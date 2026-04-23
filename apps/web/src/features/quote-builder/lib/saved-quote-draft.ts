@@ -53,6 +53,8 @@ function isQuoteStatus(
     "draft",
     "pending_approval",
     "approved",
+    "approved_with_conditions",
+    "changes_requested",
     "sent",
     "accepted",
     "rejected",

@@ -12,7 +12,7 @@ export const quoteManagerApproval: FlowWorkflowDefinition = {
   slug: "quote-manager-approval",
   name: "Quote manager approval",
   description:
-    "Routes submitted quotes to the sales manager for approval before they can be sent to the customer.",
+    "Routes submitted quotes to the branch sales manager for approval before they can be sent to the customer, falling back to branch general manager or the manager queue when no named sales manager is configured.",
   owner_role: "sales",
   trigger_event_pattern: "quote.approval.submitted",
   conditions: [
@@ -24,7 +24,7 @@ export const quoteManagerApproval: FlowWorkflowDefinition = {
       params: {
         subject: "Quote approval required",
         detail:
-          "A quote was submitted from Quote Builder and now requires manager approval before customer delivery.",
+          "A quote was submitted from Quote Builder and now requires manager approval before customer delivery. Primary route is the branch sales manager, with fallback to branch general manager or manager queue.",
         assigned_role: "manager",
         due_in_hours: 24,
         escalate_in_hours: 48,

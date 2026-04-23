@@ -13,6 +13,9 @@ import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { GlassPanel } from "@/components/primitives/GlassPanel";
 import { DashboardPivotToggle } from "@/components/primitives";
 import { cn } from "@/lib/utils";
@@ -41,6 +44,7 @@ import {
   useDecideQuoteApproval,
 } from "../hooks/useApprovals";
 import { normalizeApprovals, type ApprovalItem, type ApprovalType } from "../lib/approvalTypes";
+import type { QuoteApprovalConditionDraft, QuoteApprovalDecision } from "../../../../../../../shared/qep-moonshot-contracts";
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -60,7 +64,7 @@ const TYPE_CONFIG: Record<ApprovalType, { icon: LucideIcon; color: string; bg: s
   deposit: { icon: Wallet, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", label: "Deposit", actionLabel: "Verify Deposit" },
   trade: { icon: GitCompare, color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/20", label: "Trade", actionLabel: "Approve Trade" },
   demo: { icon: MonitorPlay, color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20", label: "Demo", actionLabel: "Approve Demo" },
-  quote: { icon: FileText, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", label: "Quote", actionLabel: "Approve Quote" },
+  quote: { icon: FileText, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", label: "Quote", actionLabel: "Review Quote" },
 };
 
 import { formatCurrency } from "@/lib/format";
@@ -213,11 +217,41 @@ const listVariants = {
   visible: { opacity: 1, transition: { staggerChildren: 0.06 } },
 };
 
+const QUOTE_CONDITION_OPTIONS: Array<{ value: QuoteApprovalConditionDraft["conditionType"]; label: string }> = [
+  { value: "min_margin_pct", label: "Minimum margin %" },
+  { value: "max_trade_allowance", label: "Max trade allowance" },
+  { value: "required_cash_down", label: "Required cash down" },
+  { value: "required_finance_scenario", label: "Required finance scenario" },
+  { value: "remove_attachment", label: "Remove attachment" },
+  { value: "expiry_hours", label: "Approval expiry window" },
+];
+
+function makeConditionDraft(type: QuoteApprovalConditionDraft["conditionType"]): QuoteApprovalConditionDraft {
+  switch (type) {
+    case "min_margin_pct":
+      return { conditionType: type, conditionPayload: { min_margin_pct: 8 }, sortOrder: 0 };
+    case "max_trade_allowance":
+      return { conditionType: type, conditionPayload: { max_trade_allowance: 0 }, sortOrder: 0 };
+    case "required_cash_down":
+      return { conditionType: type, conditionPayload: { required_cash_down: 0 }, sortOrder: 0 };
+    case "required_finance_scenario":
+      return { conditionType: type, conditionPayload: { required_finance_scenario: "" }, sortOrder: 0 };
+    case "remove_attachment":
+      return { conditionType: type, conditionPayload: { attachment_title: "" }, sortOrder: 0 };
+    case "expiry_hours":
+      return { conditionType: type, conditionPayload: { expiry_hours: 72 }, sortOrder: 0 };
+  }
+}
+
 // ─── Page ──────────────────────────────────────────────────────────────────
 
 export function ApprovalCenterPage() {
   const { data, isLoading, isError, error } = useApprovals();
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [quoteDecisionTarget, setQuoteDecisionTarget] = useState<ApprovalItem | null>(null);
+  const [quoteDecision, setQuoteDecision] = useState<QuoteApprovalDecision>("approved");
+  const [quoteDecisionNote, setQuoteDecisionNote] = useState("");
+  const [quoteConditions, setQuoteConditions] = useState<QuoteApprovalConditionDraft[]>([]);
 
   const approveMargin = useApproveMargin();
   const verifyDeposit = useVerifyDeposit();
@@ -247,7 +281,18 @@ export function ApprovalCenterPage() {
     quote: items.filter((i) => i.type === "quote").length,
   }), [items]);
 
-  function handleDecision(item: ApprovalItem, decision: "approved" | "rejected" = "approved") {
+  function resetQuoteDecisionState() {
+    setQuoteDecision("approved");
+    setQuoteDecisionNote("");
+    setQuoteConditions([]);
+  }
+
+  function openQuoteDecision(item: ApprovalItem) {
+    setQuoteDecisionTarget(item);
+    resetQuoteDecisionState();
+  }
+
+  function handleDecision(item: ApprovalItem, decision: QuoteApprovalDecision = "approved") {
     setPendingIds((prev) => new Set(prev).add(item.id));
 
     const onError = () => {
@@ -273,9 +318,19 @@ export function ApprovalCenterPage() {
         break;
       case "quote": {
         decideQuote.mutate({
-          approvalId: item.id,
+          approvalCaseId: typeof item.meta.approvalCaseId === "string" ? item.meta.approvalCaseId : item.id,
           decision,
-        }, { onError });
+          reason: quoteDecisionNote || null,
+          conditions: decision === "approved_with_conditions" || decision === "changes_requested"
+            ? quoteConditions.map((condition, index) => ({ ...condition, sortOrder: index }))
+            : [],
+        }, {
+          onError,
+          onSuccess: () => {
+            setQuoteDecisionTarget(null);
+            resetQuoteDecisionState();
+          },
+        });
         break;
       }
     }
@@ -368,8 +423,8 @@ export function ApprovalCenterPage() {
               <ApprovalCard
                 key={`${item.type}-${item.id}`}
                 item={item}
-                onApprove={() => handleDecision(item, "approved")}
-                onReject={item.type === "quote" ? () => handleDecision(item, "rejected") : undefined}
+                onApprove={() => item.type === "quote" ? openQuoteDecision(item) : handleDecision(item, "approved")}
+                onReject={item.type === "quote" ? undefined : undefined}
                 isApproving={isApprovingItem(item.id)}
               />
             ))}
@@ -382,6 +437,215 @@ export function ApprovalCenterPage() {
           <p className="text-xs text-slate-500 mt-1">You're caught up. Nice work.</p>
         </GlassPanel>
       )}
+
+      <Dialog
+        open={quoteDecisionTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setQuoteDecisionTarget(null);
+            resetQuoteDecisionState();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Quote Approval Decision</DialogTitle>
+            <DialogDescription>
+              {quoteDecisionTarget
+                ? `Review ${quoteDecisionTarget.dealName} and choose the manager action.`
+                : "Review the quote and choose the manager action."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {quoteDecisionTarget && (
+            <div className="space-y-4">
+              <Card className="border-border/60 bg-card/60 p-4">
+                <p className="text-sm font-medium text-foreground">{quoteDecisionTarget.dealName}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{quoteDecisionTarget.detail}</p>
+              </Card>
+
+              <div className="grid gap-3 sm:grid-cols-5">
+                {([
+                  { value: "approved", label: "Approve" },
+                  { value: "approved_with_conditions", label: "Approve with Conditions" },
+                  { value: "changes_requested", label: "Return for Revision" },
+                  { value: "rejected", label: "Reject" },
+                  { value: "escalated", label: "Escalate" },
+                ] as Array<{ value: QuoteApprovalDecision; label: string }>).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setQuoteDecision(option.value)}
+                    className={cn(
+                      "rounded-lg border px-3 py-2 text-xs font-medium transition",
+                      quoteDecision === option.value
+                        ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
+                        : "border-border text-muted-foreground hover:border-foreground/20",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              <label className="block space-y-1">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Decision note</span>
+                <textarea
+                  value={quoteDecisionNote}
+                  onChange={(event) => setQuoteDecisionNote(event.target.value)}
+                  className="min-h-[96px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                  placeholder="Explain the decision so the rep and audit trail are clear."
+                />
+              </label>
+
+              {(quoteDecision === "approved_with_conditions" || quoteDecision === "changes_requested") && (
+                <Card className="border-border/60 bg-card/60 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-foreground">Structured conditions</p>
+                    <select
+                      className="rounded border border-input bg-card px-2 py-1 text-xs"
+                      onChange={(event) => {
+                        const nextType = event.target.value as QuoteApprovalConditionDraft["conditionType"];
+                        if (!nextType) return;
+                        setQuoteConditions((current) => [...current, makeConditionDraft(nextType)]);
+                        event.currentTarget.value = "";
+                      }}
+                      defaultValue=""
+                    >
+                      <option value="" disabled>Add condition…</option>
+                      {QUOTE_CONDITION_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {quoteConditions.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No conditions added yet.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {quoteConditions.map((condition, index) => (
+                        <Card key={`${condition.conditionType}-${index}`} className="border-border/60 bg-background/50 p-3 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-foreground">
+                              {QUOTE_CONDITION_OPTIONS.find((option) => option.value === condition.conditionType)?.label ?? condition.conditionType}
+                            </p>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setQuoteConditions((current) => current.filter((_, currentIndex) => currentIndex !== index))}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+
+                          {condition.conditionType === "min_margin_pct" && (
+                            <Input
+                              type="number"
+                              value={String(condition.conditionPayload.min_margin_pct ?? 0)}
+                              onChange={(event) => {
+                                const value = Number(event.target.value || 0);
+                                setQuoteConditions((current) => current.map((row, currentIndex) =>
+                                  currentIndex === index
+                                    ? { ...row, conditionPayload: { ...row.conditionPayload, min_margin_pct: value } }
+                                    : row));
+                              }}
+                            />
+                          )}
+                          {condition.conditionType === "max_trade_allowance" && (
+                            <Input
+                              type="number"
+                              value={String(condition.conditionPayload.max_trade_allowance ?? 0)}
+                              onChange={(event) => {
+                                const value = Number(event.target.value || 0);
+                                setQuoteConditions((current) => current.map((row, currentIndex) =>
+                                  currentIndex === index
+                                    ? { ...row, conditionPayload: { ...row.conditionPayload, max_trade_allowance: value } }
+                                    : row));
+                              }}
+                            />
+                          )}
+                          {condition.conditionType === "required_cash_down" && (
+                            <Input
+                              type="number"
+                              value={String(condition.conditionPayload.required_cash_down ?? 0)}
+                              onChange={(event) => {
+                                const value = Number(event.target.value || 0);
+                                setQuoteConditions((current) => current.map((row, currentIndex) =>
+                                  currentIndex === index
+                                    ? { ...row, conditionPayload: { ...row.conditionPayload, required_cash_down: value } }
+                                    : row));
+                              }}
+                            />
+                          )}
+                          {condition.conditionType === "required_finance_scenario" && (
+                            <Input
+                              value={String(condition.conditionPayload.required_finance_scenario ?? "")}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setQuoteConditions((current) => current.map((row, currentIndex) =>
+                                  currentIndex === index
+                                    ? { ...row, conditionPayload: { ...row.conditionPayload, required_finance_scenario: value } }
+                                    : row));
+                              }}
+                              placeholder="Finance 48 mo"
+                            />
+                          )}
+                          {condition.conditionType === "remove_attachment" && (
+                            <Input
+                              value={String(condition.conditionPayload.attachment_title ?? "")}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setQuoteConditions((current) => current.map((row, currentIndex) =>
+                                  currentIndex === index
+                                    ? { ...row, conditionPayload: { ...row.conditionPayload, attachment_title: value } }
+                                    : row));
+                              }}
+                              placeholder="Attachment title"
+                            />
+                          )}
+                          {condition.conditionType === "expiry_hours" && (
+                            <Input
+                              type="number"
+                              value={String(condition.conditionPayload.expiry_hours ?? 72)}
+                              onChange={(event) => {
+                                const value = Number(event.target.value || 0);
+                                setQuoteConditions((current) => current.map((row, currentIndex) =>
+                                  currentIndex === index
+                                    ? { ...row, conditionPayload: { ...row.conditionPayload, expiry_hours: value } }
+                                    : row));
+                              }}
+                            />
+                          )}
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              )}
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setQuoteDecisionTarget(null);
+                    resetQuoteDecisionState();
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => quoteDecisionTarget && handleDecision(quoteDecisionTarget, quoteDecision)}
+                  disabled={decideQuote.isPending || (quoteDecision === "approved_with_conditions" && quoteConditions.length === 0)}
+                >
+                  {decideQuote.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+                  Submit Decision
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

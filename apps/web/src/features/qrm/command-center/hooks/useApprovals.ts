@@ -7,6 +7,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { decideQuoteApprovalCase } from "@/features/quote-builder/lib/quote-api";
 import type { MarginRow, DepositRow, TradeRow, DemoRow, QuoteApprovalRow } from "../lib/approvalTypes";
 
 const QUERY_KEY = ["qrm", "approvals"];
@@ -40,12 +41,21 @@ export function useApprovals() {
           .select("id, deal_id, status, equipment_category, scheduled_date, needs_assessment_complete, buying_intent_confirmed, created_at, crm_deals(name)")
           .eq("status", "requested")
           .limit(100),
-        supabase
-          .from("flow_approvals")
-          .select("id, workflow_slug, subject, detail, status, requested_at, due_at, escalate_at, context_summary")
-          .eq("workflow_slug", "quote-manager-approval")
+        (supabase as unknown as {
+          from: (table: "quote_approval_cases") => {
+            select: (columns: string) => {
+              in: (column: string, values: string[]) => {
+                order: (column: string, options: { ascending: boolean }) => {
+                  limit: (limit: number) => Promise<{ data: QuoteApprovalRow[] | null; error: { message: string } | null }>;
+                };
+              };
+            };
+          };
+        })
+          .from("quote_approval_cases")
+          .select("id, quote_package_id, quote_package_version_id, version_number, deal_id, quote_number, branch_slug, branch_name, submitted_by_name, assigned_to_name, assigned_role, route_mode, policy_snapshot_json, reason_summary_json, decision_note, status, created_at, due_at, escalate_at, customer_name, customer_company, net_total, margin_pct")
           .in("status", ["pending", "escalated"])
-          .order("requested_at", { ascending: false })
+          .order("created_at", { ascending: false })
           .limit(100),
       ]);
 
@@ -73,7 +83,8 @@ export function useApprovals() {
         deposits: normalizeJoin(depositsRes.data) as DepositRow[],
         trades: normalizeJoin(tradesRes.data) as TradeRow[],
         demos: normalizeJoin(demosRes.data) as DemoRow[],
-        quotes: normalizeJoin(quotesRes.data) as QuoteApprovalRow[],
+        quotes: ((quotesRes.data ?? []) as QuoteApprovalRow[])
+          .map((row) => ({ ...row, requested_at: row.requested_at ?? (row as QuoteApprovalRow & { created_at?: string }).created_at ?? "" })),
       };
     },
     staleTime: 30_000,
@@ -154,22 +165,29 @@ export function useDecideQuoteApproval() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: {
-      approvalId: string;
-      decision: "approved" | "rejected";
-      reason?: string;
+      approvalCaseId: string;
+      decision: "approved" | "approved_with_conditions" | "changes_requested" | "rejected" | "escalated";
+      reason?: string | null;
+      conditions?: Array<{
+        id?: string | null;
+        conditionType: "min_margin_pct" | "max_trade_allowance" | "required_cash_down" | "required_finance_scenario" | "remove_attachment" | "expiry_hours";
+        conditionPayload: Record<string, unknown>;
+        sortOrder?: number;
+      }>;
     }) => {
-      const { error: approvalError } = await supabase.rpc("decide_flow_approval", {
-        p_approval_id: input.approvalId,
-        p_decision: input.decision,
-        p_reason: input.reason ?? null,
+      await decideQuoteApprovalCase({
+        approvalCaseId: input.approvalCaseId,
+        decision: input.decision,
+        note: input.reason ?? null,
+        conditions: input.conditions ?? [],
       });
-      if (approvalError) throw new Error(approvalError.message);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEY });
       qc.invalidateQueries({ queryKey: ["flow-approvals-pending"] });
       qc.invalidateQueries({ queryKey: ["flow-admin-recent-runs"] });
       qc.invalidateQueries({ queryKey: ["quote-builder", "list"] });
+      qc.invalidateQueries({ queryKey: ["quote-builder", "approval-case"] });
     },
   });
 }

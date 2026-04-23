@@ -52,6 +52,7 @@ import {
   getAiEquipmentRecommendation,
   getClosedDealsAudit,
   getFactorVerdicts,
+  getQuoteApprovalCase,
   getSavedQuotePackage,
   getPortalRevision,
   publishPortalRevision,
@@ -75,6 +76,7 @@ import { useQuoteTaxPreview } from "../hooks/useQuoteTaxPreview";
 import { buildCustomFinanceScenario } from "../lib/custom-finance";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
+import { cn } from "@/lib/utils";
 import { VoiceRecorder } from "@/features/voice-qrm/components/VoiceRecorder";
 import { submitVoiceToQrm } from "@/features/voice-qrm/lib/voice-qrm-api";
 import {
@@ -601,6 +603,7 @@ export function QuoteBuilderV2Page() {
         dealId: resolvedDealId ?? current.dealId,
         quoteStatus: nextStatus as QuoteWorkspaceDraft["quoteStatus"],
       }));
+      queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case"] });
     },
   });
 
@@ -615,6 +618,7 @@ export function QuoteBuilderV2Page() {
     onSuccess: () => {
       setDraft((current) => ({ ...current, quoteStatus: "pending_approval" }));
       queryClient.invalidateQueries({ queryKey: ["quote-builder", "list"] });
+      queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case", activeQuotePackageId] });
       if (draft.dealId) {
         queryClient.invalidateQueries({ queryKey: ["quote-builder", "saved-quote", packageId, draft.dealId] });
       }
@@ -681,6 +685,14 @@ export function QuoteBuilderV2Page() {
     staleTime: 5_000,
   });
 
+  const activeApprovalCaseQuery = useQuery({
+    queryKey: ["quote-builder", "approval-case", activeQuotePackageId],
+    queryFn: () => getQuoteApprovalCase(activeQuotePackageId!),
+    enabled: Boolean(activeQuotePackageId),
+    staleTime: 5_000,
+  });
+  const activeApprovalCase = activeApprovalCaseQuery.data ?? null;
+
   useEffect(() => {
     const revisionDraft = portalRevisionQuery.data?.draft;
     if (revisionDraft) {
@@ -693,19 +705,35 @@ export function QuoteBuilderV2Page() {
     setRevisionSummary(currentVersion?.revision_summary ?? "");
   }, [portalRevisionQuery.data]);
 
-  const quoteStatus = draft.quoteStatus ?? "draft";
+  const quoteStatus = activeApprovalCase?.status === "pending" || activeApprovalCase?.status === "escalated"
+    ? "pending_approval"
+    : activeApprovalCase?.status === "approved_with_conditions"
+      ? "approved_with_conditions"
+      : activeApprovalCase?.status === "changes_requested"
+        ? "changes_requested"
+        : activeApprovalCase?.status === "approved"
+          ? "approved"
+          : activeApprovalCase?.status === "rejected"
+            ? "rejected"
+            : draft.quoteStatus ?? "draft";
   const approvalPending = quoteStatus === "pending_approval";
-  const approvalGranted = quoteStatus === "approved" || quoteStatus === "sent" || quoteStatus === "accepted";
+  const approvalGranted =
+    quoteStatus === "approved"
+    || quoteStatus === "approved_with_conditions"
+    || quoteStatus === "sent"
+    || quoteStatus === "accepted";
   const canSubmitForApproval =
     approvalState.requiresManagerApproval
     && Boolean(activeQuotePackageId)
+    && Boolean(draft.branchSlug)
     && quoteStatus !== "sent"
     && quoteStatus !== "accepted"
     && !approvalPending
-    && !approvalGranted;
+    && quoteStatus !== "approved"
+    && quoteStatus !== "approved_with_conditions";
   const canShowSendSection =
     Boolean(activeQuotePackageId)
-    && packetReadiness.send.ready
+    && (activeApprovalCase?.canSend ?? packetReadiness.send.ready)
     && quoteStatus !== "sent"
     && quoteStatus !== "accepted";
   const showQuoteActions = Boolean(activeQuotePackageId);
@@ -1811,13 +1839,74 @@ export function QuoteBuilderV2Page() {
 
           {showQuoteActions && (() => {
             const savedId = activeQuotePackageId;
-            const canPublish = ["manager", "owner"].includes(userRoleQuery.data ?? "");
+            const canPublish = ["admin", "manager", "owner"].includes(userRoleQuery.data ?? "");
             const portalRevision = portalRevisionQuery.data;
             const compareSnapshot = portalRevision?.draft?.compareSnapshot;
             const publicationStatus = portalRevision?.publishState?.publicationStatus ?? "none";
             return savedId ? (
               <>
                 <IncentiveStack quotePackageId={savedId} />
+
+                {activeApprovalCase && (
+                  <Card className="border-border/60 bg-card/60 p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Approval Case</p>
+                        <p className="text-xs text-muted-foreground">
+                          {activeApprovalCase.versionNumber != null
+                            ? `Quote version v${activeApprovalCase.versionNumber}`
+                            : "Version snapshot attached"}
+                          {activeApprovalCase.branchName ? ` · ${activeApprovalCase.branchName}` : ""}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange">
+                        {String(activeApprovalCase.status).replace(/_/g, " ")}
+                      </span>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Assigned approver</p>
+                        <p className="mt-2 text-sm font-semibold text-foreground">
+                          {activeApprovalCase.assignedToName ?? activeApprovalCase.assignedRole ?? "Unassigned"}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Route: {String(activeApprovalCase.routeMode).replace(/_/g, " ")}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Decision note</p>
+                        <p className="mt-2 text-sm text-foreground">
+                          {activeApprovalCase.decisionNote ?? "No decision note recorded yet."}
+                        </p>
+                      </div>
+                    </div>
+
+                    {activeApprovalCase.evaluations.length > 0 && (
+                      <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Condition checklist</p>
+                        <div className="mt-3 space-y-2">
+                          {activeApprovalCase.evaluations.map((evaluation) => (
+                            <div key={evaluation.id} className="rounded border border-border/60 bg-card/50 px-3 py-2">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-medium text-foreground">{evaluation.label}</p>
+                                <span className={cn(
+                                  "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
+                                  evaluation.satisfied
+                                    ? "bg-emerald-500/10 text-emerald-400"
+                                    : "bg-amber-500/10 text-amber-300",
+                                )}>
+                                  {evaluation.satisfied ? "met" : "open"}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs text-muted-foreground">{evaluation.detail}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </Card>
+                )}
 
                 {canShowSendSection ? (
                   <SendQuoteSection
@@ -1837,14 +1926,20 @@ export function QuoteBuilderV2Page() {
                   <Card className="border-amber-500/20 bg-amber-500/5 p-4">
                     <p className="text-sm font-medium text-amber-400">Approval requested</p>
                     <p className="mt-1 text-xs text-amber-300">
-                      This quote is waiting in Approval Center for sales manager review.
+                      {submitApprovalMutation.data?.assignedToName
+                        ? `This quote is waiting on ${submitApprovalMutation.data.assignedToName} in Approval Center.`
+                        : submitApprovalMutation.data?.branchName
+                          ? `This quote is waiting in the ${submitApprovalMutation.data.branchName} approval queue.`
+                          : "This quote is waiting in Approval Center for sales manager review."}
                     </p>
                   </Card>
                 ) : approvalState.requiresManagerApproval && !approvalGranted ? (
                   <Card className="border-amber-500/20 bg-amber-500/5 p-4">
                     <p className="text-sm font-medium text-amber-400">Manager approval required before send</p>
                     <p className="mt-1 text-xs text-amber-300">
-                      Save the quote, then use Submit for Approval to route it to the sales manager.
+                      {draft.branchSlug
+                        ? "Save the quote, then use Submit for Approval to route it to the branch sales manager."
+                        : "Select a quoting branch, save the quote, then submit it for approval."}
                     </p>
                   </Card>
                 ) : (

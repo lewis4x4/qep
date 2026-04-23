@@ -7,6 +7,7 @@
  */
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ShieldCheck, Loader2, Check, X, Clock } from "lucide-react";
@@ -19,6 +20,11 @@ interface ApprovalRow {
   subject: string;
   detail: string | null;
   assigned_role: string | null;
+  assigned_to: string | null;
+  profiles:
+    | { full_name: string | null }
+    | Array<{ full_name: string | null }>
+    | null;
   status: string;
   due_at: string | null;
   escalate_at: string | null;
@@ -41,7 +47,7 @@ export function FlowApprovalsPanel() {
           };
         };
       }).from("flow_approvals")
-        .select("id, workflow_slug, subject, detail, assigned_role, status, due_at, escalate_at, requested_at")
+        .select("id, workflow_slug, subject, detail, assigned_role, assigned_to, status, due_at, escalate_at, requested_at, profiles!flow_approvals_assigned_to_fkey(full_name)")
         .in("status", ["pending", "escalated"])
         .order("requested_at", { ascending: true });
       if (error) throw new Error("approvals load failed");
@@ -85,6 +91,9 @@ export function FlowApprovalsPanel() {
         <div className="space-y-2">
           {approvals.map((a) => {
             const overdue = a.due_at && new Date(a.due_at).getTime() < Date.now();
+            const assignedProfile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
+            const assignedName = typeof assignedProfile?.full_name === "string" ? assignedProfile.full_name : null;
+            const isQuoteApproval = a.workflow_slug === "quote-manager-approval";
             return (
               <div key={a.id} className="rounded border border-border/60 bg-muted/10 p-2.5">
                 <div className="mb-1 flex items-start justify-between gap-2">
@@ -92,7 +101,8 @@ export function FlowApprovalsPanel() {
                     <p className="text-xs font-semibold text-foreground">{a.subject}</p>
                     <p className="mt-0.5 text-[10px] text-muted-foreground">
                       <code>{a.workflow_slug}</code>
-                      {a.assigned_role && <> · role: {a.assigned_role}</>}
+                      {assignedName && <> · assigned: {assignedName}</>}
+                      {!assignedName && a.assigned_role && <> · role: {a.assigned_role}</>}
                     </p>
                   </div>
                   <StatusChipStack chips={[
@@ -107,30 +117,41 @@ export function FlowApprovalsPanel() {
                   </p>
                 )}
                 <div className="mt-2 flex items-center gap-2">
-                  <input
-                    type="text"
-                    aria-label={`Decision reason for ${a.subject}`}
-                    value={reasonById[a.id] ?? ""}
-                    onChange={(e) => setReasonById((p) => ({ ...p, [a.id]: e.target.value }))}
-                    placeholder="Decision reason (optional)"
-                    className="flex-1 rounded border border-border bg-background px-2 py-1 text-[11px]"
-                  />
-                  <Button
-                    size="sm"
-                    variant="default"
-                    disabled={decide.isPending}
-                    onClick={() => decide.mutate({ id: a.id, decision: "approved", reason: reasonById[a.id] ?? "" })}
-                  >
-                    <Check className="mr-1 h-2.5 w-2.5" /> Approve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={decide.isPending}
-                    onClick={() => decide.mutate({ id: a.id, decision: "rejected", reason: reasonById[a.id] ?? "" })}
-                  >
-                    <X className="mr-1 h-2.5 w-2.5" /> Reject
-                  </Button>
+                  {isQuoteApproval ? (
+                    <Link
+                      to="/qrm/command/approvals"
+                      className="text-[11px] text-qep-orange hover:text-qep-orange/80"
+                    >
+                      Open Approval Center for quote-specific decision tools
+                    </Link>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        aria-label={`Decision reason for ${a.subject}`}
+                        value={reasonById[a.id] ?? ""}
+                        onChange={(e) => setReasonById((p) => ({ ...p, [a.id]: e.target.value }))}
+                        placeholder="Decision reason (optional)"
+                        className="flex-1 rounded border border-border bg-background px-2 py-1 text-[11px]"
+                      />
+                      <Button
+                        size="sm"
+                        variant="default"
+                        disabled={decide.isPending}
+                        onClick={() => decide.mutate({ id: a.id, decision: "approved", reason: reasonById[a.id] ?? "" })}
+                      >
+                        <Check className="mr-1 h-2.5 w-2.5" /> Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={decide.isPending}
+                        onClick={() => decide.mutate({ id: a.id, decision: "rejected", reason: reasonById[a.id] ?? "" })}
+                      >
+                        <X className="mr-1 h-2.5 w-2.5" /> Reject
+                      </Button>
+                    </>
+                  )}
                 </div>
                 {decide.isError && decide.variables?.id === a.id && (
                   <p className="mt-1 text-[11px] text-red-400">

@@ -20,6 +20,20 @@ import { captureEdgeException } from "../_shared/sentry.ts";
 import { sendResendEmail } from "../_shared/resend-email.ts";
 import { computeQuoteDocumentHash } from "../_shared/quote-document-hash.ts";
 import { quoteManagerApproval } from "../_shared/flow-workflows/quote-manager-approval.ts";
+import {
+  allowedQuoteVersionScopesForConditions,
+  buildQuoteVersionSnapshot,
+  diffQuoteVersionScopes,
+  evaluateQuoteApprovalConditions,
+  isQuoteApprovalConditionType,
+  isQuoteApprovalDecision,
+  resolveQuoteApprovalAuthorityBand,
+  type QuoteApprovalConditionDraft,
+  type QuoteApprovalConditionType,
+  type QuoteApprovalPolicy,
+  type QuoteApprovalRouteMode,
+  type QuoteVersionSnapshot,
+} from "../../../shared/qep-moonshot-contracts.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -380,6 +394,548 @@ async function ensureQuoteApprovalWorkflow(
   return String(created.id);
 }
 
+async function resolveQuoteApprovalAssignee(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  workspaceId: string;
+  branchSlug: string | null;
+  authorityBand: "branch_manager" | "owner_admin";
+  ownerEscalationRole: "owner" | "admin";
+  namedBranchSalesManagerPrimary: boolean;
+  namedBranchGeneralManagerFallback: boolean;
+}): Promise<{
+  branchSlug: string;
+  branchName: string;
+  assignedTo: string | null;
+  assignedToName: string | null;
+  assignedRole: string | null;
+  routeMode: QuoteApprovalRouteMode;
+}> {
+  if (!input.branchSlug) {
+    throw new Error("Select a quoting branch before submitting this quote for approval.");
+  }
+
+  const { data: branch, error: branchErr } = await input.admin
+    .from("branches")
+    .select("slug, display_name, sales_manager_id, general_manager_id, is_active, deleted_at")
+    .eq("workspace_id", input.workspaceId)
+    .eq("slug", input.branchSlug)
+    .eq("is_active", true)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (branchErr) throw new Error(branchErr.message);
+  if (!branch?.slug) {
+    throw new Error("The selected quoting branch is unavailable. Update the branch on the quote and try again.");
+  }
+
+  async function resolveProfile(profileId: string | null, routeMode: "branch_sales_manager" | "branch_general_manager") {
+    if (!profileId) return null;
+    const { data: profile, error } = await input.admin
+      .from("profiles")
+      .select("id, full_name, role, is_active")
+      .eq("id", profileId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!profile?.id || profile.is_active !== true) return null;
+    if (!["manager", "admin", "owner"].includes(String(profile.role ?? ""))) return null;
+    return {
+      assignedTo: String(profile.id),
+      assignedToName: typeof profile.full_name === "string" && profile.full_name.trim().length > 0
+        ? profile.full_name.trim()
+        : null,
+      routeMode,
+    };
+  }
+
+  if (input.authorityBand === "branch_manager") {
+    if (input.namedBranchSalesManagerPrimary) {
+      const salesManager = await resolveProfile(branch.sales_manager_id ?? null, "branch_sales_manager");
+      if (salesManager) {
+        return {
+          branchSlug: String(branch.slug),
+          branchName: String(branch.display_name ?? branch.slug),
+          assignedTo: salesManager.assignedTo,
+          assignedToName: salesManager.assignedToName,
+          assignedRole: null,
+          routeMode: salesManager.routeMode,
+        };
+      }
+    }
+
+    if (input.namedBranchGeneralManagerFallback) {
+      const generalManager = await resolveProfile(branch.general_manager_id ?? null, "branch_general_manager");
+      if (generalManager) {
+        return {
+          branchSlug: String(branch.slug),
+          branchName: String(branch.display_name ?? branch.slug),
+          assignedTo: generalManager.assignedTo,
+          assignedToName: generalManager.assignedToName,
+          assignedRole: null,
+          routeMode: generalManager.routeMode,
+        };
+      }
+    }
+
+    return {
+      branchSlug: String(branch.slug),
+      branchName: String(branch.display_name ?? branch.slug),
+      assignedTo: null,
+      assignedToName: null,
+      assignedRole: "manager",
+      routeMode: "manager_queue",
+    };
+  }
+
+  const { data: escalationProfiles, error: escalationErr } = await input.admin
+    .from("profiles")
+    .select("id, full_name, role, is_active, active_workspace_id")
+    .eq("active_workspace_id", input.workspaceId)
+    .eq("is_active", true)
+    .in("role", input.ownerEscalationRole === "owner" ? ["owner", "admin"] : ["admin", "owner"]);
+  if (escalationErr) throw new Error(escalationErr.message);
+
+  const escalationProfile = (escalationProfiles ?? []).find((profile: { role?: string }) =>
+    profile.role === input.ownerEscalationRole) ?? (escalationProfiles ?? [])[0] ?? null;
+
+  if (escalationProfile?.id) {
+    return {
+      branchSlug: String(branch.slug),
+      branchName: String(branch.display_name ?? branch.slug),
+      assignedTo: String(escalationProfile.id),
+      assignedToName: typeof escalationProfile.full_name === "string" && escalationProfile.full_name.trim().length > 0
+        ? escalationProfile.full_name.trim()
+        : null,
+      assignedRole: null,
+      routeMode: escalationProfile.role === "admin" ? "admin_direct" : "owner_direct",
+    };
+  }
+
+  return {
+    branchSlug: String(branch.slug),
+    branchName: String(branch.display_name ?? branch.slug),
+    assignedTo: null,
+    assignedToName: null,
+    assignedRole: input.ownerEscalationRole,
+    routeMode: input.ownerEscalationRole === "admin" ? "admin_queue" : "owner_queue",
+  };
+}
+
+function defaultQuoteApprovalPolicy(workspaceId: string): QuoteApprovalPolicy {
+  return {
+    workspaceId,
+    branchManagerMinMarginPct: 8,
+    standardMarginFloorPct: 10,
+    branchManagerMaxQuoteAmount: 250000,
+    submitSlaHours: 24,
+    escalationSlaHours: 48,
+    ownerEscalationRole: "owner",
+    namedBranchSalesManagerPrimary: true,
+    namedBranchGeneralManagerFallback: true,
+    allowedConditionTypes: [
+      "min_margin_pct",
+      "max_trade_allowance",
+      "required_cash_down",
+      "required_finance_scenario",
+      "remove_attachment",
+      "expiry_hours",
+    ],
+    updatedAt: null,
+    updatedBy: null,
+  };
+}
+
+async function loadQuoteApprovalPolicy(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  workspaceId: string;
+}): Promise<QuoteApprovalPolicy> {
+  const { data, error } = await input.admin
+    .from("quote_approval_policies")
+    .select("*")
+    .eq("workspace_id", input.workspaceId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return defaultQuoteApprovalPolicy(input.workspaceId);
+
+  const defaultPolicy = defaultQuoteApprovalPolicy(input.workspaceId);
+  return {
+    workspaceId: String(data.workspace_id ?? input.workspaceId),
+    branchManagerMinMarginPct: Number(data.branch_manager_min_margin_pct ?? defaultPolicy.branchManagerMinMarginPct),
+    standardMarginFloorPct: Number(data.standard_margin_floor_pct ?? defaultPolicy.standardMarginFloorPct),
+    branchManagerMaxQuoteAmount: Number(data.branch_manager_max_quote_amount ?? defaultPolicy.branchManagerMaxQuoteAmount),
+    submitSlaHours: Number(data.submit_sla_hours ?? defaultPolicy.submitSlaHours),
+    escalationSlaHours: Number(data.escalation_sla_hours ?? defaultPolicy.escalationSlaHours),
+    ownerEscalationRole: data.owner_escalation_role === "admin" ? "admin" : "owner",
+    namedBranchSalesManagerPrimary: data.named_branch_sales_manager_primary !== false,
+    namedBranchGeneralManagerFallback: data.named_branch_general_manager_fallback !== false,
+    allowedConditionTypes: Array.isArray(data.allowed_condition_types)
+      ? data.allowed_condition_types.filter((value: unknown): value is QuoteApprovalConditionType =>
+        typeof value === "string" && isQuoteApprovalConditionType(value))
+      : defaultPolicy.allowedConditionTypes,
+    updatedAt: typeof data.updated_at === "string" ? data.updated_at : null,
+    updatedBy: typeof data.updated_by === "string" ? data.updated_by : null,
+  };
+}
+
+function buildQuoteVersionArtifacts(input: {
+  body: Record<string, unknown>;
+  quotePackageId?: string | null;
+  dealId?: string | null;
+  status?: string | null;
+}): {
+  snapshot: QuoteVersionSnapshot;
+  computedMetrics: Record<string, unknown>;
+} {
+  const equipment = Array.isArray(input.body.equipment) ? input.body.equipment as Array<Record<string, unknown>> : [];
+  const attachments = Array.isArray(input.body.attachments_included) ? input.body.attachments_included as Array<Record<string, unknown>> : [];
+  const snapshot = buildQuoteVersionSnapshot({
+    quotePackageId: input.quotePackageId ?? null,
+    dealId: input.dealId ?? null,
+    branchSlug: typeof input.body.branch_slug === "string" ? input.body.branch_slug : null,
+    customerName: typeof input.body.customer_name === "string" ? input.body.customer_name : null,
+    customerCompany: typeof input.body.customer_company === "string" ? input.body.customer_company : null,
+    customerEmail: typeof input.body.customer_email === "string" ? input.body.customer_email : null,
+    customerPhone: typeof input.body.customer_phone === "string" ? input.body.customer_phone : null,
+    commercialDiscountType: input.body.commercial_discount_type === "percent" ? "percent" : "flat",
+    commercialDiscountValue: Number(input.body.commercial_discount_value ?? 0) || 0,
+    tradeAllowance: Number(input.body.trade_allowance ?? input.body.trade_credit ?? 0) || 0,
+    cashDown: Number(input.body.cash_down ?? 0) || 0,
+    selectedFinanceScenario: typeof input.body.selected_finance_scenario === "string" ? input.body.selected_finance_scenario : null,
+    taxProfile: typeof input.body.tax_profile === "string"
+      ? input.body.tax_profile as QuoteVersionSnapshot["taxProfile"]
+      : "standard",
+    taxTotal: Number(input.body.tax_total ?? 0) || 0,
+    netTotal: Number(input.body.net_total ?? 0) || 0,
+    customerTotal: Number(input.body.customer_total ?? 0) || 0,
+    amountFinanced: Number(input.body.amount_financed ?? 0) || 0,
+    marginPct: typeof input.body.margin_pct === "number" ? input.body.margin_pct : Number(input.body.margin_pct ?? 0),
+    amount: typeof input.body.net_total === "number" ? input.body.net_total : Number(input.body.net_total ?? 0),
+    equipment: equipment.map((row) => ({
+      id: typeof row.id === "string" ? row.id : null,
+      title: [row.make, row.model].filter(Boolean).join(" ").trim(),
+      make: typeof row.make === "string" ? row.make : null,
+      model: typeof row.model === "string" ? row.model : null,
+      quantity: 1,
+      unitPrice: Number(row.price ?? 0) || 0,
+    })),
+    attachments: attachments.map((row) => ({
+      id: null,
+      title: typeof row.name === "string" ? row.name : "",
+      make: null,
+      model: null,
+      quantity: 1,
+      unitPrice: Number(row.price ?? 0) || 0,
+    })),
+    quoteStatus: (typeof input.status === "string" ? input.status : "draft") as QuoteVersionSnapshot["quoteStatus"],
+    savedAt: new Date().toISOString(),
+  });
+  return {
+    snapshot,
+    computedMetrics: {
+      equipment_total: Number(input.body.equipment_total ?? 0) || 0,
+      attachment_total: Number(input.body.attachment_total ?? 0) || 0,
+      subtotal: Number(input.body.subtotal ?? 0) || 0,
+      discount_total: Number(input.body.discount_total ?? 0) || 0,
+      net_total: Number(input.body.net_total ?? 0) || 0,
+      tax_total: Number(input.body.tax_total ?? 0) || 0,
+      customer_total: Number(input.body.customer_total ?? 0) || 0,
+      cash_down: Number(input.body.cash_down ?? 0) || 0,
+      amount_financed: Number(input.body.amount_financed ?? 0) || 0,
+      margin_amount: Number(input.body.margin_amount ?? 0) || 0,
+      margin_pct: Number(input.body.margin_pct ?? 0) || 0,
+      saved_at: new Date().toISOString(),
+    },
+  };
+}
+
+async function createQuotePackageVersion(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  workspaceId: string;
+  quotePackageId: string;
+  createdBy: string;
+  snapshot: QuoteVersionSnapshot;
+  computedMetrics: Record<string, unknown>;
+}): Promise<{ id: string; versionNumber: number }> {
+  const { data: latest, error: latestErr } = await input.admin
+    .from("quote_package_versions")
+    .select("id, version_number")
+    .eq("quote_package_id", input.quotePackageId)
+    .is("superseded_at", null)
+    .order("version_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (latestErr) throw new Error(latestErr.message);
+
+  const nextVersion = Number(latest?.version_number ?? 0) + 1;
+  if (latest?.id) {
+    const { error: supersedeErr } = await input.admin
+      .from("quote_package_versions")
+      .update({ superseded_at: new Date().toISOString() })
+      .eq("id", latest.id);
+    if (supersedeErr) throw new Error(supersedeErr.message);
+  }
+
+  const { data: created, error: createErr } = await input.admin
+    .from("quote_package_versions")
+    .insert({
+      workspace_id: input.workspaceId,
+      quote_package_id: input.quotePackageId,
+      version_number: nextVersion,
+      snapshot_json: input.snapshot,
+      computed_metrics_json: input.computedMetrics,
+      created_by: input.createdBy,
+    })
+    .select("id, version_number")
+    .single();
+  if (createErr || !created?.id) {
+    throw new Error(createErr?.message ?? "Failed to create quote version");
+  }
+  return { id: String(created.id), versionNumber: Number(created.version_number ?? nextVersion) };
+}
+
+async function getLatestQuotePackageVersion(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  quotePackageId: string;
+}): Promise<{ id: string; versionNumber: number; snapshot: QuoteVersionSnapshot } | null> {
+  const { data, error } = await input.admin
+    .from("quote_package_versions")
+    .select("id, version_number, snapshot_json")
+    .eq("quote_package_id", input.quotePackageId)
+    .is("superseded_at", null)
+    .order("version_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data?.id || !data.snapshot_json || typeof data.snapshot_json !== "object") return null;
+  return {
+    id: String(data.id),
+    versionNumber: Number(data.version_number ?? 1),
+    snapshot: data.snapshot_json as QuoteVersionSnapshot,
+  };
+}
+
+async function getLatestQuoteApprovalCase(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  quotePackageId: string;
+}): Promise<Record<string, unknown> | null> {
+  const { data, error } = await input.admin
+    .from("quote_approval_cases")
+    .select("*")
+    .eq("quote_package_id", input.quotePackageId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data && typeof data === "object" ? data as Record<string, unknown> : null;
+}
+
+async function getQuoteApprovalConditions(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  approvalCaseId: string;
+}): Promise<QuoteApprovalConditionDraft[]> {
+  const { data, error } = await input.admin
+    .from("quote_approval_case_conditions")
+    .select("id, condition_type, condition_payload_json, sort_order")
+    .eq("approval_case_id", input.approvalCaseId)
+    .order("sort_order", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).flatMap((row: Record<string, unknown>) => {
+    if (typeof row.condition_type !== "string" || !isQuoteApprovalConditionType(row.condition_type)) return [];
+    return [{
+      id: typeof row.id === "string" ? row.id : null,
+      conditionType: row.condition_type,
+      conditionPayload: row.condition_payload_json && typeof row.condition_payload_json === "object"
+        ? row.condition_payload_json as Record<string, unknown>
+        : {},
+      sortOrder: Number(row.sort_order ?? 0) || 0,
+    }];
+  });
+}
+
+async function invalidateQuoteApprovalCase(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  caseId: string;
+  flowApprovalId?: string | null;
+  reason: string;
+}): Promise<void> {
+  const decidedAt = new Date().toISOString();
+  const { error: caseErr } = await input.admin
+    .from("quote_approval_cases")
+    .update({
+      status: "superseded",
+      decision_note: input.reason,
+      decided_at: decidedAt,
+    })
+    .eq("id", input.caseId);
+  if (caseErr) throw new Error(caseErr.message);
+
+  if (input.flowApprovalId) {
+    const { error: flowErr } = await input.admin
+      .from("flow_approvals")
+      .update({
+        status: "cancelled",
+        decision_reason: input.reason,
+        decided_at: decidedAt,
+      })
+      .eq("id", input.flowApprovalId)
+      .in("status", ["pending", "escalated"]);
+    if (flowErr) throw new Error(flowErr.message);
+  }
+}
+
+function normalizeDecisionConditions(input: {
+  conditions: unknown;
+  allowedConditionTypes: QuoteApprovalConditionType[];
+}): QuoteApprovalConditionDraft[] {
+  if (!Array.isArray(input.conditions)) return [];
+  return input.conditions.flatMap((condition, index) => {
+    if (!condition || typeof condition !== "object" || Array.isArray(condition)) return [];
+    const record = condition as Record<string, unknown>;
+    const type = typeof record.conditionType === "string"
+      ? record.conditionType
+      : typeof record.condition_type === "string"
+        ? record.condition_type
+        : "";
+    if (!isQuoteApprovalConditionType(type)) return [];
+    if (!input.allowedConditionTypes.includes(type)) return [];
+    return [{
+      id: typeof record.id === "string" ? record.id : null,
+      conditionType: type,
+      conditionPayload: record.conditionPayload && typeof record.conditionPayload === "object" && !Array.isArray(record.conditionPayload)
+        ? record.conditionPayload as Record<string, unknown>
+        : record.condition_payload && typeof record.condition_payload === "object" && !Array.isArray(record.condition_payload)
+          ? record.condition_payload as Record<string, unknown>
+          : {},
+      sortOrder: Number(record.sortOrder ?? record.sort_order ?? index) || index,
+    }];
+  });
+}
+
+function buildQuoteApprovalReasonSummary(input: {
+  policy: QuoteApprovalPolicy;
+  marginPct: number | null;
+  amount: number | null;
+  authorityBand: "branch_manager" | "owner_admin";
+}): Record<string, unknown> {
+  function formatCurrencyValue(value: number): string {
+    return `$${Math.round(value).toLocaleString("en-US")}`;
+  }
+  const actualMargin = Number(input.marginPct ?? 0) || 0;
+  const amount = Number(input.amount ?? 0) || 0;
+  const reasons: string[] = [];
+  if (actualMargin < input.policy.standardMarginFloorPct) {
+    reasons.push(`Margin ${actualMargin.toFixed(1)}% is below the ${input.policy.standardMarginFloorPct.toFixed(1)}% floor.`);
+  }
+  if (actualMargin < input.policy.branchManagerMinMarginPct) {
+    reasons.push(`Margin ${actualMargin.toFixed(1)}% is below the branch manager band floor of ${input.policy.branchManagerMinMarginPct.toFixed(1)}%.`);
+  }
+  if (amount > input.policy.branchManagerMaxQuoteAmount) {
+    reasons.push(`Quote total ${formatCurrencyValue(amount)} exceeds the branch manager authority band.`);
+  }
+  return {
+    authority_band: input.authorityBand,
+    branch_manager_band_floor_pct: input.policy.branchManagerMinMarginPct,
+    standard_floor_pct: input.policy.standardMarginFloorPct,
+    branch_manager_max_quote_amount: input.policy.branchManagerMaxQuoteAmount,
+    reasons,
+  };
+}
+
+async function saveQuoteApprovalConditions(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  approvalCaseId: string;
+  conditions: QuoteApprovalConditionDraft[];
+}): Promise<void> {
+  const { error: deleteErr } = await input.admin
+    .from("quote_approval_case_conditions")
+    .delete()
+    .eq("approval_case_id", input.approvalCaseId);
+  if (deleteErr) throw new Error(deleteErr.message);
+
+  if (input.conditions.length === 0) return;
+
+  const { error: insertErr } = await input.admin
+    .from("quote_approval_case_conditions")
+    .insert(input.conditions.map((condition, index) => ({
+      approval_case_id: input.approvalCaseId,
+      condition_type: condition.conditionType,
+      condition_payload_json: condition.conditionPayload,
+      sort_order: Number(condition.sortOrder ?? index) || index,
+    })));
+  if (insertErr) throw new Error(insertErr.message);
+}
+
+async function buildQuoteApprovalCaseResponse(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  approvalCase: Record<string, unknown>;
+}): Promise<Record<string, unknown>> {
+  const approvalCaseId = String(input.approvalCase.id);
+  const quotePackageId = String(input.approvalCase.quote_package_id);
+  const conditions = await getQuoteApprovalConditions({
+    admin: input.admin,
+    approvalCaseId,
+  });
+  const latestVersion = await getLatestQuotePackageVersion({
+    admin: input.admin,
+    quotePackageId,
+  });
+  const decidedAt = typeof input.approvalCase.decided_at === "string"
+    ? input.approvalCase.decided_at
+    : null;
+  const evaluationResult = latestVersion
+    ? evaluateQuoteApprovalConditions({
+      snapshot: latestVersion.snapshot,
+      conditions,
+      decidedAt,
+      now: new Date().toISOString(),
+    })
+    : { evaluations: [], allSatisfied: false };
+  const status = String(input.approvalCase.status ?? "pending");
+  const canSend = status === "approved"
+    || (status === "approved_with_conditions" && evaluationResult.allSatisfied);
+
+  return {
+    id: approvalCaseId,
+    quotePackageId,
+    quotePackageVersionId: String(input.approvalCase.quote_package_version_id),
+    versionNumber: Number(input.approvalCase.version_number ?? latestVersion?.versionNumber ?? 1),
+    dealId: typeof input.approvalCase.deal_id === "string" ? input.approvalCase.deal_id : null,
+    branchSlug: typeof input.approvalCase.branch_slug === "string" ? input.approvalCase.branch_slug : null,
+    branchName: typeof input.approvalCase.branch_name === "string" ? input.approvalCase.branch_name : null,
+    submittedBy: typeof input.approvalCase.submitted_by === "string" ? input.approvalCase.submitted_by : null,
+    submittedByName: typeof input.approvalCase.submitted_by_name === "string" ? input.approvalCase.submitted_by_name : null,
+    assignedTo: typeof input.approvalCase.assigned_to === "string" ? input.approvalCase.assigned_to : null,
+    assignedToName: typeof input.approvalCase.assigned_to_name === "string" ? input.approvalCase.assigned_to_name : null,
+    assignedRole: typeof input.approvalCase.assigned_role === "string" ? input.approvalCase.assigned_role : null,
+    routeMode: typeof input.approvalCase.route_mode === "string" ? input.approvalCase.route_mode : "manager_queue",
+    policySnapshot: input.approvalCase.policy_snapshot_json && typeof input.approvalCase.policy_snapshot_json === "object"
+      ? input.approvalCase.policy_snapshot_json as Record<string, unknown>
+      : {},
+    reasonSummary: input.approvalCase.reason_summary_json && typeof input.approvalCase.reason_summary_json === "object"
+      ? input.approvalCase.reason_summary_json as Record<string, unknown>
+      : {},
+    status,
+    decisionNote: typeof input.approvalCase.decision_note === "string" ? input.approvalCase.decision_note : null,
+    decidedBy: typeof input.approvalCase.decided_by === "string" ? input.approvalCase.decided_by : null,
+    decidedByName: typeof input.approvalCase.decided_by_name === "string" ? input.approvalCase.decided_by_name : null,
+    decidedAt,
+    dueAt: typeof input.approvalCase.due_at === "string" ? input.approvalCase.due_at : null,
+    escalateAt: typeof input.approvalCase.escalate_at === "string" ? input.approvalCase.escalate_at : null,
+    flowApprovalId: typeof input.approvalCase.flow_approval_id === "string" ? input.approvalCase.flow_approval_id : null,
+    conditions,
+    evaluations: evaluationResult.evaluations,
+    canSend,
+  };
+}
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
 
@@ -445,8 +1001,8 @@ Deno.serve(async (req) => {
       .eq("id", user.id)
       .maybeSingle();
     const userRole = typeof profile?.role === "string" ? profile.role : null;
-    const canRevise = userRole !== null && ["rep", "manager", "owner"].includes(userRole);
-    const canPublish = userRole !== null && ["manager", "owner"].includes(userRole);
+    const canRevise = userRole !== null && ["rep", "admin", "manager", "owner"].includes(userRole);
+    const canPublish = userRole !== null && ["admin", "manager", "owner"].includes(userRole);
 
     const url = new URL(req.url);
     const action = url.pathname.split("/").pop() || "";
@@ -640,6 +1196,42 @@ Deno.serve(async (req) => {
             publicationStatus: context.publicationStatus,
           },
         }, origin);
+      }
+
+      if (action === "approval-case") {
+        if (!canRevise) {
+          return safeJsonError("Quote approval case access requires rep, admin, manager, or owner role", 403, origin);
+        }
+        const quotePackageId = url.searchParams.get("quote_package_id");
+        if (!quotePackageId) {
+          return safeJsonError("quote_package_id required", 400, origin);
+        }
+        const admin = createAdminClient();
+        const approvalCase = await getLatestQuoteApprovalCase({
+          admin,
+          quotePackageId,
+        });
+        if (!approvalCase) {
+          return safeJsonOk({ approval_case: null }, origin);
+        }
+        return safeJsonOk({
+          approval_case: await buildQuoteApprovalCaseResponse({
+            admin,
+            approvalCase,
+          }),
+        }, origin);
+      }
+
+      if (action === "approval-policy") {
+        if (!canPublish) {
+          return safeJsonError("Quote approval policy access requires admin, manager, or owner role", 403, origin);
+        }
+        const admin = createAdminClient();
+        const policy = await loadQuoteApprovalPolicy({
+          admin,
+          workspaceId: "default",
+        });
+        return safeJsonOk({ policy }, origin);
       }
 
       // ── GET /factor-attribution (Slice 20g) ─────────────────────────
@@ -1537,6 +2129,82 @@ Deno.serve(async (req) => {
         }
       }
 
+      const admin = createAdminClient();
+      const { data: existingQuote, error: existingQuoteErr } = await admin
+        .from("quote_packages")
+        .select("id, workspace_id, status")
+        .eq("deal_id", resolvedDealId)
+        .maybeSingle();
+      if (existingQuoteErr) {
+        return safeJsonError(existingQuoteErr.message, 500, origin);
+      }
+
+      const latestVersion = existingQuote?.id
+        ? await getLatestQuotePackageVersion({
+          admin,
+          quotePackageId: String(existingQuote.id),
+        })
+        : null;
+      const latestApprovalCase = existingQuote?.id
+        ? await getLatestQuoteApprovalCase({
+          admin,
+          quotePackageId: String(existingQuote.id),
+        })
+        : null;
+
+      const provisionalStatus = typeof existingQuote?.status === "string"
+        ? existingQuote.status
+        : typeof body.status === "string"
+          ? body.status
+          : "draft";
+      const provisionalArtifacts = buildQuoteVersionArtifacts({
+        body: {
+          ...body,
+          customer_name: customerName,
+          customer_company: customerCompany,
+          customer_phone: customerPhone,
+          customer_email: customerEmail,
+        },
+        quotePackageId: typeof existingQuote?.id === "string" ? existingQuote.id : null,
+        dealId: resolvedDealId,
+        status: provisionalStatus,
+      });
+
+      const changedScopes = latestVersion
+        ? diffQuoteVersionScopes(latestVersion.snapshot, provisionalArtifacts.snapshot)
+        : (["branch", "customer", "pricing", "trade", "cash_down", "finance", "attachments", "equipment"] as const);
+
+      let nextStatus = provisionalStatus;
+      let invalidationReason: string | null = null;
+      if (!latestVersion) {
+        nextStatus = "draft";
+      } else if (changedScopes.length === 0) {
+        nextStatus = provisionalStatus;
+      } else if (latestApprovalCase && typeof latestApprovalCase.status === "string") {
+        const caseStatus = String(latestApprovalCase.status);
+        if (caseStatus === "approved_with_conditions") {
+          const conditions = await getQuoteApprovalConditions({
+            admin,
+            approvalCaseId: String(latestApprovalCase.id),
+          });
+          const allowedScopes = allowedQuoteVersionScopesForConditions(conditions);
+          const disallowedScopes = changedScopes.filter((scope) => !allowedScopes.includes(scope));
+          if (disallowedScopes.length === 0) {
+            nextStatus = "approved_with_conditions";
+          } else {
+            nextStatus = "draft";
+            invalidationReason = `Quote changed outside allowed conditional scopes: ${disallowedScopes.join(", ")}.`;
+          }
+        } else if (["pending", "approved", "changes_requested", "rejected", "escalated"].includes(caseStatus)) {
+          nextStatus = "draft";
+          invalidationReason = `Quote changed after approval state ${caseStatus}. A new approval submission is required.`;
+        } else {
+          nextStatus = "draft";
+        }
+      } else {
+        nextStatus = "draft";
+      }
+
       const { data, error } = await supabase
         .from("quote_packages")
         .upsert({
@@ -1565,7 +2233,7 @@ Deno.serve(async (req) => {
           margin_pct: body.margin_pct,
           ai_recommendation: body.ai_recommendation,
           entry_mode: body.entry_mode || "manual",
-          status: body.status || "draft",
+          status: nextStatus,
           created_by: user.id,
           customer_name: customerName,
           customer_company: customerCompany,
@@ -1585,7 +2253,54 @@ Deno.serve(async (req) => {
         return safeJsonError("Failed to save quote", 500, origin);
       }
 
-      return safeJsonOk({ quote: data, deal_id: resolvedDealId }, origin, 201);
+      const workspaceId = typeof data.workspace_id === "string" ? data.workspace_id : "default";
+      const versionArtifacts = buildQuoteVersionArtifacts({
+        body: {
+          ...body,
+          customer_name: customerName,
+          customer_company: customerCompany,
+          customer_phone: customerPhone,
+          customer_email: customerEmail,
+        },
+        quotePackageId: String(data.id),
+        dealId: resolvedDealId,
+        status: nextStatus,
+      });
+
+      let latestVersionInfo = latestVersion;
+      if (!latestVersion || changedScopes.length > 0) {
+        latestVersionInfo = {
+          id: (await createQuotePackageVersion({
+            admin,
+            workspaceId,
+            quotePackageId: String(data.id),
+            createdBy: user.id,
+            snapshot: versionArtifacts.snapshot,
+            computedMetrics: versionArtifacts.computedMetrics,
+          })).id,
+          versionNumber: (await getLatestQuotePackageVersion({
+            admin,
+            quotePackageId: String(data.id),
+          }))?.versionNumber ?? 1,
+          snapshot: versionArtifacts.snapshot,
+        };
+      }
+
+      if (invalidationReason && latestApprovalCase?.id) {
+        await invalidateQuoteApprovalCase({
+          admin,
+          caseId: String(latestApprovalCase.id),
+          flowApprovalId: typeof latestApprovalCase.flow_approval_id === "string" ? latestApprovalCase.flow_approval_id : null,
+          reason: invalidationReason,
+        });
+      }
+
+      return safeJsonOk({
+        quote: data,
+        deal_id: resolvedDealId,
+        quote_package_version_id: latestVersionInfo?.id ?? null,
+        version_number: latestVersionInfo?.versionNumber ?? null,
+      }, origin, 201);
     }
 
     // ── POST /mark-viewed: sent → viewed transition (Slice 2.1h) ──────
@@ -1636,7 +2351,7 @@ Deno.serve(async (req) => {
 
       const { data: pkg, error: pkgErr } = await supabase
         .from("quote_packages")
-        .select("id, workspace_id, quote_number, deal_id, customer_name, customer_company, net_total, margin_pct, status")
+        .select("id, workspace_id, branch_slug, quote_number, deal_id, customer_name, customer_company, net_total, margin_pct, status")
         .eq("id", body.quote_package_id)
         .maybeSingle();
 
@@ -1646,6 +2361,7 @@ Deno.serve(async (req) => {
       const pkgRow = pkg as {
         id: string;
         workspace_id: string;
+        branch_slug: string | null;
         quote_number: string | null;
         deal_id: string;
         customer_name: string | null;
@@ -1655,37 +2371,65 @@ Deno.serve(async (req) => {
         status: string;
       };
 
-      if (pkgRow.status === "pending_approval") {
-        const admin = createAdminClient();
-        const { data: existingApproval, error: existingErr } = await admin
-          .from("flow_approvals")
-          .select("id")
-          .eq("workflow_slug", QUOTE_APPROVAL_WORKFLOW_SLUG)
-          .in("status", ["pending", "escalated"])
-          .contains("context_summary", { quote_package_id: pkgRow.id })
-          .order("requested_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (existingErr) return safeJsonError(existingErr.message, 500, origin);
-        if (!existingApproval?.id) {
-          return safeJsonError("Quote is already awaiting approval.", 409, origin);
-        }
+      const admin = createAdminClient();
+      const latestVersion = await getLatestQuotePackageVersion({
+        admin,
+        quotePackageId: pkgRow.id,
+      });
+      if (!latestVersion) {
+        return safeJsonError("Save the quote before submitting it for approval.", 409, origin);
+      }
+
+      const latestCase = await getLatestQuoteApprovalCase({
+        admin,
+        quotePackageId: pkgRow.id,
+      });
+
+      if (latestCase && ["pending", "escalated"].includes(String(latestCase.status ?? ""))) {
+        const summary = await buildQuoteApprovalCaseResponse({
+          admin,
+          approvalCase: latestCase,
+        });
         return safeJsonOk({
-          approval_id: existingApproval.id,
+          approval_case_id: summary.id,
+          approval_id: summary.flowApprovalId,
+          quote_package_version_id: summary.quotePackageVersionId,
+          version_number: summary.versionNumber,
           status: "pending_approval",
           already_pending: true,
+          branch_name: summary.branchName,
+          assigned_to_name: summary.assignedToName,
+          route_mode: summary.routeMode,
         }, origin);
       }
 
-      if (pkgRow.status === "approved") {
-        return safeJsonError("Quote is already approved.", 409, origin);
-      }
       if (pkgRow.status === "sent" || pkgRow.status === "accepted") {
         return safeJsonError("Only unsent quotes can be submitted for approval.", 409, origin);
       }
-
-      const admin = createAdminClient();
       const workflowId = await ensureQuoteApprovalWorkflow(admin);
+      const policy = await loadQuoteApprovalPolicy({
+        admin,
+        workspaceId: pkgRow.workspace_id || "default",
+      });
+      const authorityBand = resolveQuoteApprovalAuthorityBand({
+        marginPct: pkgRow.margin_pct,
+        amount: pkgRow.net_total,
+        policy,
+      });
+      const approvalRoute = await resolveQuoteApprovalAssignee({
+        admin,
+        workspaceId: pkgRow.workspace_id || "default",
+        branchSlug: pkgRow.branch_slug ?? null,
+        authorityBand,
+        ownerEscalationRole: policy.ownerEscalationRole,
+        namedBranchSalesManagerPrimary: policy.namedBranchSalesManagerPrimary,
+        namedBranchGeneralManagerFallback: policy.namedBranchGeneralManagerFallback,
+      });
+      const { data: submitterProfile } = await admin
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .maybeSingle();
 
       const { data: runRow, error: runErr } = await admin
         .from("flow_workflow_runs")
@@ -1697,16 +2441,22 @@ Deno.serve(async (req) => {
           dry_run: false,
           resolved_context: {
             quote_package_id: pkgRow.id,
+            quote_package_version_id: latestVersion.id,
+            version_number: latestVersion.versionNumber,
             deal_id: pkgRow.deal_id,
             customer_name: pkgRow.customer_name,
             customer_company: pkgRow.customer_company,
             net_total: pkgRow.net_total,
             margin_pct: pkgRow.margin_pct,
+            branch_slug: approvalRoute.branchSlug,
+            branch_name: approvalRoute.branchName,
           },
           metadata: {
             source: "quote_builder_v2",
             submitted_by: user.id,
             quote_package_id: pkgRow.id,
+            quote_package_version_id: latestVersion.id,
+            authority_band: authorityBand,
           },
         })
         .select("id")
@@ -1723,6 +2473,9 @@ Deno.serve(async (req) => {
       const totalLabel = Number.isFinite(Number(pkgRow.net_total))
         ? `$${Number(pkgRow.net_total).toLocaleString()}`
         : "amount unavailable";
+      const routeLabel = approvalRoute.assignedToName
+        ? `${approvalRoute.assignedToName} (${approvalRoute.branchName})`
+        : `${approvalRoute.branchName} manager queue`;
 
       const { data: approvalId, error: approvalErr } = await admin.rpc("request_flow_approval", {
         p_run_id: runRow.id,
@@ -1731,9 +2484,9 @@ Deno.serve(async (req) => {
         p_subject: pkgRow.quote_number
           ? `Quote ${pkgRow.quote_number} needs sales manager approval`
           : `${customerLabel} quote needs sales manager approval`,
-        p_detail: `${marginLabel} · ${totalLabel}. Review the quote before it can be sent to the customer.`,
-        p_assigned_role: "manager",
-        p_assigned_to: null,
+        p_detail: `${marginLabel} · ${totalLabel}. Routed to ${routeLabel}. Review the quote before it can be sent to the customer.`,
+        p_assigned_role: approvalRoute.assignedRole,
+        p_assigned_to: approvalRoute.assignedTo,
         p_due_in_hours: 24,
         p_escalate_in_hours: 48,
         p_context_summary: {
@@ -1741,10 +2494,16 @@ Deno.serve(async (req) => {
           quote_package_id: pkgRow.id,
           deal_id: pkgRow.deal_id,
           quote_number: pkgRow.quote_number,
+          branch_slug: approvalRoute.branchSlug,
+          branch_name: approvalRoute.branchName,
           customer_name: pkgRow.customer_name,
           customer_company: pkgRow.customer_company,
           net_total: pkgRow.net_total,
           margin_pct: pkgRow.margin_pct,
+          assigned_to: approvalRoute.assignedTo,
+          assigned_to_name: approvalRoute.assignedToName,
+          assigned_role: approvalRoute.assignedRole,
+          route_mode: approvalRoute.routeMode,
         },
       });
 
@@ -1760,6 +2519,58 @@ Deno.serve(async (req) => {
         return safeJsonError(approvalErr?.message ?? "Failed to request approval", 500, origin);
       }
 
+      const dueAt = new Date(Date.now() + policy.submitSlaHours * 60 * 60 * 1000).toISOString();
+      const escalateAt = new Date(Date.now() + policy.escalationSlaHours * 60 * 60 * 1000).toISOString();
+      const reasonSummary = buildQuoteApprovalReasonSummary({
+        policy,
+        marginPct: pkgRow.margin_pct,
+        amount: pkgRow.net_total,
+        authorityBand,
+      });
+
+      const { data: approvalCase, error: approvalCaseErr } = await admin
+        .from("quote_approval_cases")
+        .insert({
+          workspace_id: pkgRow.workspace_id || "default",
+          quote_package_id: pkgRow.id,
+          quote_package_version_id: latestVersion.id,
+          version_number: latestVersion.versionNumber,
+          deal_id: pkgRow.deal_id,
+          quote_number: pkgRow.quote_number,
+          branch_slug: approvalRoute.branchSlug,
+          branch_name: approvalRoute.branchName,
+          customer_name: pkgRow.customer_name,
+          customer_company: pkgRow.customer_company,
+          net_total: pkgRow.net_total,
+          margin_pct: pkgRow.margin_pct,
+          submitted_by: user.id,
+          submitted_by_name: typeof submitterProfile?.full_name === "string" ? submitterProfile.full_name : null,
+          assigned_to: approvalRoute.assignedTo,
+          assigned_to_name: approvalRoute.assignedToName,
+          assigned_role: approvalRoute.assignedRole,
+          route_mode: approvalRoute.routeMode,
+          policy_snapshot_json: policy,
+          reason_summary_json: reasonSummary,
+          status: "pending",
+          due_at: dueAt,
+          escalate_at: escalateAt,
+          flow_approval_id: approvalId,
+        })
+        .select("*")
+        .single();
+
+      if (approvalCaseErr || !approvalCase?.id) {
+        await admin
+          .from("flow_workflow_runs")
+          .update({
+            status: "cancelled",
+            finished_at: new Date().toISOString(),
+            error_text: approvalCaseErr?.message ?? "quote approval case creation failed",
+          })
+          .eq("id", runRow.id);
+        return safeJsonError(approvalCaseErr?.message ?? "Failed to create quote approval case", 500, origin);
+      }
+
       const { error: statusErr } = await supabase
         .from("quote_packages")
         .update({ status: "pending_approval" })
@@ -1768,8 +2579,256 @@ Deno.serve(async (req) => {
       if (statusErr) return safeJsonError(statusErr.message, 500, origin);
 
       return safeJsonOk({
+        approval_case_id: approvalCase.id,
         approval_id: approvalId,
+        quote_package_version_id: latestVersion.id,
+        version_number: latestVersion.versionNumber,
         status: "pending_approval",
+        branch_name: approvalRoute.branchName,
+        assigned_to_name: approvalRoute.assignedToName,
+        route_mode: approvalRoute.routeMode,
+      }, origin);
+    }
+
+    if (action === "approval-policy") {
+      if (!canPublish) {
+        return safeJsonError("Quote approval policy access requires admin, manager, or owner role", 403, origin);
+      }
+      const admin = createAdminClient();
+      const existing = await loadQuoteApprovalPolicy({
+        admin,
+        workspaceId: "default",
+      });
+      const allowedConditionTypes = Array.isArray(body.allowed_condition_types)
+        ? body.allowed_condition_types.filter((value: unknown): value is QuoteApprovalConditionType =>
+          typeof value === "string" && isQuoteApprovalConditionType(value))
+        : existing.allowedConditionTypes;
+      const nextPolicy: QuoteApprovalPolicy = {
+        workspaceId: "default",
+        branchManagerMinMarginPct: Number(body.branch_manager_min_margin_pct ?? existing.branchManagerMinMarginPct) || existing.branchManagerMinMarginPct,
+        standardMarginFloorPct: Number(body.standard_margin_floor_pct ?? existing.standardMarginFloorPct) || existing.standardMarginFloorPct,
+        branchManagerMaxQuoteAmount: Number(body.branch_manager_max_quote_amount ?? existing.branchManagerMaxQuoteAmount) || existing.branchManagerMaxQuoteAmount,
+        submitSlaHours: Number(body.submit_sla_hours ?? existing.submitSlaHours) || existing.submitSlaHours,
+        escalationSlaHours: Number(body.escalation_sla_hours ?? existing.escalationSlaHours) || existing.escalationSlaHours,
+        ownerEscalationRole: body.owner_escalation_role === "admin" ? "admin" : existing.ownerEscalationRole,
+        namedBranchSalesManagerPrimary: body.named_branch_sales_manager_primary == null
+          ? existing.namedBranchSalesManagerPrimary
+          : body.named_branch_sales_manager_primary === true,
+        namedBranchGeneralManagerFallback: body.named_branch_general_manager_fallback == null
+          ? existing.namedBranchGeneralManagerFallback
+          : body.named_branch_general_manager_fallback === true,
+        allowedConditionTypes: allowedConditionTypes.length > 0 ? allowedConditionTypes : existing.allowedConditionTypes,
+        updatedAt: new Date().toISOString(),
+        updatedBy: user.id,
+      };
+
+      const { error: policyErr } = await admin
+        .from("quote_approval_policies")
+        .upsert({
+          workspace_id: nextPolicy.workspaceId,
+          branch_manager_min_margin_pct: nextPolicy.branchManagerMinMarginPct,
+          standard_margin_floor_pct: nextPolicy.standardMarginFloorPct,
+          branch_manager_max_quote_amount: nextPolicy.branchManagerMaxQuoteAmount,
+          submit_sla_hours: nextPolicy.submitSlaHours,
+          escalation_sla_hours: nextPolicy.escalationSlaHours,
+          owner_escalation_role: nextPolicy.ownerEscalationRole,
+          named_branch_sales_manager_primary: nextPolicy.namedBranchSalesManagerPrimary,
+          named_branch_general_manager_fallback: nextPolicy.namedBranchGeneralManagerFallback,
+          allowed_condition_types: nextPolicy.allowedConditionTypes,
+          updated_by: user.id,
+        }, { onConflict: "workspace_id" });
+      if (policyErr) return safeJsonError(policyErr.message, 500, origin);
+      return safeJsonOk({ policy: nextPolicy }, origin);
+    }
+
+    if (action === "decide-approval-case" && req.method === "POST") {
+      if (!canPublish) {
+        return safeJsonError("Quote approval decisions require admin, manager, or owner role", 403, origin);
+      }
+      if (typeof body.approval_case_id !== "string" || body.approval_case_id.length === 0) {
+        return safeJsonError("approval_case_id required", 400, origin);
+      }
+      if (typeof body.decision !== "string" || !isQuoteApprovalDecision(body.decision)) {
+        return safeJsonError("A valid decision is required", 400, origin);
+      }
+
+      const admin = createAdminClient();
+      const { data: caseRow, error: caseErr } = await admin
+        .from("quote_approval_cases")
+        .select("*")
+        .eq("id", body.approval_case_id)
+        .maybeSingle();
+      if (caseErr) return safeJsonError(caseErr.message, 500, origin);
+      if (!caseRow?.id) return safeJsonError("Quote approval case not found", 404, origin);
+      if (!["pending", "escalated"].includes(String(caseRow.status ?? ""))) {
+        return safeJsonError("This approval case is no longer awaiting a decision.", 409, origin);
+      }
+
+      const policy = await loadQuoteApprovalPolicy({
+        admin,
+        workspaceId: typeof caseRow.workspace_id === "string" ? caseRow.workspace_id : "default",
+      });
+      const decision = body.decision as string;
+      const decisionNote = typeof body.note === "string" ? body.note.trim().slice(0, 1000) : null;
+      const conditions = normalizeDecisionConditions({
+        conditions: body.conditions,
+        allowedConditionTypes: policy.allowedConditionTypes,
+      });
+      if (decision === "approved_with_conditions" && conditions.length === 0) {
+        return safeJsonError("At least one structured condition is required for conditional approval.", 400, origin);
+      }
+
+      const { data: deciderProfile } = await admin
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .maybeSingle();
+      const deciderName = typeof deciderProfile?.full_name === "string" ? deciderProfile.full_name : null;
+      const nowIso = new Date().toISOString();
+
+      if (decision === "escalated") {
+        const approvalRoute = await resolveQuoteApprovalAssignee({
+          admin,
+          workspaceId: typeof caseRow.workspace_id === "string" ? caseRow.workspace_id : "default",
+          branchSlug: typeof caseRow.branch_slug === "string" ? caseRow.branch_slug : null,
+          authorityBand: "owner_admin",
+          ownerEscalationRole: policy.ownerEscalationRole,
+          namedBranchSalesManagerPrimary: policy.namedBranchSalesManagerPrimary,
+          namedBranchGeneralManagerFallback: policy.namedBranchGeneralManagerFallback,
+        });
+        const { error: flowErr } = await admin
+          .from("flow_approvals")
+          .update({
+            status: "escalated",
+            assigned_to: approvalRoute.assignedTo,
+            assigned_role: approvalRoute.assignedRole,
+            decision_reason: decisionNote,
+            due_at: new Date(Date.now() + policy.submitSlaHours * 60 * 60 * 1000).toISOString(),
+            escalate_at: new Date(Date.now() + policy.escalationSlaHours * 60 * 60 * 1000).toISOString(),
+            context_summary: {
+              ...(caseRow.reason_summary_json && typeof caseRow.reason_summary_json === "object" ? caseRow.reason_summary_json : {}),
+              quote_package_id: caseRow.quote_package_id,
+              branch_slug: approvalRoute.branchSlug,
+              branch_name: approvalRoute.branchName,
+              assigned_to: approvalRoute.assignedTo,
+              assigned_to_name: approvalRoute.assignedToName,
+              assigned_role: approvalRoute.assignedRole,
+              route_mode: approvalRoute.routeMode,
+            },
+          })
+          .eq("id", caseRow.flow_approval_id);
+        if (flowErr) return safeJsonError(flowErr.message, 500, origin);
+
+        const { error: caseUpdateErr } = await admin
+          .from("quote_approval_cases")
+          .update({
+            status: "escalated",
+            decision_note: decisionNote,
+            assigned_to: approvalRoute.assignedTo,
+            assigned_to_name: approvalRoute.assignedToName,
+            assigned_role: approvalRoute.assignedRole,
+            route_mode: approvalRoute.routeMode,
+            due_at: new Date(Date.now() + policy.submitSlaHours * 60 * 60 * 1000).toISOString(),
+            escalate_at: new Date(Date.now() + policy.escalationSlaHours * 60 * 60 * 1000).toISOString(),
+          })
+          .eq("id", caseRow.id);
+        if (caseUpdateErr) return safeJsonError(caseUpdateErr.message, 500, origin);
+
+        const refreshedCase = await getLatestQuoteApprovalCase({
+          admin,
+          quotePackageId: String(caseRow.quote_package_id),
+        });
+        return safeJsonOk({
+          approval_case: refreshedCase
+            ? await buildQuoteApprovalCaseResponse({ admin, approvalCase: refreshedCase })
+            : null,
+        }, origin);
+      }
+
+      const nextCaseStatus = decision === "approved_with_conditions"
+        ? "approved_with_conditions"
+        : decision === "changes_requested"
+          ? "changes_requested"
+          : decision === "approved"
+            ? "approved"
+            : "rejected";
+
+      await saveQuoteApprovalConditions({
+        admin,
+        approvalCaseId: String(caseRow.id),
+        conditions: decision === "approved" || decision === "rejected" ? [] : conditions,
+      });
+
+      const { error: caseUpdateErr } = await admin
+        .from("quote_approval_cases")
+        .update({
+          status: nextCaseStatus,
+          decision_note: decisionNote,
+          decided_by: user.id,
+          decided_by_name: deciderName,
+          decided_at: nowIso,
+        })
+        .eq("id", caseRow.id);
+      if (caseUpdateErr) return safeJsonError(caseUpdateErr.message, 500, origin);
+
+      const flowDecision = decision === "approved" || decision === "approved_with_conditions"
+        ? "approved"
+        : "rejected";
+      if (typeof caseRow.flow_approval_id === "string") {
+        const { error: flowErr } = await admin
+          .from("flow_approvals")
+          .update({
+            status: flowDecision,
+            decided_at: nowIso,
+            decided_by: user.id,
+            decision_reason: decisionNote,
+          })
+          .eq("id", caseRow.flow_approval_id);
+        if (flowErr) return safeJsonError(flowErr.message, 500, origin);
+
+        const { data: flowApprovalRow } = await admin
+          .from("flow_approvals")
+          .select("run_id")
+          .eq("id", caseRow.flow_approval_id)
+          .maybeSingle();
+        if (flowApprovalRow?.run_id) {
+          const { error: runErr } = await admin
+            .from("flow_workflow_runs")
+            .update({
+              status: flowDecision === "approved" ? "succeeded" : "cancelled",
+              finished_at: nowIso,
+              metadata: {
+                approval_case_id: caseRow.id,
+                quote_decision: decision,
+                decision_note: decisionNote,
+              },
+            })
+            .eq("id", flowApprovalRow.run_id);
+          if (runErr) return safeJsonError(runErr.message, 500, origin);
+        }
+      }
+
+      const nextQuoteStatus = nextCaseStatus === "approved_with_conditions"
+        ? "approved_with_conditions"
+        : nextCaseStatus === "changes_requested"
+          ? "changes_requested"
+          : nextCaseStatus === "approved"
+            ? "approved"
+            : "rejected";
+      const { error: quoteStatusErr } = await admin
+        .from("quote_packages")
+        .update({ status: nextQuoteStatus })
+        .eq("id", caseRow.quote_package_id);
+      if (quoteStatusErr) return safeJsonError(quoteStatusErr.message, 500, origin);
+
+      const refreshedCase = await getLatestQuoteApprovalCase({
+        admin,
+        quotePackageId: String(caseRow.quote_package_id),
+      });
+      return safeJsonOk({
+        approval_case: refreshedCase
+          ? await buildQuoteApprovalCaseResponse({ admin, approvalCase: refreshedCase })
+          : null,
       }, origin);
     }
 
@@ -1898,10 +2957,41 @@ Deno.serve(async (req) => {
         return safeJsonError("No email address found for this contact. Update the contact record and try again.", 422, origin);
       }
 
-      if ((pkg.status ?? "draft") === "pending_approval") {
-        return safeJsonError("This quote is still awaiting manager approval.", 409, origin);
+      const quoteStatus = String(pkg.status ?? "draft");
+      if (["pending_approval", "changes_requested", "rejected"].includes(quoteStatus)) {
+        return safeJsonError(`This quote cannot be sent while status is ${quoteStatus}.`, 409, origin);
       }
-      if (typeof pkg.margin_pct === "number" && pkg.margin_pct < 10 && pkg.status !== "approved") {
+
+      const admin = createAdminClient();
+      const latestCase = await getLatestQuoteApprovalCase({
+        admin,
+        quotePackageId: String(pkg.id),
+      });
+      if (quoteStatus === "approved_with_conditions") {
+        if (!latestCase) {
+          return safeJsonError("Conditional approval metadata is missing. Re-submit the quote for approval.", 409, origin);
+        }
+        const latestVersion = await getLatestQuotePackageVersion({
+          admin,
+          quotePackageId: String(pkg.id),
+        });
+        if (!latestVersion) {
+          return safeJsonError("Quote version snapshot missing for conditional approval.", 409, origin);
+        }
+        const conditions = await getQuoteApprovalConditions({
+          admin,
+          approvalCaseId: String(latestCase.id),
+        });
+        const evaluationResult = evaluateQuoteApprovalConditions({
+          snapshot: latestVersion.snapshot,
+          conditions,
+          decidedAt: typeof latestCase.decided_at === "string" ? latestCase.decided_at : null,
+          now: new Date().toISOString(),
+        });
+        if (!evaluationResult.allSatisfied) {
+          return safeJsonError("This quote still has unmet approval conditions and cannot be sent.", 409, origin);
+        }
+      } else if (typeof pkg.margin_pct === "number" && pkg.margin_pct < 10 && quoteStatus !== "approved") {
         return safeJsonError("Submit this quote for manager approval before sending it.", 409, origin);
       }
 

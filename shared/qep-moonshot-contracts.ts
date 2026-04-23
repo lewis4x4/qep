@@ -140,6 +140,8 @@ export interface QuoteWorkspaceDraft {
     | "draft"
     | "pending_approval"
     | "approved"
+    | "approved_with_conditions"
+    | "changes_requested"
     | "sent"
     | "accepted"
     | "rejected"
@@ -151,6 +153,458 @@ export interface QuoteWorkspaceDraft {
    *  qb_ai_request_log.id that generated it. Threaded through the save
    *  flow so the AI Request Log can show real time-to-quote numbers. */
   originatingLogId?: string | null;
+}
+
+export type QuoteApprovalConditionType =
+  | "min_margin_pct"
+  | "max_trade_allowance"
+  | "required_cash_down"
+  | "required_finance_scenario"
+  | "remove_attachment"
+  | "expiry_hours";
+
+export type QuoteApprovalDecision =
+  | "approved"
+  | "approved_with_conditions"
+  | "changes_requested"
+  | "rejected"
+  | "escalated";
+
+export type QuoteApprovalCaseStatus =
+  | "pending"
+  | "approved"
+  | "approved_with_conditions"
+  | "changes_requested"
+  | "rejected"
+  | "escalated"
+  | "cancelled"
+  | "superseded"
+  | "expired";
+
+export type QuoteApprovalRouteMode =
+  | "branch_sales_manager"
+  | "branch_general_manager"
+  | "owner_direct"
+  | "admin_direct"
+  | "admin_queue"
+  | "owner_queue"
+  | "manager_queue";
+
+export interface QuoteApprovalPolicy {
+  workspaceId: string;
+  branchManagerMinMarginPct: number;
+  standardMarginFloorPct: number;
+  branchManagerMaxQuoteAmount: number;
+  submitSlaHours: number;
+  escalationSlaHours: number;
+  ownerEscalationRole: "owner" | "admin";
+  namedBranchSalesManagerPrimary: boolean;
+  namedBranchGeneralManagerFallback: boolean;
+  allowedConditionTypes: QuoteApprovalConditionType[];
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
+export interface QuoteVersionLineSnapshot {
+  id: string | null;
+  title: string;
+  kind: "equipment" | "attachment";
+  make: string | null;
+  model: string | null;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface QuoteVersionSnapshot {
+  quotePackageId: string | null;
+  dealId: string | null;
+  branchSlug: string | null;
+  customerName: string | null;
+  customerCompany: string | null;
+  customerEmail: string | null;
+  customerPhone: string | null;
+  commercialDiscountType: QuoteCommercialDiscountType;
+  commercialDiscountValue: number;
+  tradeAllowance: number;
+  cashDown: number;
+  selectedFinanceScenario: string | null;
+  taxProfile: QuoteTaxProfile;
+  taxTotal: number;
+  netTotal: number;
+  customerTotal: number;
+  amountFinanced: number;
+  marginPct: number | null;
+  amount: number | null;
+  equipment: QuoteVersionLineSnapshot[];
+  attachments: QuoteVersionLineSnapshot[];
+  quoteStatus: QuoteWorkspaceDraft["quoteStatus"];
+  savedAt: string | null;
+}
+
+export interface QuoteApprovalCondition {
+  id: string;
+  approvalCaseId: string | null;
+  conditionType: QuoteApprovalConditionType;
+  conditionPayload: Record<string, unknown>;
+  sortOrder: number;
+  createdAt: string | null;
+}
+
+export interface QuoteApprovalConditionDraft {
+  id?: string | null;
+  conditionType: QuoteApprovalConditionType;
+  conditionPayload: Record<string, unknown>;
+  sortOrder?: number;
+}
+
+export interface QuoteApprovalConditionEvaluation {
+  id: string;
+  conditionType: QuoteApprovalConditionType;
+  label: string;
+  satisfied: boolean;
+  detail: string;
+  blocking: boolean;
+}
+
+export interface QuoteApprovalCaseSummary {
+  id: string;
+  quotePackageId: string;
+  quotePackageVersionId: string;
+  versionNumber: number | null;
+  dealId: string | null;
+  branchSlug: string | null;
+  branchName: string | null;
+  submittedBy: string | null;
+  submittedByName: string | null;
+  assignedTo: string | null;
+  assignedToName: string | null;
+  assignedRole: string | null;
+  routeMode: QuoteApprovalRouteMode;
+  policySnapshot: Record<string, unknown>;
+  reasonSummary: Record<string, unknown>;
+  status: QuoteApprovalCaseStatus;
+  decisionNote: string | null;
+  decidedBy: string | null;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  dueAt: string | null;
+  escalateAt: string | null;
+  flowApprovalId: string | null;
+  conditions: QuoteApprovalCondition[];
+  evaluations: QuoteApprovalConditionEvaluation[];
+  canSend: boolean;
+}
+
+export interface QuoteApprovalSubmitResult {
+  approvalCaseId: string;
+  approvalId: string;
+  quotePackageVersionId: string;
+  versionNumber: number;
+  status: "pending_approval";
+  branchName: string | null;
+  assignedToName: string | null;
+  routeMode: QuoteApprovalRouteMode;
+  alreadyPending?: boolean;
+}
+
+export interface QuoteApprovalDecisionPayload {
+  approvalCaseId: string;
+  decision: QuoteApprovalDecision;
+  note?: string | null;
+  conditions?: QuoteApprovalConditionDraft[];
+}
+
+const QUOTE_APPROVAL_ALLOWED_CONDITION_TYPES: QuoteApprovalConditionType[] = [
+  "min_margin_pct",
+  "max_trade_allowance",
+  "required_cash_down",
+  "required_finance_scenario",
+  "remove_attachment",
+  "expiry_hours",
+];
+
+const VERSION_COMPARISON_SCOPES = [
+  "branch",
+  "customer",
+  "pricing",
+  "trade",
+  "cash_down",
+  "finance",
+  "attachments",
+  "equipment",
+] as const;
+
+type QuoteVersionComparisonScope = (typeof VERSION_COMPARISON_SCOPES)[number];
+
+export function isQuoteApprovalConditionType(value: string): value is QuoteApprovalConditionType {
+  return QUOTE_APPROVAL_ALLOWED_CONDITION_TYPES.includes(value as QuoteApprovalConditionType);
+}
+
+export function isQuoteApprovalDecision(value: string): value is QuoteApprovalDecision {
+  return ["approved", "approved_with_conditions", "changes_requested", "rejected", "escalated"].includes(value);
+}
+
+export function buildQuoteVersionSnapshot(input: {
+  quotePackageId?: string | null;
+  dealId?: string | null;
+  branchSlug?: string | null;
+  customerName?: string | null;
+  customerCompany?: string | null;
+  customerEmail?: string | null;
+  customerPhone?: string | null;
+  commercialDiscountType: QuoteCommercialDiscountType;
+  commercialDiscountValue: number;
+  tradeAllowance: number;
+  cashDown: number;
+  selectedFinanceScenario?: string | null;
+  taxProfile: QuoteTaxProfile;
+  taxTotal: number;
+  netTotal: number;
+  customerTotal: number;
+  amountFinanced: number;
+  marginPct?: number | null;
+  amount?: number | null;
+  equipment: Array<QuoteLineItemDraft | { id?: string | null; title?: string | null; make?: string | null; model?: string | null; quantity?: number | null; unitPrice?: number | null; kind?: "equipment" | "attachment" }>;
+  attachments: Array<QuoteLineItemDraft | { id?: string | null; title?: string | null; make?: string | null; model?: string | null; quantity?: number | null; unitPrice?: number | null; kind?: "equipment" | "attachment" }>;
+  quoteStatus?: QuoteWorkspaceDraft["quoteStatus"];
+  savedAt?: string | null;
+}): QuoteVersionSnapshot {
+  function normalizeLines(
+    kind: "equipment" | "attachment",
+    rows: Array<QuoteLineItemDraft | { id?: string | null; title?: string | null; make?: string | null; model?: string | null; quantity?: number | null; unitPrice?: number | null }>,
+  ): QuoteVersionLineSnapshot[] {
+    return rows.map((row) => ({
+      id: row.id ?? null,
+      title: row.title ?? "",
+      kind,
+      make: row.make ?? null,
+      model: row.model ?? null,
+      quantity: Number(row.quantity ?? 1) || 1,
+      unitPrice: Number(row.unitPrice ?? 0) || 0,
+    }));
+  }
+
+  return {
+    quotePackageId: input.quotePackageId ?? null,
+    dealId: input.dealId ?? null,
+    branchSlug: input.branchSlug ?? null,
+    customerName: input.customerName ?? null,
+    customerCompany: input.customerCompany ?? null,
+    customerEmail: input.customerEmail ?? null,
+    customerPhone: input.customerPhone ?? null,
+    commercialDiscountType: input.commercialDiscountType,
+    commercialDiscountValue: Number(input.commercialDiscountValue ?? 0) || 0,
+    tradeAllowance: Number(input.tradeAllowance ?? 0) || 0,
+    cashDown: Number(input.cashDown ?? 0) || 0,
+    selectedFinanceScenario: input.selectedFinanceScenario ?? null,
+    taxProfile: input.taxProfile,
+    taxTotal: Number(input.taxTotal ?? 0) || 0,
+    netTotal: Number(input.netTotal ?? 0) || 0,
+    customerTotal: Number(input.customerTotal ?? 0) || 0,
+    amountFinanced: Number(input.amountFinanced ?? 0) || 0,
+    marginPct: input.marginPct ?? null,
+    amount: input.amount ?? input.netTotal ?? null,
+    equipment: normalizeLines("equipment", input.equipment),
+    attachments: normalizeLines("attachment", input.attachments),
+    quoteStatus: input.quoteStatus ?? null,
+    savedAt: input.savedAt ?? null,
+  };
+}
+
+function shallowEqualLineArrays(a: QuoteVersionLineSnapshot[], b: QuoteVersionLineSnapshot[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((line, index) => {
+    const other = b[index];
+    return Boolean(other)
+      && line.id === other.id
+      && line.title === other.title
+      && line.kind === other.kind
+      && line.make === other.make
+      && line.model === other.model
+      && line.quantity === other.quantity
+      && line.unitPrice === other.unitPrice;
+  });
+}
+
+export function diffQuoteVersionScopes(
+  previous: QuoteVersionSnapshot,
+  next: QuoteVersionSnapshot,
+): QuoteVersionComparisonScope[] {
+  const changed = new Set<QuoteVersionComparisonScope>();
+
+  if (previous.branchSlug !== next.branchSlug) changed.add("branch");
+  if (
+    previous.customerName !== next.customerName
+    || previous.customerCompany !== next.customerCompany
+    || previous.customerEmail !== next.customerEmail
+    || previous.customerPhone !== next.customerPhone
+  ) changed.add("customer");
+  if (
+    previous.commercialDiscountType !== next.commercialDiscountType
+    || previous.commercialDiscountValue !== next.commercialDiscountValue
+    || previous.taxProfile !== next.taxProfile
+    || previous.taxTotal !== next.taxTotal
+    || previous.netTotal !== next.netTotal
+    || previous.customerTotal !== next.customerTotal
+    || previous.marginPct !== next.marginPct
+  ) changed.add("pricing");
+  if (previous.tradeAllowance !== next.tradeAllowance) changed.add("trade");
+  if (previous.cashDown !== next.cashDown) changed.add("cash_down");
+  if (
+    previous.selectedFinanceScenario !== next.selectedFinanceScenario
+    || previous.amountFinanced !== next.amountFinanced
+  ) changed.add("finance");
+  if (!shallowEqualLineArrays(previous.attachments, next.attachments)) changed.add("attachments");
+  if (!shallowEqualLineArrays(previous.equipment, next.equipment)) changed.add("equipment");
+
+  return VERSION_COMPARISON_SCOPES.filter((scope) => changed.has(scope));
+}
+
+export function allowedQuoteVersionScopesForConditions(
+  conditions: QuoteApprovalConditionDraft[] | QuoteApprovalCondition[],
+): QuoteVersionComparisonScope[] {
+  const scopes = new Set<QuoteVersionComparisonScope>();
+  for (const condition of conditions) {
+    switch (condition.conditionType) {
+      case "min_margin_pct":
+        scopes.add("pricing");
+        scopes.add("trade");
+        scopes.add("attachments");
+        break;
+      case "max_trade_allowance":
+        scopes.add("trade");
+        break;
+      case "required_cash_down":
+        scopes.add("cash_down");
+        break;
+      case "required_finance_scenario":
+        scopes.add("finance");
+        break;
+      case "remove_attachment":
+        scopes.add("attachments");
+        break;
+      case "expiry_hours":
+        scopes.add("pricing");
+        break;
+    }
+  }
+  return VERSION_COMPARISON_SCOPES.filter((scope) => scopes.has(scope));
+}
+
+function formatCurrencyValue(value: number): string {
+  return `$${Math.round(value).toLocaleString("en-US")}`;
+}
+
+export function evaluateQuoteApprovalConditions(input: {
+  snapshot: QuoteVersionSnapshot;
+  conditions: QuoteApprovalConditionDraft[] | QuoteApprovalCondition[];
+  decidedAt?: string | null;
+  now?: string | null;
+}): { evaluations: QuoteApprovalConditionEvaluation[]; allSatisfied: boolean } {
+  const nowMs = Date.parse(input.now ?? new Date().toISOString());
+  const decidedAtMs = input.decidedAt ? Date.parse(input.decidedAt) : nowMs;
+  const evaluations = input.conditions.map((condition, index) => {
+    const id = condition.id ?? `${condition.conditionType}-${index}`;
+    switch (condition.conditionType) {
+      case "min_margin_pct": {
+        const required = Number(condition.conditionPayload.min_margin_pct ?? 0) || 0;
+        const actual = Number(input.snapshot.marginPct ?? 0) || 0;
+        const satisfied = actual >= required;
+        return {
+          id,
+          conditionType: condition.conditionType,
+          label: `Margin at least ${required.toFixed(1)}%`,
+          satisfied,
+          detail: `Current margin ${actual.toFixed(1)}%`,
+          blocking: true,
+        };
+      }
+      case "max_trade_allowance": {
+        const maxTrade = Number(condition.conditionPayload.max_trade_allowance ?? 0) || 0;
+        const actual = Number(input.snapshot.tradeAllowance ?? 0) || 0;
+        const satisfied = actual <= maxTrade;
+        return {
+          id,
+          conditionType: condition.conditionType,
+          label: `Trade allowance no more than ${formatCurrencyValue(maxTrade)}`,
+          satisfied,
+          detail: `Current trade allowance ${formatCurrencyValue(actual)}`,
+          blocking: true,
+        };
+      }
+      case "required_cash_down": {
+        const required = Number(condition.conditionPayload.required_cash_down ?? 0) || 0;
+        const actual = Number(input.snapshot.cashDown ?? 0) || 0;
+        const satisfied = actual >= required;
+        return {
+          id,
+          conditionType: condition.conditionType,
+          label: `Cash down at least ${formatCurrencyValue(required)}`,
+          satisfied,
+          detail: `Current cash down ${formatCurrencyValue(actual)}`,
+          blocking: true,
+        };
+      }
+      case "required_finance_scenario": {
+        const required = String(condition.conditionPayload.required_finance_scenario ?? "").trim();
+        const actual = input.snapshot.selectedFinanceScenario ?? "";
+        const satisfied = required.length === 0 ? true : actual === required;
+        return {
+          id,
+          conditionType: condition.conditionType,
+          label: `Use finance scenario ${required || "specified by manager"}`,
+          satisfied,
+          detail: `Current finance scenario ${actual || "none selected"}`,
+          blocking: true,
+        };
+      }
+      case "remove_attachment": {
+        const target = String(condition.conditionPayload.attachment_title ?? "").trim().toLowerCase();
+        const match = input.snapshot.attachments.find((attachment) => attachment.title.trim().toLowerCase() === target);
+        const satisfied = !match;
+        return {
+          id,
+          conditionType: condition.conditionType,
+          label: `Remove attachment ${String(condition.conditionPayload.attachment_title ?? "").trim() || "specified by manager"}`,
+          satisfied,
+          detail: satisfied ? "Attachment is no longer included." : "Attachment is still included.",
+          blocking: true,
+        };
+      }
+      case "expiry_hours": {
+        const hours = Number(condition.conditionPayload.expiry_hours ?? 0) || 0;
+        const expiresAt = Number.isFinite(decidedAtMs)
+          ? decidedAtMs + hours * 60 * 60 * 1000
+          : nowMs;
+        const satisfied = nowMs <= expiresAt;
+        return {
+          id,
+          conditionType: condition.conditionType,
+          label: `Send within ${hours} hours of approval`,
+          satisfied,
+          detail: `Approval window expires ${Number.isFinite(expiresAt) ? new Date(expiresAt).toLocaleString("en-US") : "now"}`,
+          blocking: true,
+        };
+      }
+    }
+  });
+
+  return {
+    evaluations,
+    allSatisfied: evaluations.every((evaluation) => evaluation.satisfied || !evaluation.blocking),
+  };
+}
+
+export function resolveQuoteApprovalAuthorityBand(input: {
+  marginPct: number | null | undefined;
+  amount: number | null | undefined;
+  policy: Pick<QuoteApprovalPolicy, "branchManagerMinMarginPct" | "branchManagerMaxQuoteAmount">;
+}): "branch_manager" | "owner_admin" {
+  const marginPct = Number(input.marginPct ?? 0) || 0;
+  const amount = Number(input.amount ?? 0) || 0;
+  if (marginPct < input.policy.branchManagerMinMarginPct) return "owner_admin";
+  if (amount > input.policy.branchManagerMaxQuoteAmount) return "owner_admin";
+  return "branch_manager";
 }
 
 export interface QuoteListItem {

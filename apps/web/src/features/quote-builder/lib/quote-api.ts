@@ -5,6 +5,11 @@ import type {
   PortalQuoteRevisionCompare,
   PortalQuoteRevisionDraft,
   PortalQuoteRevisionPublishState,
+  QuoteApprovalCaseSummary,
+  QuoteApprovalConditionDraft,
+  QuoteApprovalDecision,
+  QuoteApprovalPolicy,
+  QuoteApprovalSubmitResult,
   QuoteFinancingPreview,
   QuoteFinanceScenario,
   QuoteListItem,
@@ -17,7 +22,9 @@ const QUOTE_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/quote-b
 export interface QuotePackageSaveResponse {
   id?: string;
   deal_id?: string;
-  quote?: { id?: string; deal_id?: string };
+  quote_package_version_id?: string | null;
+  version_number?: number | null;
+  quote?: { id?: string; deal_id?: string; status?: string };
 }
 
 export interface PortalRevisionEnvelope {
@@ -447,11 +454,7 @@ export async function sendQuotePackage(quotePackageId: string): Promise<{ sent: 
   return res.json() as Promise<{ sent: boolean; to_email: string }>;
 }
 
-export async function submitQuoteForApproval(quotePackageId: string): Promise<{
-  approval_id: string;
-  status: "pending_approval";
-  already_pending?: boolean;
-}> {
+export async function submitQuoteForApproval(quotePackageId: string): Promise<QuoteApprovalSubmitResult> {
   const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/submit-approval`, {
     method: "POST",
     body: JSON.stringify({ quote_package_id: quotePackageId }),
@@ -460,7 +463,84 @@ export async function submitQuoteForApproval(quotePackageId: string): Promise<{
     const err = await res.json().catch(() => ({ error: "Failed to submit quote for approval" }));
     throw new Error((err as { error?: string }).error ?? "Failed to submit quote for approval");
   }
-  return res.json();
+  const body = await res.json() as Record<string, unknown>;
+  return {
+    approvalCaseId: String(body.approval_case_id ?? ""),
+    approvalId: String(body.approval_id ?? ""),
+    quotePackageVersionId: String(body.quote_package_version_id ?? ""),
+    versionNumber: Number(body.version_number ?? 0) || 0,
+    status: "pending_approval",
+    branchName: typeof body.branch_name === "string" ? body.branch_name : null,
+    assignedToName: typeof body.assigned_to_name === "string" ? body.assigned_to_name : null,
+    routeMode: (typeof body.route_mode === "string" ? body.route_mode : "manager_queue") as QuoteApprovalSubmitResult["routeMode"],
+    alreadyPending: body.already_pending === true,
+  };
+}
+
+export async function getQuoteApprovalCase(quotePackageId: string): Promise<QuoteApprovalCaseSummary | null> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/approval-case?quote_package_id=${encodeURIComponent(quotePackageId)}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Failed to load quote approval case" }));
+    throw new Error((err as { error?: string }).error ?? "Failed to load quote approval case");
+  }
+  const body = await res.json() as { approval_case?: QuoteApprovalCaseSummary | null };
+  return body.approval_case ?? null;
+}
+
+export async function decideQuoteApprovalCase(input: {
+  approvalCaseId: string;
+  decision: QuoteApprovalDecision;
+  note?: string | null;
+  conditions?: QuoteApprovalConditionDraft[];
+}): Promise<QuoteApprovalCaseSummary | null> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/decide-approval-case`, {
+    method: "POST",
+    body: JSON.stringify({
+      approval_case_id: input.approvalCaseId,
+      decision: input.decision,
+      note: input.note ?? null,
+      conditions: input.conditions ?? [],
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Failed to decide quote approval case" }));
+    throw new Error((err as { error?: string }).error ?? "Failed to decide quote approval case");
+  }
+  const body = await res.json() as { approval_case?: QuoteApprovalCaseSummary | null };
+  return body.approval_case ?? null;
+}
+
+export async function getQuoteApprovalPolicy(): Promise<QuoteApprovalPolicy> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/approval-policy`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Failed to load quote approval policy" }));
+    throw new Error((err as { error?: string }).error ?? "Failed to load quote approval policy");
+  }
+  const body = await res.json() as { policy: QuoteApprovalPolicy };
+  return body.policy;
+}
+
+export async function saveQuoteApprovalPolicy(policy: Partial<QuoteApprovalPolicy>): Promise<QuoteApprovalPolicy> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/approval-policy`, {
+    method: "POST",
+    body: JSON.stringify({
+      branch_manager_min_margin_pct: policy.branchManagerMinMarginPct,
+      standard_margin_floor_pct: policy.standardMarginFloorPct,
+      branch_manager_max_quote_amount: policy.branchManagerMaxQuoteAmount,
+      submit_sla_hours: policy.submitSlaHours,
+      escalation_sla_hours: policy.escalationSlaHours,
+      owner_escalation_role: policy.ownerEscalationRole,
+      named_branch_sales_manager_primary: policy.namedBranchSalesManagerPrimary,
+      named_branch_general_manager_fallback: policy.namedBranchGeneralManagerFallback,
+      allowed_condition_types: policy.allowedConditionTypes,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Failed to save quote approval policy" }));
+    throw new Error((err as { error?: string }).error ?? "Failed to save quote approval policy");
+  }
+  const body = await res.json() as { policy: QuoteApprovalPolicy };
+  return body.policy;
 }
 
 export async function saveQuoteSignature(data: {

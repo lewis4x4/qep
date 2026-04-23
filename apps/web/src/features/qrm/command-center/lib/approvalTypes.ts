@@ -5,6 +5,8 @@
  * into a single sorted list the Approval Center page can render uniformly.
  */
 
+import type { QuoteApprovalConditionType } from "../../../../../../../shared/qep-moonshot-contracts";
+
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 export type ApprovalType = "margin" | "deposit" | "trade" | "demo" | "quote";
@@ -105,22 +107,42 @@ export interface DemoRow {
 
 export interface QuoteApprovalRow {
   id: string;
-  workflow_slug: string;
-  subject: string;
-  detail: string | null;
+  quote_package_id: string;
+  quote_package_version_id: string;
+  version_number: number;
+  deal_id: string | null;
+  quote_number: string | null;
+  branch_slug: string | null;
+  branch_name: string | null;
+  submitted_by_name: string | null;
+  assigned_to_name: string | null;
+  assigned_role: string | null;
+  route_mode: "branch_sales_manager" | "branch_general_manager" | "owner_direct" | "admin_direct" | "admin_queue" | "owner_queue" | "manager_queue";
+  policy_snapshot_json: Record<string, unknown> | null;
+  reason_summary_json: { reasons?: string[] | null } | null;
+  decision_note: string | null;
   status: string;
   requested_at: string;
   due_at: string | null;
   escalate_at: string | null;
-  context_summary: {
-    quote_package_id?: string | null;
-    deal_id?: string | null;
-    quote_number?: string | null;
-    customer_name?: string | null;
-    customer_company?: string | null;
-    net_total?: number | null;
-    margin_pct?: number | null;
-  } | null;
+  customer_name: string | null;
+  customer_company: string | null;
+  net_total: number | null;
+  margin_pct: number | null;
+  conditions?: Array<{
+    id: string;
+    condition_type: QuoteApprovalConditionType;
+    condition_payload_json: Record<string, unknown>;
+    sort_order: number;
+  }> | null;
+  evaluations?: Array<{
+    id: string;
+    conditionType: QuoteApprovalConditionType;
+    label: string;
+    satisfied: boolean;
+    detail: string;
+    blocking: boolean;
+  }> | null;
 }
 
 // ─── Normalizer ────────────────────────────────────────────────────────────
@@ -213,23 +235,30 @@ export function normalizeApprovals(
   }
 
   for (const approval of quotes ?? []) {
-    const context = approval.context_summary ?? {};
-    const quotePackageId = context.quote_package_id ?? null;
-    const dealId = context.deal_id ?? null;
-    const customerCompany = context.customer_company?.trim() ?? "";
-    const customerName = context.customer_name?.trim() ?? "";
-    const quoteNumber = context.quote_number?.trim() ?? "";
-    const marginPct = typeof context.margin_pct === "number"
-      ? context.margin_pct
-      : Number(context.margin_pct ?? NaN);
-    const amount = typeof context.net_total === "number"
-      ? context.net_total
-      : Number(context.net_total ?? 0);
-    const headline = customerCompany || customerName || approval.subject || "Quote approval";
+    const quotePackageId = approval.quote_package_id ?? null;
+    const dealId = approval.deal_id ?? null;
+    const customerCompany = approval.customer_company?.trim() ?? "";
+    const customerName = approval.customer_name?.trim() ?? "";
+    const quoteNumber = approval.quote_number?.trim() ?? "";
+    const branchName = approval.branch_name?.trim() ?? "";
+    const assignedToName = approval.assigned_to_name?.trim() ?? "";
+    const submittedByName = approval.submitted_by_name?.trim() ?? "";
+    const marginPct = typeof approval.margin_pct === "number"
+      ? approval.margin_pct
+      : Number(approval.margin_pct ?? NaN);
+    const amount = typeof approval.net_total === "number"
+      ? approval.net_total
+      : Number(approval.net_total ?? 0);
+    const headline = customerCompany || customerName || "Quote approval";
     const detailBits = [
       quoteNumber ? `Quote ${quoteNumber}` : null,
+      branchName ? `Branch ${branchName}` : null,
+      submittedByName ? `Rep ${submittedByName}` : null,
+      assignedToName ? `Assigned to ${assignedToName}` : null,
+      approval.version_number ? `v${approval.version_number}` : null,
       Number.isFinite(marginPct) ? `Margin ${marginPct.toFixed(1)}%` : null,
-      approval.detail,
+      approval.decision_note,
+      ...(Array.isArray(approval.reason_summary_json?.reasons) ? approval.reason_summary_json.reasons.slice(0, 2) : []),
     ].filter(Boolean);
 
     items.push({
@@ -244,10 +273,15 @@ export function normalizeApprovals(
       createdAt: approval.requested_at,
       urgency: urgency(approval.requested_at, nowTime),
       meta: {
-        approvalId: approval.id,
+        approvalCaseId: approval.id,
         quotePackageId,
-        decisionWorkflow: approval.workflow_slug,
+        quotePackageVersionId: approval.quote_package_version_id,
+        versionNumber: approval.version_number,
+        routeMode: approval.route_mode,
+        assignedToName,
         status: approval.status,
+        conditions: approval.conditions ?? [],
+        evaluations: approval.evaluations ?? [],
       },
     });
   }

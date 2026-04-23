@@ -5,16 +5,19 @@
  * a "Run now" button to manually invoke the flow-runner edge fn. Drill
  * any run row → FlowRunHistoryDrawer with full step trace.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Workflow, Loader2, AlertOctagon, CheckCircle2, PlayCircle, Sparkles, Bot, Zap, Lightbulb, X, Activity } from "lucide-react";
 import { ForwardForecastBar, StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { FlowRunHistoryDrawer, type FlowRunRow } from "../components/flow/FlowRunHistoryDrawer";
 import { FlowApprovalsPanel } from "../components/flow/FlowApprovalsPanel";
 import { SloSparkline } from "@/lib/iron/SloSparkline";
+import { getQuoteApprovalPolicy, saveQuoteApprovalPolicy } from "@/features/quote-builder/lib/quote-api";
+import type { QuoteApprovalConditionType, QuoteApprovalPolicy } from "../../../../../../shared/qep-moonshot-contracts";
 
 interface WorkflowDef {
   id: string;
@@ -90,6 +93,7 @@ export function FlowAdminPage() {
   const [synthOpen, setSynthOpen] = useState(false);
   const [synthResult, setSynthResult] = useState<{ definition_id: string | null; missing: string[] } | null>(null);
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>("all");
+  const [quotePolicyDraft, setQuotePolicyDraft] = useState<QuoteApprovalPolicy | null>(null);
 
   const { data: workflows = [], isLoading: workflowsLoading } = useQuery({
     queryKey: ["flow-admin-workflows"],
@@ -104,6 +108,18 @@ export function FlowAdminPage() {
     },
     staleTime: 30_000,
   });
+
+  const quotePolicyQuery = useQuery({
+    queryKey: ["quote-approval-policy"],
+    queryFn: getQuoteApprovalPolicy,
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    if (quotePolicyQuery.data) {
+      setQuotePolicyDraft(quotePolicyQuery.data);
+    }
+  }, [quotePolicyQuery.data]);
 
   // Surface-filtered subset, computed before render
   const filteredWorkflows = useMemo(() => {
@@ -214,6 +230,17 @@ export function FlowAdminPage() {
       if (error) throw new Error("toggle failed");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["flow-admin-workflows"] }),
+  });
+
+  const saveQuotePolicyMutation = useMutation({
+    mutationFn: async () => {
+      if (!quotePolicyDraft) throw new Error("Quote approval policy is not loaded.");
+      return saveQuoteApprovalPolicy(quotePolicyDraft);
+    },
+    onSuccess: (policy) => {
+      queryClient.invalidateQueries({ queryKey: ["quote-approval-policy"] });
+      setQuotePolicyDraft(policy);
+    },
   });
 
   // ── Wave 7 v1.3: Iron flow suggestions (pattern-mined) ────────────────
@@ -458,6 +485,164 @@ export function FlowAdminPage() {
           { label: "Dead letters open", value: deadLetters.length, tone: "red" },
         ]}
       />
+
+      <Card className="p-4">
+        <p className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">Quote approval policy</p>
+        {!quotePolicyDraft ? (
+          <p className="text-xs text-muted-foreground">
+            {quotePolicyQuery.isLoading ? "Loading quote approval policy…" : "Quote approval policy unavailable."}
+          </p>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="block space-y-1">
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Branch manager min margin %</span>
+                <Input
+                  type="number"
+                  value={String(quotePolicyDraft.branchManagerMinMarginPct)}
+                  onChange={(event) => setQuotePolicyDraft((current) => current ? {
+                    ...current,
+                    branchManagerMinMarginPct: Number(event.target.value || 0),
+                  } : current)}
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Standard floor %</span>
+                <Input
+                  type="number"
+                  value={String(quotePolicyDraft.standardMarginFloorPct)}
+                  onChange={(event) => setQuotePolicyDraft((current) => current ? {
+                    ...current,
+                    standardMarginFloorPct: Number(event.target.value || 0),
+                  } : current)}
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Branch manager max quote $</span>
+                <Input
+                  type="number"
+                  value={String(quotePolicyDraft.branchManagerMaxQuoteAmount)}
+                  onChange={(event) => setQuotePolicyDraft((current) => current ? {
+                    ...current,
+                    branchManagerMaxQuoteAmount: Number(event.target.value || 0),
+                  } : current)}
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Submit SLA hours</span>
+                <Input
+                  type="number"
+                  value={String(quotePolicyDraft.submitSlaHours)}
+                  onChange={(event) => setQuotePolicyDraft((current) => current ? {
+                    ...current,
+                    submitSlaHours: Number(event.target.value || 0),
+                  } : current)}
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Escalation SLA hours</span>
+                <Input
+                  type="number"
+                  value={String(quotePolicyDraft.escalationSlaHours)}
+                  onChange={(event) => setQuotePolicyDraft((current) => current ? {
+                    ...current,
+                    escalationSlaHours: Number(event.target.value || 0),
+                  } : current)}
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Owner escalation role</span>
+                <select
+                  value={quotePolicyDraft.ownerEscalationRole}
+                  onChange={(event) => setQuotePolicyDraft((current) => current ? {
+                    ...current,
+                    ownerEscalationRole: event.target.value === "admin" ? "admin" : "owner",
+                  } : current)}
+                  className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="owner">Owner</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={quotePolicyDraft.namedBranchSalesManagerPrimary}
+                  onChange={(event) => setQuotePolicyDraft((current) => current ? {
+                    ...current,
+                    namedBranchSalesManagerPrimary: event.target.checked,
+                  } : current)}
+                />
+                Use branch sales manager as primary approver
+              </label>
+              <label className="flex items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={quotePolicyDraft.namedBranchGeneralManagerFallback}
+                  onChange={(event) => setQuotePolicyDraft((current) => current ? {
+                    ...current,
+                    namedBranchGeneralManagerFallback: event.target.checked,
+                  } : current)}
+                />
+                Use branch general manager as fallback approver
+              </label>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[11px] uppercase tracking-wider text-muted-foreground">Allowed condition types</p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {([
+                  "min_margin_pct",
+                  "max_trade_allowance",
+                  "required_cash_down",
+                  "required_finance_scenario",
+                  "remove_attachment",
+                  "expiry_hours",
+                ] as QuoteApprovalConditionType[]).map((type) => (
+                  <label key={type} className="flex items-center gap-2 text-sm text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={quotePolicyDraft.allowedConditionTypes.includes(type)}
+                      onChange={(event) => setQuotePolicyDraft((current) => {
+                        if (!current) return current;
+                        return {
+                          ...current,
+                          allowedConditionTypes: event.target.checked
+                            ? [...current.allowedConditionTypes, type]
+                            : current.allowedConditionTypes.filter((value) => value !== type),
+                        };
+                      })}
+                    />
+                    {type}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              {saveQuotePolicyMutation.isError && (
+                <span className="text-[10px] text-red-400">
+                  {(saveQuotePolicyMutation.error as Error)?.message ?? "Save failed"}
+                </span>
+              )}
+              {saveQuotePolicyMutation.isSuccess && (
+                <span className="text-[10px] text-emerald-400">Policy saved</span>
+              )}
+              <Button
+                size="sm"
+                onClick={() => saveQuotePolicyMutation.mutate()}
+                disabled={saveQuotePolicyMutation.isPending || quotePolicyDraft.allowedConditionTypes.length === 0}
+              >
+                {saveQuotePolicyMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+                Save quote policy
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
 
       {/* Surface filter chips: All / Automated / Iron */}
       <div className="flex items-center gap-2">

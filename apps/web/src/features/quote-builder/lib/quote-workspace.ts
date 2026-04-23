@@ -100,12 +100,17 @@ export function computeQuoteWorkspace(draft: QuoteWorkspaceDraft): QuoteWorkspac
   const approvalSatisfied = !approvalState.requiresManagerApproval
     ? true
     : draft.quoteStatus === "approved"
+      || draft.quoteStatus === "approved_with_conditions"
       || draft.quoteStatus === "sent"
       || draft.quoteStatus === "accepted";
-  const approvalMissingLabel =
-    draft.quoteStatus === "pending_approval"
-      ? "manager approval pending"
-      : "manager approval (margin below 10%)";
+  let approvalMissingLabel = "manager approval (margin below 10%)";
+  if (draft.quoteStatus === "pending_approval") {
+    approvalMissingLabel = "manager approval pending";
+  } else if (draft.quoteStatus === "changes_requested") {
+    approvalMissingLabel = "manager requested revision";
+  } else if (draft.quoteStatus === "rejected") {
+    approvalMissingLabel = "quote was rejected and must be revised before resubmission";
+  }
 
   return {
     equipmentTotal,
