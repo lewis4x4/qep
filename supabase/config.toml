@@ -411,6 +411,11 @@ verify_jwt = false
 [functions.decision-room-seat-dialogue]
 verify_jwt = false
 
+# Decision Room competitor counter — returns three counter-positioning
+# lines per competitor named in Loss Lens. 24h iron_web_search_cache.
+[functions.decision-room-competitor-counter]
+verify_jwt = false
+
 [functions.generate-daily-briefing]
 verify_jwt = false
 
@@ -455,4 +460,13 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.document-twin]
+verify_jwt = false
+
+[functions.marketing-engine]
+verify_jwt = false
+
+[functions.meta-social]
+verify_jwt = false
+
+[functions.portal-notification-refresh]
 verify_jwt = false
