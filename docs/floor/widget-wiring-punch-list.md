@@ -1,27 +1,34 @@
 # The Floor — Widget Wiring Punch List
 
-**Status as of 2026-04-23:**
+**Status as of 2026-04-23 (Phase 2 implementation pass):**
 
 - ✅ **Shipped Week 1:** `exec.owner-brief` (10-min direct wrap) and
   `nervous.customer-health` (new list wrapper). Ryan's Owner Floor now
   renders 3 real widgets + 1 stub (up from 2 real + 2 stubs).
-- 🔁 **Pivoted away from Week 1:** `exec.morning-brief`. On inspection
-  the existing `AdvisorMorningBriefingCard` is the SLA+leads card
-  already in use by `qrm.advisor-brief`, not an overnight narrative.
-  A real morning briefing needs the queued `floor-narrative` edge fn
-  to mean anything distinct — re-queued for a later slice once that
-  edge fn lands.
-- ⏳ **Remaining:** `parts.serial-first` (#1), `sales.commission-to-date`
-  (#2), `parts.quote-drafts` (#4).
+- ✅ **Shipped Phase 2-a:** `qrm.decision-room-scoreboard`,
+  `sales.ai-briefing`, `sales.day-summary`, and
+  `service.parts-hub-strip` now use thin Floor adapters around existing
+  feature-owned components and live query data.
+- ✅ **Shipped Phase 2-b/2-c:** `exec.morning-brief`,
+  `parts.quote-drafts`, `parts.order-status`, `parts.customer-intel`,
+  `parts.demand-forecast`, `parts.inventory-health`,
+  `exec.revenue-pace`, `exec.deal-velocity`,
+  `iron-woman.pending-invoices`, `iron-man.open-service-tickets`,
+  `parts.lost-sales`, and `parts.supplier-health` now resolve to
+  Floor-native real-data adapters. `floor-narrative` is backed by an
+  Edge Function plus cached deterministic fallback.
+- ⏸ **Human-gated:** final `sales.commission-to-date` math still needs
+  QA-R2 commission rules; `parts.lost-sales` reason-code depth still
+  needs QA-N1. The current widgets show real source/proxy data and do
+  not render Preview cards.
 
 
 
 **Context:** The Floor shell is live at `/floor` on production
-(`qualityequipmentparts.netlify.app`). Of the 29 widget ids registered in
-`floor-widget-registry.tsx`, **14 render real data** (reused directly from
-the pre-existing Iron dashboard registry) and **15 render branded
-"Preview" stubs**. This file ranks the top 5 stubs to wire first, with
-per-widget implementation briefs so any engineer can pick one up cold.
+(`qualityequipmentparts.netlify.app`). Of the 38 widget ids registered in
+`floor-widget-registry.tsx`, every active registry entry now resolves to a
+real component or a real-data gated proxy. This file is retained as the
+historical wiring queue and gating note.
 
 **Prioritization lens:** highest-impact-per-hour against the QEP team's
 adoption curve. Juan (Parts) and Rylee (Sales Manager) are the two

@@ -36,7 +36,7 @@ import type { FloorQuickAction } from "../lib/layout-types";
 /** Map of icon ids → Lucide components. Keep keys stable — they're
  *  referenced by `FloorQuickAction.icon` (which is stored in
  *  floor_layouts.layout_json). */
-const ICON_MAP: Record<string, LucideIcon> = {
+export const FLOOR_QUICK_ACTION_ICON_MAP: Record<string, LucideIcon> = {
   quote: FileText,
   voice: Mic,
   visit: MapPin,
@@ -78,7 +78,7 @@ function guessIcon(actionId: string): LucideIcon {
 }
 
 function resolveIcon(action: FloorQuickAction): LucideIcon {
-  if (action.icon && ICON_MAP[action.icon]) return ICON_MAP[action.icon];
+  if (action.icon && FLOOR_QUICK_ACTION_ICON_MAP[action.icon]) return FLOOR_QUICK_ACTION_ICON_MAP[action.icon];
   return guessIcon(action.id);
 }
 

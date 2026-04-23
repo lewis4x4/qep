@@ -195,6 +195,23 @@
   animation: floor-widget-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+@keyframes floor-skeleton-sweep {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+.floor-skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsl(var(--qep-orange) / 0.08) 42%,
+    hsl(var(--qep-orange) / 0.14) 50%,
+    hsl(var(--qep-orange) / 0.08) 58%,
+    transparent 100%
+  );
+  animation: floor-skeleton-sweep 1.8s ease-in-out infinite;
+}
+
 /* Soft inner glow for surfaces that carry live signal */
 .deck-glow {
   box-shadow:

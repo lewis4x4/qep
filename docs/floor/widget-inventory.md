@@ -28,15 +28,15 @@ Fourteen widgets exist today. The Floor reuses the same registry — we do NOT f
 | `iron.return-inspections` | Return inspections | iron | iron_man, iron_woman, iron_manager | ✅ Prep Tech |
 | `parts.replenish-queue` | Parts replenishment queue | parts | ALL | ✅ Parts Counter, Parts Manager |
 
-## 2. Widgets to REGISTER (wrap existing components)
+## 2. Registered direct wraps (existing components)
 
-These components already exist but are not yet in the registry. They each become a typed `WidgetDescriptor` with a thin wrapper that imports the real component.
+These components already exist and are registered through typed Floor descriptors. Entries marked "Floor adapter" use a zero-prop wrapper to provide the source component's required props and live data.
 
 | Proposed id | Wraps (existing component) | Category | Roles |
 |---|---|---|---|
-| `sales.ai-briefing` | `features/sales/components/AiBriefingCard.tsx` | sales | iron_advisor, iron_manager |
-| `sales.day-summary` | `features/sales/components/DaySummaryCard.tsx` | sales | iron_advisor |
-| `sales.action-items` | `features/sales/components/ActionItemCard.tsx` | sales | iron_advisor |
+| `sales.ai-briefing` | `features/sales/components/AiBriefingCard.tsx` via Floor adapter | sales | iron_advisor |
+| `sales.day-summary` | `features/sales/components/DaySummaryCard.tsx` via Floor adapter | sales | iron_advisor |
+| `sales.action-items` | Floor-native action list over follow-up touchpoints | sales | iron_advisor |
 | `quote.win-probability-compact` | `features/quote-builder/components/WinProbabilityStrip.tsx` (compact variant) | sales | iron_advisor, iron_manager |
 | `quote.deal-copilot-summary` | Slice 21 Deal Copilot summary card (new thin wrapper) | sales | iron_advisor, iron_manager |
 | `nervous.customer-health` | `features/nervous-system/components/CustomerHealthScore.tsx` | cross | iron_manager, iron_owner |
@@ -44,22 +44,21 @@ These components already exist but are not yet in the registry. They each become
 | `parts.inventory-health` | `features/parts/components/InventoryHealthCard.tsx` | parts | iron_parts_manager |
 | `parts.order-status` | `features/parts/components/OrderStatusBadge.tsx` (compact list) | parts | iron_parts_counter, iron_parts_manager |
 | `parts.customer-intel` | `features/parts/components/CustomerPartsIntelCard.tsx` | parts | iron_parts_counter, iron_parts_manager |
-| `service.parts-hub-strip` | `features/service/components/ServicePartsHubStrip.tsx` | service | iron_man, iron_manager |
+| `service.parts-hub-strip` | `features/service/components/ServicePartsHubStrip.tsx` via Floor adapter | service | iron_man, iron_manager |
 | `service.job-card` | `features/service/components/ServiceJobCard.tsx` (list variant) | service | iron_man |
 | `exec.morning-brief` | `features/dashboards/components/AdvisorMorningBriefingCard.tsx` | cross | iron_advisor, iron_manager, iron_owner |
 | `exec.owner-brief` | `features/owner/components/OwnerBriefCard.tsx` | cross | iron_owner |
-| `qrm.decision-room-scoreboard` | `features/qrm/components/DecisionRoomScoreboard.tsx` | sales | iron_manager, iron_advisor |
+| `qrm.decision-room-scoreboard` | `features/qrm/components/DecisionRoomScoreboard.tsx` via Floor adapter | sales | iron_manager, iron_advisor |
 
-## 3. Widgets that need NEW component builds (defer past F-2)
+## 3. Widgets that still need NEW component builds (human-gated)
 
 These are called out in the QEP handoff but don't exist yet. Do NOT block F-1/F-2 on these — land the shell first.
 
 | Proposed id | Component to build | Category | Role | Handoff ref |
 |---|---|---|---|---|
-| `sales.commission-to-date` | `CommissionToDateCard.tsx` | sales | iron_advisor, iron_manager | QA-R2, fly-on-the-wall |
+| `sales.commission-to-date` | Final commission ledger/RPC | sales | iron_advisor, iron_manager | QA-R2, fly-on-the-wall |
 | `sales.quote-drafts` | `MyQuoteDraftsCard.tsx` | sales | iron_advisor | C8 |
-| `parts.quote-drafts` | `MyPartsDraftsCard.tsx` | parts | iron_parts_counter | C8 |
-| `parts.serial-first` | `SerialFirstEntryCard.tsx` | parts | iron_parts_counter | C7, ADR-004 |
+| `parts.lost-sales` | Reason-code logging flow | parts | iron_parts_manager | QA-N1 |
 | `reports.first-five` | `FirstFiveReportsCard.tsx` | cross | iron_manager, iron_owner | QA-R3 |
 
 ## 4. Role model extensions needed
@@ -107,7 +106,7 @@ This is the curated v1 per-role Floor. Brian can edit anything the day he signs 
 1. `exec.morning-brief` (one line)
 2. `iron.approval-queue` (hero — the biggest driver)
 3. `iron.pipeline-by-rep`
-4. `sales.commission-to-date` *(deferred; stub card)*
+4. `sales.commission-to-date` *(real closed-quote source; final commission math gated by QA-R2)*
 5. `qrm.decision-room-scoreboard`
 6. `iron.inventory-aging`
 
@@ -123,8 +122,8 @@ This is the curated v1 per-role Floor. Brian can edit anything the day he signs 
 **Quick actions:** "New quote", "Voice capture", "Log visit"
 
 ### iron_parts_counter (Juan) — "Serial, quote, done"
-1. `parts.serial-first` *(deferred; stub card with serial input)*
-2. `parts.quote-drafts` *(deferred; stub card)*
+1. `parts.serial-first`
+2. `parts.quote-drafts`
 3. `parts.order-status` (today's orders)
 4. `parts.customer-intel`
 5. `parts.replenish-queue`

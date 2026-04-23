@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { PartsSubNav } from "../components/PartsSubNav";
 import { CatalogSearchBar } from "../components/CatalogSearchBar";
+import { PartCrossRefPanel } from "../components/PartCrossRefPanel";
 import { PartCommandPanel, type BranchCell } from "../components/PartCommandPanel";
 import { usePartsCatalog } from "../hooks/usePartsCatalog";
 import { useAuth } from "@/hooks/useAuth";
@@ -461,6 +462,11 @@ export function PartsCatalogPage() {
                         )}
                         {row.part_number}
                       </div>
+                      {isFocused && (
+                        <div className="mt-0.5">
+                          <PartCrossRefPanel partNumber={row.part_number} compact />
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="text-sm max-w-[240px] truncate">
                       {row.description ?? "—"}

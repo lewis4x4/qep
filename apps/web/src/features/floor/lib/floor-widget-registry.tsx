@@ -11,11 +11,8 @@
  * Design:
  *   - We do NOT fork the existing `features/dashboards/widgets/registry.ts`.
  *     We REFERENCE its components where the wiring is already done
- *     (aging fleet, approval queue, pipeline by rep, etc.) and add
- *     brand-compliant STUB wrappers for widgets whose real impls are
- *     still being built (commission-to-date, parts serial-first, etc.).
- *   - Stubs exist so Brian can compose a Floor today and see the
- *     shape of the final surface. They are clearly labeled `Preview`.
+ *     (aging fleet, approval queue, pipeline by rep, etc.) and add thin
+ *     Floor-native wrappers where a role needs a compact operational read.
  *
  * Keeping both registries in play is intentional: the legacy Iron
  * dashboards keep rendering their dense grid from `WIDGET_REGISTRY`,
@@ -50,7 +47,7 @@ import {
 import { PartsReplenishQueueWidget } from "@/features/dashboards/widgets/impls/parts-widgets";
 
 // ── Slice: The Floor widget wirings (Week 1) ────────────────────────────
-// Real-component wrappers replacing earlier stubs. Each maps to an
+// Real-component wrappers replacing earlier placeholder cards. Each maps to an
 // existing feature-owned component and fetches its own data — see
 // docs/floor/widget-wiring-punch-list.md for the selection rationale.
 import { OwnerBriefCard } from "@/features/owner/components/OwnerBriefCard";
@@ -60,8 +57,27 @@ import { CrmCustomerSearchWidget } from "../widgets/CrmCustomerSearchWidget";
 import { SerialFirstWidget } from "../widgets/SerialFirstWidget";
 import { ActionItemsWidget } from "../widgets/ActionItemsWidget";
 import { DealCopilotSummaryWidget } from "../widgets/DealCopilotSummaryWidget";
-
-import { FloorStubWidget } from "../components/FloorStubWidget";
+import {
+  DecisionRoomScoreboardFloorWidget,
+  SalesAiBriefingFloorWidget,
+  SalesDaySummaryFloorWidget,
+  ServicePartsHubStripFloorWidget,
+} from "../widgets/DirectWrapWidgets";
+import {
+  ExecDealVelocityFloorWidget,
+  ExecRevenuePaceFloorWidget,
+  MorningBriefFloorWidget,
+  OpenServiceTicketsFloorWidget,
+  PartsCustomerIntelFloorWidget,
+  PartsDemandForecastFloorWidget,
+  PartsInventoryHealthFloorWidget,
+  PartsLostSalesFloorWidget,
+  PartsOrderStatusFloorWidget,
+  PartsQuoteDraftsFloorWidget,
+  PartsSupplierHealthFloorWidget,
+  PendingInvoicesFloorWidget,
+  SalesCommissionSourceFloorWidget,
+} from "../widgets/OperationalWidgets";
 
 export interface FloorWidgetDescriptor {
   id: string;
@@ -74,17 +90,8 @@ export interface FloorWidgetDescriptor {
   /** Default span in the responsive grid. "wide" consumes two columns on
    *  desktop; "normal" is one column. */
   size: "normal" | "wide";
-  /** The component rendered inside the FloorWidget frame. Stubs are
-   *  bound components (pre-filled with their title + purpose). */
+  /** The component rendered inside the FloorWidget frame. */
   component: ComponentType;
-}
-
-/** Helper — bind the stub component so the registry entry is a plain
- *  ComponentType with no props. Keeps the grid renderer trivial. */
-function stub(title: string, purpose: string, sample?: string): ComponentType {
-  const StubBound = () => <FloorStubWidget title={title} purpose={purpose} sample={sample} />;
-  StubBound.displayName = `FloorStub(${title})`;
-  return StubBound;
 }
 
 const ALL_ROLES: IronRole[] = [
@@ -220,7 +227,7 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     component: PartsReplenishQueueWidget,
   },
 
-  // ── Stubs — widgets Brian can compose today; real impl lands later ──
+  // ── Owner + operator widgets ────────────────────────────────────────
   "exec.owner-brief": {
     id: "exec.owner-brief",
     title: "Owner brief",
@@ -240,11 +247,7 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     purpose: "Overnight signal summary for your pipeline.",
     allowedRoles: ["iron_advisor", "iron_manager", "iron_owner"],
     size: "wide",
-    component: stub(
-      "Morning brief",
-      "Overnight changes across your pipeline surfaced as actions.",
-      "Sample: 2 deals moved forward · 1 stale follow-up · new lead from ACME",
-    ),
+    component: MorningBriefFloorWidget,
   },
   "nervous.customer-health": {
     id: "nervous.customer-health",
@@ -264,11 +267,9 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     purpose: "Live deal-by-deal moves — wins, blocks, next plays.",
     allowedRoles: ["iron_manager", "iron_advisor"],
     size: "wide",
-    component: stub(
-      "Decision room",
-      "Active deal moves across your team's pipeline.",
-      "Sample: 12 plays today · 4 wins · 2 blocks to clear",
-    ),
+    // Phase 2-a wiring — picks the hottest active pipeline deal and
+    // renders the real DecisionRoomScoreboard against live pipeline data.
+    component: DecisionRoomScoreboardFloorWidget,
   },
   "sales.ai-briefing": {
     id: "sales.ai-briefing",
@@ -276,11 +277,9 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     purpose: "Today's priority actions tuned to your deals.",
     allowedRoles: ["iron_advisor"],
     size: "wide",
-    component: stub(
-      "AI briefing",
-      "Three things to do before lunch to move your pipeline.",
-      "Sample: call Dave at 10 · send Whittaker re-quote · close ASV demo loop",
-    ),
+    // Phase 2-a wiring — direct adapter over the Sales Companion
+    // AiBriefingCard using the existing useTodayFeed data pipeline.
+    component: SalesAiBriefingFloorWidget,
   },
   "sales.action-items": {
     id: "sales.action-items",
@@ -299,11 +298,8 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     purpose: "Today's visits, calls, and quotes — so far.",
     allowedRoles: ["iron_advisor"],
     size: "normal",
-    component: stub(
-      "Day summary",
-      "Your day's activity versus target visits / calls / quotes.",
-      "Sample: 6/10 visits · 14 calls · 2 quotes",
-    ),
+    // Phase 2-a wiring — wraps DaySummaryCard with the live rep pipeline.
+    component: SalesDaySummaryFloorWidget,
   },
   "quote.deal-copilot-summary": {
     id: "quote.deal-copilot-summary",
@@ -320,18 +316,14 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
   },
   "sales.commission-to-date": {
     id: "sales.commission-to-date",
-    title: "Commission MTD",
-    purpose: "Your commission earned this month vs. pace.",
+    title: "Commission source",
+    purpose: "Closed quote value that will feed commission once QA-R2 defines rules.",
     allowedRoles: ["iron_advisor", "iron_manager"],
     size: "normal",
-    component: stub(
-      "Commission MTD",
-      "Your month-to-date commission + in-flight pipeline commission.",
-      "Sample: $14,250 booked · $8,900 in flight",
-    ),
+    component: SalesCommissionSourceFloorWidget,
   },
 
-  // ── Parts-focused stubs for Juan, Norman ──
+  // ── Parts-focused widgets for Juan, Norman ──
   "parts.serial-first": {
     id: "parts.serial-first",
     title: "Serial-first lookup",
@@ -348,11 +340,7 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     purpose: "Parts quotes auto-saved and waiting for you to finish.",
     allowedRoles: ["iron_parts_counter", "iron_parts_manager"],
     size: "normal",
-    component: stub(
-      "My drafts",
-      "Auto-saved parts quotes you can resume at any time.",
-      "Sample: 3 drafts · oldest 2h ago",
-    ),
+    component: PartsQuoteDraftsFloorWidget,
   },
   "parts.order-status": {
     id: "parts.order-status",
@@ -360,11 +348,7 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     purpose: "Today's parts orders and their fulfillment stage.",
     allowedRoles: ["iron_parts_counter", "iron_parts_manager"],
     size: "normal",
-    component: stub(
-      "Order status",
-      "Orders opened today with their processing / shipped / delivered state.",
-      "Sample: 8 open · 3 ready for counter pickup",
-    ),
+    component: PartsOrderStatusFloorWidget,
   },
   "parts.customer-intel": {
     id: "parts.customer-intel",
@@ -372,11 +356,7 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     purpose: "Last parts + service context for the customer in front of you.",
     allowedRoles: ["iron_parts_counter", "iron_parts_manager"],
     size: "normal",
-    component: stub(
-      "Customer intel",
-      "The customer's recent parts orders and open service tickets.",
-      "Surfaces when you type a customer or serial.",
-    ),
+    component: PartsCustomerIntelFloorWidget,
   },
   "parts.demand-forecast": {
     id: "parts.demand-forecast",
@@ -384,11 +364,7 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     purpose: "Parts trending up in demand — what to stock deeper.",
     allowedRoles: ["iron_parts_manager"],
     size: "wide",
-    component: stub(
-      "Demand forecast",
-      "Parts trending up vs. last 90 days — stocking recommendations.",
-      "Sample: 12 parts up >20% · top: cutter teeth, hydraulic hoses",
-    ),
+    component: PartsDemandForecastFloorWidget,
   },
   "parts.inventory-health": {
     id: "parts.inventory-health",
@@ -396,25 +372,19 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     purpose: "Stock coverage, dead stock, and fill-rate summary.",
     allowedRoles: ["iron_parts_manager"],
     size: "normal",
-    component: stub(
-      "Inventory health",
-      "Overall stock health — coverage days, dead stock dollars, fill rate.",
-      "Sample: 42 days coverage · $18K dead · 92% fill rate",
-    ),
+    component: PartsInventoryHealthFloorWidget,
   },
 
-  // ── Service-focused stubs ──
+  // ── Service-focused widgets ──
   "service.parts-hub-strip": {
     id: "service.parts-hub-strip",
     title: "Service parts hub",
     purpose: "Parts staged for today's service jobs.",
     allowedRoles: ["iron_man", "iron_manager"],
     size: "normal",
-    component: stub(
-      "Service parts hub",
-      "Parts picked + staged for today's service jobs.",
-      "Sample: 6 jobs ready · 2 waiting on backorder",
-    ),
+    // Phase 2-a wiring — wraps the service-owned parts strip around the
+    // highest-priority open service job with parts context.
+    component: ServicePartsHubStripFloorWidget,
   },
 
   // ── Slice: The Floor v2 — CRM search as a first-class Floor widget ──
@@ -437,18 +407,14 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     component: CrmCustomerSearchWidget,
   },
 
-  // ── Slice: The Floor v2 — role-optimized stubs (real impl lands later) ──
+  // ── Slice: The Floor v2 — role-optimized operational widgets ────────
   "exec.revenue-pace": {
     id: "exec.revenue-pace",
     title: "Revenue pace",
     purpose: "Month-to-date revenue vs. target — and what's in flight.",
     allowedRoles: ["iron_owner", "iron_manager"],
     size: "normal",
-    component: stub(
-      "Revenue pace",
-      "MTD revenue vs. your monthly target with the in-flight pipeline that could close it.",
-      "Sample: $412K booked · 67% of $615K target · $248K in flight",
-    ),
+    component: ExecRevenuePaceFloorWidget,
   },
   "exec.deal-velocity": {
     id: "exec.deal-velocity",
@@ -456,11 +422,7 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     purpose: "How fast deals are moving through the pipeline.",
     allowedRoles: ["iron_owner", "iron_manager"],
     size: "normal",
-    component: stub(
-      "Deal velocity",
-      "Average days per stage across the team — highlights the bottleneck stage.",
-      "Sample: 4.2d quote → 11.8d proposal → 3.1d close",
-    ),
+    component: ExecDealVelocityFloorWidget,
   },
   "iron-woman.pending-invoices": {
     id: "iron-woman.pending-invoices",
@@ -468,11 +430,7 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     purpose: "Approved deals waiting on invoicing — ordered by age.",
     allowedRoles: ["iron_woman", "iron_manager"],
     size: "normal",
-    component: stub(
-      "Pending invoices",
-      "Deals that are approved but not yet invoiced — aged and ready to send.",
-      "Sample: 7 pending · oldest 4 days",
-    ),
+    component: PendingInvoicesFloorWidget,
   },
   "iron-man.open-service-tickets": {
     id: "iron-man.open-service-tickets",
@@ -480,11 +438,7 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     purpose: "Service work in progress across today's bay.",
     allowedRoles: ["iron_man", "iron_manager"],
     size: "normal",
-    component: stub(
-      "Open service tickets",
-      "In-progress jobs with part status, tech assignment, and customer waiting time.",
-      "Sample: 4 in progress · 1 waiting on parts · 2 ready for pickup",
-    ),
+    component: OpenServiceTicketsFloorWidget,
   },
   "parts.lost-sales": {
     id: "parts.lost-sales",
@@ -492,11 +446,7 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     purpose: "Recent parts we didn't close — with the reason code for each.",
     allowedRoles: ["iron_parts_manager", "iron_manager"],
     size: "normal",
-    component: stub(
-      "Lost parts sales",
-      "Parts quotes that didn't convert this week, grouped by reason (no stock / price / timing / competitor).",
-      "Sample: 6 lost · top reason: no stock (4)",
-    ),
+    component: PartsLostSalesFloorWidget,
   },
   "parts.supplier-health": {
     id: "parts.supplier-health",
@@ -504,11 +454,7 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     purpose: "Open POs + vendor fill rates + backorder exposure at a glance.",
     allowedRoles: ["iron_parts_manager"],
     size: "normal",
-    component: stub(
-      "Supplier health",
-      "Active purchase orders, vendor fill rate this month, and dollars exposed to backorder.",
-      "Sample: 14 open POs · 94% fill · $12.4K backordered",
-    ),
+    component: PartsSupplierHealthFloorWidget,
   },
 };
 

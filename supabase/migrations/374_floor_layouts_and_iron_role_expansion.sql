@@ -240,8 +240,8 @@ create policy "floor_layouts_select"
   on public.floor_layouts
   for select
   using (
-    workspace_id = public.get_my_workspace()
-    and public.get_my_role() in ('rep', 'admin', 'manager', 'owner')
+    workspace_id = (select public.get_my_workspace())
+    and (select public.get_my_role()) in ('rep', 'admin', 'manager', 'owner')
   );
 
 -- Manage: only admin/manager/owner can edit. Reps never compose.
@@ -249,12 +249,12 @@ create policy "floor_layouts_manage"
   on public.floor_layouts
   for all
   using (
-    workspace_id = public.get_my_workspace()
-    and public.get_my_role() in ('admin', 'manager', 'owner')
+    workspace_id = (select public.get_my_workspace())
+    and (select public.get_my_role()) in ('admin', 'manager', 'owner')
   )
   with check (
-    workspace_id = public.get_my_workspace()
-    and public.get_my_role() in ('admin', 'manager', 'owner')
+    workspace_id = (select public.get_my_workspace())
+    and (select public.get_my_role()) in ('admin', 'manager', 'owner')
   );
 
 -- Service role bypass — future edge-function composers (e.g. a "reset to

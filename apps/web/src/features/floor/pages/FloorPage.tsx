@@ -21,6 +21,7 @@ import { FloorWidgetGrid } from "../components/FloorWidgetGrid";
 import { FloorFooter } from "../components/FloorFooter";
 import { FloorZoneLabel } from "../components/FloorZoneLabel";
 import { useFloorLayout } from "../hooks/useFloorLayout";
+import { useFloorNarrative } from "../hooks/useFloorNarrative";
 
 export interface FloorPageProps {
   userId: string;
@@ -44,7 +45,7 @@ export function FloorPage({
   const ironRole = getEffectiveIronRole(userRole, blend, ironRoleFromProfile);
 
   // Layout for this role (workspace-scoped via RLS).
-  const { layout, updatedAt, isLoading } = useFloorLayout(ironRole.role);
+  const { layout, updatedAt, isLoading } = useFloorLayout(ironRole.role, userId);
 
   // Dark-only on The Floor. We force the class but don't persist the
   // preference — the user's chosen theme elsewhere is unchanged.
@@ -60,6 +61,7 @@ export function FloorPage({
   const displayName = userFullName ?? "";
   const firstName = displayName.split(" ").filter(Boolean)[0] ?? "";
   const isAdmin = ADMIN_ROLES.includes(userRole);
+  const narrative = useFloorNarrative(ironRole.role, firstName);
 
   const hasQuickActions = layout.quickActions.length > 0;
 
@@ -74,7 +76,12 @@ export function FloorPage({
       {layout.showNarrative && !isLoading && (
         <>
           <FloorZoneLabel index="01" label="NARRATIVE" />
-          <FloorNarrative role={ironRole.role} userFirstName={firstName} />
+          <FloorNarrative
+            role={ironRole.role}
+            userFirstName={firstName}
+            text={narrative.text}
+            fresh={narrative.fresh}
+          />
         </>
       )}
 
@@ -86,7 +93,7 @@ export function FloorPage({
       )}
 
       <FloorZoneLabel index="03" label="THE FLOOR" className="mt-4" />
-      <FloorWidgetGrid widgets={layout.widgets} isAdmin={isAdmin} />
+      <FloorWidgetGrid widgets={layout.widgets} isAdmin={isAdmin} isLoading={isLoading} />
 
       <FloorFooter showOfficeLink={isAdmin} layoutUpdatedAt={updatedAt} />
     </div>

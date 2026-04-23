@@ -159,8 +159,8 @@ create policy "qbct_select"
   on public.qb_quote_copilot_turns
   for select
   using (
-    workspace_id = public.get_my_workspace()
-    and public.get_my_role() in ('rep', 'admin', 'manager', 'owner')
+    workspace_id = (select public.get_my_workspace())
+    and (select public.get_my_role()) in ('rep', 'admin', 'manager', 'owner')
   );
 
 -- Insert: caller must be authoring their own turn in their own workspace.
@@ -171,8 +171,8 @@ create policy "qbct_insert"
   on public.qb_quote_copilot_turns
   for insert
   with check (
-    workspace_id = public.get_my_workspace()
-    and author_user_id = auth.uid()
+    workspace_id = (select public.get_my_workspace())
+    and author_user_id = (select auth.uid())
   );
 
 -- Update: nobody from the client side. The edge function uses service_role

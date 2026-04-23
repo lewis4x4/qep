@@ -8,10 +8,11 @@
  * same narrative strip, same quick-action hero, same widget frames —
  * so Brian arranges exactly what the target role will see.
  *
- * Drag-drop is native HTML5 DataTransfer. No library.
+ * Drag-drop is native HTML5 DataTransfer with always-visible arrow controls
+ * as the touch fallback.
  *
- * Narrative toggle lives in the role bar. Quick actions are read-only
- * in v1 (editing label/route/icon per action is a separate slice).
+ * Narrative, quick actions, role defaults, user overrides, and audit history
+ * are edited here. The DB still enforces the six-widget / three-action caps.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -20,8 +21,13 @@ import {
   ArrowLeft,
   ArrowUp,
   Check,
+  Clock,
   GripVertical,
+  History,
   Loader2,
+  Plus,
+  RotateCcw,
+  Trash2,
   Wrench,
   X,
 } from "lucide-react";
@@ -34,8 +40,9 @@ import type { IronRole } from "@/features/qrm/lib/iron-roles";
 
 import { FloorJumpMenu } from "../components/FloorJumpMenu";
 import { FloorNarrative } from "../components/FloorNarrative";
-import { FloorHero } from "../components/FloorHero";
+import { FloorHero, FLOOR_QUICK_ACTION_ICON_MAP } from "../components/FloorHero";
 import { FloorZoneLabel } from "../components/FloorZoneLabel";
+import { DEFAULT_FLOOR_LAYOUTS } from "../lib/default-layouts";
 import { IRON_ROLE_DISPLAY_NAMES } from "../lib/role-display-names";
 import {
   FLOOR_WIDGET_REGISTRY,
@@ -44,9 +51,11 @@ import {
 } from "../lib/floor-widget-registry";
 import {
   EMPTY_FLOOR_LAYOUT,
+  FLOOR_QUICK_ACTION_CAP,
   FLOOR_WIDGET_CAP,
   normalizeFloorLayout,
   type FloorLayout,
+  type FloorQuickAction,
 } from "../lib/layout-types";
 
 export interface FloorComposePageProps {
@@ -67,6 +76,52 @@ const ALL_ROLES: IronRole[] = [
 
 const DND_MIME_PALETTE = "application/x-floor-palette-widget";
 const DND_MIME_REORDER = "application/x-floor-reorder-widget";
+const FLOOR_LAYOUT_SELECT =
+  "id, workspace_id, iron_role, user_id, layout_json, updated_by, created_at, updated_at";
+
+type ComposeTargetMode = "role" | "user";
+
+interface ComposeProfile {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  iron_role: string | null;
+}
+
+interface ComposeLayoutRow {
+  id: string;
+  workspace_id: string;
+  iron_role: IronRole;
+  user_id: string | null;
+  layout_json: unknown;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface LayoutAuditRow {
+  id: string;
+  action: string;
+  created_at: string;
+  actor_user_id: string | null;
+  subject_user_id: string | null;
+  old_layout_json: unknown;
+  new_layout_json: unknown;
+}
+
+function cloneDefaultLayout(role: IronRole): FloorLayout {
+  return normalizeFloorLayout(DEFAULT_FLOOR_LAYOUTS[role]);
+}
+
+function validateQuickActions(actions: FloorQuickAction[]): string | null {
+  for (const action of actions) {
+    if (!action.label.trim()) return "Every quick action needs a label.";
+    if (!action.route.trim().startsWith("/")) {
+      return `${action.label || action.id} needs an in-app route that starts with "/".`;
+    }
+  }
+  return null;
+}
 
 export function FloorComposePage({
   userId,
@@ -89,41 +144,105 @@ export function FloorComposePage({
   }, []);
 
   const [selectedRole, setSelectedRole] = useState<IronRole>("iron_manager");
+  const [targetMode, setTargetMode] = useState<ComposeTargetMode>("role");
+  const [selectedSubjectUserId, setSelectedSubjectUserId] = useState<string>("");
+  const [profilesForRole, setProfilesForRole] = useState<ComposeProfile[]>([]);
   const [layout, setLayout] = useState<FloorLayout>({ ...EMPTY_FLOOR_LAYOUT });
+  const [layoutRowId, setLayoutRowId] = useState<string | null>(null);
+  const [isInheritedRoleDefault, setIsInheritedRoleDefault] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditRows, setAuditRows] = useState<LayoutAuditRow[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
 
-  // ── Load selected role's layout ────────────────────────────────────────
+  // ── Load profiles that can receive a user override ─────────────────────
   useEffect(() => {
     let cancelled = false;
-    setIsLoading(true);
     (async () => {
       const { data, error } = await supabase
-        .from("floor_layouts")
-        .select("layout_json")
+        .from("profiles")
+        .select("id, full_name, email, iron_role")
         .eq("iron_role", selectedRole)
-        .maybeSingle();
+        .order("full_name", { ascending: true });
+
       if (cancelled) return;
       if (error) {
-        toast({
-          title: "Couldn't load layout",
-          description: "Starting from an empty layout. Save creates a new row.",
-          variant: "destructive",
-        });
-        setLayout({ ...EMPTY_FLOOR_LAYOUT });
-      } else if (data) {
-        setLayout(normalizeFloorLayout(data.layout_json));
-      } else {
-        setLayout({ ...EMPTY_FLOOR_LAYOUT });
+        setProfilesForRole([]);
+        return;
       }
-      setIsDirty(false);
-      setIsLoading(false);
+      const rows = (data ?? []) as ComposeProfile[];
+      setProfilesForRole(rows);
+      setSelectedSubjectUserId((current) => {
+        if (current && rows.some((row) => row.id === current)) return current;
+        return rows[0]?.id ?? "";
+      });
     })();
     return () => {
       cancelled = true;
     };
-  }, [selectedRole, toast]);
+  }, [selectedRole]);
+
+  const selectedSubjectUser = profilesForRole.find((row) => row.id === selectedSubjectUserId) ?? null;
+  const activeSubjectUserId = targetMode === "user" ? selectedSubjectUserId || null : null;
+
+  // ── Load selected role/user layout ─────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    (async () => {
+      let loadedRow: ComposeLayoutRow | null = null;
+      let inherited = false;
+
+      if (activeSubjectUserId) {
+        const { data: override, error: overrideError } = await supabase
+          .from("floor_layouts")
+          .select(FLOOR_LAYOUT_SELECT)
+          .eq("iron_role", selectedRole)
+          .eq("user_id", activeSubjectUserId)
+          .limit(1)
+          .maybeSingle();
+        if (overrideError) throw overrideError;
+        loadedRow = (override as ComposeLayoutRow | null) ?? null;
+      }
+
+      if (!loadedRow) {
+        const { data, error } = await supabase
+        .from("floor_layouts")
+        .select(FLOOR_LAYOUT_SELECT)
+        .eq("iron_role", selectedRole)
+          .is("user_id", null)
+          .limit(1)
+        .maybeSingle();
+        if (error) throw error;
+        loadedRow = (data as ComposeLayoutRow | null) ?? null;
+        inherited = Boolean(activeSubjectUserId);
+      }
+
+      if (cancelled) return;
+      setLayout(loadedRow ? normalizeFloorLayout(loadedRow.layout_json) : { ...EMPTY_FLOOR_LAYOUT });
+      setLayoutRowId(inherited ? null : loadedRow?.id ?? null);
+      setIsInheritedRoleDefault(inherited);
+      setIsDirty(false);
+      setIsLoading(false);
+    })().catch((error: unknown) => {
+      if (cancelled) return;
+      toast({
+        title: "Couldn't load layout",
+        description: error instanceof Error ? error.message : "Starting from an empty layout.",
+        variant: "destructive",
+      });
+      setLayout({ ...EMPTY_FLOOR_LAYOUT });
+      setLayoutRowId(null);
+      setIsInheritedRoleDefault(false);
+      setIsDirty(false);
+      setIsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRole, activeSubjectUserId, toast]);
 
   // ── Palette — widgets allowed for role, minus those already placed ─────
   const paletteWidgets = useMemo(() => {
@@ -172,23 +291,163 @@ export function FloorComposePage({
     setIsDirty(true);
   };
 
-  // ── Save ──────────────────────────────────────────────────────────────
-  const handleSave = async () => {
+  const updateQuickAction = (index: number, patch: Partial<FloorQuickAction>) => {
+    setLayout((prev) => ({
+      ...prev,
+      quickActions: prev.quickActions.map((action, i) =>
+        i === index ? { ...action, ...patch } : action,
+      ),
+    }));
+    setIsDirty(true);
+  };
+
+  const addQuickAction = () => {
+    setLayout((prev) => {
+      if (prev.quickActions.length >= FLOOR_QUICK_ACTION_CAP) return prev;
+      const nextIndex = prev.quickActions.length + 1;
+      return {
+        ...prev,
+        quickActions: [
+          ...prev.quickActions,
+          {
+            id: `quick_action_${nextIndex}`,
+            label: "NEW ACTION",
+            route: "/floor",
+            icon: "spark",
+          },
+        ],
+      };
+    });
+    setIsDirty(true);
+  };
+
+  const removeQuickAction = (index: number) => {
+    setLayout((prev) => ({
+      ...prev,
+      quickActions: prev.quickActions.filter((_, i) => i !== index),
+    }));
+    setIsDirty(true);
+  };
+
+  const resetToDefaults = () => {
+    setLayout(cloneDefaultLayout(selectedRole));
+    setIsDirty(true);
+  };
+
+  const deleteUserOverride = async () => {
+    if (!activeSubjectUserId) return;
     setIsSaving(true);
     try {
       const { error } = await supabase
         .from("floor_layouts")
-        .upsert(
-          { iron_role: selectedRole, layout_json: layout },
-          { onConflict: "workspace_id,iron_role" },
-        );
+        .delete()
+        .eq("iron_role", selectedRole)
+        .eq("user_id", activeSubjectUserId);
       if (error) throw error;
+      setLayout(cloneDefaultLayout(selectedRole));
+      setLayoutRowId(null);
+      setIsInheritedRoleDefault(true);
+      setIsDirty(false);
+      toast({
+        title: "Override cleared",
+        description: `${selectedSubjectUser?.full_name ?? selectedSubjectUser?.email ?? "This user"} now inherits the role default.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Couldn't clear override",
+        description: err instanceof Error ? err.message : "Unknown error.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!auditOpen) return;
+    let cancelled = false;
+    setAuditLoading(true);
+    (async () => {
+      let query = supabase
+        .from("floor_layout_audit")
+        .select("id, action, created_at, actor_user_id, subject_user_id, old_layout_json, new_layout_json")
+        .eq("iron_role", selectedRole)
+        .order("created_at", { ascending: false })
+        .limit(12);
+
+      if (activeSubjectUserId) query = query.eq("subject_user_id", activeSubjectUserId);
+
+      const { data, error } = await query;
+      if (error) throw error;
+      if (!cancelled) setAuditRows((data ?? []) as LayoutAuditRow[]);
+    })()
+      .catch(() => {
+        if (!cancelled) setAuditRows([]);
+      })
+      .finally(() => {
+        if (!cancelled) setAuditLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [auditOpen, selectedRole, activeSubjectUserId]);
+
+  // ── Save ──────────────────────────────────────────────────────────────
+  const handleSave = async () => {
+    const quickActionError = validateQuickActions(layout.quickActions);
+    if (quickActionError) {
+      toast({
+        title: "Quick action needs cleanup",
+        description: quickActionError,
+        variant: "destructive",
+      });
+      return;
+    }
+    if (targetMode === "user" && !activeSubjectUserId) {
+      toast({
+        title: "Choose a user",
+        description: "A per-user override needs a target profile.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const payload = {
+        iron_role: selectedRole,
+        user_id: activeSubjectUserId,
+        layout_json: layout,
+        updated_by: userId,
+      };
+
+      if (layoutRowId) {
+        const { error } = await supabase
+          .from("floor_layouts")
+          .update(payload)
+          .eq("id", layoutRowId);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase
+          .from("floor_layouts")
+          .insert(payload)
+          .select(FLOOR_LAYOUT_SELECT)
+          .single();
+        if (error) throw error;
+        setLayoutRowId((data as ComposeLayoutRow).id);
+      }
+
       toast({
         title: "Layout saved",
-        description: `${IRON_ROLE_DISPLAY_NAMES[selectedRole]} now sees ${layout.widgets.length} widget${
-          layout.widgets.length === 1 ? "" : "s"
-        }.`,
+        description:
+          targetMode === "user" && selectedSubjectUser
+            ? `${selectedSubjectUser.full_name ?? selectedSubjectUser.email} now has a custom Floor.`
+            : `${IRON_ROLE_DISPLAY_NAMES[selectedRole]} now sees ${layout.widgets.length} widget${
+                layout.widgets.length === 1 ? "" : "s"
+              }.`,
       });
+      setIsInheritedRoleDefault(false);
       setIsDirty(false);
     } catch (err) {
       toast({
@@ -210,10 +469,20 @@ export function FloorComposePage({
         isDirty={isDirty}
         onSave={handleSave}
         onBack={() => navigate("/floor")}
+        onReset={resetToDefaults}
+        onToggleHistory={() => setAuditOpen((open) => !open)}
+        historyOpen={auditOpen}
       />
       <RoleBar
         selectedRole={selectedRole}
         onSelectRole={(r) => setSelectedRole(r)}
+        targetMode={targetMode}
+        onSetTargetMode={setTargetMode}
+        profiles={profilesForRole}
+        selectedSubjectUserId={selectedSubjectUserId}
+        onSelectSubjectUser={setSelectedSubjectUserId}
+        isInheritedRoleDefault={isInheritedRoleDefault}
+        onDeleteUserOverride={deleteUserOverride}
         widgetCount={layout.widgets.length}
         cap={FLOOR_WIDGET_CAP}
         showNarrative={layout.showNarrative}
@@ -241,10 +510,22 @@ export function FloorComposePage({
           <PalettePane
             widgets={paletteWidgets}
             atCap={atCap}
+            quickActions={layout.quickActions}
+            onAddQuickAction={addQuickAction}
+            onUpdateQuickAction={updateQuickAction}
+            onRemoveQuickAction={removeQuickAction}
             onQuickAdd={(id) => addWidget(id)}
           />
         </div>
       </div>
+
+      {auditOpen && (
+        <AuditDrawer
+          rows={auditRows}
+          isLoading={auditLoading}
+          onClose={() => setAuditOpen(false)}
+        />
+      )}
 
       {/* Footer */}
       <div className="shrink-0 border-t border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck-elevated))]/95 px-4 py-2 text-[11px] text-muted-foreground">
@@ -269,12 +550,18 @@ function ComposeTopBar({
   isDirty,
   onSave,
   onBack,
+  onReset,
+  onToggleHistory,
+  historyOpen,
 }: {
   userFullName: string | null;
   isSaving: boolean;
   isDirty: boolean;
   onSave: () => void;
   onBack: () => void;
+  onReset: () => void;
+  onToggleHistory: () => void;
+  historyOpen: boolean;
 }) {
   return (
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between border-b border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck-elevated))]/95 px-4 backdrop-blur-sm">
@@ -308,6 +595,24 @@ function ComposeTopBar({
             {userFullName}
           </span>
         )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onReset}
+          className="hidden h-8 gap-1 text-[11px] sm:inline-flex"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          Reset
+        </Button>
+        <Button
+          variant={historyOpen ? "default" : "outline"}
+          size="sm"
+          onClick={onToggleHistory}
+          className="h-8 gap-1 text-[11px]"
+        >
+          <History className="h-3.5 w-3.5" />
+          History
+        </Button>
         <Button size="sm" onClick={onSave} disabled={!isDirty || isSaving} className="gap-1.5">
           {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
           {isSaving ? "Saving" : isDirty ? "Save" : "Saved"}
@@ -322,6 +627,13 @@ function ComposeTopBar({
 function RoleBar({
   selectedRole,
   onSelectRole,
+  targetMode,
+  onSetTargetMode,
+  profiles,
+  selectedSubjectUserId,
+  onSelectSubjectUser,
+  isInheritedRoleDefault,
+  onDeleteUserOverride,
   widgetCount,
   cap,
   showNarrative,
@@ -330,6 +642,13 @@ function RoleBar({
 }: {
   selectedRole: IronRole;
   onSelectRole: (r: IronRole) => void;
+  targetMode: ComposeTargetMode;
+  onSetTargetMode: (mode: ComposeTargetMode) => void;
+  profiles: ComposeProfile[];
+  selectedSubjectUserId: string;
+  onSelectSubjectUser: (id: string) => void;
+  isInheritedRoleDefault: boolean;
+  onDeleteUserOverride: () => void;
   widgetCount: number;
   cap: number;
   showNarrative: boolean;
@@ -352,6 +671,57 @@ function RoleBar({
           </option>
         ))}
       </select>
+      <div className="inline-flex rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))] p-0.5">
+        {(["role", "user"] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => onSetTargetMode(mode)}
+            className={cn(
+              "rounded px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors",
+              targetMode === mode
+                ? "bg-[hsl(var(--qep-orange))] text-[hsl(var(--qep-dark))]"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {mode === "role" ? "Role default" : "User override"}
+          </button>
+        ))}
+      </div>
+      {targetMode === "user" && (
+        <>
+          <select
+            value={selectedSubjectUserId}
+            onChange={(e) => onSelectSubjectUser(e.target.value)}
+            className="max-w-[240px] rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck-elevated))] px-3 py-1.5 text-sm font-semibold text-foreground focus:border-[hsl(var(--qep-orange))] focus:outline-none"
+          >
+            {profiles.length === 0 ? (
+              <option value="">No profiles for role</option>
+            ) : (
+              profiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.full_name ?? profile.email ?? profile.id}
+                </option>
+              ))
+            )}
+          </select>
+          {isInheritedRoleDefault ? (
+            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Inheriting role default
+            </span>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onDeleteUserOverride}
+              className="h-7 gap-1 text-[11px]"
+            >
+              <Trash2 className="h-3 w-3" />
+              Clear override
+            </Button>
+          )}
+        </>
+      )}
       <Button
         variant="outline"
         size="sm"
@@ -663,7 +1033,7 @@ function PreviewWidget({
             )}
           </div>
 
-          <div className="pointer-events-auto flex items-center gap-0.5 rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))]/90 p-0.5 opacity-0 backdrop-blur transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          <div className="pointer-events-auto flex items-center gap-0.5 rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))]/90 p-0.5 opacity-100 backdrop-blur transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
             <button
               type="button"
               onClick={onMoveUp}
@@ -728,10 +1098,18 @@ function InsertionLine() {
 function PalettePane({
   widgets,
   atCap,
+  quickActions,
+  onAddQuickAction,
+  onUpdateQuickAction,
+  onRemoveQuickAction,
   onQuickAdd,
 }: {
   widgets: ReturnType<typeof floorWidgetsForRole>;
   atCap: boolean;
+  quickActions: FloorQuickAction[];
+  onAddQuickAction: () => void;
+  onUpdateQuickAction: (index: number, patch: Partial<FloorQuickAction>) => void;
+  onRemoveQuickAction: (index: number) => void;
   onQuickAdd: (id: string) => void;
 }) {
   // Filter input for the palette — when sir has 14+ widgets to browse,
@@ -774,7 +1152,20 @@ function PalettePane({
         />
       </div>
 
-      <div className="flex-1 space-y-2 overflow-auto p-3">
+      <div className="flex-1 space-y-4 overflow-auto p-3">
+        <QuickActionEditor
+          actions={quickActions}
+          onAdd={onAddQuickAction}
+          onUpdate={onUpdateQuickAction}
+          onRemove={onRemoveQuickAction}
+        />
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="font-kpi text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
+              Widgets
+            </h3>
+            <span className="text-[10px] text-muted-foreground">{filtered.length} shown</span>
+          </div>
         {widgets.length === 0 ? (
           <p className="rounded-md border border-dashed border-[hsl(var(--qep-deck-rule))] p-3 text-xs text-muted-foreground">
             Every widget allowed for this role is already on the Floor. Remove one to add something else.
@@ -796,12 +1187,110 @@ function PalettePane({
             />
           ))
         )}
+        </div>
       </div>
 
       <div className="shrink-0 border-t border-[hsl(var(--qep-deck-rule))] px-4 py-2 text-[10px] text-muted-foreground">
         Drag a card onto the preview → or click to add to the end.
       </div>
     </aside>
+  );
+}
+
+function QuickActionEditor({
+  actions,
+  onAdd,
+  onUpdate,
+  onRemove,
+}: {
+  actions: FloorQuickAction[];
+  onAdd: () => void;
+  onUpdate: (index: number, patch: Partial<FloorQuickAction>) => void;
+  onRemove: (index: number) => void;
+}) {
+  const iconOptions = Object.keys(FLOOR_QUICK_ACTION_ICON_MAP);
+  return (
+    <section className="rounded-lg border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))]/40 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <div>
+          <h3 className="font-kpi text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
+            Quick actions
+          </h3>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            {actions.length} / {FLOOR_QUICK_ACTION_CAP} hero buttons
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onAdd}
+          disabled={actions.length >= FLOOR_QUICK_ACTION_CAP}
+          className="h-7 gap-1 text-[11px]"
+        >
+          <Plus className="h-3 w-3" />
+          Add
+        </Button>
+      </div>
+      {actions.length === 0 ? (
+        <p className="rounded-md border border-dashed border-[hsl(var(--qep-deck-rule))] p-3 text-xs text-muted-foreground">
+          No quick actions. Add up to three buttons for the role's first moves.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {actions.map((action, index) => (
+            <div
+              key={`${action.id}-${index}`}
+              className="rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck-elevated))] p-2"
+            >
+              <div className="grid grid-cols-[1fr_auto] gap-2">
+                <input
+                  value={action.label}
+                  onChange={(e) => onUpdate(index, { label: e.target.value.toUpperCase() })}
+                  aria-label={`Quick action ${index + 1} label`}
+                  className="h-8 min-w-0 rounded border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))] px-2 text-xs font-semibold text-foreground focus:border-[hsl(var(--qep-orange))] focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => onRemove(index)}
+                  aria-label={`Remove ${action.label}`}
+                  className="h-8 rounded border border-[hsl(var(--qep-deck-rule))] px-2 text-muted-foreground hover:border-rose-500/40 hover:text-rose-300"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <input
+                value={action.route}
+                onChange={(e) => onUpdate(index, { route: e.target.value })}
+                aria-label={`Quick action ${index + 1} route`}
+                className="mt-2 h-8 w-full rounded border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))] px-2 font-mono text-xs text-foreground focus:border-[hsl(var(--qep-orange))] focus:outline-none"
+              />
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <input
+                  value={action.subLabel ?? ""}
+                  onChange={(e) => onUpdate(index, { subLabel: e.target.value || undefined })}
+                  placeholder="Sublabel"
+                  aria-label={`Quick action ${index + 1} sublabel`}
+                  className="h-8 min-w-0 rounded border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))] px-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-[hsl(var(--qep-orange))] focus:outline-none"
+                />
+                <select
+                  value={action.icon ?? "spark"}
+                  onChange={(e) => onUpdate(index, { icon: e.target.value })}
+                  aria-label={`Quick action ${index + 1} icon`}
+                  className="h-8 min-w-0 rounded border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))] px-2 text-xs text-foreground focus:border-[hsl(var(--qep-orange))] focus:outline-none"
+                >
+                  {iconOptions.map((icon) => (
+                    <option key={icon} value={icon}>
+                      {icon}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -863,6 +1352,91 @@ function PaletteCard({
       <p className="text-[11px] leading-snug text-muted-foreground">{purpose}</p>
     </button>
   );
+}
+
+function AuditDrawer({
+  rows,
+  isLoading,
+  onClose,
+}: {
+  rows: LayoutAuditRow[];
+  isLoading: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <aside className="fixed bottom-0 right-0 top-14 z-30 flex w-full max-w-md flex-col border-l border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck-elevated))] shadow-2xl">
+      <div className="flex shrink-0 items-center justify-between border-b border-[hsl(var(--qep-deck-rule))] px-4 py-3">
+        <div>
+          <h2 className="font-kpi text-xs font-extrabold uppercase tracking-[0.16em] text-foreground">
+            Layout history
+          </h2>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            Last saved composer changes from the audit trigger.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close layout history"
+          className="rounded p-1 text-muted-foreground hover:bg-[hsl(var(--qep-deck))] hover:text-foreground"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-auto p-3">
+        {isLoading ? (
+          <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Loading history...
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="rounded-md border border-dashed border-[hsl(var(--qep-deck-rule))] p-3 text-xs text-muted-foreground">
+            No audit rows yet. The next save will write one automatically.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {rows.map((row) => (
+              <li
+                key={row.id}
+                className="rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))]/50 p-3"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-kpi text-[11px] font-extrabold uppercase tracking-[0.14em] text-[hsl(var(--qep-orange))]">
+                    {row.action}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <Clock className="h-3 w-3" />
+                    {new Date(row.created_at).toLocaleString()}
+                  </span>
+                </div>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  Widgets: {countAuditWidgets(row.old_layout_json)} {" -> "} {countAuditWidgets(row.new_layout_json)}
+                  {" | "}
+                  Actions: {countAuditActions(row.old_layout_json)} {" -> "} {countAuditActions(row.new_layout_json)}
+                </p>
+                {row.subject_user_id ? (
+                  <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
+                    user {row.subject_user_id}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function countAuditWidgets(layout: unknown): number {
+  const normalized = normalizeFloorLayout(layout);
+  return normalized.widgets.length;
+}
+
+function countAuditActions(layout: unknown): number {
+  const normalized = normalizeFloorLayout(layout);
+  return normalized.quickActions.length;
 }
 
 // Keep the registry reference close at hand for downstream contributors.

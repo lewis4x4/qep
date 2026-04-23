@@ -18,12 +18,17 @@ import type { FloorLayoutWidget } from "../lib/layout-types";
 export interface FloorWidgetGridProps {
   widgets: FloorLayoutWidget[];
   isAdmin: boolean;
+  isLoading?: boolean;
 }
 
-export function FloorWidgetGrid({ widgets, isAdmin }: FloorWidgetGridProps) {
+export function FloorWidgetGrid({ widgets, isAdmin, isLoading = false }: FloorWidgetGridProps) {
   const resolved = widgets
     .map((w) => ({ ...w, descriptor: resolveFloorWidget(w.id) }))
     .filter((w): w is FloorLayoutWidget & { descriptor: NonNullable<ReturnType<typeof resolveFloorWidget>> } => !!w.descriptor);
+
+  if (isLoading) {
+    return <FloorLoadingGrid />;
+  }
 
   if (resolved.length === 0) {
     return <FloorEmptyState isAdmin={isAdmin} />;
@@ -55,6 +60,43 @@ export function FloorWidgetGrid({ widgets, isAdmin }: FloorWidgetGridProps) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function FloorLoadingGrid() {
+  return (
+    <div className="flex-1 px-4 pb-6 pt-4 sm:px-6" aria-label="Loading Floor layout">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div
+            key={index}
+            className={[
+              "relative min-h-[190px] overflow-hidden rounded-xl border border-[hsl(var(--qep-deck-rule))]",
+              "bg-[hsl(var(--qep-deck-elevated))] p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]",
+              index === 0 || index === 4 ? "md:col-span-2 xl:col-span-2" : "",
+            ].join(" ")}
+          >
+            <div className="absolute inset-y-0 left-0 w-0.5 bg-[hsl(var(--qep-orange))]/70" />
+            <div className="floor-skeleton-shimmer absolute inset-0 opacity-70" />
+            <div className="relative space-y-5">
+              <div className="flex items-center justify-between gap-4">
+                <div className="h-3 w-28 rounded-full bg-white/10" />
+                <div className="h-3 w-12 rounded-full bg-white/10" />
+              </div>
+              <div className="space-y-3">
+                <div className="h-5 w-40 rounded-full bg-white/12" />
+                <div className="h-3 w-56 max-w-full rounded-full bg-white/8" />
+              </div>
+              <div className="grid grid-cols-3 gap-2 pt-4">
+                <div className="h-12 rounded-lg border border-white/10 bg-black/10" />
+                <div className="h-12 rounded-lg border border-white/10 bg-black/10" />
+                <div className="h-12 rounded-lg border border-white/10 bg-black/10" />
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

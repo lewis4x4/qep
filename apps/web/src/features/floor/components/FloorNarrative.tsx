@@ -2,10 +2,8 @@
  * FloorNarrative — one-sentence overnight brief across the top of the
  * Floor. 48px fixed height on desktop; wraps to 2 lines on mobile.
  *
- * v1 renders a static, role-flavored sentence derived from the widget
- * ids in the layout. A server-side Claude-generated narrative edge fn
- * (`floor-narrative`) lands in a follow-up slice and will replace the
- * `buildStaticNarrative` call here.
+ * Renders a server-generated Floor narrative when available, with a
+ * deterministic role-flavored sentence as the offline/stale fallback.
  */
 import { Sparkles } from "lucide-react";
 import type { IronRole } from "@/features/qrm/lib/iron-roles";
@@ -14,9 +12,10 @@ export interface FloorNarrativeProps {
   role: IronRole;
   userFirstName: string;
   /** True when the narrative is "fresh" (generated in the last 15m).
-   *  Drives the orange pulse dot. v1 always renders as fresh since
-   *  copy is generated locally. */
+   *  Drives the orange pulse dot. */
   fresh?: boolean;
+  /** Optional edge-function narrative. Falls back to role copy when empty. */
+  text?: string | null;
 }
 
 /**
@@ -25,7 +24,7 @@ export interface FloorNarrativeProps {
  * narrative edge fn ships — each variant reads like a sentence a seasoned
  * manager would say at a standup, not a chatbot.
  */
-function buildStaticNarrative(role: IronRole, firstName: string): string {
+export function buildStaticNarrative(role: IronRole, firstName: string): string {
   const greeting = firstName ? `${firstName}, ` : "";
   switch (role) {
     case "iron_owner":
@@ -45,8 +44,8 @@ function buildStaticNarrative(role: IronRole, firstName: string): string {
   }
 }
 
-export function FloorNarrative({ role, userFirstName, fresh = true }: FloorNarrativeProps) {
-  const text = buildStaticNarrative(role, userFirstName);
+export function FloorNarrative({ role, userFirstName, fresh = true, text }: FloorNarrativeProps) {
+  const narrative = text?.trim() || buildStaticNarrative(role, userFirstName);
   return (
     <div
       role="status"
@@ -79,7 +78,7 @@ export function FloorNarrative({ role, userFirstName, fresh = true }: FloorNarra
 
       {/* Sentence — bumped to 15pt Inter semibold so it reads as a headline, not a caption */}
       <p className="min-w-0 flex-1 self-center text-[15px] font-medium leading-snug text-foreground sm:truncate">
-        {text}
+        {narrative}
       </p>
     </div>
   );

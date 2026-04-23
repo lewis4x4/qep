@@ -20,6 +20,10 @@ export interface FloorLayoutWidget {
   id: string;
   /** Explicit display order. Array position is the tiebreaker. */
   order: number;
+  /** Reserved for the Phase 6 mobile layout renderer. */
+  mobileOrder?: number;
+  /** Reserved for the Phase 6 mobile layout renderer. */
+  mobileSize?: "normal" | "wide";
 }
 
 export interface FloorQuickAction {
@@ -50,6 +54,8 @@ export interface FloorLayoutRow {
   id: string;
   workspace_id: string;
   iron_role: IronRole;
+  /** Null for role default layouts; set for per-user overrides. */
+  user_id: string | null;
   layout_json: FloorLayout;
   updated_by: string | null;
   created_at: string;
@@ -81,6 +87,8 @@ export function normalizeFloorLayout(raw: unknown): FloorLayout {
         .map((w, i) => ({
           id: w.id,
           order: typeof w.order === "number" ? w.order : i,
+          mobileOrder: typeof w.mobileOrder === "number" ? w.mobileOrder : undefined,
+          mobileSize: w.mobileSize === "wide" || w.mobileSize === "normal" ? w.mobileSize : undefined,
         }))
         .sort((a, b) => a.order - b.order)
     : [];

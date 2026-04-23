@@ -156,6 +156,9 @@ verify_jwt = false
 [functions.owner-morning-brief]
 verify_jwt = false
 
+[functions.floor-narrative]
+verify_jwt = false
+
 [functions.owner-ask-anything]
 verify_jwt = false
 
