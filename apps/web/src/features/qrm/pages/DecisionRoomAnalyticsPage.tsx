@@ -47,7 +47,7 @@ const WINDOW_OPTIONS: Array<{ label: string; days: number }> = [
 const DEFAULT_WINDOW_DAYS = 30;
 const ROW_LIMIT = 500;
 
-interface DbRow {
+interface MoveDbRow {
   id: string;
   move_text: string;
   mood: string | null;
@@ -55,51 +55,97 @@ interface DbRow {
   created_at: string;
   user_id: string | null;
   deal_id: string | null;
-  user: { id: string; full_name: string | null } | null;
-  deal: {
-    id: string;
-    name: string | null;
-    stage: { is_closed_won: boolean | null; is_closed_lost: boolean | null } | null;
-  } | null;
 }
 
+interface ProfileDbRow {
+  id: string;
+  full_name: string | null;
+}
+
+interface DealDbRow {
+  id: string;
+  name: string | null;
+  stage_id: string | null;
+}
+
+interface StageDbRow {
+  id: string;
+  is_closed_won: boolean | null;
+  is_closed_lost: boolean | null;
+}
+
+/**
+ * Three parallel RLS-scoped queries, joined client-side. Intentionally
+ * NOT using PostgREST embedded-relationship syntax — the FK names
+ * between decision_room_moves → qrm_deals → qrm_deal_stages evolved
+ * through the crm→qrm rename and any disambiguator drift would throw
+ * at runtime on every page load. Flat queries + client join is robust.
+ */
 async function fetchAnalyticsRows(windowDays: number): Promise<MoveRow[]> {
   const since = new Date();
   since.setDate(since.getDate() - windowDays);
 
-  const { data, error } = await supabase
+  const { data: moveRows, error: moveErr } = await supabase
     .from("decision_room_moves")
-    .select(
-      `
-        id, move_text, mood, velocity_delta, created_at, user_id, deal_id,
-        user:profiles!decision_room_moves_user_id_fkey ( id, full_name ),
-        deal:qrm_deals!decision_room_moves_deal_id_fkey (
-          id, name,
-          stage:crm_deal_stages!qrm_deals_stage_id_fkey ( is_closed_won, is_closed_lost )
-        )
-      `,
-    )
+    .select("id, move_text, mood, velocity_delta, created_at, user_id, deal_id")
     .is("deleted_at", null)
     .gte("created_at", since.toISOString())
     .order("created_at", { ascending: false })
     .limit(ROW_LIMIT);
+  if (moveErr) throw moveErr;
+  const moves = (moveRows ?? []) as MoveDbRow[];
+  if (moves.length === 0) return [];
 
-  if (error) throw error;
+  const userIds = Array.from(new Set(moves.map((m) => m.user_id).filter((v): v is string => !!v)));
+  const dealIds = Array.from(new Set(moves.map((m) => m.deal_id).filter((v): v is string => !!v)));
 
-  const rows = (data ?? []) as unknown as DbRow[];
-  return rows.map((row) => ({
-    id: row.id,
-    moveText: row.move_text,
-    mood: (row.mood as "positive" | "mixed" | "negative" | null) ?? null,
-    velocityDelta: row.velocity_delta,
-    createdAt: row.created_at,
-    userId: row.user_id,
-    userName: row.user?.full_name ?? null,
-    dealId: row.deal_id,
-    dealName: row.deal?.name ?? null,
-    dealStageIsWon: row.deal?.stage?.is_closed_won ?? null,
-    dealStageIsLost: row.deal?.stage?.is_closed_lost ?? null,
-  }));
+  const [profilesResult, dealsResult] = await Promise.all([
+    userIds.length > 0
+      ? supabase.from("profiles").select("id, full_name").in("id", userIds)
+      : Promise.resolve({ data: [] as ProfileDbRow[], error: null }),
+    dealIds.length > 0
+      ? supabase.from("qrm_deals").select("id, name, stage_id").in("id", dealIds)
+      : Promise.resolve({ data: [] as DealDbRow[], error: null }),
+  ]);
+
+  const profiles = (profilesResult.error ? [] : (profilesResult.data ?? [])) as ProfileDbRow[];
+  const deals = (dealsResult.error ? [] : (dealsResult.data ?? [])) as DealDbRow[];
+
+  const stageIds = Array.from(
+    new Set(deals.map((d) => d.stage_id).filter((v): v is string => !!v)),
+  );
+  let stages: StageDbRow[] = [];
+  if (stageIds.length > 0) {
+    const { data: stageData, error: stageErr } = await supabase
+      .from("qrm_deal_stages")
+      .select("id, is_closed_won, is_closed_lost")
+      .in("id", stageIds);
+    if (!stageErr) stages = (stageData ?? []) as StageDbRow[];
+  }
+
+  const profileById = new Map(profiles.map((p) => [p.id, p]));
+  const stageById = new Map(stages.map((s) => [s.id, s]));
+  const dealById = new Map(
+    deals.map((d) => [d.id, { name: d.name, stage: d.stage_id ? stageById.get(d.stage_id) ?? null : null }]),
+  );
+
+  return moves.map((row) => {
+    const profile = row.user_id ? profileById.get(row.user_id) : null;
+    const deal = row.deal_id ? dealById.get(row.deal_id) : null;
+    return {
+      id: row.id,
+      moveText: row.move_text,
+      mood: (row.mood as "positive" | "mixed" | "negative" | null) ?? null,
+      velocityDelta: row.velocity_delta,
+      createdAt: row.created_at,
+      userId: row.user_id,
+      userName: profile?.full_name ?? null,
+      dealId: row.deal_id,
+      dealName: deal?.name ?? null,
+      dealStageIsWon: deal?.stage?.is_closed_won ?? null,
+      dealStageIsLost: deal?.stage?.is_closed_lost ?? null,
+    };
+  });
 }
 
 function moodPct(dist: MoodDistribution): {

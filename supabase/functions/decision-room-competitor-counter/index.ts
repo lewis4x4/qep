@@ -134,9 +134,14 @@ Deno.serve(async (req) => {
   if (!dealRow) return safeJsonError("deal not found or access denied", 404, origin);
 
   const cacheKey = await sha256Hex(`decision-room-competitor-counter:v1:${body.competitor.toLowerCase()}`);
+  // Resolve caller workspace explicitly so service-role inserts don't
+  // collapse tenants into the "default" bucket via get_my_workspace().
+  const cacheWorkspaceId = caller.workspaceId ?? "default";
+
   const { data: cacheRow } = await admin
     .from("iron_web_search_cache")
     .select("results, created_at")
+    .eq("workspace_id", cacheWorkspaceId)
     .eq("query_hash", cacheKey)
     .maybeSingle();
 
@@ -192,6 +197,7 @@ Deno.serve(async (req) => {
     try {
       await admin.from("iron_web_search_cache").upsert(
         {
+          workspace_id: cacheWorkspaceId,
           query_hash: cacheKey,
           query_text: `competitor-counter:${body.competitor}`,
           results: packet,
