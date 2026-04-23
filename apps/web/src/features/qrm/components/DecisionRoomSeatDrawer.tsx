@@ -7,6 +7,11 @@
  * invention. The input is the Phase 2 beachhead: once try-a-move ships,
  * the same drawer will also show this seat's reaction to each proposed
  * move with a confidence + citation back to evidence.
+ *
+ * Pending-request discipline: every fetch records the seat id it was
+ * issued against. If the user switches seats before the response lands,
+ * the resolver discards the late reply instead of appending it to the
+ * wrong chat log.
  */
 import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Loader2, Send, Sparkles, UserPlus2 } from "lucide-react";
@@ -70,6 +75,25 @@ function stanceBadge(seat: DecisionRoomSeat): { label: string; cls: string } {
   }
 }
 
+function promptForArchetype(archetype: string): string {
+  switch (archetype) {
+    case "economic_buyer":
+      return "e.g. What would you need to see to approve this this quarter?";
+    case "operations":
+      return "e.g. What's your biggest concern about the install window?";
+    case "procurement":
+      return "e.g. Does this path require a formal RFP on your side?";
+    case "maintenance":
+      return "e.g. What would you want to know about parts and service before signing off?";
+    case "operator":
+      return "e.g. What do the operators on this site tell you about downtime risk?";
+    case "executive_sponsor":
+      return "e.g. Where does this fit on your capex priority list for the year?";
+    default:
+      return "e.g. What would move this forward for you?";
+  }
+}
+
 async function askSeatPersona(input: {
   dealId: string;
   seatId: string;
@@ -80,7 +104,7 @@ async function askSeatPersona(input: {
   companyName: string | null;
   dealName: string | null;
   evidence: string[];
-}): Promise<string> {
+}, signal: AbortSignal): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Not authenticated");
 
@@ -94,6 +118,7 @@ async function askSeatPersona(input: {
         apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
       },
       body: JSON.stringify(input),
+      signal,
     },
   );
   const payload = await res.json().catch(() => ({}));
@@ -110,17 +135,40 @@ export function DecisionRoomSeatDrawer({ seat, open, onOpenChange, dealId, compa
   const [question, setQuestion] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const lastSeatId = useRef<string | null>(null);
+  const activeSeatIdRef = useRef<string | null>(null);
+  const activeRequestRef = useRef<AbortController | null>(null);
 
-  // Reset chat when switching seats.
+  // Reset chat and abort any in-flight request when switching seats or
+  // closing the drawer.
   useEffect(() => {
-    if (seat && seat.id !== lastSeatId.current) {
-      setMessages([]);
-      setError(null);
-      setQuestion("");
-      lastSeatId.current = seat.id;
+    if (!seat) return;
+    if (seat.id === activeSeatIdRef.current) return;
+
+    if (activeRequestRef.current) {
+      activeRequestRef.current.abort();
+      activeRequestRef.current = null;
     }
+    activeSeatIdRef.current = seat.id;
+    setMessages([]);
+    setError(null);
+    setQuestion("");
+    setPending(false);
   }, [seat]);
+
+  // On unmount or drawer close, abort any pending persona call.
+  useEffect(() => {
+    if (!open && activeRequestRef.current) {
+      activeRequestRef.current.abort();
+      activeRequestRef.current = null;
+      setPending(false);
+    }
+    return () => {
+      if (activeRequestRef.current) {
+        activeRequestRef.current.abort();
+        activeRequestRef.current = null;
+      }
+    };
+  }, [open]);
 
   if (!seat) return null;
 
@@ -129,8 +177,22 @@ export function DecisionRoomSeatDrawer({ seat, open, onOpenChange, dealId, compa
   async function handleAsk(event: React.FormEvent) {
     event.preventDefault();
     if (!seat || !question.trim() || pending) return;
+
     const q = question.trim();
+    const askingSeatId = seat.id;
+    const askingArchetype = seat.archetype;
+    const askingName = seat.name;
+    const askingTitle = seat.title;
+    const askingEvidence = seat.evidence.map((e) => e.label);
     const nowIso = new Date().toISOString();
+
+    // Abort any previous request for this seat and start a fresh one.
+    if (activeRequestRef.current) {
+      activeRequestRef.current.abort();
+    }
+    const controller = new AbortController();
+    activeRequestRef.current = controller;
+
     setPending(true);
     setError(null);
     setMessages((prev) => [...prev, { role: "rep", content: q, at: nowIso }]);
@@ -139,20 +201,29 @@ export function DecisionRoomSeatDrawer({ seat, open, onOpenChange, dealId, compa
     try {
       const reply = await askSeatPersona({
         dealId,
-        seatId: seat.id,
-        archetype: seat.archetype,
-        seatName: seat.name,
-        seatTitle: seat.title,
+        seatId: askingSeatId,
+        archetype: askingArchetype,
+        seatName: askingName,
+        seatTitle: askingTitle,
         question: q,
         companyName,
         dealName,
-        evidence: seat.evidence.map((e) => e.label),
-      });
+        evidence: askingEvidence,
+      }, controller.signal);
+      // Drop the response if the user has since switched seats.
+      if (activeSeatIdRef.current !== askingSeatId) return;
       setMessages((prev) => [...prev, { role: "seat", content: reply, at: new Date().toISOString() }]);
     } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
+      if (activeSeatIdRef.current !== askingSeatId) return;
       setError(err instanceof Error ? err.message : "Something went wrong asking this seat.");
     } finally {
-      setPending(false);
+      if (activeRequestRef.current === controller) {
+        activeRequestRef.current = null;
+      }
+      if (activeSeatIdRef.current === askingSeatId) {
+        setPending(false);
+      }
     }
   }
 
@@ -224,14 +295,14 @@ export function DecisionRoomSeatDrawer({ seat, open, onOpenChange, dealId, compa
               <div className="mt-3 space-y-2 text-xs">
                 <div>
                   <span className="text-muted-foreground">Search: </span>
-                  <code className="rounded bg-black/40 px-1.5 py-0.5 text-[11px] text-foreground/90">
+                  <code className="rounded bg-black/40 px-1.5 py-0.5 text-[11px] text-foreground/90 break-all">
                     {seat.findGuidance.searchQuery}
                   </code>
                 </div>
                 {seat.findGuidance.emailHint ? (
                   <div>
                     <span className="text-muted-foreground">Email hint: </span>
-                    <code className="rounded bg-black/40 px-1.5 py-0.5 text-[11px] text-foreground/90">
+                    <code className="rounded bg-black/40 px-1.5 py-0.5 text-[11px] text-foreground/90 break-all">
                       {seat.findGuidance.emailHint}
                     </code>
                   </div>
@@ -279,7 +350,11 @@ export function DecisionRoomSeatDrawer({ seat, open, onOpenChange, dealId, compa
             </p>
 
             {messages.length > 0 ? (
-              <div className="mt-3 space-y-2">
+              <div
+                className="mt-3 space-y-2"
+                aria-live="polite"
+                aria-atomic="false"
+              >
                 {messages.map((m, i) => (
                   <div
                     key={i}
@@ -300,7 +375,10 @@ export function DecisionRoomSeatDrawer({ seat, open, onOpenChange, dealId, compa
             ) : null}
 
             {error ? (
-              <div className="mt-3 rounded-md border border-red-400/40 bg-red-500/10 p-3 text-xs text-red-200">
+              <div
+                role="alert"
+                className="mt-3 rounded-md border border-red-400/40 bg-red-500/10 p-3 text-xs text-red-200"
+              >
                 {error}
               </div>
             ) : null}
@@ -309,16 +387,12 @@ export function DecisionRoomSeatDrawer({ seat, open, onOpenChange, dealId, compa
               <Input
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                placeholder={
-                  seat.archetype === "economic_buyer"
-                    ? "e.g. What would you need to see to approve this this quarter?"
-                    : seat.archetype === "operations"
-                      ? "e.g. What's your biggest concern about the install window?"
-                      : "e.g. What would move this forward for you?"
-                }
+                placeholder={promptForArchetype(seat.archetype)}
+                maxLength={2000}
                 disabled={pending}
+                aria-label={`Question for ${seat.name ?? seat.archetypeLabel}`}
               />
-              <Button type="submit" size="icon" disabled={pending || !question.trim()}>
+              <Button type="submit" size="icon" disabled={pending || !question.trim()} aria-label="Ask this seat">
                 {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </form>

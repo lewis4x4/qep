@@ -7,6 +7,10 @@
  * unknown amber). Click any seat → fires onSelectSeat for the page to open
  * the drawer. This is the stage for Phase 2 (per-seat reaction bubbles)
  * and Phase 4 (time-scrubber animation).
+ *
+ * Responsive model: the canvas is aspect-ratio based so seat positions
+ * scale together. Seat sizes clamp between a mobile floor and desktop
+ * ceiling so they never collide on narrow screens.
  */
 import { useMemo } from "react";
 import type { DecisionRoomSeat } from "../lib/decision-room-simulator";
@@ -33,9 +37,10 @@ function placeSeats(seats: DecisionRoomSeat[]): SeatPosition[] {
     // Start at the top (–π/2) and walk clockwise so the first/highest-power
     // seat is at the head of the table.
     const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
-    // Stretch x more than y — conference-table feel.
-    const xPct = 50 + Math.cos(angle) * 38;
-    const yPct = 50 + Math.sin(angle) * 28;
+    // Stretch x more than y — conference-table feel. Keep within 5–95%
+    // so seats never clip the container at any viewport size.
+    const xPct = 50 + Math.cos(angle) * 37;
+    const yPct = 50 + Math.sin(angle) * 30;
     return { seat, xPct, yPct };
   });
 }
@@ -49,9 +54,16 @@ function initials(seat: DecisionRoomSeat): string {
   return (primary + secondary).toUpperCase();
 }
 
-function sizeForPower(weight: number): number {
-  // 48px at weight 0, 80px at weight 1
-  return Math.round(48 + weight * 32);
+/**
+ * Seat diameter in px, clamped so even 8+ seats never overlap on mobile.
+ * Mobile floor: 40px. Desktop ceiling: 76px. Power weight scales inside.
+ */
+function sizeForPower(weight: number): string {
+  const floor = 40;
+  const range = 28; // + up to 28 on desktop
+  const base = Math.round(floor + weight * range);
+  // clamp(min, preferred, max) — preferred scales with viewport.
+  return `clamp(${floor}px, ${base * 0.85}px + 0.5vw, ${base + 8}px)`;
 }
 
 function stanceTone(seat: DecisionRoomSeat): { ring: string; bg: string; glow: string; text: string } {
@@ -112,7 +124,8 @@ export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, compan
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-[0.08]"
         style={{
-          backgroundImage: "linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)",
+          backgroundImage:
+            "linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)",
           backgroundSize: "40px 40px",
         }}
       />
@@ -121,25 +134,27 @@ export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, compan
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
-          background: "radial-gradient(60% 50% at 50% 50%, hsl(var(--qep-orange) / 0.08), transparent 70%)",
+          background:
+            "radial-gradient(60% 50% at 50% 50%, hsl(var(--qep-orange) / 0.08), transparent 70%)",
         }}
       />
 
-      <div className="relative h-[460px] w-full">
+      {/* Aspect-ratio wrapper keeps seat angles consistent across viewports. */}
+      <div className="relative aspect-[16/10] min-h-[380px] w-full sm:min-h-[440px]">
         {/* The table — an oval in the center of the canvas */}
         <div
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[50%] border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01]"
-          style={{ width: "48%", height: "40%" }}
+          className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[50%] border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01]"
+          style={{ width: "46%", height: "42%" }}
         >
           <div className="flex h-full w-full flex-col items-center justify-center px-4 text-center">
             <p className="text-[9px] font-semibold uppercase tracking-[0.3em] text-qep-orange/70">
               Decision Room
             </p>
-            <p className="mt-1 text-sm font-semibold text-foreground/90 md:text-base">
+            <p className="mt-1 line-clamp-2 text-sm font-semibold text-foreground/90 md:text-base">
               {dealName ?? "Untitled deal"}
             </p>
             {companyName ? (
-              <p className="mt-0.5 text-xs text-muted-foreground">{companyName}</p>
+              <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{companyName}</p>
             ) : null}
             <div className="mt-2 flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-qep-live shadow-[0_0_8px_hsl(var(--qep-live))]" />
@@ -160,60 +175,57 @@ export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, compan
               type="button"
               onClick={() => onSelectSeat(seat)}
               className={cn(
-                "absolute -translate-x-1/2 -translate-y-1/2 transition-transform duration-150",
-                "hover:scale-110 focus-visible:scale-110 focus-visible:outline-none",
+                "group absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5 transition-transform duration-150",
+                "hover:scale-105 focus-visible:scale-105 focus-visible:outline-none",
               )}
-              style={{ left: `${xPct}%`, top: `${yPct}%` }}
-              aria-label={`${seat.name ?? "Ghost seat"} — ${seat.archetypeLabel}`}
+              style={{ left: `${xPct}%`, top: `${yPct}%`, width: 108 }}
+              aria-label={`${seat.name ?? `${seat.archetypeLabel} (ghost)`} — ${seat.archetypeLabel}`}
+              aria-pressed={selected}
             >
-              <div
-                className={cn(
-                  "flex items-center justify-center rounded-full border-2 ring-2 ring-offset-0",
-                  tone.ring,
-                  tone.bg,
-                  tone.glow,
-                  tone.text,
-                  selected && "ring-4 ring-qep-orange/80",
-                )}
-                style={{ width: size, height: size }}
-              >
-                <span className={cn("font-semibold", size >= 64 ? "text-base" : "text-sm")}>
-                  {initials(seat)}
-                </span>
+              <div className="relative">
+                <div
+                  className={cn(
+                    "flex items-center justify-center rounded-full border-2 ring-2 ring-offset-0",
+                    tone.ring,
+                    tone.bg,
+                    tone.glow,
+                    tone.text,
+                    selected && "ring-4 ring-qep-orange/80",
+                  )}
+                  style={{ width: size, height: size }}
+                >
+                  <span className="text-sm font-semibold sm:text-base">{initials(seat)}</span>
+                </div>
+                {/* Ghost / blocker badge — blocker wins if both apply */}
+                {seat.stance === "blocker" ? (
+                  <span
+                    aria-hidden
+                    className="absolute -right-1 -top-1 rounded-full border border-red-400/60 bg-black/80 px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-wider text-red-300"
+                  >
+                    Blocker
+                  </span>
+                ) : seat.status === "ghost" ? (
+                  <span
+                    aria-hidden
+                    className="absolute -right-1 -top-1 rounded-full border border-qep-orange/60 bg-black/80 px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-wider text-qep-orange"
+                  >
+                    Ghost
+                  </span>
+                ) : null}
               </div>
-              {/* Label below seat */}
-              <div className="mt-2 w-[112px] -translate-x-[calc(50%-calc(var(--seat-size,0px)/2))] text-center">
-                <p className="truncate text-[11px] font-medium text-foreground/90" style={{ maxWidth: 112 }}>
-                  {seat.name ?? (seat.status === "ghost" ? "Unknown" : "—")}
+              <div className="min-w-0 max-w-full text-center">
+                <p className="truncate text-[11px] font-medium text-foreground/90">
+                  {seat.name ?? (seat.status === "ghost" ? "Not yet identified" : "—")}
                 </p>
                 <p
                   className={cn(
                     "truncate text-[10px]",
                     seat.status === "ghost" ? "italic text-muted-foreground" : "text-muted-foreground",
                   )}
-                  style={{ maxWidth: 112 }}
                 >
                   {seat.archetypeLabel}
                 </p>
               </div>
-              {/* Ghost indicator */}
-              {seat.status === "ghost" ? (
-                <span
-                  aria-hidden
-                  className="absolute -right-1 -top-1 rounded-full border border-qep-orange/60 bg-black/80 px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-wider text-qep-orange"
-                >
-                  Ghost
-                </span>
-              ) : null}
-              {/* Blocker indicator */}
-              {seat.stance === "blocker" ? (
-                <span
-                  aria-hidden
-                  className="absolute -right-1 -top-1 rounded-full border border-red-400/60 bg-black/80 px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-wider text-red-300"
-                >
-                  Blocker
-                </span>
-              ) : null}
             </button>
           );
         })}
