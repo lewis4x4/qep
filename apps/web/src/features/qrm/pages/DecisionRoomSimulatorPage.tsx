@@ -16,11 +16,17 @@ import type { ExtractedDealData } from "@/lib/voice-capture-extraction.types";
 import { fetchDealComposite } from "../lib/deal-composite-api";
 import { buildDealRoomSummary, type DealRoomApproval } from "../lib/deal-room";
 import { buildDecisionRoomBoard } from "../lib/decision-room-simulator";
-import { buildRelationshipMapBoard } from "../lib/relationship-map";
+import { buildRelationshipMapBoard, type RelationshipMapBoard } from "../lib/relationship-map";
 import { useBlockers } from "../command-center/hooks/useBlockers";
 import { groupBlockedDeals } from "../command-center/lib/blockerTypes";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+
+const EMPTY_RELATIONSHIP_BOARD: RelationshipMapBoard = {
+  summary: { contacts: 0, signers: 0, deciders: 0, influencers: 0, operators: 0, blockers: 0 },
+  contacts: [],
+  unmatchedStakeholders: [],
+};
 
 function confidenceTone(confidence: "high" | "medium" | "low"): string {
   switch (confidence) {
@@ -165,10 +171,10 @@ export function DecisionRoomSimulatorPage() {
 
   const board = useMemo(
     () =>
-      composite && relationshipQuery.data && roomSummary
+      composite && roomSummary
         ? buildDecisionRoomBoard({
             dealId: dealId!,
-            relationship: relationshipQuery.data,
+            relationship: relationshipQuery.data ?? EMPTY_RELATIONSHIP_BOARD,
             needsAssessment: composite.needsAssessment,
             blockerPresent: Boolean(blocker),
             openTaskCount: roomSummary?.openTaskCount ?? 0,
