@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import type { DecisionRoomSeat } from "../lib/decision-room-simulator";
+import { DecisionRoomGhostProposals } from "./DecisionRoomGhostProposals";
 
 interface PersonaMessage {
   role: "rep" | "seat";
@@ -308,6 +309,13 @@ export function DecisionRoomSeatDrawer({ seat, open, onOpenChange, dealId, compa
                   </div>
                 ) : null}
                 <p className="text-muted-foreground">{seat.findGuidance.nextStep}</p>
+              </div>
+              <div className="mt-4 border-t border-qep-orange/20 pt-3">
+                <DecisionRoomGhostProposals
+                  dealId={dealId}
+                  archetype={seat.archetype}
+                  companyName={companyName}
+                />
               </div>
             </section>
           ) : null}

@@ -32,6 +32,7 @@ import {
 } from "../lib/decision-room-simulator";
 import { buildRelationshipMapBoard, type RelationshipMapBoard } from "../lib/relationship-map";
 import { buildRecommendedMoves, type RecommendedMove } from "../lib/decision-room-moves";
+import { projectAllHorizons } from "../lib/decision-room-future";
 import { useBlockers } from "../command-center/hooks/useBlockers";
 import { groupBlockedDeals } from "../command-center/lib/blockerTypes";
 import { QrmPageHeader } from "../components/QrmPageHeader";
@@ -43,6 +44,7 @@ import { DecisionRoomCoachRead } from "../components/DecisionRoomCoachRead";
 import { DecisionRoomRecommendedMoves } from "../components/DecisionRoomRecommendedMoves";
 import { DecisionRoomMoveBar, type TriedMove } from "../components/DecisionRoomMoveBar";
 import { DecisionRoomMoveHistory } from "../components/DecisionRoomMoveHistory";
+import { DecisionRoomFuturePulse } from "../components/DecisionRoomFuturePulse";
 
 const EMPTY_RELATIONSHIP_BOARD: RelationshipMapBoard = {
   summary: { contacts: 0, signers: 0, deciders: 0, influencers: 0, operators: 0, blockers: 0 },
@@ -195,6 +197,11 @@ export function DecisionRoomSimulatorPage() {
     [board],
   );
 
+  const futureTicks = useMemo(
+    () => (board ? projectAllHorizons(board) : []),
+    [board],
+  );
+
   if (!dealId) {
     return <Navigate to="/qrm/deals" replace />;
   }
@@ -295,6 +302,8 @@ export function DecisionRoomSimulatorPage() {
         moves={recommendedMoves}
         onPickMove={handlePickRecommendedMove}
       />
+
+      {futureTicks.length > 0 ? <DecisionRoomFuturePulse ticks={futureTicks} /> : null}
 
       <DecisionRoomMoveBar
         board={board}

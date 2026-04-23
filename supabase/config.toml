@@ -395,6 +395,11 @@ verify_jwt = false
 [functions.decision-room-try-move]
 verify_jwt = false
 
+# Decision Room ghost inference — web-search for named candidates to fill
+# archetype gap seats. Uses Tavily + iron_web_search_cache (24h TTL).
+[functions.decision-room-ghost-propose]
+verify_jwt = false
+
 [functions.generate-daily-briefing]
 verify_jwt = false
 
