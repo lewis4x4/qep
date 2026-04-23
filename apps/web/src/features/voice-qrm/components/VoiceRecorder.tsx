@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Mic, Square, Upload, RotateCcw } from "lucide-react";
+import {
+  getInitialMicrophoneProblem,
+  getMicrophoneProblemFromError,
+  getMicrophoneSupportProblem,
+  type MicrophoneProblem,
+} from "@/lib/microphone-access";
 
 interface VoiceRecorderProps {
   onRecorded: (audioBlob: Blob, fileName: string) => void;
@@ -32,7 +38,7 @@ function pickMimeType(): { mimeType: string; fileName: string } {
 export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
   const [state, setState] = useState<RecorderState>("idle");
   const [elapsedSec, setElapsedSec] = useState(0);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [microphoneProblem, setMicrophoneProblem] = useState<MicrophoneProblem | null>(null);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [recordedFileName, setRecordedFileName] = useState<string>("recording.webm");
 
@@ -45,6 +51,21 @@ export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
     return () => {
       stopTimer();
       cleanupStream();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      const problem = await getInitialMicrophoneProblem();
+      if (!cancelled) {
+        setMicrophoneProblem(problem);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -63,9 +84,15 @@ export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
   }
 
   async function startRecording() {
-    setErrorMessage(null);
+    setMicrophoneProblem(null);
     setElapsedSec(0);
     chunksRef.current = [];
+
+    const supportProblem = getMicrophoneSupportProblem();
+    if (supportProblem) {
+      setMicrophoneProblem(supportProblem);
+      return;
+    }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -92,13 +119,13 @@ export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
 
       recorder.start();
       setState("recording");
+      setMicrophoneProblem(null);
 
       timerRef.current = window.setInterval(() => {
         setElapsedSec((prev) => prev + 1);
       }, 1000);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Microphone access denied";
-      setErrorMessage(message);
+      setMicrophoneProblem(getMicrophoneProblemFromError(err));
       setState("idle");
       cleanupStream();
     }
@@ -114,7 +141,7 @@ export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
     setRecordedBlob(null);
     setState("idle");
     setElapsedSec(0);
-    setErrorMessage(null);
+    setMicrophoneProblem(null);
   }
 
   function submit() {
@@ -176,14 +203,20 @@ export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
             Recording... {formatTime(elapsedSec)}
           </p>
         )}
-        {state === "idle" && !errorMessage && (
+        {state === "idle" && !microphoneProblem && (
           <p className="text-xs text-muted-foreground">Tap the mic to start. Talk naturally — the system will extract the structure.</p>
         )}
         {state === "ready" && (
           <p className="text-xs text-muted-foreground">Recorded {formatTime(elapsedSec)}. Review or submit.</p>
         )}
-        {errorMessage && (
-          <p className="text-xs text-red-400">{errorMessage}</p>
+        {microphoneProblem && (
+          <div className="mx-auto max-w-md rounded-xl border border-destructive/40 bg-destructive/5 px-3 py-2 text-left">
+            <p className="text-xs font-semibold text-destructive">{microphoneProblem.title}</p>
+            <p className="mt-1 text-xs text-destructive/90">{microphoneProblem.description}</p>
+            {microphoneProblem.recovery && (
+              <p className="mt-1 text-xs text-destructive/80">{microphoneProblem.recovery}</p>
+            )}
+          </div>
         )}
       </div>
     </div>

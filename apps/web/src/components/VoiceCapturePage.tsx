@@ -58,6 +58,12 @@ import {
   getExtractedMachineLabel,
   normalizeExtractedDealData,
 } from "@/lib/voice-capture-extraction";
+import {
+  getInitialMicrophoneProblem,
+  getMicrophoneProblemFromError,
+  getMicrophoneSupportProblem,
+  type MicrophoneProblem,
+} from "@/lib/microphone-access";
 
 interface VoiceCapturePageProps {
   userRole: UserRole;
@@ -249,6 +255,14 @@ function canPreviewAudioMimeType(mimeType: string): boolean {
 }
 
 function chooseRecordingFormat(): RecordingFormat | null {
+  if (typeof MediaRecorder === "undefined") {
+    return null;
+  }
+
+  if (typeof MediaRecorder.isTypeSupported !== "function") {
+    return RECORDING_FORMATS[0] ?? null;
+  }
+
   const playableFormats = RECORDING_FORMATS.filter(
     (format) =>
       MediaRecorder.isTypeSupported(format.mimeType) &&
@@ -308,6 +322,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const [result, setResult] = useState<CaptureResult | null>(null);
   const [editedTranscript, setEditedTranscript] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [microphoneProblem, setMicrophoneProblem] = useState<MicrophoneProblem | null>(null);
   const [processingStep, setProcessingStep] = useState(0);
   const [transcriptCopied, setTranscriptCopied] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
@@ -328,6 +343,21 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
     mql.addEventListener("change", handler);
     return () => mql.removeEventListener("change", handler);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      const problem = await getInitialMicrophoneProblem();
+      if (!cancelled) {
+        setMicrophoneProblem(problem);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -590,15 +620,20 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
   const startRecording = useCallback(async () => {
     setErrorMessage(null);
+    setMicrophoneProblem(null);
+
+    const supportProblem = getMicrophoneSupportProblem();
+    if (supportProblem) {
+      setMicrophoneProblem(supportProblem);
+      return;
+    }
 
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-    } catch {
-      setErrorMessage(
-        "Microphone access was denied. Please allow microphone access and try again."
-      );
+    } catch (err) {
+      setMicrophoneProblem(getMicrophoneProblemFromError(err));
       return;
     }
 
@@ -633,6 +668,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     recorder.start(250);
     setRecordingState("recording");
     setElapsedSeconds(0);
+    setMicrophoneProblem(null);
 
     timerRef.current = setInterval(() => {
       setElapsedSeconds((s) => s + 1);
@@ -662,6 +698,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     setResult(null);
     setEditedTranscript("");
     setErrorMessage(null);
+    setMicrophoneProblem(null);
     setTranscriptOpen(false);
     setTranscriptCopied(false);
     setRecordingState("idle");
@@ -1000,6 +1037,15 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                   <Mic className="w-10 h-10 text-primary-foreground" />
                 </button>
                 <p className="text-sm text-muted-foreground">Tap to Record</p>
+                {microphoneProblem && (
+                  <div className="w-full max-w-md rounded-2xl border border-destructive/40 bg-destructive/5 px-4 py-3 text-left">
+                    <p className="text-sm font-medium text-destructive">{microphoneProblem.title}</p>
+                    <p className="mt-1 text-sm text-destructive/90">{microphoneProblem.description}</p>
+                    {microphoneProblem.recovery && (
+                      <p className="mt-1 text-xs text-destructive/80">{microphoneProblem.recovery}</p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
