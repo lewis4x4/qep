@@ -8,6 +8,7 @@
 
 import { createElement, useState, useCallback } from "react";
 import type { QuotePDFData } from "../components/QuotePDFDocument";
+import { openPrintableQuoteSheet } from "../lib/quote-print-html";
 
 export function useQuotePDF() {
   const [generating, setGenerating] = useState(false);
@@ -43,7 +44,13 @@ export function useQuotePDF() {
         customerName: data.customerName,
         equipmentCount: data.equipment.length,
       });
-      setError("Failed to generate the quote PDF. Try again.");
+      try {
+        await openPrintableQuoteSheet(data);
+        setError(null);
+      } catch (fallbackErr) {
+        console.error("[useQuotePDF] printable fallback failed:", fallbackErr);
+        setError("Failed to generate the quote PDF. Try again.");
+      }
     } finally {
       setGenerating(false);
     }

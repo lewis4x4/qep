@@ -32,12 +32,19 @@ interface FinancingCalculatorProps {
   financeLoading?: boolean;
   financeError?: boolean;
   selectedScenario: string | null;
+  customFinanceEnabled: boolean;
+  customFinanceRate: number | null;
+  customFinanceTermMonths: number | null;
+  customFinancePreview: QuoteFinanceScenario | null;
   taxProfiles: TaxProfileOption[];
   onDiscountTypeChange: (value: QuoteCommercialDiscountType) => void;
   onDiscountValueChange: (value: number) => void;
   onCashDownChange: (value: number) => void;
   onTaxProfileChange: (value: QuoteTaxProfile) => void;
   onSelectScenario: (label: string) => void;
+  onCustomFinanceEnabledChange: (value: boolean) => void;
+  onCustomFinanceRateChange: (value: number | null) => void;
+  onCustomFinanceTermMonthsChange: (value: number | null) => void;
 }
 
 function formatCurrency(value: number): string {
@@ -70,12 +77,19 @@ export function FinancingCalculator({
   financeLoading = false,
   financeError = false,
   selectedScenario,
+  customFinanceEnabled,
+  customFinanceRate,
+  customFinanceTermMonths,
+  customFinancePreview,
   taxProfiles,
   onDiscountTypeChange,
   onDiscountValueChange,
   onCashDownChange,
   onTaxProfileChange,
   onSelectScenario,
+  onCustomFinanceEnabledChange,
+  onCustomFinanceRateChange,
+  onCustomFinanceTermMonthsChange,
 }: FinancingCalculatorProps) {
   if (packageSubtotal <= 0) return null;
 
@@ -209,6 +223,86 @@ export function FinancingCalculator({
           <SummaryRow label="Cash down" value={`-${formatCurrency(cashDown)}`} positive />
           <SummaryRow label="Amount financed" value={formatCurrency(amountFinanced)} emphasize />
         </div>
+      </Card>
+
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Optional Payment Terms</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Add custom APR and term months when you want the quote sheet to show a manual payment structure.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={customFinanceEnabled}
+              onChange={(event) => onCustomFinanceEnabledChange(event.target.checked)}
+              className="h-4 w-4 rounded border-input bg-card"
+            />
+            Include custom terms
+          </label>
+        </div>
+
+        {customFinanceEnabled && (
+          <div className="grid gap-3 md:grid-cols-[minmax(0,180px)_minmax(0,180px)_minmax(0,1fr)]">
+            <div className="space-y-2">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                APR %
+              </label>
+              <Input
+                type="number"
+                min={0}
+                step={0.25}
+                value={customFinanceRate ?? ""}
+                onChange={(event) => {
+                  const value = event.target.value.trim();
+                  onCustomFinanceRateChange(value === "" ? null : clampNonNegative(value));
+                }}
+                placeholder="e.g. 7.5"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Term months
+              </label>
+              <Input
+                type="number"
+                min={1}
+                step={12}
+                value={customFinanceTermMonths ?? ""}
+                onChange={(event) => {
+                  const value = event.target.value.trim();
+                  onCustomFinanceTermMonthsChange(value === "" ? null : Math.round(clampNonNegative(value)));
+                }}
+                placeholder="e.g. 60"
+              />
+            </div>
+            <div className="rounded-lg border border-border/70 bg-card/50 p-3">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Payment preview</p>
+              {customFinancePreview ? (
+                <>
+                  <p className="mt-2 text-xl font-semibold text-qep-orange">
+                    {formatCurrency(customFinancePreview.monthlyPayment ?? 0)}/mo
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {customFinancePreview.termMonths} months at {(customFinancePreview.rate ?? customFinancePreview.apr ?? 0).toFixed(2)}% APR
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Total paid: {formatCurrency(customFinancePreview.totalCost ?? 0)}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {amountFinanced > 0
+                    ? "Enter APR and term months to calculate a monthly payment and carry it into the quote sheet."
+                    : "No financed balance remains on this quote."}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
       </Card>
 
       <Card className="p-4 space-y-3">

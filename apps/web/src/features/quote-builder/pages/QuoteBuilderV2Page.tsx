@@ -52,6 +52,7 @@ import {
   getAiEquipmentRecommendation,
   getClosedDealsAudit,
   getFactorVerdicts,
+  getSavedQuotePackage,
   getPortalRevision,
   publishPortalRevision,
   returnPortalRevisionToDraft,
@@ -64,11 +65,13 @@ import {
   type QuoteFinancingRequest,
 } from "../lib/quote-api";
 import { computeQuoteWorkspace } from "../lib/quote-workspace";
+import { hydrateDraftFromSavedQuote } from "../lib/saved-quote-draft";
 import { useActiveBranches } from "@/hooks/useBranches";
 import { BranchDocumentHeader, BranchDocumentFooter } from "@/components/BranchDocumentHeader";
 import { useQuotePDF } from "../hooks/useQuotePDF";
 import { useQuoteFinancingPreview } from "../hooks/useQuoteFinancingPreview";
 import { useQuoteTaxPreview } from "../hooks/useQuoteTaxPreview";
+import { buildCustomFinanceScenario } from "../lib/custom-finance";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { VoiceRecorder } from "@/features/voice-qrm/components/VoiceRecorder";
@@ -196,9 +199,13 @@ function equipmentKeyForLine(item: Pick<QuoteLineItemDraft, "id" | "title" | "ma
 
 export function QuoteBuilderV2Page() {
   const [searchParams] = useSearchParams();
+  const packageId = searchParams.get("package_id") || "";
   const dealId = searchParams.get("deal_id") || searchParams.get("crm_deal_id") || "";
   const contactId = searchParams.get("contact_id") || searchParams.get("crm_contact_id") || "";
   const [step, setStep] = useState<Step>("entry");
+  const [customFinanceEnabled, setCustomFinanceEnabled] = useState(false);
+  const [customFinanceRate, setCustomFinanceRate] = useState<number | null>(null);
+  const [customFinanceTermMonths, setCustomFinanceTermMonths] = useState<number | null>(null);
   const [draft, setDraft] = useState<QuoteWorkspaceDraft>({
     dealId: dealId || undefined,
     contactId: contactId || undefined,
@@ -257,6 +264,25 @@ export function QuoteBuilderV2Page() {
 
   const { generateAndDownload: downloadPDF, generating: pdfGenerating, error: pdfError } = useQuotePDF();
   const { profile } = useAuth();
+  const existingQuoteHydrationKeyRef = useRef<string | null>(null);
+
+  const existingQuoteQuery = useQuery({
+    queryKey: ["quote-builder", "saved-quote", packageId, dealId],
+    queryFn: () => getSavedQuotePackage({
+      packageId: packageId || undefined,
+      dealId: dealId || undefined,
+    }),
+    enabled: Boolean(packageId || dealId),
+    staleTime: 10_000,
+  });
+
+  const existingQuote = useMemo(() => {
+    const quote = existingQuoteQuery.data?.quote;
+    if (quote && typeof quote === "object" && !Array.isArray(quote)) {
+      return quote as Record<string, unknown>;
+    }
+    return null;
+  }, [existingQuoteQuery.data?.quote]);
 
   const userRoleQuery = useQuery({
     queryKey: ["quote-builder", "role"],
@@ -362,6 +388,19 @@ export function QuoteBuilderV2Page() {
       : { ...current, branchSlug: branches[0]!.slug });
   }, [branches, draft.branchSlug]);
 
+  useEffect(() => {
+    if (!existingQuote) return;
+    const nextKey =
+      (typeof existingQuote.id === "string" && existingQuote.id.length > 0 ? existingQuote.id : "")
+      || packageId
+      || dealId
+      || "__saved_quote__";
+    if (existingQuoteHydrationKeyRef.current === nextKey) return;
+    existingQuoteHydrationKeyRef.current = nextKey;
+    setDraft((current) => ({ ...current, ...hydrateDraftFromSavedQuote(existingQuote) }));
+    setStep("review");
+  }, [dealId, existingQuote, packageId]);
+
   const financingInput = useMemo<QuoteFinancingRequest>(() => ({
     packageSubtotal: subtotal,
     discountTotal,
@@ -384,6 +423,20 @@ export function QuoteBuilderV2Page() {
 
   const financingPreviewQuery = useQuoteFinancingPreview(financingInput);
   const financeScenarios: QuoteFinanceScenario[] = financingPreviewQuery.data?.scenarios ?? [];
+  const customFinanceScenario = useMemo(() => buildCustomFinanceScenario({
+    enabled: customFinanceEnabled,
+    amountFinanced,
+    ratePct: customFinanceRate,
+    termMonths: customFinanceTermMonths,
+  }), [customFinanceEnabled, amountFinanced, customFinanceRate, customFinanceTermMonths]);
+  const allFinanceScenarios = useMemo<QuoteFinanceScenario[]>(
+    () => customFinanceScenario ? [customFinanceScenario, ...financeScenarios] : financeScenarios,
+    [customFinanceScenario, financeScenarios],
+  );
+  const selectedFinanceScenario = useMemo(
+    () => allFinanceScenarios.find((scenario) => scenario.label === draft.selectedFinanceScenario) ?? null,
+    [allFinanceScenarios, draft.selectedFinanceScenario],
+  );
 
   const taxPreviewQuery = useQuoteTaxPreview({
     dealId: draft.dealId,
@@ -403,16 +456,22 @@ export function QuoteBuilderV2Page() {
   }, [draft.branchSlug, taxPreviewQuery.data?.total_tax]);
 
   useEffect(() => {
-    if (financeScenarios.length === 0) {
+    if (allFinanceScenarios.length === 0) {
       setDraft((current) => current.selectedFinanceScenario == null
         ? current
         : { ...current, selectedFinanceScenario: null });
       return;
     }
-    const hasSelected = financeScenarios.some((scenario) => scenario.label === draft.selectedFinanceScenario);
+    const hasSelected = allFinanceScenarios.some((scenario) => scenario.label === draft.selectedFinanceScenario);
+    if (customFinanceScenario) {
+      if (draft.selectedFinanceScenario == null || draft.selectedFinanceScenario === "Cash" || !hasSelected) {
+        setDraft((current) => ({ ...current, selectedFinanceScenario: customFinanceScenario.label }));
+      }
+      return;
+    }
     if (hasSelected) return;
-    setDraft((current) => ({ ...current, selectedFinanceScenario: financeScenarios[0]!.label }));
-  }, [financeScenarios, draft.selectedFinanceScenario]);
+    setDraft((current) => ({ ...current, selectedFinanceScenario: allFinanceScenarios[0]!.label }));
+  }, [allFinanceScenarios, customFinanceScenario, draft.selectedFinanceScenario]);
 
   // Slice 20a: when QRM deep-links into Quote Builder with ?contact_id= or
   // ?deal_id=, hydrate the customer from CRM so the Customer step renders
@@ -424,6 +483,7 @@ export function QuoteBuilderV2Page() {
       draft.customerName?.trim() || draft.customerCompany?.trim(),
     );
     if (hasCustomer) return;
+    if (existingQuoteQuery.isLoading || existingQuote) return;
     if (!contactId && !dealId) return;
 
     let cancelled = false;
@@ -450,9 +510,14 @@ export function QuoteBuilderV2Page() {
       }
     })();
     return () => { cancelled = true; };
-    // Intentionally one-shot on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [
+    contactId,
+    dealId,
+    draft.customerCompany,
+    draft.customerName,
+    existingQuote,
+    existingQuoteQuery.isLoading,
+  ]);
 
   // Slice 14: pick up a pending voice-quote handoff on mount. The VoiceQuotePage
   // stashes the selected scenario in sessionStorage; we read + clear it here
@@ -515,7 +580,7 @@ export function QuoteBuilderV2Page() {
             marginAmount,
             marginPct,
           },
-          financeScenarios,
+          allFinanceScenarios,
           snapshot,
         ),
       );
@@ -676,7 +741,7 @@ export function QuoteBuilderV2Page() {
             cashDown,
             amountFinanced,
           },
-          financeScenarios,
+          allFinanceScenarios,
           dealerMessage,
           revisionSummary,
         ),
@@ -1381,16 +1446,23 @@ export function QuoteBuilderV2Page() {
             taxLoading={taxPreviewQuery.isLoading}
             taxError={taxPreviewQuery.isError}
             taxEnabled={Boolean(draft.branchSlug)}
-            financeScenarios={financeScenarios}
+            financeScenarios={allFinanceScenarios}
             financeLoading={financingPreviewQuery.isLoading}
             financeError={financingPreviewQuery.isError}
             selectedScenario={draft.selectedFinanceScenario}
+            customFinanceEnabled={customFinanceEnabled}
+            customFinanceRate={customFinanceRate}
+            customFinanceTermMonths={customFinanceTermMonths}
+            customFinancePreview={customFinanceScenario}
             taxProfiles={taxProfiles}
             onDiscountTypeChange={(value) => setDraft((current) => ({ ...current, commercialDiscountType: value }))}
             onDiscountValueChange={(value) => setDraft((current) => ({ ...current, commercialDiscountValue: value }))}
             onCashDownChange={(value) => setDraft((current) => ({ ...current, cashDown: value }))}
             onTaxProfileChange={(value) => setDraft((current) => ({ ...current, taxProfile: value }))}
             onSelectScenario={(label) => setDraft((current) => ({ ...current, selectedFinanceScenario: label }))}
+            onCustomFinanceEnabledChange={setCustomFinanceEnabled}
+            onCustomFinanceRateChange={setCustomFinanceRate}
+            onCustomFinanceTermMonthsChange={setCustomFinanceTermMonths}
           />
 
           <div className="flex justify-between">
@@ -1470,6 +1542,41 @@ export function QuoteBuilderV2Page() {
             {draft.branchSlug && <BranchDocumentFooter branchSlug={draft.branchSlug} />}
           </Card>
 
+          {selectedFinanceScenario && selectedFinanceScenario.type !== "cash" && (
+            <Card className="p-4 space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Selected Financing Option</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  This optional payment structure will be included on the quote sheet.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-4">
+                <div className="rounded-lg border border-border/70 bg-card/50 p-3">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Option</p>
+                  <p className="mt-2 text-sm font-semibold text-foreground">{selectedFinanceScenario.label}</p>
+                </div>
+                <div className="rounded-lg border border-border/70 bg-card/50 p-3">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Monthly payment</p>
+                  <p className="mt-2 text-sm font-semibold text-qep-orange">
+                    ${(selectedFinanceScenario.monthlyPayment ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/70 bg-card/50 p-3">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">APR / term</p>
+                  <p className="mt-2 text-sm font-semibold text-foreground">
+                    {((selectedFinanceScenario.rate ?? selectedFinanceScenario.apr ?? 0)).toFixed(2)}% · {selectedFinanceScenario.termMonths ?? 0} mo
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/70 bg-card/50 p-3">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Total paid</p>
+                  <p className="mt-2 text-sm font-semibold text-foreground">
+                    ${(selectedFinanceScenario.totalCost ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
+
           {draft.branchSlug && subtotal > 0 && (
             <TaxBreakdown
               data={taxPreviewQuery.data}
@@ -1544,14 +1651,16 @@ export function QuoteBuilderV2Page() {
                   cashDown,
                   amountFinanced,
                   netTotal,
-                  financing: financeScenarios.map((scenario) => ({
+                  financing: allFinanceScenarios.map((scenario) => ({
                     type: scenario.type,
+                    label: scenario.label,
                     termMonths: scenario.termMonths ?? 0,
                     rate: scenario.rate ?? scenario.apr ?? 0,
                     monthlyPayment: scenario.monthlyPayment ?? 0,
                     totalCost: scenario.totalCost ?? 0,
                     lender: scenario.lender ?? "Preferred lender",
                   })),
+                  selectedFinancingLabel: draft.selectedFinanceScenario,
                   branch: (() => {
                     const branch = selectedBranch as unknown as Record<string, unknown> | undefined;
                     return {

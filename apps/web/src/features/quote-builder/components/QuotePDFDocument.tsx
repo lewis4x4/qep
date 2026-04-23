@@ -92,7 +92,8 @@ export interface QuotePDFData {
   cashDown: number;
   amountFinanced: number;
   netTotal: number;
-  financing: Array<{ type: string; termMonths: number; rate: number; monthlyPayment: number; totalCost: number; lender: string }>;
+  financing: Array<{ type: string; label?: string; termMonths: number; rate: number; monthlyPayment: number; totalCost: number; lender: string }>;
+  selectedFinancingLabel?: string | null;
   branch: { name: string; address?: string; city?: string; state?: string; postalCode?: string; phone?: string; email?: string; website?: string; footerText?: string };
 }
 
@@ -136,6 +137,14 @@ function PageHeader({ branch }: { branch: QuotePDFData["branch"] }) {
 
 export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
   const b = data.branch;
+  const financingOptions = data.financing
+    .filter((option) =>
+      option.type !== "cash" ||
+      option.monthlyPayment != null ||
+      (option.termMonths ?? 0) > 0 ||
+      ((option.rate ?? 0) > 0),
+    )
+    .slice(0, 3);
 
   return (
     <Document>
@@ -250,17 +259,20 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
           </View>
         </View>
 
-        {data.financing.length > 0 && (
+        {financingOptions.length > 0 && (
           <>
             <Text style={s.sectionTitle}>Financing Options</Text>
             <View style={s.financingCard}>
-              {data.financing.slice(0, 3).map((f, i) => (
+              {financingOptions.map((f, i) => (
                 <View key={i} style={s.financingOption}>
-                  <Text style={s.financingTitle}>{f.type}</Text>
+                  <Text style={s.financingTitle}>{f.label ?? f.type}</Text>
                   <Text style={s.financingLine}>Term: {f.termMonths} months</Text>
                   <Text style={s.financingLine}>Rate: {f.rate}%</Text>
                   <Text style={s.financingLine}>Monthly: {fmt(f.monthlyPayment)}</Text>
                   <Text style={s.financingLine}>Total: {fmt(f.totalCost)}</Text>
+                  {data.selectedFinancingLabel === f.label ? (
+                    <Text style={[s.financingLine, { color: ORANGE }]}>Selected financing structure</Text>
+                  ) : null}
                   {f.lender ? <Text style={[s.financingLine, { color: "#999" }]}>via {f.lender}</Text> : null}
                 </View>
               ))}
