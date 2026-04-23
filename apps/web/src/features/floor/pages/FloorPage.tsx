@@ -9,7 +9,7 @@
  * charcoal palette regardless of the user's theme preference — the brand
  * is dark, and the Floor is the canonical team-facing surface.
  */
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import type { UserRole } from "@/lib/database.types";
 import { getEffectiveIronRole } from "@/features/qrm/lib/iron-roles";
 import { useIronRoleBlend } from "@/features/qrm/lib/useIronRoleBlend";
@@ -22,6 +22,7 @@ import { FloorFooter } from "../components/FloorFooter";
 import { FloorZoneLabel } from "../components/FloorZoneLabel";
 import { useFloorLayout } from "../hooks/useFloorLayout";
 import { useFloorNarrative } from "../hooks/useFloorNarrative";
+import { resolveFloorWidget } from "../lib/floor-widget-registry";
 
 export interface FloorPageProps {
   userId: string;
@@ -63,7 +64,26 @@ export function FloorPage({
   const isAdmin = ADMIN_ROLES.includes(userRole);
   const narrative = useFloorNarrative(ironRole.role, firstName);
 
-  const hasQuickActions = layout.quickActions.length > 0;
+  const serialActionBand = useMemo(() => {
+    const firstWidget = layout.widgets[0];
+    if (ironRole.role !== "iron_parts_counter" || firstWidget?.id !== "parts.serial-first") {
+      return null;
+    }
+    const descriptor = resolveFloorWidget(firstWidget.id);
+    if (!descriptor) return null;
+    const Component = descriptor.component;
+    return <Component />;
+  }, [ironRole.role, layout.widgets]);
+
+  const floorWidgets = useMemo(
+    () =>
+      serialActionBand
+        ? layout.widgets.filter((widget, index) => !(index === 0 && widget.id === "parts.serial-first"))
+        : layout.widgets,
+    [layout.widgets, serialActionBand],
+  );
+
+  const hasQuickActions = layout.quickActions.length > 0 || !!serialActionBand;
 
   return (
     <div className="floor-texture flex min-h-screen flex-col bg-[hsl(var(--qep-deck))] text-foreground antialiased">
@@ -88,12 +108,12 @@ export function FloorPage({
       {hasQuickActions && (
         <>
           <FloorZoneLabel index="02" label="ACTIONS" className="mt-2" />
-          <FloorHero actions={layout.quickActions} />
+          <FloorHero actions={layout.quickActions} actionBand={serialActionBand} />
         </>
       )}
 
       <FloorZoneLabel index="03" label="THE FLOOR" className="mt-4" />
-      <FloorWidgetGrid widgets={layout.widgets} isAdmin={isAdmin} isLoading={isLoading} />
+      <FloorWidgetGrid widgets={floorWidgets} isAdmin={isAdmin} isLoading={isLoading} />
 
       <FloorFooter showOfficeLink={isAdmin} layoutUpdatedAt={updatedAt} />
     </div>

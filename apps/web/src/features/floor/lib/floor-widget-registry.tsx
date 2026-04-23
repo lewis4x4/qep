@@ -39,7 +39,6 @@ import {
   CreditAppsWidget,
 } from "@/features/dashboards/widgets/impls/iron-woman-widgets";
 import {
-  PrepQueueWidget,
   PdiChecklistsWidget,
   DemoScheduleWidget,
   ReturnInspectionsWidget,
@@ -78,6 +77,17 @@ import {
   PendingInvoicesFloorWidget,
   SalesCommissionSourceFloorWidget,
 } from "../widgets/OperationalWidgets";
+import {
+  AgingDealsTeamWidget,
+  CounterInquiriesWidget,
+  EditablePrepQueueWidget,
+  MarginTrendWidget,
+  MyQuotesByStatusWidget,
+  OwnerLargeDealsWidget,
+  RecentDecisionsWidget,
+  ServiceDeliveryScheduleWidget,
+  SlaPerformanceWidget,
+} from "../widgets/RoleHomeWidgets";
 
 export interface FloorWidgetDescriptor {
   id: string;
@@ -189,10 +199,10 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
   "iron.prep-queue": {
     id: "iron.prep-queue",
     title: "Prep queue",
-    purpose: "Units awaiting PDI + delivery prep, ordered by demo date.",
+    purpose: "Units in prep with one-click lifecycle status updates.",
     allowedRoles: ["iron_man", "iron_woman", "iron_manager"],
-    size: "normal",
-    component: PrepQueueWidget,
+    size: "wide",
+    component: EditablePrepQueueWidget,
   },
   "iron.pdi-checklists": {
     id: "iron.pdi-checklists",
@@ -292,6 +302,14 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     // and one-tap Mark Done on the touchpoint status column.
     component: ActionItemsWidget,
   },
+  "sales.my-quotes-by-status": {
+    id: "sales.my-quotes-by-status",
+    title: "My quotes by status",
+    purpose: "Draft, sent, viewed, approved, declined, and expired quotes grouped for follow-up.",
+    allowedRoles: ["iron_advisor"],
+    size: "wide",
+    component: MyQuotesByStatusWidget,
+  },
   "sales.day-summary": {
     id: "sales.day-summary",
     title: "Day summary",
@@ -358,6 +376,14 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     size: "normal",
     component: PartsCustomerIntelFloorWidget,
   },
+  "parts.counter-inquiries": {
+    id: "parts.counter-inquiries",
+    title: "Counter inquiries",
+    purpose: "Unquoted counter searches and AI parts lookups that need quote follow-through.",
+    allowedRoles: ["iron_parts_counter"],
+    size: "wide",
+    component: CounterInquiriesWidget,
+  },
   "parts.demand-forecast": {
     id: "parts.demand-forecast",
     title: "Demand forecast",
@@ -385,6 +411,14 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     // Phase 2-a wiring — wraps the service-owned parts strip around the
     // highest-priority open service job with parts context.
     component: ServicePartsHubStripFloorWidget,
+  },
+  "service.delivery-schedule": {
+    id: "service.delivery-schedule",
+    title: "Delivery schedule",
+    purpose: "Ready-for-pickup service jobs scheduled over the next five days.",
+    allowedRoles: ["iron_man"],
+    size: "wide",
+    component: ServiceDeliveryScheduleWidget,
   },
 
   // ── Slice: The Floor v2 — CRM search as a first-class Floor widget ──
@@ -423,6 +457,46 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     allowedRoles: ["iron_owner", "iron_manager"],
     size: "normal",
     component: ExecDealVelocityFloorWidget,
+  },
+  "iron.margin-trend": {
+    id: "iron.margin-trend",
+    title: "Margin trend",
+    purpose: "Gross margin trend and margin-floor flags from the analytics view.",
+    allowedRoles: ["iron_manager", "iron_owner"],
+    size: "normal",
+    component: MarginTrendWidget,
+  },
+  "iron.aging-deals-team": {
+    id: "iron.aging-deals-team",
+    title: "Aging deals",
+    purpose: "Workspace-wide stalled deals until direct-report filtering exists.",
+    allowedRoles: ["iron_manager"],
+    size: "wide",
+    component: AgingDealsTeamWidget,
+  },
+  "iron.owner-large-deals": {
+    id: "iron.owner-large-deals",
+    title: "Deals over $250K",
+    purpose: "Large open deals with advisor, stage, value, and close-date risk.",
+    allowedRoles: ["iron_owner"],
+    size: "wide",
+    component: OwnerLargeDealsWidget,
+  },
+  "iron-woman.sla-performance": {
+    id: "iron-woman.sla-performance",
+    title: "SLA performance",
+    purpose: "Deal Desk decision speed today versus the two-hour target.",
+    allowedRoles: ["iron_woman"],
+    size: "normal",
+    component: SlaPerformanceWidget,
+  },
+  "iron-woman.recent-decisions": {
+    id: "iron-woman.recent-decisions",
+    title: "Recent decisions",
+    purpose: "Recent approval decisions for deal desk audit visibility.",
+    allowedRoles: ["iron_woman"],
+    size: "wide",
+    component: RecentDecisionsWidget,
   },
   "iron-woman.pending-invoices": {
     id: "iron-woman.pending-invoices",

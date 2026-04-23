@@ -9,6 +9,7 @@
  * Brian's composer caps at 3 at the UI level; the DB also caps at 3.
  */
 import { Link } from "react-router-dom";
+import type { ReactNode } from "react";
 import {
   ArrowRight,
   FileText,
@@ -84,26 +85,31 @@ function resolveIcon(action: FloorQuickAction): LucideIcon {
 
 export interface FloorHeroProps {
   actions: FloorQuickAction[];
+  actionBand?: ReactNode;
 }
 
-export function FloorHero({ actions }: FloorHeroProps) {
-  if (actions.length === 0) return null;
+export function FloorHero({ actions, actionBand }: FloorHeroProps) {
+  if (actions.length === 0 && !actionBand) return null;
   // Column layout: 2 on mobile (or 1 if single), desktop mirrors action count up to 3.
+  const itemCount = actions.length + (actionBand ? 1 : 0);
   const gridCols =
-    actions.length === 1
+    itemCount === 1
       ? "grid-cols-1"
-      : actions.length === 2
+      : itemCount === 2
         ? "grid-cols-2"
         : "grid-cols-2 sm:grid-cols-3";
   return (
     <div className="shrink-0 px-4 pt-4 sm:px-6 sm:pt-6">
       <div className={`grid gap-3 ${gridCols}`}>
+        {actionBand ? (
+          <div className="col-span-2 sm:col-span-1">{actionBand}</div>
+        ) : null}
         {actions.map((action, i) => (
           <QuickActionButton
             key={action.id}
             action={action}
             Icon={resolveIcon(action)}
-            isPrimary={i === 0}
+            isPrimary={!actionBand && i === 0}
           />
         ))}
       </div>
