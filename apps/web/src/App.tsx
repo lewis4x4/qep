@@ -918,7 +918,12 @@ function App() {
     await supabase.auth.signOut();
   }
 
-  const homeRoute = resolveHomeRoute(profile.role, profile.iron_role, profile.audience);
+  const homeRoute = resolveHomeRoute(
+    profile.role,
+    profile.iron_role,
+    profile.audience,
+    profile.floor_mode,
+  );
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -950,6 +955,7 @@ function App() {
                     userId={profile.id}
                     userRole={profile.role}
                     ironRoleFromProfile={profile.iron_role}
+                    floorMode={profile.floor_mode}
                   />
                 }
               />

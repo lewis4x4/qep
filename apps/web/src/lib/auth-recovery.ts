@@ -12,6 +12,11 @@ export interface CachedProfile {
   active_workspace_id: string | null;
   audience: "internal" | "stakeholder" | null;
   stakeholder_subrole: "owner" | "primary_contact" | "technical" | "admin" | null;
+  /** Slice: The Floor (migration 374). Mirrors Profile.floor_mode in
+   *  useAuth.ts. Optional on the cache type so sessions persisted before
+   *  this slice deserialize cleanly — the consumer coerces with
+   *  `Boolean(cached.floor_mode)`. */
+  floor_mode?: boolean;
 }
 
 interface CachedProfileEnvelope {

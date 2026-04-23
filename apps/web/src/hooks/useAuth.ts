@@ -36,6 +36,10 @@ interface Profile {
     | "technical"
     | "admin"
     | null;
+  /** Slice: The Floor (migration 374). When true, the user lands on the
+   *  simplified /floor surface instead of the legacy Iron dashboards.
+   *  Brian flips this per-user as reps onboard. */
+  floor_mode: boolean;
 }
 
 interface AuthState {
@@ -131,7 +135,16 @@ export function useAuth(): AuthState {
       if (!cachedProfile) {
         return false;
       }
-      setState({ user: session.user, session, profile: cachedProfile, loading: false, error: null });
+      // Slice: The Floor — coerce optional floor_mode from the cached
+      // envelope into the Profile-required shape. Legacy envelopes
+      // persisted before migration 374 don't carry the field; default
+      // false so the initial paint never diverts to /floor on stale
+      // cache. The live DB row refreshes within ~60s.
+      const profile: Profile = {
+        ...cachedProfile,
+        floor_mode: Boolean(cachedProfile.floor_mode),
+      };
+      setState({ user: session.user, session, profile, loading: false, error: null });
       return true;
     }
 
@@ -405,6 +418,10 @@ function buildFallbackProfileFromSession(session: Session): Profile | null {
     active_workspace_id: activeWorkspaceId,
     audience,
     stakeholder_subrole: stakeholderSubrole,
+    // Fallback profiles are used before the DB load completes; default
+    // floor_mode=false so fresh logins never short-circuit to /floor
+    // on an unverified JWT. The real row load overrides within ~200ms.
+    floor_mode: false,
   };
 }
 
@@ -418,7 +435,7 @@ async function fetchProfile(userId: string): Promise<{ profile: Profile | null; 
         supabase
           .from("profiles")
           .select(
-            "id, full_name, email, role, iron_role, iron_role_display, is_support, active_workspace_id, audience, stakeholder_subrole"
+            "id, full_name, email, role, iron_role, iron_role_display, is_support, active_workspace_id, audience, stakeholder_subrole, floor_mode"
           )
           .eq("id", userId)
           .single()
@@ -543,5 +560,7 @@ function normalizeProfileRow(row: unknown): Profile | null {
     active_workspace_id: (r.active_workspace_id as string | null) ?? null,
     audience,
     stakeholder_subrole: normalizedSubrole,
+    // Legacy rows pre-migration-374 won't have the column; default false.
+    floor_mode: Boolean(r.floor_mode),
   };
 }

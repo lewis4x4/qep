@@ -2,12 +2,23 @@ export function resolveHomeRoute(
   userRole: string | null | undefined,
   ironRole?: string | null,
   audience?: string | null,
+  floorMode?: boolean | null,
 ): string {
   // Stakeholder audience (external QEP USA build observers — Ryan, Rylee,
   // Juan, Angela) always lands on the Build Hub regardless of role/iron role.
   // Internal operators keep their role-based routing below.
   if (audience === "stakeholder") {
     return "/brief";
+  }
+
+  // Slice: The Floor — profiles.floor_mode = true sends the user to the
+  // simplified Brian-curated Floor surface. This wins over role-based
+  // routing because the whole point of the flag is to opt specific team
+  // members into The Floor while the rest of the roster keeps their
+  // existing home. The Floor itself still picks the right layout
+  // internally based on iron_role.
+  if (floorMode) {
+    return "/floor";
   }
 
   // Iron role is the most reliable routing signal — check it first.
