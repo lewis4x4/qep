@@ -1,0 +1,87 @@
+# Manually-triggered workflow to deploy a single edge function to the
+# linked Supabase project. Mirrors the gating pattern of
+# apply-migrations.yml: workflow_dispatch only, explicit confirm input,
+# dry_run default so a misclick prints the bundle list without shipping.
+#
+# Scoped to one function per run on purpose — fan-out deploys of many
+# functions at once make rollbacks painful and obscure which function
+# broke a regression. Re-run the workflow per function if you need to
+# deploy several.
+name: Deploy Supabase edge function
+
+on:
+  workflow_dispatch:
+    inputs:
+      function_slug:
+        description: 'Function slug under supabase/functions (e.g. quote-builder-v2).'
+        required: true
+        default: ""
+      confirm:
+        description: 'Type DEPLOY to confirm. This replaces the live function.'
+        required: true
+        default: ""
+      dry_run:
+        description: 'Dry run (list bundle without deploying)'
+        type: boolean
+        required: false
+        default: true
+
+concurrency:
+  # Serialize so two concurrent deploys of the same slug can't race.
+  group: deploy-function-${{ inputs.function_slug }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Guard — require explicit confirmation
+        if: ${{ inputs.confirm != 'DEPLOY' }}
+        run: |
+          echo "Aborting — the 'confirm' input must be exactly 'DEPLOY'. Got: '${{ inputs.confirm }}'."
+          exit 1
+
+      - name: Guard — require a function slug
+        if: ${{ inputs.function_slug == '' }}
+        run: |
+          echo "Aborting — 'function_slug' is required."
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - name: Guard — function directory must exist
+        run: |
+          if [ ! -d "supabase/functions/${{ inputs.function_slug }}" ]; then
+            echo "Aborting — supabase/functions/${{ inputs.function_slug }} not found."
+            exit 1
+          fi
+          echo "Bundle contents:"
+          find "supabase/functions/${{ inputs.function_slug }}" -type f | sort
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Dry run — print what would ship
+        if: ${{ inputs.dry_run == true }}
+        run: |
+          echo "DRY RUN — the following would be deployed:"
+          echo "  function: ${{ inputs.function_slug }}"
+          echo "  to project ref: (masked)"
+          wc -l supabase/functions/${{ inputs.function_slug }}/*.ts || true
+          echo "Pass dry_run=false to deploy."
+
+      - name: Deploy edge function
+        if: ${{ inputs.dry_run == false }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        # JWT verification stays on by default (gateway checks the anon
+        # key's signature before routing). quote-builder-v2 branches to
+        # its public routes before any user-auth lookup, so public
+        # customers only need the anon bearer.
+        run: |
+          supabase functions deploy "${{ inputs.function_slug }}" \
+            --project-ref "$SUPABASE_PROJECT_REF"
