@@ -50,6 +50,7 @@ import { DecisionRoomGymPicker } from "../components/DecisionRoomGymPicker";
 import { DecisionRoomReplayBanner } from "../components/DecisionRoomReplayBanner";
 import { DecisionRoomDealLens } from "../components/DecisionRoomDealLens";
 import { DecisionRoomPatternBanner } from "../components/DecisionRoomPatternBanner";
+import { DecisionRoomLiveCoaching } from "../components/DecisionRoomLiveCoaching";
 import { coachReadQueryKey, fetchCoachRead } from "../lib/decision-room-coach-read-api";
 import {
   insertMoveToDb,
@@ -398,6 +399,13 @@ export function DecisionRoomSimulatorPage() {
         dealAmount={composite.deal.amount ?? null}
         machineInterest={composite.needsAssessment?.machine_interest ?? null}
         onPickMove={(moveText) => setMovePrefill(moveText)}
+      />
+
+      <DecisionRoomLiveCoaching
+        dealId={dealId}
+        companyId={composite.company?.id ?? null}
+        companyName={board.companyName}
+        dealName={board.dealName}
       />
 
       {futureTicks.length > 0 ? <DecisionRoomFuturePulse ticks={futureTicks} /> : null}

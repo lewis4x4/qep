@@ -416,6 +416,19 @@ verify_jwt = false
 [functions.decision-room-competitor-counter]
 verify_jwt = false
 
+# Decision Room live-mic chunk ingest (Phase 6). Accepts ~20s audio
+# chunks from the rep's browser during a live call, transcribes via
+# Whisper, and extracts stakeholder mentions + archetype hints so the
+# canvas can surface live ghost seats as new humans are named.
+[functions.decision-room-voice-chunk]
+verify_jwt = false
+
+# Decision Room pattern lookup — surfaces the "this deal's shape has
+# lost N times in the last M" pattern banner. Same ES256 + access-check
+# pattern as the other DR fns.
+[functions.decision-room-pattern-lookup]
+verify_jwt = false
+
 [functions.generate-daily-briefing]
 verify_jwt = false
 
