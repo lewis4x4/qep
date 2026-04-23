@@ -53,6 +53,16 @@ function pickSelectedFinance(quote: DealRoomQuote): DealRoomFinanceScenario | nu
   return scenarios.find((s) => s.label === selected) ?? scenarios[0] ?? null;
 }
 
+// Statuses that indicate the rep / manager are mid-loop; polling on
+// these auto-refreshes the deal room so the customer sees transitions
+// (approval, changes_requested → sent) without manual reload. Terminal
+// states (accepted, rejected, expired) stop polling to save cost.
+const TRANSIENT_STATUSES = new Set([
+  "pending_approval",
+  "changes_requested",
+  "approved_with_conditions",
+]);
+
 export function DealRoomPage() {
   const { token = "" } = useParams<{ token: string }>();
   const { data, isLoading, isError, error } = useQuery<DealRoomPayload>({
@@ -61,6 +71,13 @@ export function DealRoomPage() {
     enabled: token.length > 0,
     staleTime: 30_000,
     retry: false,
+    // Only poll while the rep-side approval loop is live. 15s keeps the
+    // page feeling responsive without hammering the edge function.
+    refetchInterval: (query) => {
+      const status = (query.state.data?.quote?.status ?? "") as string;
+      return TRANSIENT_STATUSES.has(status) ? 15_000 : false;
+    },
+    refetchIntervalInBackground: false,
   });
 
   if (isLoading) {
@@ -303,6 +320,7 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
           currentCredit={tradeCredit}
           onApply={setTradeCredit}
         />
+        <ApprovalStatusBanner status={quote.status} />
         <AcceptPanel
           token={token}
           quote={adjustedQuote}
@@ -1036,6 +1054,86 @@ function TradeEstimatorPanel({
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+interface StatusDisplay {
+  tone: "pending" | "caution" | "conditional" | "neutral" | "success";
+  title: string;
+  body: string;
+}
+
+function describeApprovalStatus(status: string): StatusDisplay | null {
+  switch (status) {
+    case "pending_approval":
+      return {
+        tone: "pending",
+        title: "Waiting on manager approval",
+        body: "Your rep submitted this proposal for manager sign-off. This page updates automatically the moment a decision lands — typically within 15 minutes during business hours.",
+      };
+    case "approved_with_conditions":
+      return {
+        tone: "conditional",
+        title: "Approved with conditions",
+        body: "Your rep's manager cleared this pricing with a few conditions attached. Contact your rep to review them before you sign.",
+      };
+    case "changes_requested":
+      return {
+        tone: "caution",
+        title: "Changes requested",
+        body: "Your rep's manager asked for adjustments before this can ship. Your rep will send an updated proposal shortly — this page will refresh automatically.",
+      };
+    case "rejected":
+      return {
+        tone: "caution",
+        title: "Proposal paused",
+        body: "This configuration wasn't approved. Reach out to your rep to rework the terms.",
+      };
+    case "expired":
+      return {
+        tone: "neutral",
+        title: "This proposal has expired",
+        body: "Prices and availability change — contact your rep for a fresh proposal.",
+      };
+    default:
+      return null;
+  }
+}
+
+function ApprovalStatusBanner({ status }: { status: string }) {
+  const display = describeApprovalStatus(status);
+  if (!display) return null;
+  const toneClasses: Record<StatusDisplay["tone"], string> = {
+    pending: "border-amber-300 bg-amber-50 text-amber-900",
+    caution: "border-rose-300 bg-rose-50 text-rose-900",
+    conditional: "border-blue-300 bg-blue-50 text-blue-900",
+    neutral: "border-slate-200 bg-slate-50 text-slate-700",
+    success: "border-emerald-300 bg-emerald-50 text-emerald-900",
+  };
+  const pulseDot: Record<StatusDisplay["tone"], string> = {
+    pending: "bg-amber-500",
+    caution: "bg-rose-500",
+    conditional: "bg-blue-500",
+    neutral: "bg-slate-400",
+    success: "bg-emerald-500",
+  };
+  return (
+    <section className={`mt-9 rounded-2xl border-2 p-6 ${toneClasses[display.tone]}`} aria-live="polite">
+      <div className="flex items-start gap-3">
+        <span className="relative mt-1.5 flex h-2.5 w-2.5 shrink-0">
+          {display.tone === "pending" && (
+            <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 ${pulseDot[display.tone]}`} />
+          )}
+          <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${pulseDot[display.tone]}`} />
+        </span>
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.12em]">
+            {display.title}
+          </div>
+          <p className="mt-1 text-sm leading-relaxed">{display.body}</p>
+        </div>
+      </div>
     </section>
   );
 }
