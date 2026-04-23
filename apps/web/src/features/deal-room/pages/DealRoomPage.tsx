@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -8,6 +8,12 @@ import {
   type DealRoomPayload,
   type DealRoomQuote,
 } from "../lib/deal-room-api";
+import {
+  computePaymentFor,
+  filterDisplayableScenarios,
+  scenarioKey,
+  type ComputedPayment,
+} from "../lib/financing-math";
 
 function formatCurrency(value: number | null | undefined, digits = 2): string {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -33,12 +39,7 @@ function referenceBadge(quote: DealRoomQuote): string {
 }
 
 function pickSelectedFinance(quote: DealRoomQuote): DealRoomFinanceScenario | null {
-  const scenarios = (quote.financing_scenarios ?? []).filter((s) =>
-    s.type !== "cash"
-    || (s.monthly_payment ?? null) != null
-    || (s.term_months ?? 0) > 0
-    || ((s.rate ?? s.apr ?? 0) > 0),
-  );
+  const scenarios = filterDisplayableScenarios(quote.financing_scenarios ?? []);
   if (scenarios.length === 0) return null;
   const selected = quote.selected_finance_scenario?.trim();
   return scenarios.find((s) => s.label === selected) ?? scenarios[0] ?? null;
@@ -85,19 +86,51 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
   const { quote, branch } = payload;
   const [hero, ...rest] = quote.equipment ?? [];
   const attachments = quote.attachments_included ?? [];
-  const selectedFinance = useMemo(() => pickSelectedFinance(quote), [quote]);
-  const otherFinance = (quote.financing_scenarios ?? [])
-    .filter((s) => s !== selectedFinance)
-    .filter((s) =>
-      s.type !== "cash"
-      || (s.monthly_payment ?? null) != null
-      || (s.term_months ?? 0) > 0
-      || ((s.rate ?? s.apr ?? 0) > 0),
-    )
-    .slice(0, 2);
+  const displayableScenarios = useMemo(
+    () => filterDisplayableScenarios(quote.financing_scenarios ?? []),
+    [quote.financing_scenarios],
+  );
+  const initialScenario = useMemo(() => pickSelectedFinance(quote), [quote]);
+
+  // Customer-driven financing inputs — the deal room's decision rails.
+  // Seeded from the saved quote so the first render matches the PDF,
+  // then the customer can tweak in place without a round trip.
+  const [selectedKey, setSelectedKey] = useState<string>(
+    initialScenario ? scenarioKey(initialScenario) : (displayableScenarios[0] ? scenarioKey(displayableScenarios[0]) : ""),
+  );
+  const [cashDown, setCashDown] = useState<number>(quote.cash_down ?? 0);
+  const [termMonths, setTermMonths] = useState<number>(
+    initialScenario?.term_months ?? displayableScenarios[0]?.term_months ?? 60,
+  );
+
+  // If the fetched quote changes (e.g. react-query refetch), resync so
+  // we don't strand stale state against a newer payload.
+  useEffect(() => {
+    if (!initialScenario) return;
+    setSelectedKey(scenarioKey(initialScenario));
+    setTermMonths(initialScenario.term_months ?? 60);
+    setCashDown(quote.cash_down ?? 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quote.id]);
+
+  const activeScenario = displayableScenarios.find((s) => scenarioKey(s) === selectedKey)
+    ?? initialScenario
+    ?? displayableScenarios[0]
+    ?? null;
+
+  const computed = useMemo<ComputedPayment | null>(() => {
+    if (!activeScenario) return null;
+    return computePaymentFor(quote, activeScenario, {
+      cashDown,
+      termMonths,
+      scenarioKey: selectedKey,
+    });
+  }, [quote, activeScenario, cashDown, termMonths, selectedKey]);
+
   const refBadge = referenceBadge(quote);
   const preparedDate = formatDate(quote.created_at) || formatDate(quote.updated_at);
   const displayCustomer = quote.customer_name?.trim() || quote.customer_company?.trim() || "Customer";
+  const customerTotal = quote.customer_total ?? 0;
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
@@ -118,8 +151,18 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
           <AdditionalItems equipment={rest} attachments={attachments} />
         )}
         <div className="mt-9 grid gap-5 sm:grid-cols-[1.15fr_1fr]">
-          <PricingSummary quote={quote} />
-          <FinancingPanel selected={selectedFinance} others={otherFinance} />
+          <PricingSummary quote={quote} cashDownOverride={cashDown} computed={computed} />
+          <FinancingPanel
+            scenarios={displayableScenarios}
+            selectedKey={selectedKey}
+            onSelect={setSelectedKey}
+            termMonths={termMonths}
+            onTermChange={setTermMonths}
+            cashDown={cashDown}
+            onCashDownChange={setCashDown}
+            customerTotal={customerTotal}
+            computed={computed}
+          />
         </div>
         <RepContact branch={branch} />
         <Footer branch={branch} refBadge={refBadge} />
@@ -248,7 +291,13 @@ function AdditionalItems({
   );
 }
 
-function PricingSummary({ quote }: { quote: DealRoomQuote }) {
+function PricingSummary({
+  quote, cashDownOverride, computed,
+}: {
+  quote: DealRoomQuote;
+  cashDownOverride: number;
+  computed: ComputedPayment | null;
+}) {
   const Row = ({ label, value, tone = "base" }: {
     label: string; value: string; tone?: "base" | "credit" | "net" | "total";
   }) => {
@@ -264,10 +313,13 @@ function PricingSummary({ quote }: { quote: DealRoomQuote }) {
       </div>
     );
   };
-  const amountFinancedLabel = (quote.amount_financed ?? 0) > 0 ? "Amount financed" : "Customer total";
-  const amountFinancedValue = (quote.amount_financed ?? 0) > 0
-    ? quote.amount_financed ?? 0
-    : quote.customer_total ?? 0;
+  // When the customer drags the cash-down slider, the row below reflects
+  // their number, not the saved one. Likewise the financed total is the
+  // live computed value from the scenario math.
+  const cashDown = cashDownOverride;
+  const amountFinanced = computed?.amountFinanced ?? (quote.amount_financed ?? 0);
+  const amountFinancedLabel = amountFinanced > 0 ? "Amount financed" : "Customer total";
+  const amountFinancedValue = amountFinanced > 0 ? amountFinanced : (quote.customer_total ?? 0);
   return (
     <div className="rounded-xl border border-slate-200 p-5 sm:p-6">
       <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
@@ -287,8 +339,8 @@ function PricingSummary({ quote }: { quote: DealRoomQuote }) {
         )}
         <Row label="Net before tax" value={formatCurrency(quote.net_total ?? 0)} tone="net" />
         <Row label="Estimated tax" value={formatCurrency(quote.tax_total ?? 0)} />
-        {(quote.cash_down ?? 0) > 0 && (
-          <Row label="Cash down" value={`-${formatCurrency(quote.cash_down ?? 0)}`} tone="credit" />
+        {cashDown > 0 && (
+          <Row label="Cash down" value={`-${formatCurrency(cashDown)}`} tone="credit" />
         )}
         <Row label={amountFinancedLabel} value={formatCurrency(amountFinancedValue)} tone="total" />
       </div>
@@ -296,65 +348,158 @@ function PricingSummary({ quote }: { quote: DealRoomQuote }) {
   );
 }
 
+// Decision-rail term presets. Most equipment loans are 36/48/60/72/84; we
+// surface a broad-but-finite list so the customer can see how the payment
+// moves without typing a free number. When the selected scenario already
+// sits on a term not in the preset list, we inject it so the dropdown
+// always reflects the current selection.
+const TERM_PRESETS = [24, 36, 48, 60, 72, 84];
+
 function FinancingPanel({
-  selected, others,
+  scenarios,
+  selectedKey,
+  onSelect,
+  termMonths,
+  onTermChange,
+  cashDown,
+  onCashDownChange,
+  customerTotal,
+  computed,
 }: {
-  selected: DealRoomFinanceScenario | null;
-  others: DealRoomFinanceScenario[];
+  scenarios: DealRoomFinanceScenario[];
+  selectedKey: string;
+  onSelect: (key: string) => void;
+  termMonths: number;
+  onTermChange: (value: number) => void;
+  cashDown: number;
+  onCashDownChange: (value: number) => void;
+  customerTotal: number;
+  computed: ComputedPayment | null;
 }) {
+  // Cap the slider at the customer total — down payment can never exceed
+  // the amount due. Step in hundreds so the slider feels precise without
+  // being twitchy for $50k+ deals.
+  const cashMax = Math.max(0, Math.round(customerTotal));
+  const cashStep = cashMax >= 50_000 ? 500 : cashMax >= 10_000 ? 100 : 50;
+  const termOptions = Array.from(new Set([...TERM_PRESETS, termMonths])).sort((a, b) => a - b);
+  const activeIsCash = computed?.isCash ?? false;
+
+  if (scenarios.length === 0) {
+    return (
+      <div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+          Recommended payment
+        </div>
+        <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-5 py-4 text-[13px] text-slate-500">
+          No financing option selected. Contact your rep to structure payment terms.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
         Recommended payment
       </div>
-      {selected ? (
-        <div className="mt-3 rounded-xl border-2 border-[#E87722] bg-[#fff7ed] px-6 py-5">
-          <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#E87722]">
-            {selected.label ?? selected.type}
-          </div>
-          <div className="mt-1.5 flex items-baseline gap-1 text-4xl font-extrabold tracking-tight tabular-nums text-slate-900">
-            {formatCurrency(selected.monthly_payment ?? 0)}
-            <span className="text-base font-medium text-slate-500">/mo</span>
-          </div>
-          <div className="mt-1 text-xs text-slate-600">
-            {selected.term_months ?? 0} months
-            {" · "}
-            {((selected.rate ?? selected.apr ?? 0)).toFixed(2)}% APR
-            {" · Total "}
-            {formatCurrency(selected.total_cost ?? 0)}
-          </div>
-          {selected.lender && (
-            <div className="mt-0.5 text-[11px] italic text-slate-400">via {selected.lender}</div>
-          )}
-        </div>
-      ) : (
-        <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-5 py-4 text-[13px] text-slate-500">
-          No financing option selected. Contact your rep to structure payment terms.
+
+      {/* Scenario tabs — one per financing option the rep attached. */}
+      {scenarios.length > 1 && (
+        <div className="mt-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Financing options">
+          {scenarios.map((s) => {
+            const key = scenarioKey(s);
+            const active = key === selectedKey;
+            return (
+              <button
+                key={key}
+                role="tab"
+                aria-selected={active}
+                onClick={() => onSelect(key)}
+                className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] transition ${
+                  active
+                    ? "border-[#E87722] bg-[#fff7ed] text-[#E87722]"
+                    : "border-slate-200 text-slate-600 hover:border-slate-300"
+                }`}
+              >
+                {s.label ?? s.type}
+              </button>
+            );
+          })}
         </div>
       )}
-      {others.length > 0 && (
-        <div className="mt-4">
-          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
-            Also available
-          </div>
-          {others.map((s, i) => (
-            <div key={i} className="flex items-center justify-between border-b border-slate-100 py-2.5 last:border-0">
-              <div>
-                <div className="text-[13px] font-semibold text-slate-900">{s.label ?? s.type}</div>
-                <div className="mt-0.5 text-[11px] text-slate-500">
-                  {s.term_months ?? 0} mo
-                  {" · "}{((s.rate ?? s.apr ?? 0)).toFixed(2)}% APR
-                  {s.lender ? ` · ${s.lender}` : ""}
-                </div>
-              </div>
-              <div className="text-base font-bold tabular-nums">
-                {formatCurrency(s.monthly_payment ?? 0)}
-                <span className="ml-0.5 text-[11px] font-medium text-slate-500">/mo</span>
-              </div>
+
+      {/* Live monthly-payment card — re-renders on every input change. */}
+      <div className="mt-3 rounded-xl border-2 border-[#E87722] bg-[#fff7ed] px-6 py-5">
+        <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#E87722]">
+          {computed?.scenario.label ?? computed?.scenario.type ?? "Payment"}
+        </div>
+        {activeIsCash ? (
+          <>
+            <div className="mt-1.5 flex items-baseline gap-1 text-4xl font-extrabold tracking-tight tabular-nums text-slate-900">
+              {formatCurrency(computed?.totalCost ?? 0)}
             </div>
-          ))}
+            <div className="mt-1 text-xs text-slate-600">Paid at close</div>
+          </>
+        ) : (
+          <>
+            <div className="mt-1.5 flex items-baseline gap-1 text-4xl font-extrabold tracking-tight tabular-nums text-slate-900">
+              {formatCurrency(computed?.monthlyPayment ?? 0)}
+              <span className="text-base font-medium text-slate-500">/mo</span>
+            </div>
+            <div className="mt-1 text-xs text-slate-600">
+              {termMonths} months
+              {" · "}
+              {((computed?.scenario.rate ?? computed?.scenario.apr ?? 0)).toFixed(2)}% APR
+              {" · Total "}
+              {formatCurrency(computed?.totalCost ?? 0)}
+            </div>
+            {computed?.scenario.lender && (
+              <div className="mt-0.5 text-[11px] italic text-slate-400">via {computed.scenario.lender}</div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Decision rails — cash-down slider and term selector. */}
+      <div className="mt-4 space-y-4 rounded-xl border border-slate-200 bg-slate-50 px-5 py-4">
+        <div>
+          <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
+            <span>Cash down</span>
+            <span className="tabular-nums text-slate-900">{formatCurrency(cashDown, 0)}</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={cashMax}
+            step={cashStep}
+            value={Math.min(cashDown, cashMax)}
+            onChange={(e) => onCashDownChange(Number(e.target.value))}
+            aria-label="Cash down"
+            className="mt-2 w-full accent-[#E87722]"
+          />
+          <div className="mt-1 flex justify-between text-[10px] text-slate-400">
+            <span>$0</span>
+            <span>{formatCurrency(cashMax, 0)}</span>
+          </div>
         </div>
-      )}
+        {!activeIsCash && (
+          <div>
+            <label className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
+              <span>Term length</span>
+              <select
+                value={termMonths}
+                onChange={(e) => onTermChange(Number(e.target.value))}
+                className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[13px] font-medium normal-case text-slate-900 tracking-normal"
+                aria-label="Term length in months"
+              >
+                {termOptions.map((n) => (
+                  <option key={n} value={n}>{n} months</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
