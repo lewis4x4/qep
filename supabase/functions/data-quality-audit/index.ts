@@ -37,7 +37,7 @@ async function runAudit(admin: ReturnType<typeof createClient>): Promise<AuditRe
 
   // 1. Equipment without owner linkage
   const { count: unownedEquip } = await admin
-    .from("equipment")
+    .from("qrm_equipment")
     .select("*", { count: "exact", head: true })
     .is("company_id", null);
   if (unownedEquip && unownedEquip > 0) {
@@ -52,7 +52,7 @@ async function runAudit(admin: ReturnType<typeof createClient>): Promise<AuditRe
 
   // 2. Missing make/model
   const { count: missingMake } = await admin
-    .from("equipment")
+    .from("qrm_equipment")
     .select("*", { count: "exact", head: true })
     .or("make.is.null,model.is.null");
   if (missingMake && missingMake > 0) {
@@ -85,7 +85,7 @@ async function runAudit(admin: ReturnType<typeof createClient>): Promise<AuditRe
   let dupCount = 0;
   try {
     const { data: dupSerials } = await admin
-      .from("equipment")
+      .from("qrm_equipment")
       .select("serial_number")
       .not("serial_number", "is", null)
       .neq("serial_number", "");
