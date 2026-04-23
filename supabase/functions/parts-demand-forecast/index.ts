@@ -432,14 +432,19 @@ Deno.serve(async (req) => {
       ),
     );
 
+    // For each inventory (ws, part, branch) without a history-based forecast,
+    // emit one zero-predicted row per forecast month. The dedupe set only
+    // tracks (ws, part, branch) — it represents "already has a better
+    // history-based forecast, skip entirely" — so we check but never re-add
+    // inside the month loop. The previous implementation re-added fullKey
+    // after the first month, which caused months 2 and 3 to be silently
+    // skipped and left every part with a single "May 2026" row.
     for (const row of inventory ?? []) {
       const pk = `${row.workspace_id}::${(row.part_number as string).toLowerCase()}`;
+      const fullKey = `${pk}::${row.branch_id}`;
+      if (forecastedKeys.has(fullKey)) continue;
       for (const forecastDate of forecastMonthDates) {
-        const fullKey = `${pk}::${row.branch_id}`;
         const monthStr = monthKey(forecastDate);
-        const forecastKey = `${fullKey}::${monthStr}`;
-        if (forecastedKeys.has(fullKey)) continue;
-
         forecastRows.push({
           workspace_id: row.workspace_id,
           part_number: (row.part_number as string).toUpperCase(),
@@ -456,8 +461,6 @@ Deno.serve(async (req) => {
           computation_batch_id: batchId,
           computed_at: now.toISOString(),
         });
-
-        forecastedKeys.add(fullKey);
       }
     }
 
