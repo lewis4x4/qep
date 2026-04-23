@@ -31,6 +31,7 @@ import type { DecisionRoomSeat } from "../lib/decision-room-simulator";
 import { DecisionRoomGhostProposals } from "./DecisionRoomGhostProposals";
 import { DecisionRoomEmailDraft } from "./DecisionRoomEmailDraft";
 import { DecisionRoomDialogue } from "./DecisionRoomDialogue";
+import { DecisionRoomArchetypeOverride } from "./DecisionRoomArchetypeOverride";
 
 interface PersonaMessage {
   role: "rep" | "seat";
@@ -268,6 +269,19 @@ export function DecisionRoomSeatDrawer({
               Veto weight {(seat.vetoWeight * 100).toFixed(0)}%
             </Badge>
           </div>
+          {/* Reclassify — named seats only. A rep can override the archetype
+              inference (e.g. "Jordan is actually our Champion, not an
+              Operator") and the coach + scores rebuild on next refetch. */}
+          {seat.status === "named" ? (
+            <div className="pt-1">
+              <DecisionRoomArchetypeOverride
+                seatId={seat.id}
+                currentArchetype={seat.archetype}
+                currentLabel={seat.archetypeLabel}
+                dealId={dealId}
+              />
+            </div>
+          ) : null}
         </SheetHeader>
 
         <div className="mt-4 space-y-5">

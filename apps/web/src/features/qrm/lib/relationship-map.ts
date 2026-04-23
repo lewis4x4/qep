@@ -9,6 +9,11 @@ export interface RelationshipContactInput {
   title: string | null;
   email: string | null;
   phone: string | null;
+  /** Rep-authored archetype override from
+   *  `crm_contacts.metadata.decision_room_override.archetype`. When set,
+   *  seat inference treats this as the source of truth and skips title/role
+   *  heuristics for this contact. */
+  archetypeOverride?: string | null;
 }
 
 export interface RelationshipDealInput {
@@ -46,6 +51,9 @@ export interface RelationshipMapContact {
   roles: RelationshipRole[];
   evidence: string[];
   lastSignalAt: string | null;
+  /** Carried from crm_contacts metadata — when set, wins over title/role
+   *  inference in decision-room-archetype::inferArchetypeForContact. */
+  archetypeOverride: string | null;
 }
 
 export interface RelationshipMapBoard {
@@ -136,6 +144,7 @@ export function buildRelationshipMapBoard(input: {
       roles: [],
       evidence: [],
       lastSignalAt: null,
+      archetypeOverride: contact.archetypeOverride ?? null,
     };
     contactsById.set(contact.id, row);
     const email = normalize(contact.email);

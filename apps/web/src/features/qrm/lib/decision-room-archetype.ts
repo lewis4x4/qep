@@ -192,10 +192,25 @@ function titleMatch(archetype: SeatArchetype, title: string): SeatArchetype | nu
   return hit ? archetype : null;
 }
 
-/** Infer which archetype a contact most likely occupies. Title wins; role-based fallback. */
+function isValidArchetype(value: unknown): value is SeatArchetype {
+  return typeof value === "string" && value in ARCHETYPE_DEFS;
+}
+
+/** Infer which contact archetype occupies a seat. Rep override wins
+ *  absolutely; otherwise title keyword match wins; role-based fallback. */
 export function inferArchetypeForContact(
   contact: RelationshipMapContact,
 ): { archetype: SeatArchetype; confidence: ConfidenceLevel; reason: string } {
+  // Rep-authored override is the source of truth — the human told us
+  // explicitly, and we don't second-guess them.
+  if (isValidArchetype(contact.archetypeOverride)) {
+    return {
+      archetype: contact.archetypeOverride,
+      confidence: "high",
+      reason: "Reclassified by rep",
+    };
+  }
+
   const title = normalizeTitle(contact.title);
   if (title) {
     for (const archetype of ARCHETYPE_ORDER) {

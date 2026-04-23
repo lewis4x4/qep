@@ -118,7 +118,7 @@ export function DecisionRoomSimulatorPage() {
       const [contactsResult, voiceResult, signaturesResult] = await Promise.all([
         supabase
           .from("crm_contacts")
-          .select("id, first_name, last_name, title, email, phone")
+          .select("id, first_name, last_name, title, email, phone, metadata")
           .eq("primary_company_id", companyId)
           .is("deleted_at", null)
           .limit(200),
@@ -140,14 +140,24 @@ export function DecisionRoomSimulatorPage() {
       const signatures = signaturesResult.error ? [] : (signaturesResult.data ?? []);
 
       return buildRelationshipMapBoard({
-        contacts: contacts.map((row) => ({
-          id: row.id,
-          firstName: row.first_name,
-          lastName: row.last_name,
-          title: row.title,
-          email: row.email,
-          phone: row.phone,
-        })),
+        contacts: contacts.map((row) => {
+          // Pull the rep-authored archetype override out of metadata.
+          // We accept unknown shapes defensively — this field is optional
+          // and can be absent, null, or legacy objects.
+          const meta = (row.metadata as Record<string, unknown> | null) ?? null;
+          const override = meta && typeof meta === "object"
+            ? (meta.decision_room_override as Record<string, unknown> | null)?.archetype
+            : null;
+          return {
+            id: row.id,
+            firstName: row.first_name,
+            lastName: row.last_name,
+            title: row.title,
+            email: row.email,
+            phone: row.phone,
+            archetypeOverride: typeof override === "string" ? override : null,
+          };
+        }),
         deals: compositeQuery.data ? [{
           id: compositeQuery.data.deal.id,
           name: compositeQuery.data.deal.name,
