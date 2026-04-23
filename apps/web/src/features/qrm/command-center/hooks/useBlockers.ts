@@ -26,8 +26,12 @@ export function useBlockers() {
           .order("amount", { ascending: false })
           .limit(200),
         supabase
+          // Schema column is `required_amount`. Alias to `amount` so the
+          // BlockerDepositRow interface and downstream consumers keep
+          // working without a wider refactor. The previous unaliased
+          // `amount` select 400'd on every page load.
           .from("deposits")
-          .select("id, deal_id, amount, status, tier, required_amount")
+          .select("id, deal_id, amount:required_amount, status, tier, required_amount")
           .in("status", ["pending", "requested", "received"])
           .limit(200),
         supabase

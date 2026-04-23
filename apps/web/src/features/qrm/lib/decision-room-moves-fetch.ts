@@ -44,7 +44,6 @@ interface DealDbRow {
   name: string | null;
   amount: number | null;
   stage_id: string | null;
-  needs_assessment_id: string | null;
 }
 
 interface StageDbRow {
@@ -54,7 +53,7 @@ interface StageDbRow {
 }
 
 interface NeedsAssessmentDbRow {
-  id: string;
+  deal_id: string;
   machine_interest: string | null;
 }
 
@@ -98,8 +97,8 @@ export async function fetchMoveRows(
       : Promise.resolve({ data: [] as ProfileDbRow[], error: null }),
     dealIds.length > 0
       ? supabase
-          .from("qrm_deals")
-          .select("id, name, amount, stage_id, needs_assessment_id")
+          .from("crm_deals")
+          .select("id, name, amount, stage_id")
           .in("id", dealIds)
       : Promise.resolve({ data: [] as DealDbRow[], error: null }),
   ]);
@@ -110,22 +109,23 @@ export async function fetchMoveRows(
   const stageIds = Array.from(
     new Set(deals.map((d) => d.stage_id).filter((v): v is string => !!v)),
   );
-  const assessmentIds = Array.from(
-    new Set(deals.map((d) => d.needs_assessment_id).filter((v): v is string => !!v)),
-  );
 
+  // needs_assessments has a `deal_id` FK, not the other way around, so we
+  // pull assessments by deal_id and key the resulting map the same way.
+  // When a deal has multiple assessments we keep the first one — order
+  // doesn't matter for cohort classification; any recent signal is fine.
   const [stageResult, assessmentResult] = await Promise.all([
     stageIds.length > 0
       ? supabase
-          .from("qrm_deal_stages")
+          .from("crm_deal_stages")
           .select("id, is_closed_won, is_closed_lost")
           .in("id", stageIds)
       : Promise.resolve({ data: [] as StageDbRow[], error: null }),
-    assessmentIds.length > 0
+    dealIds.length > 0
       ? supabase
           .from("needs_assessments")
-          .select("id, machine_interest")
-          .in("id", assessmentIds)
+          .select("deal_id, machine_interest")
+          .in("deal_id", dealIds)
       : Promise.resolve({ data: [] as NeedsAssessmentDbRow[], error: null }),
   ]);
 
@@ -134,7 +134,12 @@ export async function fetchMoveRows(
 
   const profileById = new Map(profiles.map((p) => [p.id, p]));
   const stageById = new Map(stages.map((s) => [s.id, s]));
-  const assessmentById = new Map(assessments.map((a) => [a.id, a]));
+  const assessmentByDealId = new Map<string, NeedsAssessmentDbRow>();
+  for (const a of assessments) {
+    // Keep the first assessment per deal; skip later ones so the map
+    // stays stable across reruns.
+    if (!assessmentByDealId.has(a.deal_id)) assessmentByDealId.set(a.deal_id, a);
+  }
   const dealById = new Map<string, DealView>(
     deals.map((d) => [
       d.id,
@@ -142,9 +147,7 @@ export async function fetchMoveRows(
         name: d.name,
         amount: d.amount,
         stage: d.stage_id ? stageById.get(d.stage_id) ?? null : null,
-        machineInterest: d.needs_assessment_id
-          ? assessmentById.get(d.needs_assessment_id)?.machine_interest ?? null
-          : null,
+        machineInterest: assessmentByDealId.get(d.id)?.machine_interest ?? null,
       },
     ]),
   );

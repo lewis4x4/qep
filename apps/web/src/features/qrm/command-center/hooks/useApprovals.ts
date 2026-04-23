@@ -27,8 +27,10 @@ export function useApprovals() {
           .is("closed_at", null)
           .limit(100),
         supabase
+          // Schema column is `required_amount`; alias to `amount` so the
+          // downstream DepositRow shape and formatters keep working.
           .from("deposits")
-          .select("id, deal_id, amount, status, tier, created_at, crm_deals(name, amount)")
+          .select("id, deal_id, amount:required_amount, status, tier, created_at, crm_deals(name, amount)")
           .in("status", ["pending", "requested", "received"])
           .limit(100),
         supabase
