@@ -2,9 +2,9 @@
  * Decision Room — team-wide move analytics.
  *
  * Aggregates pure functions over rows from decision_room_moves (joined
- * with profiles + qrm_deals + crm_deal_stages). No mutation, no side
- * effects — the page hydrates the rows via one RLS-scoped query and
- * passes them here for layout.
+ * with profiles + qrm_deals + qrm_deal_stages + needs_assessments).
+ * No mutation, no side effects — the page hydrates the rows via
+ * parallel RLS-scoped queries and passes them here for layout.
  *
  * What reps + managers see:
  *   - Top moves this window (frequency + mood mix)
@@ -12,7 +12,10 @@
  *   - Moves that ran on deals later closed won ("working playbook")
  *   - Moves that ran on deals later closed lost ("missed-it patterns")
  *   - Overall mood distribution across the window
+ *   - Filtered / compared by cohort (equipment × deal size × rep tenure)
  */
+import type { CohortTags } from "./decision-room-cohorts";
+
 export type Mood = "positive" | "mixed" | "negative";
 
 export interface MoveRow {
@@ -27,6 +30,7 @@ export interface MoveRow {
   dealName: string | null;
   dealStageIsWon: boolean | null;
   dealStageIsLost: boolean | null;
+  cohort: CohortTags;
 }
 
 export interface MoodDistribution {

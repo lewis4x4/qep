@@ -14,6 +14,7 @@ function row(overrides: Partial<MoveRow>): MoveRow {
     dealName: "Deal 1",
     dealStageIsWon: false,
     dealStageIsLost: false,
+    cohort: { equipment: "unknown", size: "unsized", tenure: "unknown" },
     ...overrides,
   };
 }

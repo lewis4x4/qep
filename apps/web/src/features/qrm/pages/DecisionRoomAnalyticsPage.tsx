@@ -37,6 +37,18 @@ import {
   type MoodDistribution,
   type RepRow,
 } from "../lib/decision-room-analytics";
+import {
+  classifyCohort,
+  type CohortFilter,
+  EMPTY_COHORT_FILTER,
+  filterMatches,
+  isEmptyFilter,
+} from "../lib/decision-room-cohorts";
+import {
+  DecisionRoomCohortFilters,
+  loadCohortFilter,
+} from "../components/DecisionRoomCohortFilters";
+import { DecisionRoomCohortCompare } from "../components/DecisionRoomCohortCompare";
 import { cn } from "@/lib/utils";
 
 const WINDOW_OPTIONS: Array<{ label: string; days: number }> = [
@@ -60,18 +72,26 @@ interface MoveDbRow {
 interface ProfileDbRow {
   id: string;
   full_name: string | null;
+  created_at: string | null;
 }
 
 interface DealDbRow {
   id: string;
   name: string | null;
+  amount: number | null;
   stage_id: string | null;
+  needs_assessment_id: string | null;
 }
 
 interface StageDbRow {
   id: string;
   is_closed_won: boolean | null;
   is_closed_lost: boolean | null;
+}
+
+interface NeedsAssessmentDbRow {
+  id: string;
+  machine_interest: string | null;
 }
 
 /**
@@ -101,10 +121,13 @@ async function fetchAnalyticsRows(windowDays: number): Promise<MoveRow[]> {
 
   const [profilesResult, dealsResult] = await Promise.all([
     userIds.length > 0
-      ? supabase.from("profiles").select("id, full_name").in("id", userIds)
+      ? supabase.from("profiles").select("id, full_name, created_at").in("id", userIds)
       : Promise.resolve({ data: [] as ProfileDbRow[], error: null }),
     dealIds.length > 0
-      ? supabase.from("qrm_deals").select("id, name, stage_id").in("id", dealIds)
+      ? supabase
+          .from("qrm_deals")
+          .select("id, name, amount, stage_id, needs_assessment_id")
+          .in("id", dealIds)
       : Promise.resolve({ data: [] as DealDbRow[], error: null }),
   ]);
 
@@ -114,24 +137,57 @@ async function fetchAnalyticsRows(windowDays: number): Promise<MoveRow[]> {
   const stageIds = Array.from(
     new Set(deals.map((d) => d.stage_id).filter((v): v is string => !!v)),
   );
-  let stages: StageDbRow[] = [];
-  if (stageIds.length > 0) {
-    const { data: stageData, error: stageErr } = await supabase
-      .from("qrm_deal_stages")
-      .select("id, is_closed_won, is_closed_lost")
-      .in("id", stageIds);
-    if (!stageErr) stages = (stageData ?? []) as StageDbRow[];
-  }
+  const assessmentIds = Array.from(
+    new Set(deals.map((d) => d.needs_assessment_id).filter((v): v is string => !!v)),
+  );
+
+  const [stageResult, assessmentResult] = await Promise.all([
+    stageIds.length > 0
+      ? supabase
+          .from("qrm_deal_stages")
+          .select("id, is_closed_won, is_closed_lost")
+          .in("id", stageIds)
+      : Promise.resolve({ data: [] as StageDbRow[], error: null }),
+    assessmentIds.length > 0
+      ? supabase
+          .from("needs_assessments")
+          .select("id, machine_interest")
+          .in("id", assessmentIds)
+      : Promise.resolve({ data: [] as NeedsAssessmentDbRow[], error: null }),
+  ]);
+
+  const stages = (stageResult.error ? [] : (stageResult.data ?? [])) as StageDbRow[];
+  const assessments = (assessmentResult.error ? [] : (assessmentResult.data ?? [])) as NeedsAssessmentDbRow[];
 
   const profileById = new Map(profiles.map((p) => [p.id, p]));
   const stageById = new Map(stages.map((s) => [s.id, s]));
+  const assessmentById = new Map(assessments.map((a) => [a.id, a]));
   const dealById = new Map(
-    deals.map((d) => [d.id, { name: d.name, stage: d.stage_id ? stageById.get(d.stage_id) ?? null : null }]),
+    deals.map((d) => [
+      d.id,
+      {
+        name: d.name,
+        amount: d.amount,
+        stage: d.stage_id ? stageById.get(d.stage_id) ?? null : null,
+        machineInterest: d.needs_assessment_id
+          ? assessmentById.get(d.needs_assessment_id)?.machine_interest ?? null
+          : null,
+      },
+    ]),
   );
+
+  const classifiedNow = new Date();
 
   return moves.map((row) => {
     const profile = row.user_id ? profileById.get(row.user_id) : null;
     const deal = row.deal_id ? dealById.get(row.deal_id) : null;
+    const cohort = classifyCohort({
+      machineInterest: deal?.machineInterest ?? null,
+      dealName: deal?.name ?? null,
+      dealAmount: deal?.amount ?? null,
+      profileCreatedAt: profile?.created_at ?? null,
+      now: classifiedNow,
+    });
     return {
       id: row.id,
       moveText: row.move_text,
@@ -144,6 +200,7 @@ async function fetchAnalyticsRows(windowDays: number): Promise<MoveRow[]> {
       dealName: deal?.name ?? null,
       dealStageIsWon: deal?.stage?.is_closed_won ?? null,
       dealStageIsLost: deal?.stage?.is_closed_lost ?? null,
+      cohort,
     };
   });
 }
@@ -298,6 +355,7 @@ function RepLeaderboard({ reps }: { reps: RepRow[] }) {
 
 export function DecisionRoomAnalyticsPage() {
   const [windowDays, setWindowDays] = useState(DEFAULT_WINDOW_DAYS);
+  const [cohortFilter, setCohortFilter] = useState<CohortFilter>(() => loadCohortFilter());
 
   const { data: rows, isLoading, error } = useQuery({
     queryKey: ["decision-room", "analytics", windowDays],
@@ -305,9 +363,15 @@ export function DecisionRoomAnalyticsPage() {
     staleTime: 60_000,
   });
 
+  const filteredRows = useMemo(() => {
+    if (!rows) return null;
+    if (isEmptyFilter(cohortFilter)) return rows;
+    return rows.filter((r) => filterMatches(r.cohort, cohortFilter));
+  }, [rows, cohortFilter]);
+
   const aggregate = useMemo(
-    () => (rows ? aggregateMoves(rows, windowDays) : null),
-    [rows, windowDays],
+    () => (filteredRows ? aggregateMoves(filteredRows, windowDays) : null),
+    [filteredRows, windowDays],
   );
 
   return (
@@ -343,6 +407,12 @@ export function DecisionRoomAnalyticsPage() {
         subtitle="Patterns across every move your team has simulated — what gets tried, who tries it, what works, what doesn't."
       />
       <QrmSubNav />
+
+      <DecisionRoomCohortFilters value={cohortFilter} onChange={setCohortFilter} />
+
+      {rows && rows.length > 0 ? (
+        <DecisionRoomCohortCompare rows={rows} windowDays={windowDays} />
+      ) : null}
 
       {error ? (
         <DeckSurface className="border-red-400/40 bg-red-500/10 p-5">
