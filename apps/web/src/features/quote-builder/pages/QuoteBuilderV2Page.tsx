@@ -698,9 +698,21 @@ export function QuoteBuilderV2Page() {
 
   const submitApprovalMutation = useMutation({
     mutationFn: async () => {
-      const quotePackageId = activeQuotePackageId;
+      // Auto-save first. Two-click "save then submit" was annoying; one
+      // click should do the whole journey. If the quote is already
+      // saved we skip the save and go straight to submit. saveMutation
+      // surfaces the real Postgres error if something rejects the write,
+      // so any failure here cleanly bubbles up to the error banner.
+      let quotePackageId = activeQuotePackageId;
       if (!quotePackageId) {
-        throw new Error("Save the quote before submitting it for approval.");
+        const saveResult = await saveMutation.mutateAsync();
+        quotePackageId =
+          (saveResult.quote?.id as string | undefined)
+          ?? (saveResult as { id?: string }).id
+          ?? null;
+        if (!quotePackageId) {
+          throw new Error("Couldn't save the quote — approval not submitted.");
+        }
       }
       return submitQuoteForApproval(quotePackageId);
     },
@@ -816,13 +828,12 @@ export function QuoteBuilderV2Page() {
     || quoteStatus === "sent"
     || quoteStatus === "accepted";
   // QEP rule: every quote requires owner approval (Ryan + Rylee).
-  // The old approvalState.requiresManagerApproval gate only fired for
-  // margin-flagged or big-amount quotes, which hid the button for
-  // acceptable-margin saves — leaving reps no way to request approval
-  // after they'd saved. Gate only on "have a saved quote with a branch,
-  // and we're not already past approval".
+  // Button shows whenever the draft is complete enough to save — Submit
+  // auto-saves first, so the rep can go straight from "done editing"
+  // to "waiting on Ryan/Rylee" in one click. Hidden once the case is
+  // already past draft (pending / approved / sent / accepted).
   const canSubmitForApproval =
-    Boolean(activeQuotePackageId)
+    packetReadiness.draft.ready
     && Boolean(draft.branchSlug)
     && quoteStatus !== "sent"
     && quoteStatus !== "accepted"
