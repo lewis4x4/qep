@@ -19,7 +19,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowUpRight } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DeckSurface } from "../components/command-deck";
 import { supabase } from "@/lib/supabase";
@@ -321,6 +321,12 @@ export function DecisionRoomSimulatorPage() {
           </Link>
         </Button>
         <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to="/qrm/decision-room/analytics" className="gap-1.5">
+              <BarChart3 className="h-3.5 w-3.5" />
+              Team analytics
+            </Link>
+          </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={`/qrm/deals/${dealId}/room`}>Deal Room</Link>
           </Button>
