@@ -1,3 +1,4 @@
+import type { RefObject } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -9,6 +10,7 @@ interface Props {
   canCreate: boolean;
   creating: boolean;
   onToggleCreate: () => void;
+  searchRef?: RefObject<HTMLInputElement>;
 }
 
 export function CatalogSearchBar({
@@ -19,6 +21,7 @@ export function CatalogSearchBar({
   canCreate,
   creating,
   onToggleCreate,
+  searchRef,
 }: Props) {
   return (
     <div className="flex flex-wrap gap-2 items-end">
@@ -26,6 +29,7 @@ export function CatalogSearchBar({
         <label htmlFor="catalog-search" className="text-xs text-muted-foreground">Search</label>
         <Input
           id="catalog-search"
+          ref={searchRef}
           className="w-[220px]"
           placeholder="Part #, description, mfr"
           value={query}

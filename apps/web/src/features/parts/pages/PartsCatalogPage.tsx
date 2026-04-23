@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table";
 import { PartsSubNav } from "../components/PartsSubNav";
 import { CatalogSearchBar } from "../components/CatalogSearchBar";
-import { PartCrossRefPanel } from "../components/PartCrossRefPanel";
+import { PartCommandPanel, type BranchCell } from "../components/PartCommandPanel";
 import { usePartsCatalog } from "../hooks/usePartsCatalog";
 import { useAuth } from "@/hooks/useAuth";
 import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
@@ -24,6 +24,25 @@ type CatalogRow = Database["public"]["Tables"]["parts_catalog"]["Row"];
 
 const ELEVATED_ROLES = ["admin", "manager", "owner"];
 
+const STATUS_DOT: Record<string, string> = {
+  stockout: "bg-red-500",
+  critical: "bg-amber-500",
+  reorder: "bg-yellow-500",
+  healthy: "bg-green-500",
+};
+
+function coalesceRow(rows: CatalogRow[]): CatalogRow {
+  return rows.reduce((acc, r) => ({
+    ...acc,
+    description: acc.description ?? r.description,
+    category: acc.category ?? r.category,
+    manufacturer: acc.manufacturer ?? r.manufacturer,
+    list_price: acc.list_price ?? r.list_price,
+    cost_price: acc.cost_price ?? r.cost_price,
+    updated_at: acc.updated_at > r.updated_at ? acc.updated_at : r.updated_at,
+  }));
+}
+
 export function PartsCatalogPage() {
   const { profile } = useAuth();
   const canMutate = ELEVATED_ROLES.includes(profile?.role ?? "");
@@ -32,16 +51,6 @@ export function PartsCatalogPage() {
 
   const qc = useQueryClient();
   const catQ = usePartsCatalog();
-  type BranchCell = {
-    qty: number;
-    bin: string | null;
-    reorderPoint: number | null;
-    velocity: number | null;
-    daysToStockout: number | null;
-    stockStatus: string | null;
-    forecastQty: number | null;
-    forecastRisk: string | null;
-  };
 
   const invTotals = useQuery({
     queryKey: ["parts-inventory-totals-by-part"],
@@ -52,8 +61,7 @@ export function PartsCatalogPage() {
         .is("deleted_at", null);
       if (error) throw error;
 
-      // Try to load reorder profiles (graceful if migration 136 not applied)
-      let reorderMap = new Map<string, { reorder_point: number; consumption_velocity: number; stock_status: string }>();
+      const reorderMap = new Map<string, { reorder_point: number; consumption_velocity: number }>();
       try {
         const { data: rpData } = await supabase
           .from("parts_reorder_profiles")
@@ -61,18 +69,15 @@ export function PartsCatalogPage() {
         if (rpData) {
           for (const rp of rpData) {
             const rpKey = `${(rp.part_number as string).toLowerCase()}:${rp.branch_id}`;
-            const vel = Number(rp.consumption_velocity) || 0;
             reorderMap.set(rpKey, {
               reorder_point: Number(rp.reorder_point) || 0,
-              consumption_velocity: vel,
-              stock_status: "healthy",
+              consumption_velocity: Number(rp.consumption_velocity) || 0,
             });
           }
         }
       } catch { /* pre-migration-136 — ignore */ }
 
-      // Try to load demand forecasts for next month (graceful if migration 137 not applied)
-      let forecastMap = new Map<string, { predicted_qty: number; stockout_risk: string }>();
+      const forecastMap = new Map<string, { predicted_qty: number; stockout_risk: string }>();
       try {
         const nextMonth = new Date();
         nextMonth.setMonth(nextMonth.getMonth() + 1);
@@ -117,20 +122,31 @@ export function PartsCatalogPage() {
           else if (qty <= reorderPoint) stockStatus = "reorder";
           else stockStatus = "healthy";
         }
-        const fcKey = `${k}:${r.branch_id}`;
-        const fc = forecastMap.get(fcKey);
-        const forecastQty = fc?.predicted_qty ?? null;
-        const forecastRisk = fc?.stockout_risk ?? null;
-        bm.set(r.branch_id, { qty, bin, reorderPoint, velocity, daysToStockout, stockStatus, forecastQty, forecastRisk });
+        const fc = forecastMap.get(rpKey);
+        bm.set(r.branch_id, {
+          qty,
+          bin,
+          reorderPoint,
+          velocity,
+          daysToStockout,
+          stockStatus,
+          forecastQty: fc?.predicted_qty ?? null,
+          forecastRisk: fc?.stockout_risk ?? null,
+        });
       }
       return { totals, byBranch };
     },
     staleTime: 30_000,
   });
+
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
   const [creating, setCreating] = useState(false);
-  const [expandedPart, setExpandedPart] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [focusIndex, setFocusIndex] = useState(0);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const tableRef = useRef<HTMLTableSectionElement | null>(null);
   const [newPart, setNewPart] = useState({
     part_number: "",
     description: "",
@@ -144,12 +160,31 @@ export function PartsCatalogPage() {
   const stockByBranch =
     invTotals.data?.byBranch ?? new Map<string, Map<string, BranchCell>>();
 
+  // Collapse multi-branch catalog duplicates (migration 257 uniques on
+  // (workspace, co, div, branch, part#), so a single part_number can appear
+  // multiple times). Group by part_number and keep the richest row.
+  const deduped = useMemo(() => {
+    const rows = (catQ.data ?? []) as CatalogRow[];
+    const byPn = new Map<string, CatalogRow[]>();
+    for (const r of rows) {
+      const key = r.part_number.toLowerCase();
+      if (!byPn.has(key)) byPn.set(key, []);
+      byPn.get(key)!.push(r);
+    }
+    const result: Array<{ canonical: CatalogRow; variantCount: number }> = [];
+    for (const group of byPn.values()) {
+      result.push({ canonical: coalesceRow(group), variantCount: group.length });
+    }
+    result.sort((a, b) => a.canonical.part_number.localeCompare(b.canonical.part_number));
+    return result;
+  }, [catQ.data]);
+
   const filtered = useMemo(() => {
-    let rows = (catQ.data ?? []) as CatalogRow[];
+    let rows = deduped;
     const term = q.trim().toLowerCase();
     if (term) {
       rows = rows.filter(
-        (r) =>
+        ({ canonical: r }) =>
           r.part_number.toLowerCase().includes(term) ||
           (r.description ?? "").toLowerCase().includes(term) ||
           (r.manufacturer ?? "").toLowerCase().includes(term),
@@ -157,10 +192,17 @@ export function PartsCatalogPage() {
     }
     if (category.trim()) {
       const c = category.trim().toLowerCase();
-      rows = rows.filter((r) => (r.category ?? "").toLowerCase().includes(c));
+      rows = rows.filter(({ canonical: r }) => (r.category ?? "").toLowerCase().includes(c));
     }
     return rows;
-  }, [catQ.data, q, category]);
+  }, [deduped, q, category]);
+
+  // Keep focus index within bounds as the filter changes
+  useEffect(() => {
+    if (focusIndex >= filtered.length) {
+      setFocusIndex(Math.max(0, filtered.length - 1));
+    }
+  }, [filtered.length, focusIndex]);
 
   const upsert = useMutation({
     mutationFn: async (payload: Database["public"]["Tables"]["parts_catalog"]["Insert"]) => {
@@ -184,17 +226,6 @@ export function PartsCatalogPage() {
     },
   });
 
-  const softDelete = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("parts_catalog")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["parts-catalog"] }),
-  });
-
   const onCreate = () => {
     const pn = newPart.part_number.trim();
     if (!pn) return;
@@ -210,14 +241,85 @@ export function PartsCatalogPage() {
     });
   };
 
+  const openPart = useCallback((row: CatalogRow) => {
+    setSelectedId(row.id);
+    setPanelOpen(true);
+  }, []);
+
+  const selectedRow = useMemo(
+    () => filtered.find((r) => r.canonical.id === selectedId)?.canonical ?? null,
+    [filtered, selectedId],
+  );
+
+  const selectedBranches = selectedRow
+    ? stockByBranch.get(selectedRow.part_number.toLowerCase())
+    : undefined;
+  const selectedTotal = selectedRow
+    ? stockTotals.get(selectedRow.part_number.toLowerCase()) ?? 0
+    : 0;
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const inField =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+
+      if (e.key === "/" && !inField && !panelOpen) {
+        e.preventDefault();
+        searchRef.current?.focus();
+        return;
+      }
+
+      if (panelOpen) return; // let Sheet handle its own keys
+      if (inField) return;
+
+      if (e.key === "ArrowDown" || e.key === "j") {
+        e.preventDefault();
+        setFocusIndex((i) => Math.min(filtered.length - 1, i + 1));
+      } else if (e.key === "ArrowUp" || e.key === "k") {
+        e.preventDefault();
+        setFocusIndex((i) => Math.max(0, i - 1));
+      } else if (e.key === "Enter") {
+        const row = filtered[focusIndex]?.canonical;
+        if (row) {
+          e.preventDefault();
+          openPart(row);
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [filtered, focusIndex, openPart, panelOpen]);
+
+  // Scroll focused row into view
+  useEffect(() => {
+    if (!tableRef.current) return;
+    const el = tableRef.current.querySelector<HTMLElement>(`[data-row-index="${focusIndex}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [focusIndex]);
+
   return (
     <div className="max-w-6xl mx-auto py-6 px-4 space-y-6">
       <PartsSubNav />
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Parts catalog</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Master list with list/cost price; branch stock rolls up from inventory.
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Parts catalog</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Click any part to open the Command Panel — stock heatmap, demand forecast, substitutes, and inline edit.
+          </p>
+        </div>
+        <div className="text-[11px] text-muted-foreground space-x-2 pt-1">
+          <kbd className="border rounded px-1.5 py-0.5 font-mono">/</kbd>
+          <span>search</span>
+          <kbd className="border rounded px-1.5 py-0.5 font-mono">↑↓</kbd>
+          <span>navigate</span>
+          <kbd className="border rounded px-1.5 py-0.5 font-mono">Enter</kbd>
+          <span>open</span>
+        </div>
       </div>
 
       <CatalogSearchBar
@@ -228,6 +330,7 @@ export function PartsCatalogPage() {
         canCreate={canMutate}
         creating={creating}
         onToggleCreate={() => setCreating((c) => !c)}
+        searchRef={searchRef}
       />
 
       {creating && (
@@ -282,12 +385,6 @@ export function PartsCatalogPage() {
         </Card>
       )}
 
-      {softDelete.isError && (
-        <Card className="p-3 text-sm text-destructive border-destructive/40">
-          {(softDelete.error as Error)?.message ?? "Could not retire catalog row."}
-        </Card>
-      )}
-
       {catQ.isLoading ? (
         <div className="flex justify-center py-16" role="status" aria-live="polite" aria-busy="true">
           <span className="sr-only">Loading catalog</span>
@@ -300,6 +397,10 @@ export function PartsCatalogPage() {
         <Card className="p-4 text-sm text-destructive">
           {(catQ.error as Error)?.message ?? "Failed to load catalog."}
         </Card>
+      ) : filtered.length === 0 ? (
+        <Card className="p-6 text-sm text-muted-foreground text-center">
+          No parts match the current filters.
+        </Card>
       ) : (
         <Card className="overflow-x-auto">
           <Table>
@@ -311,126 +412,88 @@ export function PartsCatalogPage() {
                 <TableHead>Mfr</TableHead>
                 <TableHead className="text-right">List</TableHead>
                 <TableHead className="text-right">Stock</TableHead>
-                {canMutate && <TableHead className="w-[100px]" />}
+                <TableHead className="text-right">Branches</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
-              {filtered.map((row) => {
+            <TableBody ref={tableRef}>
+              {filtered.map(({ canonical: row, variantCount }, idx) => {
                 const pk = row.part_number.toLowerCase();
                 const total = stockTotals.get(pk);
                 const branches = stockByBranch.get(pk);
-                const isExpanded = expandedPart === row.id;
+                const branchCount = branches?.size ?? 0;
+                const worstStatus = branches
+                  ? [...branches.values()]
+                      .map((b) => b.stockStatus)
+                      .reduce<string | null>((worst, s) => {
+                        const rank = (x: string | null) =>
+                          x === "stockout" ? 4 : x === "critical" ? 3 : x === "reorder" ? 2 : x === "healthy" ? 1 : 0;
+                        return rank(s) > rank(worst) ? s : worst;
+                      }, null)
+                  : null;
+                const isFocused = idx === focusIndex;
                 return (
-                  <Fragment key={row.id}>
-                    <TableRow>
-                      <TableCell className="font-mono text-sm">{row.part_number}</TableCell>
-                      <TableCell className="text-sm max-w-[200px] truncate">
-                        {row.description ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {row.category ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-xs">{row.manufacturer ?? "—"}</TableCell>
-                      <TableCell className="text-right text-sm">
-                        {row.list_price != null ? Number(row.list_price).toFixed(2) : "—"}
-                      </TableCell>
-                      <TableCell className="text-right text-sm tabular-nums">
-                        {total != null ? (
-                          <button
-                            type="button"
-                            className="underline-offset-2 hover:underline text-primary"
-                            onClick={() => setExpandedPart(isExpanded ? null : row.id)}
-                          >
-                            {total}
-                          </button>
-                        ) : (
-                          "—"
+                  <TableRow
+                    key={row.id}
+                    data-row-index={idx}
+                    tabIndex={0}
+                    onClick={() => openPart(row)}
+                    onFocus={() => setFocusIndex(idx)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openPart(row);
+                      }
+                    }}
+                    aria-label={`Open ${row.part_number}`}
+                    className={`cursor-pointer transition-colors outline-none hover:bg-accent/40 focus-visible:bg-accent/60 ${
+                      isFocused ? "bg-accent/30 ring-1 ring-primary/40 ring-inset" : ""
+                    }`}
+                  >
+                    <TableCell className="font-mono text-sm">
+                      <div className="flex items-center gap-1.5">
+                        {worstStatus && (
+                          <span
+                            className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
+                              STATUS_DOT[worstStatus] ?? "bg-muted-foreground/30"
+                            }`}
+                            aria-label={`Stock ${worstStatus}`}
+                          />
                         )}
-                      </TableCell>
-                      {canMutate && (
-                        <TableCell>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive"
-                            onClick={() => softDelete.mutate(row.id)}
-                          >
-                            Retire
-                          </Button>
-                        </TableCell>
-                      )}
-                    </TableRow>
-                    {isExpanded && branches && branches.size > 0 && (
-                      <TableRow>
-                        <TableCell colSpan={canMutate ? 7 : 6} className="bg-muted/30 py-2 px-4">
-                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-xs">
-                            {[...branches.entries()]
-                              .sort(([a], [b]) => a.localeCompare(b))
-                              .map(([branch, cell]) => {
-                                const dotColor =
-                                  cell.stockStatus === "stockout" ? "bg-red-500" :
-                                  cell.stockStatus === "critical" ? "bg-amber-500" :
-                                  cell.stockStatus === "reorder" ? "bg-yellow-500" :
-                                  cell.stockStatus === "healthy" ? "bg-green-500" :
-                                  "bg-muted-foreground/30";
-                                return (
-                                  <div
-                                    key={branch}
-                                    className="flex flex-wrap justify-between gap-x-2 gap-y-0.5"
-                                  >
-                                    <span className="flex items-center gap-1 font-mono text-muted-foreground">
-                                      <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
-                                      {branch}
-                                    </span>
-                                    <span className="tabular-nums font-medium">{cell.qty} ea</span>
-                                    <span className="w-full text-[10px] text-muted-foreground sm:w-auto sm:text-xs">
-                                      {cell.bin ? `Bin ${cell.bin}` : "Bin —"}
-                                    </span>
-                                    {(cell.reorderPoint != null || cell.forecastQty != null) && (
-                                      <span className="w-full text-[10px] text-muted-foreground">
-                                        {cell.reorderPoint != null && (
-                                          <>ROP {cell.reorderPoint}</>
-                                        )}
-                                        {cell.daysToStockout != null && (
-                                          <span className={
-                                            cell.daysToStockout <= 3 ? " text-red-600 dark:text-red-400 font-medium" :
-                                            cell.daysToStockout <= 7 ? " text-amber-600 dark:text-amber-400" : ""
-                                          }>
-                                            {" "}· ~{cell.daysToStockout}d
-                                          </span>
-                                        )}
-                                        {cell.velocity != null && cell.velocity > 0 && (
-                                          <span> · {cell.velocity.toFixed(2)}/day</span>
-                                        )}
-                                        {cell.forecastQty != null && cell.forecastQty > 0 && (
-                                          <span className={
-                                            cell.forecastRisk === "critical" ? " text-red-600 dark:text-red-400 font-medium" :
-                                            cell.forecastRisk === "high" ? " text-amber-600 dark:text-amber-400 font-medium" :
-                                            " text-blue-600 dark:text-blue-400"
-                                          }>
-                                            {" "}· Forecast: {cell.forecastQty.toFixed(0)} next mo
-                                          </span>
-                                        )}
-                                      </span>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                          </div>
-                          <div className="mt-2">
-                            <PartCrossRefPanel partNumber={row.part_number} />
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </Fragment>
+                        {row.part_number}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm max-w-[240px] truncate">
+                      {row.description ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {row.category ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-xs">{row.manufacturer ?? "—"}</TableCell>
+                    <TableCell className="text-right text-sm tabular-nums">
+                      {row.list_price != null ? `$${Number(row.list_price).toFixed(2)}` : "—"}
+                    </TableCell>
+                    <TableCell className="text-right text-sm tabular-nums">
+                      {total != null ? total : "—"}
+                    </TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground tabular-nums">
+                      {branchCount > 0 ? branchCount : variantCount > 1 ? `${variantCount}×` : "—"}
+                    </TableCell>
+                  </TableRow>
                 );
               })}
             </TableBody>
           </Table>
         </Card>
       )}
+
+      <PartCommandPanel
+        row={selectedRow}
+        open={panelOpen}
+        onOpenChange={setPanelOpen}
+        branches={selectedBranches}
+        totalStock={selectedTotal}
+        canMutate={canMutate}
+      />
     </div>
   );
 }
