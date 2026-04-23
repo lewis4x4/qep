@@ -26,7 +26,7 @@ export interface QuotePackageSaveResponse {
   deal_id?: string;
   quote_package_version_id?: string | null;
   version_number?: number | null;
-  quote?: { id?: string; deal_id?: string; status?: string };
+  quote?: { id?: string; deal_id?: string; status?: string; updated_at?: string };
 }
 
 export interface PortalRevisionEnvelope {
@@ -693,7 +693,40 @@ export function buildQuoteSavePayload(
    *  quote_packages.win_probability_snapshot. Optional so legacy
    *  callers keep working. */
   winProbabilitySnapshot?: Record<string, unknown> | null,
+  options?: {
+    expectedUpdatedAt?: string | null;
+    saveMode?: "manual" | "autosave";
+  },
 ): Record<string, unknown> {
+  const lineItems = [
+    ...draft.equipment.map((item, index) => ({
+      id: item.id,
+      catalog_entry_id: item.id,
+      line_type: "equipment",
+      description: item.title,
+      make: item.make,
+      model: item.model,
+      year: item.year,
+      quantity: item.quantity,
+      unit_price: item.unitPrice,
+      extended_price: item.unitPrice * item.quantity,
+      display_order: index,
+    })),
+    ...draft.attachments.map((item, index) => ({
+      id: item.id,
+      catalog_entry_id: item.kind === "attachment" ? item.id : undefined,
+      line_type: item.kind,
+      description: item.title,
+      make: item.make,
+      model: item.model,
+      year: item.year,
+      quantity: item.quantity,
+      unit_price: item.unitPrice,
+      extended_price: item.unitPrice * item.quantity,
+      display_order: draft.equipment.length + index,
+    })),
+  ];
+
   return {
     deal_id: draft.dealId,
     contact_id: draft.contactId || undefined,
@@ -705,15 +738,22 @@ export function buildQuoteSavePayload(
     company_id: draft.companyId || undefined,
     equipment: draft.equipment.map((item) => ({
       id: item.id,
+      kind: item.kind,
       make: item.make,
       model: item.model,
       year: item.year,
+      quantity: item.quantity,
+      title: item.title,
       price: item.unitPrice,
     })),
     attachments_included: draft.attachments.map((item) => ({
+      id: item.id,
+      kind: item.kind,
       name: item.title,
+      quantity: item.quantity,
       price: item.unitPrice,
     })),
+    line_items: lineItems,
     trade_in_valuation_id: draft.tradeValuationId,
     trade_allowance: draft.tradeAllowance,
     financing_scenarios: financeScenarios.map((scenario) => ({
@@ -752,6 +792,8 @@ export function buildQuoteSavePayload(
     customer_email: draft.customerEmail || null,
     originating_log_id: draft.originatingLogId ?? null,
     win_probability_snapshot: winProbabilitySnapshot ?? null,
+    expected_updated_at: options?.expectedUpdatedAt ?? null,
+    save_mode: options?.saveMode ?? "manual",
   };
 }
 

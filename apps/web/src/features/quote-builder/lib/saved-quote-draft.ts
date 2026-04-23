@@ -1,11 +1,13 @@
 import type {
   QuoteEntryMode,
+  QuoteLineItemKind,
   QuoteLineItemDraft,
   QuoteTaxProfile,
   QuoteWorkspaceDraft,
 } from "../../../../../../shared/qep-moonshot-contracts";
 
-const ENTRY_MODES: QuoteEntryMode[] = ["voice", "ai_chat", "manual"];
+const ENTRY_MODES: QuoteEntryMode[] = ["voice", "ai_chat", "manual", "trade_photo"];
+const LINE_ITEM_KINDS: QuoteLineItemKind[] = ["equipment", "attachment", "warranty", "financing", "custom"];
 const TAX_PROFILES: QuoteTaxProfile[] = [
   "standard",
   "agriculture_exempt",
@@ -44,6 +46,10 @@ function isEntryMode(value: string): value is QuoteEntryMode {
 
 function isTaxProfile(value: string): value is QuoteTaxProfile {
   return TAX_PROFILES.includes(value as QuoteTaxProfile);
+}
+
+function isLineItemKind(value: string): value is QuoteLineItemKind {
+  return LINE_ITEM_KINDS.includes(value as QuoteLineItemKind);
 }
 
 function isQuoteStatus(
@@ -102,12 +108,45 @@ function toAttachmentDraft(item: unknown): QuoteLineItemDraft[] {
   if (!title) return [];
 
   return [{
-    kind: "attachment",
+    kind: isLineItemKind(asString(record.kind)) && asString(record.kind) !== "equipment"
+      ? asString(record.kind) as QuoteLineItemKind
+      : isLineItemKind(asString(record.line_type)) && asString(record.line_type) !== "equipment"
+        ? asString(record.line_type) as QuoteLineItemKind
+        : "attachment",
     title,
     quantity: Math.max(1, Math.round(asNumber(record.quantity) ?? 1)),
     unitPrice:
       asNumber(record.price)
       ?? asNumber(record.unit_price)
+      ?? asNumber(record.amount)
+      ?? 0,
+  }];
+}
+
+function toPackageLineItemDraft(item: unknown): QuoteLineItemDraft[] {
+  const record = asRecord(item);
+  if (!record) return [];
+  const lineType = asString(record.line_type);
+  const kind = isLineItemKind(lineType) ? lineType : "custom";
+  const title =
+    asString(record.description)
+    || asString(record.title)
+    || asString(record.name)
+    || buildEquipmentTitle(record);
+  if (!title) return [];
+
+  return [{
+    kind,
+    id: asString(record.catalog_entry_id) || asString(record.id) || undefined,
+    title,
+    make: asString(record.make) || undefined,
+    model: asString(record.model) || undefined,
+    year: asNumber(record.year),
+    quantity: Math.max(1, Math.round(asNumber(record.quantity) ?? 1)),
+    unitPrice:
+      asNumber(record.unit_price)
+      ?? asNumber(record.quoted_list_price)
+      ?? asNumber(record.price)
       ?? asNumber(record.amount)
       ?? 0,
   }];
@@ -159,6 +198,10 @@ export function hydrateDraftFromSavedQuote(
   const commercialDiscountType = asString(savedQuote.commercial_discount_type) === "percent"
     ? "percent"
     : "flat";
+  const normalizedLineItems = asArray(savedQuote.quote_package_line_items)
+    .flatMap(toPackageLineItemDraft);
+  const normalizedEquipment = normalizedLineItems.filter((item) => item.kind === "equipment");
+  const normalizedAttachments = normalizedLineItems.filter((item) => item.kind !== "equipment");
 
   return {
     dealId: asString(savedQuote.deal_id) || undefined,
@@ -168,8 +211,12 @@ export function hydrateDraftFromSavedQuote(
     branchSlug: asString(savedQuote.branch_slug),
     recommendation: toRecommendation(savedQuote.ai_recommendation),
     voiceSummary: null,
-    equipment: asArray(savedQuote.equipment).flatMap(toEquipmentDraft),
-    attachments: asArray(savedQuote.attachments_included).flatMap(toAttachmentDraft),
+    equipment: normalizedEquipment.length > 0
+      ? normalizedEquipment
+      : asArray(savedQuote.equipment).flatMap(toEquipmentDraft),
+    attachments: normalizedAttachments.length > 0
+      ? normalizedAttachments
+      : asArray(savedQuote.attachments_included).flatMap(toAttachmentDraft),
     tradeAllowance: asNumber(savedQuote.trade_allowance) ?? asNumber(savedQuote.trade_credit) ?? 0,
     tradeValuationId: asString(savedQuote.trade_in_valuation_id) || null,
     commercialDiscountType,

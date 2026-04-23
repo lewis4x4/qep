@@ -157,6 +157,95 @@ function clampCurrency(value: unknown): number {
   return Math.round(Math.max(0, numeric) * 100) / 100;
 }
 
+const QUOTE_PACKAGE_LINE_TYPES = new Set(["equipment", "attachment", "warranty", "financing", "custom"]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function lineString(value: unknown, max = 240): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed.slice(0, max) : null;
+}
+
+function lineNumber(value: unknown, fallback = 0): number {
+  const numeric = Number(value ?? fallback);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Record<string, unknown>> {
+  const rawLines = Array.isArray(body.line_items) ? body.line_items : [];
+  const fallbackEquipment = Array.isArray(body.equipment)
+    ? body.equipment.map((row, index) => ({ ...(typeof row === "object" && row ? row as Record<string, unknown> : {}), line_type: "equipment", display_order: index }))
+    : [];
+  const fallbackAttachments = Array.isArray(body.attachments_included)
+    ? body.attachments_included.map((row, index) => ({ ...(typeof row === "object" && row ? row as Record<string, unknown> : {}), line_type: "attachment", display_order: fallbackEquipment.length + index }))
+    : [];
+  const source = rawLines.length > 0 ? rawLines : [...fallbackEquipment, ...fallbackAttachments];
+
+  return source.flatMap((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const row = item as Record<string, unknown>;
+    const lineTypeRaw = lineString(row.line_type ?? row.kind, 40) ?? "custom";
+    const lineType = QUOTE_PACKAGE_LINE_TYPES.has(lineTypeRaw) ? lineTypeRaw : "custom";
+    const quantity = Math.max(1, Math.round(lineNumber(row.quantity, 1)));
+    const unitPrice = clampCurrency(row.unit_price ?? row.price ?? row.amount ?? row.quoted_list_price);
+    const extendedPrice = clampCurrency(row.extended_price ?? unitPrice * quantity);
+    const description =
+      lineString(row.description ?? row.title ?? row.name)
+      ?? [lineString(row.make, 80), lineString(row.model, 80)].filter(Boolean).join(" ").trim()
+      ?? `${lineType} line item`;
+    const catalogEntryId = lineString(row.catalog_entry_id ?? row.catalogEntryId ?? row.id, 80);
+
+    return [{
+      catalog_entry_id: catalogEntryId && UUID_RE.test(catalogEntryId) ? catalogEntryId : null,
+      make: lineString(row.make, 80),
+      model: lineString(row.model, 120),
+      year: Number.isFinite(Number(row.year)) ? Math.round(Number(row.year)) : null,
+      quoted_list_price: unitPrice,
+      quoted_dealer_cost: lineNumber(row.quoted_dealer_cost ?? row.dealer_cost, 0) || null,
+      quantity,
+      source_location: lineString(row.source_location, 80),
+      line_type: lineType,
+      description,
+      unit_price: unitPrice,
+      extended_price: extendedPrice,
+      display_order: Math.round(lineNumber(row.display_order, index)),
+      metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? row.metadata
+        : {},
+    }];
+  });
+}
+
+async function syncQuotePackageLineItems(input: {
+  admin: ReturnType<typeof createAdminClient>;
+  quotePackageId: string;
+  workspaceId: string;
+  body: Record<string, unknown>;
+}): Promise<{ rows: Array<Record<string, unknown>>; error: string | null }> {
+  const lineItems = normalizeQuotePackageLineItems(input.body).map((row) => ({
+    ...row,
+    quote_package_id: input.quotePackageId,
+    workspace_id: input.workspaceId,
+  }));
+
+  const { error: deleteErr } = await input.admin
+    .from("quote_package_line_items")
+    .delete()
+    .eq("quote_package_id", input.quotePackageId);
+  if (deleteErr) return { rows: [], error: deleteErr.message };
+
+  if (lineItems.length === 0) return { rows: [], error: null };
+
+  const { data, error: insertErr } = await input.admin
+    .from("quote_package_line_items")
+    .insert(lineItems)
+    .select("*")
+    .order("display_order", { ascending: true });
+
+  if (insertErr) return { rows: [], error: insertErr.message };
+  return { rows: (data ?? []) as Array<Record<string, unknown>>, error: null };
+}
+
 function contactNameFromRelation(value: unknown): string | null {
   const contact = Array.isArray(value) ? value[0] : value;
   if (!contact || typeof contact !== "object") return null;
@@ -446,6 +535,7 @@ function buildPublicDealRoomPayload(row: Record<string, unknown>): Record<string
     branch_slug: pickString(row.branch_slug),
     equipment: pickArray(row.equipment),
     attachments_included: pickArray(row.attachments_included),
+    quote_package_line_items: pickArray(row.quote_package_line_items),
     subtotal: pickNumber(row.subtotal),
     equipment_total: pickNumber(row.equipment_total),
     attachment_total: pickNumber(row.attachment_total),
@@ -480,7 +570,7 @@ async function handlePublicDealRoomRead(url: URL, origin: string | null): Promis
   // without a second request.
   const { data: quote, error: quoteErr } = await admin
     .from("quote_packages")
-    .select("*")
+    .select("*, quote_package_line_items(*)")
     .eq("share_token", token)
     .maybeSingle();
   if (quoteErr) {
@@ -2390,7 +2480,7 @@ Deno.serve(async (req) => {
 
       let query = supabase
         .from("quote_packages")
-        .select("*, quote_signatures(*)");
+        .select("*, quote_signatures(*), quote_package_line_items(*)");
 
       if (packageId) {
         query = query.eq("id", packageId);
@@ -2499,6 +2589,22 @@ Deno.serve(async (req) => {
         .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, updated_at, accepted_at, win_probability_score")
         .single();
       if (createErr) return safeJsonError(createErr.message, 500, origin);
+      const admin = createAdminClient();
+      const { data: sourceLines } = await admin
+        .from("quote_package_line_items")
+        .select("workspace_id, catalog_entry_id, make, model, year, quoted_list_price, quoted_dealer_cost, quantity, source_location, line_type, description, unit_price, extended_price, display_order, metadata")
+        .eq("quote_package_id", quotePackageId)
+        .order("display_order", { ascending: true });
+      if (Array.isArray(sourceLines) && sourceLines.length > 0) {
+        const { error: duplicateLinesErr } = await admin
+          .from("quote_package_line_items")
+          .insert(sourceLines.map((line) => ({
+            ...(line as Record<string, unknown>),
+            quote_package_id: created.id,
+            workspace_id: (created as { workspace_id?: string }).workspace_id ?? (line as { workspace_id?: string }).workspace_id ?? userWorkspaceId,
+          })));
+        if (duplicateLinesErr) return safeJsonError(duplicateLinesErr.message, 500, origin);
+      }
       return safeJsonOk({ ok: true, quote: created }, origin, 201);
     }
 
@@ -3051,11 +3157,24 @@ Deno.serve(async (req) => {
       const admin = createAdminClient();
       const { data: existingQuote, error: existingQuoteErr } = await admin
         .from("quote_packages")
-        .select("id, workspace_id, status")
+        .select("id, workspace_id, status, updated_at, created_by")
         .eq("deal_id", resolvedDealId)
         .maybeSingle();
       if (existingQuoteErr) {
         return safeJsonError(existingQuoteErr.message, 500, origin);
+      }
+      const expectedUpdatedAt = typeof body.expected_updated_at === "string" ? body.expected_updated_at : null;
+      if (
+        existingQuote?.id &&
+        expectedUpdatedAt &&
+        typeof existingQuote.updated_at === "string" &&
+        existingQuote.updated_at !== expectedUpdatedAt
+      ) {
+        return safeJsonError(
+          "Quote changed in another session. Refresh before saving so auto-save does not overwrite a newer edit.",
+          409,
+          origin,
+        );
       }
 
       const latestVersion = existingQuote?.id
@@ -3152,7 +3271,9 @@ Deno.serve(async (req) => {
           margin_amount: body.margin_amount,
           margin_pct: body.margin_pct,
           ai_recommendation: body.ai_recommendation,
-          entry_mode: body.entry_mode || "manual",
+          entry_mode: ["voice", "ai_chat", "manual", "trade_photo"].includes(String(body.entry_mode ?? ""))
+            ? body.entry_mode
+            : "manual",
           status: nextStatus,
           created_by: user.id,
           customer_name: customerName,
@@ -3181,6 +3302,17 @@ Deno.serve(async (req) => {
       }
 
       const workspaceId = typeof data.workspace_id === "string" ? data.workspace_id : "default";
+      const syncedLineItems = await syncQuotePackageLineItems({
+        admin,
+        quotePackageId: String(data.id),
+        workspaceId,
+        body,
+      });
+      if (syncedLineItems.error) {
+        console.error("quote line item sync error:", syncedLineItems.error);
+        return safeJsonError(`Quote saved but line-item sync failed: ${syncedLineItems.error}`, 500, origin);
+      }
+
       const versionArtifacts = buildQuoteVersionArtifacts({
         body: {
           ...body,
@@ -3223,7 +3355,10 @@ Deno.serve(async (req) => {
       }
 
       return safeJsonOk({
-        quote: data,
+        quote: {
+          ...(data as Record<string, unknown>),
+          quote_package_line_items: syncedLineItems.rows,
+        },
         deal_id: resolvedDealId,
         quote_package_version_id: latestVersionInfo?.id ?? null,
         version_number: latestVersionInfo?.versionNumber ?? null,

@@ -304,8 +304,8 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
   },
   "sales.my-quotes-by-status": {
     id: "sales.my-quotes-by-status",
-    title: "My quotes by status",
-    purpose: "Draft, sent, viewed, approved, declined, and expired quotes grouped for follow-up.",
+    title: "My quotes",
+    purpose: "Actionable quote table for draft, sent, viewed, approved, declined, and expired follow-up.",
     allowedRoles: ["iron_advisor"],
     size: "wide",
     component: MyQuotesByStatusWidget,

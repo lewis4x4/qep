@@ -17857,42 +17857,60 @@ export type Database = {
         Row: {
           catalog_entry_id: string | null
           created_at: string
+          description: string | null
+          display_order: number
+          extended_price: number | null
           id: string
+          line_type: string
           make: string | null
+          metadata: Json
           model: string | null
           quantity: number | null
           quote_package_id: string
           quoted_dealer_cost: number | null
           quoted_list_price: number | null
           source_location: string | null
+          unit_price: number | null
           workspace_id: string
           year: number | null
         }
         Insert: {
           catalog_entry_id?: string | null
           created_at?: string
+          description?: string | null
+          display_order?: number
+          extended_price?: number | null
           id?: string
+          line_type?: string
           make?: string | null
+          metadata?: Json
           model?: string | null
           quantity?: number | null
           quote_package_id: string
           quoted_dealer_cost?: number | null
           quoted_list_price?: number | null
           source_location?: string | null
+          unit_price?: number | null
           workspace_id?: string
           year?: number | null
         }
         Update: {
           catalog_entry_id?: string | null
           created_at?: string
+          description?: string | null
+          display_order?: number
+          extended_price?: number | null
           id?: string
+          line_type?: string
           make?: string | null
+          metadata?: Json
           model?: string | null
           quantity?: number | null
           quote_package_id?: string
           quoted_dealer_cost?: number | null
           quoted_list_price?: number | null
           source_location?: string | null
+          unit_price?: number | null
           workspace_id?: string
           year?: number | null
         }
