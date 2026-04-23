@@ -280,10 +280,13 @@ Deno.serve(async (req) => {
     // ── 2. Upload audio to storage ────────��───────────────────────────────
     const audioBuffer = await audioFile.arrayBuffer();
     const ext = audioFile.name?.split(".").pop() || "webm";
-    const storagePath = `voice-qrm/${user.id}/${Date.now()}.${ext}`;
+    // Keep Voice Quote recordings in the same private bucket + user-folder
+    // layout as the working voice-capture pipeline so storage policy and
+    // operator expectations stay aligned.
+    const storagePath = `${user.id}/${Date.now()}-voice-qrm.${ext}`;
 
     const { error: uploadError } = await supabaseAdmin.storage
-      .from("voice-captures")
+      .from("voice-recordings")
       .upload(storagePath, audioBuffer, {
         contentType: audioFile.type || "audio/webm",
         upsert: false,
