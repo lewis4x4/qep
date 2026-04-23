@@ -56,6 +56,7 @@ import {
 } from "../lib/quote-api";
 import { computeQuoteWorkspace } from "../lib/quote-workspace";
 import { hydrateDraftFromSavedQuote } from "../lib/saved-quote-draft";
+import { buildCatalogQueryCandidates } from "../lib/catalog-query-candidates";
 import {
   buildLocalDraftKey,
   clearLocalDraft,
@@ -805,10 +806,27 @@ export function QuoteBuilderV2Page() {
       return { voiceResult, recommendation };
     },
     onSuccess: ({ voiceResult, recommendation }) => {
+      // voice-to-qrm already extracts structured entities from the
+      // transcript (contact name/id, company name/id, deal id). The old
+      // flow dropped all of that on the floor — rep landed on Customer
+      // with an empty form even though the pipeline knew "John Coker"
+      // from "I'm quoting John Coker for a small farm tractor..." Pull
+      // the entities in so the Customer step is pre-filled when confidence
+      // is usable. Only apply fields we actually have; don't overwrite
+      // a manually-entered value the rep may have already typed.
+      const entities = "entities" in voiceResult ? voiceResult.entities : null;
+      const contactName = entities?.contact?.name?.trim() || "";
+      const companyName = entities?.company?.name?.trim() || "";
+      const contactId = entities?.contact?.id ?? null;
+      const companyId = entities?.company?.id ?? null;
       setDraft((current) => ({
         ...current,
         recommendation,
         voiceSummary: voiceResult.transcript,
+        customerName: current.customerName?.trim() ? current.customerName : contactName,
+        customerCompany: current.customerCompany?.trim() ? current.customerCompany : companyName,
+        contactId: current.contactId ?? contactId ?? undefined,
+        companyId: current.companyId ?? companyId ?? undefined,
       }));
       // Slice 20a: land on the Customer step instead of Equipment. The AI
       // has picked a machine, but we still don't know who the quote is
@@ -875,9 +893,22 @@ export function QuoteBuilderV2Page() {
 
   async function addRecommendedMachine(machine: string) {
     const fallback = buildEquipmentLineFromRecommendation(machine);
+    // AI machine strings look like "Case SR175 (2026)". Catalog columns
+    // (model_code/family/series/name_display) don't contain the year, so
+    // a single ilike on the full string returns zero rows and we fall
+    // back to a $0 line. Strip year tokens + parens, then try progressive
+    // fallbacks (full → no year → make+model → make) so at least one of
+    // them lands on a real catalog row with the real list price.
+    const candidateQueries = buildCatalogQueryCandidates(machine);
+    let firstMatch: CatalogEntryMatch | undefined;
     try {
-      const matches = await searchCatalog(machine);
-      const firstMatch = matches[0] as CatalogEntryMatch | undefined;
+      for (const query of candidateQueries) {
+        const matches = await searchCatalog(query);
+        if (matches.length > 0) {
+          firstMatch = matches[0] as CatalogEntryMatch;
+          break;
+        }
+      }
       const line = firstMatch ? buildEquipmentLine(firstMatch) : fallback;
       if (!line) return;
       if (firstMatch) {
@@ -905,7 +936,17 @@ export function QuoteBuilderV2Page() {
         };
       });
     }
-    setStep("equipment");
+    // Slice 20a: if the rep hasn't picked a customer yet, land on Customer
+    // so "who is this quote for?" is explicit before we jump to Equipment.
+    // The AI rec often flows straight from voice/AI-chat intake, where the
+    // rep hasn't confirmed the customer identity yet.
+    const hasCustomerNow = Boolean(
+      draft.customerName?.trim() ||
+      draft.customerCompany?.trim() ||
+      draft.contactId ||
+      draft.companyId,
+    );
+    setStep(hasCustomerNow ? "equipment" : "customer");
   }
 
   const firstEquipment = draft.equipment[0];
@@ -1368,7 +1409,31 @@ export function QuoteBuilderV2Page() {
                       </Button>
                     </div>
                   </div>
-                  <span className="font-semibold text-foreground">${equipment.unitPrice.toLocaleString()}</span>
+                  <label className="flex items-center gap-1 font-semibold text-foreground">
+                    <span className="text-muted-foreground">$</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step={100}
+                      value={equipment.unitPrice}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        const parsed = nextValue === "" ? 0 : Number(nextValue);
+                        if (!Number.isFinite(parsed) || parsed < 0) return;
+                        setDraft((current) => ({
+                          ...current,
+                          equipment: current.equipment.map((item, rowIndex) =>
+                            rowIndex === index
+                              ? { ...item, unitPrice: parsed }
+                              : item,
+                          ),
+                        }));
+                      }}
+                      aria-label={`Unit price for ${equipment.make ?? ""} ${equipment.model ?? ""}`.trim()}
+                      className="w-28 rounded border border-input bg-card px-2 py-1 text-right text-sm focus:border-primary focus:outline-none"
+                    />
+                  </label>
                 </div>
               ))}
             </Card>

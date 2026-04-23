@@ -997,10 +997,16 @@ Deno.serve(async (req) => {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("id, role")
+      .select("id, role, active_workspace_id")
       .eq("id", user.id)
       .maybeSingle();
     const userRole = typeof profile?.role === "string" ? profile.role : null;
+    // get_my_workspace() returns active_workspace_id or 'default' as a last
+    // resort. RLS on quote_packages checks workspace_id against that, so
+    // writes must stamp the same value or the WITH CHECK clause rejects.
+    const userWorkspaceId = typeof profile?.active_workspace_id === "string" && profile.active_workspace_id.trim()
+      ? profile.active_workspace_id.trim()
+      : "default";
     const canRevise = userRole !== null && ["rep", "admin", "manager", "owner"].includes(userRole);
     const canPublish = userRole !== null && ["admin", "manager", "owner"].includes(userRole);
 
@@ -2208,6 +2214,7 @@ Deno.serve(async (req) => {
       const { data, error } = await supabase
         .from("quote_packages")
         .upsert({
+          workspace_id: userWorkspaceId,
           deal_id: resolvedDealId,
           contact_id: contactId,
           equipment,
@@ -2250,7 +2257,14 @@ Deno.serve(async (req) => {
 
       if (error) {
         console.error("quote save error:", error);
-        return safeJsonError("Failed to save quote", 500, origin);
+        // Surface the DB-layer detail to the rep so save failures (missing
+        // branch, RLS denial, FK violation, NOT NULL on a new column) are
+        // diagnosable from the UI instead of a generic "try again" that
+        // forces a dev to open Supabase logs to see what actually broke.
+        const detail = typeof error.message === "string" && error.message.trim()
+          ? error.message.trim()
+          : "Failed to save quote";
+        return safeJsonError(detail, 500, origin);
       }
 
       const workspaceId = typeof data.workspace_id === "string" ? data.workspace_id : "default";

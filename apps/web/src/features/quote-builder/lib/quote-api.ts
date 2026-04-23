@@ -438,7 +438,13 @@ export async function saveQuotePackage(data: Record<string, unknown>): Promise<Q
     method: "POST",
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("Failed to save quote");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string; message?: string }).error
+      ?? (body as { message?: string }).message
+      ?? "";
+    throw new Error(detail.trim() || `Failed to save quote (HTTP ${res.status})`);
+  }
   return res.json();
 }
 
