@@ -10,7 +10,7 @@ import {
   PanelTopOpen,
   Bug,
 } from "lucide-react";
-import { BRAND_NAME } from "@/components/BrandLogo";
+import { BRAND_NAME, BrandLogo } from "@/components/BrandLogo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -298,6 +298,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
   } = useTopBarBell(profile.id);
   const { preference, resolvedDark } = useTheme();
   const showCrmSearch = location.pathname.startsWith("/qrm");
+  const isQuotesListRoute = location.pathname === "/sales/quotes";
 
   const primaryNavGroups = resolvePrimaryNavGroups(
     quoteBuilderEnabled,
@@ -421,12 +422,38 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
 
   return (
     <>
-      <div className={`fixed ${floorMode ? "top-[52px]" : "top-4"} inset-x-0 z-50 flex justify-center px-4 sm:px-6 lg:px-8 pointer-events-none`}>
+      <div
+        className={cn(
+          "fixed z-50 flex justify-center pointer-events-none",
+          floorMode ? "top-[52px]" : "top-4",
+          isQuotesListRoute ? "inset-x-1 px-0" : "inset-x-0 px-4 sm:px-6 lg:px-8",
+        )}
+      >
         <header
-          className="w-full max-w-7xl flex items-center px-6 py-3.5 gap-4 bg-slate-900/80 dark:bg-white/[0.05] border border-white/10 backdrop-blur-xl rounded-full shadow-2xl pointer-events-auto"
+          className={cn(
+            "w-full flex items-center gap-4 bg-slate-900/80 dark:bg-white/[0.05] border border-white/10 backdrop-blur-xl shadow-2xl pointer-events-auto",
+            isQuotesListRoute
+              ? "max-w-[calc(100vw-12px)] rounded-[24px] px-9 py-3.5"
+              : "max-w-7xl rounded-full px-6 py-3.5",
+          )}
           role="banner"
         >
-          <nav className="hidden lg:flex min-w-0 flex-1 items-center justify-center gap-1.5 text-[11px] font-bold tracking-[0.12em] uppercase text-slate-300">
+          {isQuotesListRoute && (
+            <Link to="/floor" className="hidden min-w-[185px] items-center gap-3 lg:flex">
+              <div className="rounded-md border border-white/10 bg-black/20 p-1">
+                <BrandLogo className="h-8 w-auto" decorative />
+              </div>
+              <span className="h-7 w-px bg-white/15" aria-hidden="true" />
+              <span className="text-sm font-bold uppercase tracking-[0.14em] text-qep-orange">QEP</span>
+            </Link>
+          )}
+
+          <nav
+            className={cn(
+              "hidden lg:flex min-w-0 flex-1 items-center gap-1.5 text-[11px] font-bold tracking-[0.12em] uppercase text-slate-300",
+              isQuotesListRoute ? "justify-start" : "justify-center",
+            )}
+          >
             {primaryNavGroups.map((group) => {
               const isActive = activePrimaryHeader === group.id;
               return (
@@ -503,7 +530,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
 
         {/* Right: Search + Bell + Workspace + Avatar */}
         <div className="flex items-center gap-3 ml-auto shrink-0">
-          <div className="hidden lg:block w-40 transition-all focus-within:w-52">
+          <div className={cn("hidden lg:block transition-all", isQuotesListRoute ? "w-[340px]" : "w-40 focus-within:w-52")}>
             {showCrmSearch ? (
               <QrmGlobalSearchCommand />
             ) : (
@@ -515,8 +542,16 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
                     value={searchValue}
                     onChange={(e) => setSearchValue(e.target.value)}
                     placeholder={location.pathname === "/sales/quotes" ? "Search quotes, customers, or #..." : "Search..."}
-                    className="w-full pl-9 pr-4 py-1.5 text-xs bg-white/5 border border-white/10 rounded-full text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-qep-orange focus:bg-white/10 transition-all"
+                    className={cn(
+                      "w-full pl-9 py-1.5 text-xs bg-white/5 border border-white/10 rounded-full text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-qep-orange focus:bg-white/10 transition-all",
+                      isQuotesListRoute ? "h-10 pr-14" : "pr-4",
+                    )}
                   />
+                  {isQuotesListRoute && (
+                    <kbd className="pointer-events-none absolute right-3 top-1/2 hidden h-6 -translate-y-1/2 items-center rounded border border-white/10 bg-white/10 px-2 font-mono text-[10px] text-slate-300 xl:inline-flex">
+                      ⌘K
+                    </kbd>
+                  )}
                 </div>
               </form>
             )}
@@ -586,9 +621,17 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
             <Button
               size="sm"
               onClick={handleQuickAction}
-              className="hidden xl:flex rounded-full bg-qep-orange hover:bg-qep-orange-hover text-white text-xs px-3 h-8 font-medium"
+              className={cn(
+                "hidden xl:flex bg-qep-orange hover:bg-qep-orange-hover text-white font-medium",
+                isQuotesListRoute ? "h-10 rounded-lg px-4 text-sm shadow-[0_0_18px_rgba(249,115,22,0.25)]" : "h-8 rounded-full px-3 text-xs",
+              )}
             >
               {quickAction.label}
+              {isQuotesListRoute && (
+                <kbd className="ml-3 rounded border border-white/20 bg-white/15 px-1.5 py-0.5 font-mono text-[10px] text-white/90">
+                  ⌘N
+                </kbd>
+              )}
             </Button>
           )}
 

@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Archive,
   BarChart3,
+  Building2,
   Check,
   ChevronDown,
   ChevronRight,
@@ -22,6 +23,8 @@ import {
   Send,
   Trophy,
   Trash2,
+  Truck,
+  User,
   XCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -269,7 +272,7 @@ export function QuoteListPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[1360px] flex-col gap-6 px-5 pb-20 pt-4 sm:px-8 lg:px-10">
+    <div className="relative left-1/2 -mt-8 flex min-h-[calc(100vh-9rem)] w-[min(1500px,calc(100vw-48px))] -translate-x-1/2 flex-col gap-7 rounded-b-2xl border-x border-b border-border/60 bg-background/25 px-10 pb-8 pt-8 shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Quotes</h1>
@@ -277,7 +280,7 @@ export function QuoteListPage() {
         </div>
       </header>
 
-      <section className="grid gap-3 md:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-4">
         <StatCard
           active={activeStatFilters.has("total")}
           icon={List}
@@ -317,9 +320,9 @@ export function QuoteListPage() {
         />
       )}
 
-      <Card className="overflow-hidden border-border/70 bg-card/80">
+      <Card className="overflow-hidden rounded-lg border-border/70 bg-card/80">
         <div className="flex flex-col gap-3 border-b border-border/60 p-3 lg:flex-row lg:items-center">
-          <div className="relative min-w-[280px] flex-1">
+          <div className="relative min-w-[420px] flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               ref={searchInputRef}
@@ -340,7 +343,7 @@ export function QuoteListPage() {
             <BarChart3 className="h-4 w-4 text-qep-orange" />
             View scoring accuracy
           </button>
-          <div className="flex rounded-lg border border-border/60 bg-muted/20 p-1">
+          <div className="ml-auto flex rounded-lg border border-border/60 bg-muted/20 p-1">
             {STATUS_FILTERS.map((filter) => (
               <button
                 key={filter}
@@ -432,7 +435,7 @@ function QuoteTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1100px] table-fixed">
+      <table className="w-full min-w-[1220px] table-fixed">
         <thead className="border-b border-border/60 bg-muted/10">
           <tr className="text-left text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             <SortableHeader label="Quote" column="quote" sort={sort} onSort={onSort} className="w-[20%]" />
@@ -498,7 +501,7 @@ function QuoteRow({
       className="group cursor-pointer border-b border-border/50 bg-card/40 transition hover:bg-muted/20"
       onClick={onOpen}
     >
-      <td className="px-4 py-4 align-middle">
+      <td className="px-5 py-5 align-middle">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-muted/40">
             <FileText className="h-5 w-5 text-muted-foreground" />
@@ -511,24 +514,33 @@ function QuoteRow({
           </div>
         </div>
       </td>
-      <td className="px-4 py-4 align-middle">
-        <div className="truncate text-sm font-medium text-foreground">{item.customer_company || item.customer_name || "Unnamed customer"}</div>
-        <div className={`mt-1 truncate text-sm ${isMissingContact(item) ? "text-muted-foreground/60" : "text-muted-foreground"}`}>
-          {renderContactName(item)}
+      <td className="px-5 py-5 align-middle">
+        <div className="space-y-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="truncate text-sm font-medium text-foreground">{item.customer_company || item.customer_name || "Unnamed customer"}</span>
+          </div>
+          <div className={`flex min-w-0 items-center gap-2 text-sm ${isMissingContact(item) ? "text-muted-foreground/60" : "text-muted-foreground"}`}>
+            <User className="h-4 w-4 shrink-0" />
+            <span className="truncate">{renderContactName(item)}</span>
+          </div>
         </div>
       </td>
-      <td className="px-4 py-4 align-middle">
-        <div className="line-clamp-2 text-sm text-foreground">{item.equipment_summary || "No equipment"}</div>
+      <td className="px-5 py-5 align-middle">
+        <div className="flex items-center gap-2">
+          <Truck className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="line-clamp-2 text-sm text-foreground">{item.equipment_summary || "No equipment"}</span>
+        </div>
       </td>
-      <td className="px-4 py-4 align-middle">
+      <td className="px-5 py-5 align-middle">
         <div className="text-sm font-semibold tabular-nums text-foreground">{fmtCurrency(item.net_total)}</div>
       </td>
-      <td className="px-4 py-4 align-middle">
+      <td className="px-5 py-5 align-middle">
         <div className="text-base font-bold tabular-nums text-qep-orange">
           {typeof item.win_probability_score === "number" ? item.win_probability_score : "—"}
         </div>
       </td>
-      <td className="px-4 py-4 align-middle">
+      <td className="px-5 py-5 align-middle">
         <div className="flex items-center justify-end">
           <div className="flex items-center gap-2 text-sm text-muted-foreground group-hover:hidden">
             <span>{formatDate(item.updated_at ?? item.created_at)}</span>
@@ -573,7 +585,7 @@ function SortableHeader({
 }) {
   const active = sort.key === column;
   return (
-    <th className={`px-4 py-3 font-medium ${className ?? ""}`}>
+    <th className={`px-5 py-4 font-medium ${className ?? ""}`}>
       <button
         type="button"
         onClick={() => onSort(column)}
@@ -608,7 +620,7 @@ function StatCard({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-lg border bg-card/80 p-4 text-left transition hover:border-qep-orange/60 hover:bg-card ${
+      className={`min-h-[128px] rounded-lg border bg-card/80 p-5 text-left transition hover:border-qep-orange/60 hover:bg-card ${
         active ? "border-qep-orange shadow-[0_0_0_1px_rgba(249,115,22,0.45)]" : "border-border/70"
       }`}
     >
@@ -656,12 +668,17 @@ function LocalDraftsSection({
             ? [firstEquip.make, firstEquip.model].filter(Boolean).join(" ") || firstEquip.title || "Equipment selected"
             : "No equipment yet";
           return (
-            <div key={record.key} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/40 px-4 py-3">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-foreground">{name}</div>
-                <div className="mt-1 truncate text-xs text-muted-foreground">
-                  {equipmentLabel}{equipmentCount > 1 ? ` +${equipmentCount - 1} more` : ""}
-                  {record.savedAt ? ` · Last edited ${new Date(record.savedAt).toLocaleString()}` : ""}
+            <div key={record.key} className="flex min-h-[74px] items-center justify-between gap-4 rounded-lg border border-border/60 bg-background/40 px-5 py-3">
+              <div className="flex min-w-0 items-center gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted/60 text-sm font-semibold text-foreground">
+                  {initialsForName(name)}
+                </div>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-foreground">{name}</div>
+                  <div className="mt-1 truncate text-xs text-muted-foreground">
+                    {equipmentLabel}{equipmentCount > 1 ? ` +${equipmentCount - 1} more` : ""}
+                    {record.savedAt ? ` · Last edited ${new Date(record.savedAt).toLocaleString()}` : ""}
+                  </div>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -838,4 +855,10 @@ function formatDate(value: string | null | undefined): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleDateString();
+}
+
+function initialsForName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "Q";
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "Q";
 }
