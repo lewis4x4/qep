@@ -798,6 +798,139 @@ Rules:
   }
 }
 
+// Public accept — customer taps to sign on /q/:token. Writes a signature
+// row, stores the live configuration they accepted, SHA-256-seals the
+// canonicalized snapshot for integrity, and transitions the quote
+// status to "accepted". Returns the status + signature id so the UI
+// can switch to a confirmation state.
+async function canonicalizeAndHash(payload: Record<string, unknown>): Promise<string> {
+  // Stable key order so the hash of the same logical snapshot is
+  // identical across re-renders. Nested objects are sorted too.
+  const canonicalize = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonicalize);
+    if (value && typeof value === "object") {
+      const entries = Object.entries(value as Record<string, unknown>)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, v]) => [k, canonicalize(v)]);
+      return Object.fromEntries(entries);
+    }
+    return value;
+  };
+  const canon = JSON.stringify(canonicalize(payload));
+  const bytes = new TextEncoder().encode(canon);
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function handlePublicAccept(
+  req: Request,
+  url: URL,
+  origin: string | null,
+): Promise<Response> {
+  const token = url.searchParams.get("token")?.trim();
+  if (!token) return safeJsonError("token required", 400, origin);
+  if (token.length < 16 || token.length > 128) {
+    return safeJsonError("invalid token", 400, origin);
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const signerName = typeof body.signer_name === "string" ? body.signer_name.trim().slice(0, 200) : "";
+  const signerEmail = typeof body.signer_email === "string" ? body.signer_email.trim().slice(0, 200) : "";
+  const signatureDataUrl = typeof body.signature_data_url === "string" ? body.signature_data_url : "";
+  const configRaw = body.customer_configuration;
+
+  if (!signerName) return safeJsonError("Please enter your name to sign.", 400, origin);
+  // Keep the signature payload reasonable — a 320×160 PNG @ base64 is
+  // well under 100KB; reject anything much larger than that.
+  if (!signatureDataUrl.startsWith("data:image/")) {
+    return safeJsonError("Signature is required.", 400, origin);
+  }
+  if (signatureDataUrl.length > 250_000) {
+    return safeJsonError("Signature image too large.", 413, origin);
+  }
+  if (!configRaw || typeof configRaw !== "object" || Array.isArray(configRaw)) {
+    return safeJsonError("Missing configuration snapshot.", 400, origin);
+  }
+
+  const admin = createAdminClient();
+  const { data: quote, error: quoteErr } = await admin
+    .from("quote_packages")
+    .select("id, workspace_id, deal_id, status")
+    .eq("share_token", token)
+    .maybeSingle();
+  if (quoteErr) return safeJsonError("Failed to load quote", 500, origin);
+  if (!quote) return safeJsonError("Quote not found", 404, origin);
+
+  // Guard against re-accepting or overwriting a terminal state. A rep
+  // rotating the token is still a safe way to re-open for acceptance.
+  const terminalStates = new Set(["rejected", "expired"]);
+  if (terminalStates.has(String(quote.status))) {
+    return safeJsonError(`This quote is ${quote.status} and cannot be signed.`, 409, origin);
+  }
+
+  const configuration = {
+    ...(configRaw as Record<string, unknown>),
+    accepted_at_client: new Date().toISOString(),
+  };
+  const documentHash = await canonicalizeAndHash({
+    quote_id: quote.id,
+    configuration,
+    signer_name: signerName,
+  });
+
+  const sigIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  const sigUa = req.headers.get("user-agent") ?? null;
+
+  const { data: sigRow, error: sigErr } = await admin
+    .from("quote_signatures")
+    .insert({
+      workspace_id: typeof quote.workspace_id === "string" ? quote.workspace_id : "default",
+      quote_package_id: quote.id,
+      deal_id: quote.deal_id ?? null,
+      signer_name: signerName,
+      signer_email: signerEmail || null,
+      signer_ip: sigIp,
+      signer_user_agent: sigUa,
+      signature_image_url: signatureDataUrl,
+      signed_snapshot: configuration,
+      signed_via: "deal_room",
+      document_hash: documentHash,
+      is_valid: true,
+    })
+    .select("id, signed_at")
+    .single();
+  if (sigErr) {
+    console.error("public accept signature insert error:", sigErr);
+    return safeJsonError(sigErr.message || "Failed to record signature", 500, origin);
+  }
+
+  // Flip the package to accepted if it isn't already in a post-accept
+  // state. Rep-side approval flows may have moved it further along
+  // (e.g. converted_to_deal); we don't clobber those.
+  const preserveStatuses = new Set([
+    "accepted",
+    "converted_to_deal",
+    "archived",
+  ]);
+  if (!preserveStatuses.has(String(quote.status))) {
+    // quote_packages doesn't track an accepted_at of its own — the
+    // signature row's signed_at is the canonical accept timestamp.
+    await admin
+      .from("quote_packages")
+      .update({ status: "accepted" })
+      .eq("id", quote.id);
+  }
+
+  return safeJsonOk({
+    signature_id: sigRow?.id ?? null,
+    signed_at: sigRow?.signed_at ?? null,
+    status: "accepted",
+    document_hash: documentHash,
+  }, origin, 201);
+}
+
 function generateShareToken(): string {
   // 32 hex chars → 128 bits of entropy. UUID-shaped but dashes stripped
   // for a tidier URL. crypto.randomUUID is cryptographically random in
@@ -1498,6 +1631,9 @@ Deno.serve(async (req) => {
     }
     if (req.method === "POST" && publicAction === "public-chat") {
       return await handlePublicChatTurn(req, publicUrl, origin);
+    }
+    if (req.method === "POST" && publicAction === "public-accept") {
+      return await handlePublicAccept(req, publicUrl, origin);
     }
   } catch (err) {
     console.error("public-route dispatch error:", err);

@@ -126,6 +126,46 @@ export interface ConciergeMessage {
   content: string;
 }
 
+export interface PublicAcceptRequest {
+  signerName: string;
+  signerEmail?: string | null;
+  signatureDataUrl: string;
+  customerConfiguration: Record<string, unknown>;
+}
+
+export interface PublicAcceptResponse {
+  signature_id: string | null;
+  signed_at: string | null;
+  status: string;
+  document_hash: string;
+}
+
+export async function acceptPublicQuote(
+  token: string,
+  input: PublicAcceptRequest,
+): Promise<PublicAcceptResponse> {
+  const res = await fetch(`${QUOTE_FN_URL}/public-accept?token=${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${ANON_KEY}`,
+    },
+    body: JSON.stringify({
+      signer_name: input.signerName,
+      signer_email: input.signerEmail ?? null,
+      signature_data_url: input.signatureDataUrl,
+      customer_configuration: input.customerConfiguration,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string }).error ?? `HTTP ${res.status}`;
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
 export async function sendConciergeChat(
   token: string,
   message: string,
