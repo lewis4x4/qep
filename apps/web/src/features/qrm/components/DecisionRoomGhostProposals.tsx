@@ -10,7 +10,7 @@
  */
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, Loader2, Search, UserCheck, UserPlus } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, FileSignature, Loader2, Mic, Search, UserCheck, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
@@ -26,6 +26,33 @@ interface Proposal {
    *  Surfaced in the save-confirm guardrail. Optional for backward-compat
    *  with cached proposals written before the field existed. */
   mismatchReason?: string | null;
+  /** Where the proposal came from. Internal sources (`signer`, `voice`)
+   *  are customer-confirmed and bypass the low-confidence guardrail.
+   *  `web` = Tavily / LinkedIn. Undefined on cached rows written before
+   *  the edge function gained the CRM-first path. */
+  source?: "signer" | "voice" | "web";
+}
+
+function isInternalSource(p: Proposal): boolean {
+  return p.source === "signer" || p.source === "voice";
+}
+
+function sourceBadge(p: Proposal): { icon: typeof UserCheck; label: string; cls: string } | null {
+  if (p.source === "signer") {
+    return {
+      icon: FileSignature,
+      label: "Past signer",
+      cls: "border-cyan-400/40 bg-cyan-400/10 text-cyan-200",
+    };
+  }
+  if (p.source === "voice") {
+    return {
+      icon: Mic,
+      label: "Named on call",
+      cls: "border-violet-400/40 bg-violet-400/10 text-violet-200",
+    };
+  }
+  return null;
 }
 
 interface Props {
@@ -213,25 +240,42 @@ export function DecisionRoomGhostProposals({ dealId, archetype, companyName, com
     );
   }
 
-  // Split into strong (high + medium company match) vs weak (low / partial).
-  // Weak candidates are almost always wrong-company false positives — we
-  // hide them behind an explicit opt-in so the default view stays honest.
-  const strongProposals = proposals.filter((p) => p.confidence !== "low");
-  const weakProposals = proposals.filter((p) => p.confidence === "low");
+  // Split: internal (past signers + voice mentions — always trustworthy),
+  // strong web matches (high + medium confidence), and weak web matches.
+  // Weak web candidates almost always reference the wrong company — we
+  // hide those behind an explicit opt-in so the default view stays honest.
+  // Internal candidates bypass the weak-match rules entirely because the
+  // rep's own team surfaced them.
+  const internalProposals = proposals.filter(isInternalSource);
+  const webProposals = proposals.filter((p) => !isInternalSource(p));
+  const strongProposals = webProposals.filter((p) => p.confidence !== "low");
+  const weakProposals = webProposals.filter((p) => p.confidence === "low");
 
   const renderCard = (p: Proposal, key: string) => {
     const saved = savedNames.has(p.name);
     const savingThis = savingName === p.name;
-    const isLow = p.confidence === "low";
+    // Internal sources never need the low-confidence guardrail — the
+    // customer's own team surfaced them. A "low" internal rating would
+    // only occur through a cache glitch, so treat internal as non-weak.
+    const isInternal = isInternalSource(p);
+    const isLow = !isInternal && p.confidence === "low";
     const awaitingConfirm = confirmName === p.name;
+    const badge = sourceBadge(p);
+    const BadgeIcon = badge?.icon ?? null;
     return (
       <li
         key={key}
         className={cn(
           "flex flex-col gap-2 rounded-lg border p-3",
-          confidenceCls(p.confidence),
+          isInternal && badge ? badge.cls : confidenceCls(p.confidence),
         )}
       >
+        {isInternal && badge && BadgeIcon ? (
+          <span className="inline-flex w-fit items-center gap-1 rounded-full border border-current/30 bg-current/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider">
+            <BadgeIcon className="h-2.5 w-2.5" aria-hidden />
+            {badge.label}
+          </span>
+        ) : null}
         <div className="flex items-start gap-3">
           <UserCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <div className="min-w-0 flex-1">
@@ -348,15 +392,38 @@ export function DecisionRoomGhostProposals({ dealId, archetype, companyName, com
           <span className="text-[10px] italic">from cache</span>
         ) : null}
       </div>
+
+      {/* Internal candidates first — past signers and voice-capture mentions.
+          These come from the rep's own workspace, so we trust them absolutely
+          and skip the weak-match guardrail. */}
+      {internalProposals.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-[10px] uppercase tracking-wider text-emerald-300/80">
+            From your CRM
+          </p>
+          <ul className="space-y-2">
+            {internalProposals.map((p, i) => renderCard(p, `internal-${p.name}-${i}`))}
+          </ul>
+        </div>
+      ) : null}
+
+      {/* Web-sourced candidates — strong matches first, weak hidden. */}
       {strongProposals.length > 0 ? (
-        <ul className="space-y-2">
-          {strongProposals.map((p, i) => renderCard(p, `strong-${p.name}-${i}`))}
-        </ul>
-      ) : (
+        <div className={cn("space-y-2", internalProposals.length > 0 && "pt-2")}>
+          {internalProposals.length > 0 ? (
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              From the web
+            </p>
+          ) : null}
+          <ul className="space-y-2">
+            {strongProposals.map((p, i) => renderCard(p, `strong-${p.name}-${i}`))}
+          </ul>
+        </div>
+      ) : internalProposals.length === 0 ? (
         <p className="rounded-md border border-white/10 bg-white/[0.02] p-3 text-xs text-muted-foreground">
           No strong matches for {companyName}. The web search returned only partial-company hits, which are usually wrong-company false positives. Ask your champion directly or expand weaker candidates below.
         </p>
-      )}
+      ) : null}
 
       {weakProposals.length > 0 ? (
         <div className="pt-1">

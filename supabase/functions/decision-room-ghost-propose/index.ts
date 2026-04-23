@@ -89,6 +89,11 @@ interface Proposal {
    *  guardrail so the rep sees *why* a candidate is weak, not just that
    *  they are. Null when nothing to warn about. */
   mismatchReason: string | null;
+  /** Where this proposal came from. Internal sources (past-deal signers,
+   *  voice-capture stakeholder mentions) are always trustworthy signal
+   *  and bypass the low-confidence guardrail. `web` is Tavily / LinkedIn.
+   *  Undefined on cached rows written before v3. */
+  source?: "signer" | "voice" | "web";
 }
 
 /** Tokens stripped before comparing company names. Corporate suffixes and
@@ -280,6 +285,160 @@ function scoreProposal(profile: ArchetypeProfile, result: TavilyResult, companyN
   };
 }
 
+/** Lightweight container for internal-source proposals. We separate
+ *  them from Tavily ranking because they deserve unconditional priority
+ *  regardless of the confidence bands we derive from LinkedIn results. */
+interface InternalProposal extends Proposal {
+  source: "signer" | "voice";
+}
+
+/** Normalize a person's name to compare across sources — lowercase,
+ *  trimmed, collapsed whitespace. Used both for dedup and for filtering
+ *  internal candidates against the already-named contacts at the company. */
+function normPersonName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Mine internal CRM sources for candidate names *before* firing Tavily.
+ *
+ * Two high-signal paths today:
+ *   1. Past-deal signers at this company (quote_signatures). They
+ *      committed to something in writing — the highest-quality signal
+ *      the CRM can produce. Only surfaced for archetypes that plausibly
+ *      sign (champion / economic_buyer / executive_sponsor).
+ *   2. Voice-capture stakeholder mentions (additionalStakeholders +
+ *      contactName). The customer literally named these people on a
+ *      call; they're strictly better than a LinkedIn stranger even when
+ *      we don't have their title.
+ *
+ * Known contacts at the company are excluded so we don't propose the
+ * same person already occupying a named seat.
+ */
+async function fetchInternalCandidates(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  companyId: string,
+  archetype: SeatArchetype,
+): Promise<InternalProposal[]> {
+  const out: InternalProposal[] = [];
+
+  // Set of already-known people (contacts at this company) — dedup source.
+  const knownNames = new Set<string>();
+  const knownEmails = new Set<string>();
+  try {
+    const { data: contacts } = await admin
+      .from("crm_contacts")
+      .select("first_name, last_name, email")
+      .eq("primary_company_id", companyId)
+      .is("deleted_at", null)
+      .limit(200);
+    for (const c of contacts ?? []) {
+      const name = `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();
+      if (name) knownNames.add(normPersonName(name));
+      if (c.email) knownEmails.add((c.email as string).trim().toLowerCase());
+    }
+  } catch (_err) {
+    // Missing contacts data is not fatal — we just fall through without
+    // dedup protection. A duplicate proposal is a minor UX issue, not
+    // worth aborting the internal lookup over.
+  }
+
+  // 1. Signers from past deals at this company. quote_signatures joins
+  //    through crm_deals, so we first gather the deal IDs and then pull
+  //    their signatures in a single IN query — faster than a nested
+  //    select in PostgREST for small result sets.
+  const archetypeAllowsSigners =
+    archetype === "champion" ||
+    archetype === "economic_buyer" ||
+    archetype === "executive_sponsor";
+  if (archetypeAllowsSigners) {
+    try {
+      const { data: deals } = await admin
+        .from("crm_deals")
+        .select("id")
+        .eq("company_id", companyId)
+        .is("deleted_at", null)
+        .limit(50);
+      const dealIds = (deals ?? []).map((d: { id: string }) => d.id);
+      if (dealIds.length > 0) {
+        const { data: signers } = await admin
+          .from("quote_signatures")
+          .select("signer_name, signer_email, signed_at, deal_id")
+          .in("deal_id", dealIds)
+          .order("signed_at", { ascending: false })
+          .limit(20);
+        for (const s of signers ?? []) {
+          const name = (s.signer_name as string | null)?.trim();
+          const email = (s.signer_email as string | null)?.trim().toLowerCase() ?? null;
+          if (!name) continue;
+          if (knownNames.has(normPersonName(name))) continue;
+          if (email && knownEmails.has(email)) continue;
+          out.push({
+            name,
+            title: null,
+            profileUrl: null,
+            confidence: "high",
+            evidence: "Signed a quote at this company",
+            mismatchReason: null,
+            source: "signer",
+          });
+          knownNames.add(normPersonName(name));
+        }
+      }
+    } catch (_err) {
+      // Non-fatal — fall through to voice captures.
+    }
+  }
+
+  // 2. Voice-capture stakeholder mentions at this company. The rep or
+  //    customer named these people on a call; we may not have titles
+  //    but the source signal is stronger than any LinkedIn result.
+  try {
+    const { data: captures } = await admin
+      .from("voice_captures")
+      .select("extracted_data, created_at")
+      .eq("linked_company_id", companyId)
+      .not("extracted_data", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    const seenInVoice = new Set<string>();
+    for (const row of captures ?? []) {
+      const ex = row.extracted_data as
+        | { record?: { contactName?: string | null; additionalStakeholders?: string[] } }
+        | null;
+      if (!ex?.record) continue;
+      const names: string[] = [];
+      if (ex.record.contactName) names.push(ex.record.contactName);
+      if (Array.isArray(ex.record.additionalStakeholders)) {
+        names.push(...ex.record.additionalStakeholders);
+      }
+      for (const raw of names) {
+        const name = raw?.trim();
+        if (!name || name.length < 2) continue;
+        const n = normPersonName(name);
+        if (knownNames.has(n) || seenInVoice.has(n)) continue;
+        seenInVoice.add(n);
+        out.push({
+          name,
+          title: null,
+          profileUrl: null,
+          confidence: "medium",
+          evidence: `Named in a voice capture at this company (${(row.created_at as string).slice(0, 10)})`,
+          mismatchReason: null,
+          source: "voice",
+        });
+        if (out.length >= 6) break;
+      }
+      if (out.length >= 6) break;
+    }
+  } catch (_err) {
+    // Non-fatal.
+  }
+
+  return out.slice(0, 4);
+}
+
 function rankProposals(list: Proposal[]): Proposal[] {
   const rank: Record<Proposal["confidence"], number> = { high: 0, medium: 1, low: 2 };
   const seen = new Set<string>();
@@ -331,7 +490,7 @@ Deno.serve(async (req) => {
   const callerClient = createCallerClient(caller.authHeader);
   const { data: dealRow, error: dealErr } = await callerClient
     .from("crm_deals")
-    .select("id")
+    .select("id, company_id")
     .eq("id", body.dealId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -340,12 +499,24 @@ Deno.serve(async (req) => {
 
   const profile = ARCHETYPE_PROFILES[body.archetype];
   const query = `${profile.queryTerms.join(" OR ")} "${body.companyName}" site:linkedin.com/in`;
-  const cacheKey = await sha256Hex(`decision-room-ghost-propose:v1:${query}`);
+  // v3 bumps the cache for the CRM-first + source field shape. Old v2
+  // entries would be missing `source` on each proposal and wouldn't
+  // include internal candidates at all.
+  const cacheKey = await sha256Hex(`decision-room-ghost-propose:v3:${query}`);
 
-  // Cache hit?
+  // Resolve the caller's workspace explicitly. get_my_workspace() under
+  // service role returns "default", which would collapse every workspace
+  // into one shared cache bucket — a real cross-tenant leak since
+  // LinkedIn-sourced names are workspace-scoped in intent. Fall back to
+  // "default" only if the caller has no workspace of their own.
+  const cacheWorkspaceId = caller.workspaceId ?? "default";
+
+  // Cache hit? Filter by the caller's workspace so two tenants never
+  // share results via this function.
   const { data: cacheRow } = await admin
     .from("iron_web_search_cache")
     .select("results, created_at")
+    .eq("workspace_id", cacheWorkspaceId)
     .eq("query_hash", cacheKey)
     .maybeSingle();
 
@@ -364,21 +535,39 @@ Deno.serve(async (req) => {
     }
   }
 
+  // CRM-first: mine internal sources before burning a Tavily call. Signers
+  // and voice-capture stakeholders are higher-signal than any LinkedIn
+  // stranger, so they always rank above web results in the UI.
+  const companyIdForInternal = (dealRow as { company_id: string | null }).company_id;
+  const internalProposals: InternalProposal[] = companyIdForInternal
+    ? await fetchInternalCandidates(admin, companyIdForInternal, body.archetype)
+    : [];
+
   const tavily = await runTavily(query);
   if ("error" in tavily) {
     return safeJsonError(tavily.error, 502, origin);
   }
 
-  const proposals = rankProposals(
+  const webProposals: Proposal[] = rankProposals(
     tavily.results
       .map((r) => scoreProposal(profile, r, body.companyName))
       .filter((p): p is Proposal => p != null),
-  );
+  ).map((p) => ({ ...p, source: "web" as const }));
+
+  // Dedup: drop any web proposal that collides with an internal one by
+  // normalized name. Trust the internal source — it's the one the rep's
+  // own team produced.
+  const internalNames = new Set(internalProposals.map((p) => normPersonName(p.name)));
+  const proposals: Proposal[] = [
+    ...internalProposals,
+    ...webProposals.filter((p) => !internalNames.has(normPersonName(p.name))),
+  ].slice(0, 6);
 
   // Best-effort cache write — don't fail the response if cache insert fails.
   try {
     await admin.from("iron_web_search_cache").upsert(
       {
+        workspace_id: cacheWorkspaceId,
         query_hash: cacheKey,
         query_text: query,
         results: proposals,
