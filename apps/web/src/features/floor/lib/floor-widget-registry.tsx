@@ -56,6 +56,10 @@ import { PartsReplenishQueueWidget } from "@/features/dashboards/widgets/impls/p
 import { OwnerBriefCard } from "@/features/owner/components/OwnerBriefCard";
 import { CustomerHealthListWidget } from "../widgets/CustomerHealthListWidget";
 import { CrmCustomerSearchWidget } from "../widgets/CrmCustomerSearchWidget";
+// P1 moonshot widgets — see docs/floor/widget-wiring-punch-list.md.
+import { SerialFirstWidget } from "../widgets/SerialFirstWidget";
+import { ActionItemsWidget } from "../widgets/ActionItemsWidget";
+import { DealCopilotSummaryWidget } from "../widgets/DealCopilotSummaryWidget";
 
 import { FloorStubWidget } from "../components/FloorStubWidget";
 
@@ -281,14 +285,13 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
   "sales.action-items": {
     id: "sales.action-items",
     title: "Action items",
-    purpose: "Your open tasks, prioritized by deal impact.",
+    purpose: "Your open touchpoints, ordered by deal value — biggest stakes first.",
     allowedRoles: ["iron_advisor"],
     size: "normal",
-    component: stub(
-      "Action items",
-      "Tasks ordered by the deal they move, not the date they were made.",
-      "Sample: 5 open · 2 high-impact",
-    ),
+    // P1 moonshot wiring — joins follow_up_touchpoints → cadences →
+    // qrm_deals and sorts DESC by deal amount. Per-row tel:/mailto:
+    // and one-tap Mark Done on the touchpoint status column.
+    component: ActionItemsWidget,
   },
   "sales.day-summary": {
     id: "sales.day-summary",
@@ -305,14 +308,15 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
   "quote.deal-copilot-summary": {
     id: "quote.deal-copilot-summary",
     title: "Deal Copilot signals",
-    purpose: "Copilot-surfaced signals that moved your win probability.",
+    purpose: "Live feed of your latest Copilot turns with score deltas + extracted signals.",
     allowedRoles: ["iron_advisor", "iron_manager"],
     size: "normal",
-    component: stub(
-      "Deal Copilot signals",
-      "Latest copilot turns and the score deltas they produced.",
-      "Sample: RT-135 @ Whittaker +8 · competitor mentioned · cash pref locked",
-    ),
+    // P1 moonshot wiring — 5 most recent qb_quote_copilot_turns for
+    // the signed-in user. Headline KPI: distinct deals moved this
+    // week. Each row click-through deep-links to the quote with
+    // ?copilotTurn={id} which triggers DealCopilotPanel auto-open
+    // (wired in Slice 21).
+    component: DealCopilotSummaryWidget,
   },
   "sales.commission-to-date": {
     id: "sales.commission-to-date",
@@ -330,15 +334,13 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
   // ── Parts-focused stubs for Juan, Norman ──
   "parts.serial-first": {
     id: "parts.serial-first",
-    title: "Serial-first quote",
-    purpose: "Start a parts quote by typing the equipment serial number.",
+    title: "Serial-first lookup",
+    purpose: "Paste a serial — pulls machine, owner, and service state in one read.",
     allowedRoles: ["iron_parts_counter", "iron_parts_manager"],
     size: "wide",
-    component: stub(
-      "Serial-first quote",
-      "Type a serial and we'll match the machine + suggest compatible parts.",
-      "Paste or scan a serial — we'll find the machine and owner.",
-    ),
+    // P1 moonshot wiring — paste-tolerant input, fuzzy ILIKE against
+    // qrm_equipment.serial_number, three-panel snapshot on match.
+    component: SerialFirstWidget,
   },
   "parts.quote-drafts": {
     id: "parts.quote-drafts",
