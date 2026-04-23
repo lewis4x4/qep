@@ -1072,7 +1072,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                   )}
                   {audioPreviewFailed && (
                     <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                      Recording preview is unavailable in this browser, but the note can still be processed.
+                      Playback is not available in this browser, but your note is ready to process.
                     </div>
                   )}
                 </CardContent>
