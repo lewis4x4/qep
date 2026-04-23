@@ -15,7 +15,7 @@ interface Props {
   board: DecisionRoomBoard;
 }
 
-interface CoachReadResponse {
+export interface CoachReadResponse {
   read: string;
   generatedAt: string;
 }
@@ -25,13 +25,17 @@ interface CoachReadResponse {
  * when a seat's status/stance/confidence/power would meaningfully shift
  * the narrative — so reruns are rare even if other seat details update.
  */
-function snapshotKey(board: DecisionRoomBoard): string {
+export function coachReadSnapshotKey(board: DecisionRoomBoard): string {
   return board.seats
     .map((s) => `${s.id}:${s.status}:${s.stance}:${s.confidence}:${Math.round(s.vetoWeight * 100)}`)
     .join("|");
 }
 
-async function fetchCoachRead(board: DecisionRoomBoard): Promise<CoachReadResponse> {
+export function coachReadQueryKey(board: DecisionRoomBoard): readonly unknown[] {
+  return ["decision-room", "coach-read", board.dealId, coachReadSnapshotKey(board)] as const;
+}
+
+export async function fetchCoachRead(board: DecisionRoomBoard): Promise<CoachReadResponse> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Not authenticated");
 
@@ -89,9 +93,9 @@ async function fetchCoachRead(board: DecisionRoomBoard): Promise<CoachReadRespon
 }
 
 export function DecisionRoomCoachRead({ board }: Props) {
-  const key = useMemo(() => snapshotKey(board), [board]);
+  const key = useMemo(() => coachReadQueryKey(board), [board]);
   const { data, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: ["decision-room", "coach-read", board.dealId, key],
+    queryKey: key,
     queryFn: () => fetchCoachRead(board),
     staleTime: 5 * 60 * 1000,
     retry: 1,

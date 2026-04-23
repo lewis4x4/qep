@@ -29,6 +29,9 @@ interface Props {
   archetype: string;
   companyName: string | null;
   companyId: string | null;
+  /** Fired after a candidate is successfully persisted. The parent uses this
+   *  to close the drawer so the rep immediately sees the refreshed seat map. */
+  onSaved?: () => void;
 }
 
 function splitName(full: string): { firstName: string; lastName: string } {
@@ -73,7 +76,7 @@ function confidenceCls(level: Proposal["confidence"]): string {
   }
 }
 
-export function DecisionRoomGhostProposals({ dealId, archetype, companyName, companyId }: Props) {
+export function DecisionRoomGhostProposals({ dealId, archetype, companyName, companyId, onSaved }: Props) {
   const [fired, setFired] = useState(false);
   const [savedNames, setSavedNames] = useState<Set<string>>(new Set());
   const [savingName, setSavingName] = useState<string | null>(null);
@@ -88,12 +91,16 @@ export function DecisionRoomGhostProposals({ dealId, archetype, companyName, com
     if (!companyId || savingName) return;
     setSavingName(proposal.name);
     try {
+      // Pull the caller's user id so reps can insert under their own scope
+      // (the rep-insert RLS policy requires assigned_rep_id = auth.uid()).
+      const { data: { user } } = await supabase.auth.getUser();
       const { firstName, lastName } = splitName(proposal.name);
       const { error } = await supabase.from("crm_contacts").insert({
         first_name: firstName || proposal.name,
         last_name: lastName || "(unknown)",
         title: proposal.title,
         primary_company_id: companyId,
+        assigned_rep_id: user?.id ?? null,
         metadata: {
           decision_room_source: {
             archetype,
@@ -109,10 +116,25 @@ export function DecisionRoomGhostProposals({ dealId, archetype, companyName, com
       setSavedNames((prev) => new Set([...prev, proposal.name]));
       toast({
         title: "Saved as contact",
-        description: `${proposal.name} added to this company. The decision room will reflect them once it refreshes.`,
+        description: `${proposal.name} added to this company. Decision room is refreshing.`,
       });
-      // Re-run the relationship query so the ghost seat becomes named.
-      await queryClient.invalidateQueries({ queryKey: ["decision-room-simulator", dealId, "relationship"] });
+      // Force the downstream queries to refetch. `refetchType: "active"`
+      // ensures the seat map on the page re-reads contacts even though the
+      // drawer is on top. We also nudge composite in case downstream views
+      // key off the same cache entry.
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["decision-room-simulator", dealId, "relationship"],
+          refetchType: "active",
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["decision-room-simulator", dealId, "composite"],
+          refetchType: "active",
+        }),
+      ]);
+      // Close the drawer so the rep sees the seat flip ghost → named without
+      // having to back out manually.
+      onSaved?.();
     } catch (err) {
       toast({
         title: "Couldn't save contact",

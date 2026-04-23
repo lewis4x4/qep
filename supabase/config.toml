@@ -405,6 +405,12 @@ verify_jwt = false
 [functions.decision-room-draft-email]
 verify_jwt = false
 
+# Decision Room seat-to-seat dialogue — simulates a short back-and-forth
+# between two seats, each grounded on their own evidence packet. Same
+# access-gated pattern.
+[functions.decision-room-seat-dialogue]
+verify_jwt = false
+
 [functions.generate-daily-briefing]
 verify_jwt = false
 

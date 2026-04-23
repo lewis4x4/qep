@@ -40,7 +40,11 @@ import { QrmSubNav } from "../components/QrmSubNav";
 import { DecisionRoomCanvas } from "../components/DecisionRoomCanvas";
 import { DecisionRoomScoreboard } from "../components/DecisionRoomScoreboard";
 import { DecisionRoomSeatDrawer } from "../components/DecisionRoomSeatDrawer";
-import { DecisionRoomCoachRead } from "../components/DecisionRoomCoachRead";
+import {
+  DecisionRoomCoachRead,
+  coachReadQueryKey,
+  fetchCoachRead,
+} from "../components/DecisionRoomCoachRead";
 import { DecisionRoomRecommendedMoves } from "../components/DecisionRoomRecommendedMoves";
 import { DecisionRoomMoveBar, type TriedMove } from "../components/DecisionRoomMoveBar";
 import { DecisionRoomMoveHistory } from "../components/DecisionRoomMoveHistory";
@@ -244,6 +248,16 @@ export function DecisionRoomSimulatorPage() {
     [board],
   );
 
+  // Share the coach-read cache with the brief export so both the top-of-
+  // page paragraph and the downloadable markdown stay in sync.
+  const coachReadQuery = useQuery({
+    queryKey: board ? coachReadQueryKey(board) : ["decision-room", "coach-read", "pending"],
+    queryFn: () => fetchCoachRead(board!),
+    enabled: Boolean(board),
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+
   const futureTicks = useMemo(
     () => (board ? projectAllHorizons(board) : []),
     [board],
@@ -375,7 +389,7 @@ export function DecisionRoomSimulatorPage() {
 
       <DecisionRoomBriefExport
         board={board}
-        coachRead={null}
+        coachRead={coachReadQuery.data?.read ?? null}
         recommendedMoves={recommendedMoves}
         futureTicks={futureTicks}
         moveHistory={moveHistory}
@@ -434,6 +448,7 @@ export function DecisionRoomSimulatorPage() {
         companyName={board.companyName}
         dealName={board.dealName}
         repName={null}
+        allSeats={board.seats}
       />
     </div>
   );

@@ -12,6 +12,7 @@
  */
 import { createCallerClient, createAdminClient, resolveCallerContext } from "../_shared/dge-auth.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 
 const MODEL = "gpt-5.4-mini";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -263,6 +264,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk({ read, generatedAt: new Date().toISOString() }, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "decision-room-coach-read", req });
     console.error("[decision-room-coach-read] unexpected error", err);
     return safeJsonError(err instanceof Error ? err.message : "read_failed", 500, origin);
   }

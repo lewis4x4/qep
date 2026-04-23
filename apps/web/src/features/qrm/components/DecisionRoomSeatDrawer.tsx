@@ -30,6 +30,7 @@ import { supabase } from "@/lib/supabase";
 import type { DecisionRoomSeat } from "../lib/decision-room-simulator";
 import { DecisionRoomGhostProposals } from "./DecisionRoomGhostProposals";
 import { DecisionRoomEmailDraft } from "./DecisionRoomEmailDraft";
+import { DecisionRoomDialogue } from "./DecisionRoomDialogue";
 
 interface PersonaMessage {
   role: "rep" | "seat";
@@ -46,6 +47,8 @@ interface Props {
   companyName: string | null;
   dealName: string | null;
   repName: string | null;
+  /** Full seat list so the drawer can offer cross-seat dialogue. */
+  allSeats: DecisionRoomSeat[];
 }
 
 function evidenceKindLabel(kind: string): string {
@@ -143,6 +146,7 @@ export function DecisionRoomSeatDrawer({
   companyName,
   dealName,
   repName,
+  allSeats,
 }: Props) {
   const [messages, setMessages] = useState<PersonaMessage[]>([]);
   const [question, setQuestion] = useState("");
@@ -328,6 +332,7 @@ export function DecisionRoomSeatDrawer({
                   archetype={seat.archetype}
                   companyName={companyName}
                   companyId={companyId}
+                  onSaved={() => onOpenChange(false)}
                 />
               </div>
             </section>
@@ -345,6 +350,22 @@ export function DecisionRoomSeatDrawer({
                 dealName={dealName}
                 companyName={companyName}
                 repName={repName}
+              />
+            </section>
+          ) : null}
+
+          {/* Cross-seat dialogue simulation */}
+          {allSeats.length > 1 ? (
+            <section>
+              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Room dynamics
+              </h3>
+              <DecisionRoomDialogue
+                seat={seat}
+                otherSeats={allSeats.filter((s) => s.id !== seat.id)}
+                dealId={dealId}
+                companyName={companyName}
+                dealName={dealName}
               />
             </section>
           ) : null}

@@ -21,6 +21,7 @@
  */
 import { createCallerClient, createAdminClient, resolveCallerContext } from "../_shared/dge-auth.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 
 const MODEL = "gpt-5.4-mini";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -368,6 +369,7 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     clearTimeout(overallTimeout);
+    captureEdgeException(err, { fn: "decision-room-try-move", req });
     console.error("[decision-room-try-move] unexpected error", err);
     return safeJsonError(err instanceof Error ? err.message : "try_move_failed", 500, origin);
   }

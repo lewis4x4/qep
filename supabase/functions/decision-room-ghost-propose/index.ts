@@ -15,6 +15,7 @@
  */
 import { createCallerClient, createAdminClient, resolveCallerContext } from "../_shared/dge-auth.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1_000;
@@ -298,6 +299,7 @@ Deno.serve(async (req) => {
       { onConflict: "workspace_id,query_hash" },
     );
   } catch (err) {
+    captureEdgeException(err, { fn: "decision-room-ghost-propose", req, extra: { stage: "cache_write" } });
     console.warn("[decision-room-ghost-propose] cache write failed", err);
   }
 

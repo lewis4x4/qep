@@ -22,6 +22,7 @@
  */
 import { createCallerClient, createAdminClient, resolveCallerContext } from "../_shared/dge-auth.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 
 const CHAT_MODEL = "gpt-5.4-mini";
 
@@ -272,6 +273,7 @@ Deno.serve(async (req) => {
       origin,
     );
   } catch (err) {
+    captureEdgeException(err, { fn: "decision-room-seat-chat", req });
     console.error("[decision-room-seat-chat] unexpected error", err);
     return safeJsonError(
       err instanceof Error ? err.message : "persona_failed",

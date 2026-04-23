@@ -14,6 +14,7 @@
  */
 import { createCallerClient, createAdminClient, resolveCallerContext } from "../_shared/dge-auth.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 
 const MODEL = "gpt-5.4-mini";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -257,6 +258,7 @@ Deno.serve(async (req) => {
       origin,
     );
   } catch (err) {
+    captureEdgeException(err, { fn: "decision-room-draft-email", req });
     console.error("[decision-room-draft-email] unexpected error", err);
     return safeJsonError(err instanceof Error ? err.message : "draft_failed", 500, origin);
   }
