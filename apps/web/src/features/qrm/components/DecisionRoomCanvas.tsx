@@ -14,6 +14,7 @@
  */
 import { useMemo, useRef } from "react";
 import type { DecisionRoomSeat } from "../lib/decision-room-simulator";
+import { ARCHETYPE_AVATAR } from "../lib/decision-room-avatar";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -198,8 +199,7 @@ export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, compan
             highest-power decider they plausibly influence. */}
         {edges.length > 0 ? (
           <svg
-            aria-hidden
-            className="pointer-events-none absolute inset-0 h-full w-full"
+            className="absolute inset-0 h-full w-full"
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
           >
@@ -220,6 +220,8 @@ export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, compan
               const from = positioned[fromIdx];
               const to = positioned[toIdx];
               if (!from || !to) return null;
+              const fromLabel = from.seat.name ?? from.seat.archetypeLabel;
+              const toLabel = to.seat.name ?? to.seat.archetypeLabel;
               return (
                 <line
                   key={`${fromIdx}-${toIdx}-${i}`}
@@ -232,7 +234,11 @@ export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, compan
                   strokeDasharray="0.7 0.6"
                   vectorEffect="non-scaling-stroke"
                   markerEnd="url(#decision-room-influence-arrow)"
-                />
+                  className="pointer-events-auto cursor-help transition-[stroke-width,stroke] hover:stroke-[0.5] hover:stroke-qep-orange"
+                  role="presentation"
+                >
+                  <title>{`${fromLabel} champions ${toLabel}`}</title>
+                </line>
               );
             })}
           </svg>
@@ -292,7 +298,7 @@ export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, compan
               <div className="relative">
                 <div
                   className={cn(
-                    "flex items-center justify-center rounded-full border-2 ring-2 ring-offset-0",
+                    "relative flex items-center justify-center overflow-hidden rounded-full border-2 ring-2 ring-offset-0",
                     tone.ring,
                     tone.bg,
                     tone.glow,
@@ -301,7 +307,23 @@ export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, compan
                   )}
                   style={{ width: size, height: size }}
                 >
-                  <span className="text-sm font-semibold sm:text-base">{initials(seat)}</span>
+                  {seat.status === "ghost" && ARCHETYPE_AVATAR[seat.archetype] ? (
+                    <>
+                      <img
+                        src={ARCHETYPE_AVATAR[seat.archetype]}
+                        alt=""
+                        aria-hidden
+                        className="absolute inset-0 h-full w-full object-cover opacity-80 saturate-[0.55] transition-[filter,opacity] duration-200 group-hover:opacity-100 group-hover:saturate-100 group-focus-visible:opacity-100 group-focus-visible:saturate-100"
+                        draggable={false}
+                      />
+                      <div
+                        aria-hidden
+                        className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/50"
+                      />
+                    </>
+                  ) : (
+                    <span className="text-sm font-semibold sm:text-base">{initials(seat)}</span>
+                  )}
                 </div>
                 {/* Ghost / blocker badge — blocker wins if both apply */}
                 {seat.stance === "blocker" ? (
