@@ -135,6 +135,16 @@ export function useAuth(): AuthState {
       return true;
     }
 
+    function applyFallbackProfileIfAvailable(session: Session): boolean {
+      const fallbackProfile = buildFallbackProfileFromSession(session);
+      if (!fallbackProfile) {
+        return false;
+      }
+      writeCachedProfile(fallbackProfile);
+      setState({ user: session.user, session, profile: fallbackProfile, loading: false, error: null });
+      return true;
+    }
+
     // Get initial session
     withTimeoutRetries(
       () => supabase.auth.getSession(),
@@ -179,6 +189,9 @@ export function useAuth(): AuthState {
 
           return fetchProfile(session.user.id)
             .then(({ profile, error }) => {
+              if (!profile && error && applyFallbackProfileIfAvailable(session)) {
+                return;
+              }
               if (!profile && error && applyCachedProfileIfAvailable(session)) {
                 return;
               }
@@ -186,6 +199,9 @@ export function useAuth(): AuthState {
             })
             .catch((err: unknown) => {
               const message = err instanceof Error ? err.message : "Failed to load your profile.";
+              if (applyFallbackProfileIfAvailable(session)) {
+                return;
+              }
               if (applyCachedProfileIfAvailable(session)) {
                 return;
               }
@@ -278,6 +294,9 @@ export function useAuth(): AuthState {
                 }
               }
               const { profile, error } = await fetchProfile(session.user.id);
+              if (!profile && error && applyFallbackProfileIfAvailable(session)) {
+                return;
+              }
               if (!profile && error && applyCachedProfileIfAvailable(session)) {
                 return;
               }
@@ -343,6 +362,50 @@ export function useAuth(): AuthState {
   }, []);
 
   return state;
+}
+
+function buildFallbackProfileFromSession(session: Session): Profile | null {
+  const user = session.user;
+  if (!user?.id) return null;
+
+  const appMeta = (user.app_metadata ?? {}) as Record<string, unknown>;
+  const userMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
+  const role = appMeta.role === "rep" || appMeta.role === "admin" || appMeta.role === "manager" || appMeta.role === "owner"
+    ? appMeta.role
+    : "rep";
+  const activeWorkspaceId =
+    typeof appMeta.workspace_id === "string" && appMeta.workspace_id.trim().length > 0
+      ? appMeta.workspace_id
+      : typeof userMeta.workspace_id === "string" && userMeta.workspace_id.trim().length > 0
+        ? userMeta.workspace_id
+        : "default";
+  const audience =
+    userMeta.audience === "internal" || userMeta.audience === "stakeholder"
+      ? userMeta.audience
+      : null;
+  const stakeholderSubrole =
+    userMeta.stakeholder_subrole === "owner" ||
+    userMeta.stakeholder_subrole === "primary_contact" ||
+    userMeta.stakeholder_subrole === "technical" ||
+    userMeta.stakeholder_subrole === "admin"
+      ? userMeta.stakeholder_subrole
+      : null;
+
+  return {
+    id: user.id,
+    full_name:
+      typeof userMeta.full_name === "string" && userMeta.full_name.trim().length > 0
+        ? userMeta.full_name
+        : user.email ?? null,
+    email: user.email ?? null,
+    role,
+    iron_role: typeof appMeta.iron_role === "string" ? appMeta.iron_role : null,
+    iron_role_display: typeof appMeta.iron_role_display === "string" ? appMeta.iron_role_display : null,
+    is_support: Boolean(appMeta.is_support),
+    active_workspace_id: activeWorkspaceId,
+    audience,
+    stakeholder_subrole: stakeholderSubrole,
+  };
 }
 
 async function fetchProfile(userId: string): Promise<{ profile: Profile | null; error: string | null }> {

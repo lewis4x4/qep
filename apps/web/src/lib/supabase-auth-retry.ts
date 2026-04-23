@@ -92,6 +92,15 @@ export async function signInWithPasswordWithRetry(params: {
       // Either our own timeout or a thrown network error. Treat both as
       // retryable until we've exhausted attempts, then surface a clear
       // "couldn't reach auth" error rather than leaving the UI hanging.
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          return { error: null };
+        }
+      } catch {
+        // Ignore follow-up session probe failures; the retry path below
+        // will surface the original timeout state.
+      }
       lastError = buildTimeoutAuthError();
       if (attempt === MAX_ATTEMPTS - 1) {
         return { error: lastError };
@@ -123,6 +132,15 @@ export async function signInWithOtpWithRetry(params: {
         return { error };
       }
     } catch (thrown) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          return { error: null };
+        }
+      } catch {
+        // Ignore follow-up session probe failures; the retry path below
+        // will surface the original timeout state.
+      }
       lastError = buildTimeoutAuthError();
       if (attempt === MAX_ATTEMPTS - 1) {
         return { error: lastError };
