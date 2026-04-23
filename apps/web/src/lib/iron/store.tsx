@@ -471,3 +471,8 @@ export function useStableCallback<T extends (...args: never[]) => unknown>(fn: T
   ref.current = fn;
   return useCallback(((...args: Parameters<T>) => ref.current(...args)) as T, []);
 }
+
+// Default-export alias for lazy() — Safari production resolver crashes
+// on `.then((m) => ({ default: m.IronStoreProvider }))` when the named
+// export hasn't propagated. See commit f0ab92b + 5bc1c56 for context.
+export default IronStoreProvider;

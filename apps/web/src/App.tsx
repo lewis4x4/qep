@@ -37,9 +37,7 @@ const NotFoundPage = lazy(() => import("./components/NotFoundPage"));
 const NoProfileShell = lazy(() => import("./components/NoProfileShell"));
 const FlareProvider = lazy(() => import("@/lib/flare/FlareProvider"));
 const IronShell = lazy(() => import("@/lib/iron/IronShell"));
-const IronStoreProvider = lazy(() =>
-  import("@/lib/iron/store").then((m) => ({ default: m.IronStoreProvider }))
-);
+const IronStoreProvider = lazy(() => import("@/lib/iron/store"));
 
 const ChatPage = lazy(() => import("./components/ChatPage"));
 const AdminPage = lazy(() =>
