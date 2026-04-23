@@ -1,0 +1,43 @@
+# Verify every migration file in supabase/migrations/ is applied to the
+# linked Supabase project. Fails the PR if drift exists so un-applied
+# migrations stop silently piling up on main.
+#
+# Skips cleanly when SUPABASE_ACCESS_TOKEN or SUPABASE_PROJECT_REF aren't
+# set, so adding this workflow doesn't retroactively break PRs.
+name: Check Supabase migrations
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # Only re-run on migration-relevant changes to keep PR noise low.
+    paths:
+      - "supabase/migrations/**"
+      - "scripts/check-migrations-applied.mjs"
+      - ".github/workflows/check-migrations.yml"
+
+concurrency:
+  group: check-migrations-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Detect unapplied migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: node scripts/check-migrations-applied.mjs

@@ -1,0 +1,68 @@
+# Manually-triggered workflow to apply pending migrations to the linked
+# Supabase project. Paired with check-migrations.yml: the check surfaces
+# drift at PR time, this workflow is how an operator closes it.
+#
+# NOT triggered on push — migrations are destructive by nature, so a
+# human always approves via the "Run workflow" button in GitHub Actions.
+#
+# Uses the Supabase Management API directly (not the CLI) because this
+# repo uses 3-digit-prefix migration filenames, which the CLI's
+# `supabase db push` silently ignores.
+name: Apply Supabase migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type APPLY to confirm. This runs every pending migration against prod.'
+        required: true
+        default: ""
+      dry_run:
+        description: 'Dry run (print pending without applying)'
+        type: boolean
+        required: false
+        default: true
+
+concurrency:
+  # Serialize to prevent two concurrent pushes interleaving migrations.
+  group: apply-migrations-prod
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Note: to add a second approval layer, create a `production` GitHub
+    # Environment in repo settings and uncomment `environment: production`.
+    # For now the gating is workflow_dispatch + confirm=APPLY + dry_run
+    # default true, which is enough for a one-operator release process.
+    steps:
+      - name: Guard — require explicit confirmation
+        if: ${{ inputs.confirm != 'APPLY' }}
+        run: |
+          echo "Aborting — the 'confirm' input must be exactly 'APPLY'. Got: '${{ inputs.confirm }}'."
+          echo "No migrations were applied."
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - name: Dry run — preview pending migrations
+        if: ${{ inputs.dry_run == true }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: node scripts/apply-pending-migrations.mjs
+
+      - name: Apply pending migrations
+        if: ${{ inputs.dry_run == false }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: node scripts/apply-pending-migrations.mjs --apply
+
+      - name: Re-verify no drift after apply
+        if: ${{ inputs.dry_run == false }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: node scripts/check-migrations-applied.mjs
