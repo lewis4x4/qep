@@ -8,7 +8,7 @@ import { portalRouteElements } from "@/features/portal/PortalRoutes";
 import { supabase } from "@/lib/supabase";
 
 const VendorPricingPortalPage = lazy(() =>
-  import("@/features/service/pages/VendorPricingPortalPage").then((m) => ({ default: m.VendorPricingPortalPage })),
+  import("@/features/service/pages/VendorPricingPortalPage"),
 );
 
 function RouteFallback() {
