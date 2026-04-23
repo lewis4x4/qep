@@ -31,6 +31,15 @@ export interface DealRoomRecommendation {
   machine?: string | null;
   reasoning?: string | null;
   attachments?: string[] | null;
+  alternative?: {
+    machine?: string | null;
+    reasoning?: string | null;
+    attachments?: string[] | null;
+    whyNotChosen?: string | null;
+  } | null;
+  jobConsiderations?: string[] | null;
+  jobFacts?: Array<{ label: string; value: string }> | null;
+  transcriptHighlights?: Array<{ quote: string; supports: string }> | null;
 }
 
 export interface DealRoomQuote {

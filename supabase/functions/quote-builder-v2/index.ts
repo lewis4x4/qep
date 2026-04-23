@@ -140,8 +140,15 @@ interface AiRecommendationResult {
   machine: string;
   attachments: string[];
   reasoning: string;
-  alternative?: { machine: string; attachments: string[]; reasoning: string } | null;
+  alternative?: {
+    machine: string;
+    attachments: string[];
+    reasoning: string;
+    whyNotChosen?: string | null;
+  } | null;
   jobConsiderations?: string[] | null;
+  jobFacts?: Array<{ label: string; value: string }> | null;
+  transcriptHighlights?: Array<{ quote: string; supports: string }> | null;
 }
 
 function clampCurrency(value: unknown): number {
@@ -180,23 +187,42 @@ async function aiEquipmentRecommendation(
         response_format: { type: "json_object" },
         messages: [{
           role: "system",
-          content: `You are an equipment specialist for QEP, a heavy equipment dealership. Given a job description, recommend the optimal machine and attachments from the available inventory. Also provide an alternative recommendation and key job considerations.
+          content: `You are an equipment specialist for QEP, a heavy equipment dealership. You write the "why this machine" narrative on a customer-facing proposal. The customer has already spoken with their sales rep; the job description is a transcript of that conversation. Your job is to ground the recommendation in what they actually said, cite verbatim excerpts, and give an honest comparison to the alternative.
 
-Return JSON:
+Return JSON exactly matching this shape:
 {
   "machine": "Make Model",
   "attachments": ["Attachment 1", "Attachment 2"],
-  "reasoning": "2-3 sentence explanation of why this is the optimal choice",
-  "alternative": { "machine": "Make Model", "attachments": ["Attachment"], "reasoning": "Why this is a good alternative" },
-  "jobConsiderations": ["Key consideration 1", "Key consideration 2"]
+  "reasoning": "A concrete 2-4 sentence narrative addressed to the customer. Reference specific job details they mentioned (acreage, terrain, existing equipment, workloads, budget constraints). Explain WHY this model is the right fit for THEIR situation — not generic marketing.",
+  "alternative": {
+    "machine": "Make Model",
+    "attachments": ["Attachment"],
+    "reasoning": "1-2 sentences: what makes this a sensible second choice.",
+    "whyNotChosen": "1 honest sentence: what tradeoff makes the primary a better fit for this customer specifically."
+  },
+  "jobConsiderations": ["Practical note 1", "Practical note 2", "Practical note 3"],
+  "jobFacts": [
+    { "label": "Property size", "value": "5 acres" },
+    { "label": "Primary task", "value": "Mowing and light grading" },
+    { "label": "Budget", "value": "~$50,000" }
+  ],
+  "transcriptHighlights": [
+    { "quote": "five-acre property", "supports": "Size class selection" },
+    { "quote": "mowing attachment and sometimes grading", "supports": "Attachment mix" }
+  ]
 }
 
-If no good alternative exists, set alternative to null. Keep jobConsiderations to 2-3 practical notes about the job requirements.`,
+Rules:
+- reasoning: write to the customer (you / your), not about them. No marketing fluff.
+- alternative: set to null ONLY when the catalog truly has no close second.
+- jobConsiderations: 2-3 practical notes (permit, ground conditions, seasonality, operator training). Concrete, not vague.
+- jobFacts: 2-5 structured extractions from the transcript. Omit fields the customer didn't mention — don't invent.
+- transcriptHighlights: 2-4 short verbatim quotes (10-20 words each) from the job description. Each must appear in the input; do not paraphrase. Pair with the decision they justify.`,
         }, {
           role: "user",
-          content: `Job description: ${jobDescription}\n\nAvailable equipment:\n${catalogSummary || "No catalog entries — provide general recommendation."}`,
+          content: `Job description (transcript):\n${jobDescription}\n\nAvailable equipment:\n${catalogSummary || "No catalog entries — provide general recommendation."}`,
         }],
-        max_tokens: 500,
+        max_tokens: 900,
         temperature: 0.3,
       }),
       signal: AbortSignal.timeout(15_000),
@@ -207,12 +233,50 @@ If no good alternative exists, set alternative to null. Keep jobConsiderations t
     const content = data.choices?.[0]?.message?.content;
     if (!content) return { machine: "", attachments: [], reasoning: "No recommendation generated." };
     const parsed = JSON.parse(content);
+    // Guard every new field so a model that skips one (or hallucinates a
+    // wrong shape) can't poison the saved quote blob. Each new field is
+    // optional at the contract level.
+    const altRaw = parsed.alternative;
+    const alternative = altRaw && typeof altRaw === "object"
+      ? {
+        machine: typeof altRaw.machine === "string" ? altRaw.machine : "",
+        attachments: Array.isArray(altRaw.attachments) ? altRaw.attachments.filter((a: unknown) => typeof a === "string") : [],
+        reasoning: typeof altRaw.reasoning === "string" ? altRaw.reasoning : "",
+        whyNotChosen: typeof altRaw.whyNotChosen === "string" ? altRaw.whyNotChosen : null,
+      }
+      : null;
+    const jobFacts = Array.isArray(parsed.jobFacts)
+      ? parsed.jobFacts.flatMap((row: unknown) => {
+        if (!row || typeof row !== "object") return [];
+        const label = (row as { label?: unknown }).label;
+        const value = (row as { value?: unknown }).value;
+        if (typeof label === "string" && typeof value === "string" && label.trim() && value.trim()) {
+          return [{ label: label.trim(), value: value.trim() }];
+        }
+        return [];
+      })
+      : null;
+    const transcriptHighlights = Array.isArray(parsed.transcriptHighlights)
+      ? parsed.transcriptHighlights.flatMap((row: unknown) => {
+        if (!row || typeof row !== "object") return [];
+        const quote = (row as { quote?: unknown }).quote;
+        const supports = (row as { supports?: unknown }).supports;
+        if (typeof quote === "string" && typeof supports === "string" && quote.trim() && supports.trim()) {
+          return [{ quote: quote.trim(), supports: supports.trim() }];
+        }
+        return [];
+      })
+      : null;
     return {
       machine: parsed.machine ?? "",
       attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
       reasoning: parsed.reasoning ?? "",
-      alternative: parsed.alternative ?? null,
-      jobConsiderations: Array.isArray(parsed.jobConsiderations) ? parsed.jobConsiderations : null,
+      alternative,
+      jobConsiderations: Array.isArray(parsed.jobConsiderations)
+        ? parsed.jobConsiderations.filter((c: unknown) => typeof c === "string")
+        : null,
+      jobFacts,
+      transcriptHighlights,
     };
   } catch {
     return { machine: "", attachments: [], reasoning: "AI recommendation error — select manually." };

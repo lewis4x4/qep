@@ -144,8 +144,11 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
         {hero && (
           <HeroMachine
             line={hero}
-            reasoning={quote.ai_recommendation?.reasoning ?? null}
+            recommendation={quote.ai_recommendation}
           />
+        )}
+        {quote.ai_recommendation && (
+          <WhyThisMachine recommendation={quote.ai_recommendation} />
         )}
         {rest.length + attachments.length > 0 && (
           <AdditionalItems equipment={rest} attachments={attachments} />
@@ -215,11 +218,12 @@ function Hero({ customer, preparedDate, refBadge }: {
   );
 }
 
-function HeroMachine({ line, reasoning }: {
+function HeroMachine({ line, recommendation }: {
   line: DealRoomQuote["equipment"][number];
-  reasoning: string | null;
+  recommendation: DealRoomQuote["ai_recommendation"];
 }) {
   const title = [line.make, line.model].filter(Boolean).join(" ") || line.title || "Equipment";
+  const reasoning = recommendation?.reasoning ?? null;
   return (
     <section className="mt-8 grid gap-7 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-7 text-slate-100 sm:grid-cols-[1.4fr_1fr]">
       <div>
@@ -239,9 +243,105 @@ function HeroMachine({ line, reasoning }: {
       {reasoning && (
         <div>
           <span className="inline-block text-[10px] font-bold uppercase tracking-[0.12em] text-[#E87722]">
-            Why this machine
+            Why this machine for you
           </span>
           <p className="mt-1.5 text-sm leading-relaxed text-slate-300">{reasoning}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function WhyThisMachine({
+  recommendation,
+}: {
+  recommendation: NonNullable<DealRoomQuote["ai_recommendation"]>;
+}) {
+  const facts = recommendation.jobFacts ?? [];
+  const highlights = recommendation.transcriptHighlights ?? [];
+  const considerations = recommendation.jobConsiderations ?? [];
+  const alt = recommendation.alternative ?? null;
+  const hasAnything = facts.length + highlights.length + considerations.length > 0 || alt;
+  if (!hasAnything) return null;
+
+  return (
+    <section className="mt-8 grid gap-6 rounded-2xl border border-slate-200 p-6 sm:grid-cols-2 sm:p-7">
+      {facts.length > 0 && (
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+            Your job, as we heard it
+          </div>
+          <dl className="mt-3 space-y-2.5">
+            {facts.map((fact, i) => (
+              <div key={i} className="flex justify-between gap-4 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
+                <dt className="text-[13px] text-slate-500">{fact.label}</dt>
+                <dd className="text-[13px] font-semibold text-slate-900 text-right">{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+
+      {highlights.length > 0 && (
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+            Grounded in your intake
+          </div>
+          <ul className="mt-3 space-y-3">
+            {highlights.map((h, i) => (
+              <li key={i} className="border-l-2 border-[#E87722] pl-3">
+                <blockquote className="text-[13px] italic leading-relaxed text-slate-900">
+                  “{h.quote}”
+                </blockquote>
+                <div className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-slate-500">
+                  {h.supports}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {considerations.length > 0 && (
+        <div className={facts.length + highlights.length === 0 ? "sm:col-span-2" : ""}>
+          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+            Worth knowing
+          </div>
+          <ul className="mt-3 space-y-2 text-[13px] text-slate-700">
+            {considerations.map((c, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="mt-1.5 h-1 w-1 rounded-full bg-[#E87722]" />
+                <span className="flex-1 leading-relaxed">{c}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {alt?.machine && (
+        <div className="sm:col-span-2 rounded-xl bg-slate-50 p-5">
+          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+            Also considered
+          </div>
+          <div className="mt-2 flex flex-wrap items-baseline gap-3">
+            <h3 className="text-lg font-bold text-slate-900">{alt.machine}</h3>
+            {alt.attachments && alt.attachments.length > 0 && (
+              <span className="text-[12px] text-slate-500">
+                {alt.attachments.filter((a): a is string => typeof a === "string").join(", ")}
+              </span>
+            )}
+          </div>
+          {alt.reasoning && (
+            <p className="mt-2 text-[13px] leading-relaxed text-slate-700">{alt.reasoning}</p>
+          )}
+          {alt.whyNotChosen && (
+            <div className="mt-3 border-t border-slate-200 pt-3">
+              <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                Why we led with the primary
+              </span>
+              <p className="mt-1 text-[13px] leading-relaxed text-slate-700">{alt.whyNotChosen}</p>
+            </div>
+          )}
         </div>
       )}
     </section>

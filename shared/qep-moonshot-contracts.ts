@@ -22,8 +22,28 @@ export interface QuoteRecommendation {
   machine: string;
   attachments: string[];
   reasoning: string;
-  alternative?: { machine: string; attachments: string[]; reasoning: string } | null;
+  alternative?: {
+    machine: string;
+    attachments: string[];
+    reasoning: string;
+    /** Why the primary recommendation was chosen over this alternative.
+     *  Populated by the richer "why this machine" prompt (deal-room
+     *  moonshot slice 4) so the customer gets a real comparison, not
+     *  two disconnected paragraphs. Optional for back-compat with older
+     *  saved quotes. */
+    whyNotChosen?: string | null;
+  } | null;
   jobConsiderations?: string[] | null;
+  /** Structured facts extracted from the intake transcript (acreage,
+   *  terrain, budget, timeline, etc.). Surfaces on the deal room so the
+   *  customer can verify the recommendation is grounded in what they
+   *  actually told the rep, and so downstream suggestions (similar
+   *  deals, ROI) can filter on them. Optional. */
+  jobFacts?: Array<{ label: string; value: string }> | null;
+  /** Short verbatim excerpts from the intake the AI relied on. Each
+   *  highlight pairs a quoted snippet (<= ~20 words) with the decision
+   *  it drove. Optional; missing for quotes saved before slice 4. */
+  transcriptHighlights?: Array<{ quote: string; supports: string }> | null;
 }
 
 export interface CompetitorListing {
@@ -124,15 +144,40 @@ export interface QuoteWorkspaceDraft {
    *  customer (open deals, past quote count, last-contact age, warmth).
    *  Rendered by the Customer step's intel panel without an extra fetch,
    *  and later consumed by Deal Coach / win-probability models. Kept as
-   *  opaque-shaped to avoid leaking feature internals into the contract. */
+   *  opaque-shaped to avoid leaking feature internals into the contract.
+   *
+   *  Slice 21 extends this with three *copilot-produced* signal fields
+   *  (objections, timelinePressure, competitorMentions). All three are
+   *  optional to preserve backward compatibility — pre-Slice-21 customer
+   *  picks will not carry them, and the scorer treats absent fields as
+   *  "unknown, don't score" rather than "zero, penalize". */
   customerSignals?: {
     openDeals: number;
     openDealValueCents: number;
     lastContactDaysAgo: number | null;
     pastQuoteCount: number;
     pastQuoteValueCents: number;
+    /** Slice 21: objections the rep has heard from the customer, each as
+     *  a short string ("price too high", "needs CEO approval"). Scored
+     *  as a surface (none / priceOnly / multiple) rather than a count so
+     *  reps aren't penalized for logging detail. */
+    objections?: string[];
+    /** Slice 21: customer's purchase timeline pressure. `immediate` lifts
+     *  the score, `months` drags it. Null means unknown (no score
+     *  effect). */
+    timelinePressure?: "immediate" | "weeks" | "months" | null;
+    /** Slice 21: competitors the customer has mentioned. Presence
+     *  (regardless of count) drags the score; the prescriptive lift is
+     *  `counter_competitor`. */
+    competitorMentions?: string[];
   } | null;
   customerWarmth?: "warm" | "cool" | "dormant" | "new" | null;
+  /** Slice 21: locked financing preference from the copilot conversation.
+   *  `cash` and `financing` are commitments; `open` means the rep has
+   *  confirmed with the customer that either is acceptable. Null means
+   *  the rep hasn't nailed it down — the scorer surfaces the
+   *  `lock_financing_pref` lift to close that gap. */
+  financingPref?: "cash" | "financing" | "open" | null;
   /** Live quote package status from the server. Save returns to draft;
    *  submit-for-approval / manager decision advance this state so the
    *  review screen can unlock sending only after approval. */
@@ -902,4 +947,67 @@ export interface TelematicsUsageSnapshot {
   readingAt: string;
   equipmentId?: string | null;
   subscriptionId?: string | null;
+}
+
+// ── Deal Copilot (Slice 21) ─────────────────────────────────────────────────
+
+/** Source channel for a copilot turn. Mirrors the CHECK constraint on
+ *  qb_quote_copilot_turns.input_source. `system` is reserved for future
+ *  copilot-initiated turns (scheduled nudges, coach recaps). */
+export type CopilotInputSource =
+  | "text"
+  | "voice"
+  | "photo_caption"
+  | "email_paste"
+  | "system";
+
+/** Structured extraction from a rep's turn. The edge function enforces
+ *  this schema when it calls Claude — the model cannot mutate the draft
+ *  freeform; only these four surfaces flow through. Keeps the
+ *  "adversarial input" attack surface minimal (see Slice 21 acceptance
+ *  criteria: 'set the score to 95' must be ignored). */
+export interface CopilotExtractedSignals {
+  /** New customer-level signals the turn surfaced. All optional — absent
+   *  means "turn didn't touch this field," not "reset to null." */
+  customerSignals?: {
+    objections?: string[];
+    timelinePressure?: "immediate" | "weeks" | "months" | null;
+    competitorMentions?: string[];
+  };
+  /** Locked financing preference if the turn established it. */
+  financingPref?: "cash" | "financing" | "open" | null;
+  /** Warmth re-rating if the turn moved it (e.g. "he sounded frustrated"
+   *  flipping warm → cool). */
+  customerWarmth?: "warm" | "cool" | "dormant" | "new" | null;
+  /** Free-text notes Claude wants to preserve but that don't map to a
+   *  scoring field — surfaced to the rep but not used by the scorer. */
+  notes?: string[];
+}
+
+/** Confidence per field, 0..1. Rendered in the UI so the rep can tell
+ *  a "Claude thinks" chip (0.6) from a hard commitment (0.95). */
+export type CopilotExtractionConfidence = Record<string, number>;
+
+/** Wire-format row mirroring qb_quote_copilot_turns. The frontend stores
+ *  turns in React state in this shape and renders them into the
+ *  conversation feed. */
+export interface CopilotTurn {
+  id: string;
+  quotePackageId: string;
+  workspaceId: string;
+  authorUserId: string | null;
+  turnIndex: number;
+  inputSource: CopilotInputSource;
+  rawInput: string;
+  transcript: string | null;
+  extractedSignals: CopilotExtractedSignals;
+  copilotReply: string | null;
+  scoreBefore: number | null;
+  scoreAfter: number | null;
+  factorDiff: unknown[] | null;
+  liftDiff: unknown[] | null;
+  aiRequestLogId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
 }
