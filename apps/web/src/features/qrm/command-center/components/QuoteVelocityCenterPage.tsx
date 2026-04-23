@@ -180,14 +180,26 @@ function QuoteTableRow({ row }: { row: QuoteVelocityRow }) {
         )}
       </td>
       <td className="py-3 pl-2 pr-3">
-        {row.dealId && (
+        <div className="flex items-center justify-end gap-1">
           <Link
-            to={`/qrm/deals/${row.dealId}`}
+            to={`/quote-v2?package_id=${encodeURIComponent(row.id)}${row.dealId ? `&crm_deal_id=${encodeURIComponent(row.dealId)}` : ""}`}
             className="inline-flex items-center gap-1 text-[11px] font-medium text-qep-orange hover:text-qep-orange/80 min-h-[44px] min-w-[44px] justify-center"
+            aria-label={`Resume quote for ${row.dealName}`}
+            title="Resume quote"
           >
-            <ArrowRight className="h-3 w-3" />
+            <FileText className="h-3 w-3" />
           </Link>
-        )}
+          {row.dealId && (
+            <Link
+              to={`/qrm/deals/${row.dealId}`}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-qep-orange hover:text-qep-orange/80 min-h-[44px] min-w-[44px] justify-center"
+              aria-label={`Open deal for ${row.dealName}`}
+              title="Open deal"
+            >
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          )}
+        </div>
       </td>
     </motion.tr>
   );

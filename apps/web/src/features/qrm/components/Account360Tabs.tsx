@@ -214,18 +214,30 @@ export function AccountQuotesTab({ quotes }: { quotes: Account360OpenQuote[] }) 
                 </p>
                 <p className="mt-0.5 text-[10px] text-muted-foreground capitalize">{q.status}</p>
               </Link>
-              <div className="text-right">
-                <p className="text-sm font-bold text-foreground tabular-nums">
-                  ${(q.net_total ?? 0).toLocaleString()}
-                </p>
-                {expiresInDays != null && (
-                  <p className={`text-[10px] tabular-nums ${
-                    expiresInDays < 0 ? "text-red-400" :
-                    expiresInDays <= 7 ? "text-amber-400" : "text-muted-foreground"
-                  }`}>
-                    {expiresInDays < 0 ? `Expired ${-expiresInDays}d ago` : `${expiresInDays}d to expire`}
+              <div className="flex items-start gap-2">
+                <div className="text-right">
+                  <p className="text-sm font-bold text-foreground tabular-nums">
+                    ${(q.net_total ?? 0).toLocaleString()}
                   </p>
-                )}
+                  {expiresInDays != null && (
+                    <p className={`text-[10px] tabular-nums ${
+                      expiresInDays < 0 ? "text-red-400" :
+                      expiresInDays <= 7 ? "text-amber-400" : "text-muted-foreground"
+                    }`}>
+                      {expiresInDays < 0 ? `Expired ${-expiresInDays}d ago` : `${expiresInDays}d to expire`}
+                    </p>
+                  )}
+                </div>
+                <div className="flex shrink-0 flex-col gap-2">
+                  <Button asChild size="sm" variant="outline" className="h-8 px-2 text-xs">
+                    <Link to={`/quote-v2?package_id=${encodeURIComponent(q.id)}&crm_deal_id=${encodeURIComponent(q.deal_id)}`}>
+                      Resume
+                    </Link>
+                  </Button>
+                  <Button asChild size="sm" variant="ghost" className="h-8 px-2 text-xs">
+                    <Link to="/quote">All Quotes</Link>
+                  </Button>
+                </div>
               </div>
             </div>
           </Card>

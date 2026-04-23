@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -86,6 +86,16 @@ import type {
 // selection entirely. Splitting the step makes "who is this quote for?"
 // explicit and is the anchor for the Customer Digital Twin intel panel.
 type Step = "entry" | "customer" | "equipment" | "tradeIn" | "financing" | "review";
+
+const STEP_STORAGE_PREFIX = "qep.quote-builder.last-step.";
+const STEP_LABELS: Record<Step, string> = {
+  entry: "Entry",
+  customer: "Customer",
+  equipment: "Equipment",
+  tradeIn: "Trade-In",
+  financing: "Financing",
+  review: "Review",
+};
 
 interface CatalogEntryMatch {
   id?: string;
@@ -180,6 +190,20 @@ function equipmentKeyForLine(item: Pick<QuoteLineItemDraft, "id" | "title" | "ma
     item.model ?? "",
     item.year ?? "",
   ].join("|");
+}
+
+function readPersistedStep(quotePackageId: string | null): Step | null {
+  if (!quotePackageId || typeof window === "undefined") return null;
+  const raw = window.sessionStorage.getItem(`${STEP_STORAGE_PREFIX}${quotePackageId}`);
+  if (raw === "entry" || raw === "customer" || raw === "equipment" || raw === "tradeIn" || raw === "financing" || raw === "review") {
+    return raw;
+  }
+  return null;
+}
+
+function persistStep(quotePackageId: string | null, step: Step): void {
+  if (!quotePackageId || typeof window === "undefined") return;
+  window.sessionStorage.setItem(`${STEP_STORAGE_PREFIX}${quotePackageId}`, step);
 }
 
 const QuoteReviewWorkflowPanels = lazy(() =>
@@ -386,7 +410,7 @@ export function QuoteBuilderV2Page() {
     if (existingQuoteHydrationKeyRef.current === nextKey) return;
     existingQuoteHydrationKeyRef.current = nextKey;
     setDraft((current) => ({ ...current, ...hydrateDraftFromSavedQuote(existingQuote) }));
-    setStep("review");
+    setStep(readPersistedStep(nextKey) ?? "review");
   }, [dealId, existingQuote, packageId]);
 
   const financingInput = useMemo<QuoteFinancingRequest>(() => ({
@@ -661,6 +685,24 @@ export function QuoteBuilderV2Page() {
     saveMutation.data?.quote?.id
     ?? saveMutation.data?.id
     ?? (typeof existingQuote?.id === "string" ? existingQuote.id : null);
+  const activeQuoteRecord = useMemo(() => {
+    const saved = saveMutation.data?.quote;
+    return saved && typeof saved === "object" && !Array.isArray(saved)
+      ? (saved as Record<string, unknown>)
+      : existingQuote;
+  }, [existingQuote, saveMutation.data?.quote]);
+  const activeQuoteNumber = typeof activeQuoteRecord?.quote_number === "string" && activeQuoteRecord.quote_number.length > 0
+    ? activeQuoteRecord.quote_number
+    : null;
+  const activeQuoteUpdatedAt = typeof activeQuoteRecord?.updated_at === "string"
+    ? activeQuoteRecord.updated_at
+    : typeof activeQuoteRecord?.created_at === "string"
+      ? activeQuoteRecord.created_at
+      : null;
+
+  useEffect(() => {
+    persistStep(activeQuotePackageId, step);
+  }, [activeQuotePackageId, step]);
 
   const quoteStatus = draft.quoteStatus ?? "draft";
   const approvalPending = quoteStatus === "pending_approval";
@@ -847,6 +889,45 @@ export function QuoteBuilderV2Page() {
           <AskIronAdvisorButton contextType="quote" contextId={draft.dealId || undefined} variant="inline" />
         </div>
         </div>
+
+        {activeQuotePackageId && (
+          <Card className="border-qep-orange/20 bg-qep-orange/5 p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Current quote workspace</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <p className="text-base font-semibold text-foreground">
+                    {activeQuoteNumber ?? `Quote ${activeQuotePackageId.slice(0, 8)}`}
+                  </p>
+                  <span className="rounded-full border border-qep-orange/20 bg-background/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange">
+                    {quoteStatus.replace(/_/g, " ")}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Current step: {STEP_LABELS[step]}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Reopen this quote at any stage, jump anywhere with the step rail, and keep editing the same package.
+                </p>
+                {activeQuoteUpdatedAt && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Last updated {new Date(activeQuoteUpdatedAt).toLocaleString()}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild size="sm" variant="outline">
+                  <Link to="/quote">Open Quotes</Link>
+                </Button>
+                {draft.dealId && (
+                  <Button asChild size="sm" variant="outline">
+                    <Link to={`/qrm/deals/${draft.dealId}`}>Back to Deal</Link>
+                  </Button>
+                )}
+              </div>
+            </div>
+          </Card>
+        )}
 
         <Card className="border-qep-orange/20 bg-qep-orange/5 p-4">
           <div className="grid gap-3 md:grid-cols-3">

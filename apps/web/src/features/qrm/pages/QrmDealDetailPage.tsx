@@ -64,6 +64,17 @@ interface QrmDealDetailPageProps {
   mode?: "detail" | "room" | "autopsy";
 }
 
+interface DealQuoteSummary {
+  id: string;
+  status: string | null;
+  quote_number: string | null;
+  created_at: string;
+  updated_at: string;
+  sent_at: string | null;
+  expires_at: string | null;
+  net_total: number | null;
+}
+
 const OPEN_QUOTE_STATUSES = [
   "draft",
   "pending_approval",
@@ -127,33 +138,18 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
     staleTime: 30_000,
   });
 
-  const activeQuoteQuery = useQuery({
-    queryKey: ["crm", "deal", dealId, "active-quote-package"],
+  const dealQuotesQuery = useQuery({
+    queryKey: ["crm", "deal", dealId, "quote-packages"],
     enabled: Boolean(dealId),
-    queryFn: async (): Promise<{ id: string } | null> => {
-      const selectClause = "id, status, created_at";
-      const openRes = await supabase
+    queryFn: async (): Promise<DealQuoteSummary[]> => {
+      const { data, error } = await supabase
         .from("quote_packages")
-        .select(selectClause)
-        .eq("deal_id", dealId)
-        .in("status", [...OPEN_QUOTE_STATUSES])
-        .order("created_at", { ascending: false })
-        .limit(1);
-      if (openRes.error) throw openRes.error;
-      const openRow = openRes.data?.[0];
-      if (openRow?.id) {
-        return { id: String(openRow.id) };
-      }
-
-      const latestRes = await supabase
-        .from("quote_packages")
-        .select(selectClause)
+        .select("id, status, quote_number, created_at, updated_at, sent_at, expires_at, net_total")
         .eq("deal_id", dealId)
         .order("created_at", { ascending: false })
-        .limit(1);
-      if (latestRes.error) throw latestRes.error;
-      const latestRow = latestRes.data?.[0];
-      return latestRow?.id ? { id: String(latestRow.id) } : null;
+        .limit(10);
+      if (error) throw error;
+      return (data ?? []) as DealQuoteSummary[];
     },
     staleTime: 30_000,
   });
@@ -326,10 +322,37 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
         activities: activitiesData,
       })
     : null;
+  const activeQuote = useMemo(() => {
+    const quotes = dealQuotesQuery.data ?? [];
+    return quotes.find((quote) => OPEN_QUOTE_STATUSES.includes((quote.status ?? "draft") as (typeof OPEN_QUOTE_STATUSES)[number]))
+      ?? quotes[0]
+      ?? null;
+  }, [dealQuotesQuery.data]);
+  const quoteStatusMeta = (status: string | null) => {
+    switch (status) {
+      case "pending_approval":
+        return { label: "Pending approval", tone: "text-amber-300 bg-amber-500/10" };
+      case "approved":
+        return { label: "Approved", tone: "text-emerald-400 bg-emerald-500/10" };
+      case "approved_with_conditions":
+        return { label: "Approved w/ conditions", tone: "text-blue-300 bg-blue-500/10" };
+      case "changes_requested":
+        return { label: "Changes requested", tone: "text-rose-300 bg-rose-500/10" };
+      case "sent":
+        return { label: "Sent", tone: "text-qep-orange bg-qep-orange/10" };
+      case "accepted":
+        return { label: "Accepted", tone: "text-emerald-400 bg-emerald-500/10" };
+      case "rejected":
+        return { label: "Rejected", tone: "text-rose-300 bg-rose-500/10" };
+      case "draft":
+      default:
+        return { label: "Draft", tone: "text-muted-foreground bg-muted/20" };
+    }
+  };
   const quoteHref = (() => {
     const params = new URLSearchParams();
-    if (activeQuoteQuery.data?.id) {
-      params.set("package_id", activeQuoteQuery.data.id);
+    if (activeQuote?.id) {
+      params.set("package_id", activeQuote.id);
     }
     params.set("crm_deal_id", dealId);
     if (dealQueryData?.primaryContactId) {
@@ -427,6 +450,87 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
             />
             <AskIronAdvisorButton contextType="deal" contextId={dealId} variant="inline" />
           </div>
+
+          {mode === "detail" && (
+            <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-4 sm:p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    Quote Workspace
+                  </p>
+                  <p className="mt-1 text-sm text-foreground">
+                    {activeQuote
+                      ? "Resume the current quote directly from this deal and jump back into any quote stage."
+                      : "No saved quote is attached to this deal yet. Start one from here and it will stay linked."}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild size="sm">
+                    <Link to={quoteHref}>
+                      <FileText className="mr-2 h-4 w-4" />
+                      {activeQuote ? "Resume Quote" : "Start Quote"}
+                    </Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link to="/quote">Open Quote List</Link>
+                  </Button>
+                </div>
+              </div>
+
+              {dealQuotesQuery.isLoading ? (
+                <div className="mt-4 grid gap-2">
+                  <div className="h-16 animate-pulse rounded-md border border-border/60 bg-background/40" />
+                  <div className="h-16 animate-pulse rounded-md border border-border/60 bg-background/40" />
+                </div>
+              ) : (dealQuotesQuery.data?.length ?? 0) > 0 ? (
+                <div className="mt-4 grid gap-2">
+                  {(dealQuotesQuery.data ?? []).map((quote) => {
+                    const status = quoteStatusMeta(quote.status);
+                    const rowHref = (() => {
+                      const params = new URLSearchParams({ package_id: quote.id, crm_deal_id: dealId });
+                      if (dealQueryData.primaryContactId) {
+                        params.set("crm_contact_id", dealQueryData.primaryContactId);
+                      }
+                      return `/quote-v2?${params.toString()}`;
+                    })();
+                    return (
+                      <div key={quote.id} className="flex flex-col gap-3 rounded-md border border-border/60 bg-background/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold text-foreground">
+                              {quote.quote_number || `Quote ${quote.id.slice(0, 8)}`}
+                            </p>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${status.tone}`}>
+                              {status.label}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                            <span>Updated {new Date(quote.updated_at || quote.created_at).toLocaleString()}</span>
+                            {typeof quote.net_total === "number" ? (
+                              <span>${quote.net_total.toLocaleString()}</span>
+                            ) : null}
+                            {quote.sent_at ? <span>Sent {new Date(quote.sent_at).toLocaleDateString()}</span> : null}
+                            {quote.expires_at ? <span>Expires {new Date(quote.expires_at).toLocaleDateString()}</span> : null}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button asChild size="sm" variant={activeQuote?.id === quote.id ? "default" : "outline"}>
+                            <Link to={rowHref}>
+                              {activeQuote?.id === quote.id ? "Resume current" : "Open quote"}
+                            </Link>
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="mt-4 rounded-md border border-dashed border-border/60 bg-background/30 px-4 py-3 text-sm text-muted-foreground">
+                  No quote packages are linked to this deal yet.
+                </div>
+              )}
+            </DeckSurface>
+          )}
 
           {mode === "room" && (
             <>
