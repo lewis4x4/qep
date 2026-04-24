@@ -33,8 +33,10 @@ async function verifyNetlify(head) {
   const deploys = token
     ? await listNetlifyDeploysWithToken(token)
     : await listNetlifyDeploysWithCli();
-  const mainDeploys = deploys?.filter((deploy) => deploy.context === "production" && deploy.branch === "main")
-    ?? deploys?.filter((deploy) => deploy.branch === "main")
+  const deploysWithCommits = deploys?.filter((deploy) => deploy.commit_ref)
+    ?? [];
+  const mainDeploys = deploysWithCommits.filter((deploy) => deploy.context === "production" && deploy.branch === "main")
+    ?? deploysWithCommits.filter((deploy) => deploy.branch === "main")
     ?? deploys
     ?? [];
   const latest = mainDeploys[0];
