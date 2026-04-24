@@ -14,14 +14,11 @@ import { FloorJumpMenu } from "./FloorJumpMenu";
 export interface FloorTopBarProps {
   userDisplayName: string;
   roleDisplayName: string;
-  /** Admin-only — shows the "Compose" link into the composer. */
-  isAdmin: boolean;
 }
 
 export function FloorTopBar({
   userDisplayName,
   roleDisplayName,
-  isAdmin,
 }: FloorTopBarProps) {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -43,20 +40,12 @@ export function FloorTopBar({
         </span>
       </Link>
 
-      {/* Right — jump menu + user identity + admin link + sign-out */}
+      {/* Right — jump menu + user identity + sign-out */}
       <div className="flex items-center gap-3">
         {/* Jump-to dropdown — minimal escape to the 5 operator domains */}
         <div className="hidden sm:block">
           <FloorJumpMenu />
         </div>
-        {isAdmin && (
-          <Link
-            to="/floor/compose"
-            className="hidden rounded-md border border-[hsl(var(--qep-deck-rule))] px-2.5 py-1.5 font-kpi text-[10px] font-extrabold uppercase tracking-[0.14em] text-[hsl(var(--qep-gray))] transition-colors hover:border-[hsl(var(--qep-orange))] hover:text-[hsl(var(--qep-orange))] sm:inline-flex"
-          >
-            Compose
-          </Link>
-        )}
         <div className="hidden flex-col items-end leading-tight sm:flex">
           <span className="truncate text-sm font-semibold text-foreground" title={userDisplayName}>
             {userDisplayName}

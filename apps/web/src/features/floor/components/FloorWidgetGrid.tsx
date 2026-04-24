@@ -7,21 +7,18 @@
  * widgets span one.
  *
  * Empty-state: if the layout has zero widgets, renders a tasteful
- * empty-state that tells admins how to compose one (and says nothing to
- * non-admins beyond "your Floor is empty").
+ * empty-state that tells the user this role has no active Floor widgets.
  */
-import { Link } from "react-router-dom";
 import { Cog } from "lucide-react";
 import { resolveFloorWidget } from "../lib/floor-widget-registry";
 import type { FloorWidgetWithAttention } from "../lib/attention";
 
 export interface FloorWidgetGridProps {
   widgets: FloorWidgetWithAttention[];
-  isAdmin: boolean;
   isLoading?: boolean;
 }
 
-export function FloorWidgetGrid({ widgets, isAdmin, isLoading = false }: FloorWidgetGridProps) {
+export function FloorWidgetGrid({ widgets, isLoading = false }: FloorWidgetGridProps) {
   const resolved = widgets
     .map((w) => ({ ...w, descriptor: resolveFloorWidget(w.id) }))
     .filter((w): w is FloorWidgetWithAttention & { descriptor: NonNullable<ReturnType<typeof resolveFloorWidget>> } => !!w.descriptor);
@@ -31,7 +28,7 @@ export function FloorWidgetGrid({ widgets, isAdmin, isLoading = false }: FloorWi
   }
 
   if (resolved.length === 0) {
-    return <FloorEmptyState isAdmin={isAdmin} />;
+    return <FloorEmptyState />;
   }
 
   return (
@@ -113,7 +110,7 @@ function FloorLoadingGrid() {
  * Replaces the generic sparkle with a branded SVG gear wheel. Same
  * mark used in the top bar + Back-to-Floor chip for visual coherence.
  */
-function FloorEmptyState({ isAdmin }: { isAdmin: boolean }) {
+function FloorEmptyState() {
   return (
     <div className="flex flex-1 items-center justify-center px-6 py-16">
       <div className="max-w-md text-center">
@@ -130,26 +127,9 @@ function FloorEmptyState({ isAdmin }: { isAdmin: boolean }) {
         <p className="font-display text-3xl tracking-[0.06em] text-foreground">
           THE FLOOR IS EMPTY
         </p>
-        {isAdmin ? (
-          <>
-            <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-              No widgets on this role's Floor yet. Open the composer to
-              arrange the tools this role needs — six max, so pick the
-              ones that matter.
-            </p>
-            <Link
-              to="/floor/compose"
-              className="mt-5 inline-flex items-center gap-1.5 rounded-md border border-[hsl(var(--qep-orange))] bg-[hsl(var(--qep-orange))]/10 px-5 py-2.5 font-kpi text-xs font-extrabold uppercase tracking-[0.14em] text-[hsl(var(--qep-orange))] transition-all hover:bg-[hsl(var(--qep-orange))]/20 hover:shadow-[0_0_24px_-8px_hsl(var(--qep-orange))]"
-            >
-              Open composer
-            </Link>
-          </>
-        ) : (
-          <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-            Brian is still composing your Floor. It'll light up the moment
-            he picks your widgets.
-          </p>
-        )}
+        <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+          No active widgets are assigned to this role yet.
+        </p>
       </div>
     </div>
   );

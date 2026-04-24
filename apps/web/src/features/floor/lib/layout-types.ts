@@ -6,8 +6,7 @@
  *   - `widgets` array length <= 6
  *   - `quickActions` array length <= 3
  *
- * The frontend mirrors those caps in the composer UI and defensively
- * clamps anything it reads — a stale client shouldn't crash if somehow
+ * The frontend defensively clamps anything it reads — a stale client shouldn't crash if somehow
  * more arrive.
  */
 import type { IronRole } from "@/features/qrm/lib/iron-roles";
@@ -72,7 +71,7 @@ export const EMPTY_FLOOR_LAYOUT: FloorLayout = {
 /**
  * Defensive normalization — any persisted layout that violates the caps
  * (e.g. a stale row written before a cap tightened) is truncated on read
- * so the UI never crashes. The composer saves re-apply the caps on write,
+ * so the UI never crashes. Database checks re-apply the caps on write,
  * so this is strictly forward-compat.
  */
 export function normalizeFloorLayout(raw: unknown): FloorLayout {

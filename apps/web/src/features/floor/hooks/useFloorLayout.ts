@@ -10,7 +10,7 @@
  * `features/dashboards/widgets/role-defaults.ts`. Those defaults power the
  * legacy Iron dashboards, which are a different surface. If no
  * floor_layouts row exists for a workspace, Brian sees an empty Floor —
- * which is the correct signal to open the composer and curate one.
+ * which is the correct signal that the role-default seed/configuration is missing.
  * The seed inserts in migration 374 guarantee the `default` workspace
  * has rows for all 7 roles out of the box.
  */

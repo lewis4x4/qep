@@ -184,7 +184,7 @@ The Floor feels like precision machinery, not a UI-toolkit animation demo.
 - **Narrative pulse:** orange dot opacity cycles 60%→100%→60% over 2.5s ease-in-out when narrative is <15min old. Stops when stale.
 - **Quick-action hover:** scale 1.01, 150ms ease-out. Border-color transition same duration.
 - **Widget hover:** only the border lightens — no lift, no transform. (Widgets are work, not features.)
-- **Layout changes (composer):** 220ms ease-out for position; opacity 120ms for add/remove.
+- **Layout changes:** 220ms ease-out for position; opacity 120ms for add/remove.
 
 **No parallax. No gradient washes. No animated backgrounds. No confetti.**
 
@@ -200,7 +200,7 @@ The Floor is mobile-first. Reps live on phones.
 
 - Viewport ≤ 640px: quick-action hero stacks to 2-col grid of 96px buttons. Narrative strip wraps to 2 lines max. Widget grid is single column with `--qep-space-3` gap.
 - All tap targets ≥ 48×48px.
-- The bottom 56px is reserved for a **floating action bar** (C5 from the handoff) that sticks to the viewport bottom — not the page bottom — containing the primary quick action + a shortcut to the composer (admin only).
+- The bottom 56px is reserved for a **floating action bar** (C5 from the handoff) that sticks to the viewport bottom — not the page bottom — containing the primary quick action.
 - No hover states are exposed — all hover styles also apply on `:focus-visible` and on `@media (hover: none)` rely on the pressed state only.
 
 ## 12. Accessibility
@@ -210,15 +210,12 @@ The Floor is mobile-first. Reps live on phones.
 - Keyboard: Tab order follows visual order. `Esc` closes any modal. `Enter` triggers primary quick action when focus is in the hero.
 - `prefers-reduced-motion: reduce` → disable all transforms and the narrative pulse. Fade-in only.
 
-## 13. Dead-simple composer (F-3 preview)
+## 13. Role-Based Floor Only
 
-When Brian lands on `/floor/compose`:
-
-- One role picker at the top (small Bebas Neue "COMPOSE FOR" label + Inter role dropdown)
-- Left column (320px): **Palette** — all widgets allowed for the selected role, as compact rows with a `+` button to add
-- Right column (flexible): **Preview** — the live Floor as that role would see it; widgets can be reordered with up/down arrows, removed with `×`, no drag-drop
-- Footer: **Save** button (orange), dirty-state indicator, "Preview as Rylee" link
-- A persistent **"6 / 6"** counter at the top of the preview — when it hits 6, the `+` buttons in the palette disable with a tooltip "Max 6 — remove one first"
+`/floor` resolves from the signed-in user's effective Iron role and the
+workspace role-default layout. The former `/floor/compose` surface is removed;
+layout changes now ship through reviewed migrations or controlled admin scripts
+so production cannot drift back to a stale, hand-composed dashboard.
 
 ## 14. What we are NOT doing in v1
 

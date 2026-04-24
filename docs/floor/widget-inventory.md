@@ -174,7 +174,7 @@ These stay accessible through the existing routes; they don't land on role Floor
 
 - F-1 migration knows the 6-widget hard cap is realistic (max role above has 6).
 - F-2 /floor shell renders at most 6 cards + 1 narrative + 2-3 quick actions — **fixed size**. No infinite scroll. No density creep.
-- F-3 composer palette knows which widgets each role is allowed to see (from existing `allowedRoles` field).
+- F-3 role-default validation knows which widgets each role is allowed to see (from existing `allowedRoles` field).
 - Role model extension in F-1 (+3 Iron roles) means every QEP team member can log in to a Floor built for them on day one.
 
 ---

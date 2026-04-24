@@ -2,8 +2,8 @@
 /**
  * CDO gate for The Floor.
  *
- * Runs authenticated desktop/mobile browser checks for /floor and /floor/compose,
- * captures screenshots, and executes a lightweight a11y scan. This intentionally
+ * Runs authenticated desktop/mobile browser checks for /floor, captures
+ * screenshots, and executes a lightweight a11y scan. This intentionally
  * fails when auth credentials are missing: the old stub let UI changes pass
  * without seeing the product.
  */
@@ -69,21 +69,12 @@ async function main() {
       route: "/floor",
       screenshotName: "floor-desktop.png",
       requiredText: ["THE FLOOR"],
+      forbiddenText: ["Role preview", "View as", "COMPOSE"],
       checks,
       artifacts,
     });
     await runA11yScan(desktopPage, "/floor desktop", checks);
 
-    await visitAndAssert({
-      page: desktopPage,
-      baseUrl,
-      route: "/floor/compose",
-      screenshotName: "floor-compose-desktop.png",
-      requiredText: ["COMPOSE", "Palette", "Quick actions"],
-      checks,
-      artifacts,
-    });
-    await runA11yScan(desktopPage, "/floor/compose desktop", checks);
     await desktop.close();
 
     const mobile = await browser.newContext({
@@ -104,6 +95,7 @@ async function main() {
       route: "/floor",
       screenshotName: "floor-mobile.png",
       requiredText: ["THE FLOOR"],
+      forbiddenText: ["Role preview", "View as", "COMPOSE"],
       checks,
       artifacts,
     });
@@ -284,7 +276,7 @@ async function resolveAuditEmail(adminClient) {
   return data.email;
 }
 
-async function visitAndAssert({ page, baseUrl, route, screenshotName, requiredText, checks, artifacts }) {
+async function visitAndAssert({ page, baseUrl, route, screenshotName, requiredText, forbiddenText = [], checks, artifacts }) {
   const url = `${baseUrl}${route}`;
   await page.goto(url, { waitUntil: "networkidle", timeout: 30_000 });
   await page.waitForTimeout(750);
@@ -305,6 +297,15 @@ async function visitAndAssert({ page, baseUrl, route, screenshotName, requiredTe
     checks.push({
       id: `route${route}.text.${text}`,
       verdict: count > 0 ? "pass" : "fail",
+      detail: `${count} matches`,
+    });
+  }
+
+  for (const text of forbiddenText) {
+    const count = await page.getByText(text, { exact: false }).count();
+    checks.push({
+      id: `route${route}.forbidden.${text}`,
+      verdict: count === 0 ? "pass" : "fail",
       detail: `${count} matches`,
     });
   }

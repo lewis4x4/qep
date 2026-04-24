@@ -123,8 +123,7 @@ async function verifyProductionBrowser() {
     const desktop = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
     await injectAuth(desktop);
     const page = await desktop.newPage();
-    await smokeRoute(page, "/floor", "floor-production-desktop.png", ["THE FLOOR"]);
-    await smokeRoute(page, "/floor/compose", "floor-compose-production-desktop.png", ["COMPOSE", "Palette"]);
+    await smokeRoute(page, "/floor", "floor-production-desktop.png", ["THE FLOOR"], ["Role preview", "View as", "COMPOSE"]);
     await desktop.close();
 
     const mobile = await browser.newContext({
@@ -134,14 +133,14 @@ async function verifyProductionBrowser() {
     });
     await injectAuth(mobile);
     const mobilePage = await mobile.newPage();
-    await smokeRoute(mobilePage, "/floor", "floor-production-mobile.png", ["THE FLOOR"]);
+    await smokeRoute(mobilePage, "/floor", "floor-production-mobile.png", ["THE FLOOR"], ["Role preview", "View as", "COMPOSE"]);
     await mobile.close();
   } finally {
     await browser.close().catch(() => {});
   }
 }
 
-async function smokeRoute(page, route, screenshotName, requiredText) {
+async function smokeRoute(page, route, screenshotName, requiredText, forbiddenText = []) {
   await page.goto(`${productionUrl}${route}`, { waitUntil: "networkidle", timeout: 30_000 });
   await page.waitForTimeout(750);
   const pathname = new URL(page.url()).pathname;
@@ -149,6 +148,10 @@ async function smokeRoute(page, route, screenshotName, requiredText) {
   for (const text of requiredText) {
     const count = await page.getByText(text, { exact: false }).count();
     if (count === 0) throw new Error(`${route} missing expected text: ${text}`);
+  }
+  for (const text of forbiddenText) {
+    const count = await page.getByText(text, { exact: false }).count();
+    if (count > 0) throw new Error(`${route} still contains removed text: ${text}`);
   }
   const screenshotPath = resolve(artifactDir, screenshotName);
   await page.screenshot({ path: screenshotPath, fullPage: true });

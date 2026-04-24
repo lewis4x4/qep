@@ -281,7 +281,6 @@ const report = {
     "/tmp/qep-mobile-admin-rep-redirect.png",
     "test-results/design-review/floor-desktop.png",
     "test-results/design-review/floor-mobile.png",
-    "test-results/design-review/floor-compose-desktop.png",
   ],
 };
 

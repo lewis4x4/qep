@@ -10,9 +10,8 @@
  * is dark, and the Floor is the canonical team-facing surface.
  */
 import { useEffect, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
 import type { UserRole } from "@/lib/database.types";
-import { getEffectiveIronRole, isIronRole, type IronRole } from "@/features/qrm/lib/iron-roles";
+import { getEffectiveIronRole } from "@/features/qrm/lib/iron-roles";
 import { useIronRoleBlend } from "@/features/qrm/lib/useIronRoleBlend";
 
 import { FloorTopBar } from "../components/FloorTopBar";
@@ -26,7 +25,6 @@ import { useFloorNarrative } from "../hooks/useFloorNarrative";
 import { useFloorAttentionSignals } from "../hooks/useFloorAttentionSignals";
 import { applyAttentionPinning } from "../lib/attention";
 import { FLOOR_WIDGET_REGISTRY, resolveFloorWidget } from "../lib/floor-widget-registry";
-import { IRON_ROLE_DISPLAY_NAMES } from "../lib/role-display-names";
 
 export interface FloorPageProps {
   userId: string;
@@ -38,16 +36,6 @@ export interface FloorPageProps {
 }
 
 const ADMIN_ROLES: UserRole[] = ["admin", "manager", "owner"];
-const FLOOR_PREVIEW_NAMES = new Set(["brian lewis", "ryan mckenzie", "rylee mckenzie"]);
-const FLOOR_PREVIEW_ROLES: Array<{ role: IronRole; label: string }> = [
-  { role: "iron_manager", label: "Sales Manager" },
-  { role: "iron_advisor", label: "Sales Rep" },
-  { role: "iron_parts_counter", label: "Parts Counter" },
-  { role: "iron_parts_manager", label: "Parts Manager" },
-  { role: "iron_owner", label: "Owner" },
-  { role: "iron_woman", label: "Deal Desk" },
-  { role: "iron_man", label: "Prep / Service" },
-];
 
 export function FloorPage({
   userId,
@@ -57,19 +45,7 @@ export function FloorPage({
 }: FloorPageProps) {
   // Dominant role resolution — same policy the existing DashboardRouter uses.
   const { blend } = useIronRoleBlend(userId);
-  const resolvedIronRole = getEffectiveIronRole(userRole, blend, ironRoleFromProfile);
-  const [searchParams, setSearchParams] = useSearchParams();
-  const requestedPreviewRole = searchParams.get("previewRole");
-  const canPreviewRoles = canUseFloorPreview(userRole, userFullName);
-  const previewRole =
-    canPreviewRoles && isIronRole(requestedPreviewRole) ? requestedPreviewRole : null;
-  const ironRole = previewRole
-    ? {
-        role: previewRole,
-        display: IRON_ROLE_DISPLAY_NAMES[previewRole],
-        description: "Previewing a role-home layout",
-      }
-    : resolvedIronRole;
+  const ironRole = getEffectiveIronRole(userRole, blend, ironRoleFromProfile);
 
   // Layout for this role (workspace-scoped via RLS).
   const { layout, updatedAt, isLoading } = useFloorLayout(ironRole.role, userId);
@@ -121,58 +97,13 @@ export function FloorPage({
   );
 
   const hasQuickActions = layout.quickActions.length > 0 || !!serialActionBand;
-  const previewingDifferentRole = previewRole != null && previewRole !== resolvedIronRole.role;
-
-  const handlePreviewRoleChange = (nextRole: IronRole) => {
-    const next = new URLSearchParams(searchParams);
-    if (nextRole === resolvedIronRole.role) {
-      next.delete("previewRole");
-    } else {
-      next.set("previewRole", nextRole);
-    }
-    setSearchParams(next, { replace: false });
-  };
 
   return (
     <div className="floor-texture flex min-h-screen flex-col bg-[hsl(var(--qep-deck))] text-foreground antialiased">
       <FloorTopBar
         userDisplayName={displayName || ironRole.display}
-        roleDisplayName={previewingDifferentRole ? `Preview: ${ironRole.display}` : ironRole.display}
-        isAdmin={isAdmin}
+        roleDisplayName={ironRole.display}
       />
-
-      {canPreviewRoles && (
-        <section className="border-b border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck-elevated))]/70 px-4 py-2">
-          <div className="mx-auto flex max-w-[1600px] flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <p className="font-kpi text-[10px] font-extrabold uppercase tracking-[0.16em] text-[hsl(var(--qep-orange))]">
-                Role preview
-              </p>
-              <p className="truncate text-xs text-muted-foreground">
-                Actual role: {resolvedIronRole.display}
-                {previewingDifferentRole ? ` · Viewing ${ironRole.display}` : ""}
-              </p>
-            </div>
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="font-kpi text-[10px] font-extrabold uppercase tracking-[0.14em]">
-                View as
-              </span>
-              <select
-                value={ironRole.role}
-                onChange={(event) => handlePreviewRoleChange(event.target.value as IronRole)}
-                aria-label="Preview Floor as role"
-                className="h-8 rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))] px-2 font-kpi text-[11px] font-extrabold uppercase tracking-[0.1em] text-foreground outline-none transition-colors hover:border-[hsl(var(--qep-orange))] focus:border-[hsl(var(--qep-orange))]"
-              >
-                {FLOOR_PREVIEW_ROLES.map((option) => (
-                  <option key={option.role} value={option.role}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </section>
-      )}
 
       {layout.showNarrative && !isLoading && (
         <>
@@ -194,15 +125,9 @@ export function FloorPage({
       )}
 
       <FloorZoneLabel index="03" label="THE FLOOR" className="mt-4" />
-      <FloorWidgetGrid widgets={visibleWidgets} isAdmin={isAdmin} isLoading={isLoading} />
+      <FloorWidgetGrid widgets={visibleWidgets} isLoading={isLoading} />
 
       <FloorFooter showOfficeLink={isAdmin} layoutUpdatedAt={updatedAt} />
     </div>
   );
-}
-
-function canUseFloorPreview(userRole: UserRole, userFullName: string | null): boolean {
-  if (ADMIN_ROLES.includes(userRole)) return true;
-  const normalizedName = (userFullName ?? "").trim().toLowerCase();
-  return FLOOR_PREVIEW_NAMES.has(normalizedName);
 }

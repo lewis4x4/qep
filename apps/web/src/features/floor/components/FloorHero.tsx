@@ -6,7 +6,7 @@
  * on mobile, N-col on desktop (where N = action count, max 3).
  *
  * When a layout has zero quick actions, this section does not render.
- * Brian's composer caps at 3 at the UI level; the DB also caps at 3.
+ * Role-default layouts cap quick actions at 3; the DB also enforces the cap.
  */
 import { Link } from "react-router-dom";
 import type { ReactNode } from "react";

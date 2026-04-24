@@ -251,7 +251,7 @@ ruleset).
   these 5.
 - **Command palette (⌘K).** Explicit deferral per
   `docs/floor/visual-language.md` §14.
-- **Quick-action editing in the composer.** Read-only v1; separate slice.
+- **Quick-action editing.** Removed from production Floor; quick actions now change through reviewed role-default migrations/admin scripts.
 
 ---
 

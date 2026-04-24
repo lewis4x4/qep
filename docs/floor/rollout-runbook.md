@@ -17,7 +17,7 @@ Purpose: move QEP operators from the dense admin dashboard to `/floor` without l
    ```bash
    bun run floor:verify-production
    ```
-2. Confirm no active Sentry errors for `/floor`, `/floor/compose`, or `/quote-v2`.
+2. Confirm no active Sentry errors for `/floor` or `/quote-v2`.
 3. Flip one pilot profile:
    ```sql
    update public.profiles
@@ -74,7 +74,6 @@ bun run floor:validate-layouts
 
 - Sentry transactions:
   - `/floor`
-  - `/floor/compose`
   - `/quote-v2`
 - Supabase tables:
   - `floor_layouts`

@@ -15,7 +15,7 @@
  *   • Ownership-transfer awareness (ADR-007): when a matched serial's
  *     current owner differs from what the counter expects, the
  *     handoff into the full equipment record is the right escape
- *     hatch — the composer surfaces it inline via "Owner mismatch?"
+ *     hatch — the widget surfaces it inline via "Owner mismatch?"
  *     copy in the Owner panel.
  *   • Empty state tells the rep how the widget works in one line.
  *     No serial typed → "Paste a serial to pull the machine, owner,

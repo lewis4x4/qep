@@ -6,9 +6,16 @@
  */
 "use strict";
 
-const Sentry = require("@sentry/node");
+let Sentry = null;
+try {
+  Sentry = require("@sentry/node");
+} catch (error) {
+  if (error?.code !== "MODULE_NOT_FOUND") {
+    throw error;
+  }
+}
 
-if (!globalThis.__QEP_SENTRY_INSTRUMENTED__) {
+if (Sentry && !globalThis.__QEP_SENTRY_INSTRUMENTED__) {
   globalThis.__QEP_SENTRY_INSTRUMENTED__ = true;
   const dsn = process.env.SENTRY_DSN || process.env.SENTRY_NODE_DSN;
   if (dsn && String(dsn).trim()) {

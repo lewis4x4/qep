@@ -6,7 +6,7 @@
  *      React component renderable on The Floor.
  *   2. Gate widget visibility by Iron role (mirrors the allowedRoles
  *      field on the base dashboard registry).
- *   3. Provide UI metadata for the composer palette (title + purpose).
+ *   3. Provide UI metadata for role-default validation and admin tooling.
  *
  * Design:
  *   - We do NOT fork the existing `features/dashboards/widgets/registry.ts`.
@@ -93,10 +93,9 @@ import {
 export interface FloorWidgetDescriptor {
   id: string;
   title: string;
-  /** One-sentence purpose shown in the composer palette + any stub state. */
+  /** One-sentence purpose shown in admin tooling + any stub state. */
   purpose: string;
-  /** Iron roles allowed to see this widget on The Floor. The composer
-   *  filters the palette by these. */
+  /** Iron roles allowed to see this widget on The Floor. */
   allowedRoles: IronRole[];
   /** Default span in the responsive grid. "wide" consumes two columns on
    *  desktop; "normal" is one column. */
@@ -563,7 +562,7 @@ export function resolveFloorWidget(id: string): FloorWidgetDescriptor | null {
   return FLOOR_WIDGET_REGISTRY[id] ?? null;
 }
 
-/** Filter the registry by role — powers the composer palette. */
+/** Filter the registry by role — powers role-default validation/admin tooling. */
 export function floorWidgetsForRole(role: IronRole): FloorWidgetDescriptor[] {
   return Object.values(FLOOR_WIDGET_REGISTRY).filter((w) =>
     w.allowedRoles.includes(role),

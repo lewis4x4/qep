@@ -22,7 +22,6 @@ Expected PASS evidence:
 - CDO artifacts exist:
   - `test-results/design-review/floor-desktop.png`
   - `test-results/design-review/floor-mobile.png`
-  - `test-results/design-review/floor-compose-desktop.png`
 
 ## Required Production Commands
 
@@ -43,7 +42,7 @@ Expected PASS evidence:
 - latest Netlify `commit_ref` equals local `git rev-parse HEAD`
 - Supabase migration list includes the latest local migration version
 - Supabase functions list includes `floor-narrative`
-- production screenshots are written under `test-results/floor-production-audit/`
+- production `/floor` desktop and mobile screenshots are written under `test-results/floor-production-audit/`
 
 ## Audit Guardrails
 

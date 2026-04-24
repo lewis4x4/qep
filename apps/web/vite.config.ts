@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import path from "path";
@@ -35,6 +35,14 @@ function getAppVersion(): string {
 const GIT_SHA = process.env.VITE_GIT_SHA ?? getGitSha();
 const APP_VERSION = process.env.VITE_APP_VERSION ?? getAppVersion();
 const BUILD_TIMESTAMP = process.env.VITE_BUILD_TIMESTAMP ?? new Date().toISOString();
+const repoRoot = path.resolve(__dirname, "../..");
+const rootEnv = loadEnv(process.env.NODE_ENV === "production" ? "production" : "development", repoRoot, "");
+const SUPABASE_URL =
+  process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
+  ?? rootEnv.VITE_SUPABASE_URL ?? rootEnv.SUPABASE_URL ?? rootEnv.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY =
+  process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  ?? rootEnv.VITE_SUPABASE_ANON_KEY ?? rootEnv.SUPABASE_ANON_KEY ?? rootEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 /** When SENTRY_* are set in CI, upload source maps and use hidden sourcemaps in the bundle. */
 const sentrySourceMapUpload =
@@ -57,6 +65,8 @@ export default defineConfig({
     "import.meta.env.VITE_GIT_SHA": JSON.stringify(GIT_SHA),
     "import.meta.env.VITE_APP_VERSION": JSON.stringify(APP_VERSION),
     "import.meta.env.VITE_BUILD_TIMESTAMP": JSON.stringify(BUILD_TIMESTAMP),
+    ...(SUPABASE_URL ? { "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(SUPABASE_URL) } : {}),
+    ...(SUPABASE_ANON_KEY ? { "import.meta.env.VITE_SUPABASE_ANON_KEY": JSON.stringify(SUPABASE_ANON_KEY) } : {}),
   },
   resolve: {
     alias: {

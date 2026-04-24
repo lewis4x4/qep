@@ -74,9 +74,6 @@ const DashboardRouter = lazy(() =>
 const FloorPage = lazy(() =>
   import("./features/floor/pages/FloorPage").then((m) => ({ default: m.FloorPage }))
 );
-const FloorComposePage = lazy(() =>
-  import("./features/floor/pages/FloorComposePage").then((m) => ({ default: m.FloorComposePage }))
-);
 const ServiceCommandCenterPage = lazy(() =>
   import("./features/service/pages/ServiceCommandCenterPage").then((m) => ({ default: m.ServiceCommandCenterPage }))
 );
@@ -710,7 +707,7 @@ function AnimatedRoutes({ children }: { children: React.ReactNode }) {
  * (Sales Companion has its own SalesShell via SalesRoutes), otherwise
  * wraps in the standard AppLayout.
  *
- * Slice: The Floor — /floor and /floor/compose also bypass AppLayout
+ * Slice: The Floor — /floor also bypasses AppLayout
  * so the Floor's own FloorTopBar is the sole header chrome. Without
  * this bypass two top bars stack, which the user explicitly called
  * out as confusing. When the user navigates away from /floor AND
@@ -981,20 +978,6 @@ function App() {
                     userFullName={profile.full_name}
                     ironRoleFromProfile={profile.iron_role}
                   />
-                }
-              />
-              <Route
-                path="/floor/compose"
-                element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
-                    <FloorComposePage
-                      userId={profile.id}
-                      userRole={profile.role}
-                      userFullName={profile.full_name}
-                    />
-                  ) : (
-                    <Navigate to="/floor" replace />
-                  )
                 }
               />
               <Route
