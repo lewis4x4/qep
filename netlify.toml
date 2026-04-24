@@ -15,7 +15,7 @@
     X-Frame-Options = "SAMEORIGIN"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Permissions-Policy = "camera=(), microphone=(self), geolocation=()"
     Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
     # Include wss + *.supabase.com so Safari can reach Auth/Realtime/pooler; *.co alone is not always enough.
     # Sentry: connect-src needs *.ingest.sentry.io (events), *.ingest.us.sentry.io (US region ingest),
