@@ -73,7 +73,7 @@ async function listNetlifyDeploysWithCli() {
 
 async function verifySupabaseMigrations() {
   const localVersions = (await run("bash", ["-lc", "ls supabase/migrations/*.sql | sed 's#.*/##; s#_.*##' | sort -n | tail -1"], repoRoot)).stdout.trim();
-  const list = await run("supabase", ["migration", "list", "--project-ref", projectRef], repoRoot);
+  const list = await run("supabase", ["migration", "list", "--linked"], repoRoot);
   evidence.push({
     check: "supabase.migrations",
     latest_local_version: localVersions,
