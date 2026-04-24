@@ -700,8 +700,8 @@ export function OwnerLargeDealsWidget() {
       {query.isError ? <ErrorLine>Couldn't load large deals.</ErrorLine> : null}
       {!query.isLoading && !query.isError ? (
         shown.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-xs">
+          <div className="-mx-2 overflow-x-auto">
+            <table className="w-full min-w-[840px] text-xs">
               <thead>
                 <tr className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                   <th className="px-2 py-1.5 text-left">Deal</th>
@@ -756,9 +756,9 @@ export function OwnerLargeDealsWidget() {
                       <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">
                         {row.margin_pct != null ? `${row.margin_pct.toFixed(1)}%` : "—"}
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="whitespace-nowrap px-2 py-2">
                         <span
-                          className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-semibold ${stagePillClass(
+                          className={`inline-flex whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] font-semibold ${stagePillClass(
                             stage?.name,
                           )}`}
                         >

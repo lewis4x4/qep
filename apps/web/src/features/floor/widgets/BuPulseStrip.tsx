@@ -202,14 +202,16 @@ interface TileProps {
 
 function Tile({ icon: Icon, label, primary, secondary }: TileProps) {
   return (
-    <div className="flex flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 transition-colors hover:border-[#f28a07]/30 hover:bg-[#f28a07]/[0.03]">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f28a07]/10 text-[#f6a53a]">
+    <div className="flex flex-1 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 transition-colors hover:border-[#f28a07]/30">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f28a07]/10 text-[#f6a53a]">
         <Icon className="h-4 w-4" aria-hidden="true" />
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{label}</p>
-        <p className="mt-0.5 text-lg font-semibold tabular-nums text-white">{primary}</p>
-        <p className="text-[11px] text-slate-400">{secondary}</p>
+        <p className="mt-0.5 whitespace-nowrap text-lg font-semibold tabular-nums leading-tight text-white">
+          {primary}
+        </p>
+        <p className="whitespace-nowrap text-[11px] leading-tight text-slate-400">{secondary}</p>
       </div>
     </div>
   );
@@ -224,8 +226,8 @@ export function BuPulseStripWidget() {
   });
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#121927] p-4">
-      <div className="flex items-center justify-between">
+    <div className="rounded-xl border border-white/10 bg-[#121927] p-3">
+      <div className="flex items-center justify-between px-1">
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#f6a53a]">
           BU Pulse
         </p>
@@ -252,7 +254,7 @@ export function BuPulseStripWidget() {
       ) : null}
 
       {!query.isLoading && !query.isError && query.data ? (
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <Tile
             icon={TrendingUp}
             label="Equipment"

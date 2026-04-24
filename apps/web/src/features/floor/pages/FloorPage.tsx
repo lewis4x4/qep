@@ -206,9 +206,11 @@ export function FloorPage({
     [roleWidgets, attentionSignals.data],
   );
 
+  const isOwner = activeRole === "iron_owner";
+
   return (
     <div className="min-h-screen bg-[#0b1018] text-slate-100 antialiased">
-      <main className="mx-auto flex w-full max-w-[1480px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
+      <main className="mx-auto flex w-full max-w-[1680px] flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
         {/* Title block */}
         <section className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -230,7 +232,7 @@ export function FloorPage({
         </section>
 
         {/* 01 NARRATIVE */}
-        <section className="rounded-3xl border border-white/10 bg-[#121927] p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.9)] sm:p-6">
+        <section className="rounded-2xl border border-white/5 bg-[#121927]/60 p-5">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#f6a53a]">
             01 Narrative
           </p>
@@ -240,7 +242,7 @@ export function FloorPage({
               : "Your role home is loading the current workspace signals."}
           </p>
           {narrative.model ? (
-            <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+            <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               Last 24h · {narrative.model}
             </p>
           ) : null}
@@ -266,13 +268,13 @@ export function FloorPage({
         </section>
 
         {/* 03 THE FLOOR */}
-        <section className="rounded-3xl border border-white/10 bg-[#0f1624] p-4 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.9)] sm:p-5">
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <section className="rounded-2xl border border-white/5 bg-[#0f1624]/60 p-4">
+          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#f6a53a]">
                 03 The Floor
               </p>
-              <h2 className="mt-1 text-xl font-semibold tracking-tight text-white">
+              <h2 className="mt-0.5 text-base font-semibold tracking-tight text-white">
                 Role-specific signals
               </h2>
             </div>
@@ -284,7 +286,11 @@ export function FloorPage({
             </div>
           </div>
 
-          <RoleWidgetGrid widgets={visibleWidgets} isLoading={isLoading} emptyMessage={copy.empty} />
+          {isOwner ? (
+            <OwnerFloorGrid widgets={visibleWidgets} isLoading={isLoading} />
+          ) : (
+            <RoleWidgetGrid widgets={visibleWidgets} isLoading={isLoading} emptyMessage={copy.empty} />
+          )}
         </section>
       </main>
     </div>
@@ -318,6 +324,55 @@ function RoleAction({ action, index }: { action: FloorQuickAction; index: number
       </span>
       <ArrowRight className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-[#f28a07]" aria-hidden="true" />
     </Link>
+  );
+}
+
+function OwnerFloorGrid({
+  widgets,
+  isLoading,
+}: {
+  widgets: FloorWidgetWithAttention[];
+  isLoading: boolean;
+}) {
+  const find = (id: string) => widgets.find((w) => w.id === id);
+  const customerHealth = find("nervous.customer-health");
+  const revenuePace = find("exec.revenue-pace");
+  const buPulse = find("exec.bu-pulse");
+  const largeDeals = find("iron.owner-large-deals");
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="min-h-[220px] animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
+          <div className="min-h-[220px] animate-pulse rounded-2xl border border-white/10 bg-white/[0.04] md:col-span-2" />
+        </div>
+        <div className="min-h-[140px] animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
+        <div className="min-h-[340px] animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
+      </div>
+    );
+  }
+
+  const renderWidget = (widget: FloorWidgetWithAttention | undefined) => {
+    if (!widget) return null;
+    const descriptor = resolveFloorWidget(widget.id);
+    if (!descriptor) return null;
+    const Component = descriptor.component;
+    return <Component />;
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Row 1: Customer Health (1/3) + Revenue Pace (2/3) */}
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="md:col-span-1">{renderWidget(customerHealth)}</div>
+        <div className="md:col-span-2">{renderWidget(revenuePace)}</div>
+      </div>
+      {/* Row 2: BU Pulse full width */}
+      {buPulse ? <div>{renderWidget(buPulse)}</div> : null}
+      {/* Row 3: Deals table full width */}
+      {largeDeals ? <div>{renderWidget(largeDeals)}</div> : null}
+    </div>
   );
 }
 
