@@ -9,6 +9,7 @@ import {
   Sun,
   PanelTopOpen,
   Bug,
+  Menu,
 } from "lucide-react";
 import { BRAND_NAME, BrandLogo } from "@/components/BrandLogo";
 import {
@@ -433,13 +434,13 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
           className={cn(
             "w-full flex items-center gap-4 bg-slate-900/80 dark:bg-white/[0.05] border border-white/10 backdrop-blur-xl shadow-2xl pointer-events-auto",
             isQuotesListRoute
-              ? "max-w-[calc(100vw-12px)] rounded-[24px] px-9 py-3.5"
+              ? "max-w-[calc(100vw-12px)] rounded-[24px] px-3 py-2 sm:px-4 xl:px-9 xl:py-3.5"
               : "max-w-7xl rounded-full px-6 py-3.5",
           )}
           role="banner"
         >
           {isQuotesListRoute && (
-            <Link to="/floor" className="hidden min-w-[185px] items-center gap-3 lg:flex">
+            <Link to="/floor" className="hidden min-w-[185px] items-center gap-3 xl:flex">
               <div className="rounded-md border border-white/10 bg-black/20 p-1">
                 <BrandLogo className="h-8 w-auto" decorative />
               </div>
@@ -448,10 +449,74 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
             </Link>
           )}
 
+          {isQuotesListRoute && (
+            <div className="flex min-w-0 flex-1 items-center gap-3 xl:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-200 outline-none transition hover:bg-white/10 hover:text-white"
+                    aria-label="Open navigation menu"
+                  >
+                    <Menu className="h-5 w-5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="start"
+                  className="w-[min(22rem,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto rounded-2xl border-white/10 bg-slate-900/95 p-2 text-white backdrop-blur-xl"
+                >
+                  {primaryNavGroups.map((group) => (
+                    <div key={`compact-${group.id}`}>
+                      <DropdownMenuLabel className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                        {group.label}
+                      </DropdownMenuLabel>
+                      {group.sections.flatMap((section) => section.items).map((item) => (
+                        <DropdownMenuItem
+                          key={`compact-${item.href}`}
+                          asChild
+                          disabled={item.gated}
+                          className="rounded-xl px-3 py-3 focus:bg-white/10 focus:text-white"
+                        >
+                          {item.gated ? (
+                            <div className="flex w-full cursor-not-allowed items-center gap-3 opacity-60">
+                              <item.icon className="h-4 w-4 text-slate-400" />
+                              <span className="flex-1 text-sm font-medium tracking-normal">{item.label}</span>
+                              <span className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Locked</span>
+                            </div>
+                          ) : (
+                            <Link to={item.href} className="flex w-full items-center gap-3">
+                              <item.icon
+                                className={cn(
+                                  "h-4 w-4",
+                                  isNavHrefActive(item.href) ? "text-qep-orange" : "text-slate-400",
+                                )}
+                              />
+                              <span
+                                className={cn(
+                                  "flex-1 text-sm font-medium tracking-normal",
+                                  isNavHrefActive(item.href) && "text-qep-orange",
+                                )}
+                              >
+                                {item.label}
+                              </span>
+                            </Link>
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                    </div>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-qep-orange">QEP</div>
+                <div className="truncate text-sm font-semibold text-white">Quotes</div>
+              </div>
+            </div>
+          )}
+
           <nav
             className={cn(
-              "hidden lg:flex min-w-0 flex-1 items-center gap-1.5 text-[11px] font-bold tracking-[0.12em] uppercase text-slate-300",
-              isQuotesListRoute ? "justify-start" : "justify-center",
+              "min-w-0 flex-1 items-center gap-1.5 text-[11px] font-bold tracking-[0.12em] uppercase text-slate-300",
+              isQuotesListRoute ? "hidden justify-start xl:flex" : "hidden justify-center lg:flex",
             )}
           >
             {primaryNavGroups.map((group) => {
@@ -530,7 +595,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
 
         {/* Right: Search + Bell + Workspace + Avatar */}
         <div className="flex items-center gap-3 ml-auto shrink-0">
-          <div className={cn("hidden lg:block transition-all", isQuotesListRoute ? "w-[340px]" : "w-40 focus-within:w-52")}>
+          <div className={cn("hidden transition-all", isQuotesListRoute ? "w-[340px] 2xl:block" : "w-40 focus-within:w-52 lg:block")}>
             {showCrmSearch ? (
               <QrmGlobalSearchCommand />
             ) : (
@@ -562,7 +627,8 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
               <DropdownMenuTrigger asChild>
                 <button
                   className={cn(
-                    "hidden lg:inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] outline-none transition-colors",
+                    "items-center gap-1.5 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] outline-none transition-colors",
+                    isQuotesListRoute ? "hidden xl:inline-flex" : "hidden lg:inline-flex",
                     utilityRouteActive
                       ? "bg-qep-orange/10 text-qep-orange"
                       : "text-slate-300 hover:bg-white/5 hover:text-white"
@@ -614,7 +680,9 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
           )}
           
           {profile.active_workspace_id && (
-            <WorkspaceSwitcher activeWorkspaceId={profile.active_workspace_id} />
+            <div className={cn(isQuotesListRoute && "hidden xl:block")}>
+              <WorkspaceSwitcher activeWorkspaceId={profile.active_workspace_id} />
+            </div>
           )}
           {/* Quick action pill */}
           {quickAction && (
@@ -622,13 +690,15 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
               size="sm"
               onClick={handleQuickAction}
               className={cn(
-                "hidden xl:flex bg-qep-orange hover:bg-qep-orange-hover text-white font-medium",
-                isQuotesListRoute ? "h-10 rounded-lg px-4 text-sm shadow-[0_0_18px_rgba(249,115,22,0.25)]" : "h-8 rounded-full px-3 text-xs",
+                "bg-qep-orange hover:bg-qep-orange-hover text-white font-medium",
+                isQuotesListRoute
+                  ? "flex h-9 rounded-lg px-3 text-xs shadow-[0_0_18px_rgba(249,115,22,0.25)] sm:h-10 sm:px-4 sm:text-sm"
+                  : "hidden h-8 rounded-full px-3 text-xs xl:flex",
               )}
             >
               {quickAction.label}
               {isQuotesListRoute && (
-                <kbd className="ml-3 rounded border border-white/20 bg-white/15 px-1.5 py-0.5 font-mono text-[10px] text-white/90">
+                <kbd className="ml-3 hidden rounded border border-white/20 bg-white/15 px-1.5 py-0.5 font-mono text-[10px] text-white/90 xl:inline">
                   ⌘N
                 </kbd>
               )}

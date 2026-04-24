@@ -273,8 +273,8 @@ export function QuoteListPage() {
 
   return (
     <div
-      className="relative left-1/2 -mt-8 flex min-h-[calc(100vh-9rem)] -translate-x-1/2 flex-col gap-7 rounded-b-2xl border-x border-b border-border/60 bg-background/25 px-10 pb-8 pt-8 shadow-[0_24px_80px_rgba(0,0,0,0.22)]"
-      style={{ width: "calc(100vw - 80px)" }}
+      className="relative left-1/2 -mt-8 flex min-h-[calc(100vh-9rem)] -translate-x-1/2 flex-col gap-6 rounded-b-2xl border-x border-b border-border/60 bg-background/25 px-4 pb-8 pt-8 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:px-6 lg:px-10"
+      style={{ width: "calc(100vw - clamp(24px, 5vw, 80px))" }}
     >
       <header className="flex items-start justify-between gap-4">
         <div>
@@ -283,7 +283,7 @@ export function QuoteListPage() {
         </div>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           active={activeStatFilters.has("total")}
           icon={List}
@@ -324,8 +324,8 @@ export function QuoteListPage() {
       )}
 
       <Card className="overflow-hidden rounded-lg border-border/70 bg-card/80">
-        <div className="flex flex-col gap-3 border-b border-border/60 p-3 lg:flex-row lg:items-center">
-          <div className="relative min-w-[420px] flex-1">
+        <div className="flex flex-col gap-3 border-b border-border/60 p-3 xl:flex-row xl:items-center">
+          <div className="relative min-w-0 flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               ref={searchInputRef}
@@ -341,12 +341,12 @@ export function QuoteListPage() {
           <button
             type="button"
             onClick={() => setShowScoringAccuracy((value) => !value)}
-            className="inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground transition hover:bg-muted/40 hover:text-foreground"
+            className="inline-flex h-10 items-center justify-start gap-2 rounded-md px-3 text-sm text-muted-foreground transition hover:bg-muted/40 hover:text-foreground sm:w-auto"
           >
             <BarChart3 className="h-4 w-4 text-qep-orange" />
             View scoring accuracy
           </button>
-          <div className="ml-auto flex rounded-lg border border-border/60 bg-muted/20 p-1">
+          <div className="flex w-full overflow-x-auto rounded-lg border border-border/60 bg-muted/20 p-1 sm:w-auto xl:ml-auto">
             {STATUS_FILTERS.map((filter) => (
               <button
                 key={filter}
@@ -438,7 +438,7 @@ function QuoteTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1220px] table-fixed">
+      <table className="w-full min-w-[980px] table-fixed xl:min-w-[1220px]">
         <thead className="border-b border-border/60 bg-muted/10">
           <tr className="text-left text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             <SortableHeader label="Quote" column="quote" sort={sort} onSort={onSort} className="w-[20%]" />
