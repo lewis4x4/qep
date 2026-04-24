@@ -125,7 +125,7 @@ async function verifyProductionBrowser() {
     const desktop = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
     await injectAuth(desktop);
     const page = await desktop.newPage();
-    await smokeRoute(page, "/floor", "floor-production-desktop.png", ["Role Home", "Work Queue"], ["THE FLOOR", "Role preview", "View as", "COMPOSE", "NARRATIVE", "ACTIONS"]);
+    await smokeRoute(page, "/floor", "floor-production-desktop.png", ["Sales Quote Flow Redesign", "Entry", "Customer", "Equipment", "Trade-In", "Financing", "Review"], ["QEP Role Home", "Role Home", "Work Queue", "Role preview", "View as", "COMPOSE", "NARRATIVE", "ACTIONS"]);
     await desktop.close();
 
     const mobile = await browser.newContext({
@@ -135,7 +135,7 @@ async function verifyProductionBrowser() {
     });
     await injectAuth(mobile);
     const mobilePage = await mobile.newPage();
-    await smokeRoute(mobilePage, "/floor", "floor-production-mobile.png", ["Role Home", "Work Queue"], ["THE FLOOR", "Role preview", "View as", "COMPOSE", "NARRATIVE", "ACTIONS"]);
+    await smokeRoute(mobilePage, "/floor", "floor-production-mobile.png", ["Sales Quote Flow Redesign", "Entry", "Customer", "Equipment", "Trade-In", "Financing", "Review"], ["QEP Role Home", "Role Home", "Work Queue", "Role preview", "View as", "COMPOSE", "NARRATIVE", "ACTIONS"]);
     await mobile.close();
   } finally {
     await browser.close().catch(() => {});
