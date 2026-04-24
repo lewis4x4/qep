@@ -272,7 +272,10 @@ export function QuoteListPage() {
   }
 
   return (
-    <div className="relative left-1/2 -mt-8 flex min-h-[calc(100vh-9rem)] w-[min(1500px,calc(100vw-48px))] -translate-x-1/2 flex-col gap-7 rounded-b-2xl border-x border-b border-border/60 bg-background/25 px-10 pb-8 pt-8 shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
+    <div
+      className="relative left-1/2 -mt-8 flex min-h-[calc(100vh-9rem)] -translate-x-1/2 flex-col gap-7 rounded-b-2xl border-x border-b border-border/60 bg-background/25 px-10 pb-8 pt-8 shadow-[0_24px_80px_rgba(0,0,0,0.22)]"
+      style={{ width: "calc(100vw - 80px)" }}
+    >
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Quotes</h1>
