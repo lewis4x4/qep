@@ -35,8 +35,8 @@ export const DEFAULT_FLOOR_LAYOUTS: Record<IronRole, FloorLayout> = {
       { id: "sales.my-quotes-by-status", order: 0 },
       { id: "sales.ai-briefing", order: 1 },
       { id: "sales.action-items", order: 2 },
-      { id: "qrm.follow-up-queue", order: 3 },
-      { id: "quote.deal-copilot-summary", order: 4 },
+      { id: "sales.recent-activity", order: 3 },
+      { id: "qrm.follow-up-queue", order: 4 },
     ],
     quickActions: [
       { id: "new_quote", label: "NEW QUOTE", route: "/quote-v2", icon: "quote" },

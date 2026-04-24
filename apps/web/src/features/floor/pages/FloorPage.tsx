@@ -207,6 +207,7 @@ export function FloorPage({
   );
 
   const isOwner = activeRole === "iron_owner";
+  const isAdvisor = activeRole === "iron_advisor";
 
   return (
     <div className="min-h-screen bg-[#0b1018] text-slate-100 antialiased">
@@ -288,6 +289,8 @@ export function FloorPage({
 
           {isOwner ? (
             <OwnerFloorGrid widgets={visibleWidgets} isLoading={isLoading} />
+          ) : isAdvisor ? (
+            <AdvisorFloorGrid widgets={visibleWidgets} isLoading={isLoading} />
           ) : (
             <RoleWidgetGrid widgets={visibleWidgets} isLoading={isLoading} emptyMessage={copy.empty} />
           )}
@@ -372,6 +375,61 @@ function OwnerFloorGrid({
       {buPulse ? <div>{renderWidget(buPulse)}</div> : null}
       {/* Row 3: Deals table full width */}
       {largeDeals ? <div>{renderWidget(largeDeals)}</div> : null}
+    </div>
+  );
+}
+
+function AdvisorFloorGrid({
+  widgets,
+  isLoading,
+}: {
+  widgets: FloorWidgetWithAttention[];
+  isLoading: boolean;
+}) {
+  const find = (id: string) => widgets.find((w) => w.id === id);
+  const myQuotes = find("sales.my-quotes-by-status");
+  const aiBriefing = find("sales.ai-briefing");
+  const actionItems = find("sales.action-items");
+  const recentActivity = find("sales.recent-activity");
+  const followUpQueue = find("qrm.follow-up-queue");
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="min-h-[420px] animate-pulse rounded-2xl border border-white/10 bg-white/[0.04] md:col-span-2" />
+          <div className="flex min-h-[420px] flex-col gap-3">
+            <div className="flex-1 animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
+            <div className="flex-1 animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
+            <div className="flex-1 animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
+          </div>
+        </div>
+        <div className="min-h-[260px] animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
+      </div>
+    );
+  }
+
+  const renderWidget = (widget: FloorWidgetWithAttention | undefined) => {
+    if (!widget) return null;
+    const descriptor = resolveFloorWidget(widget.id);
+    if (!descriptor) return null;
+    const Component = descriptor.component;
+    return <Component />;
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Row 1: Hero (2/3) + Stacked rail (1/3) */}
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="min-w-0 md:col-span-2">{renderWidget(myQuotes)}</div>
+        <div className="flex min-w-0 flex-col gap-3 md:col-span-1">
+          {aiBriefing ? <div className="min-h-0">{renderWidget(aiBriefing)}</div> : null}
+          {actionItems ? <div className="min-h-0">{renderWidget(actionItems)}</div> : null}
+          {recentActivity ? <div className="min-h-0">{renderWidget(recentActivity)}</div> : null}
+        </div>
+      </div>
+      {/* Row 2: Pipeline below-fold full width */}
+      {followUpQueue ? <div className="min-w-0">{renderWidget(followUpQueue)}</div> : null}
     </div>
   );
 }

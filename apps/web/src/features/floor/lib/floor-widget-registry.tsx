@@ -90,6 +90,7 @@ import {
   SlaPerformanceWidget,
 } from "../widgets/RoleHomeWidgets";
 import { BuPulseStripWidget } from "../widgets/BuPulseStrip";
+import { RecentActivityWidget } from "../widgets/RecentActivityWidget";
 
 export interface FloorWidgetDescriptor {
   id: string;
@@ -326,6 +327,14 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     component: MyQuotesByStatusWidget,
     getAttentionScore: (signals) =>
       countAttention(signals.quoteFollowupCount, 16, "quote needing follow-up"),
+  },
+  "sales.recent-activity": {
+    id: "sales.recent-activity",
+    title: "Recent activity",
+    purpose: "Latest touches you logged plus live buying signals when customers open your sent quotes.",
+    allowedRoles: ["iron_advisor"],
+    size: "normal",
+    component: RecentActivityWidget,
   },
   "sales.day-summary": {
     id: "sales.day-summary",
