@@ -89,7 +89,7 @@ type DealRow = {
   name: string;
   amount: number | null;
   margin_pct: number | null;
-  stage_changed_at: string | null;
+  stage_changed_at?: string | null;
   expected_close_on: string | null;
   updated_at: string;
   company?: { name: string | null } | { name: string | null }[] | null;
@@ -553,15 +553,15 @@ export function AgingDealsTeamWidget() {
         .from("qrm_deals")
         .select(
           `
-          id, name, amount, margin_pct, stage_changed_at, expected_close_on, updated_at,
+          id, name, amount, margin_pct, expected_close_on, updated_at,
           company:qrm_companies ( name ),
           stage:qrm_deal_stages ( name ),
           assigned_rep:profiles!crm_deals_assigned_rep_id_fkey ( full_name )
         `,
         )
-        .lt("stage_changed_at", cutoff)
+        .lt("updated_at", cutoff)
         .is("deleted_at", null)
-        .order("stage_changed_at", { ascending: true })
+        .order("updated_at", { ascending: true })
         .limit(8);
       if (error) throw new Error(error.message);
       return (data ?? []) as unknown as DealRow[];
@@ -602,7 +602,7 @@ export function AgingDealsTeamWidget() {
                   <CompactRow
                     key={row.id}
                     title={company?.name ?? row.name}
-                    detail={`${rep?.full_name ?? "Unassigned"} · ${stage?.name ?? "Stage"} · ${daysSince(row.stage_changed_at)}d`}
+                    detail={`${rep?.full_name ?? "Unassigned"} · ${stage?.name ?? "Stage"} · ${daysSince(row.updated_at)}d`}
                     value={currency(row.amount)}
                     to={`/qrm/deals/${row.id}`}
                   />
@@ -630,7 +630,7 @@ export function OwnerLargeDealsWidget() {
         .from("qrm_deals")
         .select(
           `
-          id, name, amount, margin_pct, stage_changed_at, expected_close_on, updated_at,
+          id, name, amount, margin_pct, expected_close_on, updated_at,
           company:qrm_companies ( name ),
           stage:qrm_deal_stages ( name ),
           assigned_rep:profiles!crm_deals_assigned_rep_id_fkey ( full_name )
