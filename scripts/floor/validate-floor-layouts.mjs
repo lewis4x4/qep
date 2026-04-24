@@ -10,17 +10,17 @@ loadLocalEnv(repoRoot);
 
 const registryPath = resolve(repoRoot, "apps/web/src/features/floor/lib/floor-widget-registry.tsx");
 const defaultsPath = resolve(repoRoot, "apps/web/src/features/floor/lib/default-layouts.ts");
-const heroPath = resolve(repoRoot, "apps/web/src/features/floor/components/FloorHero.tsx");
+const floorPagePath = resolve(repoRoot, "apps/web/src/features/floor/pages/FloorPage.tsx");
 
 const registrySource = readFileSync(registryPath, "utf8");
 const defaultsSource = readFileSync(defaultsPath, "utf8");
-const heroSource = readFileSync(heroPath, "utf8");
+const floorPageSource = readFileSync(floorPagePath, "utf8");
 
 const errors = [];
 const warnings = [];
 
 const registry = parseRegistry(registrySource);
-const validIcons = parseIconMap(heroSource);
+const validIcons = parseIconMap(floorPageSource);
 
 validateRegistry(registry);
 validateLocalDefaults(defaultsSource, registry, validIcons);
@@ -74,8 +74,8 @@ function parseRegistry(source) {
 }
 
 function parseIconMap(source) {
-  const mapStart = source.indexOf("FLOOR_QUICK_ACTION_ICON_MAP");
-  if (mapStart === -1) throw new Error("FLOOR_QUICK_ACTION_ICON_MAP not found");
+  const mapStart = source.indexOf("QUICK_ACTION_ICON_MAP");
+  if (mapStart === -1) throw new Error("QUICK_ACTION_ICON_MAP not found");
   const mapEnd = source.indexOf("};", mapStart);
   const body = source.slice(mapStart, mapEnd);
   return new Set([...body.matchAll(/^\s*([A-Za-z0-9_-]+)\s*:/gm)].map((match) => match[1]));

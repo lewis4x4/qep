@@ -2,8 +2,8 @@
  * DirectWrapWidgets — zero-prop Floor adapters around existing feature widgets.
  *
  * These are intentionally thin. The source components stay owned by their
- * feature areas; the Floor wrappers provide data, loading/error states, and
- * the charcoal/orange Floor frame.
+ * feature areas; the role-home wrappers provide data, loading/error states,
+ * and a compact card frame.
  */
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -50,27 +50,27 @@ export function FloorWidgetShell({
       role="figure"
       aria-label={title}
       className={cn(
-        "floor-widget-in relative flex h-full flex-col overflow-hidden rounded-xl border border-[hsl(var(--qep-deck-rule))]",
-        "bg-[hsl(var(--qep-deck-elevated))] p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]",
-        "transition-all duration-150 ease-out hover:border-[hsl(var(--qep-orange))]/40",
+        "relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/10",
+        "bg-[#121927] p-4 shadow-[0_18px_60px_-44px_rgba(0,0,0,0.95)]",
+        "transition-all duration-150 ease-out hover:border-[#f28a07]/35",
         minHeight,
       )}
     >
       <span
         aria-hidden="true"
-        className="absolute inset-y-0 left-0 w-[2px] bg-[hsl(var(--qep-orange))]/60"
+        className="absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"
       />
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
-          <span className="shrink-0 text-[hsl(var(--qep-gray))]">{icon}</span>
-          <h3 className="truncate font-kpi text-[11px] font-extrabold uppercase tracking-[0.14em] text-[hsl(var(--qep-gray))]">
+          <span className="shrink-0 text-slate-500">{icon}</span>
+          <h3 className="truncate text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
             {title}
           </h3>
         </div>
         {to ? (
           <Link
             to={to}
-            className="inline-flex shrink-0 items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground hover:text-[hsl(var(--qep-orange))]"
+            className="inline-flex shrink-0 items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 hover:text-[#f28a07]"
           >
             {linkLabel}
             <ArrowUpRight className="h-3 w-3" aria-hidden="true" />

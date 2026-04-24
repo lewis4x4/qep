@@ -1,14 +1,5 @@
 /**
- * FloorJumpMenu — "Jump to" dropdown inside FloorTopBar.
- *
- * Gives Floor-mode users a minimal navigation escape to the five
- * operator domains without reintroducing the legacy dense top nav.
- * Intentionally thin — this is NOT a navigation system. It's a
- * ripcord for the rare moment the rep needs to walk into QRM or
- * Parts at large instead of following a widget's deep link.
- *
- * Brand-native: charcoal menu, Bebas Neue caps on the trigger,
- * Montserrat on items, orange hover states.
+ * FloorJumpMenu — compact role-home escape hatch to major work surfaces.
  */
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -68,9 +59,9 @@ export function FloorJumpMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="true"
-        className="group inline-flex items-center gap-1.5 rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck-elevated))] px-3 py-1.5 font-display text-xs tracking-[0.14em] text-foreground transition-colors hover:border-[hsl(var(--qep-orange))] hover:text-[hsl(var(--qep-orange))]"
+        className="group inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-xs font-semibold text-slate-300 transition-colors hover:border-[#f28a07]/40 hover:text-white"
       >
-        JUMP TO
+        Jump to
         <ChevronDown
           className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`}
           aria-hidden="true"
@@ -80,11 +71,11 @@ export function FloorJumpMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-50 mt-1 w-48 overflow-hidden rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck-elevated))] shadow-lg ring-1 ring-black/40"
+          className="absolute right-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-2xl border border-white/10 bg-[#121927] shadow-[0_24px_80px_-48px_rgba(0,0,0,0.9)] ring-1 ring-black/40"
         >
-          <div className="border-b border-[hsl(var(--qep-deck-rule))] px-3 py-1.5">
-            <span className="font-kpi text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
-              Operator surfaces
+          <div className="border-b border-white/10 px-3 py-2">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+              Work surfaces
             </span>
           </div>
           <ul className="p-1">
@@ -96,17 +87,17 @@ export function FloorJumpMenu() {
                     to={t.route}
                     onClick={() => setOpen(false)}
                     role="menuitem"
-                    className="group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-[hsl(var(--qep-orange))]/10 hover:text-[hsl(var(--qep-orange))]"
+                    className="group flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-slate-200 transition-colors hover:bg-[#f28a07]/10 hover:text-[#f6a53a]"
                   >
-                    <Icon className="h-3.5 w-3.5 text-muted-foreground group-hover:text-[hsl(var(--qep-orange))]" aria-hidden="true" />
+                    <Icon className="h-3.5 w-3.5 text-slate-500 group-hover:text-[#f6a53a]" aria-hidden="true" />
                     <span className="font-medium">{t.label}</span>
                   </Link>
                 </li>
               );
             })}
           </ul>
-          <div className="border-t border-[hsl(var(--qep-deck-rule))] px-3 py-1.5">
-            <span className="text-[10px] text-muted-foreground">
+          <div className="border-t border-white/10 px-3 py-2">
+            <span className="text-[10px] text-slate-500">
               Each keeps a Back to Floor chip pinned on top.
             </span>
           </div>

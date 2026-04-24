@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import type { IronRole } from "@/features/qrm/lib/iron-roles";
-import { buildStaticNarrative } from "../components/FloorNarrative";
+import { buildStaticNarrative } from "../lib/static-narrative";
 
 export interface FloorNarrativeResponse {
   narrative_text: string;

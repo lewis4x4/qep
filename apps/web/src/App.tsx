@@ -707,12 +707,10 @@ function AnimatedRoutes({ children }: { children: React.ReactNode }) {
  * routes (Sales Companion has its own SalesShell via SalesRoutes), otherwise
  * wraps in the standard AppLayout.
  *
- * Slice: The Floor — /floor also bypasses AppLayout
- * so the Floor's own FloorTopBar is the sole header chrome. Without
- * this bypass two top bars stack, which the user explicitly called
- * out as confusing. When the user navigates away from /floor AND
- * their profile has floor_mode=true, AppLayout renders a "Back to
- * Floor" chip so the user can always return home.
+ * Slice: Role Home — /floor bypasses AppLayout so its focused role-home
+ * header is the sole chrome. When the user navigates away from /floor AND
+ * their profile has floor_mode=true, AppLayout renders a "Back to Floor"
+ * chip so the user can always return home.
  */
 function SalesOrAppLayout({
   profile,

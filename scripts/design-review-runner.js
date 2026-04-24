@@ -68,8 +68,8 @@ async function main() {
       baseUrl,
       route: "/floor",
       screenshotName: "floor-desktop.png",
-      requiredText: ["THE FLOOR"],
-      forbiddenText: ["Role preview", "View as", "COMPOSE"],
+      requiredText: ["Role Home", "Work Queue"],
+      forbiddenText: ["THE FLOOR", "Role preview", "View as", "COMPOSE", "NARRATIVE", "ACTIONS"],
       checks,
       artifacts,
     });
@@ -94,8 +94,8 @@ async function main() {
       baseUrl,
       route: "/floor",
       screenshotName: "floor-mobile.png",
-      requiredText: ["THE FLOOR"],
-      forbiddenText: ["Role preview", "View as", "COMPOSE"],
+      requiredText: ["Role Home", "Work Queue"],
+      forbiddenText: ["THE FLOOR", "Role preview", "View as", "COMPOSE", "NARRATIVE", "ACTIONS"],
       checks,
       artifacts,
     });
