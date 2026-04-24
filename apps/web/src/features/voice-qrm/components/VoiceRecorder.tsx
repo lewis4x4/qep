@@ -204,7 +204,7 @@ export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
           </p>
         )}
         {state === "idle" && !microphoneProblem && (
-          <p className="text-xs text-muted-foreground">Tap the mic to start. Talk naturally — the system will extract the structure.</p>
+          <p className="text-xs text-muted-foreground">Voice capture — describe the opportunity.</p>
         )}
         {state === "ready" && (
           <p className="text-xs text-muted-foreground">Recorded {formatTime(elapsedSec)}. Review or submit.</p>

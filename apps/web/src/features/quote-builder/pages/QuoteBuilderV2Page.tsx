@@ -118,6 +118,14 @@ type Step = "entry" | "customer" | "equipment" | "tradeIn" | "financing" | "revi
 type BuilderMode = "workspace" | "guided";
 type AutoSaveState = "idle" | "local" | "saving" | "saved" | "error";
 
+function readinessChipLabel(missing: string): string {
+  if (missing.includes("customer")) return "Customer";
+  if (missing.includes("equipment")) return "Equipment";
+  if (missing.includes("branch")) return "Branch";
+  if (missing.includes("email")) return "Email";
+  return missing;
+}
+
 const STEP_STORAGE_PREFIX = "qep.quote-builder.last-step.";
 const STEP_LABELS: Record<Step, string> = {
   entry: "Entry",
@@ -1270,6 +1278,8 @@ export function QuoteBuilderV2Page() {
     draft.contactId ||
     draft.companyId,
   );
+  const hasEquipmentLine = draft.equipment.length > 0;
+  const signalsReady = hasCustomer && hasEquipmentLine;
 
   const intelligencePanel = (
     <IntelligencePanel
@@ -1331,13 +1341,25 @@ export function QuoteBuilderV2Page() {
                           : "Not saved"}
                 </span>
               </div>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                {packetReadiness.draft.ready
-                  ? "Cmd-S saves. Auto-save runs every 10 seconds when the draft is server-ready."
-                  : packetReadiness.draft.missing.length > 0
-                    ? `Missing: ${packetReadiness.draft.missing.join(", ")}`
-                    : "Start the quote to enable save."}
-              </p>
+              {packetReadiness.draft.ready ? (
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Cmd-S saves. Auto-save runs every 10 seconds when the draft is server-ready.
+                </p>
+              ) : packetReadiness.draft.missing.length > 0 ? (
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span>Needs:</span>
+                  {packetReadiness.draft.missing.map((missing) => (
+                    <span
+                      key={missing}
+                      className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 font-semibold text-amber-300"
+                    >
+                      {readinessChipLabel(missing)}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Start the quote to enable save.</p>
+              )}
             </div>
           </div>
 
@@ -1428,7 +1450,8 @@ export function QuoteBuilderV2Page() {
                     value={draft.voiceSummary ?? ""}
                     onChange={(event) => setDraft((current) => ({ ...current, voiceSummary: event.target.value }))}
                     placeholder="What is the customer trying to accomplish?"
-                    className="min-h-[96px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                    rows={5}
+                    className="min-h-[136px] w-full resize-y rounded border border-input bg-card px-3 py-2 text-sm"
                   />
                 </label>
 
@@ -1506,14 +1529,14 @@ export function QuoteBuilderV2Page() {
                   { mode: "voice" as QuoteEntryMode, label: "Voice", icon: Mic, body: "Record the deal and seed customer need.", action: () => setDraft((cur) => ({ ...cur, entryMode: "voice" })) },
                   { mode: "ai_chat" as QuoteEntryMode, label: "AI Chat", icon: MessageSquare, body: "Use the prompt below for recommendation.", action: () => setDraft((cur) => ({ ...cur, entryMode: "ai_chat" })) },
                   { mode: "manual" as QuoteEntryMode, label: "Manual", icon: FileText, body: "Build package lines directly.", action: () => setDraft((cur) => ({ ...cur, entryMode: "manual" })) },
-                  { mode: "manual" as QuoteEntryMode, label: "Trade Photo", icon: Camera, body: "Open trade capture first.", action: () => { setDraft((cur) => ({ ...cur, entryMode: "manual" })); setTradeExpanded(true); } },
+                  { mode: "trade_photo" as QuoteEntryMode, label: "Trade Photo", icon: Camera, body: "Open trade capture first.", action: () => { setDraft((cur) => ({ ...cur, entryMode: "trade_photo" })); setTradeExpanded(true); } },
                 ]).map(({ mode, label, icon: Icon, body, action }) => (
                   <button
                     key={label}
                     type="button"
                     onClick={action}
                     className={`min-h-[116px] rounded-lg border p-3 text-left transition hover:border-qep-orange/60 ${
-                      draft.entryMode === mode && label !== "Trade Photo"
+                      draft.entryMode === mode
                         ? "border-qep-orange bg-qep-orange/5"
                         : "border-border bg-card/40"
                     }`}
@@ -1833,17 +1856,34 @@ export function QuoteBuilderV2Page() {
               <button
                 type="button"
                 onClick={() => setDealAssistantOpen(true)}
+                aria-label="Open quote copilot chat drawer"
+                title="Open quote copilot chat drawer"
                 className="flex w-full items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-left text-sm text-muted-foreground transition hover:border-qep-orange/50 hover:text-foreground"
               >
                 <Sparkles className="h-4 w-4 text-qep-orange" />
-                Ask about this quote...
+                <span className="min-w-0 flex-1 truncate">Ask about this quote...</span>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Chat drawer</span>
               </button>
             </Card>
 
             <Card className="p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Signals</p>
               <div className="mt-3">
-                <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} shadowCalibration={shadowCalibration} />
+                {signalsReady ? (
+                  <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} shadowCalibration={shadowCalibration} />
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border bg-background/40 p-3 text-xs text-muted-foreground">
+                    Score available once quote has customer + equipment.
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {!hasCustomer && (
+                        <span className="rounded-full border border-border/70 px-2 py-0.5">Customer needed</span>
+                      )}
+                      {!hasEquipmentLine && (
+                        <span className="rounded-full border border-border/70 px-2 py-0.5">Equipment needed</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
 

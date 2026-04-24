@@ -223,7 +223,7 @@ export function CustomerPicker({
             setTimeout(() => setOpen(false), 120);
           }}
           onKeyDown={handleKeyDown}
-          placeholder="Search customers by name, company, phone, or email…"
+          placeholder="Search..."
           className="pl-9 pr-16"
           aria-label="Search customers"
           aria-expanded={open}

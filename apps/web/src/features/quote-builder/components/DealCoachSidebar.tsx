@@ -29,6 +29,7 @@ import {
   type RuleAcceptanceStat,
 } from "../lib/deal-intelligence-api";
 import type { AcceptanceSnapshot } from "../lib/coach-rules/adaptive";
+import { hasQuoteCustomerIdentity } from "../lib/quote-workspace";
 
 /**
  * Slice 13 — Deal Coach Sidebar v1.
@@ -101,6 +102,7 @@ export function DealCoachSidebar({
 
   // Slice 18 — workspace acceptance snapshots drive adaptive demote/suppress
   const [acceptanceStats, setAcceptanceStats] = useState<AcceptanceSnapshot[]>([]);
+  const coachReady = hasQuoteCustomerIdentity(draft) && draft.equipment.length > 0;
 
   // ── Context fetch (once per user + equipment-make change) ──────────────
   const equipmentMakesKey = useMemo(
@@ -199,6 +201,11 @@ export function DealCoachSidebar({
   ]);
 
   useEffect(() => {
+    if (!coachReady) {
+      setSuggestions([]);
+      setLoading(false);
+      return;
+    }
     if (!profile || !marginBaseline) {
       setLoading(marginBaseline === null);
       return;
@@ -244,7 +251,7 @@ export function DealCoachSidebar({
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctxSignature]);
+  }, [ctxSignature, coachReady]);
 
   const handleApply = useCallback((rule: RuleResult) => {
     if (rule.action && onAction) onAction(rule.action.actionId);
@@ -280,7 +287,7 @@ export function DealCoachSidebar({
   // ── Render ──────────────────────────────────────────────────────────────
 
   const headerCount = suggestions.length;
-  const hasAny = headerCount > 0;
+  const hasAny = coachReady && headerCount > 0;
 
   return (
     <div className="space-y-2">
@@ -292,13 +299,16 @@ export function DealCoachSidebar({
         <span className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
           <span className="font-medium">Deal Coach</span>
-          {loading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+          {loading && coachReady && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
           {!loading && hasAny && (
             <Badge variant="outline" className="text-[10px]">
               {headerCount} suggestion{headerCount === 1 ? "" : "s"}
             </Badge>
           )}
-          {!loading && !hasAny && (
+          {!coachReady && (
+            <span className="text-xs text-muted-foreground">waiting</span>
+          )}
+          {!loading && coachReady && !hasAny && (
             <span className="text-xs text-muted-foreground">all clear</span>
           )}
         </span>
@@ -307,7 +317,7 @@ export function DealCoachSidebar({
 
       {expanded && (
         <div className="space-y-2">
-          {loading && (
+          {loading && coachReady && (
             <Card className="border-dashed">
               <CardContent className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" /> Analyzing…
@@ -315,7 +325,15 @@ export function DealCoachSidebar({
             </Card>
           )}
 
-          {!loading && !hasAny && (
+          {!coachReady && (
+            <Card className="border-dashed">
+              <CardContent className="p-3 text-xs text-muted-foreground">
+                Waiting for quote details to review.
+              </CardContent>
+            </Card>
+          )}
+
+          {!loading && coachReady && !hasAny && (
             <Card className="border-dashed">
               <CardContent className="p-3 text-xs text-muted-foreground">
                 No suggestions right now. Margin looks healthy and no active programs are being missed.
@@ -323,7 +341,7 @@ export function DealCoachSidebar({
             </Card>
           )}
 
-          {!loading && suggestions.map((rule) => {
+          {!loading && coachReady && suggestions.map((rule) => {
             const tone = SEVERITY_TONE[rule.severity];
             const whyExpanded = expandedWhy === rule.ruleId;
             return (

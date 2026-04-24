@@ -304,6 +304,8 @@ export function AppLayout({
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const embeddedMode = new URLSearchParams(location.search).get("embedded") === "1";
+  const quoteWorkspaceRoute = location.pathname === "/quote-v2" || location.pathname.startsWith("/quote-v2/");
+  const showBackToFloorChip = Boolean(profile.floor_mode && !quoteWorkspaceRoute);
 
   if (embeddedMode) {
     return (
@@ -318,14 +320,14 @@ export function AppLayout({
       <AmbientMatrix />
 
       {/* Slice: The Floor — Back-to-Floor chip for users who opted in.
-          Renders on EVERY admin surface (anything that isn't /floor/*)
-          so a Floor-mode user who navigates into a widget's deep link
-          can always return home. The chip is visually compact and
-          styled to feel like Floor chrome — orange gear mark +
-          uppercase Bebas Neue — so the user's eye tracks it
-          instantly. When the user is on /floor itself this layout
-          isn't rendered (see SalesOrAppLayout). */}
-      {profile.floor_mode && <BackToFloorChip />}
+          Renders on admin surfaces (anything that isn't /floor/*),
+          except the quote workspace where the page header owns the
+          return link to avoid duplicate Back-to-Floor chrome. The chip
+          is visually compact and styled to feel like Floor chrome —
+          orange gear mark + uppercase Bebas Neue — so the user's eye
+          tracks it instantly. When the user is on /floor itself this
+          layout isn't rendered (see SalesOrAppLayout). */}
+      {showBackToFloorChip && <BackToFloorChip />}
 
       {/* Desktop: enhanced top bar */}
       <TopBar
@@ -333,14 +335,14 @@ export function AppLayout({
         onLogout={onLogout}
         quoteBuilderEnabled={quoteBuilderEnabled}
         quoteBuilderLoading={quoteBuilderLoading}
-        floorMode={profile.floor_mode}
+        floorMode={showBackToFloorChip}
       />
 
       {/* Mobile: top header */}
       <div
         className={cn(
           "lg:hidden fixed left-0 right-0 z-40 flex items-center justify-between px-4 h-14 bg-qep-dark border-b border-white/10",
-          profile.floor_mode ? "top-9" : "top-0",
+          showBackToFloorChip ? "top-9" : "top-0",
         )}
         role="banner"
       >
@@ -384,7 +386,7 @@ export function AppLayout({
       <main
         className={cn(
           "flex-1 pb-16 lg:pb-8 min-h-screen",
-          profile.floor_mode
+          showBackToFloorChip
             ? "pt-[116px] lg:pt-[140px]"
             : "pt-20 lg:pt-[104px]",
         )}

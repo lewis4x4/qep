@@ -260,7 +260,7 @@ export function WinProbabilityStrip({
             <div className="flex items-center gap-1.5 mb-1.5">
               <ArrowUpRight className="h-3 w-3 text-emerald-400" aria-hidden />
               <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-400">
-                Biggest lifts
+                Next actions to improve score
               </span>
             </div>
             <div className="flex flex-wrap gap-1.5">
