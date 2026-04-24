@@ -262,6 +262,14 @@ function looksLikeCrmRecordId(value: string): boolean {
   );
 }
 
+function formatDealReference(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!looksLikeCrmRecordId(trimmed)) return trimmed;
+  return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
+}
+
 function getVoiceCaptureStatusMeta(
   status: RecentCapture["sync_status"],
   syncError: string | null,
@@ -1205,7 +1213,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     } else if (cap.sync_status === "synced" && hasDeal) {
       syncStatus = "synced";
       statusLabel = "Synced to QRM";
-      statusDetail = cap.hubspot_deal_id || cap.linked_deal_id || "On deal timeline";
+      statusDetail = formatDealReference(cap.hubspot_deal_id ?? cap.linked_deal_id) ?? "On deal timeline";
       actionLabel = "Open note";
     } else if (!hasDeal) {
       syncStatus = "needs_match";
@@ -1248,7 +1256,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       dealId: note.dealId,
       syncStatus: "queued",
       statusLabel: "Queued locally",
-      statusDetail: note.dealId ? "Will sync to selected deal" : "Will auto-match after upload",
+      statusDetail: note.dealId
+        ? `Will sync to ${formatDealReference(note.dealId) ?? "selected deal"}`
+        : "Will auto-match after upload",
       actionLabel: "Manage offline",
       audioStoragePath: null,
       audioBlob: note.audioBlob,
@@ -1325,6 +1335,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       ? `${resolvedDealOption.name} · ${resolvedDealOption.companyName}`
       : resolvedDealOption.name
     : selectedDealLabel;
+  const activeDealReference = formatDealReference(activeDealId);
   const queuedCount = queuedVoiceNotes.length;
   const matchConfidenceClass = activeDealId
     ? "border-green-500/30 bg-green-500/10 text-green-300"
@@ -1398,11 +1409,13 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     });
   }, [queuedVoiceNotes, recentCaptures, recentSearch, recentStatusFilter, recentDateFilter]);
 
+  const hasTranscriptContent = Boolean(liveTranscript || result?.transcript);
   const liveTranscriptText =
     liveTranscript ||
+    result?.transcript ||
     (recordingState === "recording"
       ? "Listening for customer, equipment, stage, budget, and next steps..."
-      : result?.transcript ?? "Transcript preview appears here after recording.");
+      : "Transcript preview appears here after recording.");
 
   return (
     <TooltipProvider>
@@ -1434,16 +1447,16 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                     className={cn(
                       "relative flex min-h-12 items-center gap-2 rounded-lg border px-3 py-2 text-sm",
                       complete && "border-green-500/30 bg-green-500/10 text-green-300",
-                      active && "border-qep-orange/35 bg-qep-orange/10 text-qep-orange",
-                      !complete && !active && "border-border bg-background/40 text-muted-foreground",
+                      active && "border-qep-orange/50 bg-qep-orange/15 text-qep-orange shadow-[inset_0_0_0_1px_rgba(255,132,31,0.12)]",
+                      !complete && !active && "border-border bg-background/30 text-muted-foreground/80",
                     )}
                   >
                     <span
                       className={cn(
                         "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold",
-                        complete && "border-green-500/30 bg-green-500/20",
-                        active && "border-qep-orange/40 bg-qep-orange/15",
-                        !complete && !active && "border-border bg-muted/30",
+                        complete && "border-green-500/40 bg-green-500/25 text-green-200",
+                        active && "border-qep-orange bg-qep-orange text-background",
+                        !complete && !active && "border-muted-foreground/35 bg-transparent text-muted-foreground",
                       )}
                     >
                       {complete ? <Check className="h-3.5 w-3.5" /> : index + 1}
@@ -1478,13 +1491,13 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
               {statusCards.map((card) => {
                 const StatusIcon = card.icon;
                 return (
-                  <div key={card.label} className={cn("flex h-[60px] items-center gap-3 rounded-lg border px-3", card.className)}>
-                    <StatusIcon className="h-4 w-4 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] opacity-70">{card.label}</p>
-                      <p className="truncate text-sm font-semibold">{card.value}</p>
-                      <p className="truncate text-[11px] opacity-70">{card.detail}</p>
-                    </div>
+                  <div key={card.label} className={cn("flex h-[72px] min-w-0 flex-col justify-center rounded-lg border px-3 py-2", card.className)}>
+                    <p className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] opacity-75">
+                      <StatusIcon className="h-3.5 w-3.5 shrink-0" />
+                      {card.label}
+                    </p>
+                    <p className="mt-1 truncate text-sm font-semibold leading-tight">{card.value}</p>
+                    <p className="mt-0.5 truncate text-[11px] leading-tight opacity-70">{card.detail}</p>
                   </div>
                 );
               })}
@@ -1523,11 +1536,12 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                       </p>
                       <p className="text-sm text-muted-foreground">or press Enter</p>
                     </div>
-                    <div className="grid w-full grid-cols-3 gap-3 border-t border-border pt-4">
-                      <div>
-                        <p className="font-mono text-3xl text-foreground">{formatTime(elapsedSeconds)}</p>
-                        <p className="text-xs text-muted-foreground">Max 10:00</p>
+                    <div className="w-full space-y-3 border-t border-border pt-4">
+                      <div className="text-center">
+                        <p className="font-mono text-3xl tabular-nums leading-none text-foreground">{formatTime(elapsedSeconds)}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Max 10:00</p>
                       </div>
+                      <div className="grid grid-cols-2 gap-2">
                       <Button
                         type="button"
                         variant="outline"
@@ -1552,6 +1566,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                         <span aria-hidden="true" className="text-base leading-none">⏹</span>
                         Stop
                       </Button>
+                      </div>
                     </div>
                   </div>
 
@@ -1563,7 +1578,12 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                         {recordingState === "recording" ? "Live" : "Ready"}
                       </span>
                     </div>
-                    <div className="min-h-[132px] rounded-lg border border-border bg-background/50 p-4 text-base leading-7 text-foreground">
+                    <div
+                      className={cn(
+                        "min-h-[132px] rounded-lg border border-border bg-background/50 p-4 text-base leading-7 text-foreground",
+                        !hasTranscriptContent && "text-muted-foreground/70 italic",
+                      )}
+                    >
                       {liveTranscriptText}
                     </div>
                     <div className="flex h-16 items-center gap-1 overflow-hidden rounded-lg border border-border bg-background/40 px-3" aria-label="Recording waveform">
@@ -1648,13 +1668,13 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                       ].map((item) => {
                         const Icon = item.icon;
                         return (
-                          <div key={item.label} className="grid grid-cols-[24px_minmax(0,1fr)_32px] gap-3">
+                          <div key={item.label} className="grid w-full grid-cols-[24px_minmax(0,1fr)_36px] items-start gap-3">
                             <Icon className="mt-1 h-4 w-4 text-muted-foreground" />
                             <div className="min-w-0">
                               <p className="whitespace-nowrap text-sm font-medium leading-tight text-foreground">{item.label}</p>
                               <p className="break-words text-sm text-muted-foreground">{item.value}</p>
                             </div>
-                            <Button variant="ghost" size="icon" aria-label={`Edit ${item.label}`}>
+                            <Button variant="ghost" size="icon" aria-label={`Edit ${item.label}`} className="h-8 w-8 justify-self-end">
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
                           </div>
@@ -1704,22 +1724,28 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                     View all
                   </Link>
                 </div>
-                <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+                <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(0,1fr)_140px_150px_auto] lg:items-end">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input value={recentSearch} onChange={(e) => setRecentSearch(e.target.value)} placeholder="Search notes..." className="pl-9" />
                   </div>
-                  <select value={recentStatusFilter} onChange={(e) => setRecentStatusFilter(e.target.value as RecentStatusFilter)} className="h-11 rounded-[8px] border border-border bg-card px-3 text-sm text-foreground">
-                    <option value="all">All</option>
-                    <option value="synced">Synced</option>
-                    <option value="queued">Queued</option>
-                    <option value="needs_match">Needs match</option>
-                  </select>
-                  <select value={recentDateFilter} onChange={(e) => setRecentDateFilter(e.target.value as RecentDateFilter)} className="h-11 rounded-[8px] border border-border bg-card px-3 text-sm text-foreground">
-                    <option value="all">All time</option>
-                    <option value="today">Today</option>
-                    <option value="week">Last 7 days</option>
-                  </select>
+                  <label className="space-y-1">
+                    <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Status</span>
+                    <select value={recentStatusFilter} onChange={(e) => setRecentStatusFilter(e.target.value as RecentStatusFilter)} className="h-10 w-full rounded-[8px] border border-border bg-card px-3 text-sm text-foreground">
+                      <option value="all">All</option>
+                      <option value="synced">Synced</option>
+                      <option value="queued">Queued</option>
+                      <option value="needs_match">Needs match</option>
+                    </select>
+                  </label>
+                  <label className="space-y-1">
+                    <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Date</span>
+                    <select value={recentDateFilter} onChange={(e) => setRecentDateFilter(e.target.value as RecentDateFilter)} className="h-10 w-full rounded-[8px] border border-border bg-card px-3 text-sm text-foreground">
+                      <option value="all">All time</option>
+                      <option value="today">Today</option>
+                      <option value="week">Last 7 days</option>
+                    </select>
+                  </label>
                   <Button variant="outline" aria-label="Open recording filters">
                     <SlidersHorizontal className="h-4 w-4" />
                   </Button>
@@ -1804,6 +1830,11 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-2">
                                   <Button type="button" variant={row.syncStatus === "review_sync" ? "default" : "ghost"} size="sm" onClick={() => cap && void openRecentCapture(cap)}>
+                                    {row.syncStatus === "needs_match" ? (
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <FileText className="h-3.5 w-3.5" />
+                                    )}
                                     {row.actionLabel}
                                   </Button>
                                   {row.dealId && (
@@ -1834,13 +1865,23 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                   <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em]">
                     <CheckCircle2 className="h-4 w-4 text-green-400" />
                     QRM match & destination
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button type="button" aria-label="Where field notes are saved" className="rounded-sm text-muted-foreground hover:text-foreground">
+                          <HelpCircle className="h-3.5 w-3.5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side={isMobile ? "bottom" : "left"} className="max-w-[260px]">
+                        Field notes save to Sales Activity first. When a deal is matched, Iron syncs the note to that customer timeline in QRM.
+                      </TooltipContent>
+                    </Tooltip>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="rounded-lg border border-border bg-background/50 p-3">
                     <p className="text-xs text-muted-foreground">Matched to</p>
                     <p className="mt-1 font-semibold text-foreground">{activeDealTitle ?? "No deal matched yet"}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{activeDealId ?? "Orphan notes stay in Field Notes until matched."}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{activeDealReference ?? "Orphan notes stay in Field Notes until matched."}</p>
                     {activeDealId && (
                       <Link to={`/crm/deals/${activeDealId}`} className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-qep-orange hover:underline">
                         View in QRM
@@ -1852,8 +1893,8 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                     <span className="text-muted-foreground">Confidence</span>
                     <Badge variant="outline" className={matchConfidenceClass}>{activeDealId ? "High (92%)" : "Needs match"}</Badge>
                   </div>
-                  <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
-                    This note will be saved to <span className="font-medium text-foreground">Field Notes &gt; Sales Activity</span> and synced to the customer timeline when matched.
+                  <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                    Saves to <span className="font-medium text-foreground">Field Notes</span> until matched to a deal.
                   </div>
                 </CardContent>
               </Card>

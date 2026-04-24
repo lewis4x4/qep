@@ -177,6 +177,8 @@ describe("VoiceCapturePage redesign", () => {
     expect(screen.getByText("Extracted details (preview)")).toBeTruthy();
     expect(screen.getByText("Offline & sync status")).toBeTruthy();
     expect(screen.getByPlaceholderText("Search notes...")).toBeTruthy();
+    expect(screen.getByText("Status")).toBeTruthy();
+    expect(screen.getByText("Date")).toBeTruthy();
     expect(screen.getByDisplayValue("All")).toBeTruthy();
     expect(screen.getByDisplayValue("All time")).toBeTruthy();
 
@@ -186,6 +188,8 @@ describe("VoiceCapturePage redesign", () => {
 
     expect(screen.getByText("City bid review")).toBeTruthy();
     expect(screen.getAllByText("Synced to QRM").length).toBeGreaterThan(0);
+    expect(screen.getByText("1111...1111")).toBeTruthy();
+    expect(screen.queryByText("11111111-1111-4111-8111-111111111111")).toBeNull();
     expect(screen.getAllByText("Needs match").length).toBeGreaterThan(0);
     expect(screen.getByText("Queued locally")).toBeTruthy();
     expect(screen.getAllByLabelText(/^Play /).length).toBeGreaterThanOrEqual(5);

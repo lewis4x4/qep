@@ -703,8 +703,8 @@ function AnimatedRoutes({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * SalesOrAppLayout — renders children directly when on /sales/* routes
- * (Sales Companion has its own SalesShell via SalesRoutes), otherwise
+ * SalesOrAppLayout — renders children directly when on companion /sales/*
+ * routes (Sales Companion has its own SalesShell via SalesRoutes), otherwise
  * wraps in the standard AppLayout.
  *
  * Slice: The Floor — /floor also bypasses AppLayout
@@ -722,7 +722,11 @@ function SalesOrAppLayout({
   children,
 }: AppLayoutProps) {
   const location = useLocation();
-  const isSalesRoute = location.pathname.startsWith("/sales") && location.pathname !== "/sales/quotes";
+  const salesRoutesWithSharedChrome = ["/sales/quotes", "/sales/field-note"];
+  const hasSharedSalesChrome = salesRoutesWithSharedChrome.some((path) =>
+    location.pathname === path || location.pathname.startsWith(`${path}/`)
+  );
+  const isSalesRoute = location.pathname.startsWith("/sales") && !hasSharedSalesChrome;
   const isPartsCompanionRoute = location.pathname.startsWith("/parts/companion");
   const isFloorRoute = location.pathname.startsWith("/floor");
 
