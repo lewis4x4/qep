@@ -301,7 +301,6 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
   } = useTopBarBell(profile.id);
   const { preference, resolvedDark } = useTheme();
   const showCrmSearch = location.pathname.startsWith("/qrm");
-  const isQuotesListRoute = location.pathname === "/sales/quotes";
 
   const primaryNavGroups = resolvePrimaryNavGroups(
     quoteBuilderEnabled,
@@ -315,16 +314,14 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
   );
   const activePrimaryHeader = resolveActivePrimaryHeader(location.pathname);
   const utilityRouteActive = isUtilityRoute(location.pathname);
+  const activePrimaryGroupLabel =
+    primaryNavGroups.find((group) => group.id === activePrimaryHeader)?.label ?? "QEP";
 
   const themeAriaLabel =
     preference === "system"
       ? `Theme: following system (${resolvedDark ? "dark" : "light"})`
       : `Theme: ${preference}`;
 
-  const isCrmSubPage =
-    location.pathname.startsWith("/qrm/") && location.pathname !== "/qrm";
-  const isAdminSubPage =
-    location.pathname.startsWith("/admin/") && location.pathname !== "/admin";
   const breadcrumbLabel =
     BREADCRUMB_LABELS[location.pathname] ??
     (location.pathname.startsWith("/m/qrm") ? "Mobile Field Command" : undefined) ??
@@ -353,6 +350,8 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     (location.pathname.startsWith("/qrm/accounts/") ? "Account Command" : undefined) ??
     (location.pathname.startsWith("/qrm/territories/") ? "Territory Command" : undefined) ??
     (location.pathname.startsWith("/qrm/companies/") ? "Company Detail" : undefined);
+  const compactAreaLabel = utilityRouteActive ? "System" : activePrimaryGroupLabel;
+  const compactPageLabel = breadcrumbLabel ?? compactAreaLabel;
   const quickAction =
     QUICK_ACTION_MAP[location.pathname] ??
     (location.pathname.startsWith("/m/qrm") ? { label: "QRM", route: "/qrm" } : null) ??
@@ -429,96 +428,118 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
         className={cn(
           "fixed z-50 flex justify-center pointer-events-none",
           floorMode ? "top-[52px]" : "top-4",
-          isQuotesListRoute ? "inset-x-1 px-0" : "inset-x-0 px-4 sm:px-6 lg:px-8",
+          "inset-x-1 px-0",
         )}
       >
         <header
-          className={cn(
-            "w-full flex items-center gap-4 bg-slate-900/80 dark:bg-white/[0.05] border border-white/10 backdrop-blur-xl shadow-2xl pointer-events-auto",
-            isQuotesListRoute
-              ? "max-w-[calc(100vw-12px)] rounded-[24px] px-3 py-2 sm:px-4 xl:px-9 xl:py-3.5"
-              : "max-w-7xl rounded-full px-6 py-3.5",
-          )}
+          className="w-full max-w-[calc(100vw-12px)] flex items-center gap-3 rounded-[24px] border border-white/10 bg-slate-900/80 px-3 py-2 shadow-2xl backdrop-blur-xl pointer-events-auto dark:bg-white/[0.05] sm:px-4 xl:gap-4 xl:px-9 xl:py-3.5"
           role="banner"
         >
-          {isQuotesListRoute && (
-            <Link to="/floor" className="hidden min-w-[185px] items-center gap-3 xl:flex">
-              <div className="rounded-md border border-white/10 bg-black/20 p-1">
-                <BrandLogo className="h-8 w-auto" decorative />
-              </div>
-              <span className="h-7 w-px bg-white/15" aria-hidden="true" />
-              <span className="text-sm font-bold uppercase tracking-[0.14em] text-qep-orange">QEP</span>
-            </Link>
-          )}
-
-          {isQuotesListRoute && (
-            <div className="flex min-w-0 flex-1 items-center gap-3 xl:hidden">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-200 outline-none transition hover:bg-white/10 hover:text-white"
-                    aria-label="Open navigation menu"
-                  >
-                    <Menu className="h-5 w-5" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="start"
-                  className="w-[min(22rem,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto rounded-2xl border-white/10 bg-slate-900/95 p-2 text-white backdrop-blur-xl"
-                >
-                  {primaryNavGroups.map((group) => (
-                    <div key={`compact-${group.id}`}>
-                      <DropdownMenuLabel className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                        {group.label}
-                      </DropdownMenuLabel>
-                      {group.sections.flatMap((section) => section.items).map((item) => (
-                        <DropdownMenuItem
-                          key={`compact-${item.href}`}
-                          asChild
-                          disabled={item.gated}
-                          className="rounded-xl px-3 py-3 focus:bg-white/10 focus:text-white"
-                        >
-                          {item.gated ? (
-                            <div className="flex w-full cursor-not-allowed items-center gap-3 opacity-60">
-                              <item.icon className="h-4 w-4 text-slate-400" />
-                              <span className="flex-1 text-sm font-medium tracking-normal">{item.label}</span>
-                              <span className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Locked</span>
-                            </div>
-                          ) : (
-                            <Link to={item.href} className="flex w-full items-center gap-3">
-                              <item.icon
-                                className={cn(
-                                  "h-4 w-4",
-                                  isNavHrefActive(item.href) ? "text-qep-orange" : "text-slate-400",
-                                )}
-                              />
-                              <span
-                                className={cn(
-                                  "flex-1 text-sm font-medium tracking-normal",
-                                  isNavHrefActive(item.href) && "text-qep-orange",
-                                )}
-                              >
-                                {item.label}
-                              </span>
-                            </Link>
-                          )}
-                        </DropdownMenuItem>
-                      ))}
-                    </div>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <div className="min-w-0">
-                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-qep-orange">QEP</div>
-                <div className="truncate text-sm font-semibold text-white">Quotes</div>
-              </div>
+          <Link to="/floor" className="hidden min-w-[185px] items-center gap-3 xl:flex">
+            <div className="rounded-md border border-white/10 bg-black/20 p-1">
+              <BrandLogo className="h-8 w-auto" decorative />
             </div>
-          )}
+            <span className="h-7 w-px bg-white/15" aria-hidden="true" />
+            <span className="text-sm font-bold uppercase tracking-[0.14em] text-qep-orange">QEP</span>
+          </Link>
+
+          <div className="flex min-w-0 flex-1 items-center gap-3 xl:hidden">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-200 outline-none transition hover:bg-white/10 hover:text-white"
+                  aria-label="Open navigation menu"
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                className="w-[min(22rem,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto rounded-2xl border-white/10 bg-slate-900/95 p-2 text-white backdrop-blur-xl"
+              >
+                {primaryNavGroups.map((group) => (
+                  <div key={`compact-${group.id}`}>
+                    <DropdownMenuLabel className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                      {group.label}
+                    </DropdownMenuLabel>
+                    {group.sections.flatMap((section) => section.items).map((item) => (
+                      <DropdownMenuItem
+                        key={`compact-${item.href}`}
+                        asChild
+                        disabled={item.gated}
+                        className="rounded-xl px-3 py-3 focus:bg-white/10 focus:text-white"
+                      >
+                        {item.gated ? (
+                          <div className="flex w-full cursor-not-allowed items-center gap-3 opacity-60">
+                            <item.icon className="h-4 w-4 text-slate-400" />
+                            <span className="flex-1 text-sm font-medium tracking-normal">{item.label}</span>
+                            <span className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Locked</span>
+                          </div>
+                        ) : (
+                          <Link to={item.href} className="flex w-full items-center gap-3">
+                            <item.icon
+                              className={cn(
+                                "h-4 w-4",
+                                isNavHrefActive(item.href) ? "text-qep-orange" : "text-slate-400",
+                              )}
+                            />
+                            <span
+                              className={cn(
+                                "flex-1 text-sm font-medium tracking-normal",
+                                isNavHrefActive(item.href) && "text-qep-orange",
+                              )}
+                            >
+                              {item.label}
+                            </span>
+                          </Link>
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </div>
+                ))}
+                {utilitySections.length > 0 && (
+                  <div className="mt-2 border-t border-white/10 pt-2">
+                    <DropdownMenuLabel className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                      System
+                    </DropdownMenuLabel>
+                    {utilitySections.flatMap((section) => section.items).map((item) => (
+                      <DropdownMenuItem
+                        key={`compact-utility-${item.href}`}
+                        asChild
+                        className="rounded-xl px-3 py-3 focus:bg-white/10 focus:text-white"
+                      >
+                        <Link to={item.href} className="flex w-full items-center gap-3">
+                          <item.icon
+                            className={cn(
+                              "h-4 w-4",
+                              isNavHrefActive(item.href) ? "text-qep-orange" : "text-slate-400",
+                            )}
+                          />
+                          <span
+                            className={cn(
+                              "flex-1 text-sm font-medium tracking-normal",
+                              isNavHrefActive(item.href) && "text-qep-orange",
+                            )}
+                          >
+                            {item.label}
+                          </span>
+                        </Link>
+                      </DropdownMenuItem>
+                    ))}
+                  </div>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <div className="min-w-0">
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-qep-orange">{compactAreaLabel}</div>
+              <div className="truncate text-sm font-semibold text-white">{compactPageLabel}</div>
+            </div>
+          </div>
 
           <nav
             className={cn(
               "min-w-0 flex-1 items-center gap-1.5 text-[11px] font-bold tracking-[0.12em] uppercase text-slate-300",
-              isQuotesListRoute ? "hidden justify-start xl:flex" : "hidden justify-center lg:flex",
+              "hidden justify-start xl:flex",
             )}
           >
             {primaryNavGroups.map((group) => {
@@ -597,7 +618,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
 
         {/* Right: Search + Bell + Workspace + Avatar */}
         <div className="flex items-center gap-3 ml-auto shrink-0">
-          <div className={cn("hidden transition-all", isQuotesListRoute ? "w-[340px] 2xl:block" : "w-40 focus-within:w-52 lg:block")}>
+          <div className="hidden w-48 transition-all xl:block 2xl:w-[340px]">
             {showCrmSearch ? (
               <QrmGlobalSearchCommand />
             ) : (
@@ -609,16 +630,11 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
                     value={searchValue}
                     onChange={(e) => setSearchValue(e.target.value)}
                     placeholder={location.pathname === "/sales/quotes" ? "Search quotes, customers, or #..." : "Search..."}
-                    className={cn(
-                      "w-full pl-9 py-1.5 text-xs bg-white/5 border border-white/10 rounded-full text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-qep-orange focus:bg-white/10 transition-all",
-                      isQuotesListRoute ? "h-10 pr-14" : "pr-4",
-                    )}
+                    className="h-10 w-full rounded-full border border-white/10 bg-white/5 py-1.5 pl-9 pr-14 text-xs text-white placeholder:text-slate-400 transition-all focus:bg-white/10 focus:outline-none focus:ring-1 focus:ring-qep-orange"
                   />
-                  {isQuotesListRoute && (
-                    <kbd className="pointer-events-none absolute right-3 top-1/2 hidden h-6 -translate-y-1/2 items-center rounded border border-white/10 bg-white/10 px-2 font-mono text-[10px] text-slate-300 xl:inline-flex">
-                      ⌘K
-                    </kbd>
-                  )}
+                  <kbd className="pointer-events-none absolute right-3 top-1/2 hidden h-6 -translate-y-1/2 items-center rounded border border-white/10 bg-white/10 px-2 font-mono text-[10px] text-slate-300 xl:inline-flex">
+                    ⌘K
+                  </kbd>
                 </div>
               </form>
             )}
@@ -630,7 +646,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
                 <button
                   className={cn(
                     "items-center gap-1.5 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] outline-none transition-colors",
-                    isQuotesListRoute ? "hidden xl:inline-flex" : "hidden lg:inline-flex",
+                    "hidden xl:inline-flex",
                     utilityRouteActive
                       ? "bg-qep-orange/10 text-qep-orange"
                       : "text-slate-300 hover:bg-white/5 hover:text-white"
@@ -682,7 +698,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
           )}
           
           {profile.active_workspace_id && (
-            <div className={cn(isQuotesListRoute && "hidden xl:block")}>
+            <div className="hidden xl:block">
               <WorkspaceSwitcher activeWorkspaceId={profile.active_workspace_id} />
             </div>
           )}
@@ -693,17 +709,13 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
               onClick={handleQuickAction}
               className={cn(
                 "bg-qep-orange hover:bg-qep-orange-hover text-white font-medium",
-                isQuotesListRoute
-                  ? "flex h-9 rounded-lg px-3 text-xs shadow-[0_0_18px_rgba(249,115,22,0.25)] sm:h-10 sm:px-4 sm:text-sm"
-                  : "hidden h-8 rounded-full px-3 text-xs xl:flex",
+                "flex h-9 max-w-[116px] rounded-lg px-3 text-xs shadow-[0_0_18px_rgba(249,115,22,0.25)] sm:h-10 sm:max-w-[140px] sm:px-4 sm:text-sm xl:max-w-none",
               )}
             >
-              {quickAction.label}
-              {isQuotesListRoute && (
-                <kbd className="ml-3 hidden rounded border border-white/20 bg-white/15 px-1.5 py-0.5 font-mono text-[10px] text-white/90 xl:inline">
-                  ⌘N
-                </kbd>
-              )}
+              <span className="truncate">{quickAction.label}</span>
+              <kbd className="ml-3 hidden rounded border border-white/20 bg-white/15 px-1.5 py-0.5 font-mono text-[10px] text-white/90 xl:inline">
+                ⌘N
+              </kbd>
             </Button>
           )}
 
