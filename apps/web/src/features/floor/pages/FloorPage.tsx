@@ -209,76 +209,77 @@ export function FloorPage({
   return (
     <div className="min-h-screen bg-[#0b1018] text-slate-100 antialiased">
       <main className="mx-auto flex w-full max-w-[1480px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.6fr)]">
-          <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#121927] p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.9)] sm:p-6">
-            <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-[#f28a07]/35 bg-[#f28a07]/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[#f6a53a]">
-                    Role Home
-                  </span>
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                    {copy.kicker}
-                  </span>
-                  {previewRole ? (
-                    <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-200">
-                      Read-only preview
-                    </span>
-                  ) : null}
-                </div>
-                <h1 className="mt-4 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                  {copy.title}
-                </h1>
-                <p className="mt-3 max-w-3xl text-base leading-7 text-slate-300">
-                  {copy.question}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 md:max-w-sm">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                  Today's read
-                </p>
-                <p className="mt-2 text-sm leading-6 text-slate-200">
-                  {layout.showNarrative && !isLoading ? narrative.text : "Your role home is loading the current workspace signals."}
-                </p>
-                <div className="mt-3 h-1 rounded-full bg-slate-800">
-                  <div className="h-full w-2/3 rounded-full bg-[#f28a07]" />
-                </div>
-              </div>
-            </div>
+        {/* Title block */}
+        <section className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-[#f28a07]/35 bg-[#f28a07]/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[#f6a53a]">
+              Role Home
+            </span>
+            {previewRole ? (
+              <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-200">
+                Read-only preview
+              </span>
+            ) : null}
           </div>
-
-          <div className="rounded-3xl border border-white/10 bg-[#121927] p-4 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.9)]">
-            <p className="px-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-              Shortcuts
-            </p>
-            <div className="mt-3 grid gap-2">
-              {serialActionBand ? <div>{serialActionBand}</div> : null}
-              {layout.quickActions.length > 0 ? (
-                layout.quickActions.map((action, index) => (
-                  <RoleAction key={action.id} action={action} index={index} />
-                ))
-              ) : (
-                <p className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-slate-400">
-                  No shortcuts are assigned to this role.
-                </p>
-              )}
-            </div>
-          </div>
+          <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
+            {copy.title}
+          </h1>
+          <p className="max-w-3xl text-base leading-7 text-slate-300">
+            {copy.question}
+          </p>
         </section>
 
+        {/* 01 NARRATIVE */}
+        <section className="rounded-3xl border border-white/10 bg-[#121927] p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.9)] sm:p-6">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#f6a53a]">
+            01 Narrative
+          </p>
+          <p className="mt-3 text-base leading-7 text-slate-200">
+            {layout.showNarrative && !isLoading
+              ? narrative.text
+              : "Your role home is loading the current workspace signals."}
+          </p>
+          {narrative.model ? (
+            <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Last 24h · {narrative.model}
+            </p>
+          ) : null}
+        </section>
+
+        {/* 02 ACTIONS */}
+        <section>
+          <p className="mb-3 px-1 text-[11px] font-bold uppercase tracking-[0.16em] text-[#f6a53a]">
+            02 Actions
+          </p>
+          {serialActionBand ? <div className="mb-3">{serialActionBand}</div> : null}
+          {layout.quickActions.length > 0 ? (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {layout.quickActions.map((action, index) => (
+                <RoleAction key={action.id} action={action} index={index} />
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-slate-400">
+              No shortcuts are assigned to this role.
+            </p>
+          )}
+        </section>
+
+        {/* 03 THE FLOOR */}
         <section className="rounded-3xl border border-white/10 bg-[#0f1624] p-4 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.9)] sm:p-5">
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#f6a53a]">
-                Work Queue
+                03 The Floor
               </p>
               <h2 className="mt-1 text-xl font-semibold tracking-tight text-white">
                 Role-specific signals
               </h2>
             </div>
             <div className="text-xs text-slate-500">
-              {updatedAt ? `Synced ${new Date(updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "Sync pending"}
+              {updatedAt
+                ? `Synced ${new Date(updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+                : "Sync pending"}
               {isAdmin ? " · Office tools remain in the main app" : ""}
             </div>
           </div>

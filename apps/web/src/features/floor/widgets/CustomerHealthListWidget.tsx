@@ -54,6 +54,33 @@ async function fetchAtRiskCustomers(): Promise<CustomerHealthProfile[]> {
   return data ?? [];
 }
 
+async function fetchCoverage(): Promise<{
+  scored: number;
+  total: number;
+  at_risk: number;
+}> {
+  const [{ count: scoredCount }, { count: totalCount }, { count: atRiskCount }] = await Promise.all([
+    supabase
+      .from("customer_profiles_extended")
+      .select("id", { count: "exact", head: true })
+      .not("health_score", "is", null),
+    supabase
+      .from("qrm_companies")
+      .select("id", { count: "exact", head: true })
+      .is("deleted_at", null),
+    supabase
+      .from("customer_profiles_extended")
+      .select("id", { count: "exact", head: true })
+      .not("health_score", "is", null)
+      .lt("health_score", AT_RISK_THRESHOLD),
+  ]);
+  return {
+    scored: scoredCount ?? 0,
+    total: totalCount ?? 0,
+    at_risk: atRiskCount ?? 0,
+  };
+}
+
 export function CustomerHealthListWidget() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["floor", "customer-health-at-risk"],
@@ -61,6 +88,22 @@ export function CustomerHealthListWidget() {
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
+
+  const coverage = useQuery({
+    queryKey: ["floor", "customer-health-coverage"],
+    queryFn: fetchCoverage,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const coverageLine = (() => {
+    if (!coverage.data) return null;
+    const { scored, total, at_risk } = coverage.data;
+    const ratio = total > 0 ? scored / total : 0;
+    const base = `${scored} of ${total} customers scored · ${at_risk} at risk`;
+    if (ratio >= 0.8 && at_risk === 0) return `${base} — Good shape.`;
+    return `${base} — backfill pending`;
+  })();
 
   return (
     <div
@@ -112,40 +155,40 @@ export function CustomerHealthListWidget() {
         )}
 
         {!isLoading && !isError && (data?.length ?? 0) > 0 && (
-          <ul className="space-y-1.5">
-            {data!.map((row) => {
-              const score = row.health_score ?? 0;
-              const tone = scoreTone(score);
-              const name = row.customer_name || row.company_name || "Unnamed";
-              return (
-                <li key={row.id}>
-                  <Link
-                    to={`/qrm/companies/${row.id}`}
-                    className="group flex items-center gap-2 rounded-md border border-transparent px-2 py-1.5 transition-colors hover:border-[hsl(var(--qep-deck-rule))] hover:bg-[hsl(var(--qep-deck))]"
-                  >
-                    <span
-                      className={`flex h-8 w-10 shrink-0 items-center justify-center rounded-md border font-kpi text-xs font-extrabold tabular-nums ${tone.border} ${tone.bg} ${tone.text}`}
-                      aria-label={`Score ${score}, ${tone.label}`}
+          <>
+            {coverageLine ? (
+              <p className="mb-2 text-[11px] text-muted-foreground">{coverageLine}</p>
+            ) : null}
+            <ul className="space-y-1.5">
+              {data!.map((row) => {
+                const score = row.health_score ?? 0;
+                const tone = scoreTone(score);
+                const name = row.customer_name || row.company_name || "Unnamed";
+                return (
+                  <li key={row.id}>
+                    <Link
+                      to={`/qrm/companies/${row.id}`}
+                      className="group flex items-center gap-2 rounded-md border border-transparent px-2 py-1.5 transition-colors hover:border-[hsl(var(--qep-deck-rule))] hover:bg-[hsl(var(--qep-deck))]"
                     >
-                      {score}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                      {name}
-                    </span>
-                    <ChevronRight
-                      className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
-                      aria-hidden="true"
-                    />
-                  </Link>
-                </li>
-              );
-            })}
-            {data!.every((r) => (r.health_score ?? 0) >= AT_RISK_THRESHOLD) && (
-              <li className="mt-2 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-2 py-1.5 text-[11px] text-emerald-300">
-                All customers scoring above {AT_RISK_THRESHOLD}. Good shape.
-              </li>
-            )}
-          </ul>
+                      <span
+                        className={`flex h-8 w-10 shrink-0 items-center justify-center rounded-md border font-kpi text-xs font-extrabold tabular-nums ${tone.border} ${tone.bg} ${tone.text}`}
+                        aria-label={`Score ${score}, ${tone.label}`}
+                      >
+                        {score}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                        {name}
+                      </span>
+                      <ChevronRight
+                        className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                        aria-hidden="true"
+                      />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
         )}
       </div>
     </div>

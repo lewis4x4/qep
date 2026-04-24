@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
-import { fetchOwnerDashboardSummary } from "@/features/owner/lib/owner-api";
 import { useDemandForecast } from "@/features/parts/hooks/useDemandForecast";
 import { useInventoryHealth } from "@/features/parts/hooks/useInventoryHealth";
 import { usePartsOrders, type PartsOrderListRow } from "@/features/parts/hooks/usePartsOrders";
@@ -571,35 +570,95 @@ export function PartsInventoryHealthFloorWidget() {
   );
 }
 
+const CLOSED_WON_STAGE_NAMES = [
+  "Invoice Closed",
+  "Post-Sale Follow-Up",
+  "Sales Order Signed",
+  "Deposit Collected",
+];
+
+async function fetchRevenuePace(): Promise<{
+  mtd: number;
+  today: number;
+  pipeline: number;
+  at_risk: number;
+}> {
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const monthStartISO = monthStart.toISOString();
+
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const dayStartISO = dayStart.toISOString();
+
+  const { data: stages, error: stagesError } = await supabase
+    .from("qrm_deal_stages")
+    .select("id, name")
+    .in("name", CLOSED_WON_STAGE_NAMES);
+  if (stagesError) throw new Error(stagesError.message);
+  const closedWonIds = (stages ?? []).map((s) => s.id);
+  const safeIds = closedWonIds.length ? closedWonIds : ["00000000-0000-0000-0000-000000000000"];
+
+  const [mtdRes, todayRes, pipelineRes] = await Promise.all([
+    supabase
+      .from("qrm_deals")
+      .select("amount")
+      .in("stage_id", safeIds)
+      .gte("closed_at", monthStartISO)
+      .is("deleted_at", null),
+    supabase
+      .from("qrm_deals")
+      .select("amount")
+      .in("stage_id", safeIds)
+      .gte("closed_at", dayStartISO)
+      .is("deleted_at", null),
+    supabase
+      .from("qrm_deals")
+      .select("amount")
+      .is("deleted_at", null)
+      .is("closed_at", null),
+  ]);
+
+  if (mtdRes.error) throw new Error(mtdRes.error.message);
+  if (todayRes.error) throw new Error(todayRes.error.message);
+  if (pipelineRes.error) throw new Error(pipelineRes.error.message);
+
+  const sum = (rows: { amount: number | null }[] | null) =>
+    (rows ?? []).reduce((acc, row) => acc + Number(row.amount ?? 0), 0);
+
+  return {
+    mtd: sum(mtdRes.data),
+    today: sum(todayRes.data),
+    pipeline: sum(pipelineRes.data),
+    at_risk: 0,
+  };
+}
+
 export function ExecRevenuePaceFloorWidget() {
   const query = useQuery({
-    queryKey: ["floor", "exec", "revenue-pace"],
-    queryFn: fetchOwnerDashboardSummary,
+    queryKey: ["floor", "exec", "revenue-pace-v2"],
+    queryFn: fetchRevenuePace,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
 
   return (
     <FloorWidgetShell
-      title="Revenue pace"
+      title="Revenue pace (MTD)"
       icon={<Gauge className="h-3.5 w-3.5" aria-hidden="true" />}
       to="/owner"
       linkLabel="Owner"
       minHeight="min-h-[205px]"
     >
       {query.isLoading ? <LoadingLine /> : null}
-      {query.isError ? <ErrorLine>Couldn't load owner revenue summary.</ErrorLine> : null}
+      {query.isError ? <ErrorLine>Couldn't load revenue pace.</ErrorLine> : null}
       {!query.isLoading && !query.isError && query.data ? (
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <Metric label="MTD booked" value={currency(query.data.revenue.mtd)} detail={`Today ${currency(query.data.revenue.today)}`} />
-            <Metric label="Pipeline" value={currency(query.data.pipeline.weighted_total)} detail={`${query.data.pipeline.at_risk_count} at risk`} />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {query.data.revenue.mtd_vs_prev_pct == null
-              ? "No prior-month comparison yet."
-              : `${query.data.revenue.mtd_vs_prev_pct.toFixed(1)}% vs. prior month same-day pace.`}
-          </p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Metric label="MTD Booked" value={currency(query.data.mtd)} />
+          <Metric label="Today" value={currency(query.data.today)} />
+          <Metric label="Pipeline" value={currency(query.data.pipeline)} />
+          <Metric label="At risk" value={currency(query.data.at_risk)} />
         </div>
       ) : null}
     </FloorWidgetShell>

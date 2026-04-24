@@ -89,6 +89,7 @@ import {
   ServiceDeliveryScheduleWidget,
   SlaPerformanceWidget,
 } from "../widgets/RoleHomeWidgets";
+import { BuPulseStripWidget } from "../widgets/BuPulseStrip";
 
 export interface FloorWidgetDescriptor {
   id: string;
@@ -501,6 +502,15 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     allowedRoles: ["iron_owner"],
     size: "wide",
     component: OwnerLargeDealsWidget,
+  },
+  "exec.bu-pulse": {
+    id: "exec.bu-pulse",
+    title: "BU Pulse",
+    purpose:
+      "Four-tile cross-business snapshot: Equipment sales, Parts, Service, Rentals.",
+    allowedRoles: ["iron_owner"],
+    size: "wide",
+    component: BuPulseStripWidget,
   },
   "iron-woman.sla-performance": {
     id: "iron-woman.sla-performance",

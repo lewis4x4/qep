@@ -622,6 +622,44 @@ export function AgingDealsTeamWidget() {
   );
 }
 
+function deriveRisk(
+  marginPct: number | null,
+  expectedCloseOn: string | null,
+): "high" | "medium" | "low" {
+  const now = new Date();
+  const close = expectedCloseOn ? new Date(expectedCloseOn) : null;
+  const daysUntilClose = close
+    ? Math.ceil((close.getTime() - now.getTime()) / 86_400_000)
+    : null;
+
+  if (marginPct != null && marginPct < 10) return "high";
+  if (daysUntilClose != null && daysUntilClose < 7) return "high";
+  if (marginPct != null && marginPct < 15) return "medium";
+  if (daysUntilClose != null && daysUntilClose < 14) return "medium";
+  return "low";
+}
+
+function initials(name: string | null | undefined): string {
+  if (!name) return "—";
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((s) => s[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function stagePillClass(stageName: string | null | undefined): string {
+  const s = (stageName ?? "").toLowerCase();
+  if (s.includes("closed won") || s.includes("post-sale") || s.includes("invoice closed"))
+    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+  if (s.includes("negotiation") || s.includes("quote"))
+    return "border-amber-500/30 bg-amber-500/10 text-amber-300";
+  if (s.includes("proposal"))
+    return "border-sky-500/30 bg-sky-500/10 text-sky-300";
+  return "border-slate-500/30 bg-slate-500/10 text-slate-300";
+}
+
 export function OwnerLargeDealsWidget() {
   const query = useQuery({
     queryKey: ["floor", "owner", "large-deals"],
@@ -648,35 +686,108 @@ export function OwnerLargeDealsWidget() {
   });
 
   const rows = query.data ?? [];
+  const shown = rows.slice(0, 6);
 
   return (
     <FloorWidgetShell
-      title="Deals over $250K"
+      title="Deals > $250K"
       icon={<Gauge className="h-3.5 w-3.5" aria-hidden="true" />}
-      to="/qrm/deals"
-      linkLabel="Pipeline"
+      to="/qrm/deals?amount=gte.250000"
+      linkLabel={`View all deals (${rows.length})`}
       minHeight="min-h-[260px]"
     >
       {query.isLoading ? <LoadingLine /> : null}
       {query.isError ? <ErrorLine>Couldn't load large deals.</ErrorLine> : null}
       {!query.isLoading && !query.isError ? (
-        rows.length > 0 ? (
-          <ul>
-            {rows.slice(0, 6).map((row) => {
-              const company = one(row.company);
-              const stage = one(row.stage);
-              const rep = one(row.assigned_rep);
-              return (
-                <CompactRow
-                  key={row.id}
-                  title={company?.name ?? row.name}
-                  detail={`${rep?.full_name ?? "Unassigned"} · ${stage?.name ?? "Stage"} · close ${dateShort(row.expected_close_on)}`}
-                  value={currency(row.amount)}
-                  to={`/qrm/deals/${row.id}`}
-                />
-              );
-            })}
-          </ul>
+        shown.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-xs">
+              <thead>
+                <tr className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  <th className="px-2 py-1.5 text-left">Deal</th>
+                  <th className="px-2 py-1.5 text-left">Customer</th>
+                  <th className="px-2 py-1.5 text-left">Advisor</th>
+                  <th className="px-2 py-1.5 text-right">Value</th>
+                  <th className="px-2 py-1.5 text-right">GM%</th>
+                  <th className="px-2 py-1.5 text-left">Stage</th>
+                  <th className="px-2 py-1.5 text-left">Close</th>
+                  <th className="px-2 py-1.5 text-center">Risk</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((row) => {
+                  const company = one(row.company);
+                  const stage = one(row.stage);
+                  const rep = one(row.assigned_rep);
+                  const risk = deriveRisk(row.margin_pct, row.expected_close_on);
+                  const riskDot =
+                    risk === "high"
+                      ? "bg-rose-400"
+                      : risk === "medium"
+                        ? "bg-amber-400"
+                        : "bg-emerald-400";
+                  return (
+                    <tr
+                      key={row.id}
+                      className="border-t border-[hsl(var(--qep-deck-rule))]/40 transition-colors hover:bg-[hsl(var(--qep-deck))]"
+                    >
+                      <td className="max-w-[200px] truncate px-2 py-2 font-medium text-foreground">
+                        <Link
+                          to={`/qrm/deals/${row.id}`}
+                          className="hover:text-[hsl(var(--qep-orange))]"
+                        >
+                          {row.name}
+                        </Link>
+                      </td>
+                      <td className="max-w-[180px] truncate px-2 py-2 text-muted-foreground">
+                        {company?.name ?? "—"}
+                      </td>
+                      <td className="px-2 py-2">
+                        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[hsl(var(--qep-orange))]/15 text-[9px] font-bold text-[hsl(var(--qep-orange))]">
+                            {initials(rep?.full_name)}
+                          </span>
+                          <span className="truncate">{rep?.full_name ?? "Unassigned"}</span>
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-right tabular-nums text-foreground">
+                        {currency(row.amount)}
+                      </td>
+                      <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">
+                        {row.margin_pct != null ? `${row.margin_pct.toFixed(1)}%` : "—"}
+                      </td>
+                      <td className="px-2 py-2">
+                        <span
+                          className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-semibold ${stagePillClass(
+                            stage?.name,
+                          )}`}
+                        >
+                          {stage?.name ?? "—"}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-muted-foreground">
+                        {dateShort(row.expected_close_on)}
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <span
+                          className={`inline-block h-2 w-2 rounded-full ${riskDot}`}
+                          aria-label={`Risk: ${risk}`}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {rows.length > 6 ? (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Showing {shown.length} of {rows.length} deals ·{" "}
+                <Link to="/qrm/deals?amount=gte.250000" className="text-[hsl(var(--qep-orange))]">
+                  View all deals →
+                </Link>
+              </p>
+            ) : null}
+          </div>
         ) : (
           <EmptyState
             icon={<BadgeCheck className="h-6 w-6" aria-hidden="true" />}

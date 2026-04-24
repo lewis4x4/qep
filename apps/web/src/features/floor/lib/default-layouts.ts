@@ -4,15 +4,15 @@ import type { FloorLayout } from "./layout-types";
 export const DEFAULT_FLOOR_LAYOUTS: Record<IronRole, FloorLayout> = {
   iron_owner: {
     widgets: [
-      { id: "exec.owner-brief", order: 0 },
+      { id: "nervous.customer-health", order: 0 },
       { id: "exec.revenue-pace", order: 1 },
-      { id: "nervous.customer-health", order: 2 },
+      { id: "exec.bu-pulse", order: 2 },
       { id: "iron.owner-large-deals", order: 3 },
     ],
     quickActions: [
-      { id: "ask_iron", label: "ASK IRON", route: "/iron", icon: "sparkles" },
-      { id: "open_pipeline", label: "OPEN PIPELINE", route: "/qrm", icon: "activity" },
-      { id: "monthly_report", label: "MONTHLY REPORT", route: "/admin/deal-economics", icon: "trending" },
+      { id: "ask_iron", label: "Ask Iron", route: "/chat", icon: "sparkles" },
+      { id: "open_pipeline", label: "Open Pipeline", route: "/qrm", icon: "activity" },
+      { id: "monthly_report", label: "Monthly Report", route: "/admin/deal-economics", icon: "trending" },
     ],
     showNarrative: true,
   },
