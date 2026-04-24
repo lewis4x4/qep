@@ -70,7 +70,7 @@ const QuoteListPage = lazy(() =>
 const DashboardRouter = lazy(() =>
   import("./features/dashboards/pages/DashboardRouter").then((m) => ({ default: m.DashboardRouter }))
 );
-// Slice: The Floor — Sales Quote Flow redesign preview.
+// Slice: The Floor — simplified, Brian-curated, team-facing landing surface.
 const FloorPage = lazy(() =>
   import("./features/floor/pages/FloorPage").then((m) => ({ default: m.FloorPage }))
 );
@@ -707,10 +707,10 @@ function AnimatedRoutes({ children }: { children: React.ReactNode }) {
  * routes (Sales Companion has its own SalesShell via SalesRoutes), otherwise
  * wraps in the standard AppLayout.
  *
- * Slice: Sales Quote Flow — /floor bypasses AppLayout so the focused quote
- * flow preview is the sole chrome. When the user navigates away from /floor
- * AND their profile has floor_mode=true, AppLayout renders a "Back to Floor"
- * chip so the user can always return.
+ * Slice: Role Home — /floor bypasses AppLayout so its focused role-home
+ * header is the sole chrome. When the user navigates away from /floor AND
+ * their profile has floor_mode=true, AppLayout renders a "Back to Floor"
+ * chip so the user can always return home.
  */
 function SalesOrAppLayout({
   profile,
@@ -970,7 +970,7 @@ function App() {
                 path="/dashboard"
                 element={<Navigate to="/floor" replace />}
               />
-              {/* Slice: The Floor — Sales Quote Flow redesign preview */}
+              {/* Slice: The Floor — parallel to /dashboard, team-facing */}
               <Route
                 path="/floor"
                 element={

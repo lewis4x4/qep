@@ -16,27 +16,6 @@ const registrySource = readFileSync(registryPath, "utf8");
 const defaultsSource = readFileSync(defaultsPath, "utf8");
 const floorPageSource = readFileSync(floorPagePath, "utf8");
 
-const CANONICAL_QUICK_ACTION_ICONS = new Set([
-  "activity",
-  "approve",
-  "box",
-  "check",
-  "clipboard",
-  "credit",
-  "drafts",
-  "money",
-  "parts",
-  "quote",
-  "search",
-  "spark",
-  "sparkles",
-  "trending",
-  "users",
-  "visit",
-  "voice",
-  "wrench",
-]);
-
 const errors = [];
 const warnings = [];
 
@@ -96,9 +75,7 @@ function parseRegistry(source) {
 
 function parseIconMap(source) {
   const mapStart = source.indexOf("QUICK_ACTION_ICON_MAP");
-  if (mapStart === -1) {
-    return CANONICAL_QUICK_ACTION_ICONS;
-  }
+  if (mapStart === -1) throw new Error("QUICK_ACTION_ICON_MAP not found");
   const mapEnd = source.indexOf("};", mapStart);
   const body = source.slice(mapStart, mapEnd);
   return new Set([...body.matchAll(/^\s*([A-Za-z0-9_-]+)\s*:/gm)].map((match) => match[1]));
