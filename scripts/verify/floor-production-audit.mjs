@@ -33,9 +33,11 @@ async function verifyNetlify(head) {
   const deploys = token
     ? await listNetlifyDeploysWithToken(token)
     : await listNetlifyDeploysWithCli();
-  const latest = deploys?.find((deploy) => deploy.context === "production" && deploy.branch === "main")
-    ?? deploys?.find((deploy) => deploy.branch === "main")
-    ?? deploys?.[0];
+  const mainDeploys = deploys?.filter((deploy) => deploy.context === "production" && deploy.branch === "main")
+    ?? deploys?.filter((deploy) => deploy.branch === "main")
+    ?? deploys
+    ?? [];
+  const latest = mainDeploys[0];
   if (!latest) throw new Error(`Netlify site ${siteId} returned no production deploys.`);
 
   evidence.push({
@@ -43,7 +45,27 @@ async function verifyNetlify(head) {
     deploy_id: latest.id,
     state: latest.state,
     commit_ref: latest.commit_ref,
+    error_message: latest.error_message ?? null,
   });
+
+  if (
+    latest.commit_ref === head
+    && latest.state === "error"
+    && /no content change/i.test(latest.error_message ?? "")
+  ) {
+    const readyDeploy = mainDeploys.find((deploy) => deploy.state === "ready");
+    if (!readyDeploy) {
+      throw new Error("Latest Netlify deploy skipped for no content change, but no previous ready production deploy was found.");
+    }
+    evidence.push({
+      check: "netlify.active_content_deploy",
+      deploy_id: readyDeploy.id,
+      state: readyDeploy.state,
+      commit_ref: readyDeploy.commit_ref,
+      note: "HEAD produced no publishable app-content change; Netlify left the previous ready production deploy active.",
+    });
+    return;
+  }
 
   if (latest.state !== "ready") {
     throw new Error(`Latest Netlify deploy is ${latest.state}, expected ready.`);
