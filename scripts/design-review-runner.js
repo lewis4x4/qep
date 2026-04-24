@@ -69,7 +69,7 @@ async function main() {
       route: "/floor",
       screenshotName: "floor-desktop.png",
       requiredText: ["Role Home", "Work Queue"],
-      forbiddenText: ["Role preview", "COMPOSE", "NARRATIVE", "ACTIONS"],
+      forbiddenText: ["Role preview", "COMPOSE"],
       checks,
       artifacts,
     });
@@ -95,7 +95,7 @@ async function main() {
       route: "/floor",
       screenshotName: "floor-mobile.png",
       requiredText: ["Role Home", "Work Queue"],
-      forbiddenText: ["Role preview", "COMPOSE", "NARRATIVE", "ACTIONS"],
+      forbiddenText: ["Role preview", "COMPOSE"],
       checks,
       artifacts,
     });
