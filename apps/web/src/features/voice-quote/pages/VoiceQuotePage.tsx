@@ -92,6 +92,15 @@ interface RecentVoiceQuote {
   action: string;
 }
 
+interface InProgressVoiceCapture {
+  id: string;
+  transcript: string | null;
+  extracted_data: unknown;
+  sync_status: string | null;
+  duration_seconds: number | null;
+  created_at: string;
+}
+
 const MAX_DURATION_MS = 600_000;
 
 const EXAMPLE_TRANSCRIPTS = [
@@ -100,133 +109,7 @@ const EXAMPLE_TRANSCRIPTS = [
   "Lone Star Rentals is expanding their Austin fleet and asked for a mini excavator quote with two financing options and a rental conversion path.",
 ];
 
-const DEMO_TRANSCRIPT = [
-  "Amanda at Red River Demolition needs a compact track loader for land clearing in Tyler.",
-  "Budget is around fifty thousand dollars, prefers Bobcat, and has a two thousand nineteen CAT three twenty to trade.",
-  "They need delivery within the next three weeks to start a new project on June tenth.",
-].join("\n\n");
-
-const DEMO_FIELDS: ExtractedDetail[] = [
-  { id: "customer", icon: UserRound, label: "Customer", value: "Red River Demolition", confidence: "High" },
-  { id: "equipment", icon: Wrench, label: "Equipment", value: "Compact track loader", confidence: "High" },
-  { id: "budget", icon: DollarSign, label: "Budget", value: "Around $50,000", confidence: "Medium" },
-  { id: "urgency", icon: Timer, label: "Urgency", value: "Delivery within 3 weeks", confidence: "Medium" },
-  { id: "trade_in", icon: RefreshCcw, label: "Trade-in", value: "2019 CAT 320", confidence: "High" },
-  { id: "location", icon: MapPin, label: "Location", value: "Tyler, TX", confidence: "High" },
-];
-
-const DEMO_SCENARIOS: QuoteScenario[] = [
-  {
-    label: "Option A · Value",
-    description: "Bobcat T76 Compact Track Loader",
-    programIds: ["voice-demo-value"],
-    customerOutOfPocketCents: 4_975_000,
-    monthlyPaymentCents: 108_500,
-    termMonths: 60,
-    totalPaidByCustomerCents: 6_510_000,
-    dealerMarginCents: 575_000,
-    dealerMarginPct: 11.6,
-    commissionCents: 82_500,
-    pros: ["Lead time: 2-3 weeks", "Trade-in applied: $18,000", "Best value with strong performance and fast availability."],
-    cons: ["Less lift capacity than the premium option."],
-  },
-  {
-    label: "Option B · Preferred",
-    description: "Bobcat T770 Compact Track Loader",
-    programIds: ["voice-demo-preferred"],
-    customerOutOfPocketCents: 5_625_000,
-    monthlyPaymentCents: 125_000,
-    termMonths: 60,
-    totalPaidByCustomerCents: 7_500_000,
-    dealerMarginCents: 662_500,
-    dealerMarginPct: 11.8,
-    commissionCents: 92_000,
-    pros: ["Lead time: 3-4 weeks", "Trade-in applied: $18,000", "More power and lift capacity for demanding jobs."],
-    cons: ["Higher monthly payment than the value option."],
-  },
-  {
-    label: "Option C · Premium",
-    description: "Bobcat T870 Compact Track Loader",
-    programIds: ["voice-demo-premium"],
-    customerOutOfPocketCents: 6_485_000,
-    monthlyPaymentCents: 143_000,
-    termMonths: 60,
-    totalPaidByCustomerCents: 8_580_000,
-    dealerMarginCents: 745_000,
-    dealerMarginPct: 11.5,
-    commissionCents: 104_000,
-    pros: ["Lead time: 4-6 weeks", "Trade-in applied: $18,000", "Maximum performance and uptime for heavy duty work."],
-    cons: ["Longer lead time and higher total price."],
-  },
-];
-
-const RECENT_QUOTES: RecentVoiceQuote[] = [
-  {
-    id: "voice-red-river",
-    title: "Compact track loader for land clearing in Tyler",
-    summary: "Amanda at Red River Demolition needs a compact track loader...",
-    customer: "Red River Demolition",
-    location: "Tyler, TX",
-    duration: "01:12",
-    createdAt: "May 23, 2025\n9:28 AM",
-    statusLabel: "Converted to Quote",
-    statusDetail: "QEP-2026-0012",
-    statusTone: "success",
-    action: "Open quote",
-  },
-  {
-    id: "voice-lone-star",
-    title: "New mini excavator for rental fleet expansion",
-    summary: "Looking for a 5 ton excavator for our rental fleet in Austin...",
-    customer: "Lone Star Rentals",
-    location: "Austin, TX",
-    duration: "00:58",
-    createdAt: "May 22, 2025\n3:41 PM",
-    statusLabel: "Needs Review",
-    statusDetail: "QEP-2026-0011",
-    statusTone: "warning",
-    action: "Review & sync",
-  },
-  {
-    id: "voice-hill-country",
-    title: "Skid steer under 40k with pallet forks",
-    summary: "Need a skid steer under forty thousand dollars with pallet forks...",
-    customer: "Hill Country Landscaping",
-    location: "Georgetown, TX",
-    duration: "00:41",
-    createdAt: "May 22, 2025\n10:18 AM",
-    statusLabel: "Queued locally",
-    statusDetail: "Will sync when online",
-    statusTone: "info",
-    action: "Review & sync",
-  },
-  {
-    id: "voice-central-materials",
-    title: "Wheel loader for material yard",
-    summary: "Need a mid size wheel loader for our material yard in Waco...",
-    customer: "Central Texas Materials",
-    location: "Waco, TX",
-    duration: "01:23",
-    createdAt: "May 21, 2025\n4:05 PM",
-    statusLabel: "Draft in Quote Builder",
-    statusDetail: "QEP-2026-0010",
-    statusTone: "draft",
-    action: "Open in Builder",
-  },
-  {
-    id: "voice-metro-utilities",
-    title: "Compact excavator for utilities crew",
-    summary: "We need a compact excavator for our utilities crew in Dallas...",
-    customer: "Metro Utilities",
-    location: "Dallas, TX",
-    duration: "00:36",
-    createdAt: "May 20, 2025\n2:32 PM",
-    statusLabel: "Offline",
-    statusDetail: "Saved locally",
-    statusTone: "offline",
-    action: "View session",
-  },
-];
+const RECENT_QUOTES: RecentVoiceQuote[] = [];
 
 function formatCurrency(cents?: number) {
   if (typeof cents !== "number") return "TBD";
@@ -336,6 +219,22 @@ function buildFieldsFromResult(result: VoiceQrmResponse): ExtractedDetail[] {
   ];
 }
 
+function buildFieldsFromCapture(extractedData: unknown): ExtractedDetail[] {
+  if (!extractedData || typeof extractedData !== "object") return [];
+  const data = extractedData as Record<string, unknown>;
+  const fields: ExtractedDetail[] = [];
+  const addField = (id: string, icon: ExtractedDetail["icon"], label: string, value: unknown) => {
+    if (typeof value !== "string" || !value.trim()) return;
+    fields.push({ id, icon, label, value: value.trim(), confidence: "Medium" });
+  };
+  addField("customer", UserRound, "Customer", data.companyName ?? data.company_name ?? data.customer);
+  addField("contact", ClipboardList, "Contact", data.contactName ?? data.contact_name ?? data.contact);
+  addField("equipment", Wrench, "Equipment", data.equipment ?? data.machine ?? data.equipmentInterest);
+  addField("budget", DollarSign, "Budget", data.budget ?? data.budgetRange ?? data.budget_range);
+  addField("follow_up", CalendarDays, "Follow-up", data.nextStep ?? data.next_step ?? data.followUp);
+  return fields;
+}
+
 function getRecorderMimeType() {
   if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
     return "";
@@ -439,17 +338,17 @@ function StatusCard({
 export function VoiceQuotePage() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [phase, setPhase] = useState<RecordingPhase>("ready");
-  const [elapsedMs, setElapsedMs] = useState(41_000);
-  const [transcript, setTranscript] = useState(DEMO_TRANSCRIPT);
-  const [transcriptDraft, setTranscriptDraft] = useState(DEMO_TRANSCRIPT);
+  const [phase, setPhase] = useState<RecordingPhase>("idle");
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [transcript, setTranscript] = useState("");
+  const [transcriptDraft, setTranscriptDraft] = useState("");
   const [transcriptEdited, setTranscriptEdited] = useState(false);
   const [editingTranscript, setEditingTranscript] = useState(false);
-  const [fields, setFields] = useState<ExtractedDetail[]>(DEMO_FIELDS);
-  const [scenarios, setScenarios] = useState<QuoteScenario[]>(DEMO_SCENARIOS);
+  const [fields, setFields] = useState<ExtractedDetail[]>([]);
+  const [scenarios, setScenarios] = useState<QuoteScenario[]>([]);
   const [resolved, setResolved] = useState<SseResolvedEvent | null>(null);
   const [originatingLogId, setOriginatingLogId] = useState<string | null>(null);
-  const [processingMessage, setProcessingMessage] = useState("Ready to review generated scenarios.");
+  const [processingMessage, setProcessingMessage] = useState("Start with a fresh recording. Transcript, details, and scenarios will appear after processing.");
   const [microphoneProblem, setMicrophoneProblem] = useState<MicrophoneProblem | null>(null);
   const [compareOpen, setCompareOpen] = useState(false);
   const [exampleIndex, setExampleIndex] = useState(0);
@@ -478,6 +377,46 @@ export function VoiceQuotePage() {
     return () => {
       scenarioSessionRef.current?.cancel();
       streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function restoreInProgressCapture() {
+      try {
+        const { data: userResult } = await supabase.auth.getUser();
+        const userId = userResult.user?.id;
+        if (!userId || cancelled) return;
+        const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const { data, error } = await supabase
+          .from("voice_captures")
+          .select("id, transcript, extracted_data, sync_status, duration_seconds, created_at")
+          .eq("user_id", userId)
+          .in("sync_status", ["pending", "processing"])
+          .gte("created_at", since)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (error || cancelled || !data) return;
+        const capture = data as InProgressVoiceCapture;
+        const restoredTranscript = capture.transcript?.trim() ?? "";
+        setTranscript(restoredTranscript);
+        setTranscriptDraft(restoredTranscript);
+        setFields(buildFieldsFromCapture(capture.extracted_data));
+        setElapsedMs((capture.duration_seconds ?? 0) * 1000);
+        setPhase(restoredTranscript ? "ready" : "transcribing");
+        setProcessingMessage(
+          restoredTranscript
+            ? "Restored your in-progress voice quote from the last 24 hours. Review it before generating scenarios."
+            : "Restored an in-progress voice quote from the last 24 hours. Transcription is still pending.",
+        );
+      } catch {
+        // First visit should remain empty if restore cannot be verified.
+      }
+    }
+    void restoreInProgressCapture();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -555,8 +494,8 @@ export function VoiceQuotePage() {
         }
 
         if (nextScenarios.length === 0) {
-          setScenarios(DEMO_SCENARIOS);
-          setProcessingMessage("The recording was transcribed, but scenario generation returned no cards. Showing the current sample set for review.");
+          setScenarios([]);
+          setProcessingMessage("The recording was transcribed, but scenario generation returned no cards. Re-record or open Quote Builder manually.");
         }
         setPhase("ready");
       } catch (error) {
@@ -649,7 +588,7 @@ export function VoiceQuotePage() {
     recorder.stop();
   }
 
-  function resetDemo() {
+  function resetCapture() {
     scenarioSessionRef.current?.cancel();
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
       recorderRef.current.stop();
@@ -657,17 +596,17 @@ export function VoiceQuotePage() {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     recorderRef.current = null;
-    setPhase("ready");
-    setElapsedMs(41_000);
-    setTranscript(DEMO_TRANSCRIPT);
-    setTranscriptDraft(DEMO_TRANSCRIPT);
+    setPhase("idle");
+    setElapsedMs(0);
+    setTranscript("");
+    setTranscriptDraft("");
     setTranscriptEdited(false);
     setEditingTranscript(false);
-    setFields(DEMO_FIELDS);
-    setScenarios(DEMO_SCENARIOS);
+    setFields([]);
+    setScenarios([]);
     setResolved(null);
     setOriginatingLogId(null);
-    setProcessingMessage("Ready to review generated scenarios.");
+    setProcessingMessage("Start with a fresh recording. Transcript, details, and scenarios will appear after processing.");
     setMicrophoneProblem(null);
   }
 
@@ -707,7 +646,7 @@ export function VoiceQuotePage() {
         VOICE_QUOTE_HANDOFF_KEY,
         JSON.stringify({
           ...selection,
-          voiceSessionId: "voice-session-red-river-demo",
+          voiceSessionId: originatingLogId ?? `voice-session-${Date.now()}`,
           at: new Date().toISOString(),
         }),
       );
@@ -721,11 +660,11 @@ export function VoiceQuotePage() {
       console.warn("[voice-quote] sessionStorage write failed:", error);
     }
 
-    navigate("/quote-v2?voice_session_id=voice-session-red-river-demo");
+    navigate(`/quote-v2?voice_session_id=${encodeURIComponent(originatingLogId ?? "voice-session")}`);
   }
 
   const primaryStatus = phase === "recording" ? "Live" : phase === "paused" ? "Paused" : phase === "error" ? "Needs review" : "Ready";
-  const visibleScenarios = scenarios.length > 0 ? scenarios : DEMO_SCENARIOS;
+  const visibleScenarios = scenarios;
 
   return (
     <div className="-mb-16 min-h-screen bg-[#081323] pb-16 lg:-mb-8 lg:pb-8">
@@ -765,7 +704,7 @@ export function VoiceQuotePage() {
             <StatusCard icon={FileText} label="Type mode" value="Available" tone="blue" />
             <StatusCard icon={Wifi} label="Offline-ready" value="Saved locally" />
             <StatusCard icon={Languages} label="English" value="Spanish available" tone="blue" />
-            <StatusCard icon={Globe2} label="2 drafts queued" value="Will sync later" tone="orange" />
+            <StatusCard icon={Globe2} label="Draft queue" value="Empty" tone="orange" />
           </div>
         </div>
       </section>
@@ -822,7 +761,7 @@ export function VoiceQuotePage() {
                 </span>
                 <span className="text-xs">Stop</span>
               </button>
-              <button type="button" onClick={resetDemo} className="flex flex-col items-center gap-2 rounded-[8px] p-2 text-slate-300">
+              <button type="button" onClick={resetCapture} className="flex flex-col items-center gap-2 rounded-[8px] p-2 text-slate-300">
                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800">
                   <RotateCcw className="h-5 w-5" />
                 </span>
@@ -913,7 +852,11 @@ export function VoiceQuotePage() {
             </div>
 
             <div className="mt-4 space-y-2">
-              {fields.map((field) => {
+              {fields.length === 0 ? (
+                <div className="rounded-[8px] border border-dashed border-slate-700 px-4 py-6 text-center text-sm text-slate-400">
+                  Extracted customer, equipment, budget, and follow-up details will appear after transcription.
+                </div>
+              ) : fields.map((field) => {
                 const Icon = field.icon;
                 return (
                   <div key={field.id} className="grid grid-cols-[20px_74px_minmax(0,1fr)_72px_28px] items-center gap-2 rounded-[8px] border border-slate-800 bg-slate-950/20 px-2 py-2 text-sm">
@@ -953,6 +896,7 @@ export function VoiceQuotePage() {
               variant="ghost"
               size="sm"
               className="text-slate-400 hover:text-orange-300"
+              disabled={visibleScenarios.length === 0}
               onClick={() => setCompareOpen(true)}
             >
               <Sparkles className="h-4 w-4" />
@@ -961,7 +905,12 @@ export function VoiceQuotePage() {
           </div>
 
           <div className="space-y-2 p-3">
-            {visibleScenarios.map((scenario, index) => {
+            {visibleScenarios.length === 0 ? (
+              <div className="rounded-[8px] border border-dashed border-slate-700 px-4 py-10 text-center">
+                <p className="text-sm font-semibold text-slate-200">No scenarios yet</p>
+                <p className="mt-2 text-sm text-slate-400">Record a voice quote to generate quote options.</p>
+              </div>
+            ) : visibleScenarios.map((scenario, index) => {
               const recommended = index === 0;
               return (
                 <div
@@ -1109,7 +1058,13 @@ export function VoiceQuotePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {RECENT_QUOTES.map((quote) => (
+              {RECENT_QUOTES.length === 0 ? (
+                <tr>
+                  <td className="px-5 py-10 text-center text-slate-400" colSpan={6}>
+                    Recent voice quotes will appear after real sessions are recorded or restored.
+                  </td>
+                </tr>
+              ) : RECENT_QUOTES.map((quote) => (
                 <tr key={quote.id} className="text-slate-300 hover:bg-slate-950/25">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3">
@@ -1145,6 +1100,7 @@ export function VoiceQuotePage() {
                       size="sm"
                       className="border-slate-700 bg-slate-950/20 text-slate-200"
                       onClick={() => quote.action.includes("Builder") || quote.action.includes("quote") ? openScenario(visibleScenarios[0]) : undefined}
+                      disabled={visibleScenarios.length === 0}
                     >
                       {quote.action}
                     </Button>

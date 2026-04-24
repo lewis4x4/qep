@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { VoiceQuotePage } from "../VoiceQuotePage";
 
 describe("VoiceQuotePage (integration)", () => {
-  test("renders the redesigned voice quote workflow instead of the old embedded drawer", () => {
+  test("starts a first visit at Record with empty quote state", () => {
     const { container } = render(
       <MemoryRouter>
         <VoiceQuotePage />
@@ -16,22 +16,25 @@ describe("VoiceQuotePage (integration)", () => {
     expect(screen.getByText("Voice Capture")).toBeTruthy();
     expect(screen.getByText("Live Transcript")).toBeTruthy();
     expect(screen.getByText("Extracted Details")).toBeTruthy();
-    expect(screen.getByText("Option A · Value")).toBeTruthy();
+    expect(screen.getByText("No scenarios yet")).toBeTruthy();
+    expect(screen.getByText("Extracted customer, equipment, budget, and follow-up details will appear after transcription.")).toBeTruthy();
+    expect(screen.queryByText("Option A · Value")).toBeNull();
+    expect(screen.queryByText("Red River Demolition")).toBeNull();
     expect(screen.getByText("Recent Voice Quotes")).toBeTruthy();
+    expect(screen.getByText("Recent voice quotes will appear after real sessions are recorded or restored.")).toBeTruthy();
     expect(screen.queryByPlaceholderText(/Customer needs an ASV RT-135/i)).toBeNull();
     expect(container.querySelector(".fixed.inset-y-0.right-0.z-50")).toBeNull();
   });
 
-  test("opens the scenario comparison modal", () => {
+  test("disables scenario comparison until real scenarios exist", () => {
     render(
       <MemoryRouter>
         <VoiceQuotePage />
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Compare" })[0]);
-
-    expect(screen.getByText("Scenario comparison")).toBeTruthy();
-    expect(screen.getByText("Compare machine, pricing, financing, lead time, and trade credit before opening Quote Builder.")).toBeTruthy();
+    const howScenariosWork = screen.getByRole("button", { name: /How scenarios work/i });
+    expect(howScenariosWork.hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByText("Scenario comparison")).toBeNull();
   });
 });

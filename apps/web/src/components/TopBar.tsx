@@ -44,8 +44,9 @@ import {
   resolveUtilityNavSections,
 } from "@/lib/nav-config";
 import { supabase } from "@/lib/supabase";
-import { QrmGlobalSearchCommand } from "@/features/qrm/components/QrmGlobalSearchCommand";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
+import type { IronRole } from "@/features/qrm/lib/iron-roles";
+import { isIronRole } from "@/features/qrm/lib/iron-roles";
 
 interface Profile {
   id: string;
@@ -122,7 +123,10 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   "/admin/documents": "Document Center",
 };
 
-const QUICK_ACTION_MAP: Record<string, { label: string; route: string } | null> = {
+type QuickAction = { label: string; route: string };
+
+const QUICK_ACTION_MAP: Record<string, QuickAction | null> = {
+  "/floor": { label: "QRM Hub", route: "/qrm" },
   "/dashboard": { label: "Open OS Hub", route: "/os" },
   "/os": { label: "Open QRM", route: "/qrm" },
   "/chat": { label: "New Chat", route: "/chat" },
@@ -172,6 +176,63 @@ const QUICK_ACTION_MAP: Record<string, { label: string; route: string } | null> 
   "/admin/integrations": null,
   "/admin/documents": null,
 };
+
+const DEFAULT_QUICK_ACTION: QuickAction = { label: "QRM Hub", route: "/qrm" };
+
+const ROLE_PREVIEW_OPTIONS: Array<{ role: IronRole; label: string }> = [
+  { role: "iron_manager", label: "Sales Manager" },
+  { role: "iron_advisor", label: "Sales Rep" },
+  { role: "iron_parts_counter", label: "Parts Counter" },
+  { role: "iron_parts_manager", label: "Parts Manager" },
+  { role: "iron_woman", label: "Deal Desk" },
+  { role: "iron_man", label: "Prep / Service" },
+];
+
+function dispatchOpenOmniCommand() {
+  window.dispatchEvent(new CustomEvent("qep:open-omni-command"));
+}
+
+function getPageQuickAction(pathname: string): QuickAction | null | undefined {
+  return Object.prototype.hasOwnProperty.call(QUICK_ACTION_MAP, pathname)
+    ? QUICK_ACTION_MAP[pathname]
+    : undefined;
+}
+
+function getDynamicQuickAction(pathname: string): QuickAction | null {
+  if (pathname.startsWith("/m/qrm")) return { label: "QRM", route: "/qrm" };
+  if (pathname.startsWith("/qrm/visit-intelligence")) return { label: "QRM", route: "/qrm" };
+  if (pathname.startsWith("/qrm/branches/") && pathname.endsWith("/chief")) {
+    return { label: "Branch command", route: pathname.replace(/\/chief$/, "/command") };
+  }
+  if (pathname.includes("/deals/") && pathname.endsWith("/room")) return { label: "Deals", route: "/qrm/deals" };
+  if (pathname.includes("/deals/") && pathname.endsWith("/decision-room")) {
+    return { label: "Deal Room", route: pathname.replace(/\/decision-room$/, "/room") };
+  }
+  if (pathname.includes("/deals/") && pathname.endsWith("/coach")) {
+    return { label: "Deal detail", route: pathname.replace(/\/coach$/, "") };
+  }
+  if (pathname.startsWith("/qrm/accounts/") && pathname.endsWith("/decision-cycle")) return { label: "Strategist", route: pathname.replace(/\/decision-cycle$/, "/strategist") };
+  if (pathname.startsWith("/qrm/accounts/") && pathname.endsWith("/ecosystem")) return { label: "Strategist", route: pathname.replace(/\/ecosystem$/, "/strategist") };
+  if (pathname.startsWith("/qrm/accounts/") && pathname.endsWith("/reputation")) return { label: "Strategist", route: pathname.replace(/\/reputation$/, "/strategist") };
+  if (pathname.startsWith("/qrm/accounts/") && pathname.endsWith("/cashflow-weather")) return { label: "Strategist", route: pathname.replace(/\/cashflow-weather$/, "/strategist") };
+  if (pathname.startsWith("/qrm/accounts/") && pathname.endsWith("/cross-dealer-mirror")) return { label: "Strategist", route: pathname.replace(/\/cross-dealer-mirror$/, "/strategist") };
+  if (pathname.startsWith("/qrm/accounts/") && pathname.endsWith("/strategist")) return { label: "Account Command", route: pathname.replace(/\/strategist$/, "/command") };
+  if (pathname.includes("/deals/") && pathname.endsWith("/autopsy")) return { label: "Deals", route: "/qrm/deals" };
+  if (pathname.startsWith("/qrm/accounts/") && pathname.endsWith("/rental-conversion")) return { label: "Account Command", route: pathname.replace(/\/rental-conversion$/, "/command") };
+  if (pathname.startsWith("/qrm/accounts/") && pathname.endsWith("/white-space")) return { label: "Account Command", route: pathname.replace(/\/white-space$/, "/command") };
+  if (pathname.startsWith("/qrm/accounts/") && pathname.endsWith("/relationship-map")) return { label: "Account Command", route: pathname.replace(/\/relationship-map$/, "/command") };
+  if (pathname.startsWith("/qrm/accounts/") && pathname.endsWith("/fleet-intelligence")) return { label: "Account Command", route: pathname.replace(/\/fleet-intelligence$/, "/command") };
+  if (pathname.startsWith("/qrm/accounts/") && pathname.endsWith("/operating-profile")) return { label: "Account Command", route: pathname.replace(/\/operating-profile$/, "/command") };
+  if (pathname.startsWith("/qrm/accounts/") && pathname.endsWith("/genome")) return { label: "Account Command", route: pathname.replace(/\/genome$/, "/command") };
+  if (pathname.startsWith("/qrm/accounts/") && pathname.endsWith("/timeline")) return { label: "Companies", route: "/qrm/companies" };
+  if (pathname.includes("/trade-walkaround")) return { label: "Deals", route: "/qrm/deals" };
+  if (pathname.startsWith("/qrm/deals/")) return { label: "Deals", route: "/qrm/deals" };
+  if (pathname.startsWith("/qrm/contacts/")) return { label: "Contacts", route: "/qrm/contacts" };
+  if (pathname.startsWith("/qrm/accounts/")) return { label: "Companies", route: "/qrm/companies" };
+  if (pathname.startsWith("/qrm/territories/")) return { label: "Contacts", route: "/qrm/contacts" };
+  if (pathname.startsWith("/qrm/companies/")) return { label: "Companies", route: "/qrm/companies" };
+  return null;
+}
 
 type QrmBellRow = {
   id: string;
@@ -300,7 +361,14 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     markCrmNotificationRead,
   } = useTopBarBell(profile.id);
   const { preference, resolvedDark } = useTheme();
-  const showCrmSearch = location.pathname.startsWith("/qrm");
+  const searchParams = new URLSearchParams(location.search);
+  const previewRole = searchParams.get("view_as");
+  const canPreviewRoles = ["admin", "manager", "owner"].includes(profile.role);
+  const activePreview = canPreviewRoles && isIronRole(previewRole) ? previewRole : null;
+  const activePreviewLabel =
+    ROLE_PREVIEW_OPTIONS.find((option) => option.role === activePreview)?.label ?? "Own role";
+  const isFloorRoute = location.pathname === "/floor" || location.pathname.startsWith("/floor/");
+  const showOfficeViewLabel = canPreviewRoles && isFloorRoute;
 
   const primaryNavGroups = resolvePrimaryNavGroups(
     quoteBuilderEnabled,
@@ -349,37 +417,14 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     (location.pathname.startsWith("/qrm/contacts/") ? "Contact Detail" : undefined) ??
     (location.pathname.startsWith("/qrm/accounts/") ? "Account Command" : undefined) ??
     (location.pathname.startsWith("/qrm/territories/") ? "Territory Command" : undefined) ??
-    (location.pathname.startsWith("/qrm/companies/") ? "Company Detail" : undefined);
+    (location.pathname.startsWith("/qrm/companies/") ? "Company Detail" : undefined) ??
+    (isFloorRoute ? "The Floor" : undefined);
   const compactAreaLabel = utilityRouteActive ? "System" : activePrimaryGroupLabel;
   const compactPageLabel = breadcrumbLabel ?? compactAreaLabel;
+  const pageQuickAction = getPageQuickAction(location.pathname);
+  const dynamicQuickAction = getDynamicQuickAction(location.pathname);
   const quickAction =
-    QUICK_ACTION_MAP[location.pathname] ??
-    (location.pathname.startsWith("/m/qrm") ? { label: "QRM", route: "/qrm" } : null) ??
-    (location.pathname.startsWith("/qrm/visit-intelligence") ? { label: "QRM", route: "/qrm" } : null) ??
-    (location.pathname.startsWith("/qrm/branches/") && location.pathname.endsWith("/chief") ? { label: "Branch command", route: location.pathname.replace(/\/chief$/, "/command") } : null) ??
-    (location.pathname.includes("/deals/") && location.pathname.endsWith("/room") ? { label: "Deals", route: "/qrm/deals" } : null) ??
-    (location.pathname.includes("/deals/") && location.pathname.endsWith("/decision-room") ? { label: "Deal Room", route: location.pathname.replace(/\/decision-room$/, "/room") } : null) ??
-    (location.pathname.includes("/deals/") && location.pathname.endsWith("/coach") ? { label: "Deal detail", route: location.pathname.replace(/\/coach$/, "") } : null) ??
-    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/decision-cycle") ? { label: "Strategist", route: location.pathname.replace(/\/decision-cycle$/, "/strategist") } : null) ??
-    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/ecosystem") ? { label: "Strategist", route: location.pathname.replace(/\/ecosystem$/, "/strategist") } : null) ??
-    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/reputation") ? { label: "Strategist", route: location.pathname.replace(/\/reputation$/, "/strategist") } : null) ??
-    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/cashflow-weather") ? { label: "Strategist", route: location.pathname.replace(/\/cashflow-weather$/, "/strategist") } : null) ??
-    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/cross-dealer-mirror") ? { label: "Strategist", route: location.pathname.replace(/\/cross-dealer-mirror$/, "/strategist") } : null) ??
-    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/strategist") ? { label: "Account Command", route: location.pathname.replace(/\/strategist$/, "/command") } : null) ??
-    (location.pathname.includes("/deals/") && location.pathname.endsWith("/autopsy") ? { label: "Deals", route: "/qrm/deals" } : null) ??
-    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/rental-conversion") ? { label: "Account Command", route: location.pathname.replace(/\/rental-conversion$/, "/command") } : null) ??
-    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/white-space") ? { label: "Account Command", route: location.pathname.replace(/\/white-space$/, "/command") } : null) ??
-    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/relationship-map") ? { label: "Account Command", route: location.pathname.replace(/\/relationship-map$/, "/command") } : null) ??
-    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/fleet-intelligence") ? { label: "Account Command", route: location.pathname.replace(/\/fleet-intelligence$/, "/command") } : null) ??
-    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/operating-profile") ? { label: "Account Command", route: location.pathname.replace(/\/operating-profile$/, "/command") } : null) ??
-    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/genome") ? { label: "Account Command", route: location.pathname.replace(/\/genome$/, "/command") } : null) ??
-    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/timeline") ? { label: "Companies", route: "/qrm/companies" } : null) ??
-    (location.pathname.includes("/trade-walkaround") ? { label: "Deals", route: "/qrm/deals" } : null) ??
-    (location.pathname.startsWith("/qrm/deals/") ? { label: "Deals", route: "/qrm/deals" } : null) ??
-    (location.pathname.startsWith("/qrm/contacts/") ? { label: "Contacts", route: "/qrm/contacts" } : null) ??
-    (location.pathname.startsWith("/qrm/accounts/") ? { label: "Companies", route: "/qrm/companies" } : null) ??
-    (location.pathname.startsWith("/qrm/territories/") ? { label: "Contacts", route: "/qrm/contacts" } : null) ??
-    (location.pathname.startsWith("/qrm/companies/") ? { label: "Companies", route: "/qrm/companies" } : null);
+    pageQuickAction !== undefined ? pageQuickAction : (dynamicQuickAction ?? DEFAULT_QUICK_ACTION);
 
   // Clear search on route change
   useEffect(() => {
@@ -388,10 +433,13 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
 
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const query = searchValue.trim();
-    if (!query) return;
     setSearchValue("");
-    navigate("/chat", { state: { initialQuery: query } });
+    dispatchOpenOmniCommand();
+  }
+
+  function handleTopBarSearchFocus() {
+    setSearchValue("");
+    dispatchOpenOmniCommand();
   }
 
   function handleQuickAction() {
@@ -401,6 +449,16 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     } else {
       navigate(quickAction.route);
     }
+  }
+
+  function handlePreviewRole(role: IronRole | null) {
+    const next = new URLSearchParams(location.search);
+    if (role) {
+      next.set("view_as", role);
+    } else {
+      next.delete("view_as");
+    }
+    navigate({ pathname: "/floor", search: next.toString() ? `?${next.toString()}` : "" });
   }
 
   function isNavHrefActive(href: string) {
@@ -497,6 +555,47 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
                     ))}
                   </div>
                 ))}
+                <div className="mt-2 border-t border-white/10 pt-2">
+                  <DropdownMenuLabel className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                    Command
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem
+                    className="cursor-pointer rounded-xl px-3 py-3 focus:bg-white/10 focus:text-white"
+                    onClick={dispatchOpenOmniCommand}
+                  >
+                    <Search className="h-4 w-4 text-slate-400" />
+                    <span className="flex-1 text-sm font-medium tracking-normal">Search QEP</span>
+                    <kbd className="rounded border border-white/10 bg-white/10 px-2 py-0.5 font-mono text-[10px] text-slate-300">
+                      ⌘K
+                    </kbd>
+                  </DropdownMenuItem>
+                </div>
+                {canPreviewRoles && (
+                  <div className="mt-2 border-t border-white/10 pt-2">
+                    <DropdownMenuLabel className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                      View as
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem
+                      className="cursor-pointer rounded-xl px-3 py-3 focus:bg-white/10 focus:text-white"
+                      onClick={() => handlePreviewRole(null)}
+                    >
+                      <span className={cn("flex-1 text-sm font-medium tracking-normal", !activePreview && "text-qep-orange")}>
+                        Own role
+                      </span>
+                    </DropdownMenuItem>
+                    {ROLE_PREVIEW_OPTIONS.map((option) => (
+                      <DropdownMenuItem
+                        key={`compact-preview-${option.role}`}
+                        className="cursor-pointer rounded-xl px-3 py-3 focus:bg-white/10 focus:text-white"
+                        onClick={() => handlePreviewRole(option.role)}
+                      >
+                        <span className={cn("flex-1 text-sm font-medium tracking-normal", activePreview === option.role && "text-qep-orange")}>
+                          {option.label}
+                        </span>
+                      </DropdownMenuItem>
+                    ))}
+                  </div>
+                )}
                 {utilitySections.length > 0 && (
                   <div className="mt-2 border-t border-white/10 pt-2">
                     <DropdownMenuLabel className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
@@ -619,25 +718,24 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
         {/* Right: Search + Bell + Workspace + Avatar */}
         <div className="flex items-center gap-3 ml-auto shrink-0">
           <div className="hidden w-48 transition-all xl:block 2xl:w-[340px]">
-            {showCrmSearch ? (
-              <QrmGlobalSearchCommand />
-            ) : (
-              <form onSubmit={handleSearchSubmit} className="w-full">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                  <input
-                    type="search"
-                    value={searchValue}
-                    onChange={(e) => setSearchValue(e.target.value)}
-                    placeholder={location.pathname === "/sales/quotes" ? "Search quotes, customers, or #..." : "Search..."}
-                    className="h-10 w-full rounded-full border border-white/10 bg-white/5 py-1.5 pl-9 pr-14 text-xs text-white placeholder:text-slate-400 transition-all focus:bg-white/10 focus:outline-none focus:ring-1 focus:ring-qep-orange"
-                  />
-                  <kbd className="pointer-events-none absolute right-3 top-1/2 hidden h-6 -translate-y-1/2 items-center rounded border border-white/10 bg-white/10 px-2 font-mono text-[10px] text-slate-300 xl:inline-flex">
-                    ⌘K
-                  </kbd>
-                </div>
-              </form>
-            )}
+            <form onSubmit={handleSearchSubmit} className="w-full">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                <input
+                  type="search"
+                  aria-label="Open QEP command search"
+                  value={searchValue}
+                  onChange={(e) => setSearchValue(e.target.value)}
+                  onFocus={handleTopBarSearchFocus}
+                  onClick={handleTopBarSearchFocus}
+                  placeholder="Search QEP..."
+                  className="h-10 w-full rounded-full border border-white/10 bg-white/5 py-1.5 pl-9 pr-14 text-xs text-white placeholder:text-slate-400 transition-all focus:bg-white/10 focus:outline-none focus:ring-1 focus:ring-qep-orange"
+                />
+                <kbd className="pointer-events-none absolute right-3 top-1/2 hidden h-6 -translate-y-1/2 items-center rounded border border-white/10 bg-white/10 px-2 font-mono text-[10px] text-slate-300 xl:inline-flex">
+                  ⌘K
+                </kbd>
+              </div>
+            </form>
           </div>
 
           {utilitySections.length > 0 && (
@@ -701,6 +799,52 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
             <div className="hidden xl:block">
               <WorkspaceSwitcher activeWorkspaceId={profile.active_workspace_id} />
             </div>
+          )}
+          {showOfficeViewLabel && (
+            <span className="hidden rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-300 xl:inline-flex">
+              Office view
+            </span>
+          )}
+          {canPreviewRoles && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    "hidden items-center gap-1.5 rounded-full border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] outline-none transition-colors xl:inline-flex",
+                    activePreview
+                      ? "border-qep-orange/40 bg-qep-orange/10 text-qep-orange"
+                      : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/10 hover:text-white",
+                  )}
+                  aria-label="Preview the Floor as another role"
+                >
+                  <span>View as</span>
+                  <span className="max-w-[110px] truncate text-white">{activePreviewLabel}</span>
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 rounded-2xl border-white/10 bg-slate-900/95 p-2 text-white backdrop-blur-xl">
+                <DropdownMenuLabel className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                  View as
+                </DropdownMenuLabel>
+                <DropdownMenuItem
+                  className="cursor-pointer rounded-xl px-3 py-2 focus:bg-white/10 focus:text-white"
+                  onClick={() => handlePreviewRole(null)}
+                >
+                  Own role
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {ROLE_PREVIEW_OPTIONS.map((option) => (
+                  <DropdownMenuItem
+                    key={option.role}
+                    className="cursor-pointer rounded-xl px-3 py-2 focus:bg-white/10 focus:text-white"
+                    onClick={() => handlePreviewRole(option.role)}
+                  >
+                    <span className={cn("flex-1", activePreview === option.role && "text-qep-orange")}>{option.label}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           {/* Quick action pill */}
           {quickAction && (

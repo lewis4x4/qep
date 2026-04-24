@@ -120,8 +120,15 @@ export function OmniCommand({ role }: OmniCommandProps) {
         setOpen((prev) => !prev);
       }
     }
+    function onOpenOmniCommand() {
+      setOpen(true);
+    }
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("qep:open-omni-command", onOpenOmniCommand);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("qep:open-omni-command", onOpenOmniCommand);
+    };
   }, []);
 
   useEffect(() => {

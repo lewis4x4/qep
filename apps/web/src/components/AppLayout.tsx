@@ -40,7 +40,8 @@ export function AppLayout({
   const location = useLocation();
   const embeddedMode = new URLSearchParams(location.search).get("embedded") === "1";
   const quoteWorkspaceRoute = location.pathname === "/quote-v2" || location.pathname.startsWith("/quote-v2/");
-  const showBackToFloorChip = Boolean(profile.floor_mode && !quoteWorkspaceRoute);
+  const floorRoute = location.pathname === "/floor" || location.pathname.startsWith("/floor/");
+  const showBackToFloorChip = Boolean(profile.floor_mode && !floorRoute && !quoteWorkspaceRoute);
 
   if (embeddedMode) {
     return (
@@ -60,8 +61,8 @@ export function AppLayout({
           return link to avoid duplicate Back-to-Floor chrome. The chip
           is visually compact and styled to feel like Floor chrome —
           orange gear mark + uppercase Bebas Neue — so the user's eye
-          tracks it instantly. When the user is on /floor itself this
-          layout isn't rendered (see SalesOrAppLayout). */}
+          tracks it instantly. The chip stays off /floor itself because
+          the QEP wordmark is the home affordance there. */}
       {showBackToFloorChip && <BackToFloorChip />}
 
       <TopBar

@@ -1,9 +1,8 @@
 import { useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import type { UserRole } from "@/lib/database.types";
 import { getEffectiveIronRole, type IronRole } from "@/features/qrm/lib/iron-roles";
 import { useIronRoleBlend } from "@/features/qrm/lib/useIronRoleBlend";
-import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import {
   Activity,
@@ -16,8 +15,6 @@ import {
   DollarSign,
   FileText,
   Files,
-  Home,
-  LogOut,
   MapPin,
   Mic,
   PackageSearch,
@@ -30,7 +27,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { FloorJumpMenu } from "../components/FloorJumpMenu";
 import { useFloorLayout } from "../hooks/useFloorLayout";
 import { useFloorNarrative } from "../hooks/useFloorNarrative";
 import { useFloorAttentionSignals } from "../hooks/useFloorAttentionSignals";
@@ -46,6 +42,14 @@ export interface FloorPageProps {
 }
 
 const ADMIN_ROLES: UserRole[] = ["admin", "manager", "owner"];
+const PREVIEWABLE_ROLES = new Set<IronRole>([
+  "iron_manager",
+  "iron_advisor",
+  "iron_parts_counter",
+  "iron_parts_manager",
+  "iron_woman",
+  "iron_man",
+]);
 
 const ROLE_HOME_COPY: Record<IronRole, {
   title: string;
@@ -146,10 +150,18 @@ export function FloorPage({
   userFullName,
   ironRoleFromProfile,
 }: FloorPageProps) {
+  const [searchParams] = useSearchParams();
   const { blend } = useIronRoleBlend(userId);
-  const ironRole = getEffectiveIronRole(userRole, blend, ironRoleFromProfile);
-  const copy = ROLE_HOME_COPY[ironRole.role];
-  const { layout, updatedAt, isLoading } = useFloorLayout(ironRole.role, userId);
+  const resolvedIronRole = getEffectiveIronRole(userRole, blend, ironRoleFromProfile);
+  const previewRoleParam = searchParams.get("view_as");
+  const isAdmin = ADMIN_ROLES.includes(userRole);
+  const previewRole =
+    isAdmin && previewRoleParam && PREVIEWABLE_ROLES.has(previewRoleParam as IronRole)
+      ? (previewRoleParam as IronRole)
+      : null;
+  const activeRole = previewRole ?? resolvedIronRole.role;
+  const copy = ROLE_HOME_COPY[activeRole];
+  const { layout, updatedAt, isLoading } = useFloorLayout(activeRole, previewRole ? null : userId);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -162,20 +174,19 @@ export function FloorPage({
 
   const displayName = userFullName ?? "";
   const firstName = displayName.split(" ").filter(Boolean)[0] ?? "";
-  const isAdmin = ADMIN_ROLES.includes(userRole);
-  const narrative = useFloorNarrative(ironRole.role, firstName);
-  const attentionSignals = useFloorAttentionSignals(ironRole.role, userId);
+  const narrative = useFloorNarrative(activeRole, firstName);
+  const attentionSignals = useFloorAttentionSignals(activeRole, userId);
 
   const serialActionBand = useMemo(() => {
     const firstWidget = layout.widgets[0];
-    if (ironRole.role !== "iron_parts_counter" || firstWidget?.id !== "parts.serial-first") {
+    if (activeRole !== "iron_parts_counter" || firstWidget?.id !== "parts.serial-first") {
       return null;
     }
     const descriptor = resolveFloorWidget(firstWidget.id);
     if (!descriptor) return null;
     const Component = descriptor.component;
     return <Component />;
-  }, [ironRole.role, layout.widgets]);
+  }, [activeRole, layout.widgets]);
 
   const roleWidgets = useMemo(
     () =>
@@ -197,8 +208,6 @@ export function FloorPage({
 
   return (
     <div className="min-h-screen bg-[#0b1018] text-slate-100 antialiased">
-      <RoleHomeHeader userDisplayName={displayName || copy.title} roleDisplayName={copy.title} />
-
       <main className="mx-auto flex w-full max-w-[1480px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
         <section className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.6fr)]">
           <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#121927] p-5 shadow-[0_24px_80px_-48px_rgba(0,0,0,0.9)] sm:p-6">
@@ -211,6 +220,11 @@ export function FloorPage({
                   <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
                     {copy.kicker}
                   </span>
+                  {previewRole ? (
+                    <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-200">
+                      Read-only preview
+                    </span>
+                  ) : null}
                 </div>
                 <h1 className="mt-4 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
                   {copy.title}
@@ -273,53 +287,6 @@ export function FloorPage({
         </section>
       </main>
     </div>
-  );
-}
-
-function RoleHomeHeader({
-  userDisplayName,
-  roleDisplayName,
-}: {
-  userDisplayName: string;
-  roleDisplayName: string;
-}) {
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    window.location.assign("/login");
-  };
-
-  return (
-    <header className="sticky top-0 z-20 border-b border-white/10 bg-[#0b1018]/92 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-[1480px] items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
-        <Link to="/floor" className="flex min-w-0 items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f28a07] text-[#15100a] shadow-[0_0_24px_-12px_#f28a07]">
-            <Home className="h-4 w-4" aria-hidden="true" />
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate text-sm font-semibold text-white">QEP Role Home</span>
-            <span className="block truncate text-xs text-slate-500">{roleDisplayName}</span>
-          </span>
-        </Link>
-
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className="hidden sm:block">
-            <FloorJumpMenu />
-          </div>
-          <div className="hidden min-w-0 text-right md:block">
-            <p className="truncate text-sm font-semibold text-white">{userDisplayName}</p>
-            <p className="truncate text-xs text-slate-500">{roleDisplayName}</p>
-          </div>
-          <button
-            type="button"
-            onClick={handleSignOut}
-            aria-label="Sign out"
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-400 transition-colors hover:border-[#f28a07]/40 hover:text-white"
-          >
-            <LogOut className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </div>
-      </div>
-    </header>
   );
 }
 

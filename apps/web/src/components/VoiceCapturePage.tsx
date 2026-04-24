@@ -1817,9 +1817,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                                   variant="outline"
                                   className={cn(
                                     "mb-1",
-                                    row.syncStatus === "synced" && "border-green-500/30 bg-green-500/10 text-green-300",
-                                    row.syncStatus === "queued" && "border-blue-500/30 bg-blue-500/10 text-blue-300",
-                                    row.syncStatus === "needs_match" && "border-yellow-500/30 bg-yellow-500/10 text-yellow-300",
+                                    row.syncStatus === "synced" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+                                    row.syncStatus === "queued" && "border-sky-500/30 bg-sky-500/10 text-sky-300",
+                                    row.syncStatus === "needs_match" && "border-amber-500/30 bg-amber-500/10 text-amber-300",
                                     row.syncStatus === "review_sync" && "border-qep-orange/30 bg-qep-orange/10 text-qep-orange",
                                   )}
                                 >
