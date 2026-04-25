@@ -33,6 +33,8 @@ import { useFloorAttentionSignals } from "../hooks/useFloorAttentionSignals";
 import { applyAttentionPinning, type FloorWidgetWithAttention } from "../lib/attention";
 import { FLOOR_WIDGET_REGISTRY, resolveFloorWidget } from "../lib/floor-widget-registry";
 import type { FloorQuickAction } from "../lib/layout-types";
+import { AdvisorBriefingBanner } from "../components/AdvisorBriefingBanner";
+import { AdvisorActionCards } from "../components/AdvisorActionCards";
 
 export interface FloorPageProps {
   userId: string;
@@ -212,6 +214,7 @@ export function FloorPage({
   return (
     <div className="min-h-screen bg-[#0b1018] text-slate-100 antialiased">
       <main className="mx-auto flex w-full max-w-[1680px] flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
+        {isAdvisor ? <AdvisorBriefingBanner /> : null}
         {/* Title block */}
         <section className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -255,7 +258,9 @@ export function FloorPage({
             02 Actions
           </p>
           {serialActionBand ? <div className="mb-3">{serialActionBand}</div> : null}
-          {layout.quickActions.length > 0 ? (
+          {isAdvisor ? (
+            <AdvisorActionCards />
+          ) : layout.quickActions.length > 0 ? (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {layout.quickActions.map((action, index) => (
                 <RoleAction key={action.id} action={action} index={index} />
@@ -388,10 +393,11 @@ function AdvisorFloorGrid({
 }) {
   const find = (id: string) => widgets.find((w) => w.id === id);
   const myQuotes = find("sales.my-quotes-by-status");
-  const aiBriefing = find("sales.ai-briefing");
   const actionItems = find("sales.action-items");
   const recentActivity = find("sales.recent-activity");
   const followUpQueue = find("qrm.follow-up-queue");
+  // sales.ai-briefing intentionally omitted — it now renders as the
+  // collapsible AdvisorBriefingBanner at the very top of FloorPage.
 
   if (isLoading) {
     return (
@@ -399,7 +405,6 @@ function AdvisorFloorGrid({
         <div className="grid gap-3 md:grid-cols-3">
           <div className="min-h-[420px] animate-pulse rounded-2xl border border-white/10 bg-white/[0.04] md:col-span-2" />
           <div className="flex min-h-[420px] flex-col gap-3">
-            <div className="flex-1 animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
             <div className="flex-1 animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
             <div className="flex-1 animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
           </div>
@@ -423,7 +428,6 @@ function AdvisorFloorGrid({
       <div className="grid gap-3 md:grid-cols-3">
         <div className="min-w-0 md:col-span-2">{renderWidget(myQuotes)}</div>
         <div className="flex min-w-0 flex-col gap-3 md:col-span-1">
-          {aiBriefing ? <div className="min-h-0">{renderWidget(aiBriefing)}</div> : null}
           {actionItems ? <div className="min-h-0">{renderWidget(actionItems)}</div> : null}
           {recentActivity ? <div className="min-h-0">{renderWidget(recentActivity)}</div> : null}
         </div>
