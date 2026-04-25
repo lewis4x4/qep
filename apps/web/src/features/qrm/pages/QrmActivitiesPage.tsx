@@ -93,6 +93,54 @@ const ACTIVITY_META: Record<
   },
 };
 
+/**
+ * sanitizeActivityBody — strips null-interpolation artifacts from
+ * activity body text. Demo-seeded rows sometimes landed like
+ * `"I spoke to John Smith of null. He is interested in skid steer for
+ * null."` because upstream composition did not null-check
+ * location/model fields. We clean on display instead of mutating the
+ * stored rows — safe and reversible.
+ */
+function sanitizeActivityBody(body: string | null | undefined): string {
+  if (!body) return "No activity details logged.";
+  const cleaned = body
+    .replace(/\s+(?:of|for|with|at|from|in|to|by)\s+null\b/gi, "")
+    .replace(/:\s*null\b/gi, ":")
+    .replace(/\bnull\.\s*/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return cleaned.length > 0 ? cleaned : "No activity details logged.";
+}
+
+type ActivityTimeBucket = "today" | "yesterday" | "thisWeek" | "earlier";
+
+const TIME_BUCKET_LABEL: Record<ActivityTimeBucket, string> = {
+  today: "Today",
+  yesterday: "Yesterday",
+  thisWeek: "This week",
+  earlier: "Earlier",
+};
+
+const TIME_BUCKET_ORDER: ActivityTimeBucket[] = [
+  "today",
+  "yesterday",
+  "thisWeek",
+  "earlier",
+];
+
+function resolveTimeBucket(iso: string): ActivityTimeBucket {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "earlier";
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfYesterday = startOfToday - 86_400_000;
+  const startOfWeek = startOfToday - now.getDay() * 86_400_000;
+  if (t >= startOfToday) return "today";
+  if (t >= startOfYesterday) return "yesterday";
+  if (t >= startOfWeek) return "thisWeek";
+  return "earlier";
+}
+
 function readTaskMetadata(activity: QrmActivityFeedItem): QrmTaskMetadata | null {
   if (activity.activityType !== "task") return null;
   const task = activity.metadata.task;
@@ -1187,7 +1235,7 @@ export function QrmActivitiesPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 pb-12 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-3 px-4 pb-12 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
         title="Activities"
         subtitle="Calls, texts, emails, and task follow-through — one rep-safe feed with drafted next moves."
@@ -1259,54 +1307,75 @@ export function QrmActivitiesPage() {
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/12 bg-gradient-to-b from-white/[0.08] to-white/[0.02] p-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)] backdrop-blur-xl dark:border-white/10 dark:from-white/[0.05] dark:to-transparent">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Queue actions
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={allFilteredSendableSelected ? clearFilteredEligible : selectFilteredEligible}
-            disabled={filteredSendableActivityIds.length === 0}
-            className="min-h-[44px] rounded-full text-muted-foreground hover:text-primary"
-          >
-            {allFilteredSendableSelected ? "Clear eligible" : `Select eligible (${filteredSendableActivityIds.length})`}
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            Uses the current filters to queue manual and failed email/SMS items for review.
-          </span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/12 bg-gradient-to-b from-white/[0.08] to-white/[0.02] p-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)] backdrop-blur-xl dark:border-white/10 dark:from-white/[0.05] dark:to-transparent">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Task queue
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={allFilteredOpenTasksSelected ? clearFilteredOpenTasks : selectFilteredOpenTasks}
-            disabled={filteredOpenTaskActivityIds.length === 0}
-            className="min-h-[44px] rounded-full text-muted-foreground hover:border-amber-400/35 hover:from-amber-400/12 hover:to-amber-950/5 hover:text-amber-900 dark:hover:text-amber-100"
-          >
-            {allFilteredOpenTasksSelected
-              ? "Clear open tasks"
-              : `Select open tasks (${filteredOpenTaskActivityIds.length})`}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={allFilteredCompletedTasksSelected ? clearFilteredCompletedTasks : selectFilteredCompletedTasks}
-            disabled={filteredCompletedTaskActivityIds.length === 0}
-            className="min-h-[44px] rounded-full text-muted-foreground hover:border-emerald-400/35 hover:from-emerald-400/12 hover:to-emerald-950/5 hover:text-green-800 dark:hover:text-green-300"
-          >
-            {allFilteredCompletedTasksSelected
-              ? "Clear completed tasks"
-              : `Select completed tasks (${filteredCompletedTaskActivityIds.length})`}
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            Use the same inbox filters to batch-close overdue work or reopen completed follow-through.
-          </span>
-        </div>
+        <details className="group rounded-2xl border border-white/12 bg-gradient-to-b from-white/[0.04] to-transparent shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl dark:border-white/10">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
+            <span className="flex items-center gap-2">
+              <span>Bulk actions</span>
+              {(filteredSendableActivityIds.length +
+                filteredOpenTaskActivityIds.length +
+                filteredCompletedTaskActivityIds.length) > 0 ? (
+                <span className="rounded-full border border-white/15 bg-white/[0.06] px-2 py-0.5 text-[10px] font-bold tracking-[0.14em] text-foreground">
+                  {filteredSendableActivityIds.length +
+                    filteredOpenTaskActivityIds.length +
+                    filteredCompletedTaskActivityIds.length}{" "}
+                  eligible
+                </span>
+              ) : null}
+            </span>
+            <span className="text-[10px] font-medium normal-case text-muted-foreground">
+              Toggle to batch-select inbox + task work
+            </span>
+          </summary>
+          <div className="space-y-2 border-t border-white/10 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/80">
+                Queue
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={allFilteredSendableSelected ? clearFilteredEligible : selectFilteredEligible}
+                disabled={filteredSendableActivityIds.length === 0}
+                className="min-h-[40px] rounded-full text-muted-foreground hover:text-primary"
+              >
+                {allFilteredSendableSelected ? "Clear eligible" : `Select eligible (${filteredSendableActivityIds.length})`}
+              </Button>
+              <span className="text-[11px] text-muted-foreground">
+                Queues manual + failed email/SMS items that match the current filters.
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/80">
+                Tasks
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={allFilteredOpenTasksSelected ? clearFilteredOpenTasks : selectFilteredOpenTasks}
+                disabled={filteredOpenTaskActivityIds.length === 0}
+                className="min-h-[40px] rounded-full text-muted-foreground hover:border-amber-400/35 hover:from-amber-400/12 hover:to-amber-950/5 hover:text-amber-900 dark:hover:text-amber-100"
+              >
+                {allFilteredOpenTasksSelected
+                  ? "Clear open tasks"
+                  : `Select open tasks (${filteredOpenTaskActivityIds.length})`}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={allFilteredCompletedTasksSelected ? clearFilteredCompletedTasks : selectFilteredCompletedTasks}
+                disabled={filteredCompletedTaskActivityIds.length === 0}
+                className="min-h-[40px] rounded-full text-muted-foreground hover:border-emerald-400/35 hover:from-emerald-400/12 hover:to-emerald-950/5 hover:text-green-800 dark:hover:text-green-300"
+              >
+                {allFilteredCompletedTasksSelected
+                  ? "Clear completed tasks"
+                  : `Select completed tasks (${filteredCompletedTaskActivityIds.length})`}
+              </Button>
+              <span className="text-[11px] text-muted-foreground">
+                Batch-close overdue work or reopen completed follow-through.
+              </span>
+            </div>
+          </div>
+        </details>
 
         {selectedActivities.length > 0 && (
           <div className="flex flex-col gap-3 rounded-2xl border border-amber-300/60 bg-primary/10 dark:border-amber-500/35 p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1442,9 +1511,31 @@ export function QrmActivitiesPage() {
       )}
 
       {!activitiesQuery.isLoading && !activitiesQuery.isError && filteredActivities.length > 0 && (
-        <div className="space-y-3" aria-label="QRM activity feed">
-          {filteredActivities.map((activity) => {
-            const meta = ACTIVITY_META[activity.activityType];
+        <div className="space-y-5" aria-label="QRM activity feed">
+          {(() => {
+            const buckets = new Map<ActivityTimeBucket, QrmActivityFeedItem[]>();
+            for (const activity of filteredActivities) {
+              const key = resolveTimeBucket(activity.occurredAt);
+              const list = buckets.get(key) ?? [];
+              list.push(activity);
+              buckets.set(key, list);
+            }
+            return TIME_BUCKET_ORDER.filter((bucket) => (buckets.get(bucket) ?? []).length > 0).map((bucket) => {
+              const bucketActivities = buckets.get(bucket) ?? [];
+              return (
+                <section key={bucket} className="space-y-3">
+                  <header className="flex items-baseline gap-3">
+                    <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                      {TIME_BUCKET_LABEL[bucket]}
+                    </h3>
+                    <span className="text-[11px] font-medium text-muted-foreground/70">
+                      {bucketActivities.length} item{bucketActivities.length === 1 ? "" : "s"}
+                    </span>
+                    <span className="flex-1 border-t border-white/5" aria-hidden="true" />
+                  </header>
+                  <div className="space-y-3">
+                    {bucketActivities.map((activity) => {
+                      const meta = ACTIVITY_META[activity.activityType];
             const Icon = meta.icon;
             const task = readTaskMetadata(activity);
             const delivery = readDeliveryMetadata(activity);
@@ -1499,7 +1590,7 @@ export function QrmActivitiesPage() {
                     </div>
 
                     <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-foreground">
-                      {activity.body || "No activity details logged."}
+                      {sanitizeActivityBody(activity.body)}
                     </p>
 
                     <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
@@ -1640,7 +1731,12 @@ export function QrmActivitiesPage() {
                 </div>
               </div>
             );
-          })}
+                    })}
+                  </div>
+                </section>
+              );
+            });
+          })()}
         </div>
       )}
 
