@@ -18,10 +18,12 @@ export const DEFAULT_FLOOR_LAYOUTS: Record<IronRole, FloorLayout> = {
   },
   iron_manager: {
     widgets: [
-      { id: "iron.pipeline-by-rep", order: 0 },
+      { id: "iron.team-pipeline-table", order: 0 },
       { id: "iron.approval-queue", order: 1 },
-      { id: "iron.margin-trend", order: 2 },
-      { id: "iron.aging-deals-team", order: 3 },
+      { id: "iron.manager-forecast", order: 2 },
+      { id: "iron.margin-trend", order: 3 },
+      { id: "iron.manager-stalled-deals", order: 4 },
+      { id: "iron.owner-large-deals", order: 5 },
     ],
     quickActions: [
       { id: "open_approvals", label: "OPEN APPROVALS", route: "/qrm/approvals", icon: "approve" },

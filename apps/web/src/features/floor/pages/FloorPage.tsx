@@ -36,6 +36,7 @@ import type { FloorQuickAction } from "../lib/layout-types";
 import { AdvisorBriefingBanner } from "../components/AdvisorBriefingBanner";
 import { AdvisorActionCards } from "../components/AdvisorActionCards";
 import { ManagerActionCards } from "../components/ManagerActionCards";
+import { ExpiringIncentivesStrip } from "../components/ExpiringIncentivesStrip";
 
 export interface FloorPageProps {
   userId: string;
@@ -217,6 +218,7 @@ export function FloorPage({
     <div className="min-h-screen bg-[#0b1018] text-slate-100 antialiased">
       <main className="mx-auto flex w-full max-w-[1680px] flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
         {isAdvisor ? <AdvisorBriefingBanner /> : null}
+        {isManager ? <ExpiringIncentivesStrip /> : null}
         {/* Title block */}
         <section className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -452,10 +454,12 @@ function ManagerFloorGrid({
   isLoading: boolean;
 }) {
   const find = (id: string) => widgets.find((w) => w.id === id);
-  const pipelineByRep = find("iron.pipeline-by-rep");
+  const teamPipeline = find("iron.team-pipeline-table");
   const approvalQueue = find("iron.approval-queue");
+  const managerForecast = find("iron.manager-forecast");
   const marginTrend = find("iron.margin-trend");
-  const agingDeals = find("iron.aging-deals-team");
+  const stalledDeals = find("iron.manager-stalled-deals");
+  const largeDeals = find("iron.owner-large-deals");
 
   if (isLoading) {
     return (
@@ -465,8 +469,10 @@ function ManagerFloorGrid({
           <div className="flex min-h-[420px] flex-col gap-3">
             <div className="flex-1 animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
             <div className="flex-1 animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
+            <div className="flex-1 animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
           </div>
         </div>
+        <div className="min-h-[260px] animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
         <div className="min-h-[260px] animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]" />
       </div>
     );
@@ -482,16 +488,19 @@ function ManagerFloorGrid({
 
   return (
     <div className="space-y-3">
-      {/* Row 1: Pipeline-by-rep hero (2/3) + stacked rail (1/3) */}
+      {/* Row 1: Team pipeline hero (2/3) + stacked rail (1/3) */}
       <div className="grid gap-3 md:grid-cols-3">
-        <div className="min-w-0 md:col-span-2">{renderWidget(pipelineByRep)}</div>
+        <div className="min-w-0 md:col-span-2">{renderWidget(teamPipeline)}</div>
         <div className="flex min-w-0 flex-col gap-3 md:col-span-1">
           {approvalQueue ? <div className="min-h-0">{renderWidget(approvalQueue)}</div> : null}
+          {managerForecast ? <div className="min-h-0">{renderWidget(managerForecast)}</div> : null}
           {marginTrend ? <div className="min-h-0">{renderWidget(marginTrend)}</div> : null}
         </div>
       </div>
-      {/* Row 2: Aging deals below-fold full width */}
-      {agingDeals ? <div className="min-w-0">{renderWidget(agingDeals)}</div> : null}
+      {/* Row 2: Stalled deals — full width below fold */}
+      {stalledDeals ? <div className="min-w-0">{renderWidget(stalledDeals)}</div> : null}
+      {/* Row 3: Top deals ≥ $250K — full width below fold */}
+      {largeDeals ? <div className="min-w-0">{renderWidget(largeDeals)}</div> : null}
     </div>
   );
 }

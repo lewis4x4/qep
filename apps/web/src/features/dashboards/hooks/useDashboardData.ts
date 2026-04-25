@@ -107,6 +107,7 @@ export function useIronManagerData() {
         pipelineDeals: pipelineDeals ?? [],
         dealStages: stages,
         pipelineHealthByRep,
+        repProfiles,
         agingEquipment: agingEquipment ?? [],
         approvalCount: (pendingDemos?.length ?? 0) + (pendingTrades?.length ?? 0) + (marginFlags?.length ?? 0),
         marginAnalytics: marginAnalytics ?? [],

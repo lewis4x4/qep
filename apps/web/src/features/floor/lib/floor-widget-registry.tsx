@@ -91,6 +91,9 @@ import {
 } from "../widgets/RoleHomeWidgets";
 import { BuPulseStripWidget } from "../widgets/BuPulseStrip";
 import { RecentActivityWidget } from "../widgets/RecentActivityWidget";
+import { TeamPipelineTable } from "../components/TeamPipelineTable";
+import { ManagerForecastCard } from "../components/ManagerForecastCard";
+import { StalledDealsTable } from "../components/StalledDealsTable";
 
 export interface FloorWidgetDescriptor {
   id: string;
@@ -508,9 +511,35 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     id: "iron.owner-large-deals",
     title: "Deals over $250K",
     purpose: "Large open deals with advisor, stage, value, and close-date risk.",
-    allowedRoles: ["iron_owner"],
+    allowedRoles: ["iron_owner", "iron_manager"],
     size: "wide",
     component: OwnerLargeDealsWidget,
+  },
+  "iron.team-pipeline-table": {
+    id: "iron.team-pipeline-table",
+    title: "Team pipeline by advisor",
+    purpose: "Dense rep-by-rep pipeline read sorted by attention — replaces the bar-chart hero on manager home.",
+    allowedRoles: ["iron_manager"],
+    size: "wide",
+    component: TeamPipelineTable,
+  },
+  "iron.manager-forecast": {
+    id: "iron.manager-forecast",
+    title: "Forecast",
+    purpose: "Weighted-pipeline forecast for the current month plus the top three commits expected to close.",
+    allowedRoles: ["iron_manager"],
+    size: "normal",
+    component: ManagerForecastCard,
+  },
+  "iron.manager-stalled-deals": {
+    id: "iron.manager-stalled-deals",
+    title: "Stalled deals",
+    purpose: "Sortable team-wide table of deals idle 5+ days with rep, stage, amount, and inline nudge link.",
+    allowedRoles: ["iron_manager"],
+    size: "wide",
+    component: StalledDealsTable,
+    getAttentionScore: (signals) =>
+      countAttention(signals.staleDealCount, 14, "stale deal"),
   },
   "exec.bu-pulse": {
     id: "exec.bu-pulse",
