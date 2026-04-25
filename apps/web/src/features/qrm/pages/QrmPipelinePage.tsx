@@ -1,6 +1,13 @@
 import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Download, Plus } from "lucide-react";
+import {
+  BarChart3,
+  ClipboardList,
+  Download,
+  Plus,
+  ShieldAlert,
+  Target,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -203,27 +210,78 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
     ? "If pipeline pressure is buried below filters, deals age quietly and operator trust drops."
     : "Without a clear top brief, the board becomes informative but not decisive.";
 
+  const whatMattersBullets = isLoading
+    ? []
+    : [
+        overdueCount > 0
+          ? `${overdueCount} deal${overdueCount === 1 ? "" : "s"} overdue on follow-up`
+          : null,
+        staleCount > 0
+          ? `${staleCount} deal${staleCount === 1 ? "" : "s"} stalled in stage`
+          : null,
+        attentionCount > 0
+          ? `${attentionCount} attention item${attentionCount === 1 ? "" : "s"} ready to clear`
+          : `${filteredDeals.length} active deal${filteredDeals.length === 1 ? "" : "s"} on the board`,
+      ].filter((bullet): bullet is string => Boolean(bullet));
+
   return (
-    <div className="mx-auto flex w-full max-w-[1300px] flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
         title="QRM Pipeline"
         subtitle="21-step deal pipeline with SLA enforcement, drag-and-drop stage transitions, and real-time follow-up tracking."
         crumb={{ surface: "GRAPH", lens: "DEALS", count: filteredDeals.length }}
       />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <DeckSurface className="p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">What matters now</p>
-          <p className="mt-2 text-sm text-foreground">{pipelineWhatMattersNow}</p>
-        </DeckSurface>
-        <DeckSurface className="p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next move</p>
-          <p className="mt-2 text-sm text-foreground">{pipelineNextMove}</p>
-        </DeckSurface>
-        <DeckSurface className="p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Risk if ignored</p>
-          <p className="mt-2 text-sm text-foreground">{pipelineRiskIfIgnored}</p>
-        </DeckSurface>
+      <div className="grid gap-3 md:grid-cols-3">
+        <article className="flex gap-3 rounded-2xl border border-[#f28a07]/35 bg-[#f28a07]/10 p-5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f28a07] text-[#15100a]">
+            <ClipboardList className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#f6a53a]">
+              What matters now
+            </p>
+            <p className="mt-1.5 text-sm font-semibold leading-snug text-foreground">
+              {pipelineWhatMattersNow}
+            </p>
+            {whatMattersBullets.length > 0 ? (
+              <ul className="mt-2 space-y-1 text-[12px] text-muted-foreground">
+                {whatMattersBullets.map((bullet, idx) => (
+                  <li key={idx} className="flex gap-1.5">
+                    <span aria-hidden="true" className="text-emerald-400">✓</span>
+                    <span>{bullet}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        </article>
+
+        <article className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/25 text-[#f6a53a]">
+            <Target className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+              Next move
+            </p>
+            <p className="mt-1.5 text-sm font-semibold leading-snug text-foreground">
+              {pipelineNextMove}
+            </p>
+          </div>
+        </article>
+
+        <article className="flex gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/[0.06] p-5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-300">
+            <ShieldAlert className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-rose-300">
+              Risk if ignored
+            </p>
+            <p className="mt-1.5 text-sm leading-snug text-foreground">{pipelineRiskIfIgnored}</p>
+          </div>
+        </article>
       </div>
 
       <div className="flex justify-end gap-2">
