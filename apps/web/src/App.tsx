@@ -2548,7 +2548,7 @@ function App() {
               <Route
                 path="/qrm/my/reality"
                 element={
-                  profile.role === "rep" ? (
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <RepRealityReflectionPage />
                   ) : (
                     <Navigate to="/dashboard" replace />

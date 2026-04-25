@@ -209,7 +209,7 @@ export function AdvisorActionCards() {
     <div className="grid gap-3 md:grid-cols-3">
       {/* Card 1 — TODAY'S FOLLOW-UPS (orange hero) */}
       <Link
-        to="/sales/today"
+        to="/qrm/my/reality"
         className="group relative flex flex-col gap-2 overflow-hidden rounded-2xl border border-[#f28a07]/45 bg-[#f28a07]/10 p-5 transition-all hover:border-[#f28a07]/65 hover:bg-[#f28a07]/15"
         aria-label="Today's follow-ups"
       >

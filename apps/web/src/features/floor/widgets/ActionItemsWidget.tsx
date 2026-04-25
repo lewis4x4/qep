@@ -292,7 +292,7 @@ export function ActionItemsWidget() {
           )}
         </div>
         <Link
-          to="/sales/today"
+          to="/qrm/my/reality"
           className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground hover:text-[hsl(var(--qep-orange))]"
         >
           All
@@ -366,12 +366,18 @@ function ActionRowCard({
 
         {/* Middle — customer + purpose + when chips */}
         <div className="min-w-0 flex-1">
-          <Link
-            to={row.dealId ? `/qrm/deals/${row.dealId}` : "/sales/today"}
-            className="block truncate text-sm font-semibold text-foreground hover:text-[hsl(var(--qep-orange))]"
-          >
-            {row.companyName || row.dealName}
-          </Link>
+          {row.dealId ? (
+            <Link
+              to={`/qrm/deals/${row.dealId}`}
+              className="block truncate text-sm font-semibold text-foreground hover:text-[hsl(var(--qep-orange))]"
+            >
+              {row.companyName || row.dealName}
+            </Link>
+          ) : (
+            <span className="block truncate text-sm font-semibold text-foreground">
+              {row.companyName || row.dealName}
+            </span>
+          )}
           <p className="truncate text-[11px] text-muted-foreground">
             {row.purpose || row.touchpointType.replace(/_/g, " ")}
           </p>

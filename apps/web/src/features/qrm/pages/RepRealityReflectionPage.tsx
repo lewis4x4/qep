@@ -82,7 +82,7 @@ export function RepRealityReflectionPage() {
 
   if (!profile?.id) {
     return (
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
         <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
           <p className="text-sm text-muted-foreground">Profile required.</p>
         </DeckSurface>
@@ -91,7 +91,7 @@ export function RepRealityReflectionPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
+    <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
       <QrmPageHeader
         title="Rep Reality Reflection"
         subtitle="Private to you. A rep-owned mirror of your pipeline hygiene, focus risk, and signal discipline."
