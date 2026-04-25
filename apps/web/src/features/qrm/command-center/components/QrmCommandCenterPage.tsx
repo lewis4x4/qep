@@ -6,9 +6,13 @@
  */
 
 import { useCallback, useState } from "react";
-import { AlertTriangle, Loader2 } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import {
+  AlertTriangle,
+  ClipboardList,
+  Loader2,
+  ShieldAlert,
+  Target,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GlassPanel } from "@/components/primitives/GlassPanel";
 import type { UserRole } from "@/lib/database.types";
@@ -23,6 +27,13 @@ import type {
 import { useCommandCenter } from "../hooks/useCommandCenter";
 import { getRoleHeadline } from "../lib/roleVariant";
 import { RoleVariantShell } from "./RoleVariantShell";
+
+function formatCurrency(amount: number): string {
+  if (!Number.isFinite(amount) || amount <= 0) return "$0";
+  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
+  if (amount >= 1_000) return `$${Math.round(amount / 1_000)}K`;
+  return `$${Math.round(amount)}`;
+}
 
 interface QrmCommandCenterPageProps {
   userRole: UserRole;
@@ -70,21 +81,46 @@ export function QrmCommandCenterPage({
   const recommendationCount = query.data
     ? query.data.actionLanes.revenueReady.length + query.data.actionLanes.revenueAtRisk.length + query.data.actionLanes.blockers.length
     : 0;
-  const commandCenterWhatMattersNow = query.isLoading
+
+  const blockedDeals = commandStrip?.blockedDeals ?? 0;
+  const overdueFollowUps = commandStrip?.overdueFollowUps ?? 0;
+  const atRiskRevenue = commandStrip?.atRiskRevenue ?? 0;
+
+  const whatMattersHeadline = query.isLoading
     ? "Command-center pressure is loading."
     : commandStrip
-      ? `${commandStrip.blockedDeals} blocked deal${commandStrip.blockedDeals === 1 ? "" : "s"}, ${commandStrip.overdueFollowUps} overdue follow-up${commandStrip.overdueFollowUps === 1 ? "" : "s"}, and ${recommendationCount} guided move${recommendationCount === 1 ? "" : "s"} are in play.`
+      ? atRiskRevenue > 0
+        ? `${formatCurrency(atRiskRevenue)} at risk across ${overdueFollowUps} overdue follow-up${overdueFollowUps === 1 ? "" : "s"} and ${recommendationCount} guided move${recommendationCount === 1 ? "" : "s"}.`
+        : `${blockedDeals} blocked deal${blockedDeals === 1 ? "" : "s"}, ${overdueFollowUps} overdue follow-up${overdueFollowUps === 1 ? "" : "s"}, and ${recommendationCount} guided move${recommendationCount === 1 ? "" : "s"} are in play.`
       : "Command-center summary is not available yet.";
-  const commandCenterNextMove = query.isLoading
+  const whatMattersBullets = commandStrip
+    ? [
+        overdueFollowUps > 0
+          ? `${overdueFollowUps} follow-up${overdueFollowUps === 1 ? " is" : "s are"} overdue${atRiskRevenue > 0 ? ` with ${formatCurrency(atRiskRevenue)} in at-risk exposure` : ""}`
+          : null,
+        recommendationCount > 0
+          ? `${recommendationCount} guided move${recommendationCount === 1 ? " is" : "s are"} unlocked to close or de-risk deals`
+          : null,
+        blockedDeals > 0
+          ? `${blockedDeals} blocked deal${blockedDeals === 1 ? "" : "s"} — clear before scanning lower priorities`
+          : "0 blocked deals — keep the pipeline moving",
+      ].filter((bullet): bullet is string => Boolean(bullet))
+    : [];
+
+  const nextMoveHeadline = query.isLoading
     ? "Preparing the next move."
     : aiChiefOfStaff?.bestMove
       ? aiChiefOfStaff.bestMove.headline
-      : commandStrip && commandStrip.blockedDeals > 0
-        ? `Clear ${commandStrip.blockedDeals} blocked deal${commandStrip.blockedDeals === 1 ? "" : "s"} before scanning lower-priority work.`
+      : blockedDeals > 0
+        ? `Clear ${blockedDeals} blocked deal${blockedDeals === 1 ? "" : "s"} before scanning lower-priority work.`
         : "Use this pass to confirm the board is quiet and keep the next action lane clean.";
-  const commandCenterRiskIfIgnored = commandStrip && (commandStrip.blockedDeals > 0 || commandStrip.overdueFollowUps > 0 || commandStrip.atRiskRevenue > 0)
-    ? "If this page becomes a dashboard instead of a command lane, urgent work will hide in plain sight."
-    : "Without a clear top brief, operators spend time scanning instead of deciding.";
+  const nextMoveDetail =
+    aiChiefOfStaff?.bestMove?.rationale?.[0] ?? null;
+
+  const riskIfIgnored =
+    commandStrip && (blockedDeals > 0 || overdueFollowUps > 0 || atRiskRevenue > 0)
+      ? "If this page becomes a dashboard instead of a command lane, urgent work will hide in plain sight."
+      : "Without a clear top brief, operators spend time scanning instead of deciding.";
 
   const handleAccept = useCallback((card: RecommendationCardPayload) => {
     // Phase 0 P0.8 — log trace_id for telemetry. Full event emission in Phase 2.
@@ -101,8 +137,8 @@ export function QrmCommandCenterPage({
   }, []);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8 min-h-full">
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-8">
+    <div className="mx-auto w-full max-w-[1680px] space-y-6 px-4 py-4 sm:px-6 lg:px-8 min-h-full">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
         <div>
           <h1 className="text-4xl sm:text-5xl font-display font-medium tracking-tight text-white mb-2">{headline.title}</h1>
           <p className="text-lg font-light text-slate-400">{headline.subtitle}</p>
@@ -118,19 +154,61 @@ export function QrmCommandCenterPage({
         </div>
       </header>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">What matters now</p>
-          <p className="mt-2 text-sm text-foreground">{commandCenterWhatMattersNow}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next move</p>
-          <p className="mt-2 text-sm text-foreground">{commandCenterNextMove}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Risk if ignored</p>
-          <p className="mt-2 text-sm text-foreground">{commandCenterRiskIfIgnored}</p>
-        </Card>
+      <div className="grid gap-3 md:grid-cols-3">
+        <article className="flex gap-3 rounded-2xl border border-[#f28a07]/35 bg-[#f28a07]/10 p-5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f28a07] text-[#15100a]">
+            <ClipboardList className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#f6a53a]">
+              What matters now
+            </p>
+            <p className="mt-1.5 text-sm font-semibold leading-snug text-white">
+              {whatMattersHeadline}
+            </p>
+            {whatMattersBullets.length > 0 ? (
+              <ul className="mt-2 space-y-1 text-[12px] text-slate-300">
+                {whatMattersBullets.map((bullet, idx) => (
+                  <li key={idx} className="flex gap-1.5">
+                    <span aria-hidden="true" className="text-emerald-400">✓</span>
+                    <span>{bullet}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        </article>
+
+        <article className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/25 text-[#f6a53a]">
+            <Target className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+              Next move
+            </p>
+            <p className="mt-1.5 text-sm font-semibold leading-snug text-white">
+              {nextMoveHeadline}
+            </p>
+            {nextMoveDetail ? (
+              <p className="mt-1.5 text-[12px] leading-snug text-slate-400">
+                {nextMoveDetail}
+              </p>
+            ) : null}
+          </div>
+        </article>
+
+        <article className="flex gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/[0.06] p-5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-300">
+            <ShieldAlert className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-rose-300">
+              Risk if ignored
+            </p>
+            <p className="mt-1.5 text-sm leading-snug text-slate-200">{riskIfIgnored}</p>
+          </div>
+        </article>
       </div>
 
       {query.isLoading && (
