@@ -1420,7 +1420,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   return (
     <TooltipProvider>
       <div className="flex-1 overflow-y-auto bg-background">
-        <div className="mx-auto max-w-7xl space-y-4 px-4 py-5 lg:px-7">
+        <div className="mx-auto w-full max-w-[1680px] space-y-4 px-4 py-5 sm:px-6 lg:px-8">
           <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-qep-orange/90">POST-VISIT CAPTURE</p>

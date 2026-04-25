@@ -668,7 +668,7 @@ export function VoiceQuotePage() {
 
   return (
     <div className="-mb-16 min-h-screen bg-[#081323] pb-16 lg:-mb-8 lg:pb-8">
-      <div className="mx-auto flex w-full max-w-[1760px] flex-col gap-4 px-4 pb-8 pt-5 sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-4 px-4 pb-8 pt-5 sm:px-6 lg:px-8">
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_760px] 2xl:grid-cols-[minmax(0,1fr)_840px]">
         <div>
           <p className="text-xs font-bold uppercase text-orange-400">Sales Voice Workflow</p>
