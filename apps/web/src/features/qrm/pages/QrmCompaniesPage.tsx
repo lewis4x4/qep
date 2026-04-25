@@ -108,7 +108,7 @@ export function QrmCompaniesPage() {
       : `${loaded} account${loaded === 1 ? "" : "s"} across ${states.size} state${states.size === 1 ? "" : "s"}. No breach signal today.`;
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
         title="Companies"
         subtitle="Every account and sub-account — rolled up by territory, rep, and health."
