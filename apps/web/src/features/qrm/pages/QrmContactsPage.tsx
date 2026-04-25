@@ -171,7 +171,7 @@ export function QrmContactsPage() {
         : `${loaded} contact${loaded === 1 ? "" : "s"} loaded. No urgent signal from this cohort.`;
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
         title="Contacts"
         subtitle="Every person in the field — rep, operator, buyer — reachable in one keystroke."
