@@ -217,6 +217,21 @@ function parseAssistantResponse(content: string): AssistantResponseBlock[] {
   return blocks;
 }
 
+const SAFE_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
+
+function sanitizeAssistantLinkHref(rawHref: string): string | null {
+  const href = rawHref.trim();
+  if (!href) return null;
+
+  try {
+    const parsed = new URL(href, "https://qep.local");
+    if (!SAFE_LINK_PROTOCOLS.has(parsed.protocol)) return null;
+    return href;
+  } catch {
+    return null;
+  }
+}
+
 function renderInline(text: string): ReactNode[] {
   const pattern = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g;
   const tokens = text.split(pattern).filter(Boolean);
@@ -243,10 +258,15 @@ function renderInline(text: string): ReactNode[] {
 
     const linkMatch = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
     if (linkMatch) {
+      const safeHref = sanitizeAssistantLinkHref(linkMatch[2]);
+      if (!safeHref) {
+        return <span key={`${token}-${index}`}>{linkMatch[1]}</span>;
+      }
+
       return (
         <a
           key={`${token}-${index}`}
-          href={linkMatch[2]}
+          href={safeHref}
           target="_blank"
           rel="noreferrer"
           className="font-medium text-qep-orange underline decoration-qep-orange/40 underline-offset-4 hover:text-qep-orange-hover"

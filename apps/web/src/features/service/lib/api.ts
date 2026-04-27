@@ -142,18 +142,18 @@ export async function scanUpsell(machineId: string, jobId?: string): Promise<unk
   return data;
 }
 
-/** Pass opaque tracking token (from confirmation email) or legacy 4-char PIN. */
+/** Pass the full opaque tracking token from the customer confirmation message. */
 export async function fetchPublicJobStatus(
   jobId: string,
-  tokenOrLegacyPin: string,
+  trackingToken: string,
 ): Promise<unknown> {
-  const secret = tokenOrLegacyPin.trim();
-  const body =
-    secret.length > 4
-      ? { job_id: jobId, token: secret }
-      : { job_id: jobId, pin: secret };
+  const token = trackingToken.trim();
+  if (token.length < 32) {
+    throw new Error("Enter the full tracking token from your confirmation message.");
+  }
+
   const { data, error } = await supabase.functions.invoke("service-public-job-status", {
-    body,
+    body: { job_id: jobId, token },
   });
   if (error) throw new Error(error.message ?? "status fetch failed");
   return data;

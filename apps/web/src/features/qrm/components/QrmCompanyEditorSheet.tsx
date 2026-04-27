@@ -243,7 +243,7 @@ export function QrmCompanyEditorSheet({
                   value={ein}
                   onChange={(event) => setEin(event.target.value)}
                   placeholder="12-3456789"
-                  inputMode="numeric"
+                  inputMode="text"
                   pattern="[0-9]{2}-[0-9]{7}"
                 />
                 <p className="text-xs text-muted-foreground">

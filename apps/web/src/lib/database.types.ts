@@ -21450,6 +21450,7 @@ export type Database = {
           status_flags: Database["public"]["Enums"]["service_status_flag"][]
           technician_id: string | null
           tracking_token: string
+          tracking_token_sha256: string | null
           traffic_ticket_id: string | null
           updated_at: string
           workspace_id: string
@@ -21504,6 +21505,7 @@ export type Database = {
           status_flags?: Database["public"]["Enums"]["service_status_flag"][]
           technician_id?: string | null
           tracking_token?: string
+          tracking_token_sha256?: string | null
           traffic_ticket_id?: string | null
           updated_at?: string
           workspace_id?: string
@@ -21558,6 +21560,7 @@ export type Database = {
           status_flags?: Database["public"]["Enums"]["service_status_flag"][]
           technician_id?: string | null
           tracking_token?: string
+          tracking_token_sha256?: string | null
           traffic_ticket_id?: string | null
           updated_at?: string
           workspace_id?: string

@@ -3,10 +3,9 @@ import { useSearchParams } from "react-router-dom";
 import { fetchPublicJobStatus } from "../lib/api";
 
 /**
- * Customer-facing status lookup using job UUID + opaque tracking token (preferred)
- * or legacy 4-char PIN (last hex chars of UUID without dashes).
+ * Customer-facing status lookup using job UUID + opaque tracking token.
  *
- * Supports shareable links: `/service/track?job_id=<uuid>&token=<token>` (also accepts `id` and `pin`).
+ * Supports shareable links: `/service/track?job_id=<uuid>&token=<token>` (also accepts `id`).
  */
 export function ServicePublicTrackPage() {
   const [searchParams] = useSearchParams();
@@ -20,7 +19,7 @@ export function ServicePublicTrackPage() {
 
   useEffect(() => {
     const jid = (searchParams.get("job_id") ?? searchParams.get("id") ?? "").trim();
-    const tok = (searchParams.get("token") ?? searchParams.get("pin") ?? "").trim();
+    const tok = (searchParams.get("token") ?? "").trim();
     if (jid) setJobId(jid);
     if (tok) setSecret(tok);
   }, [searchParams]);
@@ -41,8 +40,8 @@ export function ServicePublicTrackPage() {
 
   useEffect(() => {
     const jid = (searchParams.get("job_id") ?? searchParams.get("id") ?? "").trim();
-    const tok = (searchParams.get("token") ?? searchParams.get("pin") ?? "").trim();
-    if (!jid || tok.length < 4) return;
+    const tok = (searchParams.get("token") ?? "").trim();
+    if (!jid || tok.length < 32) return;
     const key = `${jid}:${tok}`;
     if (autoFetchKey.current === key) return;
     autoFetchKey.current = key;
@@ -62,7 +61,7 @@ export function ServicePublicTrackPage() {
     <div className="max-w-md mx-auto py-12 px-4">
       <h1 className="text-xl font-semibold mb-2">Track service job</h1>
       <p className="text-sm text-muted-foreground mb-6">
-        Enter the full job ID and the tracking token from your confirmation message (32-character code), or the legacy 4-character PIN. If you opened a shared link, status loads automatically.
+        Enter the full job ID and the tracking token from your confirmation message. If you opened a shared link, status loads automatically.
       </p>
       <form onSubmit={submit} className="space-y-3">
         <input
@@ -74,7 +73,7 @@ export function ServicePublicTrackPage() {
         <input
           value={secret}
           onChange={(e) => setSecret(e.target.value)}
-          placeholder="Tracking token or PIN"
+          placeholder="Tracking token"
           className="w-full rounded border px-3 py-2 text-sm font-mono"
           maxLength={64}
         />
@@ -104,16 +103,6 @@ export function ServicePublicTrackPage() {
             </>
           ) : (
             <p><span className="font-medium">Stage:</span> {String(job.current_stage)}</p>
-          )}
-          {job.customer_problem_summary != null &&
-            String(job.customer_problem_summary).trim().length > 0 && (
-            <p>
-              <span className="font-medium">Your request:</span>{" "}
-              {String(job.customer_problem_summary)}
-            </p>
-          )}
-          {job.quote_total != null && (
-            <p><span className="font-medium">Quote:</span> ${Number(job.quote_total).toLocaleString()}</p>
           )}
           {job.scheduled_start_at != null && String(job.scheduled_start_at).length > 0 ? (
             <p><span className="font-medium">Scheduled:</span> {String(job.scheduled_start_at)}</p>

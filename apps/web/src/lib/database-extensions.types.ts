@@ -394,6 +394,7 @@ interface ServiceJobsRow {
   traffic_ticket_id: string | null;
   portal_request_id: string | null;
   tracking_token: string;
+  tracking_token_sha256: string | null;
   created_at: string;
   updated_at: string;
   closed_at: string | null;
