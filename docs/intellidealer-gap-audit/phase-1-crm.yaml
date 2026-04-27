@@ -1,0 +1,2621 @@
+phase: Phase-1_CRM
+generated_at: 2026-04-26T00:00:00Z
+source_artifacts:
+  pdfs:
+    - docs/IntelliDealer/Phase-1_CRM/Customer Profile: Search and Listing.pdf
+    - docs/IntelliDealer/Phase-1_CRM/Customer Reports.pdf
+    - docs/IntelliDealer/Phase-1_CRM/Prospect Board.pdf
+  png_screenshots:
+    - docs/IntelliDealer/Phase-1_CRM/Customer-Profile__3.21.06.png
+    - docs/IntelliDealer/Phase-1_CRM/Customer-Profile__3.24.45.png
+    - docs/IntelliDealer/Phase-1_CRM/Customer-Profile-Details__3.25.02.png
+    - docs/IntelliDealer/Phase-1_CRM/Customer-Profile-Contacts__3.21.14.png
+    - docs/IntelliDealer/Phase-1_CRM/Customer-Profile-Contacts__3.25.09.png
+    - docs/IntelliDealer/Phase-1_CRM/Customer-Profile-Notes__3.25.12.png
+    - docs/IntelliDealer/Phase-1_CRM/Customer-Profile-Supplement-Shipping__3.25.16.png
+    - docs/IntelliDealer/Phase-1_CRM/Prospect-Board__3.08.50.png
+    - docs/IntelliDealer/Phase-1_CRM/Prospect-Board__3.14.46.png
+    - docs/IntelliDealer/Phase-1_CRM/Prospect-Board__3.15.41.png
+  ocr_text_paths:
+    - docs/IntelliDealer/_OCR/Phase-1_CRM/Customer Profile: Search and Listing.txt
+    - docs/IntelliDealer/_OCR/Phase-1_CRM/Customer Reports.txt
+    - docs/IntelliDealer/_OCR/Phase-1_CRM/Prospect Board.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile__3.21.06.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile__3.24.45.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Contacts__3.21.14.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Contacts__3.25.09.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Notes__3.25.12.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Supplement-Shipping__3.25.16.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Prospect-Board__3.08.50.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Prospect-Board__3.14.46.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Prospect-Board__3.15.41.txt
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUDITOR NOTE — Phase-1 CRM (Customer Profile + Prospect Board)
+# This phase is composed of multiple surfaces under three menu paths
+# (Financial Mgmt > AR > Customer Profile; Customer Care > CRM > Customer
+# Profile; Management Central > CRM > Customer Profile; Product Support >
+# Equipment > Prospect Board), all backed by data source CMASTR (customer)
+# and CGISP (prospect).
+#
+# Customer Profile: a single record per customer with TEN tabs:
+#   1. Profile (the wide edit screen — primary regulatory / financial fields)
+#   2. Contact (per-customer contact list w/ salesperson by department)
+#   3. Notifications (4 risk/birthday flags)
+#   4. Supplier Mapping (cross-ref to OEM supplier customer numbers)
+#   5. Cross Reference (external IDs)
+#   6. Memos (pinned + history notes)
+#   7. Loyalty Programs (enrolled programs + tier)
+#   8. Ship To (additional ship-to addresses)
+#   9. Supplement Shipping (special handling: hazmat, lift-gate, sig req)
+#  10. (Listing search: Customer Listing entry point)
+#
+# Prospect Board: pre-customer pipeline with status / source / selling /
+# trading / customer / salesperson and free-text comments.
+#
+# CRITICAL FINDING — Brian's anchor concern (EIN/Federal Tax ID):
+# Neither qrm_companies, qrm_contacts, crm_companies, nor crm_contacts has
+# any column named ein, federal_ein, tax_id, or fein. The only tax_id in
+# the entire schema is on the dealership/branches table (the dealership's
+# own EIN, NOT the customer's). The IntelliDealer Customer Profile
+# explicitly carries a "RESALE CERT #" field, "Tax Code 1/2/3/4", "Labor
+# Tax Code 1/2", "Exempt Status", and an "AvaTax Entity Use Code" — none
+# of these have QEP equivalents. The single largest regulatory gap in
+# Phase-1 is the absence of an EIN / federal tax ID on the customer
+# record. Without it QEP cannot:
+#   * issue 1099s for cash-receipt subcontractors
+#   * pass an AvaTax sales-tax decision
+#   * substantiate a sales-tax-exemption certificate
+#   * resolve a customer in OFAC / sanctions screening
+#   * federate a customer with state-issued resale certs
+# This is a MUST-FIX-BEFORE-CUTOVER blocker.
+#
+# Other regulatory gaps (all MISSING):
+#   * RESALE CERT #         (visible on Customer Profile, no QEP column)
+#   * Sales-Tax Tax Code 1-4 (location-by-location tax routing)
+#   * Labor Tax Code 1-2     (separate tax routing for labor lines)
+#   * AvaTax Entity Use Code (regulated tax-exemption-reason enum)
+#   * Exempt Status          (free-text exemption explanation)
+#   * NAICS code             (not visible — but expected per industry)
+#   * DUNS / Dun & Bradstreet ID Number  (visible label "Dun & Bradstreet
+#                                          ID Number" — no column)
+#   * Opt Out of Sale of PI / Do Not Share PI (CCPA / state-privacy flags)
+#
+# Financial gaps (all MISSING):
+#   * AR Type (Open Item / Balance Forward)
+#   * Statement Combination
+#   * Statement Message
+#   * Statement Date
+#   * PO Number / PO Expiry (per-customer mandatory-PO control)
+#   * IBE Account #
+#   * Customer Pricing Group / Pricing Level
+#   * Discount group
+#   * Late Charge flag
+#   * Print Retail Price control
+#   * Print Parts Invoices control
+#   * Auto Email Inspection control
+#   * Terms (Normal / NET-X)
+#   * Credit Limit (visible on AR-side reports — see Phase-5)
+#
+# Operational gaps (all MISSING):
+#   * Search 1 / Search 2     (legacy 10-char fast-search keys)
+#   * Customer Number         (legacy alphanumeric — distinct from UUID)
+#   * Township / Lot / Concession (Canadian rural addressing)
+#   * Preferred Language      (driver of statement / invoice language)
+#   * Brand of Interest       (manufacturer affinity — used in marketing)
+#   * Size                    (operation size bucket)
+#   * Owner                   (named owner for B2B)
+#   * Per-department salesperson (parts/service/rental/equipment/admin/other)
+#   * Notification flags      (payment issues / multi-account / legal /
+#                              birthday — risk + relationship signals)
+#   * Supplier Mapping        (manufacturer -> supplier customer number)
+#   * Loyalty programs        (no loyalty schema at all)
+#   * Ship-To address book    (multi-address, default flag, freight terms)
+#   * Supplement Shipping     (hazmat / lift-gate / signature-required)
+#   * Prospect record         (selling, trading, source, status — no
+#                              dedicated table; closest is qrm_deals
+#                              which is post-conversion only)
+#
+# QEP currently has, for customer/contact, only:
+#   qrm_companies: id, name, dba, legal_name, address_line_1/2, city,
+#     state, postal_code, country, county, phone, website, status,
+#     classification, parent_company_id, territory_code, assigned_rep_id,
+#     hubspot_company_id, notes, metadata (Json), workspace_id, timestamps
+#   qrm_contacts: id, first_name, last_name, title, email, phone,
+#     primary_company_id, assigned_rep_id, sms_opt_in (+at +source),
+#     hubspot_contact_id, dge_customer_profile_id, merged_into_contact_id,
+#     metadata (Json), workspace_id, timestamps
+#   crm_* mirror tables with same shape (read-only views? appear to be
+#     duplicates with all-nullable columns)
+#   crm_external_id_map: generic external-ID lookup (object_type/source
+#     _system/external_id/internal_id) — could absorb IntelliDealer ID +
+#     OEM portal IDs but is currently underused
+#   tax_exemption_certificates: per-cert table linked by crm_company_id —
+#     PARTIAL coverage for RESALE CERT # (the cert number lives here, but
+#     IntelliDealer surfaces a single primary cert # inline on the
+#     customer record, while QEP requires a separate cert row + lookup)
+#   qrm_custom_field_definitions / qrm_custom_field_values: arbitrary
+#     custom fields keyed to object_type — could absorb the long tail of
+#     gap fields, but regulatory fields (EIN, RESALE CERT #) MUST be
+#     first-class typed columns, not Json values
+#
+# We mark MISSING aggressively for any field where the closest QEP target
+# is metadata Json — Json is not a real column in business terms (no
+# index, no validation, no schema). PARTIAL is reserved for shape /
+# typing mismatches against a real typed column.
+# ─────────────────────────────────────────────────────────────────────────────
+
+fields:
+  # ============================================================================
+  # SECTION 1 — IDENTIFICATION
+  # ============================================================================
+  - id: customer.legacy_customer_number
+    intellidealer_label: "Customer Number"
+    intellidealer_screen: "Customer Profile (Profile tab) / Customer Listing"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-1_CRM/Customer-Profile__3.21.06.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile__3.21.06.txt
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile__3.24.45.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Six-to-eight-character alphanumeric customer key (e.g. "A AWE001",
+      "ACONOO01"). Drives every cross-system reference in IntelliDealer:
+      AR sub-ledger, AvaTax decision payload, OEM warranty claims, lien
+      filings. Field reps know customers by this number, not the UUID.
+      Persists indefinitely; reused by every dealership that has migrated
+      off CDK / VitalEdge IntelliDealer to a new platform.
+    qep_status: PARTIAL
+    qep_table: qrm_companies
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts qrm_companies (no legacy_customer_number column; only id UUID)"
+    qep_gap_notes: |
+      QEP keys customers by UUID. The IntelliDealer alphanumeric customer
+      number must be preserved as a typed first-class column for migration
+      reconciliation, OEM portal sync, and rep mental-model continuity.
+      Storing in metadata Json is unacceptable — it must be UNIQUE-indexed
+      per workspace and visible on every list view.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN legacy_customer_number TEXT;
+      CREATE UNIQUE INDEX ON qrm_companies (workspace_id, legacy_customer_number)
+        WHERE legacy_customer_number IS NOT NULL;
+      COMMENT ON COLUMN qrm_companies.legacy_customer_number IS
+        'IntelliDealer/CMASTR alphanumeric customer key, preserved through migration';
+    ui_surface_hint: "Customer Profile header (alongside name) + Customer list column + Search bar"
+    dependencies: []
+
+  - id: customer.search_1
+    intellidealer_label: "Search 1"
+    intellidealer_screen: "Customer Profile (Profile tab) / Customer Listing search"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-1_CRM/Customer-Profile-Details__3.25.02.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile__3.21.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Ten-character fast-search key (often customer-name initials, e.g.
+      "A AWE"). Used by reps as a typing shortcut on the listing screen
+      and in the AR sub-ledger lookup. Operationally this is how phones
+      get answered ("Search 1 'TOWING' please") — removing it breaks
+      muscle memory across the entire dealership.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: search_1
+    qep_evidence: []
+    qep_gap_notes: |
+      No equivalent column. Without it, list-view search is forced to
+      do a full-text scan against name/legal_name/dba — slower, less
+      predictable, and breaks rep workflow for any dealer with > 1k
+      customers.
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN search_1 TEXT;
+      CREATE INDEX ON qrm_companies (workspace_id, lower(search_1));
+      COMMENT ON COLUMN qrm_companies.search_1 IS
+        'IntelliDealer Search 1 — 10-char rep-typed fast-search alias';
+    ui_surface_hint: "Customer Profile (Details) + Customer search bar"
+    dependencies: []
+
+  - id: customer.search_2
+    intellidealer_label: "Search 2"
+    intellidealer_screen: "Customer Profile (Profile tab) / Customer Listing search"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-1_CRM/Customer-Profile-Details__3.25.02.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Second 10-char search key (often industry word, e.g. "TOWING",
+      "ROOFING"). Lets reps slice the customer list two ways without a
+      saved-filter view. Pairs with Search 1.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: search_2
+    qep_evidence: []
+    qep_gap_notes: |
+      Same rationale as search_1 — second alternate search key.
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN search_2 TEXT;
+      CREATE INDEX ON qrm_companies (workspace_id, lower(search_2));
+    ui_surface_hint: "Customer Profile (Details) + Customer search bar"
+    dependencies: [customer.search_1]
+
+  - id: customer.business_name
+    intellidealer_label: "Business Name"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-1_CRM/Customer-Profile-Details__3.25.02.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Primary legal/dba customer name. Required field. Drives statement
+      header, invoice "Bill To", lien filings, OEM warranty registration.
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: name
+    qep_evidence:
+      - "database.types.ts qrm_companies.name (NOT NULL)"
+    qep_gap_notes: ""
+    severity: must
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Already on Companies list + Profile header"
+    dependencies: []
+
+  - id: customer.product_category
+    intellidealer_label: "Category"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-1_CRM/Customer-Profile-Details__3.25.02.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Business"
+      - "Individual"
+      - "Government"
+      - "Non-Profit"
+      - "Internal"
+    intellidealer_purpose: |
+      High-level customer-type classifier. Drives 1099 vs W-9 vs sales-
+      tax-exemption defaults and report grouping. Internal classification
+      flips many downstream defaults (no AR statement, internal-only GL).
+    qep_status: PARTIAL
+    qep_table: qrm_companies
+    qep_column: classification
+    qep_evidence:
+      - "database.types.ts qrm_companies.classification (TEXT, free-text)"
+    qep_gap_notes: |
+      QEP has classification as TEXT — no enum constraint. Need a typed
+      enum so reports/policies can branch. IntelliDealer treats this as
+      a controlled vocabulary; QEP currently does not.
+    severity: should
+    category: financial
+    migration_hint: |
+      CREATE TYPE customer_category AS ENUM ('business','individual','government','non_profit','internal');
+      ALTER TABLE qrm_companies
+        ADD COLUMN product_category customer_category;
+      -- backfill from classification + retire the free-text column over time
+    ui_surface_hint: "Customer Profile (Details) — top of the form"
+    dependencies: []
+
+  - id: customer.dba
+    intellidealer_label: "DBA / Trade Name"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      "Doing Business As" name when distinct from legal name. Required
+      for accurate AR statements when the legal entity differs from the
+      operating brand the rep talks to.
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: dba
+    qep_evidence:
+      - "database.types.ts qrm_companies.dba (nullable)"
+    qep_gap_notes: ""
+    severity: should
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Customer Profile (Details) — under Business Name"
+    dependencies: []
+
+  - id: customer.legal_name
+    intellidealer_label: "Legal Name"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Registered legal entity name (matches IRS / state filing). Used on
+      W-9, lien filings, and OEM warranty registration when distinct
+      from the operating name.
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: legal_name
+    qep_evidence:
+      - "database.types.ts qrm_companies.legal_name"
+    qep_gap_notes: ""
+    severity: must
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Customer Profile (Details) under Business Name"
+    dependencies: []
+
+  - id: customer.industry
+    intellidealer_label: "Industry"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Construction"
+      - "Agriculture"
+      - "Landscaping"
+      - "Forestry"
+      - "Trucking"
+      - "Government"
+      - "Other"
+    intellidealer_purpose: |
+      Industry classification. Drives Brand of Interest defaults,
+      cross-sell suggestions, and BI segmentation in management reports.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: industry
+    qep_evidence: []
+    qep_gap_notes: |
+      No industry column. classification is too coarse (Business/etc.).
+      Required for marketing segmentation and cross-sell rules.
+    severity: should
+    category: operational
+    migration_hint: |
+      CREATE TYPE customer_industry AS ENUM ('construction','agriculture','landscaping','forestry','trucking','government','utility','mining','other');
+      ALTER TABLE qrm_companies ADD COLUMN industry customer_industry;
+    ui_surface_hint: "Customer Profile (Details)"
+    dependencies: []
+
+  - id: customer.size
+    intellidealer_label: "Size"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Small"
+      - "Medium"
+      - "Large"
+      - "Enterprise"
+    intellidealer_purpose: |
+      Operation-size bucket. Drives credit-limit defaults, salesperson
+      assignment tier, and rental-rate eligibility in the back office.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: size
+    qep_evidence: []
+    qep_gap_notes: |
+      No size bucket. Required for tiered pricing/credit policy.
+    severity: should
+    category: financial
+    migration_hint: |
+      CREATE TYPE customer_size AS ENUM ('small','medium','large','enterprise');
+      ALTER TABLE qrm_companies ADD COLUMN size customer_size;
+    ui_surface_hint: "Customer Profile (Details)"
+    dependencies: []
+
+  - id: customer.owner_name
+    intellidealer_label: "Owner"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Free-text named owner / principal. For B2B small-business sales
+      this is the personal-guarantee party and the relationship anchor
+      a senior rep tracks across companies.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: owner_name
+    qep_evidence: []
+    qep_gap_notes: |
+      No dedicated owner field. This is distinct from a contact row —
+      the owner may not have a phone/email of their own captured.
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN owner_name TEXT;
+    ui_surface_hint: "Customer Profile (Details)"
+    dependencies: []
+
+  - id: customer.brand_of_interest
+    intellidealer_label: "Brand of Interest"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Bobcat"
+      - "Vermeer"
+      - "Yanmar"
+      - "Prinoth"
+      - "Other"
+    intellidealer_purpose: |
+      Manufacturer affinity for marketing segmentation and OEM-portal
+      cross-sell. A customer with Bobcat skidsteers gets Bobcat parts
+      promos; a Vermeer customer gets Vermeer service campaigns.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: brand_of_interest
+    qep_evidence: []
+    qep_gap_notes: |
+      No marketing-affinity column. Required for OEM-portal targeting.
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN brand_of_interest TEXT[];
+      -- array because customers often run mixed-OEM fleets
+    ui_surface_hint: "Customer Profile (Details)"
+    dependencies: []
+
+  # ============================================================================
+  # SECTION 2 — ADDRESS / GEOSPATIAL
+  # ============================================================================
+  - id: customer.address_line_1
+    intellidealer_label: "Address Line 1"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Primary street/PO Box. Drives Bill-To, statement, and AvaTax
+      jurisdiction lookup.
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: address_line_1
+    qep_evidence:
+      - "database.types.ts qrm_companies.address_line_1"
+    qep_gap_notes: ""
+    severity: must
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Customer Profile (Details)"
+    dependencies: []
+
+  - id: customer.address_line_2
+    intellidealer_label: "Address Line 2"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Suite / unit / mail-stop. Required by USPS for accurate delivery.
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: address_line_2
+    qep_evidence:
+      - "database.types.ts qrm_companies.address_line_2"
+    qep_gap_notes: ""
+    severity: should
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Customer Profile (Details)"
+    dependencies: []
+
+  - id: customer.city
+    intellidealer_label: "City"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "City for tax jurisdiction + statement."
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: city
+    qep_evidence:
+      - "database.types.ts qrm_companies.city"
+    qep_gap_notes: ""
+    severity: must
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Customer Profile (Details)"
+    dependencies: []
+
+  - id: customer.state_province
+    intellidealer_label: "Country/Province/State"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      State/Province for AvaTax jurisdiction, resale-cert routing, and
+      ship-from rules.
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: state
+    qep_evidence:
+      - "database.types.ts qrm_companies.state, qrm_companies.country"
+    qep_gap_notes: ""
+    severity: must
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Customer Profile (Details)"
+    dependencies: []
+
+  - id: customer.postal_code
+    intellidealer_label: "Zip / Postal Code"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Postal code — drives AvaTax decision."
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: postal_code
+    qep_evidence:
+      - "database.types.ts qrm_companies.postal_code"
+    qep_gap_notes: ""
+    severity: must
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Customer Profile (Details)"
+    dependencies: []
+
+  - id: customer.county
+    intellidealer_label: "County"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "County for jurisdictional tax routing in some states."
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: county
+    qep_evidence:
+      - "database.types.ts qrm_companies.county"
+    qep_gap_notes: ""
+    severity: should
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Customer Profile (Details)"
+    dependencies: []
+
+  - id: customer.township
+    intellidealer_label: "Township"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Canadian rural addressing — Township/Lot/Concession is the legal
+      land-survey unit used for service dispatch into rural Ontario /
+      Quebec / Manitoba farmland and forestry sites where there is no
+      civic street address.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: township
+    qep_evidence: []
+    qep_gap_notes: |
+      No rural-Canada survey columns. Blocks any Canadian dealership
+      cutover where farms/forestry sites lack civic addresses.
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN township TEXT;
+    ui_surface_hint: "Customer Profile (Details) — Canadian addressing block"
+    dependencies: []
+
+  - id: customer.lot
+    intellidealer_label: "Lot"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Canadian rural lot # within a township survey."
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: lot
+    qep_evidence: []
+    qep_gap_notes: "Pairs with township + concession."
+    severity: should
+    category: operational
+    migration_hint: "ALTER TABLE qrm_companies ADD COLUMN lot TEXT;"
+    ui_surface_hint: "Customer Profile (Details) — Canadian addressing block"
+    dependencies: [customer.township]
+
+  - id: customer.concession
+    intellidealer_label: "Concession"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Canadian rural concession (parallel land-survey row)."
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: concession
+    qep_evidence: []
+    qep_gap_notes: "Pairs with township + lot."
+    severity: should
+    category: operational
+    migration_hint: "ALTER TABLE qrm_companies ADD COLUMN concession TEXT;"
+    ui_surface_hint: "Customer Profile (Details) — Canadian addressing block"
+    dependencies: [customer.township, customer.lot]
+
+  - id: customer.latitude
+    intellidealer_label: "Latitude"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      Geocoded latitude — drives field-rep route optimization, geofence
+      arrival/departure events, and territory-overlap analytics.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: latitude
+    qep_evidence: []
+    qep_gap_notes: |
+      qrm_geofences exists but no per-company geocoded centroid. Without
+      it, route planning falls back to address geocoding on every trip.
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN latitude NUMERIC(10,7);
+      ALTER TABLE qrm_companies ADD COLUMN longitude NUMERIC(10,7);
+      CREATE INDEX ON qrm_companies USING gist (
+        ll_to_earth(latitude::float8, longitude::float8)
+      ) WHERE latitude IS NOT NULL;
+    ui_surface_hint: "Customer Profile (Details) — bottom of address block"
+    dependencies: []
+
+  - id: customer.longitude
+    intellidealer_label: "Longitude"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "Geocoded longitude — pairs with latitude."
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: longitude
+    qep_evidence: []
+    qep_gap_notes: "See latitude."
+    severity: should
+    category: operational
+    migration_hint: "(combined with latitude migration above)"
+    ui_surface_hint: "Customer Profile (Details)"
+    dependencies: [customer.latitude]
+
+  # ============================================================================
+  # SECTION 3 — CONTACT METHODS (company-level)
+  # ============================================================================
+  - id: customer.business_phone
+    intellidealer_label: "Business Phone Number"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: phone
+    intellidealer_purpose: "Main switchboard number for the company."
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: phone
+    qep_evidence:
+      - "database.types.ts qrm_companies.phone"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Customer Profile header + list view"
+    dependencies: []
+
+  - id: customer.business_fax
+    intellidealer_label: "Business Fax Number"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: phone
+    intellidealer_purpose: |
+      Fax — still used for AR/credit-app exchanges in the construction
+      and forestry verticals.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: business_fax
+    qep_evidence: []
+    qep_gap_notes: "No fax column."
+    severity: could
+    category: nice_to_have
+    migration_hint: "ALTER TABLE qrm_companies ADD COLUMN business_fax TEXT;"
+    ui_surface_hint: "Customer Profile (Details)"
+    dependencies: []
+
+  - id: customer.business_cell
+    intellidealer_label: "Business Cell Number"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: phone
+    intellidealer_purpose: "Owner / dispatcher cell — distinct from main switchboard."
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: business_cell
+    qep_evidence: []
+    qep_gap_notes: |
+      qrm_companies.phone is the only number column. A second cell column
+      (or first-class secondary_phone) is needed.
+    severity: should
+    category: operational
+    migration_hint: "ALTER TABLE qrm_companies ADD COLUMN business_cell TEXT;"
+    ui_surface_hint: "Customer Profile (Details)"
+    dependencies: []
+
+  - id: customer.business_email
+    intellidealer_label: "Business Email Address"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: email
+    intellidealer_purpose: |
+      Company-level email (e.g. info@acme.com) — used for statement
+      auto-email when no contact has the AR-recipient flag.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: business_email
+    qep_evidence: []
+    qep_gap_notes: |
+      qrm_companies has no email column. Statement auto-email currently
+      forced to use a contact row, which fails for companies that only
+      have a generic "billing@" inbox.
+    severity: should
+    category: financial
+    migration_hint: "ALTER TABLE qrm_companies ADD COLUMN business_email TEXT;"
+    ui_surface_hint: "Customer Profile (Details)"
+    dependencies: []
+
+  - id: customer.web_address
+    intellidealer_label: "Web Address"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Customer website URL."
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: website
+    qep_evidence:
+      - "database.types.ts qrm_companies.website"
+    qep_gap_notes: ""
+    severity: could
+    category: nice_to_have
+    migration_hint: ""
+    ui_surface_hint: "Customer Profile (Details)"
+    dependencies: []
+
+  # ============================================================================
+  # SECTION 4 — TAX / REGULATORY (Brian's anchor block)
+  # ============================================================================
+  - id: customer.ein
+    intellidealer_label: "Federal Tax ID / EIN"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+      - docs/IntelliDealer/_OCR/Phase-1_CRM/Customer Profile: Search and Listing.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Federal Employer Identification Number — the IRS-issued nine-digit
+      identifier (NN-NNNNNNN). MANDATORY for any customer that the dealer
+      will issue a 1099-NEC or 1099-MISC to (cash-receipt subcontractors,
+      independent operators, certain landlord/lease scenarios). Also
+      required by AvaTax for sales-tax-exemption substantiation, by OFAC
+      sanctions screening as a deterministic identity hook, and by the
+      manufacturer warranty programs (John Deere FinancialOps, Bobcat
+      OneCall, Vermeer Connect) to federate customer records across
+      dealer networks.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: ein
+    qep_evidence: []
+    qep_gap_notes: |
+      *** BRIAN'S #1 ANCHOR CONCERN — MUST-FIX-BEFORE-CUTOVER ***
+      No EIN/Federal Tax ID column anywhere on the customer record.
+      Without this column QEP cannot:
+        * generate 1099-NEC/MISC at year-end (tax filing failure)
+        * pass an AvaTax exemption substantiation request
+        * resolve a customer in OFAC/sanctions screening
+        * federate the customer with state-issued resale certs
+        * federate with OEM portals (JD/Bobcat/Vermeer customer dedup)
+      The single largest regulatory gap in Phase-1.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN ein TEXT;
+      ALTER TABLE qrm_companies ADD CONSTRAINT qrm_companies_ein_format_chk
+        CHECK (ein IS NULL OR ein ~ '^\d{2}-\d{7}$');
+      CREATE INDEX ON qrm_companies (workspace_id, ein) WHERE ein IS NOT NULL;
+      COMMENT ON COLUMN qrm_companies.ein IS
+        'Federal EIN (NN-NNNNNNN). Required for 1099 issuance, AvaTax exemption substantiation, OFAC screening.';
+      -- Row-level access: EIN is sensitive PII — restrict to admin + finance roles via RLS
+    ui_surface_hint: "Customer Profile (Details) — Tax/Regulatory block, masked except for last 4 to non-finance roles"
+    dependencies: []
+
+  - id: customer.resale_cert_number
+    intellidealer_label: "RESALE CERT #"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      State-issued sales-tax resale certificate number that
+      substantiates a customer's exempt-sale claim. Audited by state
+      revenue departments; missing or invalid cert # results in the
+      dealer eating the back-taxes during a sales-tax audit.
+    qep_status: PARTIAL
+    qep_table: tax_exemption_certificates
+    qep_column: certificate_number
+    qep_evidence:
+      - "database.types.ts tax_exemption_certificates.certificate_number, .crm_company_id, .issuing_state, .effective_date, .expiration_date"
+    qep_gap_notes: |
+      tax_exemption_certificates exists as a separate table — that's
+      architecturally correct (one customer can hold multi-state certs)
+      but the IntelliDealer single inline RESALE CERT # field has no
+      shortcut into it. Need an inline display on Customer Profile that
+      surfaces the primary (most-recent, non-expired) cert number, plus
+      the ability to drill into the full cert table.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      -- Schema is fine. Add a denormalized view + UI surface:
+      CREATE OR REPLACE VIEW v_customer_primary_resale_cert AS
+        SELECT DISTINCT ON (crm_company_id) crm_company_id, certificate_number,
+               issuing_state, effective_date, expiration_date, status
+        FROM tax_exemption_certificates
+        WHERE status = 'active' AND (expiration_date IS NULL OR expiration_date >= CURRENT_DATE)
+        ORDER BY crm_company_id, effective_date DESC;
+    ui_surface_hint: "Customer Profile (Details) — primary cert # inline + 'manage all' link to certs subtab"
+    dependencies: []
+
+  - id: customer.tax_code_1
+    intellidealer_label: "Tax Code 1 (Equipment)"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_purpose: |
+      Tax routing code applied to equipment-line revenue when the
+      customer is invoiced. Selected from a controlled vocabulary that
+      maps to AvaTax tax-codes. Distinct from labor/parts tax routing.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: tax_code_equipment
+    qep_evidence: []
+    qep_gap_notes: |
+      No per-customer per-revenue-line tax routing. AvaTax integration
+      currently has only one global default per workspace, which is wrong
+      for any dealer that sells across multiple states.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN tax_code_equipment TEXT;
+      ALTER TABLE qrm_companies ADD COLUMN tax_code_parts TEXT;
+      ALTER TABLE qrm_companies ADD COLUMN tax_code_service TEXT;
+      ALTER TABLE qrm_companies ADD COLUMN tax_code_rental TEXT;
+      ALTER TABLE qrm_companies ADD COLUMN labor_tax_code_1 TEXT;
+      ALTER TABLE qrm_companies ADD COLUMN labor_tax_code_2 TEXT;
+      -- All FK to a tax_codes lookup table that holds AvaTax mapping
+    ui_surface_hint: "Customer Profile (Details) — Tax block, four-column grid"
+    dependencies: []
+
+  - id: customer.tax_code_2
+    intellidealer_label: "Tax Code 2 (Mailing)"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_purpose: "Tax routing for mailing/shipping addresses (vs equipment)."
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: tax_code_parts
+    qep_evidence: []
+    qep_gap_notes: "Per-line tax routing missing — see tax_code_1."
+    severity: must
+    category: regulatory
+    migration_hint: "(combined with tax_code_1 migration above)"
+    ui_surface_hint: "Customer Profile (Details) — Tax block"
+    dependencies: [customer.tax_code_1]
+
+  - id: customer.tax_code_3
+    intellidealer_label: "Tax Code 3"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_purpose: "Third tax routing slot (often service)."
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: tax_code_service
+    qep_evidence: []
+    qep_gap_notes: "Per-line tax routing missing."
+    severity: must
+    category: regulatory
+    migration_hint: "(combined with tax_code_1)"
+    ui_surface_hint: "Customer Profile (Details) — Tax block"
+    dependencies: [customer.tax_code_1]
+
+  - id: customer.tax_code_4
+    intellidealer_label: "Tax Code 4"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_purpose: "Fourth tax routing slot (often rental/internal)."
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: tax_code_rental
+    qep_evidence: []
+    qep_gap_notes: "Per-line tax routing missing."
+    severity: must
+    category: regulatory
+    migration_hint: "(combined with tax_code_1)"
+    ui_surface_hint: "Customer Profile (Details) — Tax block"
+    dependencies: [customer.tax_code_1]
+
+  - id: customer.labor_tax_code_1
+    intellidealer_label: "Labor Tax Code 1"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_purpose: |
+      Sales-tax routing specifically for service-labor lines (which are
+      taxed differently than parts in many jurisdictions — e.g. labor
+      is exempt in TX, taxable in CA).
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: labor_tax_code_1
+    qep_evidence: []
+    qep_gap_notes: "Labor-vs-parts tax routing missing."
+    severity: must
+    category: regulatory
+    migration_hint: "(combined with tax_code_1)"
+    ui_surface_hint: "Customer Profile (Details) — Tax block"
+    dependencies: [customer.tax_code_1]
+
+  - id: customer.labor_tax_code_2
+    intellidealer_label: "Labor Tax Code 2"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_purpose: "Secondary labor-tax routing (warranty / internal labor)."
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: labor_tax_code_2
+    qep_evidence: []
+    qep_gap_notes: "See labor_tax_code_1."
+    severity: must
+    category: regulatory
+    migration_hint: "(combined with tax_code_1)"
+    ui_surface_hint: "Customer Profile (Details) — Tax block"
+    dependencies: [customer.labor_tax_code_1]
+
+  - id: customer.exempt_status
+    intellidealer_label: "Exempt Status"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Free-text explanation that documents *why* a customer is tax-
+      exempt (e.g. "501(c)(3) charity per attached letter dated
+      2024-08-12"). Audit-trail field — required during state revenue
+      audits to substantiate exempt-sale claims.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: exempt_status_notes
+    qep_evidence: []
+    qep_gap_notes: "No exemption-explanation column."
+    severity: must
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN exempt_status_notes TEXT;
+    ui_surface_hint: "Customer Profile (Details) — Tax block, multiline"
+    dependencies: []
+
+  - id: customer.avatax_entity_use_code
+    intellidealer_label: "AvaTax Entity Use Code"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "A — Federal Government"
+      - "B — State/Local Government"
+      - "C — Tribal Government"
+      - "D — Foreign Diplomat"
+      - "E — Charitable / Nonprofit"
+      - "F — Religious / Educational"
+      - "G — Resale"
+      - "H — Agricultural Production"
+      - "I — Industrial Processing"
+      - "J — Direct Pay Permit"
+      - "K — Direct Mail"
+      - "L — Other"
+      - "M — Not for resale (consumer)"
+      - "N — Local Government"
+    intellidealer_purpose: |
+      The AvaTax-defined entity-use-code that gets sent on every tax
+      decision API call. Maps to a regulated controlled vocabulary —
+      using the wrong code voids the exemption.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: avatax_entity_use_code
+    qep_evidence: []
+    qep_gap_notes: |
+      No AvaTax entity-use-code column. Without it the AvaTax integration
+      cannot send a valid exemption-substantiation payload.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      CREATE TYPE avatax_entity_use_code AS ENUM
+        ('A','B','C','D','E','F','G','H','I','J','K','L','M','N');
+      ALTER TABLE qrm_companies ADD COLUMN avatax_entity_use_code avatax_entity_use_code;
+    ui_surface_hint: "Customer Profile (Details) — Tax block, single-select"
+    dependencies: [customer.ein]
+
+  - id: customer.duns_number
+    intellidealer_label: "Dun & Bradstreet ID Number"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Nine-digit D-U-N-S number issued by Dun & Bradstreet. Used for
+      credit-bureau lookups (D&B Credit Builder, Experian Business),
+      and for federal-contract eligibility (govt customers must have
+      a DUNS for SAM.gov registration).
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: duns_number
+    qep_evidence: []
+    qep_gap_notes: "No DUNS column."
+    severity: should
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN duns_number TEXT;
+      ALTER TABLE qrm_companies ADD CONSTRAINT qrm_companies_duns_format_chk
+        CHECK (duns_number IS NULL OR duns_number ~ '^\d{9}$');
+    ui_surface_hint: "Customer Profile (Details) — Tax block"
+    dependencies: []
+
+  - id: customer.naics_code
+    intellidealer_label: "NAICS Code"
+    intellidealer_screen: "(implicit — industry classification)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Six-digit North American Industry Classification System code.
+      Required for federal tax reporting (Schedule C / Form 5471) and
+      for many state sales-tax-exemption certificates.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: naics_code
+    qep_evidence: []
+    qep_gap_notes: "No NAICS column. Required for federal tax reporting."
+    severity: should
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN naics_code TEXT;
+      ALTER TABLE qrm_companies ADD CONSTRAINT qrm_companies_naics_chk
+        CHECK (naics_code IS NULL OR naics_code ~ '^\d{6}$');
+    ui_surface_hint: "Customer Profile (Details) — Tax block"
+    dependencies: []
+
+  - id: customer.opt_out_sale_pi
+    intellidealer_label: "Opt Out of Sale of PI / Do Not Share PI"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      CCPA / CPRA / Connecticut / Colorado state-privacy opt-out flag.
+      When TRUE, the dealer must suppress this customer's PI from any
+      shared marketing-list export (e.g. OEM dealer-network rosters).
+      Recording the opt-out on the customer record is the legal proof.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: opt_out_sale_pi
+    qep_evidence: []
+    qep_gap_notes: |
+      No CCPA opt-out flag. Compliance requirement for dealers serving
+      CA, CT, CO, VA, UT customers.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN opt_out_sale_pi BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE qrm_companies ADD COLUMN opt_out_sale_pi_at TIMESTAMPTZ;
+      ALTER TABLE qrm_companies ADD COLUMN opt_out_sale_pi_source TEXT;
+    ui_surface_hint: "Customer Profile (Details) — Privacy block"
+    dependencies: []
+
+  # ============================================================================
+  # SECTION 5 — AR / FINANCIAL CONTROLS
+  # ============================================================================
+  - id: customer.ar_type
+    intellidealer_label: "A/R Type"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Open Item"
+      - "Balance Forward"
+    intellidealer_purpose: |
+      Drives AR statement format. Open-Item lists every unpaid invoice;
+      Balance-Forward rolls all prior activity into a single starting
+      balance + current-month detail. Customers (and their bookkeepers)
+      have a strong preference and changing it without telling them
+      causes payment-posting confusion.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: ar_type
+    qep_evidence: []
+    qep_gap_notes: "No AR-statement-format column."
+    severity: must
+    category: financial
+    migration_hint: |
+      CREATE TYPE ar_type AS ENUM ('open_item','balance_forward');
+      ALTER TABLE qrm_companies ADD COLUMN ar_type ar_type NOT NULL DEFAULT 'open_item';
+    ui_surface_hint: "Customer Profile (Details) — AR block"
+    dependencies: []
+
+  - id: customer.statement_combination
+    intellidealer_label: "Statement Combination"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Lets multiple related customer accounts (e.g. parent + subsidiary
+      branches) be combined onto one statement at month-end. The value
+      is a customer-number alias that groups child accounts.
+    qep_status: PARTIAL
+    qep_table: qrm_companies
+    qep_column: parent_company_id
+    qep_evidence:
+      - "database.types.ts qrm_companies.parent_company_id (UUID FK to self)"
+    qep_gap_notes: |
+      parent_company_id captures the hierarchy but there is no
+      'roll up to parent for AR statement' flag. Need a typed boolean
+      that drives the AR statement-generation routine.
+    severity: should
+    category: financial
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN combine_statement_with_parent BOOLEAN NOT NULL DEFAULT false;
+    ui_surface_hint: "Customer Profile (Details) — AR block"
+    dependencies: []
+
+  - id: customer.statement_message
+    intellidealer_label: "Statement Message"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: multiline
+    intellidealer_purpose: |
+      Per-customer free-text message that prints on the AR statement
+      footer (e.g. "Please remit to lockbox PO Box 9988").
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: statement_message
+    qep_evidence: []
+    qep_gap_notes: "No per-customer statement-footer override."
+    severity: should
+    category: financial
+    migration_hint: "ALTER TABLE qrm_companies ADD COLUMN statement_message TEXT;"
+    ui_surface_hint: "Customer Profile (Details) — AR block"
+    dependencies: []
+
+  - id: customer.terms
+    intellidealer_label: "Terms"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Normal"
+      - "NET 10"
+      - "NET 15"
+      - "NET 30"
+      - "NET 45"
+      - "NET 60"
+      - "COD"
+      - "Prepay"
+    intellidealer_purpose: |
+      Default payment terms applied when an invoice is created. Drives
+      the due-date calculation and the late-charge eligibility window.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: payment_terms
+    qep_evidence: []
+    qep_gap_notes: "No payment-terms column on the customer record."
+    severity: must
+    category: financial
+    migration_hint: |
+      CREATE TYPE payment_terms AS ENUM ('normal','net10','net15','net30','net45','net60','cod','prepay');
+      ALTER TABLE qrm_companies ADD COLUMN payment_terms payment_terms NOT NULL DEFAULT 'net30';
+    ui_surface_hint: "Customer Profile (Details) — AR block"
+    dependencies: []
+
+  - id: customer.po_number_required
+    intellidealer_label: "PO Number"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Default PO number for the customer. When set, every new
+      invoice/work-order auto-populates this PO until expiry. Customers
+      with mandatory-PO procurement controls require this — the PO is
+      what their AP system matches against, and an invoice without it
+      gets rejected.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: default_po_number
+    qep_evidence: []
+    qep_gap_notes: "No default-PO column."
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN default_po_number TEXT;
+      ALTER TABLE qrm_companies ADD COLUMN default_po_expires_at DATE;
+      ALTER TABLE qrm_companies ADD COLUMN po_required_on_invoice BOOLEAN NOT NULL DEFAULT false;
+    ui_surface_hint: "Customer Profile (Details) — AR block"
+    dependencies: []
+
+  - id: customer.po_expiry
+    intellidealer_label: "PO Expiry"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      Date the default PO expires — after this, invoices stop auto-
+      populating it and the rep must collect a fresh PO before invoicing.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: default_po_expires_at
+    qep_evidence: []
+    qep_gap_notes: "Pairs with default_po_number above."
+    severity: must
+    category: financial
+    migration_hint: "(combined with po_number_required)"
+    ui_surface_hint: "Customer Profile (Details) — AR block"
+    dependencies: [customer.po_number_required]
+
+  - id: customer.late_charge_flag
+    intellidealer_label: "Late Charge"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Per-customer toggle for late-charge assessment. Default Y; turned
+      off for VIP / strategic accounts and for governments (which by
+      statute do not pay late fees).
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: assess_late_charges
+    qep_evidence: []
+    qep_gap_notes: "No late-charge per-customer toggle."
+    severity: should
+    category: financial
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN assess_late_charges BOOLEAN NOT NULL DEFAULT true;
+    ui_surface_hint: "Customer Profile (Details) — AR block"
+    dependencies: []
+
+  - id: customer.print_retail_price
+    intellidealer_label: "Print Retail Price"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Use Location Default"
+      - "Yes"
+      - "No"
+    intellidealer_purpose: |
+      Whether to print retail (list) price alongside the customer's
+      contract price on parts/equipment invoices. Shows the customer
+      the savings they're getting; some customers contractually require
+      this, others contractually require it suppressed.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: print_retail_price
+    qep_evidence: []
+    qep_gap_notes: "No invoice-print-control column."
+    severity: should
+    category: financial
+    migration_hint: |
+      CREATE TYPE invoice_print_control AS ENUM ('use_default','yes','no');
+      ALTER TABLE qrm_companies ADD COLUMN print_retail_price invoice_print_control NOT NULL DEFAULT 'use_default';
+      ALTER TABLE qrm_companies ADD COLUMN print_parts_invoices invoice_print_control NOT NULL DEFAULT 'use_default';
+      ALTER TABLE qrm_companies ADD COLUMN auto_email_inspection invoice_print_control NOT NULL DEFAULT 'use_default';
+    ui_surface_hint: "Customer Profile (Details) — AR block"
+    dependencies: []
+
+  - id: customer.print_parts_invoices
+    intellidealer_label: "Print Parts Invoices"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Whether to print parts invoices for this customer (some get a
+      consolidated monthly statement instead of a per-transaction
+      invoice — print=No avoids paper duplication).
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: print_parts_invoices
+    qep_evidence: []
+    qep_gap_notes: "No print toggle."
+    severity: should
+    category: financial
+    migration_hint: "(combined with print_retail_price migration)"
+    ui_surface_hint: "Customer Profile (Details) — AR block"
+    dependencies: [customer.print_retail_price]
+
+  - id: customer.auto_email_inspection
+    intellidealer_label: "Auto Email Inspection"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      When TRUE, ID InspectionPlus inspections (rental returns, demo
+      walk-throughs) are auto-emailed to the customer's primary email
+      contact upon completion. Default behavior toggle.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: auto_email_inspection
+    qep_evidence: []
+    qep_gap_notes: "No inspection-auto-email control. See InspectionPlus in Phase-4."
+    severity: should
+    category: workflow
+    migration_hint: "(combined with print_retail_price migration)"
+    ui_surface_hint: "Customer Profile (Details) — AR block"
+    dependencies: [customer.print_retail_price]
+
+  - id: customer.ibe_account_number
+    intellidealer_label: "IBE Account #"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Internal Branch Equipment account number — the customer's
+      identifier when the dealer also operates as an OEM Internal
+      Branch Equipment dealer. Used on warranty claims and on
+      manufacturer pre-approval requests.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: ibe_account_number
+    qep_evidence: []
+    qep_gap_notes: "No IBE-account column. Required for OEM warranty claims."
+    severity: should
+    category: financial
+    migration_hint: "ALTER TABLE qrm_companies ADD COLUMN ibe_account_number TEXT;"
+    ui_surface_hint: "Customer Profile (Details) — AR block"
+    dependencies: []
+
+  - id: customer.credit_limit
+    intellidealer_label: "Credit Limit"
+    intellidealer_screen: "Customer Profile (Profile tab) — referenced from Credit Limit Analysis report (Phase-5)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Maximum AR balance the dealer extends to the customer. Drives
+      ar_credit_blocks on order entry — if posting an invoice would push
+      AR over the limit, the order is held for credit-mgr release.
+    qep_status: PARTIAL
+    qep_table: ar_credit_blocks
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts ar_credit_blocks (per-order block, not per-customer ceiling)"
+    qep_gap_notes: |
+      ar_credit_blocks is a downstream output (the holds), not the input
+      (the per-customer ceiling). Need a credit_limit column on
+      qrm_companies that the credit-block engine reads.
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN credit_limit_cents BIGINT;
+      ALTER TABLE qrm_companies ADD COLUMN credit_limit_currency TEXT NOT NULL DEFAULT 'USD';
+      ALTER TABLE qrm_companies ADD COLUMN credit_limit_set_by UUID REFERENCES profiles(id);
+      ALTER TABLE qrm_companies ADD COLUMN credit_limit_set_at TIMESTAMPTZ;
+      ALTER TABLE qrm_companies ADD COLUMN credit_limit_review_due_at DATE;
+    ui_surface_hint: "Customer Profile (Details) — AR block, role-restricted (finance only)"
+    dependencies: []
+
+  # ============================================================================
+  # SECTION 6 — PRICING & DISCOUNTING
+  # ============================================================================
+  - id: customer.customer_pricing_group
+    intellidealer_label: "Customer Pricing Group"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Pricing-tier group that drives parts/equipment list-price overrides
+      (e.g. CONTRACTOR-TIER1 gives 12% off list on parts).
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: pricing_group_id
+    qep_evidence: []
+    qep_gap_notes: |
+      qrm_companies has no pricing-group FK. parts_pricing_rules exists
+      but has no per-customer-group hook.
+    severity: must
+    category: financial
+    migration_hint: |
+      CREATE TABLE customer_pricing_groups (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        code TEXT NOT NULL,
+        name TEXT NOT NULL,
+        parts_discount_pct NUMERIC(5,2),
+        labor_discount_pct NUMERIC(5,2),
+        equipment_discount_pct NUMERIC(5,2),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, code)
+      );
+      ALTER TABLE qrm_companies ADD COLUMN pricing_group_id UUID REFERENCES customer_pricing_groups(id);
+    ui_surface_hint: "Customer Profile (Details) — Pricing block"
+    dependencies: []
+
+  - id: customer.pricing_level
+    intellidealer_label: "Pricing Level"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "No level assigned"
+      - "Level 1"
+      - "Level 2"
+      - "Level 3"
+      - "Level 4"
+    intellidealer_purpose: |
+      Per-customer pricing tier (1-4) that maps to the parts master
+      Level1/Level2/Level3/Level4 price ladder. Distinct from the
+      pricing-group discount %.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: pricing_level
+    qep_evidence: []
+    qep_gap_notes: "No pricing-level integer."
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN pricing_level INTEGER
+        CHECK (pricing_level IS NULL OR pricing_level BETWEEN 1 AND 4);
+    ui_surface_hint: "Customer Profile (Details) — Pricing block"
+    dependencies: []
+
+  - id: customer.discount_group
+    intellidealer_label: "Discount Group"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Cross-line discount group (e.g. 'GOLD' = 10% on labor + free
+      pickup). Distinct from pricing_group which is a parts-only
+      discount %.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: discount_group
+    qep_evidence: []
+    qep_gap_notes: "No cross-line discount group column."
+    severity: should
+    category: financial
+    migration_hint: "ALTER TABLE qrm_companies ADD COLUMN discount_group TEXT;"
+    ui_surface_hint: "Customer Profile (Details) — Pricing block"
+    dependencies: []
+
+  # ============================================================================
+  # SECTION 7 — SALES ORG / TERRITORY
+  # ============================================================================
+  - id: customer.preferred_language
+    intellidealer_label: "Preferred Language"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "ENGLISH"
+      - "FRENCH"
+      - "SPANISH"
+    intellidealer_purpose: |
+      Drives language of statements, invoices, automated emails (rental
+      reminders, service-due notices). Required for Quebec / bilingual
+      Canadian dealers; statements in the wrong language violate
+      provincial language law.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: preferred_language
+    qep_evidence: []
+    qep_gap_notes: |
+      No language preference. Blocks Quebec dealer cutover (Bill 96
+      requires French statements).
+    severity: must
+    category: regulatory
+    migration_hint: |
+      CREATE TYPE customer_language AS ENUM ('en','fr','es');
+      ALTER TABLE qrm_companies ADD COLUMN preferred_language customer_language NOT NULL DEFAULT 'en';
+    ui_surface_hint: "Customer Profile (Details) — Sales block"
+    dependencies: []
+
+  - id: customer.location_branch
+    intellidealer_label: "Location"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Home branch for the customer (e.g. "01 - LAKE CITY"). Drives
+      default tax routing, default warehouse for parts pulls, default
+      service-shop dispatch.
+    qep_status: PARTIAL
+    qep_table: qrm_companies
+    qep_column: home_branch_id
+    qep_evidence:
+      - "database.types.ts branches (table exists)"
+    qep_gap_notes: |
+      branches table exists but qrm_companies has no FK to it. Currently
+      the customer-to-branch link is implicit via territory_code.
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN home_branch_id UUID REFERENCES branches(id);
+      CREATE INDEX ON qrm_companies (home_branch_id);
+    ui_surface_hint: "Customer Profile (Details) — Sales block"
+    dependencies: []
+
+  - id: customer.salesperson_primary
+    intellidealer_label: "Salesperson"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: "Primary assigned rep for the account."
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: assigned_rep_id
+    qep_evidence:
+      - "database.types.ts qrm_companies.assigned_rep_id (FK profiles)"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Customer Profile (Details) — Sales block"
+    dependencies: []
+
+  - id: customer.salesperson_per_department
+    intellidealer_label: "Per-Department Salesperson"
+    intellidealer_screen: "Customer Profile (Contact tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Contacts__3.21.14.txt
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Contacts__3.25.09.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Distinct rep per department: Parts, Service, Rental, Equipment,
+      Admin, Other. A customer may have one rep for parts orders but a
+      different rep for new-equipment quotes.
+    qep_status: MISSING
+    qep_table: qrm_company_department_reps
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Single assigned_rep_id is not enough. Real dealerships split rep
+      assignment by department. Need a junction table.
+    severity: must
+    category: operational
+    migration_hint: |
+      CREATE TYPE rep_department AS ENUM ('parts','service','rental','equipment','admin','other');
+      CREATE TABLE qrm_company_department_reps (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        company_id uuid NOT NULL REFERENCES qrm_companies(id),
+        department rep_department NOT NULL,
+        rep_id uuid NOT NULL REFERENCES profiles(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, company_id, department)
+      );
+    ui_surface_hint: "Customer Profile (Contact tab) — sub-grid"
+    dependencies: [customer.salesperson_primary]
+
+  - id: customer.territory
+    intellidealer_label: "Territory"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Sales territory assignment (geographic / vertical)."
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: territory_code
+    qep_evidence:
+      - "database.types.ts qrm_companies.territory_code"
+    qep_gap_notes: ""
+    severity: should
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Customer Profile (Details) — Sales block"
+    dependencies: []
+
+  - id: customer.status
+    intellidealer_label: "Status"
+    intellidealer_screen: "Customer Profile (Profile tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Active"
+      - "Inactive"
+      - "Prospect"
+      - "Deleted"
+    intellidealer_purpose: "Active vs inactive state — drives list filtering and AR aging visibility."
+    qep_status: PARTIAL
+    qep_table: qrm_companies
+    qep_column: status
+    qep_evidence:
+      - "database.types.ts qrm_companies.status (TEXT, free-text)"
+    qep_gap_notes: |
+      QEP has status as TEXT — needs typed enum constraint to match
+      IntelliDealer's controlled vocabulary.
+    severity: should
+    category: operational
+    migration_hint: |
+      CREATE TYPE customer_status AS ENUM ('active','inactive','prospect','deleted');
+      ALTER TABLE qrm_companies ALTER COLUMN status TYPE customer_status USING status::customer_status;
+    ui_surface_hint: "Customer Profile header + list filter"
+    dependencies: []
+
+  - id: customer.do_not_contact
+    intellidealer_label: "Do Not Contact"
+    intellidealer_screen: "Customer Profile (Profile tab) — Miscellaneous block"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Marketing suppression flag. When TRUE, customer is excluded from
+      every campaign send (email, SMS, mailer). Distinct from CCPA
+      opt-out — this is a customer-stated preference, not a legal
+      requirement.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: do_not_contact
+    qep_evidence: []
+    qep_gap_notes: "No marketing-suppression flag."
+    severity: should
+    category: operational
+    migration_hint: "ALTER TABLE qrm_companies ADD COLUMN do_not_contact BOOLEAN NOT NULL DEFAULT false;"
+    ui_surface_hint: "Customer Profile (Details) — Miscellaneous block"
+    dependencies: []
+
+  # ============================================================================
+  # SECTION 8 — NOTIFICATIONS TAB
+  # ============================================================================
+  - id: customer.notify_payment_issues
+    intellidealer_label: "History of payment issues"
+    intellidealer_screen: "Customer Profile (Notifications tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-1_CRM/Customer-Profile-Notes__3.25.12.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Notes__3.25.12.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Risk flag — when TRUE, every screen that surfaces this customer
+      shows a warning banner ("payment-issue history") and the order-
+      entry flow forces a credit-mgr review.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: notify_payment_issues
+    qep_evidence: []
+    qep_gap_notes: "No risk-flag columns. Critical AR signal."
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN notify_payment_issues BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE qrm_companies ADD COLUMN notify_multiple_accounts BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE qrm_companies ADD COLUMN notify_legal_concerns BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE qrm_companies ADD COLUMN notify_birthday BOOLEAN NOT NULL DEFAULT false;
+    ui_surface_hint: "Customer Profile (Notifications tab) + warning banner across all customer-facing screens"
+    dependencies: []
+
+  - id: customer.notify_multiple_accounts
+    intellidealer_label: "Use of multiple or alternate accounts"
+    intellidealer_screen: "Customer Profile (Notifications tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Notes__3.25.12.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Risk flag — customer has shell-company / alternate-account history.
+      Hint to the rep that they may be trying to dodge a credit hold.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: notify_multiple_accounts
+    qep_evidence: []
+    qep_gap_notes: "See notify_payment_issues."
+    severity: must
+    category: financial
+    migration_hint: "(combined with notify_payment_issues)"
+    ui_surface_hint: "Customer Profile (Notifications tab)"
+    dependencies: [customer.notify_payment_issues]
+
+  - id: customer.notify_legal_concerns
+    intellidealer_label: "Legal concerns expressed during contact"
+    intellidealer_screen: "Customer Profile (Notifications tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Notes__3.25.12.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Risk flag — customer has expressed litigation intent. Trigger to
+      route every interaction through a manager and to document in the
+      memo trail.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: notify_legal_concerns
+    qep_evidence: []
+    qep_gap_notes: "See notify_payment_issues."
+    severity: must
+    category: regulatory
+    migration_hint: "(combined with notify_payment_issues)"
+    ui_surface_hint: "Customer Profile (Notifications tab)"
+    dependencies: [customer.notify_payment_issues]
+
+  - id: customer.notify_birthday
+    intellidealer_label: "Notify on upcoming or recent birthday"
+    intellidealer_screen: "Customer Profile (Notifications tab)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Notes__3.25.12.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Relationship signal — surfaces customer-owner birthday on the
+      rep's calendar so they can send a personal note. Small touch,
+      meaningful retention impact.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: notify_birthday
+    qep_evidence: []
+    qep_gap_notes: "See notify_payment_issues."
+    severity: should
+    category: operational
+    migration_hint: "(combined with notify_payment_issues)"
+    ui_surface_hint: "Customer Profile (Notifications tab) + Rep calendar widget"
+    dependencies: [customer.notify_payment_issues]
+
+  # ============================================================================
+  # SECTION 9 — CONTACTS TAB (per-customer contact rows)
+  # ============================================================================
+  - id: contact.first_name
+    intellidealer_label: "First Name"
+    intellidealer_screen: "Customer Profile (Contact tab)"
+    intellidealer_data_source: "CMASTR_CONTACT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Contacts__3.21.14.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Contact first name."
+    qep_status: BUILT
+    qep_table: qrm_contacts
+    qep_column: first_name
+    qep_evidence:
+      - "database.types.ts qrm_contacts.first_name (NOT NULL)"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Contact list within Customer Profile"
+    dependencies: []
+
+  - id: contact.last_name
+    intellidealer_label: "Last Name"
+    intellidealer_screen: "Customer Profile (Contact tab)"
+    intellidealer_data_source: "CMASTR_CONTACT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Contacts__3.21.14.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Contact last name."
+    qep_status: BUILT
+    qep_table: qrm_contacts
+    qep_column: last_name
+    qep_evidence:
+      - "database.types.ts qrm_contacts.last_name (NOT NULL)"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Contact list within Customer Profile"
+    dependencies: []
+
+  - id: contact.job_title
+    intellidealer_label: "Job Title"
+    intellidealer_screen: "Customer Profile (Contact tab)"
+    intellidealer_data_source: "CMASTR_CONTACT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Contacts__3.21.14.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Role at the company (Owner, Foreman, AP Clerk, etc.)."
+    qep_status: BUILT
+    qep_table: qrm_contacts
+    qep_column: title
+    qep_evidence:
+      - "database.types.ts qrm_contacts.title"
+    qep_gap_notes: ""
+    severity: should
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Contact list"
+    dependencies: []
+
+  - id: contact.business_phone
+    intellidealer_label: "Business Phone Number (contact)"
+    intellidealer_screen: "Customer Profile (Contact tab)"
+    intellidealer_data_source: "CMASTR_CONTACT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Contacts__3.21.14.txt
+    intellidealer_field_type: phone
+    intellidealer_purpose: "Per-contact phone — distinct from the company switchboard."
+    qep_status: BUILT
+    qep_table: qrm_contacts
+    qep_column: phone
+    qep_evidence:
+      - "database.types.ts qrm_contacts.phone"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Contact list"
+    dependencies: []
+
+  - id: contact.business_cell
+    intellidealer_label: "Business Cell Number (contact)"
+    intellidealer_screen: "Customer Profile (Contact tab)"
+    intellidealer_data_source: "CMASTR_CONTACT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Contacts__3.21.14.txt
+    intellidealer_field_type: phone
+    intellidealer_purpose: |
+      Per-contact cell — for SMS reach-out (the AR clerk's cell often
+      differs from her desk number).
+    qep_status: MISSING
+    qep_table: qrm_contacts
+    qep_column: cell
+    qep_evidence: []
+    qep_gap_notes: "qrm_contacts has only one phone column. Need cell separately."
+    severity: should
+    category: operational
+    migration_hint: "ALTER TABLE qrm_contacts ADD COLUMN cell TEXT;"
+    ui_surface_hint: "Contact list"
+    dependencies: []
+
+  - id: contact.email
+    intellidealer_label: "Email (contact)"
+    intellidealer_screen: "Customer Profile (Contact tab)"
+    intellidealer_data_source: "CMASTR_CONTACT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Contacts__3.21.14.txt
+    intellidealer_field_type: email
+    intellidealer_purpose: "Per-contact email — required for portal access + invoice/statement routing."
+    qep_status: BUILT
+    qep_table: qrm_contacts
+    qep_column: email
+    qep_evidence:
+      - "database.types.ts qrm_contacts.email"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Contact list"
+    dependencies: []
+
+  - id: contact.is_primary
+    intellidealer_label: "Primary Contact"
+    intellidealer_screen: "Customer Profile (Contact tab)"
+    intellidealer_data_source: "CMASTR_CONTACT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Contacts__3.21.14.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Designates the default contact for ambiguous outreach (statement
+      auto-email, service-due reminder, recall notice). Exactly one
+      contact per company should hold this flag.
+    qep_status: BUILT
+    qep_table: qrm_contact_companies
+    qep_column: is_primary
+    qep_evidence:
+      - "database.types.ts qrm_contact_companies.is_primary"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Contact list — toggle"
+    dependencies: []
+
+  - id: contact.include_inactive
+    intellidealer_label: "Include Inactive (filter)"
+    intellidealer_screen: "Customer Profile (Contact tab)"
+    intellidealer_data_source: "CMASTR_CONTACT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Contacts__3.21.14.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      List filter — defaults to OFF, hides terminated employees from
+      the contact list. Toggling to ON exposes the full historical roster.
+    qep_status: PARTIAL
+    qep_table: qrm_contacts
+    qep_column: deleted_at
+    qep_evidence:
+      - "database.types.ts qrm_contacts.deleted_at (soft-delete present)"
+    qep_gap_notes: |
+      Soft-delete column exists; the UI filter pattern needs to be wired
+      up — the data primitive is there.
+    severity: could
+    category: nice_to_have
+    migration_hint: ""
+    ui_surface_hint: "Contact list filter toggle"
+    dependencies: []
+
+  - id: contact.mydealer_user
+    intellidealer_label: "MyDealer (portal access)"
+    intellidealer_screen: "Customer Profile (Contact tab)"
+    intellidealer_data_source: "CMASTR_CONTACT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Contacts__3.21.14.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Whether the contact has been provisioned a portal login (the
+      customer-facing 'MyDealer' web app). Drives portal-access
+      enablement and password-reset routing.
+    qep_status: PARTIAL
+    qep_table: portal_customers
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts portal_customers (table exists)"
+    qep_gap_notes: |
+      portal_customers exists but no FK from qrm_contacts — the join is
+      not first-class. Need a contact-level boolean + FK.
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE qrm_contacts ADD COLUMN portal_customer_id UUID REFERENCES portal_customers(id);
+      CREATE INDEX ON qrm_contacts (portal_customer_id);
+    ui_surface_hint: "Contact list — checkbox + 'invite to portal' button"
+    dependencies: []
+
+  # ============================================================================
+  # SECTION 10 — MEMOS / SCHEDULED CALLS / ACTIVITIES
+  # ============================================================================
+  - id: customer.scheduled_calls
+    intellidealer_label: "Scheduled Calls"
+    intellidealer_screen: "Customer Profile (Profile tab — Scheduled Calls grid)"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Per-customer list of scheduled outreach (Date/Time, Contact,
+      Description, Salesperson, Category, Type, Reason). The rep's
+      task list scoped to one customer.
+    qep_status: BUILT
+    qep_table: qrm_activities
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts qrm_activities (table exists)"
+    qep_gap_notes: |
+      qrm_activities supports this. Wire up the per-customer filtered
+      view on the Customer Profile screen.
+    severity: should
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Customer Profile — Scheduled Calls grid"
+    dependencies: []
+
+  - id: customer.memos_pinned
+    intellidealer_label: "Memos (pinned)"
+    intellidealer_screen: "Customer Profile (Memos tab)"
+    intellidealer_data_source: "CMASTR_MEMO"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Notes__3.25.12.txt
+    intellidealer_field_type: multiline
+    intellidealer_purpose: |
+      Free-text memo notes per customer. Pinned memos surface at the
+      top of every customer-facing screen ("Closed July 4-5 for
+      vacation"); history memos are a chronological log.
+    qep_status: PARTIAL
+    qep_table: qrm_companies
+    qep_column: notes
+    qep_evidence:
+      - "database.types.ts qrm_companies.notes (single TEXT)"
+    qep_gap_notes: |
+      Single notes field cannot represent pinned vs history. Need a
+      separate memo table with pinned flag + author + timestamp.
+    severity: should
+    category: operational
+    migration_hint: |
+      CREATE TABLE qrm_company_memos (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        company_id uuid NOT NULL REFERENCES qrm_companies(id),
+        body TEXT NOT NULL,
+        pinned BOOLEAN NOT NULL DEFAULT false,
+        created_by UUID REFERENCES profiles(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        deleted_at TIMESTAMPTZ
+      );
+      CREATE INDEX ON qrm_company_memos (workspace_id, company_id, pinned DESC, created_at DESC);
+    ui_surface_hint: "Customer Profile — Memos tab + pinned banner"
+    dependencies: []
+
+  # ============================================================================
+  # SECTION 11 — SUPPLIER MAPPING TAB
+  # ============================================================================
+  - id: customer.supplier_mapping
+    intellidealer_label: "Supplier Mapping (Manufacturer → Supplier Customer #)"
+    intellidealer_screen: "Customer Profile (Supplier Mapping tab)"
+    intellidealer_data_source: "CMASTR_SUPMAP"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-1_CRM/Customer-Profile-Supplement-Shipping__3.25.16.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Supplement-Shipping__3.25.16.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Cross-reference table — for each manufacturer the customer buys
+      from, what is the manufacturer's identifier for them? Required
+      for OEM warranty submission, OEM-portal reconciliation, and
+      OEM-co-op-marketing claim filing.
+    qep_status: PARTIAL
+    qep_table: crm_external_id_map
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts crm_external_id_map (generic external-ID lookup)"
+    qep_gap_notes: |
+      crm_external_id_map is generic enough to hold this but is not
+      currently used for OEM customer numbers. Need to define a
+      source_system convention (e.g. 'oem_bobcat_customer_no') and
+      surface a UI grid on the Customer Profile.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      -- crm_external_id_map already exists. Define the convention:
+      INSERT INTO crm_external_id_map_source_systems (key, label) VALUES
+        ('oem_bobcat_customer_no', 'Bobcat Supplier Customer #'),
+        ('oem_vermeer_customer_no', 'Vermeer Supplier Customer #'),
+        ('oem_jd_customer_no', 'John Deere Customer #'),
+        ('oem_yanmar_customer_no', 'Yanmar Customer #'),
+        ('oem_prinoth_customer_no', 'Prinoth Customer #');
+      -- And build the per-customer Supplier Mapping UI grid that writes here
+    ui_surface_hint: "Customer Profile — Supplier Mapping tab (table grid)"
+    dependencies: []
+
+  # ============================================================================
+  # SECTION 12 — CROSS REFERENCE TAB
+  # ============================================================================
+  - id: customer.cross_reference_external_ids
+    intellidealer_label: "Cross Reference (External IDs)"
+    intellidealer_screen: "Customer Profile (Cross Reference tab)"
+    intellidealer_data_source: "CMASTR_XREF"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Supplement-Shipping__3.25.16.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      General-purpose external-system cross-reference (e.g. QuickBooks
+      customer ID, Salesforce account ID, legacy AS/400 customer #).
+      Distinct from supplier mapping which is OEM-specific.
+    qep_status: BUILT
+    qep_table: crm_external_id_map
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts crm_external_id_map"
+    qep_gap_notes: |
+      Table exists. Same UI surface as Supplier Mapping but separated
+      semantically by source_system convention.
+    severity: should
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Customer Profile — Cross Reference tab"
+    dependencies: []
+
+  # ============================================================================
+  # SECTION 13 — LOYALTY PROGRAMS TAB
+  # ============================================================================
+  - id: customer.loyalty_programs
+    intellidealer_label: "Loyalty Programs"
+    intellidealer_screen: "Customer Profile (Loyalty Programs tab)"
+    intellidealer_data_source: "CMASTR_LOYALTY"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Supplement-Shipping__3.25.16.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Enrolled loyalty / rewards programs and earned tier (e.g. JD Cash
+      Back Tier 2, Bobcat Rewards Gold). Tracks points balance and
+      tier-renewal date.
+    qep_status: MISSING
+    qep_table: customer_loyalty_enrollments
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No loyalty schema at all. Required for OEM rewards programs that
+      give the customer points-back on parts purchases.
+    severity: should
+    category: operational
+    migration_hint: |
+      CREATE TABLE customer_loyalty_programs (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        program_code TEXT NOT NULL,
+        program_name TEXT NOT NULL,
+        sponsor TEXT, -- 'jd', 'bobcat', 'internal', etc.
+        UNIQUE (workspace_id, program_code)
+      );
+      CREATE TABLE customer_loyalty_enrollments (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        company_id uuid NOT NULL REFERENCES qrm_companies(id),
+        program_id uuid NOT NULL REFERENCES customer_loyalty_programs(id),
+        member_number TEXT,
+        tier TEXT,
+        points_balance NUMERIC(12,2) DEFAULT 0,
+        enrolled_at DATE,
+        tier_expires_at DATE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, company_id, program_id)
+      );
+    ui_surface_hint: "Customer Profile — Loyalty Programs tab"
+    dependencies: []
+
+  # ============================================================================
+  # SECTION 14 — SHIP TO TAB (multi-address book)
+  # ============================================================================
+  - id: customer.ship_to_addresses
+    intellidealer_label: "Ship-To Addresses (book)"
+    intellidealer_screen: "Customer Profile (Ship To tab)"
+    intellidealer_data_source: "CMASTR_SHIPTO"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Supplement-Shipping__3.25.16.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Per-customer list of additional ship-to addresses (job sites,
+      satellite branches, foreman trailers). Each row has a default
+      flag, freight terms, contact, and tax-jurisdiction override
+      that's applied at order entry.
+    qep_status: MISSING
+    qep_table: qrm_company_ship_to_addresses
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      qrm_companies has ONE address. No additional ship-to address
+      book. Construction customers have 5-50 active job sites at any
+      time; without this, every parts/equipment delivery order requires
+      manual ad-hoc address typing.
+    severity: must
+    category: operational
+    migration_hint: |
+      CREATE TABLE qrm_company_ship_to_addresses (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        company_id uuid NOT NULL REFERENCES qrm_companies(id),
+        label TEXT NOT NULL,           -- 'Main Yard', 'I-95 jobsite', etc.
+        is_default BOOLEAN NOT NULL DEFAULT false,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        address_line_1 TEXT NOT NULL,
+        address_line_2 TEXT,
+        city TEXT NOT NULL,
+        state TEXT,
+        postal_code TEXT,
+        country TEXT,
+        contact_name TEXT,
+        contact_phone TEXT,
+        freight_terms TEXT,            -- 'prepaid','collect','dealer-truck'
+        tax_jurisdiction_override TEXT,
+        latitude NUMERIC(10,7),
+        longitude NUMERIC(10,7),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        deleted_at TIMESTAMPTZ
+      );
+      CREATE UNIQUE INDEX ON qrm_company_ship_to_addresses (workspace_id, company_id)
+        WHERE is_default;
+    ui_surface_hint: "Customer Profile — Ship To tab (grid + add-row form)"
+    dependencies: []
+
+  # ============================================================================
+  # SECTION 15 — SUPPLEMENT SHIPPING TAB (special handling)
+  # ============================================================================
+  - id: customer.supplement_shipping_special_handling
+    intellidealer_label: "Supplement Shipping (special handling)"
+    intellidealer_screen: "Customer Profile (Supplement Shipping tab)"
+    intellidealer_data_source: "CMASTR_SUPSHIP"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-1_CRM/Customer-Profile-Supplement-Shipping__3.25.16.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Supplement-Shipping__3.25.16.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Per-customer special-handling defaults: hazmat shipping required,
+      lift-gate truck required, signature-required, after-hours dropoff
+      OK, etc. Drives carrier-rate quoting and is referenced at order
+      entry to default the freight line correctly.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: shipping_handling_flags
+    qep_evidence: []
+    qep_gap_notes: |
+      No special-handling defaults. Without this every shipment requires
+      the rep to remember the customer's quirks.
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN requires_hazmat_certified_carrier BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE qrm_companies ADD COLUMN requires_lift_gate BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE qrm_companies ADD COLUMN requires_signature BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE qrm_companies ADD COLUMN allow_after_hours_dropoff BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE qrm_companies ADD COLUMN preferred_carrier TEXT;
+      ALTER TABLE qrm_companies ADD COLUMN shipping_notes TEXT;
+    ui_surface_hint: "Customer Profile — Supplement Shipping tab"
+    dependencies: []
+
+  # ============================================================================
+  # SECTION 16 — PROSPECT BOARD (pre-customer)
+  # ============================================================================
+  - id: prospect.status
+    intellidealer_label: "Prospect Status"
+    intellidealer_screen: "Prospect Board"
+    intellidealer_data_source: "CGISP"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-1_CRM/Prospect-Board__3.08.50.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Prospect-Board__3.08.50.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "All"
+      - "Early"
+      - "Almost"
+      - "Sold"
+      - "Delivered"
+      - "Lost Sale"
+      - "Expired"
+    intellidealer_purpose: |
+      Prospect-pipeline stage. Distinct from a converted-customer state.
+      Drives the Prospect Board grid filter and the salesperson's
+      forecast roll-up.
+    qep_status: PARTIAL
+    qep_table: qrm_deals
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts qrm_deals (post-conversion deal pipeline)"
+    qep_gap_notes: |
+      qrm_deals starts AFTER a prospect is engaged with a quote. The
+      Prospect Board lives upstream — early-funnel "I'm thinking about
+      buying X" tracking that hasn't yet produced a quote. Need a
+      dedicated qrm_prospects table.
+    severity: should
+    category: operational
+    migration_hint: |
+      CREATE TYPE prospect_status AS ENUM ('early','almost','sold','delivered','lost_sale','expired');
+      CREATE TABLE qrm_prospects (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        prospect_status prospect_status NOT NULL DEFAULT 'early',
+        source TEXT,
+        salesperson_id uuid REFERENCES profiles(id),
+        selling TEXT,            -- short text describing the unit being sold
+        trading TEXT,            -- short text describing the trade-in
+        company_id uuid REFERENCES qrm_companies(id), -- once converted
+        company_name_unconverted TEXT, -- before company record exists
+        comments TEXT,
+        added_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        modified_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        deleted_at TIMESTAMPTZ
+      );
+      CREATE INDEX ON qrm_prospects (workspace_id, prospect_status, modified_at DESC);
+    ui_surface_hint: "Prospect Board (own page) + filter"
+    dependencies: []
+
+  - id: prospect.source
+    intellidealer_label: "Source"
+    intellidealer_screen: "Prospect Board"
+    intellidealer_data_source: "CGISP"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Prospect-Board__3.08.50.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Where the prospect originated (walk-in, web, OEM lead, referral,
+      trade show). Lets marketing measure channel ROI.
+    qep_status: MISSING
+    qep_table: qrm_prospects
+    qep_column: source
+    qep_evidence: []
+    qep_gap_notes: "See prospect.status migration."
+    severity: should
+    category: reporting
+    migration_hint: "(combined with prospect.status migration)"
+    ui_surface_hint: "Prospect Board"
+    dependencies: [prospect.status]
+
+  - id: prospect.salesperson
+    intellidealer_label: "Salesperson (prospect)"
+    intellidealer_screen: "Prospect Board"
+    intellidealer_data_source: "CGISP"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Prospect-Board__3.08.50.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: "Rep who owns the prospect."
+    qep_status: MISSING
+    qep_table: qrm_prospects
+    qep_column: salesperson_id
+    qep_evidence: []
+    qep_gap_notes: "See prospect.status migration."
+    severity: should
+    category: operational
+    migration_hint: "(combined with prospect.status migration)"
+    ui_surface_hint: "Prospect Board"
+    dependencies: [prospect.status]
+
+  - id: prospect.selling
+    intellidealer_label: "Selling (unit)"
+    intellidealer_screen: "Prospect Board"
+    intellidealer_data_source: "CGISP"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Prospect-Board__3.08.50.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Description of the unit/package being sold to the prospect."
+    qep_status: MISSING
+    qep_table: qrm_prospects
+    qep_column: selling
+    qep_evidence: []
+    qep_gap_notes: "See prospect.status migration."
+    severity: should
+    category: operational
+    migration_hint: "(combined with prospect.status migration)"
+    ui_surface_hint: "Prospect Board"
+    dependencies: [prospect.status]
+
+  - id: prospect.trading
+    intellidealer_label: "Trading (unit)"
+    intellidealer_screen: "Prospect Board"
+    intellidealer_data_source: "CGISP"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Prospect-Board__3.08.50.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Description of any unit being traded in by the prospect."
+    qep_status: MISSING
+    qep_table: qrm_prospects
+    qep_column: trading
+    qep_evidence: []
+    qep_gap_notes: "See prospect.status migration."
+    severity: should
+    category: operational
+    migration_hint: "(combined with prospect.status migration)"
+    ui_surface_hint: "Prospect Board"
+    dependencies: [prospect.status]
+
+  - id: prospect.customer_link
+    intellidealer_label: "Customer (prospect→customer link)"
+    intellidealer_screen: "Prospect Board"
+    intellidealer_data_source: "CGISP"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Prospect-Board__3.08.50.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Once converted, the prospect row holds a FK to the qrm_companies
+      record. Pre-conversion, only a free-text name (the prospect
+      hasn't given enough info to create a real customer record).
+    qep_status: MISSING
+    qep_table: qrm_prospects
+    qep_column: company_id
+    qep_evidence: []
+    qep_gap_notes: "See prospect.status migration."
+    severity: should
+    category: operational
+    migration_hint: "(combined with prospect.status migration)"
+    ui_surface_hint: "Prospect Board — links to Customer Profile after conversion"
+    dependencies: [prospect.status]
+
+  - id: prospect.added_modified_date
+    intellidealer_label: "Added/Modified"
+    intellidealer_screen: "Prospect Board"
+    intellidealer_data_source: "CGISP"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Prospect-Board__3.08.50.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: "Created and last-modified timestamps for the prospect."
+    qep_status: MISSING
+    qep_table: qrm_prospects
+    qep_column: added_at, modified_at
+    qep_evidence: []
+    qep_gap_notes: "See prospect.status migration."
+    severity: should
+    category: operational
+    migration_hint: "(combined with prospect.status migration)"
+    ui_surface_hint: "Prospect Board"
+    dependencies: [prospect.status]
+
+  - id: prospect.comments
+    intellidealer_label: "Comments"
+    intellidealer_screen: "Prospect Board"
+    intellidealer_data_source: "CGISP"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Prospect-Board__3.08.50.txt
+    intellidealer_field_type: multiline
+    intellidealer_purpose: "Free-text rep notes on the prospect (last call notes, objections heard, next-step plan)."
+    qep_status: MISSING
+    qep_table: qrm_prospects
+    qep_column: comments
+    qep_evidence: []
+    qep_gap_notes: "See prospect.status migration."
+    severity: should
+    category: operational
+    migration_hint: "(combined with prospect.status migration)"
+    ui_surface_hint: "Prospect Board"
+    dependencies: [prospect.status]
+
+  - id: prospect.jdquote_upload
+    intellidealer_label: "John Deere Quote II Upload (prospect)"
+    intellidealer_screen: "Prospect Board (button)"
+    intellidealer_data_source: "CGISP"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-1_CRM/Prospect Board.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Integration button — exports the active prospect's selling/trading
+      data into a John Deere Quote II XML payload for upload to the JD
+      configurator. Two-way: also receives back JDQuote PDFs and price
+      confirmations.
+    qep_status: MISSING
+    qep_table: prospect_jdquote_upload_runs
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No JD Quote II integration. This is a JD-specific OEM feature —
+      defer until a JD-affiliated dealer is in scope, but flag as a
+      cutover risk for any JD dealer.
+    severity: could
+    category: nice_to_have
+    migration_hint: |
+      -- JD Quote II is an OEM-specific integration, deferred. When built:
+      CREATE TABLE prospect_jdquote_upload_runs (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        prospect_id uuid REFERENCES qrm_prospects(id),
+        request_payload JSONB,
+        response_payload JSONB,
+        jd_quote_id TEXT,
+        status TEXT,
+        error TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    ui_surface_hint: "Prospect Board — 'JD Quote Upload' button (per-prospect)"
+    dependencies: [prospect.status]
+
+  # ============================================================================
+  # SECTION 17 — CUSTOMER LISTING / SEARCH SURFACE
+  # ============================================================================
+  - id: customer.search_extended_fields
+    intellidealer_label: "Search Extended Fields (toggle)"
+    intellidealer_screen: "Customer Profile: Search and Listing"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile__3.21.06.txt
+      - docs/IntelliDealer/_OCR/Phase-1_CRM/Customer Profile: Search and Listing.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Search-form toggle that, when ON, expands the search to include
+      contact names + ship-to address names (not just the primary
+      company name). Drives a different SQL plan.
+    qep_status: PARTIAL
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP search likely already does this (full-text across joins) but
+      the explicit user-facing toggle isn't present. Add it as a UI
+      affordance for parity.
+    severity: could
+    category: nice_to_have
+    migration_hint: ""
+    ui_surface_hint: "Customer search bar — Extended Fields toggle"
+    dependencies: []
+
+  - id: customer.export_listing_csv
+    intellidealer_label: "Export to CSV (listing)"
+    intellidealer_screen: "Customer Profile: Search and Listing"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-1_CRM/Customer Profile: Search and Listing.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Export-to-CSV icon — produces a CSV of the current customer
+      listing's filtered results.
+    qep_status: PARTIAL
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP has CSV export on some list views; verify Customer list has it
+      and surface the icon consistently.
+    severity: could
+    category: nice_to_have
+    migration_hint: ""
+    ui_surface_hint: "Customer Listing — top-right export icon"
+    dependencies: []

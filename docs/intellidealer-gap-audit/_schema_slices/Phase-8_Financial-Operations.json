@@ -1,0 +1,506 @@
+{
+  "tables": {
+    "ar_credit_blocks": [
+      {
+        "name": "block_reason",
+        "type": "string"
+      },
+      {
+        "name": "block_threshold_days",
+        "type": "number"
+      },
+      {
+        "name": "blocked_at",
+        "type": "string"
+      },
+      {
+        "name": "blocked_by",
+        "type": "string | null"
+      },
+      {
+        "name": "cleared_at",
+        "type": "string | null"
+      },
+      {
+        "name": "cleared_by",
+        "type": "string | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "current_max_aging_days",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "override_accounting_notified_at",
+        "type": "string | null"
+      },
+      {
+        "name": "override_approver_id",
+        "type": "string | null"
+      },
+      {
+        "name": "override_created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "override_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "override_until",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "customer_invoice_line_items": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "description",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "invoice_id",
+        "type": "string"
+      },
+      {
+        "name": "line_number",
+        "type": "number"
+      },
+      {
+        "name": "line_total",
+        "type": "number | null"
+      },
+      {
+        "name": "quantity",
+        "type": "number"
+      },
+      {
+        "name": "unit_price",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "customer_invoices": [
+      {
+        "name": "amount",
+        "type": "number"
+      },
+      {
+        "name": "amount_paid",
+        "type": "number | null"
+      },
+      {
+        "name": "balance_due",
+        "type": "number | null"
+      },
+      {
+        "name": "branch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "crm_company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "due_date",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "invoice_date",
+        "type": "string"
+      },
+      {
+        "name": "invoice_number",
+        "type": "string"
+      },
+      {
+        "name": "paid_at",
+        "type": "string | null"
+      },
+      {
+        "name": "parts_order_id",
+        "type": "string | null"
+      },
+      {
+        "name": "payment_method",
+        "type": "string | null"
+      },
+      {
+        "name": "payment_reference",
+        "type": "string | null"
+      },
+      {
+        "name": "portal_customer_id",
+        "type": "string | null"
+      },
+      {
+        "name": "service_job_id",
+        "type": "string | null"
+      },
+      {
+        "name": "service_request_id",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "tax",
+        "type": "number | null"
+      },
+      {
+        "name": "total",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "deposits": [
+      {
+        "name": "applied_to_final_invoice",
+        "type": "boolean | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string"
+      },
+      {
+        "name": "deposit_tier",
+        "type": "string"
+      },
+      {
+        "name": "equipment_value",
+        "type": "number"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "invoice_reference",
+        "type": "string | null"
+      },
+      {
+        "name": "payment_method",
+        "type": "string | null"
+      },
+      {
+        "name": "received_at",
+        "type": "string | null"
+      },
+      {
+        "name": "refund_completed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "refund_initiated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "refund_policy",
+        "type": "string"
+      },
+      {
+        "name": "required_amount",
+        "type": "number"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "verification_cycle_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "verified_at",
+        "type": "string | null"
+      },
+      {
+        "name": "verified_by",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "gl_routing_rules": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_status",
+        "type": "string | null"
+      },
+      {
+        "name": "gl_code",
+        "type": "string"
+      },
+      {
+        "name": "gl_name",
+        "type": "string"
+      },
+      {
+        "name": "gl_number",
+        "type": "string | null"
+      },
+      {
+        "name": "has_ldw",
+        "type": "boolean | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_customer_damage",
+        "type": "boolean | null"
+      },
+      {
+        "name": "is_event_related",
+        "type": "boolean | null"
+      },
+      {
+        "name": "is_sales_truck",
+        "type": "boolean | null"
+      },
+      {
+        "name": "requires_ownership_approval",
+        "type": "boolean | null"
+      },
+      {
+        "name": "ticket_type",
+        "type": "string | null"
+      },
+      {
+        "name": "truck_numbers",
+        "type": "string[] | null"
+      },
+      {
+        "name": "usage_examples",
+        "type": "string | null"
+      }
+    ],
+    "payment_validations": [
+      {
+        "name": "amount",
+        "type": "number"
+      },
+      {
+        "name": "attempt_outcome",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "customer_id",
+        "type": "string | null"
+      },
+      {
+        "name": "daily_check_total",
+        "type": "number | null"
+      },
+      {
+        "name": "exception_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "invoice_reference",
+        "type": "string | null"
+      },
+      {
+        "name": "is_delivery_day",
+        "type": "boolean | null"
+      },
+      {
+        "name": "override_by",
+        "type": "string | null"
+      },
+      {
+        "name": "override_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "passed",
+        "type": "boolean"
+      },
+      {
+        "name": "payment_type",
+        "type": "string"
+      },
+      {
+        "name": "required_approver_role",
+        "type": "string | null"
+      },
+      {
+        "name": "rule_applied",
+        "type": "string | null"
+      },
+      {
+        "name": "transaction_type",
+        "type": "string | null"
+      },
+      {
+        "name": "validation_date",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "portal_payment_intents": [
+      {
+        "name": "amount_cents",
+        "type": "number"
+      },
+      {
+        "name": "company_id",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "currency",
+        "type": "string"
+      },
+      {
+        "name": "customer_email",
+        "type": "string | null"
+      },
+      {
+        "name": "failed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "failure_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "invoice_id",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "stripe_payment_intent_id",
+        "type": "string"
+      },
+      {
+        "name": "succeeded_at",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "webhook_signature_verified",
+        "type": "boolean"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ]
+  }
+}

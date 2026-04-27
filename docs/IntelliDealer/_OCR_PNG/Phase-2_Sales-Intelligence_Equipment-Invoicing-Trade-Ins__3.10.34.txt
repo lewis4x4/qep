@@ -1,0 +1,68 @@
+A 0011 Invalid Customer
+
+pfwf5066.cdkglobal-id.net
+
+_| Customer cP] uy
+Quote Header Added: 10/10/2019 Modifi 10/14/2019
+Reference Number: Q00001 Accepted Location: LAKE CITY
+
+Customer:
+Contact:
+Salesperson:
+Responsible:
+Expiry Date:
+PO Number:
+Ship Via:
+Discount:
+Tax 1:
+
+Tax 2:
+Tax 3:
+Tax 4:
+
+So:
+Quote Segment
+
+Stock Number
+01 CNVO0020
+02 CNVO0021
+
+Estimated Close
+
+ARSOO1 ?
+RM1 a
+11/09/2019
+NOT ASSIGNED
+Florida State 6.00% ©
+NOT ASSIGNED S
+FL28 ¢~ FLAGLER COUNTY
+“ NO TAX4
+
+99 Date: 10/18/2019
+
+Description
+
+Total A/R: 0.00
+Credit Limit: 0.00
+
+Sold To
+
+159 HAMPTON POINTE DRIVE,
+STE3
+
+ST AUGUSTINE FL 32092
+
+@ ALL RELIABLE SERVICES, INC
+
+New 2019 LAMTRAC LTR 6140T-2 TWIN SKID STEER
+New 2019 LAMTRAC LS2150 MULCHER HEAD
+
+(1 - 2 Of 2)
+
+Ship To
+Results to display: Ew
+Unit Price = Trade-in Other
+162,000.00 0.00 -2,000.00
+32,000.00 0.00 0.00
+
+Close

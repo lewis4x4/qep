@@ -1,0 +1,434 @@
+[
+  {
+    "phase": "Phase-8_Financial-Operations",
+    "source_file": "Accounts Payable Outstanding.txt",
+    "screen_name": "Accounts Payable Outstanding",
+    "data_source": "",
+    "security_switch": "601 - toggle between the display types. Accounts",
+    "revision": "2024.01",
+    "menu_paths": [
+      "IntelliDealer Menus > Financial Management > Accounts Payable > A/P Outstanding"
+    ],
+    "purpose": [],
+    "tabs": [
+      "On the Vouchers Information",
+      "Vouchers Information"
+    ],
+    "buttons": [],
+    "fields": [
+      {
+        "name": "Due Date",
+        "description": "Choose accounts aging by due date."
+      },
+      {
+        "name": "Select Vendor",
+        "description": "Search for accounts payable outstanding by"
+      },
+      {
+        "name": "Number",
+        "description": "entering a vendor number."
+      }
+    ],
+    "prose_fields": [],
+    "topics": [],
+    "linked_screens": []
+  },
+  {
+    "phase": "Phase-8_Financial-Operations",
+    "source_file": "Accounts Receivable - Credit Limit Analysis.txt",
+    "screen_name": "Accounts Receivable - Credit Limit Analysis",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "2024.01",
+    "menu_paths": [
+      "Financial Management > Accounts Receivable > Credit",
+      "IntelliDealer Menus > Financial Management > Accounts Receivable > Credit Limit",
+      "Management Central > Financial > Credit Limit"
+    ],
+    "purpose": [],
+    "tabs": [
+      "A/R Agency"
+    ],
+    "buttons": [
+      "Information"
+    ],
+    "fields": [
+      {
+        "name": "Select Receivable",
+        "description": "Enter the receivable account you wish to"
+      },
+      {
+        "name": "Account",
+        "description": "compare against."
+      },
+      {
+        "name": "Show Customers",
+        "description": "If selected, includes customers with zero with Zero Credit                   credit limit in the search results. Limit"
+      },
+      {
+        "name": "Customer",
+        "description": "The customer's name. Name"
+      },
+      {
+        "name": "Total A/R",
+        "description": "The customer's total accounts receivable for the account selected in the Select Receivable Account field."
+      },
+      {
+        "name": "Credit",
+        "description": "The customer's credit limit. Limit"
+      },
+      {
+        "name": "Rating",
+        "description": "the customer's credit."
+      },
+      {
+        "name": "Phone",
+        "description": "The customer's phone number. Number"
+      }
+    ],
+    "prose_fields": [
+      "Select Receivable Account"
+    ],
+    "topics": [
+      "Switch: 600 -",
+      "Viewing a Credit Limit Analysis                                Access Credit",
+      "Limit Analysis",
+      "Screen Description",
+      "Revision:",
+      "2024.01",
+      "Viewing a Credit Limit Analysis"
+    ],
+    "linked_screens": []
+  },
+  {
+    "phase": "Phase-8_Financial-Operations",
+    "source_file": "Accounts Receivable - Outstanding A:R.txt",
+    "screen_name": "Accounts Receivable - Outstanding A/R",
+    "data_source": "",
+    "security_switch": "600 - The Accounts Receivable - A/R Outstanding screen is available at",
+    "revision": "",
+    "menu_paths": [
+      "Financial Management > Accounts Receivable",
+      "In the Product Support > Rental > Supervisor, click the A/R",
+      "IntelliDealer Menus > Financial Management > Accounts Receivable > A/R",
+      "Management Central > Financial > Accounts Receivable"
+    ],
+    "purpose": [],
+    "tabs": [
+      "A/R Status",
+      "Status"
+    ],
+    "buttons": [
+      "Print"
+    ],
+    "fields": [
+      {
+        "name": "Select",
+        "description": "Search by the first digit of the invoice. First digits"
+      },
+      {
+        "name": "Invoice 1st",
+        "description": "configured for your location are displayed. (See"
+      },
+      {
+        "name": "Digit",
+        "description": "System Settings-Location.) Use the user-defined field to search for custom digits."
+      },
+      {
+        "name": "Location",
+        "description": "for outstanding A/R by the responsible location, which is the default location in the Customer's Profile."
+      }
+    ],
+    "prose_fields": [
+      "Use the user-defined"
+    ],
+    "topics": [
+      "Running Accounts Receivable Outstanding"
+    ],
+    "linked_screens": [
+      "Digit                  System Settings-Location"
+    ]
+  },
+  {
+    "phase": "Phase-8_Financial-Operations",
+    "source_file": "Billing Analysis.txt",
+    "screen_name": "Billing Analysis",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "2026.04",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Service Product Support > Analysis Reports",
+      "Service Product Support > Analysis Reports"
+    ],
+    "purpose": [
+      "Use the Billing Analysis screen to view billing analysis."
+    ],
+    "tabs": [],
+    "buttons": [
+      "Technician",
+      "Total",
+      "Totals"
+    ],
+    "fields": [
+      {
+        "name": "Select by",
+        "description": "Search for billing analysis by selecting a means to search by (e.g. technician, type or reason)."
+      },
+      {
+        "name": "Subtotal",
+        "description": "Select the means to subtotal the billing analysis by                 search results by (e.g. technician, type, or reason)."
+      },
+      {
+        "name": "Include",
+        "description": "If selected, includes specific billing types within the"
+      },
+      {
+        "name": "Type",
+        "description": "billing analysis search results (e.g. all, internal, warranty, or customer)."
+      },
+      {
+        "name": "Totals",
+        "description": "search."
+      },
+      {
+        "name": "Select",
+        "description": "Search for billing analysis by entering a technician. Technician"
+      },
+      {
+        "name": "Work",
+        "description": "The number of work orders the technician has worked"
+      },
+      {
+        "name": "Orders",
+        "description": "on."
+      },
+      {
+        "name": "Parts",
+        "description": "The total amount (in dollars) of parts sold on the work orders the selected technician worked on."
+      },
+      {
+        "name": "Labor",
+        "description": "The total amount of labor hours charged to the work orders the selected technician worked on."
+      },
+      {
+        "name": "Other",
+        "description": "Any other miscellaneous charges associated with the work orders worked on by the selected technician."
+      },
+      {
+        "name": "Total",
+        "description": "The total amount of charges for work orders worked on by the selected technician."
+      }
+    ],
+    "prose_fields": [],
+    "topics": [],
+    "linked_screens": []
+  },
+  {
+    "phase": "Phase-8_Financial-Operations",
+    "source_file": "Customer Pricing.txt",
+    "screen_name": "Customer Pricing",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Parts Product Support > Customer"
+    ],
+    "purpose": [],
+    "tabs": [],
+    "buttons": [
+      "Customer Pricing Import",
+      "Price Inquiry"
+    ],
+    "fields": [
+      {
+        "name": "Customer",
+        "description": "Sort the search results by customer"
+      },
+      {
+        "name": "Number",
+        "description": "number."
+      },
+      {
+        "name": "Location",
+        "description": "Sort the search results by location."
+      },
+      {
+        "name": "Vendor",
+        "description": "Sort the search results by vendor number."
+      },
+      {
+        "name": "Source",
+        "description": "Sort the search results by source code."
+      },
+      {
+        "name": "Class",
+        "description": "Sort the search results by class code."
+      },
+      {
+        "name": "Type",
+        "description": "Sort the search results by type code."
+      },
+      {
+        "name": "Select",
+        "description": "Search for customer pricing by entering a Customer/Group customer/group."
+      },
+      {
+        "name": "Select Part",
+        "description": "Search for customer pricing by entering a"
+      },
+      {
+        "name": "Select Vendor",
+        "description": "Search for customer pricing by entering a"
+      },
+      {
+        "name": "Select Source",
+        "description": "Search for customer pricing by entering a source code."
+      },
+      {
+        "name": "Select Class",
+        "description": "Search for customer pricing by entering a class code."
+      },
+      {
+        "name": "Select Type",
+        "description": "Search for customer pricing by entering a type code."
+      },
+      {
+        "name": "Select Location",
+        "description": "Search for customer pricing by entering a location."
+      },
+      {
+        "name": "Part Number",
+        "description": "The number of the part that is affected by the customer pricing."
+      },
+      {
+        "name": "Comment",
+        "description": "Any comments associated with the customer pricing."
+      }
+    ],
+    "prose_fields": [
+      "Customer/Group",
+      "If the Your Savings",
+      "This is a free text",
+      "Utilize Parts Customer Discount Pricing",
+      "Your Savings"
+    ],
+    "topics": [],
+    "linked_screens": []
+  },
+  {
+    "phase": "Phase-8_Financial-Operations",
+    "source_file": "Invoice History Listing.txt",
+    "screen_name": "Invoice History Listing",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "2025.09",
+    "menu_paths": [
+      "Financial Management > Accounts Receivable > Invoice Access",
+      "IntelliDealer Menus > Financial Management > Accounts Receivable > Invoice",
+      "Product Support > Equipment > Invoice History",
+      "Product Support > Parts > Invoice History",
+      "Product Support > Rental > Invoice History",
+      "Product Support > Service > Invoice History"
+    ],
+    "purpose": [],
+    "tabs": [],
+    "buttons": [],
+    "fields": [
+      {
+        "name": "Invoice",
+        "description": "Search for history by entering an invoice number. Number If the invoice is outstanding the invoice number field is highlighted."
+      },
+      {
+        "name": "PO",
+        "description": "Search for history by entering a purchase order"
+      },
+      {
+        "name": "Number",
+        "description": "number."
+      },
+      {
+        "name": "Show",
+        "description": "Search for history by selecting a date type: Date Invoice Date\u2014date the invoice was printed Billing Date\u2014date keyed in during the billing run that processed this invoice Processed Date\u2014actual date of the billing run"
+      },
+      {
+        "name": "Date",
+        "description": "Narrow the history search by selecting a specific"
+      },
+      {
+        "name": "Range",
+        "description": "date range. From/To"
+      },
+      {
+        "name": "Type",
+        "description": "from the drop down list."
+      },
+      {
+        "name": "Full Text",
+        "description": "Search for an invoice by entering any string of data"
+      },
+      {
+        "name": "Search",
+        "description": "that might be stored in the corresponding INVHD file. For example, you may enter the customer number, name, stock number, a specific PO"
+      },
+      {
+        "name": "Location",
+        "description": "The location where the invoice was processed."
+      },
+      {
+        "name": "Amount",
+        "description": "invoice."
+      }
+    ],
+    "prose_fields": [
+      "The date range"
+    ],
+    "topics": [],
+    "linked_screens": []
+  },
+  {
+    "phase": "Phase-8_Financial-Operations",
+    "source_file": "Real-time Billing Queue.txt",
+    "screen_name": "Real-time Billing Queue",
+    "data_source": "BILLINGSCH",
+    "security_switch": "",
+    "revision": "",
+    "menu_paths": [
+      "IntelliDealer Menus > Financial Management > Real-time Billing Queue"
+    ],
+    "purpose": [],
+    "tabs": [
+      "Details"
+    ],
+    "buttons": [],
+    "fields": [
+      {
+        "name": "Reference",
+        "description": "The unique number of the billing to search for. Number"
+      },
+      {
+        "name": "Location",
+        "description": "The location in which to search."
+      },
+      {
+        "name": "Type",
+        "description": "The type of billings to search for."
+      },
+      {
+        "name": "Status",
+        "description": "The status of billing."
+      },
+      {
+        "name": "From",
+        "description": "Search for billings from this submission date."
+      }
+    ],
+    "prose_fields": [],
+    "topics": [
+      "Security Prerequisites"
+    ],
+    "linked_screens": [
+      "Error Details",
+      "Job Scheduler"
+    ]
+  }
+]

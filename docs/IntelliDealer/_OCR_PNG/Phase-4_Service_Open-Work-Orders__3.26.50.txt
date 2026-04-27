@@ -1,0 +1,151 @@
+fe)
+
+Bak
+
+i
+
+Open Work Orders -...
+
+@
+
+> Management Central > Service > Open Work Orders
+
+01/01/01-LAKECIY @ |] & %
+
+IntelliDealer i>
+by VitalEdge
+Financial Management >
+Customer Care >
+Product Support >
+
+Management Cent
+
+Support >
+
+Quick Links >
+
+ID InspectionPlus
+
+Work Orders
+
+Service Requests
+
+Search by work order number, customer name or number, stock number, machine model or serial number, or salesperson
+
+Work Order Number
+
+Customer Number
+
+Salesperson
+
+Assigned Salesperson
+
+Stock Number
+
+Model
+
+Serial Number
+
+PO Number
+
+Ship Via
+
+Location
+
+01 - LAKE CITY
+
+Segment Status
+
+All
+
+°
+
+Outstanding POs
+
+* Order Number + Location
+CN0426 01 - LAKE CITY
+DM0426 01 - LAKE CITY
+KL0426 01 - LAKE CITY
+LLO426 01 - LAKE CITY
+MD0426 01 - LAKE CITY
+PD0326 01 - LAKE CITY
+SD0426 01 - LAKE CITY
+SF0426 01 - LAKE CITY
+ST0426 01 - LAKE CITY
+TB0426 01 - LAKE CITY
+« « + | 2 3 4 5 >
+
+= Customer
+
+NON-REVENUE TIME
+INTERNAL USE
+NON-REVENUE TIME
+
+LOG LIGHTS WORK ©...
+MIKE D - NON REVEN...
+
+MISC PARTS EXPENSE
+MISC SALES EXPENSE
+NON-REVENUE TIME
+
+SHOP TIME MONTHL...
+
+NON-REVENUE TIME
+
+Include All Segments
+
++ Machine = Description > Current Value
+
+INTERNAL STOCK NON REVENUE TIME - ... 1,834.40
+INTERNAL STOCK NON REVENUE TIME - ... 200.07
+INTERNAL STOCK NON REVENUE TIME - ... 0.00
+INTERNAL STOCK Log Light Brackets 6,090.45
+INTERNAL STOCK NON REVENUE TIME - ... 0.00
+INTERNAL STOCK Parts Pick/Up Deliveries 2,512.55
+Equipment haul SALE DEPARTMENT 100.35
+INTERNAL STOCK NON REVENUE TIME - ... 498.42
+INTERNAL STOCK Non Revenue Time- Shop 0.00
+INTERNAL STOCK NON REVENUE TIME - ... 3,828.24
+
+Showing 1 to 10 of 133 results
+
+= Location
+
+LAKE CITY
+LAKE CITY
+LAKE CITY
+LAKE CITY
+LAKE CITY
+LAKE CITY
+LAKE CITY
+LAKE CITY
+LAKE CITY
+LAKE CITY
+
+= Date Added
+
+03/31/2026
+03/31/2026
+03/31/2026
+03/31/2026
+03/31/2026
+03/31/2026
+03/31/2026
+03/31/2026
+03/31/2026
+03/31/2026
+
+> Last Activity
+
+04/20/2026
+04/21/2026
+04/21/2026
+04/21/2026
+04/21/2026
+04/21/2026
+04/01/2026
+04/20/2026
+04/21/2026
+04/21/2026
+
+Page Size: 10 | 20 | 50 | 100

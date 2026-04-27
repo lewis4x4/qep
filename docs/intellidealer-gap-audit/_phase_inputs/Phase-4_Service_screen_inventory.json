@@ -1,0 +1,492 @@
+[
+  {
+    "phase": "Phase-4_Service",
+    "source_file": "ID InspectionPlus.txt",
+    "screen_name": "ID InspectionPlus",
+    "data_source": "",
+    "security_switch": "923 - ID",
+    "revision": "",
+    "menu_paths": [
+      "IntelliDealer Menus > ID InspectionPlus ID InspectionPlus"
+    ],
+    "purpose": [],
+    "tabs": [
+      "Status        from the History"
+    ],
+    "buttons": [],
+    "fields": [
+      {
+        "name": "Actions",
+        "description": "Depending on the status of the inspection form, you can either Start, Edit, or Review an inspection form."
+      }
+    ],
+    "prose_fields": [
+      "Actions",
+      "Assignee from the Assignee"
+    ],
+    "topics": [],
+    "linked_screens": [
+      "Approvers",
+      "Assignees",
+      "InspectionPlus Settings for information on approvers"
+    ]
+  },
+  {
+    "phase": "Phase-4_Service",
+    "source_file": "IntelliTech Scheduled Work Orders.txt",
+    "screen_name": "IntelliTech Scheduled Work Orders",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "2026.03",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Service Product Support > IntelliTech Scheduled Work Orders",
+      "Product Support > IntelliTech Scheduled Work Orders",
+      "Product Support > Service > IntelliTech."
+    ],
+    "purpose": [],
+    "tabs": [],
+    "buttons": [
+      "View time card"
+    ],
+    "fields": [
+      {
+        "name": "Priority",
+        "description": "The priority of this work order/segment in relation to the other"
+      },
+      {
+        "name": "Code",
+        "description": "work order/segments for the selected technician, as displayed on the Scheduled Work Orders screen. See Work Order: Segments."
+      },
+      {
+        "name": "Log On",
+        "description": "Indicates whether the technician is: On\u2014Logged on to (working on) the work order segment. Yes\u2014Can be logged on to the work order segment by"
+      },
+      {
+        "name": "Start Time",
+        "description": "The start time of the labor transaction."
+      },
+      {
+        "name": "Stop Time",
+        "description": "The stop time of the labor transaction, which will default to the current time."
+      }
+    ],
+    "prose_fields": [
+      "Check the select technician",
+      "Name                Description",
+      "Select Technician",
+      "Service Call",
+      "Yes link in the Log On"
+    ],
+    "topics": [],
+    "linked_screens": [
+      "Work Order"
+    ]
+  },
+  {
+    "phase": "Phase-4_Service",
+    "source_file": "Labor Pricing.txt",
+    "screen_name": "Labor Pricing",
+    "data_source": "",
+    "security_switch": "818 - Product",
+    "revision": "",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Service Product Support > Labor Pricing"
+    ],
+    "purpose": [],
+    "tabs": [],
+    "buttons": [],
+    "fields": [
+      {
+        "name": "Select",
+        "description": "Search for labor pricing by entering a Customer/Group customer name or group."
+      },
+      {
+        "name": "Select Premium",
+        "description": "Search for labor pricing by entering a"
+      },
+      {
+        "name": "Code",
+        "description": "premium code."
+      },
+      {
+        "name": "Select Type",
+        "description": "Search for labor pricing by entering a type code."
+      },
+      {
+        "name": "Select Work",
+        "description": "Search for labor pricing by selecting a work"
+      },
+      {
+        "name": "Order Status",
+        "description": "order status from the drop down list (e.g. customer, warranty or internal)."
+      },
+      {
+        "name": "Select Default",
+        "description": "Search for labor pricing by entering a"
+      },
+      {
+        "name": "Premium Code",
+        "description": "default premium code."
+      },
+      {
+        "name": "Select Location",
+        "description": "Search for labor pricing by entering a location."
+      },
+      {
+        "name": "Show Extended",
+        "description": "If selected, includes extended information"
+      },
+      {
+        "name": "Information",
+        "description": "(% Price and Pricing fields) within the labor pricing search results."
+      },
+      {
+        "name": "Price",
+        "description": "increase or decrease from cost or list (based on the Pricing Code)."
+      }
+    ],
+    "prose_fields": [
+      "Customer/Group",
+      "Show Extended Information"
+    ],
+    "topics": [],
+    "linked_screens": []
+  },
+  {
+    "phase": "Phase-4_Service",
+    "source_file": "Service Agreements (Product Support Quick Links).txt",
+    "screen_name": "Service Agreements (Product Support Quick Links)",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "2025.04",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Equipment Product Support > Service",
+      "Management Central > Service > Service Agreements",
+      "Product Support > Equipment > Service Agreements Support, SAM",
+      "Product Support > Rental > Service Agreements",
+      "Product Support > Service > Service Agreements Revision:"
+    ],
+    "purpose": [],
+    "tabs": [
+      "Number to open the Contract Maintenance",
+      "Service Agreements",
+      "To open the Service Agreements"
+    ],
+    "buttons": [],
+    "fields": [
+      {
+        "name": "Select",
+        "description": "Search for service agreements by entering a"
+      },
+      {
+        "name": "Contract",
+        "description": "contract number."
+      },
+      {
+        "name": "Stock",
+        "description": "machine stock number. Number"
+      },
+      {
+        "name": "Location",
+        "description": "branch location."
+      },
+      {
+        "name": "Program",
+        "description": "SAM program from the drop down list."
+      },
+      {
+        "name": "Show",
+        "description": "If selected, includes expired service agreements"
+      },
+      {
+        "name": "Expired",
+        "description": "within the service agreement search results."
+      },
+      {
+        "name": "Field",
+        "description": "Service"
+      },
+      {
+        "name": "Contract Number",
+        "description": "The service agreement's contract number."
+      },
+      {
+        "name": "Stock Number",
+        "description": "The machine/unit stock number."
+      },
+      {
+        "name": "Machine Serial",
+        "description": "The machine/unit serial number. Number"
+      }
+    ],
+    "prose_fields": [],
+    "topics": [],
+    "linked_screens": []
+  },
+  {
+    "phase": "Phase-4_Service",
+    "source_file": "Technician Service Scheduling.txt",
+    "screen_name": "Technician Service Scheduling",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "2025.10",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Service Product Support > Technician",
+      "Product Support > Service > Service Scheduling."
+    ],
+    "purpose": [],
+    "tabs": [
+      "Category on the Employee Profile",
+      "Date field on the Employee Profile",
+      "Header",
+      "Information",
+      "Profile",
+      "Segments",
+      "Service Information",
+      "Shift Hours on the Service Information"
+    ],
+    "buttons": [
+      "Certification Lookup",
+      "Click here to refresh list",
+      "Edit Technician",
+      "Filter"
+    ],
+    "fields": [
+      {
+        "name": "Search",
+        "description": "Search for work order segment blocks by work order number."
+      },
+      {
+        "name": "Scheduled",
+        "description": "displays one of these options: Sidebar Unassigned work order segments that are"
+      }
+    ],
+    "prose_fields": [
+      "Date",
+      "Estimated Hours",
+      "If the Estimated Hours",
+      "Inside/Outside/Shift",
+      "Priority Code",
+      "Search",
+      "Select Technician",
+      "Service Location",
+      "Termination Date",
+      "When you use this"
+    ],
+    "topics": [
+      "Prerequisites"
+    ],
+    "linked_screens": []
+  },
+  {
+    "phase": "Phase-4_Service",
+    "source_file": "Work Order Quoting:Parts Quoting.txt",
+    "screen_name": "Work Order Quoting/Parts Quoting",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "2026.04",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Service Product Support > Work Order",
+      "To open the Parts Quoting screen navigate to Product Support > Parts > Parts Quoting."
+    ],
+    "purpose": [],
+    "tabs": [
+      "Customer   Parts Quoting",
+      "Customer - Quote Header",
+      "Quote/Estimate",
+      "This affects the Parts"
+    ],
+    "buttons": [
+      "Modify default print parameters"
+    ],
+    "fields": [
+      {
+        "name": "Reference",
+        "description": "Sort the search results by reference"
+      },
+      {
+        "name": "Number",
+        "description": "number."
+      },
+      {
+        "name": "Customer",
+        "description": "Sort the search results by customer number."
+      },
+      {
+        "name": "Expiry Date",
+        "description": "Sort the search results by expiration date."
+      },
+      {
+        "name": "Select",
+        "description": "Search for quotes by entering a reference"
+      },
+      {
+        "name": "Select Part",
+        "description": "Search for quotes by entering a part number. Number"
+      },
+      {
+        "name": "Description",
+        "description": "A brief description about the quote."
+      },
+      {
+        "name": "Location",
+        "description": "The branch location where the quote was created."
+      },
+      {
+        "name": "Quote",
+        "description": "The status of the quote. Status"
+      },
+      {
+        "name": "Include",
+        "description": "If selected, includes the master quotes within"
+      },
+      {
+        "name": "Master",
+        "description": "the quote search. Master quotes are user-"
+      },
+      {
+        "name": "Quotes",
+        "description": "created quote templates."
+      },
+      {
+        "name": "Status",
+        "description": "expired, pending or accepted)."
+      }
+    ],
+    "prose_fields": [
+      "Customer"
+    ],
+    "topics": [
+      "Work Order Quoting Screen"
+    ],
+    "linked_screens": [
+      "John Deere Expert Services",
+      "Master Quote"
+    ]
+  },
+  {
+    "phase": "Phase-4_Service",
+    "source_file": "Work Orders:\u00a0Listing.txt",
+    "screen_name": "Work Orders: Listing",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "2025.11",
+    "menu_paths": [
+      "If you are on Management Central > Service > Open Work",
+      "IntelliDealer Menus > Product Support > Service Product Support > Work Order: Listing"
+    ],
+    "purpose": [],
+    "tabs": [],
+    "buttons": [],
+    "fields": [
+      {
+        "name": "Work Order",
+        "description": "Search for an open work order by entering a"
+      },
+      {
+        "name": "Number",
+        "description": "work order number."
+      },
+      {
+        "name": "Customer",
+        "description": "Search for work orders opened by a specific"
+      },
+      {
+        "name": "Stock",
+        "description": "Search for work orders opened by a specific"
+      },
+      {
+        "name": "Model",
+        "description": "Search for work orders opened by a specific model by entering a model."
+      },
+      {
+        "name": "Serial",
+        "description": "Search for work orders opened by a specific"
+      },
+      {
+        "name": "PO Number",
+        "description": "Search for open work orders by entering a"
+      },
+      {
+        "name": "Order",
+        "description": "The work order number. Number"
+      },
+      {
+        "name": "Quick Add",
+        "description": "Opens the Add Work Order screen so you can"
+      },
+      {
+        "name": "Work",
+        "description": "quickly add a new Work Order. Order/Request"
+      },
+      {
+        "name": "Quick close",
+        "description": "Opens the Close Work Orders screen so you work orders                 can quickly close Work Orders."
+      },
+      {
+        "name": "Reverse Work",
+        "description": "Opens the Invoice History screen so you can"
+      }
+    ],
+    "prose_fields": [],
+    "topics": [],
+    "linked_screens": []
+  },
+  {
+    "phase": "Phase-4_Service",
+    "source_file": "Work in Process.txt",
+    "screen_name": "Work in Process",
+    "data_source": "T",
+    "security_switch": "",
+    "revision": "",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Service Product Support > Work in Process",
+      "Or navigate toManagement Central > Service > Work In Process. 2026.01",
+      "Service Product Support > Work in Process"
+    ],
+    "purpose": [],
+    "tabs": [
+      "Click the Work in Process",
+      "Fields on the Work In Process",
+      "Search fields on the Work in Process",
+      "To open the Work in Process",
+      "Use the Work in Process",
+      "Work In Process"
+    ],
+    "buttons": [
+      "Create a Work in Process Report",
+      "Run Report"
+    ],
+    "fields": [
+      {
+        "name": "WIP Method",
+        "description": "Select which method to use to analyze the WIP data. WIP Balancing\u2014lists outstanding work orders by the dollar amount that was posted to the general ledger. When WIP Balancing is selected, the system calculates the current work in process based on the WIP code (S or I) that is on the actual record in the SALDET or WOLAB files. List Price\u2014lists outstanding work orders by list price. When List Price "
+      },
+      {
+        "name": "Select",
+        "description": "Search for work in process by entering a specific"
+      },
+      {
+        "name": "Account",
+        "description": "WIP account number."
+      },
+      {
+        "name": "Status",
+        "description": "from the drop down list (e.g. all, customer, warranty, or internal)."
+      },
+      {
+        "name": "Include",
+        "description": "Select the checkbox to include any transactions"
+      },
+      {
+        "name": "Total",
+        "description": "Totals up all of the open work orders current values for each aging period."
+      }
+    ],
+    "prose_fields": [],
+    "topics": [
+      "Viewing Work in Process Details"
+    ],
+    "linked_screens": []
+  }
+]

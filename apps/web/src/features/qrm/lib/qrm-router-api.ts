@@ -268,6 +268,7 @@ export async function fetchCompanyHierarchy(companyId: string): Promise<QrmCompa
   }
 }
 
+
 export async function updateCompanyParent(
   companyId: string,
   parentCompanyId: string | null,

@@ -1,10 +1,12 @@
 import type { UserRole } from "./dge-auth.ts";
+import { canAccessCustomerEin, maskCustomerEin } from "./customer-ein-access.ts";
 import type { DataBadge } from "./integration-types.ts";
 
 export interface CustomerProfileRow {
   id: string;
   hubspot_contact_id: string | null;
   intellidealer_customer_id: string | null;
+  crm_company_id: string | null;
   customer_name: string;
   company_name: string | null;
   pricing_persona: string | null;
@@ -43,6 +45,7 @@ interface MapperInput {
   includeFleet: boolean;
   fleet: FleetRow[];
   dataBadges?: DataBadge[];
+  customerEin?: string | null;
   refresh?: {
     status: "fresh" | "refreshing" | "stale" | "degraded";
     stale: boolean;
@@ -100,11 +103,17 @@ export function mapCustomerProfileDto(
     input.role,
     input.isServiceRole,
   );
+  const einVisible = canAccessCustomerEin({
+    role: input.role,
+    isServiceRole: input.isServiceRole,
+  });
+  const maskedEin = maskCustomerEin(input.customerEin, einVisible);
 
   return {
     id: input.row.id,
     hubspot_contact_id: input.row.hubspot_contact_id,
     intellidealer_customer_id: input.row.intellidealer_customer_id,
+    crm_company_id: input.row.crm_company_id,
     customer_name: input.row.customer_name,
     company_name: input.row.company_name,
     pricing_persona: input.row.pricing_persona,
@@ -121,6 +130,12 @@ export function mapCustomerProfileDto(
     updated_at: input.row.updated_at,
     data_badges: dataBadges,
     refresh: input.refresh,
+    tax_regulatory: maskedEin
+      ? {
+        ein: maskedEin,
+        ein_masked: !einVisible,
+      }
+      : undefined,
     behavioral_signals: managerFieldsVisible
       ? {
         avg_discount_pct: input.row.avg_discount_pct,

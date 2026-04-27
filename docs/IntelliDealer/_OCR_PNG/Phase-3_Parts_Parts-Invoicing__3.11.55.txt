@@ -1,0 +1,27 @@
+pfwf5066.cdkglobal-id.net
+
+E | Details
+Vea Final
+| Agreement Summary
+Cust} Agreement Number: 000417 ‘OBALFOUR TIMBER - Invoiced Location: LAKE CITY
+3 om Date Time Date . Time
+Type: Rental ¢ Out: 04/22/2026 8:00AM In: 05/20/2026 8 : 00 AM ¢
+Mani Line Stock Number Description Quantity Duration Type Rate Amount
+103430 73HP MULCHING CARRI | AIMONTHLY RENTAL 18000.00| 18,000.00)
+
+002 Q003426 HORIZONTAL BRUSHCUTT AMONTHLY RENTAL Stock Item 3000.00 3,000.00)
+
+_| Agreement Detail - Line 001
+
+| Type: Stock Item Add Attachments Rates Standard Customer Override
+
+& ID Ini Stock Number: Q003430 WEEKLY RENTAL 6000.00 6000.00
+
+Description:| 173HP MULCHING CARRI MONTHLY RENTAL  18000.00 18000.00
+Quantity: 1 More >>
+
+Duration: MONTHLY RENTAL >
+Rate: 18000.00
+Next >}
+Click here to add rental agreement detail
+Save Done Details Rerent Package Pricing Close

@@ -1,0 +1,4496 @@
+{
+  "tables": {
+    "customer_deal_history": [
+      {
+        "name": "attachments_sold",
+        "type": "number | null"
+      },
+      {
+        "name": "competitor",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "customer_profile_id",
+        "type": "string"
+      },
+      {
+        "name": "days_to_close",
+        "type": "number | null"
+      },
+      {
+        "name": "deal_date",
+        "type": "string"
+      },
+      {
+        "name": "discount_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "equipment_category",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_make",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_model",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_year",
+        "type": "number | null"
+      },
+      {
+        "name": "financing_term_months",
+        "type": "number | null"
+      },
+      {
+        "name": "financing_used",
+        "type": "boolean | null"
+      },
+      {
+        "name": "hubspot_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "list_price",
+        "type": "number | null"
+      },
+      {
+        "name": "loss_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "outcome",
+        "type": "string"
+      },
+      {
+        "name": "rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "service_contract_sold",
+        "type": "boolean | null"
+      },
+      {
+        "name": "sold_price",
+        "type": "number | null"
+      },
+      {
+        "name": "trade_in_value",
+        "type": "number | null"
+      }
+    ],
+    "deal_feedback": [
+      {
+        "name": "action",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deal_outcome",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_scenario_id",
+        "type": "string"
+      },
+      {
+        "name": "feedback_by",
+        "type": "string"
+      },
+      {
+        "name": "feedback_role",
+        "type": "Database[\"public\"][\"Enums\"][\"user_role\"]"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "modifications",
+        "type": "Json | null"
+      },
+      {
+        "name": "quote_id",
+        "type": "string"
+      },
+      {
+        "name": "reason",
+        "type": "string | null"
+      }
+    ],
+    "deal_scenarios": [
+      {
+        "name": "ai_model",
+        "type": "string | null"
+      },
+      {
+        "name": "ai_temperature",
+        "type": "number | null"
+      },
+      {
+        "name": "ai_tokens_used",
+        "type": "number | null"
+      },
+      {
+        "name": "close_probability",
+        "type": "number | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "customer_profile_id",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "discount_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "equipment_make",
+        "type": "string"
+      },
+      {
+        "name": "equipment_model",
+        "type": "string"
+      },
+      {
+        "name": "equipment_stock_number",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_year",
+        "type": "number | null"
+      },
+      {
+        "name": "expected_value",
+        "type": "number | null"
+      },
+      {
+        "name": "explanation",
+        "type": "string"
+      },
+      {
+        "name": "financing_holdback_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "financing_monthly_payment",
+        "type": "number | null"
+      },
+      {
+        "name": "financing_rate_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "financing_recommended",
+        "type": "boolean | null"
+      },
+      {
+        "name": "financing_term_months",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_recommended",
+        "type": "boolean | null"
+      },
+      {
+        "name": "is_selected",
+        "type": "boolean | null"
+      },
+      {
+        "name": "list_price",
+        "type": "number"
+      },
+      {
+        "name": "market_valuation_id",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "quote_id",
+        "type": "string"
+      },
+      {
+        "name": "recommended_price",
+        "type": "number"
+      },
+      {
+        "name": "scenario_type",
+        "type": "Database[\"public\"][\"Enums\"][\"scenario_type\"]"
+      },
+      {
+        "name": "selected_at",
+        "type": "string | null"
+      },
+      {
+        "name": "selected_by",
+        "type": "string | null"
+      },
+      {
+        "name": "total_deal_margin",
+        "type": "number | null"
+      },
+      {
+        "name": "total_deal_margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "trade_in_actual_value",
+        "type": "number | null"
+      },
+      {
+        "name": "trade_in_allowance",
+        "type": "number | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      }
+    ],
+    "deal_timing_alerts": [
+      {
+        "name": "actioned_at",
+        "type": "string | null"
+      },
+      {
+        "name": "actioned_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "alert_type",
+        "type": "string"
+      },
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "customer_profile_id",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "fleet_intelligence_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "recommended_action",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "title",
+        "type": "string"
+      },
+      {
+        "name": "trigger_date",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "urgency",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "deposits": [
+      {
+        "name": "applied_to_final_invoice",
+        "type": "boolean | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string"
+      },
+      {
+        "name": "deposit_tier",
+        "type": "string"
+      },
+      {
+        "name": "equipment_value",
+        "type": "number"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "invoice_reference",
+        "type": "string | null"
+      },
+      {
+        "name": "payment_method",
+        "type": "string | null"
+      },
+      {
+        "name": "received_at",
+        "type": "string | null"
+      },
+      {
+        "name": "refund_completed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "refund_initiated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "refund_policy",
+        "type": "string"
+      },
+      {
+        "name": "required_amount",
+        "type": "number"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "verification_cycle_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "verified_at",
+        "type": "string | null"
+      },
+      {
+        "name": "verified_by",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "financing_rate_matrix": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "credit_tier",
+        "type": "string"
+      },
+      {
+        "name": "dealer_holdback_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "effective_date",
+        "type": "string | null"
+      },
+      {
+        "name": "entered_by",
+        "type": "string | null"
+      },
+      {
+        "name": "expiry_date",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_active",
+        "type": "boolean"
+      },
+      {
+        "name": "lender_name",
+        "type": "string"
+      },
+      {
+        "name": "max_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "min_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "rate_pct",
+        "type": "number"
+      },
+      {
+        "name": "term_months",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      }
+    ],
+    "manufacturer_incentives": [
+      {
+        "name": "ai_confidence",
+        "type": "number | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "discount_type",
+        "type": "string"
+      },
+      {
+        "name": "discount_value",
+        "type": "number"
+      },
+      {
+        "name": "effective_date",
+        "type": "string | null"
+      },
+      {
+        "name": "eligibility_criteria",
+        "type": "string | null"
+      },
+      {
+        "name": "eligibility_rules",
+        "type": "Json"
+      },
+      {
+        "name": "eligible_categories",
+        "type": "string[] | null"
+      },
+      {
+        "name": "eligible_models",
+        "type": "string[] | null"
+      },
+      {
+        "name": "end_date",
+        "type": "string | null"
+      },
+      {
+        "name": "entered_by",
+        "type": "string | null"
+      },
+      {
+        "name": "expiration_date",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_active",
+        "type": "boolean"
+      },
+      {
+        "name": "manufacturer",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "oem_name",
+        "type": "string"
+      },
+      {
+        "name": "program_code",
+        "type": "string | null"
+      },
+      {
+        "name": "program_name",
+        "type": "string"
+      },
+      {
+        "name": "requires_approval",
+        "type": "boolean"
+      },
+      {
+        "name": "source",
+        "type": "string | null"
+      },
+      {
+        "name": "source_url",
+        "type": "string | null"
+      },
+      {
+        "name": "stackable",
+        "type": "boolean"
+      },
+      {
+        "name": "stacking_rules",
+        "type": "string | null"
+      },
+      {
+        "name": "start_date",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "portal_quote_review_versions": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "customer_request_snapshot",
+        "type": "string | null"
+      },
+      {
+        "name": "dealer_message",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_current",
+        "type": "boolean"
+      },
+      {
+        "name": "portal_quote_review_id",
+        "type": "string"
+      },
+      {
+        "name": "published_at",
+        "type": "string"
+      },
+      {
+        "name": "published_by",
+        "type": "string | null"
+      },
+      {
+        "name": "quote_data",
+        "type": "Json"
+      },
+      {
+        "name": "quote_pdf_url",
+        "type": "string | null"
+      },
+      {
+        "name": "revision_summary",
+        "type": "string | null"
+      },
+      {
+        "name": "version_number",
+        "type": "number"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "portal_quote_reviews": [
+      {
+        "name": "counter_notes",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "expires_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "portal_customer_id",
+        "type": "string"
+      },
+      {
+        "name": "quote_data",
+        "type": "Json | null"
+      },
+      {
+        "name": "quote_pdf_url",
+        "type": "string | null"
+      },
+      {
+        "name": "service_quote_id",
+        "type": "string | null"
+      },
+      {
+        "name": "signature_url",
+        "type": "string | null"
+      },
+      {
+        "name": "signed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "signer_ip",
+        "type": "string | null"
+      },
+      {
+        "name": "signer_name",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "viewed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "portal_quote_revision_drafts": [
+      {
+        "name": "approved_by",
+        "type": "string | null"
+      },
+      {
+        "name": "compare_snapshot",
+        "type": "Json | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "customer_request_snapshot",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string"
+      },
+      {
+        "name": "dealer_message",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "portal_quote_review_id",
+        "type": "string"
+      },
+      {
+        "name": "prepared_by",
+        "type": "string | null"
+      },
+      {
+        "name": "published_at",
+        "type": "string | null"
+      },
+      {
+        "name": "quote_data",
+        "type": "Json"
+      },
+      {
+        "name": "quote_package_id",
+        "type": "string"
+      },
+      {
+        "name": "quote_pdf_url",
+        "type": "string | null"
+      },
+      {
+        "name": "revision_summary",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "post_sale_parts_playbooks": [
+      {
+        "name": "accepted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deal_id",
+        "type": "string"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "generated_by",
+        "type": "string | null"
+      },
+      {
+        "name": "generation_batch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "machine_profile_id",
+        "type": "string | null"
+      },
+      {
+        "name": "payload",
+        "type": "Json"
+      },
+      {
+        "name": "reviewed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "reviewed_by",
+        "type": "string | null"
+      },
+      {
+        "name": "sent_at",
+        "type": "string | null"
+      },
+      {
+        "name": "sent_to_email",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "tokens_in",
+        "type": "number | null"
+      },
+      {
+        "name": "tokens_out",
+        "type": "number | null"
+      },
+      {
+        "name": "total_revenue",
+        "type": "number | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_ai_request_log": [
+      {
+        "name": "confidence",
+        "type": "Json | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "customer_type",
+        "type": "string | null"
+      },
+      {
+        "name": "delivery_state",
+        "type": "string | null"
+      },
+      {
+        "name": "error",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "latency_ms",
+        "type": "number | null"
+      },
+      {
+        "name": "model_candidates",
+        "type": "Json | null"
+      },
+      {
+        "name": "prompt_source",
+        "type": "string"
+      },
+      {
+        "name": "raw_prompt",
+        "type": "string"
+      },
+      {
+        "name": "resolved_brand_id",
+        "type": "string | null"
+      },
+      {
+        "name": "resolved_model_id",
+        "type": "string | null"
+      },
+      {
+        "name": "user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_attachments": [
+      {
+        "name": "acquired_at",
+        "type": "string | null"
+      },
+      {
+        "name": "active",
+        "type": "boolean"
+      },
+      {
+        "name": "attachment_type",
+        "type": "string | null"
+      },
+      {
+        "name": "brand_id",
+        "type": "string | null"
+      },
+      {
+        "name": "category",
+        "type": "string | null"
+      },
+      {
+        "name": "compatible_model_ids",
+        "type": "string[] | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "freight_cents",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "list_price_cents",
+        "type": "number"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "part_number",
+        "type": "string"
+      },
+      {
+        "name": "specs",
+        "type": "Json | null"
+      },
+      {
+        "name": "universal",
+        "type": "boolean"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_attachments_audit": [
+      {
+        "name": "action",
+        "type": "string"
+      },
+      {
+        "name": "actor_id",
+        "type": "string | null"
+      },
+      {
+        "name": "changed_fields",
+        "type": "Json | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "record_id",
+        "type": "string"
+      },
+      {
+        "name": "snapshot",
+        "type": "Json | null"
+      }
+    ],
+    "qb_brand_sheet_sources": [
+      {
+        "name": "active",
+        "type": "boolean"
+      },
+      {
+        "name": "brand_id",
+        "type": "string"
+      },
+      {
+        "name": "check_freq_hours",
+        "type": "number"
+      },
+      {
+        "name": "consecutive_failures",
+        "type": "number"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "label",
+        "type": "string"
+      },
+      {
+        "name": "last_checked_at",
+        "type": "string | null"
+      },
+      {
+        "name": "last_error",
+        "type": "string | null"
+      },
+      {
+        "name": "last_etag",
+        "type": "string | null"
+      },
+      {
+        "name": "last_hash",
+        "type": "string | null"
+      },
+      {
+        "name": "last_http_status",
+        "type": "number | null"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "url",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_brands": [
+      {
+        "name": "attachment_markup_pct",
+        "type": "number"
+      },
+      {
+        "name": "category",
+        "type": "string | null"
+      },
+      {
+        "name": "code",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "dealer_discount_pct",
+        "type": "number"
+      },
+      {
+        "name": "default_markup_pct",
+        "type": "number"
+      },
+      {
+        "name": "discount_configured",
+        "type": "boolean"
+      },
+      {
+        "name": "good_faith_pct",
+        "type": "number"
+      },
+      {
+        "name": "has_inbound_freight_key",
+        "type": "boolean"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "markup_floor_pct",
+        "type": "number"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "pdi_default_cents",
+        "type": "number"
+      },
+      {
+        "name": "tariff_pct",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_brands_audit": [
+      {
+        "name": "action",
+        "type": "string"
+      },
+      {
+        "name": "actor_id",
+        "type": "string | null"
+      },
+      {
+        "name": "changed_fields",
+        "type": "Json | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "record_id",
+        "type": "string"
+      },
+      {
+        "name": "snapshot",
+        "type": "Json | null"
+      }
+    ],
+    "qb_deal_coach_actions": [
+      {
+        "name": "acted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "action",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "quote_package_id",
+        "type": "string"
+      },
+      {
+        "name": "rule_id",
+        "type": "string"
+      },
+      {
+        "name": "severity",
+        "type": "string"
+      },
+      {
+        "name": "shown_at",
+        "type": "string"
+      },
+      {
+        "name": "shown_by",
+        "type": "string | null"
+      },
+      {
+        "name": "suggestion_snapshot",
+        "type": "Json | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_deals": [
+      {
+        "name": "applied_program_ids",
+        "type": "string[] | null"
+      },
+      {
+        "name": "close_date",
+        "type": "string | null"
+      },
+      {
+        "name": "commission_cents",
+        "type": "number | null"
+      },
+      {
+        "name": "commission_paid",
+        "type": "boolean"
+      },
+      {
+        "name": "commission_paid_at",
+        "type": "string | null"
+      },
+      {
+        "name": "commission_rate_pct",
+        "type": "number"
+      },
+      {
+        "name": "company_id",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "crm_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_number",
+        "type": "string"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "delivery_date",
+        "type": "string | null"
+      },
+      {
+        "name": "gross_margin_cents",
+        "type": "number"
+      },
+      {
+        "name": "gross_margin_pct",
+        "type": "number"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "invoice_number",
+        "type": "string | null"
+      },
+      {
+        "name": "lost_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "quote_id",
+        "type": "string | null"
+      },
+      {
+        "name": "rebate_filed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "rebate_filed_by",
+        "type": "string | null"
+      },
+      {
+        "name": "rebate_filing_due_date",
+        "type": "string | null"
+      },
+      {
+        "name": "salesman_id",
+        "type": "string"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "total_cost_cents",
+        "type": "number"
+      },
+      {
+        "name": "total_revenue_cents",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "warranty_registration_date",
+        "type": "string | null"
+      },
+      {
+        "name": "won_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_deals_audit": [
+      {
+        "name": "action",
+        "type": "string"
+      },
+      {
+        "name": "actor_id",
+        "type": "string | null"
+      },
+      {
+        "name": "changed_fields",
+        "type": "Json | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "record_id",
+        "type": "string"
+      },
+      {
+        "name": "snapshot",
+        "type": "Json | null"
+      }
+    ],
+    "qb_equipment_models": [
+      {
+        "name": "active",
+        "type": "boolean"
+      },
+      {
+        "name": "aged_inventory_model_year",
+        "type": "number | null"
+      },
+      {
+        "name": "brand_id",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "family",
+        "type": "string | null"
+      },
+      {
+        "name": "horsepower",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "list_price_cents",
+        "type": "number"
+      },
+      {
+        "name": "model_code",
+        "type": "string"
+      },
+      {
+        "name": "model_year",
+        "type": "number | null"
+      },
+      {
+        "name": "name_display",
+        "type": "string"
+      },
+      {
+        "name": "series",
+        "type": "string | null"
+      },
+      {
+        "name": "specs",
+        "type": "Json | null"
+      },
+      {
+        "name": "standard_config",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "weight_lbs",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_equipment_models_audit": [
+      {
+        "name": "action",
+        "type": "string"
+      },
+      {
+        "name": "actor_id",
+        "type": "string | null"
+      },
+      {
+        "name": "changed_fields",
+        "type": "Json | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "record_id",
+        "type": "string"
+      },
+      {
+        "name": "snapshot",
+        "type": "Json | null"
+      }
+    ],
+    "qb_freight_zones": [
+      {
+        "name": "brand_id",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "effective_from",
+        "type": "string | null"
+      },
+      {
+        "name": "effective_to",
+        "type": "string | null"
+      },
+      {
+        "name": "freight_large_cents",
+        "type": "number"
+      },
+      {
+        "name": "freight_small_cents",
+        "type": "number"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "state_codes",
+        "type": "string[]"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      },
+      {
+        "name": "zone_name",
+        "type": "string"
+      }
+    ],
+    "qb_internal_freight_rules": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "distance_from_miles",
+        "type": "number | null"
+      },
+      {
+        "name": "distance_to_miles",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "priority",
+        "type": "number"
+      },
+      {
+        "name": "rate_amount_cents",
+        "type": "number"
+      },
+      {
+        "name": "rate_type",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "weight_from_lbs",
+        "type": "number | null"
+      },
+      {
+        "name": "weight_to_lbs",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_margin_exceptions": [
+      {
+        "name": "brand_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "delta_pts",
+        "type": "number | null"
+      },
+      {
+        "name": "estimated_gap_cents",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "quote_package_id",
+        "type": "string"
+      },
+      {
+        "name": "quoted_margin_pct",
+        "type": "number"
+      },
+      {
+        "name": "reason",
+        "type": "string"
+      },
+      {
+        "name": "rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "threshold_margin_pct",
+        "type": "number"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_margin_thresholds": [
+      {
+        "name": "brand_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "min_margin_pct",
+        "type": "number"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "updated_by",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_notifications": [
+      {
+        "name": "body",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "read_at",
+        "type": "string | null"
+      },
+      {
+        "name": "title",
+        "type": "string"
+      },
+      {
+        "name": "type",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_price_sheet_items": [
+      {
+        "name": "action",
+        "type": "string"
+      },
+      {
+        "name": "applied_at",
+        "type": "string | null"
+      },
+      {
+        "name": "confidence",
+        "type": "number | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "diff",
+        "type": "Json | null"
+      },
+      {
+        "name": "extracted",
+        "type": "Json"
+      },
+      {
+        "name": "extraction_metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "item_type",
+        "type": "string"
+      },
+      {
+        "name": "price_sheet_id",
+        "type": "string"
+      },
+      {
+        "name": "proposed_attachment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "proposed_model_id",
+        "type": "string | null"
+      },
+      {
+        "name": "review_status",
+        "type": "string"
+      },
+      {
+        "name": "reviewer_notes",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_price_sheet_programs": [
+      {
+        "name": "action",
+        "type": "string"
+      },
+      {
+        "name": "applied_at",
+        "type": "string | null"
+      },
+      {
+        "name": "confidence",
+        "type": "number | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "diff",
+        "type": "Json | null"
+      },
+      {
+        "name": "extracted",
+        "type": "Json"
+      },
+      {
+        "name": "extraction_metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "price_sheet_id",
+        "type": "string"
+      },
+      {
+        "name": "program_code",
+        "type": "string"
+      },
+      {
+        "name": "program_type",
+        "type": "string"
+      },
+      {
+        "name": "proposed_program_id",
+        "type": "string | null"
+      },
+      {
+        "name": "review_status",
+        "type": "string"
+      },
+      {
+        "name": "reviewer_notes",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_price_sheets": [
+      {
+        "name": "brand_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "effective_from",
+        "type": "string | null"
+      },
+      {
+        "name": "effective_to",
+        "type": "string | null"
+      },
+      {
+        "name": "extraction_metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "file_type",
+        "type": "string | null"
+      },
+      {
+        "name": "file_url",
+        "type": "string"
+      },
+      {
+        "name": "filename",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "published_at",
+        "type": "string | null"
+      },
+      {
+        "name": "reviewed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "reviewed_by",
+        "type": "string | null"
+      },
+      {
+        "name": "sheet_type",
+        "type": "string | null"
+      },
+      {
+        "name": "source_id",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "supersedes_price_sheet_id",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "uploaded_at",
+        "type": "string"
+      },
+      {
+        "name": "uploaded_by",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_price_sheets_audit": [
+      {
+        "name": "action",
+        "type": "string"
+      },
+      {
+        "name": "actor_id",
+        "type": "string | null"
+      },
+      {
+        "name": "changed_fields",
+        "type": "Json | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "record_id",
+        "type": "string"
+      },
+      {
+        "name": "snapshot",
+        "type": "Json | null"
+      }
+    ],
+    "qb_program_stacking_rules": [
+      {
+        "name": "can_combine",
+        "type": "boolean"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "program_type_a",
+        "type": "string"
+      },
+      {
+        "name": "program_type_b",
+        "type": "string"
+      }
+    ],
+    "qb_programs": [
+      {
+        "name": "active",
+        "type": "boolean"
+      },
+      {
+        "name": "brand_id",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "details",
+        "type": "Json"
+      },
+      {
+        "name": "effective_from",
+        "type": "string"
+      },
+      {
+        "name": "effective_to",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "program_code",
+        "type": "string"
+      },
+      {
+        "name": "program_type",
+        "type": "string"
+      },
+      {
+        "name": "source_document_url",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_programs_audit": [
+      {
+        "name": "action",
+        "type": "string"
+      },
+      {
+        "name": "actor_id",
+        "type": "string | null"
+      },
+      {
+        "name": "changed_fields",
+        "type": "Json | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "record_id",
+        "type": "string"
+      },
+      {
+        "name": "snapshot",
+        "type": "Json | null"
+      }
+    ],
+    "qb_quote_line_items": [
+      {
+        "name": "attachment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "description",
+        "type": "string"
+      },
+      {
+        "name": "discount_pct",
+        "type": "number"
+      },
+      {
+        "name": "display_order",
+        "type": "number"
+      },
+      {
+        "name": "extended_price_cents",
+        "type": "number"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "line_type",
+        "type": "string"
+      },
+      {
+        "name": "list_price_cents",
+        "type": "number | null"
+      },
+      {
+        "name": "quantity",
+        "type": "number"
+      },
+      {
+        "name": "quote_id",
+        "type": "string"
+      },
+      {
+        "name": "unit_price_cents",
+        "type": "number"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_quote_outcomes": [
+      {
+        "name": "captured_at",
+        "type": "string"
+      },
+      {
+        "name": "captured_by",
+        "type": "string | null"
+      },
+      {
+        "name": "competitor",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "outcome",
+        "type": "string"
+      },
+      {
+        "name": "price_sensitivity",
+        "type": "string | null"
+      },
+      {
+        "name": "quote_package_id",
+        "type": "string"
+      },
+      {
+        "name": "reason",
+        "type": "string | null"
+      },
+      {
+        "name": "reason_details",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_quotes": [
+      {
+        "name": "applied_program_ids",
+        "type": "string[] | null"
+      },
+      {
+        "name": "approval_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "approved_at",
+        "type": "string | null"
+      },
+      {
+        "name": "approved_by",
+        "type": "string | null"
+      },
+      {
+        "name": "attachments_cost_cents",
+        "type": "number"
+      },
+      {
+        "name": "attachments_list_price_cents",
+        "type": "number"
+      },
+      {
+        "name": "attachments_markup_cents",
+        "type": "number"
+      },
+      {
+        "name": "attachments_sales_price_cents",
+        "type": "number"
+      },
+      {
+        "name": "baseline_sales_price_cents",
+        "type": "number"
+      },
+      {
+        "name": "cil_amount_cents",
+        "type": "number"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "customer_equipment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "customer_type",
+        "type": "string"
+      },
+      {
+        "name": "customer_type_details",
+        "type": "Json | null"
+      },
+      {
+        "name": "dealer_discount_cents",
+        "type": "number"
+      },
+      {
+        "name": "dealer_discount_pct",
+        "type": "number"
+      },
+      {
+        "name": "delivery_date",
+        "type": "string | null"
+      },
+      {
+        "name": "doc_fee_cents",
+        "type": "number"
+      },
+      {
+        "name": "equipment_cost_cents",
+        "type": "number"
+      },
+      {
+        "name": "equipment_model_id",
+        "type": "string | null"
+      },
+      {
+        "name": "financing_scenario",
+        "type": "Json | null"
+      },
+      {
+        "name": "freight_cents",
+        "type": "number"
+      },
+      {
+        "name": "good_faith_cents",
+        "type": "number"
+      },
+      {
+        "name": "good_faith_pct",
+        "type": "number"
+      },
+      {
+        "name": "gross_margin_cents",
+        "type": "number | null"
+      },
+      {
+        "name": "gross_margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "internal_notes",
+        "type": "string | null"
+      },
+      {
+        "name": "list_price_cents",
+        "type": "number"
+      },
+      {
+        "name": "markup_achieved_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "markup_cents",
+        "type": "number"
+      },
+      {
+        "name": "markup_pct",
+        "type": "number"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "originating_log_id",
+        "type": "string | null"
+      },
+      {
+        "name": "parent_quote_id",
+        "type": "string | null"
+      },
+      {
+        "name": "pdf_url",
+        "type": "string | null"
+      },
+      {
+        "name": "pdi_cents",
+        "type": "number"
+      },
+      {
+        "name": "quote_number",
+        "type": "string"
+      },
+      {
+        "name": "rebate_total_cents",
+        "type": "number"
+      },
+      {
+        "name": "requires_approval",
+        "type": "boolean"
+      },
+      {
+        "name": "salesman_id",
+        "type": "string"
+      },
+      {
+        "name": "sent_at",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "subtotal_cents",
+        "type": "number"
+      },
+      {
+        "name": "tariff_cents",
+        "type": "number"
+      },
+      {
+        "name": "tariff_pct",
+        "type": "number"
+      },
+      {
+        "name": "tax_cents",
+        "type": "number"
+      },
+      {
+        "name": "tax_rate_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "total_cents",
+        "type": "number"
+      },
+      {
+        "name": "trade_in_allowance_cents",
+        "type": "number"
+      },
+      {
+        "name": "trade_in_book_value_cents",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "valid_until",
+        "type": "string | null"
+      },
+      {
+        "name": "version",
+        "type": "number"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_quotes_audit": [
+      {
+        "name": "action",
+        "type": "string"
+      },
+      {
+        "name": "actor_id",
+        "type": "string | null"
+      },
+      {
+        "name": "changed_fields",
+        "type": "Json | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "record_id",
+        "type": "string"
+      },
+      {
+        "name": "snapshot",
+        "type": "Json | null"
+      }
+    ],
+    "qb_service_credit_config": [
+      {
+        "name": "category",
+        "type": "string"
+      },
+      {
+        "name": "credit_cents",
+        "type": "number"
+      },
+      {
+        "name": "travel_budget_cents",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_sheet_watch_events": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "detail",
+        "type": "Json | null"
+      },
+      {
+        "name": "event_type",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "price_sheet_id",
+        "type": "string | null"
+      },
+      {
+        "name": "source_id",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_trade_ins": [
+      {
+        "name": "allowance_cents",
+        "type": "number"
+      },
+      {
+        "name": "approved_at",
+        "type": "string | null"
+      },
+      {
+        "name": "approved_by",
+        "type": "string | null"
+      },
+      {
+        "name": "book_value_cents",
+        "type": "number | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "crm_equipment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "disposition",
+        "type": "string | null"
+      },
+      {
+        "name": "hours",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "make",
+        "type": "string"
+      },
+      {
+        "name": "model",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "over_under_cents",
+        "type": "number | null"
+      },
+      {
+        "name": "quote_id",
+        "type": "string | null"
+      },
+      {
+        "name": "serial",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "valuation_source",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      },
+      {
+        "name": "year",
+        "type": "number | null"
+      }
+    ],
+    "qrm_deal_equipment": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deal_id",
+        "type": "string"
+      },
+      {
+        "name": "equipment_id",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "role",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_deal_equipment_role\"]"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_deal_stages": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_stage_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_closed_lost",
+        "type": "boolean"
+      },
+      {
+        "name": "is_closed_won",
+        "type": "boolean"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "probability",
+        "type": "number | null"
+      },
+      {
+        "name": "sla_minutes",
+        "type": "number | null"
+      },
+      {
+        "name": "sort_order",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_deals": [
+      {
+        "name": "amount",
+        "type": "number | null"
+      },
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "closed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "competitor",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deal_score",
+        "type": "number | null"
+      },
+      {
+        "name": "deal_score_factors",
+        "type": "Json | null"
+      },
+      {
+        "name": "deal_score_updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deposit_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "deposit_status",
+        "type": "string"
+      },
+      {
+        "name": "dge_last_scored_at",
+        "type": "string | null"
+      },
+      {
+        "name": "dge_scenario_count",
+        "type": "number | null"
+      },
+      {
+        "name": "dge_score",
+        "type": "number | null"
+      },
+      {
+        "name": "expected_close_on",
+        "type": "string | null"
+      },
+      {
+        "name": "forecast_confidence_score",
+        "type": "number | null"
+      },
+      {
+        "name": "hubspot_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "last_activity_at",
+        "type": "string | null"
+      },
+      {
+        "name": "loaded_margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "loss_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "margin_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "margin_check_status",
+        "type": "string"
+      },
+      {
+        "name": "margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "needs_assessment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "net_contribution_after_load",
+        "type": "number | null"
+      },
+      {
+        "name": "next_follow_up_at",
+        "type": "string | null"
+      },
+      {
+        "name": "primary_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "selected_scenario",
+        "type": "Database[\"public\"][\"Enums\"][\"scenario_type\"] | null"
+      },
+      {
+        "name": "sla_deadline_at",
+        "type": "string | null"
+      },
+      {
+        "name": "sla_started_at",
+        "type": "string | null"
+      },
+      {
+        "name": "sort_position",
+        "type": "number | null"
+      },
+      {
+        "name": "stage_id",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_quote_audit_events": [
+      {
+        "name": "actor_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "event_type",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "quote_id",
+        "type": "string"
+      },
+      {
+        "name": "request_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "quote_incentive_applications": [
+      {
+        "name": "applied_amount",
+        "type": "number"
+      },
+      {
+        "name": "applied_at",
+        "type": "string"
+      },
+      {
+        "name": "applied_by",
+        "type": "string | null"
+      },
+      {
+        "name": "auto_applied",
+        "type": "boolean"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "incentive_id",
+        "type": "string"
+      },
+      {
+        "name": "quote_package_id",
+        "type": "string"
+      },
+      {
+        "name": "removal_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "removed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "removed_by",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "quote_package_line_items": [
+      {
+        "name": "catalog_entry_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "display_order",
+        "type": "number"
+      },
+      {
+        "name": "extended_price",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "line_type",
+        "type": "string"
+      },
+      {
+        "name": "make",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "model",
+        "type": "string | null"
+      },
+      {
+        "name": "quantity",
+        "type": "number | null"
+      },
+      {
+        "name": "quote_package_id",
+        "type": "string"
+      },
+      {
+        "name": "quoted_dealer_cost",
+        "type": "number | null"
+      },
+      {
+        "name": "quoted_list_price",
+        "type": "number | null"
+      },
+      {
+        "name": "source_location",
+        "type": "string | null"
+      },
+      {
+        "name": "unit_price",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      },
+      {
+        "name": "year",
+        "type": "number | null"
+      }
+    ],
+    "quote_packages": [
+      {
+        "name": "accepted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "ai_recommendation",
+        "type": "Json | null"
+      },
+      {
+        "name": "attachment_total",
+        "type": "number | null"
+      },
+      {
+        "name": "attachments_included",
+        "type": "Json | null"
+      },
+      {
+        "name": "brochure_url",
+        "type": "string | null"
+      },
+      {
+        "name": "contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "credit_app_url",
+        "type": "string | null"
+      },
+      {
+        "name": "customer_company",
+        "type": "string | null"
+      },
+      {
+        "name": "customer_email",
+        "type": "string | null"
+      },
+      {
+        "name": "customer_name",
+        "type": "string | null"
+      },
+      {
+        "name": "customer_phone",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string"
+      },
+      {
+        "name": "discount_total",
+        "type": "number | null"
+      },
+      {
+        "name": "entry_mode",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment",
+        "type": "Json"
+      },
+      {
+        "name": "equipment_total",
+        "type": "number | null"
+      },
+      {
+        "name": "expires_at",
+        "type": "string | null"
+      },
+      {
+        "name": "financing_scenarios",
+        "type": "Json | null"
+      },
+      {
+        "name": "freight_estimate",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "margin_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "net_total",
+        "type": "number | null"
+      },
+      {
+        "name": "originating_log_id",
+        "type": "string | null"
+      },
+      {
+        "name": "opportunity_description",
+        "type": "string | null"
+      },
+      {
+        "name": "pdf_generated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "pdf_url",
+        "type": "string | null"
+      },
+      {
+        "name": "photos_included",
+        "type": "Json | null"
+      },
+      {
+        "name": "quote_number",
+        "type": "string | null"
+      },
+      {
+        "name": "requires_requote",
+        "type": "boolean | null"
+      },
+      {
+        "name": "requote_draft_email_id",
+        "type": "string | null"
+      },
+      {
+        "name": "requote_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "sent_at",
+        "type": "string | null"
+      },
+      {
+        "name": "sent_via",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "subtotal",
+        "type": "number | null"
+      },
+      {
+        "name": "trade_allowance",
+        "type": "number | null"
+      },
+      {
+        "name": "trade_credit",
+        "type": "number | null"
+      },
+      {
+        "name": "trade_in_valuation_id",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "video_url",
+        "type": "string | null"
+      },
+      {
+        "name": "voice_transcript",
+        "type": "string | null"
+      },
+      {
+        "name": "viewed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "quote_signatures": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "document_hash",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_valid",
+        "type": "boolean"
+      },
+      {
+        "name": "quote_package_id",
+        "type": "string"
+      },
+      {
+        "name": "signature_image_url",
+        "type": "string | null"
+      },
+      {
+        "name": "signed_at",
+        "type": "string"
+      },
+      {
+        "name": "signer_email",
+        "type": "string | null"
+      },
+      {
+        "name": "signer_ip",
+        "type": "string | null"
+      },
+      {
+        "name": "signer_name",
+        "type": "string"
+      },
+      {
+        "name": "signer_user_agent",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "quote_tax_breakdowns": [
+      {
+        "name": "city_rate",
+        "type": "number"
+      },
+      {
+        "name": "computed_at",
+        "type": "string"
+      },
+      {
+        "name": "computed_by_function",
+        "type": "string | null"
+      },
+      {
+        "name": "county_rate",
+        "type": "number"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "disclaimer_version",
+        "type": "string"
+      },
+      {
+        "name": "exemption_certificate_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "jurisdiction",
+        "type": "string"
+      },
+      {
+        "name": "manual_override",
+        "type": "boolean"
+      },
+      {
+        "name": "override_approver_id",
+        "type": "string | null"
+      },
+      {
+        "name": "override_delta_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "override_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "quote_package_id",
+        "type": "string"
+      },
+      {
+        "name": "source_precedence_used",
+        "type": "string"
+      },
+      {
+        "name": "special_district_rate",
+        "type": "number"
+      },
+      {
+        "name": "stale_after",
+        "type": "string"
+      },
+      {
+        "name": "state_rate",
+        "type": "number"
+      },
+      {
+        "name": "tax_amount",
+        "type": "number"
+      },
+      {
+        "name": "taxable_subtotal",
+        "type": "number"
+      },
+      {
+        "name": "total_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "quotes": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "crm_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "crm_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "customer_snapshot",
+        "type": "Json"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "line_items",
+        "type": "Json"
+      },
+      {
+        "name": "linked_at",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "title",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_quote_approvals": [
+      {
+        "name": "approval_type",
+        "type": "string"
+      },
+      {
+        "name": "approved_at",
+        "type": "string"
+      },
+      {
+        "name": "approved_by",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "method",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "quote_id",
+        "type": "string"
+      },
+      {
+        "name": "signature_url",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_quote_lines": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "description",
+        "type": "string"
+      },
+      {
+        "name": "extended_price",
+        "type": "number"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "line_type",
+        "type": "string"
+      },
+      {
+        "name": "part_requirement_id",
+        "type": "string | null"
+      },
+      {
+        "name": "quantity",
+        "type": "number"
+      },
+      {
+        "name": "quote_id",
+        "type": "string"
+      },
+      {
+        "name": "sort_order",
+        "type": "number"
+      },
+      {
+        "name": "unit_price",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_quotes": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "expires_at",
+        "type": "string | null"
+      },
+      {
+        "name": "haul_total",
+        "type": "number"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "job_id",
+        "type": "string"
+      },
+      {
+        "name": "labor_total",
+        "type": "number"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "parts_total",
+        "type": "number"
+      },
+      {
+        "name": "sent_at",
+        "type": "string | null"
+      },
+      {
+        "name": "shop_supplies",
+        "type": "number"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "total",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "version",
+        "type": "number"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "tax_exemption_certificates": [
+      {
+        "name": "certificate_number",
+        "type": "string"
+      },
+      {
+        "name": "covers_equipment",
+        "type": "boolean | null"
+      },
+      {
+        "name": "covers_parts",
+        "type": "boolean | null"
+      },
+      {
+        "name": "covers_service",
+        "type": "boolean | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "crm_company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "customer_profile_id",
+        "type": "string | null"
+      },
+      {
+        "name": "document_url",
+        "type": "string | null"
+      },
+      {
+        "name": "effective_date",
+        "type": "string"
+      },
+      {
+        "name": "equipment_application",
+        "type": "string | null"
+      },
+      {
+        "name": "exemption_type",
+        "type": "string"
+      },
+      {
+        "name": "expiration_date",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "issuing_state",
+        "type": "string"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "verified_at",
+        "type": "string | null"
+      },
+      {
+        "name": "verified_by",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "tax_treatments": [
+      {
+        "name": "applies_to",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "effective_date",
+        "type": "string | null"
+      },
+      {
+        "name": "expiration_date",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_active",
+        "type": "boolean"
+      },
+      {
+        "name": "jurisdiction",
+        "type": "string"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "rate",
+        "type": "number"
+      },
+      {
+        "name": "tax_type",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "crm_deal_equipment": [
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "role",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_deal_equipment_role\"] | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_deal_stages": [
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_stage_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "is_closed_lost",
+        "type": "boolean | null"
+      },
+      {
+        "name": "is_closed_won",
+        "type": "boolean | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "probability",
+        "type": "number | null"
+      },
+      {
+        "name": "sla_minutes",
+        "type": "number | null"
+      },
+      {
+        "name": "sort_order",
+        "type": "number | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_deals": [
+      {
+        "name": "amount",
+        "type": "number | null"
+      },
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "closed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "competitor",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_score",
+        "type": "number | null"
+      },
+      {
+        "name": "deal_score_factors",
+        "type": "Json | null"
+      },
+      {
+        "name": "deal_score_updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deposit_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "deposit_status",
+        "type": "string | null"
+      },
+      {
+        "name": "dge_last_scored_at",
+        "type": "string | null"
+      },
+      {
+        "name": "dge_scenario_count",
+        "type": "number | null"
+      },
+      {
+        "name": "dge_score",
+        "type": "number | null"
+      },
+      {
+        "name": "expected_close_on",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "last_activity_at",
+        "type": "string | null"
+      },
+      {
+        "name": "loss_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "margin_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "margin_check_status",
+        "type": "string | null"
+      },
+      {
+        "name": "margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "needs_assessment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "next_follow_up_at",
+        "type": "string | null"
+      },
+      {
+        "name": "primary_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "sla_deadline_at",
+        "type": "string | null"
+      },
+      {
+        "name": "sla_started_at",
+        "type": "string | null"
+      },
+      {
+        "name": "sort_position",
+        "type": "number | null"
+      },
+      {
+        "name": "stage_id",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_deals_elevated_full": [
+      {
+        "name": "amount",
+        "type": "number | null"
+      },
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "closed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "competitor",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "expected_close_on",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "last_activity_at",
+        "type": "string | null"
+      },
+      {
+        "name": "loss_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "margin_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "next_follow_up_at",
+        "type": "string | null"
+      },
+      {
+        "name": "primary_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "stage_id",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_deals_rep_safe": [
+      {
+        "name": "amount",
+        "type": "number | null"
+      },
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "closed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deposit_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "deposit_status",
+        "type": "string | null"
+      },
+      {
+        "name": "expected_close_on",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "last_activity_at",
+        "type": "string | null"
+      },
+      {
+        "name": "margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "next_follow_up_at",
+        "type": "string | null"
+      },
+      {
+        "name": "primary_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "sla_deadline_at",
+        "type": "string | null"
+      },
+      {
+        "name": "sort_position",
+        "type": "number | null"
+      },
+      {
+        "name": "stage_id",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_deals_weighted": [
+      {
+        "name": "amount",
+        "type": "number | null"
+      },
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "closed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "expected_close_on",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "last_activity_at",
+        "type": "string | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "next_follow_up_at",
+        "type": "string | null"
+      },
+      {
+        "name": "primary_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "stage_id",
+        "type": "string | null"
+      },
+      {
+        "name": "stage_name",
+        "type": "string | null"
+      },
+      {
+        "name": "stage_probability",
+        "type": "number | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "weighted_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "columns",
+        "type": "[\"assigned_rep_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"company_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"company_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"company_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"primary_contact_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"primary_contact_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"stage_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"stage_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"stage_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"stage_id\"]"
+      },
+      {
+        "name": "crm_duplicate_candidates",
+        "type": "{"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "left_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "right_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "rule_id",
+        "type": "string | null"
+      },
+      {
+        "name": "score",
+        "type": "number | null"
+      },
+      {
+        "name": "status",
+        "type": "| Database[\"public\"][\"Enums\"][\"crm_duplicate_candidate_status\"]"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_quote_audit_events": [
+      {
+        "name": "actor_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "event_type",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "quote_id",
+        "type": "string | null"
+      },
+      {
+        "name": "request_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "deal_signals": [
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "observed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "payload",
+        "type": "Json | null"
+      },
+      {
+        "name": "severity",
+        "type": "string | null"
+      },
+      {
+        "name": "signal_source",
+        "type": "string | null"
+      },
+      {
+        "name": "signal_subtype",
+        "type": "string | null"
+      },
+      {
+        "name": "source_record_id",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_lifecycle_summary",
+        "type": "{"
+      },
+      {
+        "name": "current_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "customer_health_score",
+        "type": "number | null"
+      },
+      {
+        "name": "customer_name",
+        "type": "string | null"
+      },
+      {
+        "name": "customer_profile_id",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_serial",
+        "type": "string | null"
+      },
+      {
+        "name": "fleet_intelligence_id",
+        "type": "string | null"
+      },
+      {
+        "name": "make",
+        "type": "string | null"
+      },
+      {
+        "name": "model",
+        "type": "string | null"
+      },
+      {
+        "name": "predicted_replacement_date",
+        "type": "string | null"
+      },
+      {
+        "name": "replacement_confidence",
+        "type": "number | null"
+      },
+      {
+        "name": "revenue_breakdown",
+        "type": "Json | null"
+      },
+      {
+        "name": "year",
+        "type": "number | null"
+      },
+      {
+        "name": "columns",
+        "type": "[\"customer_profile_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"customer_profile_id\"]"
+      },
+      {
+        "name": "equipment_status_canonical",
+        "type": "{"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "eta",
+        "type": "string | null"
+      },
+      {
+        "name": "last_updated",
+        "type": "string | null"
+      },
+      {
+        "name": "stage_label",
+        "type": "string | null"
+      },
+      {
+        "name": "stage_source",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "columns",
+        "type": "[\"company_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"company_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"company_id\"]"
+      },
+      {
+        "name": "exec_branch_comparison",
+        "type": "{"
+      },
+      {
+        "name": "active",
+        "type": "number | null"
+      },
+      {
+        "name": "branch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "closed",
+        "type": "number | null"
+      },
+      {
+        "name": "overdue",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "exec_deposits_aging_v",
+        "type": "{"
+      },
+      {
+        "name": "ar_exposure_dollars",
+        "type": "number | null"
+      },
+      {
+        "name": "avg_verification_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "pending_count",
+        "type": "number | null"
+      },
+      {
+        "name": "received_unverified_count",
+        "type": "number | null"
+      },
+      {
+        "name": "refund_exposure_dollars",
+        "type": "number | null"
+      },
+      {
+        "name": "refund_in_flight_count",
+        "type": "number | null"
+      },
+      {
+        "name": "requested_count",
+        "type": "number | null"
+      },
+      {
+        "name": "verified_count",
+        "type": "number | null"
+      },
+      {
+        "name": "exec_exception_summary",
+        "type": "{"
+      },
+      {
+        "name": "latest",
+        "type": "string | null"
+      },
+      {
+        "name": "open_count",
+        "type": "number | null"
+      },
+      {
+        "name": "severity",
+        "type": "string | null"
+      },
+      {
+        "name": "source",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "exec_health_movers",
+        "type": "{"
+      },
+      {
+        "name": "customer_profile_id",
+        "type": "string | null"
+      },
+      {
+        "name": "health_score",
+        "type": "number | null"
+      },
+      {
+        "name": "health_score_components",
+        "type": "Json | null"
+      },
+      {
+        "name": "health_score_updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ]
+  }
+}

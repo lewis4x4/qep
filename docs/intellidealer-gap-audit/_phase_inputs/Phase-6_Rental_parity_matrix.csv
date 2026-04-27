@@ -1,0 +1,17 @@
+Phase,IntelliDealer Screen,IntelliDealer Field,Field Description (abbr),Source,QEP Table,QEP Column,Parity Status,Migration / Gap Notes
+Phase-6_Rental,Rental Counter,Include,"If selected, includes rental contract history",Table,(unmapped),,REVIEW,Manual review needed
+Phase-6_Rental,Rental Counter,History,within the rental contract search results.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-6_Rental,Rental Counter,Select,Search for rental contracts by entering a,Table,(unmapped),,REVIEW,Manual review needed
+Phase-6_Rental,Rental Counter,Contract,contract number. Number,Table,rental_contracts,id,BUILT,
+Phase-6_Rental,Rental Counter,Customer,customer number. Number,Table,crm_companies,name,BUILT,Company name field
+Phase-6_Rental,Rental Counter,Number,number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-6_Rental,Rental Counter,Select Job,Search for rental contracts by entering a job,Table,(unmapped),,REVIEW,Manual review needed
+Phase-6_Rental,Rental Counter,Site,site location.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-6_Rental,Rental Counter,Category,category of the unit(s) on the contract.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-6_Rental,Rental Counter,Subclass,subclass of the unit(s) on the contract.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-6_Rental,Rental Counter,Select Type,Search for rental contracts by selecting a contract type from the drop down list.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-6_Rental,Rental Counter,Contract Number,The rental contract number. Hover over the Contract number for the context menu to appear.,Table,rental_contracts,id,BUILT,
+Phase-6_Rental,Rental Counter,Date Out/Date In,The date the unit was rented.,Table,(multiple),timestamp fields,BUILT,
+Phase-6_Rental,Rental Counter,Stock Number /,The rental unit stock number. Stock Numbers with reverse highlight VESign Status indicate that the stock number's profile has memos attached to it.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-6_Rental,Rental Counter,Customer/Salesperson,(inferred from workflow prose),Prose,crm_companies,"assigned_rep_id (custom), territories",BUILT,Maps to crm_territories + assigned_rep
+Phase-6_Rental,Rental Counter,Ship To,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed

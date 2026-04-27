@@ -1,0 +1,82 @@
+[
+  {
+    "phase": "Phase-6_Rental",
+    "source_file": "Rental Counter.txt",
+    "screen_name": "Rental Counter",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Rental Product Support > Rental Counter"
+    ],
+    "purpose": [],
+    "tabs": [
+      "Customer"
+    ],
+    "buttons": [],
+    "fields": [
+      {
+        "name": "Include",
+        "description": "If selected, includes rental contract history"
+      },
+      {
+        "name": "History",
+        "description": "within the rental contract search results."
+      },
+      {
+        "name": "Select",
+        "description": "Search for rental contracts by entering a"
+      },
+      {
+        "name": "Contract",
+        "description": "contract number. Number"
+      },
+      {
+        "name": "Customer",
+        "description": "customer number. Number"
+      },
+      {
+        "name": "Number",
+        "description": "number."
+      },
+      {
+        "name": "Select Job",
+        "description": "Search for rental contracts by entering a job"
+      },
+      {
+        "name": "Site",
+        "description": "site location."
+      },
+      {
+        "name": "Category",
+        "description": "category of the unit(s) on the contract."
+      },
+      {
+        "name": "Subclass",
+        "description": "subclass of the unit(s) on the contract."
+      },
+      {
+        "name": "Select Type",
+        "description": "Search for rental contracts by selecting a contract type from the drop down list."
+      },
+      {
+        "name": "Contract Number",
+        "description": "The rental contract number. Hover over the Contract number for the context menu to appear."
+      },
+      {
+        "name": "Date Out/Date In",
+        "description": "The date the unit was rented."
+      },
+      {
+        "name": "Stock Number /",
+        "description": "The rental unit stock number. Stock Numbers with reverse highlight VESign Status indicate that the stock number's profile has memos attached to it."
+      }
+    ],
+    "prose_fields": [
+      "Customer/Salesperson",
+      "Ship To"
+    ],
+    "topics": [],
+    "linked_screens": []
+  }
+]

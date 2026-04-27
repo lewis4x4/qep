@@ -1,0 +1,25 @@
+Phase,IntelliDealer Screen,IntelliDealer Field,Field Description (abbr),Source,QEP Table,QEP Column,Parity Status,Migration / Gap Notes
+Phase-1_CRM,Customer Profile: Search and Listing,Search 1 or 2,Search for a customer by entering either search word 1 or 2.,Table,crm_companies,"search_1, search_2",GAP,Add as custom fields or dedicated search_1/search_2 columns
+Phase-1_CRM,Customer Profile: Search and Listing,Phone Number,Search for a customer by entering a phone number.,Table,crm_contacts or crm_companies,phone,BUILT,
+Phase-1_CRM,Customer Profile: Search and Listing,Status,"Search for a customer by selecting a specific customer status from the drop down list. For example: All, Active, Deleted or prospect customer status.",Table,crm_companies,status,BUILT,active/deleted/prospect
+Phase-1_CRM,Customer Profile: Search and Listing,Customer Number,Search for a customer by entering a customer number.,Table,crm_companies,id (UUID) or custom_field 'legacy_customer_number',PARTIAL,IntelliDealer uses customer number (integer); QEP uses UUID. Store legacy number in custom_fields.
+Phase-1_CRM,Customer Profile: Search and Listing,City,Search for a customer by entering a city location.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-1_CRM,Customer Profile: Search and Listing,Territory,Search within a specific territory,Table,crm_territories,name,BUILT,
+Phase-1_CRM,Customer Profile: Search and Listing,Name,Search for a customer by entering a customer name.,Table,crm_companies,name,BUILT,Company name field
+Phase-1_CRM,Customer Profile: Search and Listing,Location,Search for a customer by entering a location.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-1_CRM,Customer Profile: Search and Listing,Salesperson,Search for a customer by entering a salesperson.,Table,crm_companies,"assigned_rep_id (custom), territories",BUILT,Maps to crm_territories + assigned_rep
+Phase-1_CRM,Customer Profile: Search and Listing,Search Extended,Adds the data in the Contacts and Ship To tabs to the search to find more results,Table,(unmapped),,REVIEW,Manual review needed
+Phase-1_CRM,Customer Profile: Search and Listing,Fields,based on the search criteria.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-1_CRM,Customer Profile: Search and Listing,The,icon option Export to CSV creates a CSV file version of the results listed.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-1_CRM,Customer Profile: Search and Listing,Search 1 or Search 2,(inferred from workflow prose),Prose,crm_companies,"search_1, search_2",GAP,Add as custom fields or dedicated search_1/search_2 columns
+Phase-1_CRM,Prospect Board,Status,Sort the search results by status.,Table,crm_companies,status,BUILT,active/deleted/prospect
+Phase-1_CRM,Prospect Board,Date,Sort the search results by the date they were,Table,(multiple),timestamp fields,BUILT,
+Phase-1_CRM,Prospect Board,Modified,last modified,Table,(unmapped),,REVIEW,Manual review needed
+Phase-1_CRM,Prospect Board,Select,Search for a prospect by selecting a status radio,Table,(unmapped),,REVIEW,Manual review needed
+Phase-1_CRM,Prospect Board,Salesperson,The name of the salesperson associated with the prospect.,Table,crm_companies,"assigned_rep_id (custom), territories",BUILT,Maps to crm_territories + assigned_rep
+Phase-1_CRM,Prospect Board,Selling/Trading,The unit being sold to the customer and any units being traded in by the customer.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-1_CRM,Prospect Board,Added/Modified,"The date the prospect was created, added or modified.",Table,(unmapped),,REVIEW,Manual review needed
+Phase-1_CRM,Prospect Board,Source,The source that the prospect originates from.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-1_CRM,Prospect Board,Comments,(inferred from workflow prose),Prose,crm_activities or custom_fields,body,BUILT,
+Phase-1_CRM,Prospect Board,Customer/Status,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-1_CRM,Prospect Board,JDQuote is selected in this,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed

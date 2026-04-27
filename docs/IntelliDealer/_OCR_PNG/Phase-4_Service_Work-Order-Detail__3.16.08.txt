@@ -1,0 +1,139 @@
+IntelliDealer
+
+@
+
+> Product Support > Service > Work Orders
+
+01/01/01 - LAKE CITY (2) w@ 2
+
+N
+I>
+by VitalEdge
+
+Financial Manager
+‘s| Customer Care
+
+& Product Support
+
+Management Ceni
+
+Quick Links
+
+ID InspectionPlus
+
+Work Orders
+
+Service Requests
+
+pfwf5066.cdkglobal-id.net
+
+Customer
+
+Work Order Header
+Reference Number: SD0426
+
+SALEMO01 Isc
+SALES. EXPENSE
+
+| fo)
+
+* JAMIE ROYSTER
+
+Customer:
+
+Contact:
+
+Salesperson: JR1
+
+fe)
+
+Responsible: ca
+PO Number: RSM013124-3
+Ship Via:
+
+Stock Number: Q000188 £0
+
+Description: Equipment haul
+Model: DELIVER
+Machine Serial Number: HAULING
+Engine Serial Number:
+
+Machine Down: © Yes © No
+
+Parts
+Tax 1: INTERNAL EXEMPT. kod
+Tax 2: NOT ASSIGNED c
+Discount: NOT ASSIGNED kod
+Tax 3: X INTERNAL EXEMPT
+Tax 4: X INTERNAL EXEMPT
+Work Order Segment
+
+Description
+
+01 ****DO NOT DELETE SEGMENT****
+02 SALES LOADING AND DELIVERIES WRIGHT STORY
+
+Added 03/31/2026 Modified 04/10/2026
+Location: LAKE CITY
+
+Source: Work Orders
+
+PO#
+REQUIRED.
+
+SEND TO
+
+RYLEE FOR
+
+Total A/R: 0.00
+Credit Limit: 0.00
+Sold To Ship To
+@misc SALES EXPENSE
+GENERAL SALES EXPENSE ye
+CLOSE TO GL# 5652021
+LAKE CITY FL 32055
+Latitude e
+Longitude
+Pricing Group: COST
+Labor
+Tax 1: INTERNAL EXEMPT c
+Tax 2: NOT ASSIGNED kod
+Discount: NOT ASSIGNED a
+Pickup: No $ Delivery: No kod
+Service Cal No a
+Results to disp!
+Status Technician Parts Labor
+Internal CUSTOMER REPAIRS 0.00 0.00
+Internal James Blue, III 0.00 100.35
+(1 - 2 Of 2)
+
+PO#
+
+Estimated
+Hours|
+0.10)
+
+0.10)
+
+Save Save & Close
+
+No Inspection (Legacy) Link Inspections Close
+
+st Activity
+
+1026
+/2026
+//2026
+/2026
+
+1026
+/2026
+/2026
+
+0/2026
+/2026
+jv2026
+
+Be: 10 | 20 | 50
+
+ Order/Requ

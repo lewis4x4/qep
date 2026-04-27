@@ -1,0 +1,76 @@
+[
+  {
+    "phase": "Phase-9_Advanced-Intelligence",
+    "source_file": "Customer Portal.txt",
+    "screen_name": "Customer Portal",
+    "data_source": "",
+    "security_switch": "702 - Customer",
+    "revision": "2025.07",
+    "menu_paths": [
+      "Customer Care > CRM > Customer Portal",
+      "IntelliDealer Menus > Customer Care > CRM > Customer Portal",
+      "Product Support > Equipment > Customer Portal",
+      "Product Support > Parts > Customer Portal",
+      "Product Support > Rental > Customer Portal",
+      "Product Support > Service > Customer Portal"
+    ],
+    "purpose": [],
+    "tabs": [
+      "Alerts",
+      "Location",
+      "Multimedia",
+      "Profile"
+    ],
+    "buttons": [
+      "A/R Agency Default",
+      "Create",
+      "List",
+      "More",
+      "Schedule Call",
+      "Statement History",
+      "Tethr It Now",
+      "Total A/R",
+      "Update/View Profile"
+    ],
+    "fields": [
+      {
+        "name": "Status",
+        "description": "The customer's status."
+      },
+      {
+        "name": "Name",
+        "description": "The customer's name."
+      },
+      {
+        "name": "Address",
+        "description": "The customer's address."
+      },
+      {
+        "name": "Zip/Postal",
+        "description": "The customer's zip/postal code. Code"
+      },
+      {
+        "name": "Contact",
+        "description": "The name of the customer's primary contact."
+      },
+      {
+        "name": "Phone",
+        "description": "The customer's phone number. Number"
+      },
+      {
+        "name": "E-mail",
+        "description": "The customer's e-mail address. Address"
+      },
+      {
+        "name": "Comment",
+        "description": "A one line comment that is loaded on the customer's profile."
+      }
+    ],
+    "prose_fields": [],
+    "topics": [],
+    "linked_screens": [
+      "Customer Notifications",
+      "Customer Profile"
+    ]
+  }
+]

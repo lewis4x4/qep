@@ -1,0 +1,129 @@
+Inte
+
+Menu
+
+Fam Financi
+‘s| Custom
+Produc!
+
+-
+2
+iS
+zg
+‘al
+
+i| - |
+
+.
+is]
+=
+a
+
+3
+
+Description: M16 NU
+Parts / Package: 1
+Vendor: PRINOT!
+Machine: SYS AD!
+Model:
+Update Type: Automat
+Label: Yes
+
+pfwf5066.cdkglobal-id.net
+
+oe ror: A co >>
+Number:
+
+Part Number: .3.02.16 B
+
+NO BIN Sell: 0.51
+
+IT Source: List Price: 0.35
+Class: Cost: 0.35
+
+H GMBH Type: Average Cost: 0.35
+D, P/O MAINT Return: Level 1: 0.00
+Weight: 0.00 Level 2: 0.00
+
+tic Matrix: YANMAR Level 3: 0.00
+OFC Reclass: Level 4: 0.00
+
+Sort by: 0 Dateo Invoice Numbero Customer Name
+
+Display: 0 Allo Outstanding
+Select DateFrom: 03/01/2025
+Range: 01/01/2026
+
+Onlyo Summary Only
+| To:
+
+Go >>
+
+Parts Sales History - .3.02.16
+Location: LAKE CITY Description: M16 NUT Vendor: PRINOTH GMBH
+
+Invoice
+Number
+
+Results to display:
+
+Date Quantity Price
+
+Sorry, but no information was found.
+
+Close
+
+Protect
+Quantity:
+
+Protect
+Code:
+
+On Order: te)
+
+In Transit: te)
+
+Lost Sale,
+
+0
+Frequency:
+
+Lost Sale,
+Quantity:
+
+YTD Sales $: 0.00
+
+YTD Sales,
+
+Quantity:
+Date Last Sale: 04/24/2023
+
+Company Last,
+12:
+
+Special Order)
+Frequency:
+Special Order,
+
+Quanti
+Last Order: 009520
+
+Last Order Type: SO
+
+Last Receipt Date: 04/06/2023
+
+® Additional Information
+
+Movement Code: ?
+
+Activity Code:
+
+Last Stock Order: 03/28/2026
+Last OFC
+Reclass:
+From / To
+Element:
+
+Months Supply: 0.0
+
+50 | 100

@@ -93,6 +93,25 @@ export function CustomerInsightCard({
               <p className="text-sm text-muted-foreground">{data.persona_reasoning}</p>
             )}
 
+            {data.tax_regulatory?.ein && (
+              <div className="rounded-md border border-qep-deck-rule/70 bg-muted/20 p-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Tax / Regulatory
+                </p>
+                <div className="mt-2 flex items-center justify-between gap-3 text-sm">
+                  <span className="text-muted-foreground">Federal EIN</span>
+                  <span className="font-medium text-foreground">
+                    {data.tax_regulatory.ein}
+                  </span>
+                </div>
+                {data.tax_regulatory.ein_masked && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Masked for unauthorized roles.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <div className="rounded-md border p-2">
                 <p className="text-xs text-muted-foreground">LTV</p>

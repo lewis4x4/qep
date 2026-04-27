@@ -1,0 +1,45 @@
+[
+  {
+    "phase": "Phase-5_Deal-Genome",
+    "source_file": "Data Miner.txt",
+    "screen_name": "Data Miner",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "2025.08",
+    "menu_paths": [
+      "IntelliDealer Menus > Management Central > Utilities > Data Miner"
+    ],
+    "purpose": [],
+    "tabs": [],
+    "buttons": [],
+    "fields": [
+      {
+        "name": "Select",
+        "description": "Search for queries by name. How to Query Create a Data"
+      },
+      {
+        "name": "Query Name",
+        "description": "The name of the query."
+      },
+      {
+        "name": "Description",
+        "description": "A brief description of the query."
+      },
+      {
+        "name": "Created by",
+        "description": "The user who created the query."
+      },
+      {
+        "name": "Date Created",
+        "description": "The date the query was created."
+      },
+      {
+        "name": "Date Last Run",
+        "description": "The date the query was last run."
+      }
+    ],
+    "prose_fields": [],
+    "topics": [],
+    "linked_screens": []
+  }
+]

@@ -197,6 +197,38 @@ Deno.serve(async (req): Promise<Response> => {
       }
     }
 
+    let customerEin: string | null = null;
+    if (profile.crm_company_id) {
+      const einWorkspaceId = clean(caller.workspaceId);
+      if (!einWorkspaceId) {
+        return fail({
+          origin,
+          status: 403,
+          code: "FORBIDDEN",
+          message: "Customer regulatory details require a bound workspace.",
+        });
+      }
+
+      const { data: companyRow, error: companyError } = await adminClient
+        .from("qrm_companies")
+        .select("ein")
+        .eq("id", profile.crm_company_id)
+        .eq("workspace_id", einWorkspaceId)
+        .is("deleted_at", null)
+        .limit(1)
+        .maybeSingle();
+      if (companyError) {
+        return fail({
+          origin,
+          status: 500,
+          code: "DB_READ_FAILED",
+          message: "Failed to fetch customer regulatory details.",
+          details: { reason: companyError.message },
+        });
+      }
+      customerEin = typeof companyRow?.ein === "string" ? companyRow.ein : null;
+    }
+
     let fleet: FleetRow[] = [];
     const managerFieldsVisible = caller.isServiceRole ||
       caller.role === "admin" || caller.role === "manager" ||
@@ -288,6 +320,7 @@ Deno.serve(async (req): Promise<Response> => {
       fleet,
       dataBadges: mergeSnapshotBadges([], refresh),
       refresh,
+      customerEin,
     });
 
     await adminClient

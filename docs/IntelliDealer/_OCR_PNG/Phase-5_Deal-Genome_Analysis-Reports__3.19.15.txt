@@ -1,0 +1,171 @@
+Analysis Reports -
+
+@
+
+IntelliDealer
+
+> Product Support > Service > Analysis Reports
+
+In...
+
+01/01/01 - LAKE CITY @
+
+&%
+
+x
+i>
+by VitalEdge
+
+Days
+
+Financial Management >
+
+Customer Care
+
+Product Support
+
+Management Central
+
+Support >
+
+Quick Links >
+
+ID InspectionPlus
+
+Sort by: @ Work Order
+O Open to Billing
+© Last Labor to Billing
+Show all Segments: O
+
+1 P
+
+Select Location: 01 ad
+
+Select Customer:
+
+Select Date Range: From: 04/01/2026
+
+© Customer
+CO Start to Completed
+© Completed to Billing
+
+To:
+
+O Open to Start
+CO Start to Billing
+CO Last Labor to Signed Off
+
+O Open to Completed
+© Last Labor to Completed
+O Signed Off to Billing
+
+Go >>
+
+ys An:
+Work Order Customer Location
+PM0426 NON-REVENUE TIME LAKE CITY
+\W06283 FR Cie LAKE CITY
+'wo6414 oe INDUSTRIES LAKE CITY
+wo6702 oe INDUSTRIES LAKE CITY
+EQUIP INVENTORY
+
+eo REPAIR EXPENSE PAS Gay
+
+\W06745 GROUND LEVEL, INC. LAKE CITY
+
+\W06788 CUMMINS INC LAKE CITY
+DEVELON- HD
+
+\W06850 HYUNDAI INFRACORE LAKE CITY
+LLC
+INTERNAL EQUIP
+
+Pet REPAIR EXPENSE PAS Gay
+PRECISION TREE
+
+'W06860 CARE & REMOVAL, LAKE CITY
+LLC
+
+Open to Open to Open to Start to
+Start Completed _ Billing Completed
+
+1 3 3 3
+
+1 169 169 191
+
+9 157 157 149
+
+1 102 102 102
+105 105 99
+
+2 101 101 100
+
+1 85 85 85
+
+4 69 69 66
+
+1 81 81 81
+
+1 85 85 85
+
+(1 - 10 OF 106)
+
+Start to
+Billing
+3
+
+191
+149
+102
+
+99
+
+100
+85
+
+66
+
+81
+
+85
+
+Last Labor
+to
+Completed
+1
+
+55
+1
+93
+
+34
+
+20
+83
+
+21
+
+81
+
+22
+
+Results to d c
+Last Labor
+Last Labor Completed to Signed Signed Off
+to Billing to Billing Off to Billing
+1 1 1 1
+ES 1 55 1
+1 1 1 1
+93 1 1 1
+34 1 34 1
+20 1 20 1
+83 1 1 1
+21 1 1 1
+81 1 81 1
+22 1 22 1
+Next >
+
+Totals
+
+e
+i

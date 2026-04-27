@@ -1,0 +1,46 @@
+Purchase Orders - In...
+
+i>
+
+@ 01/01/01 - LAKE CITY @
+
+=
+
+> Product Support > Equipment > Purchase Orders
+
+IntelliDealer
+
+by VitalEdge
+Sort by: @ PO Number © Type © Status
+Select Status: @ All () PO Request () Waiting for Authorization () Authorized () On Order
+Financial Management > O Canceled © Back Order () Completed ( Rejected
+
+Select PO Number: Select Vendor: -
+Customer Care A Select O°
+Select Type: All c Location: o1 o
+Product Support Select Description: Select Creare P
+. fe} Select fe}
+Management Central Select Modified By: “ Takeover By: “ Go >>
+Support > Purchase Orders Results to display: BURY
+PO Number Type Status Vendor Description Created By Location
+Quick Links > 260545 Miscellaneous Completed PRECISION ALIGNMENT eee REESE Jamie Royster LAKE CITY
+A BLUE DIAMOND 60" FORKS FOR DWAYNE 4
+ID InspectionPlus RM3043025 Equipment Completed ATTACHMENTS EVERETT Rylee McKenzie LAKE CITY
+NMO01219 Miscellaneous Completed NORTH FLORIDA GLASS woe KEANE Nolan Metzger LAKE CITY
+A ENTERTAINMENT
+NMO01218 Miscellaneous Completed TRANSPORT w07215 EXTERNAL HAUL Nolan Metzger LAKE CITY
+NM001217 Miscellaneous Completed Ba ERS OF W06988 OIL CONTAINER Nolan Metzger LAKE CITY
+NMO001216 Miscellaneous Completed MURRAY'S TIRE COMPANY W07138 TIRE REPAIR Nolan Metzger LAKE CITY
+A NEXTRAN TRUCK CENTER W07154 CYLINDER
+NMO01215 Miscellaneous Completed -Lc REPLACEMENT Nolan Metzger LAKE CITY
+NMO01210 Miscellaneous Completed NORTH FLORIDA GLASS W07144 GLASS REPAIR Nolan Metzger LAKE CITY
+A W07100 NFG GLASS
+NMO001205_ Miscellaneous Completed NORTH FLORIDA GLASS REPAIR INV Nolan Metzger LAKE CITY
+NMO01204 Miscellaneous Completed in TRUCK CENTER w97959 BED PAINT Nolan Metzger LAKE CITY
+(1 - 10 Of 300+) Next >
+
+Purchase Order Reports
+Modify default print parameters
+
+e
+i

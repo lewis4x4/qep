@@ -1,0 +1,68 @@
+Phase,IntelliDealer Screen,IntelliDealer Field,Field Description (abbr),Source,QEP Table,QEP Column,Parity Status,Migration / Gap Notes
+Phase-8_Financial-Operations,Accounts Payable Outstanding,Due Date,Choose accounts aging by due date.,Table,(multiple),timestamp fields,BUILT,
+Phase-8_Financial-Operations,Accounts Payable Outstanding,Select Vendor,Search for accounts payable outstanding by,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Accounts Payable Outstanding,Number,entering a vendor number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Accounts Receivable - Credit Limit Analysis,Select Receivable,Enter the receivable account you wish to,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Accounts Receivable - Credit Limit Analysis,Account,compare against.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Accounts Receivable - Credit Limit Analysis,Show Customers,"If selected, includes customers with zero with Zero Credit                   credit limit in the search results. Limit",Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Accounts Receivable - Credit Limit Analysis,Customer,The customer's name. Name,Table,crm_companies,name,BUILT,Company name field
+Phase-8_Financial-Operations,Accounts Receivable - Credit Limit Analysis,Total A/R,The customer's total accounts receivable for the account selected in the Select Receivable Account field.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Accounts Receivable - Credit Limit Analysis,Credit,The customer's credit limit. Limit,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Accounts Receivable - Credit Limit Analysis,Rating,the customer's credit.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Accounts Receivable - Credit Limit Analysis,Phone,The customer's phone number. Number,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Accounts Receivable - Credit Limit Analysis,Select Receivable Account,(inferred from workflow prose),Prose,ar_credit_blocks + company balance aggregate,,PARTIAL,Need dedicated ar_invoices + ar_aging_view
+Phase-8_Financial-Operations,Accounts Receivable - Outstanding A/R,Select,Search by the first digit of the invoice. First digits,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Accounts Receivable - Outstanding A/R,Invoice 1st,configured for your location are displayed. (See,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Accounts Receivable - Outstanding A/R,Digit,System Settings-Location.) Use the user-defined field to search for custom digits.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Accounts Receivable - Outstanding A/R,Location,"for outstanding A/R by the responsible location, which is the default location in the Customer's Profile.",Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Accounts Receivable - Outstanding A/R,Use the user-defined,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Billing Analysis,Select by,"Search for billing analysis by selecting a means to search by (e.g. technician, type or reason).",Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Billing Analysis,Subtotal,"Select the means to subtotal the billing analysis by                 search results by (e.g. technician, type, or reason).",Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Billing Analysis,Include,"If selected, includes specific billing types within the",Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Billing Analysis,Type,"billing analysis search results (e.g. all, internal, warranty, or customer).",Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Billing Analysis,Totals,search.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Billing Analysis,Select,Search for billing analysis by entering a technician. Technician,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Billing Analysis,Work,The number of work orders the technician has worked,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Billing Analysis,Orders,on.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Billing Analysis,Parts,The total amount (in dollars) of parts sold on the work orders the selected technician worked on.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Billing Analysis,Labor,The total amount of labor hours charged to the work orders the selected technician worked on.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Billing Analysis,Other,Any other miscellaneous charges associated with the work orders worked on by the selected technician.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Billing Analysis,Total,The total amount of charges for work orders worked on by the selected technician.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,Customer,Sort the search results by customer,Table,crm_companies,name,BUILT,Company name field
+Phase-8_Financial-Operations,Customer Pricing,Number,number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,Location,Sort the search results by location.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,Vendor,Sort the search results by vendor number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,Source,Sort the search results by source code.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,Class,Sort the search results by class code.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,Type,Sort the search results by type code.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,Select,Search for customer pricing by entering a Customer/Group customer/group.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,Select Part,Search for customer pricing by entering a,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,Select Vendor,Search for customer pricing by entering a,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,Select Source,Search for customer pricing by entering a source code.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,Select Class,Search for customer pricing by entering a class code.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,Select Type,Search for customer pricing by entering a type code.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,Select Location,Search for customer pricing by entering a location.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,Part Number,The number of the part that is affected by the customer pricing.,Table,vendor_part_catalog,part_number,BUILT,
+Phase-8_Financial-Operations,Customer Pricing,Comment,Any comments associated with the customer pricing.,Table,crm_activities or custom_fields,body,BUILT,
+Phase-8_Financial-Operations,Customer Pricing,Customer/Group,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,If the Your Savings,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,This is a free text,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,Utilize Parts Customer Discount Pricing,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Customer Pricing,Your Savings,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Invoice History Listing,Invoice,Search for history by entering an invoice number. Number If the invoice is outstanding the invoice number field is highlighted.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Invoice History Listing,PO,Search for history by entering a purchase order,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Invoice History Listing,Number,number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Invoice History Listing,Show,Search for history by selecting a date type: Date Invoice Date—date the invoice was printed Billing Date—date keyed in during the billing run that pro...,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Invoice History Listing,Date,Narrow the history search by selecting a specific,Table,(multiple),timestamp fields,BUILT,
+Phase-8_Financial-Operations,Invoice History Listing,Range,date range. From/To,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Invoice History Listing,Type,from the drop down list.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Invoice History Listing,Full Text,Search for an invoice by entering any string of data,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Invoice History Listing,Search,"that might be stored in the corresponding INVHD file. For example, you may enter the customer number, name, stock number, a specific PO",Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Invoice History Listing,Location,The location where the invoice was processed.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Invoice History Listing,Amount,invoice.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Invoice History Listing,The date range,(inferred from workflow prose),Prose,(multiple),timestamp fields,BUILT,
+Phase-8_Financial-Operations,Real-time Billing Queue,Reference,The unique number of the billing to search for. Number,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Real-time Billing Queue,Location,The location in which to search.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Real-time Billing Queue,Type,The type of billings to search for.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Real-time Billing Queue,Status,The status of billing.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-8_Financial-Operations,Real-time Billing Queue,From,Search for billings from this submission date.,Table,(unmapped),,REVIEW,Manual review needed

@@ -1,0 +1,1973 @@
+phase: Phase-9_Advanced-Intelligence
+generated_at: 2026-04-25T00:00:00Z
+source_artifacts:
+  pdfs:
+    - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+  png_screenshots: []
+  ocr_text_paths:
+    - docs/IntelliDealer/_OCR/Phase-9_Advanced-Intelligence/Customer Portal.txt
+
+# IntelliDealer Phase-9 (DataMiner / OEM Portal / advanced reporting) is, in
+# this surface set, primarily expressed through the Customer Portal screen —
+# a 360-degree intelligence dashboard that aggregates every operationally
+# relevant signal about a customer (A/R aging, credit, equipment fleet, all
+# open documents in every department, invoice/work order/rental history,
+# scheduled calls, marketing exposure, traffic movement). It is the closest
+# IntelliDealer analog to the "moonshot" QEP Owner/Operator Cockpit. Every
+# tile in the portal is a *view* over an underlying entity — we capture each
+# tile as a field-id even when the underlying join target lives in another
+# phase, because the gap is whether QEP can render the equivalent tile in
+# the Owner Cockpit / Account 360 view, not whether the source row exists.
+
+fields:
+  # ─── Identity / contact header (CMASTR aggregate) ─────────────────────────
+  - id: customer.status
+    intellidealer_label: "Status"
+    intellidealer_screen: "Customer Portal"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+      - docs/IntelliDealer/_OCR/Phase-9_Advanced-Intelligence/Customer Portal.txt
+    intellidealer_field_type: "enum"
+    intellidealer_purpose: |
+      The customer's master status (Active / Inactive / Hold / Prospect /
+      Closed). Drives whether a rep can quote, invoice, or extend credit and
+      whether the account shows up in the Owner Cockpit at all. Sourced from
+      CMASTR header.
+    qep_status: "BUILT"
+    qep_table: "qrm_companies"
+    qep_column: "status"
+    qep_evidence:
+      - "_full_schema.json qrm_companies.status (string | null)"
+    qep_gap_notes: |
+      QEP stores status as free text — IntelliDealer treats it as a
+      typed enum that gates AR / quoting workflows. Acceptable as PARTIAL
+      for the portal tile but should harden to enum at the policy layer.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      -- already present; consider promoting to enum in a follow-up:
+      -- CREATE TYPE customer_status AS ENUM ('active','inactive','hold','prospect','closed');
+      -- ALTER TABLE qrm_companies ALTER COLUMN status TYPE customer_status USING status::customer_status;
+    ui_surface_hint: "Owner Cockpit > Account 360 header chip; QRM Companies list status column"
+    dependencies: []
+
+  - id: customer.name
+    intellidealer_label: "Name"
+    intellidealer_screen: "Customer Portal"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      The customer's display name shown in the portal header. Used as the
+      anchor for every drill-through link in the portal.
+    qep_status: "BUILT"
+    qep_table: "qrm_companies"
+    qep_column: "name"
+    qep_evidence:
+      - "_full_schema.json qrm_companies.name (string)"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Owner Cockpit > Account 360 header"
+    dependencies: []
+
+  - id: customer.address
+    intellidealer_label: "Address"
+    intellidealer_screen: "Customer Portal"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "address"
+    intellidealer_purpose: |
+      Customer's primary mailing/physical address line. Drives delivery
+      defaults on traffic tickets and tax jurisdiction lookup.
+    qep_status: "BUILT"
+    qep_table: "qrm_companies"
+    qep_column: "address_line_1"
+    qep_evidence:
+      - "_full_schema.json qrm_companies.address_line_1 + address_line_2 + city + state + postal_code"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 header subtitle; default delivery address on traffic ticket creation"
+    dependencies: []
+
+  - id: customer.postal_code
+    intellidealer_label: "Zip/Postal Code"
+    intellidealer_screen: "Customer Portal"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Postal/ZIP for the customer's primary address. Required for sales-tax
+      jurisdiction lookup and route optimization.
+    qep_status: "BUILT"
+    qep_table: "qrm_companies"
+    qep_column: "postal_code"
+    qep_evidence:
+      - "_full_schema.json qrm_companies.postal_code"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "regulatory"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 header"
+    dependencies: []
+
+  - id: customer.primary_contact_name
+    intellidealer_label: "Contact"
+    intellidealer_screen: "Customer Portal"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Name of the customer's primary contact. Surfaced in the portal header
+      so a rep can immediately see who to call. Underpinned by CMASTR's
+      primary contact pointer plus the contacts master.
+    qep_status: "PARTIAL"
+    qep_table: "qrm_contact_companies"
+    qep_column: "is_primary"
+    qep_evidence:
+      - "_full_schema.json qrm_contact_companies.is_primary"
+    qep_gap_notes: |
+      QEP can compute the primary contact via qrm_contact_companies but
+      qrm_companies has no denormalized primary_contact_id pointer — the
+      portal tile would need a join + LIMIT 1. Acceptable but slow on
+      a 1k-account dashboard; recommend a materialized view or a
+      primary_contact_id column on qrm_companies.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN primary_contact_id UUID
+        REFERENCES qrm_contacts(id);
+      COMMENT ON COLUMN qrm_companies.primary_contact_id IS
+        'Denormalized pointer to the primary contact on this company; mirrors qrm_contact_companies.is_primary=true. Used in Account 360 header so we never join on render.';
+    ui_surface_hint: "Account 360 header; Owner Cockpit list view"
+    dependencies: []
+
+  - id: customer.phone_number
+    intellidealer_label: "Phone Number"
+    intellidealer_screen: "Customer Portal"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "phone"
+    intellidealer_purpose: |
+      Customer's main phone number — often a switchboard. Used by the
+      header click-to-call action.
+    qep_status: "BUILT"
+    qep_table: "qrm_companies"
+    qep_column: "phone"
+    qep_evidence:
+      - "_full_schema.json qrm_companies.phone"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 header click-to-call"
+    dependencies: []
+
+  - id: customer.cell_number
+    intellidealer_label: "Cell Number"
+    intellidealer_screen: "Customer Portal"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "phone"
+    intellidealer_purpose: |
+      Cell phone number for the primary contact. Clicking it opens
+      VitalEngage Text — a one-tap SMS workflow used heavily by reps.
+      Distinct from main phone because field reps text customers directly.
+    qep_status: "PARTIAL"
+    qep_table: "qrm_contacts"
+    qep_column: "phone"
+    qep_evidence:
+      - "qrm_contacts likely has a single phone field (per general CRM convention)"
+    qep_gap_notes: |
+      IntelliDealer separates main phone (CMASTR) and cell (contact-level)
+      so the portal can render two distinct click-to-call actions. QEP
+      collapses to one. For the moonshot Owner Cockpit, separate cell from
+      direct line and add a deep-link to Twilio/SMS provider.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE qrm_contacts ADD COLUMN mobile_phone TEXT;
+      ALTER TABLE qrm_contacts ADD COLUMN direct_phone TEXT;
+      COMMENT ON COLUMN qrm_contacts.mobile_phone IS 'Cell phone for click-to-text in Account 360 header';
+    ui_surface_hint: "Account 360 contact card; click-to-text shortcut"
+    dependencies: [customer.primary_contact_name]
+
+  - id: customer.email_address
+    intellidealer_label: "E-mail Address"
+    intellidealer_screen: "Customer Portal"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "email"
+    intellidealer_purpose: |
+      Primary email — used for portal invite, statement delivery, and
+      automated quote follow-up.
+    qep_status: "BUILT"
+    qep_table: "qrm_contacts"
+    qep_column: "email"
+    qep_evidence:
+      - "qrm_contacts has standard email field per CRM convention"
+    qep_gap_notes: |
+      Sits on contact, not company. Account 360 should resolve the company
+      primary contact's email for the header tile.
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 header"
+    dependencies: [customer.primary_contact_name]
+
+  - id: customer.salesperson
+    intellidealer_label: "Salesperson"
+    intellidealer_screen: "Customer Portal"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+      - docs/IntelliDealer/_OCR/Phase-9_Advanced-Intelligence/Customer Portal.txt
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      The salesperson code/name associated with this customer. This is the
+      account owner who gets routed every new deal, every scheduled call,
+      and every commission credit. CRITICAL for the entire pipeline view.
+    qep_status: "BUILT"
+    qep_table: "qrm_companies"
+    qep_column: "assigned_rep_id"
+    qep_evidence:
+      - "_full_schema.json qrm_companies.assigned_rep_id (string | null)"
+    qep_gap_notes: |
+      Built as a FK to profiles.id but IntelliDealer's salesperson code
+      (e.g. RM3) is shorter and is what reps actually see/say. Add a
+      salesperson_code to profiles so the Account 360 chip can render the
+      compact code instead of the full name.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE profiles ADD COLUMN salesperson_code TEXT;
+      CREATE UNIQUE INDEX profiles_salesperson_code_uniq ON profiles(active_workspace_id, salesperson_code) WHERE salesperson_code IS NOT NULL;
+      COMMENT ON COLUMN profiles.salesperson_code IS 'Short alpha code (e.g. RM3) used historically in IntelliDealer for sales attribution; rendered as a chip on Account 360 and on traffic tickets.';
+    ui_surface_hint: "Account 360 owner chip; pipeline filter"
+    dependencies: []
+
+  - id: customer.comment
+    intellidealer_label: "Comment"
+    intellidealer_screen: "Customer Portal"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      One-line reminder/banner displayed at the top of the customer profile.
+      Used for "PAY BY CASH ONLY", "Owner is Mike — only deal with him",
+      etc. Sticky, high-visibility instruction to anyone touching the account.
+    qep_status: "PARTIAL"
+    qep_table: "qrm_companies"
+    qep_column: "notes"
+    qep_evidence:
+      - "_full_schema.json qrm_companies.notes (string | null)"
+    qep_gap_notes: |
+      QEP has a free-form notes column but the portal "Comment" is a
+      single-line, banner-style alert that should render as a yellow callout
+      across every account view. Suggest a dedicated header_alert column or
+      a flag on notes for "show as banner".
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE qrm_companies ADD COLUMN header_alert TEXT;
+      COMMENT ON COLUMN qrm_companies.header_alert IS
+        'One-line banner displayed at top of every Account 360 view; equivalent to IntelliDealer Customer Portal Comment field. Use sparingly (PAY CASH ONLY, OWNER ONLY, COD).';
+    ui_surface_hint: "Account 360 yellow banner; visible on every related screen for the account"
+    dependencies: []
+
+  # ─── Financial header (right column of portal) ───────────────────────────
+  - id: customer.total_ar
+    intellidealer_label: "Total A/R"
+    intellidealer_screen: "Customer Portal"
+    intellidealer_data_source: "CMASTR (computed from AR open items)"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Customer's total outstanding accounts receivable, click-through to the
+      Outstanding Details screen for line-by-line aging. The single most
+      important financial number on the screen — drives credit holds and
+      collection-call routing.
+    qep_status: "MISSING"
+    qep_table: "qrm_companies"
+    qep_column: "total_ar_cents"
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP has no AR sub-ledger and no rolled-up AR balance on the customer.
+      This is one of the highest-impact gaps for the Owner Cockpit moonshot —
+      reps cannot answer "should I take this order?" without it. Even a
+      synced/cached value from IntelliDealer would unlock the cockpit.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      -- denormalized rollup, refreshed nightly + on AR mutations
+      ALTER TABLE qrm_companies
+        ADD COLUMN total_ar_cents BIGINT,
+        ADD COLUMN total_ar_computed_at TIMESTAMPTZ;
+      COMMENT ON COLUMN qrm_companies.total_ar_cents IS
+        'Cached total outstanding AR in cents. Source of truth is invoices/payments tables (or IntelliDealer sync). Refreshed nightly + on payment posting.';
+      -- Also need an aging materialized view:
+      -- mv_customer_ar_aging(workspace_id, company_id, current, d30, d60, d90, d120plus, total)
+    ui_surface_hint: "Account 360 financial card; pipeline credit chip; collection workbench"
+    dependencies: []
+
+  - id: customer.payment_terms
+    intellidealer_label: "Terms"
+    intellidealer_screen: "Customer Portal"
+    intellidealer_data_source: "CMASTR (TERMS)"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Payment terms code (NET30, COD, 2/10 NET30, etc.) configured on the
+      Terms screen. Determines invoice due date and which collection
+      workflow fires.
+    qep_status: "MISSING"
+    qep_table: "qrm_companies"
+    qep_column: "terms_code"
+    qep_evidence: []
+    qep_gap_notes: |
+      No QEP column captures payment terms today. Without it, Owner Cockpit
+      cannot show "this customer is COD-only — block credit sale" guard
+      rails. Required for AR moonshot.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE TABLE payment_terms (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        code TEXT NOT NULL,
+        description TEXT,
+        net_days INTEGER,
+        discount_days INTEGER,
+        discount_pct NUMERIC(5,2),
+        is_cod BOOLEAN DEFAULT false,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        updated_at TIMESTAMPTZ DEFAULT now(),
+        UNIQUE(workspace_id, code)
+      );
+      ALTER TABLE qrm_companies ADD COLUMN terms_code TEXT;
+      COMMENT ON COLUMN qrm_companies.terms_code IS
+        'FK-by-code to payment_terms.code; mirrors IntelliDealer CMASTR Terms field.';
+    ui_surface_hint: "Account 360 financial card; quote / invoice header"
+    dependencies: []
+
+  - id: customer.ar_agency_default
+    intellidealer_label: "A/R Agency Default"
+    intellidealer_screen: "Customer Portal"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Default collections agency the customer is routed to when AR ages out.
+      Click-through opens the A/R Agency screen for the agency profile.
+    qep_status: "MISSING"
+    qep_table: "qrm_companies"
+    qep_column: "ar_agency_id"
+    qep_evidence: []
+    qep_gap_notes: |
+      No collections-agency entity in QEP today. Defer until AR sub-ledger
+      lands; without invoices, the agency assignment has nothing to act on.
+    severity: "could"
+    category: "financial"
+    migration_hint: |
+      -- DECISION REQUIRED before DDL: see docs/intellidealer-gap-audit/_migration_order.md.
+      -- Resolve collection-agency path first: merge/link with `ar_agencies`
+      -- versus keeping a separate `collection_agencies` table.
+      CREATE TABLE collection_agencies (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        name TEXT NOT NULL,
+        contact_email TEXT,
+        contact_phone TEXT,
+        commission_pct NUMERIC(5,2),
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        updated_at TIMESTAMPTZ DEFAULT now()
+      );
+      ALTER TABLE qrm_companies
+        ADD COLUMN ar_agency_id UUID REFERENCES collection_agencies(id);
+    ui_surface_hint: "Account 360 financial card link"
+    dependencies: [customer.total_ar]
+
+  - id: customer.credit_limit
+    intellidealer_label: "Credit Limit"
+    intellidealer_screen: "Customer Portal"
+    intellidealer_data_source: "CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Manually-set or auto-computed credit ceiling. Compared against open AR
+      + open quotes/orders to determine if a new sale can be approved.
+      Cornerstone of the credit-hold workflow.
+    qep_status: "MISSING"
+    qep_table: "qrm_companies"
+    qep_column: "credit_limit_cents"
+    qep_evidence: []
+    qep_gap_notes: |
+      Required for moonshot Owner Cockpit "should I take this order?" guard
+      rail. Cannot compute Available Credit without it.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      ALTER TABLE qrm_companies
+        ADD COLUMN credit_limit_cents BIGINT,
+        ADD COLUMN credit_limit_set_by UUID REFERENCES profiles(id),
+        ADD COLUMN credit_limit_set_at TIMESTAMPTZ,
+        ADD COLUMN credit_limit_review_at DATE;
+      COMMENT ON COLUMN qrm_companies.credit_limit_cents IS
+        'Approved credit ceiling in cents. NULL = no credit (cash only). 0 = explicitly $0 limit.';
+    ui_surface_hint: "Account 360 financial card; quote-line price-and-credit gate"
+    dependencies: []
+
+  - id: customer.available_credit
+    intellidealer_label: "Available Credit"
+    intellidealer_screen: "Customer Portal"
+    intellidealer_data_source: "Computed (Feature 6178 + special credit checks)"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Real-time computed available credit = credit_limit minus open AR minus
+      open commitments (quotes, orders, rentals). Gated behind Feature 6178
+      and the special-credit-check switch in IntelliDealer system settings.
+      Displayed only when the dealership has explicitly opted in.
+    qep_status: "MISSING"
+    qep_table: "qrm_companies"
+    qep_column: "available_credit_cents (computed view)"
+    qep_evidence: []
+    qep_gap_notes: |
+      Compound gap — depends on credit_limit, total_ar, and open
+      commitments (quotes/orders/rentals) all being captured. Render as a
+      computed view, not a stored column, so it cannot drift.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE OR REPLACE VIEW v_customer_available_credit AS
+      SELECT
+        c.workspace_id, c.id AS company_id,
+        c.credit_limit_cents,
+        c.total_ar_cents,
+        COALESCE(commit.open_commit_cents, 0) AS open_commit_cents,
+        c.credit_limit_cents - COALESCE(c.total_ar_cents,0) - COALESCE(commit.open_commit_cents,0) AS available_credit_cents
+      FROM qrm_companies c
+      LEFT JOIN LATERAL (
+        SELECT SUM(amount_cents) AS open_commit_cents
+        FROM /* qrm_deals + rental_contracts open commitments */
+        WHERE company_id = c.id
+      ) commit ON true;
+    ui_surface_hint: "Account 360 financial card; deal page guard rail"
+    dependencies: [customer.credit_limit, customer.total_ar]
+
+  # ─── Tile views (each represents a portal panel) ─────────────────────────
+  - id: customer_portal_view.alerts
+    intellidealer_label: "Alerts (Parts / Service / Equipment / Rental)"
+    intellidealer_screen: "Customer Portal > Alerts"
+    intellidealer_data_source: "CMASTR + business-area alerts"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Per-business-area alerts (Parts, Service, Equipment, Rental) configured
+      on the customer. Surfaces things like "always require deposit",
+      "on warranty hold", "fleet manager travels Mondays".
+      Critical for cross-department awareness.
+    qep_status: "BUILT"
+    qep_table: "analytics_alerts"
+    qep_column: "alert_type"
+    qep_evidence:
+      - "Phase-9 schema slice analytics_alerts has alert_type, role_target, branch_id, status, severity, suggested_action"
+    qep_gap_notes: |
+      QEP analytics_alerts is generic and supports per-customer/per-role
+      alerts via entity_type/entity_id. The portal needs a deterministic
+      tab pivot by business area — add an explicit "department" dimension
+      or use role_target='parts' | 'service' | 'equipment' | 'rental'.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      -- already present via analytics_alerts; ensure helper view:
+      CREATE OR REPLACE VIEW v_customer_alerts_by_area AS
+      SELECT
+        a.workspace_id,
+        a.entity_id AS company_id,
+        CASE a.role_target
+          WHEN 'parts' THEN 'Parts'
+          WHEN 'service' THEN 'Service'
+          WHEN 'equipment' THEN 'Equipment'
+          WHEN 'rental' THEN 'Rental'
+          ELSE 'General'
+        END AS area,
+        a.title, a.description, a.severity, a.status, a.suggested_action
+      FROM analytics_alerts a
+      WHERE a.entity_type = 'company';
+    ui_surface_hint: "Account 360 alerts panel with Parts/Service/Equipment/Rental tabs"
+    dependencies: []
+
+  - id: customer_portal_view.ar_aging
+    intellidealer_label: "A/R Aging"
+    intellidealer_screen: "Customer Portal > A/R Aging"
+    intellidealer_data_source: "AR open items aggregated by bucket"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Standard 30/60/90/120+ aging buckets per customer with click-through to
+      line-level outstanding detail. Backbone of cash collection.
+    qep_status: "MISSING"
+    qep_table: "(new) v_customer_ar_aging"
+    qep_column: ""
+    qep_evidence: []
+    qep_gap_notes: |
+      No AR sub-ledger and no aging materialized view in QEP today.
+      Required for Owner Cockpit collections cell.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      -- Pre-req: AR invoice + payment tables. Then:
+      CREATE MATERIALIZED VIEW mv_customer_ar_aging AS
+      SELECT
+        i.workspace_id,
+        i.company_id,
+        SUM(CASE WHEN due_date >= CURRENT_DATE THEN balance_cents ELSE 0 END) AS current_cents,
+        SUM(CASE WHEN due_date BETWEEN CURRENT_DATE - INTERVAL '30 days' AND CURRENT_DATE - INTERVAL '1 day' THEN balance_cents ELSE 0 END) AS d30_cents,
+        SUM(CASE WHEN due_date BETWEEN CURRENT_DATE - INTERVAL '60 days' AND CURRENT_DATE - INTERVAL '31 days' THEN balance_cents ELSE 0 END) AS d60_cents,
+        SUM(CASE WHEN due_date BETWEEN CURRENT_DATE - INTERVAL '90 days' AND CURRENT_DATE - INTERVAL '61 days' THEN balance_cents ELSE 0 END) AS d90_cents,
+        SUM(CASE WHEN due_date < CURRENT_DATE - INTERVAL '90 days' THEN balance_cents ELSE 0 END) AS d120plus_cents
+      FROM /* invoices */ i
+      WHERE i.balance_cents > 0
+      GROUP BY i.workspace_id, i.company_id;
+    ui_surface_hint: "Account 360 AR aging widget; collections workbench"
+    dependencies: [customer.total_ar]
+
+  - id: customer_portal_view.contacts
+    intellidealer_label: "Contacts"
+    intellidealer_screen: "Customer Portal > Contacts"
+    intellidealer_data_source: "CMASTR contacts"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Customer's contact list with name + birthday tile + drill-through to
+      contact profile, plus an inline Create link.
+    qep_status: "BUILT"
+    qep_table: "qrm_contacts"
+    qep_column: "(via qrm_contact_companies)"
+    qep_evidence:
+      - "qrm_contacts + qrm_contact_companies"
+    qep_gap_notes: |
+      Birthday is not in the captured slice — confirm contacts has a
+      birth_date field; otherwise add it for relationship-marketing tile.
+    severity: "could"
+    category: "operational"
+    migration_hint: |
+      -- if missing:
+      ALTER TABLE qrm_contacts ADD COLUMN birth_date DATE;
+      COMMENT ON COLUMN qrm_contacts.birth_date IS 'Used by Account 360 Contacts tile birthday badge.';
+    ui_surface_hint: "Account 360 contacts list with birthday badge"
+    dependencies: []
+
+  - id: customer_portal_view.custom_screens
+    intellidealer_label: "Custom Screens"
+    intellidealer_screen: "Customer Portal > Custom Screens"
+    intellidealer_data_source: "User-defined dealer customizations"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Per-dealership user-defined custom screens attached to a customer.
+      Reflects per-dealer fields (loyalty tier, route number, etc.)
+    qep_status: "PARTIAL"
+    qep_table: "qrm_companies"
+    qep_column: "metadata"
+    qep_evidence:
+      - "qrm_companies.metadata Json"
+    qep_gap_notes: |
+      QEP supports arbitrary custom data via metadata jsonb but lacks a
+      typed custom-fields registry that lets a dealer admin define which
+      fields render where. Defer until the moonshot custom-field studio is
+      built; for now, render dealer-specific fields out of metadata.
+    severity: "could"
+    category: "nice_to_have"
+    migration_hint: |
+      -- future: custom_field_definitions + custom_field_values tables
+    ui_surface_hint: "Account 360 custom-fields tile"
+    dependencies: []
+
+  - id: customer_portal_view.customer_equipment
+    intellidealer_label: "Customer Equipment"
+    intellidealer_screen: "Customer Portal > Customer Equipment"
+    intellidealer_data_source: "Equipment master joined to customer ownership"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Customer's owned-equipment fleet showing make/model/description with
+      drill-through to the equipment profile. Click-through More to view
+      full owned fleet. Powers cross-sell ("they own a Yanmar — push the
+      filter kit"), service planning, and trade-in opportunity scoring.
+    qep_status: "BUILT"
+    qep_table: "portal_trade_in_opportunities"
+    qep_column: "make / model / customer_name"
+    qep_evidence:
+      - "Phase-9 schema slice portal_trade_in_opportunities view + machine_profiles"
+    qep_gap_notes: |
+      QEP has fleet-level trade-in opportunities and machine profiles.
+      The portal-style "owned equipment list per customer" is partially
+      represented via fleet/equipment tables (Phase-2 surface) and the
+      view portal_trade_in_opportunities. Confirm deal-aware ownership
+      pointer (current_owner_company_id) on equipment.
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 fleet panel"
+    dependencies: []
+
+  - id: customer_portal_view.equipment_invoice_history
+    intellidealer_label: "Equipment Invoice History"
+    intellidealer_screen: "Customer Portal > Equipment Invoice History"
+    intellidealer_data_source: "Equipment invoices last 5"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Last 5 equipment invoices with reference number, make/model code, and
+      total. Click-through to invoice detail; More to view the full set.
+    qep_status: "MISSING"
+    qep_table: "(new) equipment_invoices"
+    qep_column: ""
+    qep_evidence: []
+    qep_gap_notes: |
+      No equipment_invoice table in QEP today (deals exist but the
+      financial closure leg is missing). Required for the Owner Cockpit
+      "lifetime value" tile.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      -- DECISION REQUIRED before DDL: see docs/intellidealer-gap-audit/_migration_order.md.
+      -- Choose equipment-invoice path first: separate `equipment_invoices`
+      -- table versus a view over `customer_invoices` filtered to equipment lines.
+      CREATE TABLE equipment_invoices (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        company_id UUID NOT NULL REFERENCES qrm_companies(id),
+        deal_id UUID REFERENCES qrm_deals(id),
+        equipment_id UUID,
+        reference_number TEXT NOT NULL,
+        make TEXT, model TEXT,
+        invoice_total_cents BIGINT NOT NULL,
+        invoice_date DATE NOT NULL,
+        status TEXT,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        updated_at TIMESTAMPTZ DEFAULT now()
+      );
+      CREATE INDEX equipment_invoices_company_idx ON equipment_invoices(workspace_id, company_id, invoice_date DESC);
+    ui_surface_hint: "Account 360 invoice tab; lifetime-value tile"
+    dependencies: []
+
+  - id: customer_portal_view.fiscal_ytd_profitability
+    intellidealer_label: "Fiscal YTD Profitability"
+    intellidealer_screen: "Customer Portal > Fiscal YTD Profitability"
+    intellidealer_data_source: "Computed from invoices YTD"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Year-to-date profit (revenue minus cost) on invoices booked in the
+      current fiscal year. Drives "is this customer worth keeping?"
+      decisions and territory ranking.
+    qep_status: "PARTIAL"
+    qep_table: "margin_analytics_view"
+    qep_column: "avg_margin_pct"
+    qep_evidence:
+      - "Phase-9 schema slice margin_analytics_view, mv_exec_margin_daily, mv_exec_margin_waterfall"
+    qep_gap_notes: |
+      QEP has org-wide margin views but no per-customer fiscal-YTD profit
+      rollup. Add a v_customer_fiscal_ytd materialized view rolled up by
+      customer_id and fiscal year configured per workspace.
+    severity: "should"
+    category: "reporting"
+    migration_hint: |
+      CREATE MATERIALIZED VIEW mv_customer_fiscal_ytd AS
+      SELECT workspace_id, company_id, fiscal_year,
+             SUM(revenue_cents) AS revenue_cents,
+             SUM(cost_cents) AS cost_cents,
+             SUM(revenue_cents - cost_cents) AS profit_cents
+      FROM /* unioned invoice lines */
+      GROUP BY workspace_id, company_id, fiscal_year;
+    ui_surface_hint: "Account 360 financial KPI strip"
+    dependencies: [customer.total_ar, customer_portal_view.equipment_invoice_history]
+
+  - id: customer_portal_view.fiscal_ytd_purchases
+    intellidealer_label: "Fiscal YTD Purchases"
+    intellidealer_screen: "Customer Portal > Fiscal YTD Purchases"
+    intellidealer_data_source: "Computed from invoices YTD"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Total dollar volume of purchases by this customer in the current
+      fiscal year. Used as the headline "how big is this account" number.
+    qep_status: "MISSING"
+    qep_table: "(new) mv_customer_fiscal_ytd"
+    qep_column: "revenue_cents"
+    qep_evidence: []
+    qep_gap_notes: |
+      Same dependency as Fiscal YTD Profitability — needs invoice tables.
+    severity: "should"
+    category: "reporting"
+    migration_hint: |
+      -- delivered by mv_customer_fiscal_ytd above
+    ui_surface_hint: "Account 360 KPI strip"
+    dependencies: [customer_portal_view.fiscal_ytd_profitability]
+
+  - id: customer_portal_view.general_invoice_history
+    intellidealer_label: "General Invoice History"
+    intellidealer_screen: "Customer Portal > General Invoice History"
+    intellidealer_data_source: "General invoices last 5"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Generic / non-equipment invoice history (training, fees, sublet, etc.)
+      Last 5 with create date and total. Important for catch-all billing.
+    qep_status: "MISSING"
+    qep_table: "(new) general_invoices"
+    qep_column: ""
+    qep_evidence: []
+    qep_gap_notes: "No invoice tables today; defer with the AR sub-ledger build."
+    severity: "should"
+    category: "financial"
+    migration_hint: |
+      -- general_invoices table parallel to equipment_invoices, parts_invoices, etc.
+    ui_surface_hint: "Account 360 invoice tab"
+    dependencies: [customer_portal_view.equipment_invoice_history]
+
+  - id: customer_portal_view.job_jacket_history
+    intellidealer_label: "Job Jacket History"
+    intellidealer_screen: "Customer Portal > Job Jacket History"
+    intellidealer_data_source: "Job jackets per customer"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Customer's historical "job jacket" records — IntelliDealer's term for
+      a multi-document service work bundle. Shows machine description and
+      job description per jacket.
+    qep_status: "PARTIAL"
+    qep_table: "service_jobs (Phase-4)"
+    qep_column: ""
+    qep_evidence:
+      - "QEP service jobs cover this conceptually but the bundling-by-jacket pattern is dealer-specific"
+    qep_gap_notes: |
+      Service jobs in QEP are individual work orders. IntelliDealer's
+      job jacket aggregates multiple WOs under one customer-supplied issue.
+      Consider adding a parent_job_jacket_id on service_jobs to mirror this.
+    severity: "could"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE service_jobs ADD COLUMN job_jacket_id UUID;
+      CREATE TABLE job_jackets (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        company_id UUID NOT NULL REFERENCES qrm_companies(id),
+        machine_description TEXT,
+        problem_description TEXT,
+        opened_at TIMESTAMPTZ DEFAULT now(),
+        closed_at TIMESTAMPTZ
+      );
+    ui_surface_hint: "Account 360 service tab grouped by jacket"
+    dependencies: []
+
+  - id: customer_portal_view.last_fiscal_ytd_purchases
+    intellidealer_label: "Last Fiscal YTD Purchases"
+    intellidealer_screen: "Customer Portal > Last Fiscal YTD Purchases"
+    intellidealer_data_source: "Prior fiscal year invoices rollup"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Prior-fiscal-year-to-same-date purchase total. Used to YoY-compare
+      a customer at-a-glance.
+    qep_status: "MISSING"
+    qep_table: "(new) mv_customer_fiscal_ytd"
+    qep_column: "(prior year row)"
+    qep_evidence: []
+    qep_gap_notes: "Same dependency as Fiscal YTD Purchases."
+    severity: "could"
+    category: "reporting"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 KPI strip with YoY delta"
+    dependencies: [customer_portal_view.fiscal_ytd_purchases]
+
+  - id: customer_portal_view.lytd_fiscal_profitability
+    intellidealer_label: "LYTD Fiscal Profitability"
+    intellidealer_screen: "Customer Portal > LYTD Fiscal Profitability"
+    intellidealer_data_source: "Prior fiscal year profitability rollup"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Prior-fiscal-year profit for YoY profitability comparison.
+    qep_status: "MISSING"
+    qep_table: "(new) mv_customer_fiscal_ytd"
+    qep_column: "(prior year profit)"
+    qep_evidence: []
+    qep_gap_notes: "Same dependency."
+    severity: "could"
+    category: "reporting"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 KPI strip"
+    dependencies: [customer_portal_view.fiscal_ytd_profitability]
+
+  - id: customer_portal_view.memos
+    intellidealer_label: "Memos"
+    intellidealer_screen: "Customer Portal > Memos"
+    intellidealer_data_source: "CMASTR memos"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "multiline"
+    intellidealer_purpose: |
+      Free-form reference text for terms & conditions, hours, special
+      handling rules. NOT actionable — purely reference, with click-More to
+      expand. Distinct from the single-line Comment banner.
+    qep_status: "PARTIAL"
+    qep_table: "qrm_companies"
+    qep_column: "notes"
+    qep_evidence:
+      - "_full_schema.json qrm_companies.notes (string | null)"
+    qep_gap_notes: |
+      QEP has a single notes field. For parity with IntelliDealer memo
+      history, reuse Phase-1 `qrm_company_memos` as the canonical memo
+      store for Account 360 instead of introducing a duplicate table.
+    severity: "could"
+    category: "operational"
+    migration_hint: |
+      -- Reuse Phase-1 `qrm_company_memos` for memo history in Account 360.
+      -- No separate `customer_memos` table is required.
+    ui_surface_hint: "Account 360 memos panel"
+    dependencies: []
+
+  - id: customer_portal_view.multimedia
+    intellidealer_label: "Multimedia"
+    intellidealer_screen: "Customer Portal > Multimedia"
+    intellidealer_data_source: "Customer multimedia attachments"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Customer-level multimedia files (logos, site photos, signed agreements
+      scanned, etc.). Multimedia tab gates which file is the "Portal"
+      classification — the image rendered atop the Customer Portal screen.
+    qep_status: "PARTIAL"
+    qep_table: "(needs) customer_attachments"
+    qep_column: ""
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP has document tables for deals/quotes/work orders but a customer
+      attachments table is not visible in this slice. Add one to host
+      logo + signed agreements + site photos.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      CREATE TABLE customer_attachments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        company_id UUID NOT NULL REFERENCES qrm_companies(id),
+        classification TEXT, -- 'portal','logo','site_photo','signed_agreement','other'
+        file_url TEXT NOT NULL,
+        file_name TEXT,
+        mime_type TEXT,
+        uploaded_by UUID REFERENCES profiles(id),
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+    ui_surface_hint: "Account 360 attachments panel; portal hero image"
+    dependencies: []
+
+  - id: customer_portal_view.open_general_invoices
+    intellidealer_label: "Open General"
+    intellidealer_screen: "Customer Portal > Open General"
+    intellidealer_data_source: "Open general invoices last 5"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Customer's last 5 open general invoices with branch location.
+      List/Create links lets the rep open all or start a new one inline.
+    qep_status: "MISSING"
+    qep_table: "(new) general_invoices"
+    qep_column: ""
+    qep_evidence: []
+    qep_gap_notes: "Same as general_invoice_history."
+    severity: "should"
+    category: "financial"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 open-docs panel"
+    dependencies: [customer_portal_view.general_invoice_history]
+
+  - id: customer_portal_view.open_equipment_invoices
+    intellidealer_label: "Open Equipment Invoices"
+    intellidealer_screen: "Customer Portal > Open Equipment Invoices"
+    intellidealer_data_source: "Open equipment invoices last 5"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Customer's last 5 open equipment invoices with reference + make/model.
+      Inline List/Create.
+    qep_status: "MISSING"
+    qep_table: "(new) equipment_invoices"
+    qep_column: ""
+    qep_evidence: []
+    qep_gap_notes: "Depends on equipment_invoices table."
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      -- DECISION REQUIRED before DDL: see docs/intellidealer-gap-audit/_migration_order.md.
+      -- Choose equipment-invoice path first: separate `equipment_invoices`
+      -- table versus a view over `customer_invoices` filtered to equipment lines.
+      -- This open-equipment tile should follow that decision and avoid
+      -- standalone DDL until the canonical path is chosen.
+    ui_surface_hint: "Account 360 open-docs panel"
+    dependencies: [customer_portal_view.equipment_invoice_history]
+
+  - id: customer_portal_view.open_job_jackets
+    intellidealer_label: "Open Job Jackets"
+    intellidealer_screen: "Customer Portal > Open Job Jackets"
+    intellidealer_data_source: "Job jackets where closed_at is null"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Currently-open service work bundles for the customer. Inline Create
+      lets the rep open a new jacket on the spot.
+    qep_status: "PARTIAL"
+    qep_table: "service_jobs"
+    qep_column: ""
+    qep_evidence: []
+    qep_gap_notes: "Same as job_jacket_history — needs jacket grouping."
+    severity: "could"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 service panel"
+    dependencies: [customer_portal_view.job_jacket_history]
+
+  - id: customer_portal_view.open_parts_invoices
+    intellidealer_label: "Open Parts"
+    intellidealer_screen: "Customer Portal > Open Parts"
+    intellidealer_data_source: "Open parts invoices last 5"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Last 5 open parts invoices for the customer with create date.
+    qep_status: "MISSING"
+    qep_table: "parts_invoices"
+    qep_column: ""
+    qep_evidence: []
+    qep_gap_notes: |
+      Use the existing Phase-3 `parts_invoices` surface as authoritative.
+      This portal tile should consume that table plus the Phase-3
+      extension fields, not create a duplicate table.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      -- Reuse existing `parts_invoices` (Phase-3 authoritative).
+      -- Add any missing customer-facing/open-status fields as
+      -- Phase-3 extensions instead of creating a new table.
+    ui_surface_hint: "Account 360 open-docs panel"
+    dependencies: []
+
+  - id: customer_portal_view.open_quotes
+    intellidealer_label: "Open Quotes"
+    intellidealer_screen: "Customer Portal > Open Quotes"
+    intellidealer_data_source: "Quotes (service/parts/equipment) where status=open and not expired"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Open quotes with type, expiration, total. Expired quotes hidden.
+      Inline Create. Powers the moonshot "follow up before expiration" alert.
+    qep_status: "BUILT"
+    qep_table: "qrm_deals"
+    qep_column: "status"
+    qep_evidence:
+      - "qrm_deals exists; quote/deal model is the QEP analog"
+    qep_gap_notes: |
+      Confirm a quote_type field (service/parts/equipment) and expiration
+      date on qrm_deals. If missing add quote_type and expires_at.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE qrm_deals ADD COLUMN quote_type TEXT CHECK (quote_type IN ('service','parts','equipment','rental'));
+      ALTER TABLE qrm_deals ADD COLUMN expires_at TIMESTAMPTZ;
+    ui_surface_hint: "Account 360 open-docs panel; pipeline filter"
+    dependencies: []
+
+  - id: customer_portal_view.open_rental
+    intellidealer_label: "Open Rental"
+    intellidealer_screen: "Customer Portal > Open Rental"
+    intellidealer_data_source: "Rental contracts last 5"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Customer's last 5 rental contracts with make/model + Edit/List/Create
+      inline actions.
+    qep_status: "PARTIAL"
+    qep_table: "rental_contracts (Phase-3)"
+    qep_column: ""
+    qep_evidence: []
+    qep_gap_notes: |
+      Rental phase covers this; ensure the Account 360 view filters by
+      company_id and joins make/model for compact display.
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 rental panel"
+    dependencies: []
+
+  - id: customer_portal_view.open_service
+    intellidealer_label: "Open Service"
+    intellidealer_screen: "Customer Portal > Open Service"
+    intellidealer_data_source: "Open work orders"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Customer's open work orders with WO #, make/model, create date.
+      Inline Create starts a new work order against this customer.
+    qep_status: "BUILT"
+    qep_table: "service_jobs (Phase-4)"
+    qep_column: ""
+    qep_evidence:
+      - "service_dashboard_rollup view exists in Phase-9 slice"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 service panel"
+    dependencies: []
+
+  - id: customer_portal_view.parts_invoice_history
+    intellidealer_label: "Parts Invoice History"
+    intellidealer_screen: "Customer Portal > Parts Invoice History"
+    intellidealer_data_source: "Parts invoices last 5"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Customer's parts invoice history with date and total.
+    qep_status: "MISSING"
+    qep_table: "parts_invoices"
+    qep_column: ""
+    qep_evidence: []
+    qep_gap_notes: "Reuse Phase-3 `parts_invoices`; see open_parts_invoices."
+    severity: "must"
+    category: "financial"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 invoice tab"
+    dependencies: [customer_portal_view.open_parts_invoices]
+
+  - id: customer_portal_view.parts_on_order
+    intellidealer_label: "Parts On Order"
+    intellidealer_screen: "Customer Portal > Parts On Order"
+    intellidealer_data_source: "Open parts orders for customer"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Last 5 parts the customer has on order with overdue-day count.
+      Critical operational signal — answers "where's my part?" without
+      a ticket.
+    qep_status: "PARTIAL"
+    qep_table: "parts_orders"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice predicted_parts_plays + parts_inventory_reorder_status view"
+    qep_gap_notes: |
+      Use existing `parts_orders` as the source for customer open-order
+      records, with predictive overlays from `predicted_parts_plays`.
+      Phase-3 remains authoritative for structural parts-order schema.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      -- Reuse existing `parts_orders` (Phase-3 authoritative).
+      -- Extend Phase-3 fields/views as needed for portal overdue badges
+      -- and customer-facing filters; do not create a new table.
+    ui_surface_hint: "Account 360 parts panel with overdue badge"
+    dependencies: []
+
+  - id: customer_portal_view.quick_links
+    intellidealer_label: "Quick Links"
+    intellidealer_screen: "Customer Portal > Quick Links"
+    intellidealer_data_source: "Static deep links"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Static action menu — Equipment Profile, Supplier Lookup, Sales Order
+      Requisition, Parts Profile, Parts Availability, Call Scheduling.
+      Each is a deep link to another module pre-filtered to this customer.
+    qep_status: "BUILT"
+    qep_table: "(UI only)"
+    qep_column: ""
+    qep_evidence: []
+    qep_gap_notes: |
+      Pure UI surface. Account 360 should expose equivalent quick-action
+      buttons; no schema impact.
+    severity: "could"
+    category: "nice_to_have"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 right-rail quick actions"
+    dependencies: []
+
+  - id: customer_portal_view.recent_calls
+    intellidealer_label: "Recent Calls"
+    intellidealer_screen: "Customer Portal > Recent Calls"
+    intellidealer_data_source: "Call activity history"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Customer's recent calls with date and detail. Inline Create kicks
+      off a new call activity. Powers the rep's recall of "what we last
+      talked about".
+    qep_status: "BUILT"
+    qep_table: "qrm_activities"
+    qep_column: "(activity_type='call')"
+    qep_evidence:
+      - "qrm_activities is the QRM activity model"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 timeline filtered to call type"
+    dependencies: []
+
+  - id: customer_portal_view.recent_equipment_rented
+    intellidealer_label: "Recent Equipment Rented"
+    intellidealer_screen: "Customer Portal > Recent Equipment Rented"
+    intellidealer_data_source: "Rental history per customer"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Recent rentals with stock #, description, last modified. Drill-through
+      to the unit profile.
+    qep_status: "PARTIAL"
+    qep_table: "rental_contracts (Phase-3)"
+    qep_column: ""
+    qep_evidence: []
+    qep_gap_notes: "Covered by rental phase."
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 rental history strip"
+    dependencies: []
+
+  - id: customer_portal_view.recent_marketing
+    intellidealer_label: "Recent Marketing"
+    intellidealer_screen: "Customer Portal > Recent Marketing"
+    intellidealer_data_source: "Marketing campaign exposure log"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Marketing campaigns the customer was touched by, with date + category.
+      Drives "did the email land?" attribution and re-engagement.
+    qep_status: "MISSING"
+    qep_table: "(new) marketing_campaign_exposures"
+    qep_column: ""
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP has analytics_events but no marketing-campaign domain model with
+      contact-level exposures. Defer until marketing automation phase
+      ships, but reserve the table.
+    severity: "could"
+    category: "reporting"
+    migration_hint: |
+      CREATE TABLE marketing_campaigns (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        name TEXT NOT NULL,
+        category TEXT,
+        start_at DATE, end_at DATE,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+      CREATE TABLE marketing_campaign_exposures (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        campaign_id UUID NOT NULL REFERENCES marketing_campaigns(id),
+        company_id UUID REFERENCES qrm_companies(id),
+        contact_id UUID REFERENCES qrm_contacts(id),
+        exposed_at TIMESTAMPTZ DEFAULT now(),
+        engagement_score NUMERIC,
+        UNIQUE(campaign_id, contact_id, exposed_at)
+      );
+    ui_surface_hint: "Account 360 marketing tile"
+    dependencies: []
+
+  - id: customer_portal_view.recent_parts_purchased
+    intellidealer_label: "Recent Parts Purchased"
+    intellidealer_screen: "Customer Portal > Recent Parts Purchased"
+    intellidealer_data_source: "Parts invoice line items last 5"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Last 5 parts the customer purchased + quantity. Drives reorder-now
+      predictions and cross-sell.
+    qep_status: "PARTIAL"
+    qep_table: "predicted_parts_plays"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice predicted_parts_plays uses customer purchase history"
+    qep_gap_notes: |
+      QEP has the predictive layer but the raw recent-purchase ledger
+      depends on parts_invoices (above).
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 parts panel"
+    dependencies: [customer_portal_view.parts_invoice_history]
+
+  - id: customer_portal_view.recent_traffic
+    intellidealer_label: "Recent Traffic"
+    intellidealer_screen: "Customer Portal > Recent Traffic"
+    intellidealer_data_source: "traffic_tickets last 5"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Five most recent traffic tickets — type of movement, in/out, make/model.
+      Inline Create starts a new ticket against this customer.
+    qep_status: "BUILT"
+    qep_table: "traffic_tickets"
+    qep_column: "(filter on related company)"
+    qep_evidence:
+      - "Cross-Cutting schema slice traffic_tickets"
+    qep_gap_notes: |
+      traffic_tickets has from_location/to_location strings + deal_id, but
+      no direct company_id pointer. Add company_id (or denormalize via deal)
+      so the Account 360 traffic tile filters cheaply.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE traffic_tickets
+        ADD COLUMN company_id UUID REFERENCES qrm_companies(id);
+      CREATE INDEX traffic_tickets_company_idx ON traffic_tickets(workspace_id, company_id, shipping_date DESC);
+    ui_surface_hint: "Account 360 traffic panel"
+    dependencies: []
+
+  - id: customer_portal_view.rental_invoice_history
+    intellidealer_label: "Rental Invoice History"
+    intellidealer_screen: "Customer Portal > Rental Invoice History"
+    intellidealer_data_source: "Rental invoices last 5"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Last 5 rental invoices with date + total.
+    qep_status: "MISSING"
+    qep_table: "(new) rental_invoices"
+    qep_column: ""
+    qep_evidence: []
+    qep_gap_notes: "AR sub-ledger gap."
+    severity: "should"
+    category: "financial"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 rental panel"
+    dependencies: [customer_portal_view.equipment_invoice_history]
+
+  - id: customer_portal_view.sam_contracts
+    intellidealer_label: "SAM Contracts"
+    intellidealer_screen: "Customer Portal > SAM Contracts"
+    intellidealer_data_source: "Service agreement program contracts"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Customer's Service Agreement (SAM) contracts — number + program name.
+      Service agreements drive recurring service revenue and tie to
+      preventive-maintenance schedules.
+    qep_status: "PARTIAL"
+    qep_table: "service_agreements (Phase-4)"
+    qep_column: ""
+    qep_evidence: []
+    qep_gap_notes: "Covered conceptually by Phase-4."
+    severity: "must"
+    category: "financial"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 contracts panel"
+    dependencies: []
+
+  - id: customer_portal_view.scheduled_calls
+    intellidealer_label: "Scheduled Calls"
+    intellidealer_screen: "Customer Portal > Scheduled Calls"
+    intellidealer_data_source: "Activities where due_at >= now AND type=call"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Future scheduled calls per customer with date/salesperson/type/reason.
+      Inline Schedule Call.
+    qep_status: "BUILT"
+    qep_table: "qrm_activities"
+    qep_column: "due_at"
+    qep_evidence:
+      - "qrm_activities supports scheduled activities"
+    qep_gap_notes: |
+      Confirm reason / call_type fields exist; if not, add a typed
+      activity_subtype column for finer pivot.
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 timeline upcoming section"
+    dependencies: []
+
+  - id: customer_portal_view.service_request
+    intellidealer_label: "Service Request"
+    intellidealer_screen: "Customer Portal > Service Request"
+    intellidealer_data_source: "Service requests"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Customer's open service requests by # and problem type. Inline
+      List/More/Create. Pre-WO ticket inbox for the service department.
+    qep_status: "PARTIAL"
+    qep_table: "service_requests (Phase-4)"
+    qep_column: ""
+    qep_evidence: []
+    qep_gap_notes: "Covered conceptually by Phase-4."
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 service panel"
+    dependencies: []
+
+  - id: customer_portal_view.work_order_history
+    intellidealer_label: "Work Order History"
+    intellidealer_screen: "Customer Portal > Work Order History"
+    intellidealer_data_source: "Closed work orders last 5"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-9_Advanced-Intelligence/Customer Portal.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Customer's closed work orders — WO #, make/model, close date.
+    qep_status: "BUILT"
+    qep_table: "service_jobs (Phase-4)"
+    qep_column: "completed_at"
+    qep_evidence:
+      - "service_dashboard_rollup view"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Account 360 service history"
+    dependencies: []
+
+  # ─── Inferred / linked surfaces (DataMiner / OEM portal moonshot signals) ─
+  - id: analytics.kpi_snapshots
+    intellidealer_label: "(implicit) DataMiner KPI snapshots"
+    intellidealer_screen: "DataMiner / advanced reporting"
+    intellidealer_data_source: "(transformational layer beyond IntelliDealer)"
+    intellidealer_evidence:
+      - "Phase-9 mission scope — transformational reporting unlocked by superintelligence"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Periodic KPI rollups by metric_key with confidence + data-quality
+      scores. Powers the OEM portal and management dashboard with a unified
+      score per dealer per metric per period.
+    qep_status: "BUILT"
+    qep_table: "analytics_kpi_snapshots"
+    qep_column: "metric_key + metric_value + confidence_score + data_quality_score"
+    qep_evidence:
+      - "Phase-9 schema slice analytics_kpi_snapshots"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "reporting"
+    migration_hint: ""
+    ui_surface_hint: "OEM portal dashboard; Owner Cockpit KPI strip"
+    dependencies: []
+
+  - id: analytics.metric_definitions
+    intellidealer_label: "(implicit) Metric definitions registry"
+    intellidealer_screen: "DataMiner setup"
+    intellidealer_data_source: "QEP-native moonshot capability"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      The metric registry that makes every KPI introspectable —
+      label, formula_text, formula_sql, source_tables, drill_contract,
+      threshold_config, refresh_cadence, owner_role. This IS the moonshot
+      DataMiner spine.
+    qep_status: "BUILT"
+    qep_table: "analytics_metric_definitions"
+    qep_column: "metric_key"
+    qep_evidence:
+      - "Phase-9 schema slice analytics_metric_definitions"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "reporting"
+    migration_hint: ""
+    ui_surface_hint: "DataMiner metric library; admin metric editor"
+    dependencies: []
+
+  - id: analytics.alerts
+    intellidealer_label: "(implicit) Alert engine"
+    intellidealer_screen: "DataMiner alerts"
+    intellidealer_data_source: "QEP-native"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Cross-domain alert primitive with severity, suggested_action,
+      business_impact_value, root_cause_guess, owner routing.
+      The "what's broken in my dealership right now?" feed.
+    qep_status: "BUILT"
+    qep_table: "analytics_alerts"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 schema slice analytics_alerts"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Owner Cockpit alerts feed; per-role alert inbox"
+    dependencies: []
+
+  - id: analytics.action_log
+    intellidealer_label: "(implicit) Action log / audit"
+    intellidealer_screen: "DataMiner audit trail"
+    intellidealer_data_source: "QEP-native"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Append-only log of operator actions tied to widgets / metrics —
+      entity_id, entity_type, before_state, after_state, source_widget.
+      Supports replay and audit of every cockpit action.
+    qep_status: "BUILT"
+    qep_table: "analytics_action_log"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 schema slice analytics_action_log"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "regulatory"
+    migration_hint: ""
+    ui_surface_hint: "Audit screens; widget action history popover"
+    dependencies: []
+
+  - id: predictions.qrm_predictions
+    intellidealer_label: "(implicit) Predictions registry"
+    intellidealer_screen: "Predictive intelligence layer"
+    intellidealer_data_source: "QEP-native moonshot"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Versioned predictions with rationale + trace_steps + role_blend +
+      outcome logging. The transparency spine that lets an operator click
+      any number and see what the model thought.
+    qep_status: "BUILT"
+    qep_table: "qrm_predictions"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice qrm_predictions + qrm_prediction_outcomes"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "reporting"
+    migration_hint: ""
+    ui_surface_hint: "Why-popover on every predictive number"
+    dependencies: []
+
+  - id: parts.predictive_kits
+    intellidealer_label: "(implicit) Parts predictive kits"
+    intellidealer_screen: "Parts predictive intelligence"
+    intellidealer_data_source: "QEP-native moonshot"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Pre-built parts kits the model predicts a customer will need at a
+      service window with confidence + driver attribution.
+    qep_status: "BUILT"
+    qep_table: "parts_predictive_kits"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice parts_predictive_kits"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Parts predictive workbench; rep visit kit"
+    dependencies: []
+
+  - id: parts.analytics_snapshots
+    intellidealer_label: "(implicit) Parts analytics snapshots"
+    intellidealer_screen: "Parts dashboard"
+    intellidealer_data_source: "QEP-native"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Daily parts dashboard rollup — total revenue, total margin,
+      top customers, fastest/slowest moving, dead stock value, by-branch.
+    qep_status: "BUILT"
+    qep_table: "parts_analytics_snapshots"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice parts_analytics_snapshots"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "reporting"
+    migration_hint: ""
+    ui_surface_hint: "Parts dashboard; OEM portal"
+    dependencies: []
+
+  - id: predictions.visit_lists
+    intellidealer_label: "(implicit) Predictive visit lists"
+    intellidealer_screen: "Rep daily routing"
+    intellidealer_data_source: "QEP-native moonshot"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Per-rep daily recommended visit list with generation context, model
+      version, and visit completion rate tracking. The rep cockpit
+      "who should I see today" feed.
+    qep_status: "BUILT"
+    qep_table: "predictive_visit_lists"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice predictive_visit_lists"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Field-rep mobile app daily plan"
+    dependencies: []
+
+  - id: knowledge.gaps
+    intellidealer_label: "(implicit) Knowledge gap log"
+    intellidealer_screen: "Knowledge layer"
+    intellidealer_data_source: "QEP-native moonshot"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Tracks unanswered questions asked by users — frequency, last_asked_at,
+      resolved bool, normalized text. Drives the knowledge base's gap-fill
+      backlog.
+    qep_status: "BUILT"
+    qep_table: "knowledge_gaps"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice knowledge_gaps"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Admin knowledge gap workbench"
+    dependencies: []
+
+  - id: knowledge.machine_notes
+    intellidealer_label: "(implicit) Machine knowledge notes"
+    intellidealer_screen: "Knowledge layer"
+    intellidealer_data_source: "QEP-native moonshot"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "multiline"
+    intellidealer_purpose: |
+      Tribal knowledge per equipment / job with embedding for semantic
+      search. Captures what techs learn so the next tech doesn't relearn.
+    qep_status: "BUILT"
+    qep_table: "machine_knowledge_notes"
+    qep_column: "embedding"
+    qep_evidence:
+      - "Phase-9 slice machine_knowledge_notes"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Tech app machine context panel; service knowledge search"
+    dependencies: []
+
+  - id: knowledge.service_kb
+    intellidealer_label: "(implicit) Service knowledge base"
+    intellidealer_screen: "Service knowledge layer"
+    intellidealer_data_source: "QEP-native moonshot"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Curated symptom-cause-solution entries with parts_used, fault_code,
+      verified bool. Forms the "diagnosis tree" the tech app surfaces.
+    qep_status: "BUILT"
+    qep_table: "service_knowledge_base"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice service_knowledge_base"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Tech app diagnose flow"
+    dependencies: []
+
+  - id: predictions.parts_plays
+    intellidealer_label: "(implicit) Predicted parts plays"
+    intellidealer_screen: "OEM parts forecast"
+    intellidealer_data_source: "QEP-native moonshot"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Per-customer parts opportunity with probability, projected_due_date,
+      projected_revenue, recommended_order_qty, llm_reasoning. Fuels the
+      OEM portal forecast and the rep visit list.
+    qep_status: "BUILT"
+    qep_table: "predicted_parts_plays"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice predicted_parts_plays"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "OEM portal forecast; rep parts pitch list"
+    dependencies: []
+
+  - id: owner.predictive_interventions_cache
+    intellidealer_label: "(implicit) Owner predictive interventions"
+    intellidealer_screen: "Owner Cockpit"
+    intellidealer_data_source: "QEP-native moonshot"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Cached owner-cockpit interventions payload with model + token usage.
+      Surfaces "what should I personally intervene on today?" for the GM.
+    qep_status: "BUILT"
+    qep_table: "owner_predictive_interventions_cache"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice owner_predictive_interventions_cache"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Owner Cockpit interventions card"
+    dependencies: []
+
+  - id: exec.margin_views
+    intellidealer_label: "(implicit) Executive margin / pipeline views"
+    intellidealer_screen: "Executive cockpit"
+    intellidealer_data_source: "QEP-native moonshot"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Suite of executive materialized views — margin_daily,
+      margin_waterfall, pipeline_stage_summary, payment_compliance,
+      revenue_daily, deposits_aging, inventory_readiness, traffic_summary,
+      rental_return_summary. The complete daily exec dashboard backbone.
+    qep_status: "BUILT"
+    qep_table: "(views) margin_analytics_view + mv_exec_*"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice margin_analytics_view + mv_exec_deposits_aging + mv_exec_inventory_readiness + mv_exec_margin_daily + mv_exec_margin_waterfall + mv_exec_payment_compliance + mv_exec_pipeline_stage_summary + mv_exec_rental_return_summary + mv_exec_revenue_daily + mv_exec_traffic_summary"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "reporting"
+    migration_hint: ""
+    ui_surface_hint: "Executive cockpit grid"
+    dependencies: []
+
+  - id: parts.dead_capital_view
+    intellidealer_label: "(implicit) Parts dead-capital tracker"
+    intellidealer_screen: "Parts dashboard / DataMiner"
+    intellidealer_data_source: "QEP-native"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      View highlighting parts with capital trapped on the shelf —
+      capital_on_hand, dead_pattern, velocity_class. Drives liquidation
+      and de-stocking workflows.
+    qep_status: "BUILT"
+    qep_table: "v_parts_dead_capital"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice v_parts_dead_capital"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "financial"
+    migration_hint: ""
+    ui_surface_hint: "Parts dashboard dead-capital panel"
+    dependencies: []
+
+  - id: parts.forecast_risk_view
+    intellidealer_label: "(implicit) Parts forecast risk summary"
+    intellidealer_screen: "Parts forecast"
+    intellidealer_data_source: "QEP-native"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Forward-looking parts forecast with stockout_risk, predicted_qty,
+      coverage_status, drivers, confidence band.
+    qep_status: "BUILT"
+    qep_table: "parts_forecast_risk_summary"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice parts_forecast_risk_summary"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Parts forecast workbench"
+    dependencies: []
+
+  - id: parts.machine_connection_view
+    intellidealer_label: "(implicit) Machine-parts connection map"
+    intellidealer_screen: "Parts ↔ machine intelligence"
+    intellidealer_data_source: "QEP-native"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Per-machine, per-part association with strength, velocity, history.
+      The graph that powers "this machine wears these parts at this rate".
+    qep_status: "BUILT"
+    qep_table: "v_machine_parts_connections"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice v_machine_parts_connections"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Machine context panel; parts pitch list"
+    dependencies: []
+
+  - id: parts.embedding_backlog_view
+    intellidealer_label: "(implicit) Parts embedding backlog"
+    intellidealer_screen: "Parts intelligence ops"
+    intellidealer_data_source: "QEP-native"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Operational view of parts whose embeddings are stale or missing —
+      drives the embedding refresh worker.
+    qep_status: "BUILT"
+    qep_table: "v_parts_embedding_backlog"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice v_parts_embedding_backlog"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Admin embedding workbench"
+    dependencies: []
+
+  - id: parts.branch_stack_ranking_view
+    intellidealer_label: "(implicit) Branch parts stack ranking"
+    intellidealer_screen: "OEM portal / DataMiner"
+    intellidealer_data_source: "QEP-native"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Per-branch ranking on inventory_value, dead_pct, dead_parts,
+      reorder_quartile_asc, parts_count. Powers the OEM portal
+      "which branch is hoarding cash?" lens.
+    qep_status: "BUILT"
+    qep_table: "v_branch_stack_ranking"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice v_branch_stack_ranking"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "reporting"
+    migration_hint: ""
+    ui_surface_hint: "OEM portal branch ranking"
+    dependencies: []
+
+  - id: pricing.price_change_impact_view
+    intellidealer_label: "(implicit) Price change impact view"
+    intellidealer_screen: "Pricing intelligence"
+    intellidealer_data_source: "QEP-native"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Joins quoted prices vs. current list price to surface deals where
+      pricing has drifted since quote. Drives margin-protection alerts.
+    qep_status: "BUILT"
+    qep_table: "price_change_impact"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice price_change_impact view"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "financial"
+    migration_hint: ""
+    ui_surface_hint: "Quote/deal page price-drift banner"
+    dependencies: []
+
+  - id: revenue.by_make_model_view
+    intellidealer_label: "(implicit) Revenue by make/model"
+    intellidealer_screen: "OEM portal / DataMiner"
+    intellidealer_data_source: "QEP-native"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Lifetime revenue per machine make/model with avg lifetime revenue
+      per unit + unit count. Powers product-line ROI lens.
+    qep_status: "BUILT"
+    qep_table: "revenue_by_make_model"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice revenue_by_make_model view"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "reporting"
+    migration_hint: ""
+    ui_surface_hint: "OEM portal product-line ROI"
+    dependencies: []
+
+  - id: portal.trade_in_opportunities_view
+    intellidealer_label: "(implicit) Portal trade-in opportunities"
+    intellidealer_screen: "Trade-in intelligence"
+    intellidealer_data_source: "QEP-native"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Joined view of customer + fleet + predicted_replacement_date +
+      replacement_confidence + outreach_status — the trade-in pipeline.
+    qep_status: "BUILT"
+    qep_table: "portal_trade_in_opportunities"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice portal_trade_in_opportunities view"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Trade-in workbench; rep visit list"
+    dependencies: []
+
+  - id: parts.inventory_reorder_status_view
+    intellidealer_label: "(implicit) Parts inventory reorder status"
+    intellidealer_screen: "Parts dashboard"
+    intellidealer_data_source: "QEP-native"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Reorder state per inventory line — qty_on_hand, reorder_point,
+      safety_stock, days_until_stockout, economic_order_qty,
+      stock_status, consumption_velocity, avg_lead_time_days.
+      Backbone of parts reorder intelligence.
+    qep_status: "BUILT"
+    qep_table: "parts_inventory_reorder_status"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice parts_inventory_reorder_status view"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Parts reorder workbench"
+    dependencies: []
+
+  - id: service.dashboard_rollup_view
+    intellidealer_label: "(implicit) Service dashboard rollup"
+    intellidealer_screen: "Service dashboard"
+    intellidealer_data_source: "QEP-native"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Per-branch service rollup — total / active / pending / overdue /
+      closed work-order counts.
+    qep_status: "BUILT"
+    qep_table: "service_dashboard_rollup"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice service_dashboard_rollup view"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Service dashboard"
+    dependencies: []
+
+  - id: sop.compliance_summary_view
+    intellidealer_label: "(implicit) SOP compliance summary"
+    intellidealer_screen: "SOP compliance dashboard"
+    intellidealer_data_source: "QEP-native moonshot"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Per-template, per-step SOP compliance metrics — completion_rate_pct,
+      step_compliance_pct, abandoned/skipped counts, satisfied_elsewhere.
+      Critical for moonshot operational consistency.
+    qep_status: "BUILT"
+    qep_table: "sop_compliance_summary"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice sop_compliance_summary view"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "SOP compliance dashboard; per-step heatmap"
+    dependencies: []
+
+  - id: analytics.events
+    intellidealer_label: "(implicit) Cross-domain event stream"
+    intellidealer_screen: "DataMiner event firehose"
+    intellidealer_data_source: "QEP-native"
+    intellidealer_evidence:
+      - "Phase-9 mission scope"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Append-only domain event ledger with versioned event names, actor,
+      correlation_id, parent_event_id, source_module, project_id, role.
+      Source of truth for every transformation, replay, and audit.
+    qep_status: "BUILT"
+    qep_table: "analytics_events"
+    qep_column: ""
+    qep_evidence:
+      - "Phase-9 slice analytics_events"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "regulatory"
+    migration_hint: ""
+    ui_surface_hint: "Event explorer; replay tooling"
+    dependencies: []

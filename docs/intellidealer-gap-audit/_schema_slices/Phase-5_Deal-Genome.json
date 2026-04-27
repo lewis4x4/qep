@@ -1,0 +1,206 @@
+{
+  "tables": {
+    "qb_deal_coach_actions": [
+      {
+        "name": "acted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "action",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "quote_package_id",
+        "type": "string"
+      },
+      {
+        "name": "rule_id",
+        "type": "string"
+      },
+      {
+        "name": "severity",
+        "type": "string"
+      },
+      {
+        "name": "shown_at",
+        "type": "string"
+      },
+      {
+        "name": "shown_by",
+        "type": "string | null"
+      },
+      {
+        "name": "suggestion_snapshot",
+        "type": "Json | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_idea_backlog": [
+      {
+        "name": "ai_confidence",
+        "type": "number | null"
+      },
+      {
+        "name": "body",
+        "type": "string | null"
+      },
+      {
+        "name": "captured_at",
+        "type": "string"
+      },
+      {
+        "name": "captured_by",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "priority",
+        "type": "string | null"
+      },
+      {
+        "name": "shipped_at",
+        "type": "string | null"
+      },
+      {
+        "name": "source",
+        "type": "string"
+      },
+      {
+        "name": "source_voice_capture_id",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "tags",
+        "type": "Json"
+      },
+      {
+        "name": "title",
+        "type": "string"
+      },
+      {
+        "name": "triaged_at",
+        "type": "string | null"
+      },
+      {
+        "name": "triaged_by",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_predictions": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "inputs_hash",
+        "type": "string"
+      },
+      {
+        "name": "model_source",
+        "type": "string"
+      },
+      {
+        "name": "outcome",
+        "type": "string | null"
+      },
+      {
+        "name": "outcome_at",
+        "type": "string | null"
+      },
+      {
+        "name": "outcome_logged_by",
+        "type": "string | null"
+      },
+      {
+        "name": "predicted_at",
+        "type": "string"
+      },
+      {
+        "name": "prediction_kind",
+        "type": "string"
+      },
+      {
+        "name": "rationale",
+        "type": "Json"
+      },
+      {
+        "name": "rationale_hash",
+        "type": "string"
+      },
+      {
+        "name": "role_blend",
+        "type": "Json"
+      },
+      {
+        "name": "score",
+        "type": "number"
+      },
+      {
+        "name": "signals_hash",
+        "type": "string"
+      },
+      {
+        "name": "subject_id",
+        "type": "string"
+      },
+      {
+        "name": "subject_type",
+        "type": "string"
+      },
+      {
+        "name": "trace_id",
+        "type": "string"
+      },
+      {
+        "name": "trace_steps",
+        "type": "Json"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ]
+  }
+}

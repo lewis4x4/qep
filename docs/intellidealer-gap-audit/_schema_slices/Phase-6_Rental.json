@@ -1,0 +1,508 @@
+{
+  "tables": {
+    "fleet_import_history": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "error_log",
+        "type": "Json | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "import_type",
+        "type": "string"
+      },
+      {
+        "name": "imported_by",
+        "type": "string | null"
+      },
+      {
+        "name": "records_failed",
+        "type": "number"
+      },
+      {
+        "name": "records_imported",
+        "type": "number"
+      },
+      {
+        "name": "records_updated",
+        "type": "number"
+      }
+    ],
+    "fleet_intelligence": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "current_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "customer_name",
+        "type": "string"
+      },
+      {
+        "name": "customer_profile_id",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_serial",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "last_service_date",
+        "type": "string | null"
+      },
+      {
+        "name": "last_service_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "make",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "model",
+        "type": "string"
+      },
+      {
+        "name": "outreach_deal_value",
+        "type": "number | null"
+      },
+      {
+        "name": "outreach_status",
+        "type": "Database[\"public\"][\"Enums\"][\"outreach_status\"] | null"
+      },
+      {
+        "name": "predicted_replacement_date",
+        "type": "string | null"
+      },
+      {
+        "name": "replacement_confidence",
+        "type": "number | null"
+      },
+      {
+        "name": "replacement_model_version",
+        "type": "string | null"
+      },
+      {
+        "name": "telematics_source",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "utilization_trend",
+        "type": "string | null"
+      },
+      {
+        "name": "year",
+        "type": "number | null"
+      }
+    ],
+    "rental_contract_extensions": [
+      {
+        "name": "additional_charge",
+        "type": "number | null"
+      },
+      {
+        "name": "approved_by",
+        "type": "string | null"
+      },
+      {
+        "name": "approved_end_date",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "customer_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "dealer_response",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "payment_invoice_id",
+        "type": "string | null"
+      },
+      {
+        "name": "payment_status",
+        "type": "string | null"
+      },
+      {
+        "name": "rental_contract_id",
+        "type": "string"
+      },
+      {
+        "name": "requested_by",
+        "type": "string | null"
+      },
+      {
+        "name": "requested_end_date",
+        "type": "string"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "rental_contracts": [
+      {
+        "name": "agreed_daily_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "agreed_monthly_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "agreed_weekly_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "approved_end_date",
+        "type": "string | null"
+      },
+      {
+        "name": "approved_start_date",
+        "type": "string | null"
+      },
+      {
+        "name": "assignment_status",
+        "type": "string"
+      },
+      {
+        "name": "branch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "customer_notes",
+        "type": "string | null"
+      },
+      {
+        "name": "dealer_notes",
+        "type": "string | null"
+      },
+      {
+        "name": "dealer_response",
+        "type": "string | null"
+      },
+      {
+        "name": "delivery_location",
+        "type": "string | null"
+      },
+      {
+        "name": "delivery_mode",
+        "type": "string"
+      },
+      {
+        "name": "deposit_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "deposit_invoice_id",
+        "type": "string | null"
+      },
+      {
+        "name": "deposit_required",
+        "type": "boolean"
+      },
+      {
+        "name": "deposit_status",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "estimate_daily_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "estimate_monthly_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "estimate_weekly_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "portal_customer_id",
+        "type": "string"
+      },
+      {
+        "name": "request_type",
+        "type": "string"
+      },
+      {
+        "name": "requested_category",
+        "type": "string | null"
+      },
+      {
+        "name": "requested_end_date",
+        "type": "string"
+      },
+      {
+        "name": "requested_make",
+        "type": "string | null"
+      },
+      {
+        "name": "requested_model",
+        "type": "string | null"
+      },
+      {
+        "name": "requested_start_date",
+        "type": "string"
+      },
+      {
+        "name": "signed_terms_url",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "rental_rate_rules": [
+      {
+        "name": "branch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "category",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "customer_id",
+        "type": "string | null"
+      },
+      {
+        "name": "daily_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "equipment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_active",
+        "type": "boolean"
+      },
+      {
+        "name": "make",
+        "type": "string | null"
+      },
+      {
+        "name": "minimum_days",
+        "type": "number | null"
+      },
+      {
+        "name": "model",
+        "type": "string | null"
+      },
+      {
+        "name": "monthly_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "priority_rank",
+        "type": "number"
+      },
+      {
+        "name": "season_end",
+        "type": "string | null"
+      },
+      {
+        "name": "season_start",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "weekly_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "rental_returns": [
+      {
+        "name": "aging_bucket",
+        "type": "string | null"
+      },
+      {
+        "name": "balance_due",
+        "type": "number | null"
+      },
+      {
+        "name": "charge_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "condition_photos",
+        "type": "Json | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "credit_invoice_number",
+        "type": "string | null"
+      },
+      {
+        "name": "damage_description",
+        "type": "string | null"
+      },
+      {
+        "name": "decided_by",
+        "type": "string | null"
+      },
+      {
+        "name": "decision_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deposit_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "deposit_covers_charges",
+        "type": "boolean | null"
+      },
+      {
+        "name": "equipment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "has_charges",
+        "type": "boolean | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "inspection_checklist",
+        "type": "Json | null"
+      },
+      {
+        "name": "inspection_date",
+        "type": "string | null"
+      },
+      {
+        "name": "inspection_started_at",
+        "type": "string | null"
+      },
+      {
+        "name": "inspector_id",
+        "type": "string | null"
+      },
+      {
+        "name": "original_payment_method",
+        "type": "string | null"
+      },
+      {
+        "name": "refund_check_turnaround",
+        "type": "string | null"
+      },
+      {
+        "name": "refund_method",
+        "type": "string | null"
+      },
+      {
+        "name": "refund_status",
+        "type": "string | null"
+      },
+      {
+        "name": "rental_contract_id",
+        "type": "string | null"
+      },
+      {
+        "name": "rental_contract_reference",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "work_order_number",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ]
+  }
+}

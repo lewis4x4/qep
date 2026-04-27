@@ -57,6 +57,7 @@ export interface CustomerProfileResponse {
   id: string;
   hubspot_contact_id: string | null;
   intellidealer_customer_id: string | null;
+  crm_company_id?: string | null;
   customer_name: string;
   company_name: string | null;
   industry?: string | null;
@@ -78,6 +79,10 @@ export interface CustomerProfileResponse {
   last_interaction_at: string | null;
   updated_at: string;
   data_badges: DataBadge[];
+  tax_regulatory?: {
+    ein: string;
+    ein_masked: boolean;
+  };
   behavioral_signals?: CustomerBehaviorSignals;
   fleet?: CustomerFleetUnit[];
 }

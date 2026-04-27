@@ -1,0 +1,2718 @@
+phase: Phase-3_Parts
+generated_at: 2026-04-26T00:00:00Z
+source_artifacts:
+  pdfs:
+    - docs/IntelliDealer/Phase-3_Parts/Parts Invoicing.pdf
+    - docs/IntelliDealer/Phase-3_Parts/Parts Ordering.pdf
+    - docs/IntelliDealer/Phase-3_Parts/Parts Profile: Listing.pdf
+    - docs/IntelliDealer/Phase-3_Parts/Price Matrix.pdf
+    - docs/IntelliDealer/Phase-3_Parts/Purchase Orders.pdf
+  png_screenshots:
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Profile__3.19.53.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Profile__3.20.02.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Invoicing__3.11.45.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Invoicing__3.11.50.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Invoicing__3.11.55.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Invoicing__3.12.03.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Invoicing__3.12.31.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Invoicing__3.20.16.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Invoicing__3.20.24.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Invoicing__3.23.17.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Ordering__3.20.33.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Ordering-Vendors__3.20.37.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Ordering-Price-Breaks__3.20.41.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Ordering-Purchase-Details__3.21.22.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Ordering__3.21.54.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Ordering-Vendor-Detail__3.22.05.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Quoting__3.22.54.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Quoting__3.23.01.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Quoting-Service__3.13.53.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Quoting-Service__3.13.57.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Quoting-Service__3.14.01.png
+    - docs/IntelliDealer/Phase-3_Parts/Parts-Quoting-Service__3.14.05.png
+    - docs/IntelliDealer/Phase-3_Parts/Price-Matrix__3.23.24.png
+    - docs/IntelliDealer/Phase-3_Parts/Price-Matrix__3.24.28.png
+    - docs/IntelliDealer/Phase-3_Parts/Price-Matrix-Pricing-Detail__3.23.29.png
+    - docs/IntelliDealer/Phase-3_Parts/Price-Matrix-Price-Breaks__3.24.33.png
+    - docs/IntelliDealer/Phase-3_Parts/Purchase-Orders__3.13.40.png
+    - docs/IntelliDealer/Phase-3_Parts/Purchase-Orders__3.13.45.png
+    - docs/IntelliDealer/Phase-3_Parts/Purchase-Orders__3.13.49.png
+    - docs/IntelliDealer/Phase-3_Parts/Purchase-Orders-Parts__3.11.28.png
+  ocr_text_paths:
+    - docs/IntelliDealer/_OCR/Phase-3_Parts/Parts Invoicing.txt
+    - docs/IntelliDealer/_OCR/Phase-3_Parts/Parts Ordering.txt
+    - docs/IntelliDealer/_OCR/Phase-3_Parts/Parts Profile: Listing.txt
+    - docs/IntelliDealer/_OCR/Phase-3_Parts/Price Matrix.txt
+    - docs/IntelliDealer/_OCR/Phase-3_Parts/Purchase Orders.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.20.02.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.50.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.55.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.12.03.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.12.31.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.20.16.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.20.24.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.23.17.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Ordering__3.20.33.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Ordering-Vendors__3.20.37.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Ordering-Price-Breaks__3.20.41.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Ordering-Purchase-Details__3.21.22.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Ordering__3.21.54.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Ordering-Vendor-Detail__3.22.05.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Quoting__3.22.54.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Quoting__3.23.01.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Quoting-Service__3.13.53.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Quoting-Service__3.13.57.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Quoting-Service__3.14.01.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Quoting-Service__3.14.05.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Price-Matrix__3.23.24.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Price-Matrix__3.24.28.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Price-Matrix-Pricing-Detail__3.23.29.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Price-Matrix-Price-Breaks__3.24.33.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.40.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.45.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.49.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders-Parts__3.11.28.txt
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUDITOR NOTE — Phase-3 Parts
+# Parts is the highest-margin, highest-volume revenue stream in any equipment
+# dealership. The IntelliDealer Parts module spans:
+#
+#   1. Parts Profile / Parts Listing  — the master record per part
+#      (Part Number, Description, Bin, Vendor, Source, Class, Type,
+#      OnHand, On Order, OFC), with rich Parts Availability sub-screens
+#      (Sell, List Price, Cost, Average Cost, Levels 1-4, Reorder Point,
+#      Safety Stock, EOQ, AMAX APR Code, Season Code, Movement Code,
+#      Activity Code, Lost Sale, Special Order, YTD Sales, history grid,
+#      OFC Reclass, Subs, Reman, Comment).
+#   2. Parts Invoicing — counter-sale + service-pull invoice creation
+#      (Order Number, Customer, Salesperson, Responsible, PO, Ship Via,
+#      Freight Terms, Discount, Tax 1-4, Sold-To/Ship-To, Print Parameters,
+#      Ordered/Issued/Shipped/Invoiced quantities per line, OFC indicator,
+#      Cash Code, Tethr It Now button).
+#   3. Parts Ordering — internal stock orders (Order #, Vendor, Date
+#      Released, Location, Status [On Order / Back Ordered / Changeable /
+#      Received], Type, Line Items, Vendor block, Price Breaks, Purchase
+#      Details, Vendor Detail).
+#   4. Parts Quoting — separate parts-quote ladder (Reference Number,
+#      Customer, Salesperson, Description, Location, Expiry Date, Status
+#      [Pending/Quoted/Accepted/Expired], Master Quotes filter, sub-screen
+#      Parts-Quoting-Service for quotes that turn into a service WO).
+#   5. Purchase Orders — vendor-side PO (PO Number, Type, Status [PO
+#      Request / Waiting for Authorization / Authorized / On Order /
+#      Canceled / Back Order / Completed / Rejected], Description,
+#      Vendor Number/Name/Address, Vendor Contact, Items Total, Freight
+#      Charge, PO Total, Customer (the customer the PO was placed for),
+#      Receipt History).
+#   6. Price Matrix — bracket-based pricing (Matrix code, Pricing Detail,
+#      Price Breaks ladder by quantity bracket).
+#
+# QEP COVERAGE TODAY (per database.types.ts) — surprisingly rich:
+#   parts_catalog               (fat master table; covers nearly every Parts
+#                                Profile field: part_number, description,
+#                                bin_location, branch_code, category,
+#                                category_code, class_code, compatible_machines,
+#                                cost_price, average_cost, eoq, intellidealer_
+#                                part_id, last_count_date, last_known_price,
+#                                last_po_number, last_sale_date, last_year_
+#                                sales_dollars/qty, lead_time_days, list_price,
+#                                manufacturer, model_code, movement_code,
+#                                on_hand, on_order, parts_per_package, pkg_qty,
+#                                pricing_level_1-4, quantity_allocated/reserved,
+#                                reorder_point, safety_stock_qty, source_of_
+#                                supply, stocking_code, superseded_by, supersedes,
+#                                uom, vendor_code, weight_lb/lbs, ytd_sales_dollars,
+#                                avatax_product_code, avatax_use_exemption,
+#                                back_ordered, raw_dms_row, embedding columns,
+#                                manual_override booleans for each price+attrs,
+#                                source_documents, region_last_12mo_sales,
+#                                last_12mo_sales)
+#   parts_inventory             (per-branch per-bin balance: part_number,
+#                                bin_location, branch_id, qty_on_hand,
+#                                catalog_id)
+#   parts_orders                (vendor-side stock orders)
+#   parts_order_lines           (line items)
+#   parts_order_events          (state transitions)
+#   parts_order_notification_sends
+#   parts_invoices              (customer parts invoice header)
+#   parts_quoting_service*      (parts quotes that link to service)
+#   parts_pricing_rules         (pricing rules engine)
+#   parts_pricing_audit         (price-change audit)
+#   parts_pricing_suggestions   (AI-suggested price changes)
+#   parts_vendor_prices         (per-vendor price lookup)
+#   parts_cross_references      (manufacturer cross-refs)
+#   parts_demand_forecasts      (forecast horizon)
+#   parts_fulfillment_runs      (allocation runs)
+#   parts_fulfillment_events
+#   parts_history_monthly       (historical sales aggregation)
+#   parts_import_runs / parts_import_conflicts (DMS sync)
+#   parts_predictive_kits       (kit suggestion AI)
+#   parts_preferences
+#   parts_reorder_profiles      (per-branch reorder behavior)
+#   parts_replenishment_rules
+#   parts_request_activity / parts_requests
+#   parts_transfer_recommendations
+#   parts_auto_replenish_queue
+#   parts_analytics_snapshots
+#   vendor_part_catalog         (vendor catalog)
+#   vendor_profiles, vendor_contacts, vendor_order_schedules,
+#   vendor_escalation_policies, vendor_escalations
+#   customer_parts_intelligence (per-customer parts insight AI layer)
+#   price_increase_tracking
+#   tariff_tracking
+#   v_parts_dead_capital, v_parts_intelligence, v_parts_margin_signal,
+#   v_parts_pricing_drift, v_parts_stockout_risk, v_parts_velocity (views)
+#
+# MAJOR GAPS for Phase-3 (despite rich parts_catalog):
+#   * Parts Invoicing Header lifecycle — Order Number → Pending → Issued
+#     → Shipped → Invoiced flow with per-line Ord/Iss/Ship/Inv columns.
+#     parts_invoices likely covers some of this but verify the four-stage
+#     quantity ladder.
+#   * Parts Invoice "View Back Orders" button — list of unreceived back-
+#     ordered lines on this customer's invoice. Operational primitive.
+#   * Cash Code on parts invoice line (per-line cash-vs-AR routing).
+#   * Sold-To / Ship-To split per parts invoice (qrm_company_ship_to_
+#     addresses dependency from Phase-1).
+#   * Tax Codes 1-4 on parts invoice header (separate from per-customer
+#     Tax Codes from Phase-1; per-WO tax codes from Phase-4).
+#   * Discount group on parts invoice header.
+#   * Freight Terms on parts invoice header.
+#   * UPS WorldShip Import — integration to push shipping labels to UPS.
+#   * LDTTN (Loose Dead-Track Total Number?) Adjust button — IntelliDealer-
+#     specific bulk-adjust function.
+#   * Tethr It Now (telematics-driven part lookup) integration button.
+#   * Print Parameters (per-invoice print configuration).
+#   * Customer Parts Purchases sub-screen (drill-into customer's parts
+#     history from this invoice).
+#   * Vendor PO Header — PO Number, Type, Status (8 enum), Created/Modified/
+#     Authorized/Ordered/Closed timestamps + actor, Items Total, Freight
+#     Charge, PO Total, Customer (the customer the PO was placed for),
+#     Receipt History sub-grid.
+#   * Vendor Contact block on PO (Name, Phone, Fax, E-mail, Dealer flag).
+#   * Vendor Details block (Address 1-3, Zip, Phone, Fax) cross-vendor.
+#   * Purchase Order Items grid (Part #, Quantity, Cost, Extended Cost,
+#     Receipt Status). parts_order_lines covers some.
+#   * Receipt History per PO.
+#   * Price Matrix master table (Matrix code, Description, Pricing Method,
+#     Apply Order). parts_pricing_rules may cover but verify shape.
+#   * Price Breaks per matrix (quantity bracket → price multiplier).
+#   * Pricing Detail per matrix line (Source / List Price / Cost / Average
+#     Cost / Level 1-4 input → output mapping).
+#   * Parts Quoting Header (Reference Number, Status, Salesperson,
+#     Assigned Salesperson, Description, Expiry Date, Master Quote flag,
+#     Customer, Location). Need to verify if a parts-side quote table
+#     exists separate from qb_quotes (which is equipment-side).
+#   * Parts Quoting Service link — quote → WO conversion (parts_quoting_
+#     service tables may already cover this).
+#   * Movement Code, Activity Code values (controlled enum vs free text in
+#     parts_catalog.movement_code).
+#   * AMAX APR Code / Source — manufacturer AMAX (Annual Min/Max) replenishment
+#     code that drives the auto-reorder cycle.
+#   * OFC (Original Factory Code) Reclass tracking (From / To Element) —
+#     manufacturer reclassification trail.
+#   * Season Code + Season Length (seasonal-demand modifier).
+#   * Effectual % (forecasting confidence factor).
+#   * Reserved vs Allocated distinction — parts_catalog has both qty_reserved
+#     and qty_allocated; verify they're surfaced to the UI.
+#   * Lost Sale tracking (Frequency + Quantity counters) — critical
+#     stockout-impact metric. parts_catalog doesn't appear to have lost-sale
+#     columns; need a lost_sales table.
+#   * Special Order tracking (Frequency + Quantity).
+#   * Sub-Pmts / Reman flag (re-manufactured part) per part.
+#   * Comment / Memo per part (rich-text annotations from buyers).
+#   * Central Branch / Central Order routing (multi-branch consolidation).
+#   * Protect Months / Protect Quantity / Protect Code (no-pick reserve
+#     levels).
+#   * Required Quantity (next-period demand forecast).
+#   * "Do Not Order" flag + date (exclude part from auto-reorder).
+# ─────────────────────────────────────────────────────────────────────────────
+
+fields:
+  # ==========================================================================
+  # SECTION 1 — PARTS PROFILE / IDENTITY
+  # ==========================================================================
+  - id: part.part_number
+    intellidealer_label: "Part Number"
+    intellidealer_screen: "Parts Profile / Parts Listing"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+      - docs/IntelliDealer/_OCR/Phase-3_Parts/Parts Profile: Listing.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Manufacturer part number (e.g. '.3.02.16', 'A-T24-V35BKP*EBS',
+      'A-G70'). The single-most-load-bearing field in the parts module —
+      cross-references, OEM portal lookups, customer search, vendor PO
+      submission all key off this.
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: part_number
+    qep_evidence:
+      - "database.types.ts parts_catalog.part_number (NOT NULL)"
+    qep_gap_notes: ""
+    severity: must
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile header + every list view"
+    dependencies: []
+
+  - id: part.intellidealer_part_id
+    intellidealer_label: "IntelliDealer Part ID (legacy)"
+    intellidealer_screen: "Parts Profile (internal)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Internal IntelliDealer integer ID for migration reconciliation."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: intellidealer_part_id
+    qep_evidence:
+      - "database.types.ts parts_catalog.intellidealer_part_id"
+    qep_gap_notes: ""
+    severity: should
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile (admin only)"
+    dependencies: []
+
+  - id: part.description
+    intellidealer_label: "Description"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Human-readable description (e.g. 'M16 NUT', 'PIVOT PIN', 'BATTERY PACK')."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: description
+    qep_evidence:
+      - "database.types.ts parts_catalog.description, .description_manual_override"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile + every list view"
+    dependencies: []
+
+  - id: part.parts_per_package
+    intellidealer_label: "Parts / Package"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "Quantity per package (e.g. nuts come 100 per bag). Drives invoice qty rounding."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: parts_per_package
+    qep_evidence:
+      - "database.types.ts parts_catalog.parts_per_package, .pkg_qty"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile"
+    dependencies: []
+
+  - id: part.uom
+    intellidealer_label: "UOM (Unit of Measure)"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Unit of measure (EA / FT / GAL / LB)."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: uom
+    qep_evidence:
+      - "database.types.ts parts_catalog.uom"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile"
+    dependencies: []
+
+  - id: part.weight
+    intellidealer_label: "Weight"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "Per-part weight (lb). Drives freight/shipping calculation."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: weight_lb
+    qep_evidence:
+      - "database.types.ts parts_catalog.weight_lb, .weight_lbs (both columns exist — likely duplicate)"
+    qep_gap_notes: |
+      Two weight columns (weight_lb, weight_lbs) — likely a migration
+      artifact. Should consolidate.
+    severity: should
+    category: operational
+    migration_hint: |
+      -- Confirm one of weight_lb / weight_lbs is canonical and drop the other.
+    ui_surface_hint: "Parts Profile"
+    dependencies: []
+
+  - id: part.label
+    intellidealer_label: "Label (Yes/No)"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Whether this part needs a printed identification label affixed
+      when received. Drives the receiving-station print queue.
+    qep_status: MISSING
+    qep_table: parts_catalog
+    qep_column: requires_label
+    qep_evidence: []
+    qep_gap_notes: "No requires_label column."
+    severity: should
+    category: workflow
+    migration_hint: |
+      ALTER TABLE parts_catalog ADD COLUMN requires_label BOOLEAN NOT NULL DEFAULT false;
+    ui_surface_hint: "Parts Profile + Receiving station label printer"
+    dependencies: []
+
+  - id: part.is_active
+    intellidealer_label: "Active (Yes/No)"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: "Whether the part is active (orderable) or retired."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: is_active
+    qep_evidence:
+      - "database.types.ts parts_catalog.is_active"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile + listing filter"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 2 — LOCATION / BIN / BRANCH
+  # ==========================================================================
+  - id: part.bin_location
+    intellidealer_label: "Bin"
+    intellidealer_screen: "Parts Profile / Parts Listing"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Bin/shelf location (e.g. 'NO BIN', 'PS D S/R', 'WH-5905'). Drives
+      counter-staff pick path. 'NO BIN' is the dropship default.
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: bin_location
+    qep_evidence:
+      - "database.types.ts parts_catalog.bin_location, .bin_location_manual_override, .previous_bin_location"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile + counter pick screen"
+    dependencies: []
+
+  - id: part.branch_inventory
+    intellidealer_label: "On Hand (per branch)"
+    intellidealer_screen: "Parts Profile (multi-branch grid)"
+    intellidealer_data_source: "PINV"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      Per-branch on-hand quantity. Each branch has its own bin and
+      independent qty. The aggregate on-hand is sum across branches.
+    qep_status: BUILT
+    qep_table: parts_inventory
+    qep_column: qty_on_hand
+    qep_evidence:
+      - "database.types.ts parts_inventory.qty_on_hand, .branch_id, .bin_location"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile — Inventory grid + counter screen"
+    dependencies: []
+
+  - id: part.aggregate_on_hand
+    intellidealer_label: "OnHand (aggregate)"
+    intellidealer_screen: "Parts Listing"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "Catalog-level aggregate on-hand (sum of branch inventories) — denormalized for fast list-view sorting."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: on_hand
+    qep_evidence:
+      - "database.types.ts parts_catalog.on_hand"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Listing column"
+    dependencies: []
+
+  - id: part.on_order
+    intellidealer_label: "On Order"
+    intellidealer_screen: "Parts Profile / Parts Listing"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "Quantity currently on outstanding vendor POs."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: on_order
+    qep_evidence:
+      - "database.types.ts parts_catalog.on_order"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Listing column"
+    dependencies: []
+
+  - id: part.in_transit
+    intellidealer_label: "In Transit"
+    intellidealer_screen: "Parts Profile (Availability sub-screen)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "Quantity shipped from vendor but not yet received."
+    qep_status: MISSING
+    qep_table: parts_catalog
+    qep_column: in_transit
+    qep_evidence: []
+    qep_gap_notes: "No in_transit column. Distinct from on_order (which includes pre-shipment)."
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE parts_catalog ADD COLUMN in_transit INTEGER NOT NULL DEFAULT 0;
+    ui_surface_hint: "Parts Profile — Availability sub-screen"
+    dependencies: []
+
+  - id: part.back_ordered
+    intellidealer_label: "Back Ordered"
+    intellidealer_screen: "Parts Profile (Availability sub-screen)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "Quantity ordered by customers but not yet shipped (waiting on inventory)."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: back_ordered
+    qep_evidence:
+      - "database.types.ts parts_catalog.back_ordered"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile + customer service queue"
+    dependencies: []
+
+  - id: part.allocated
+    intellidealer_label: "Allocated"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "Quantity earmarked for an open WO/invoice — not available to other customers."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: quantity_allocated
+    qep_evidence:
+      - "database.types.ts parts_catalog.quantity_allocated"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile"
+    dependencies: []
+
+  - id: part.reserved
+    intellidealer_label: "Reserved"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "Quantity reserved (pre-allocated, not yet WO-bound)."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: quantity_reserved
+    qep_evidence:
+      - "database.types.ts parts_catalog.quantity_reserved"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 3 — VENDOR / SOURCING
+  # ==========================================================================
+  - id: part.vendor_code
+    intellidealer_label: "Vendor"
+    intellidealer_screen: "Parts Profile / Parts Listing"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: "Primary vendor code (e.g. 'PRINO5', 'BANDO1', 'AMAZON')."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: vendor_code
+    qep_evidence:
+      - "database.types.ts parts_catalog.vendor_code, vendor_profiles, vendor_part_catalog"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile + listing filter"
+    dependencies: []
+
+  - id: part.source_of_supply
+    intellidealer_label: "Source"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Source-of-supply code (e.g. 'P' for primary, 'D' for direct ship, 'R' for return-only)."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: source_of_supply
+    qep_evidence:
+      - "database.types.ts parts_catalog.source_of_supply"
+    qep_gap_notes: ""
+    severity: must
+    category: workflow
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile"
+    dependencies: []
+
+  - id: part.cross_references
+    intellidealer_label: "Cross References (Subs)"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR_XREF"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Manufacturer cross-references — same part under a different OEM
+      number. Critical for finding a part across catalogs.
+    qep_status: BUILT
+    qep_table: parts_cross_references
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts parts_cross_references (table) + parts_catalog.cross_references (JSON cache)"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile — Cross References sub-panel"
+    dependencies: []
+
+  - id: part.supersession
+    intellidealer_label: "Supersedes / Superseded By"
+    intellidealer_screen: "Parts Profile (Subs block)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Manufacturer supersession chain (Part X is replaced by Part Y).
+      When the sub chain is broken, lookups fail and customers wait.
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: superseded_by
+    qep_evidence:
+      - "database.types.ts parts_catalog.superseded_by, .supersedes"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile — Supersession block"
+    dependencies: []
+
+  - id: part.compatible_machines
+    intellidealer_label: "Machine (compatibility)"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Machines this part fits (e.g. 'SYS ADD, P/O MAINT'). Used in
+      tech parts-lookup workflow ('what fits this Bobcat T770?').
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: compatible_machines
+    qep_evidence:
+      - "database.types.ts parts_catalog.compatible_machines"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile + machine-based parts search"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 4 — PRICING LADDER
+  # ==========================================================================
+  - id: part.sell_price
+    intellidealer_label: "Sell"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Default sell price (e.g. 0.51)."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: last_known_price
+    qep_evidence:
+      - "database.types.ts parts_catalog.last_known_price, .price_updated_at"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile"
+    dependencies: []
+
+  - id: part.list_price
+    intellidealer_label: "List Price"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Manufacturer's suggested list price."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: list_price
+    qep_evidence:
+      - "database.types.ts parts_catalog.list_price, .list_price_manual_override"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile"
+    dependencies: []
+
+  - id: part.cost
+    intellidealer_label: "Cost"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Last-receipt cost layer."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: cost_price
+    qep_evidence:
+      - "database.types.ts parts_catalog.cost_price"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile (margin-mgr only)"
+    dependencies: []
+
+  - id: part.average_cost
+    intellidealer_label: "Average Cost"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Weighted average cost across receipts. Drives gross-margin reporting."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: average_cost
+    qep_evidence:
+      - "database.types.ts parts_catalog.average_cost, .average_inventory"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile"
+    dependencies: []
+
+  - id: part.pricing_levels
+    intellidealer_label: "Pricing Levels 1-4"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Four-tier price ladder per part. Customer's pricing_level (Phase-1
+      customer.pricing_level) selects which tier applies.
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: pricing_level_1
+    qep_evidence:
+      - "database.types.ts parts_catalog.pricing_level_1, .pricing_level_2, .pricing_level_3, .pricing_level_4 (each with manual_override boolean)"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile — Pricing Levels block"
+    dependencies: []
+
+  - id: part.maximum_discount
+    intellidealer_label: "Maximum Discount"
+    intellidealer_screen: "Parts Profile (Pricing detail)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.50.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Maximum discount group code allowed for this part (e.g. 'NOT ASSIGNED', 'STANDARD-30')."
+    qep_status: MISSING
+    qep_table: parts_catalog
+    qep_column: maximum_discount_code
+    qep_evidence: []
+    qep_gap_notes: "No max-discount governor on parts."
+    severity: should
+    category: financial
+    migration_hint: |
+      ALTER TABLE parts_catalog ADD COLUMN maximum_discount_code TEXT;
+      ALTER TABLE parts_catalog ADD COLUMN maximum_discount_pct NUMERIC(5,2);
+    ui_surface_hint: "Parts Profile + invoice line override blocker"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 5 — TAX (per-part)
+  # ==========================================================================
+  - id: part.avatax_product_code
+    intellidealer_label: "AvaTax Product Code"
+    intellidealer_screen: "Parts Profile (Pricing detail)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.50.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "AvaTax-defined product code per part (drives the AvaTax decision payload)."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: avatax_product_code
+    qep_evidence:
+      - "database.types.ts parts_catalog.avatax_product_code"
+    qep_gap_notes: ""
+    severity: must
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile — Tax block"
+    dependencies: []
+
+  - id: part.avatax_use_exemption
+    intellidealer_label: "AvaTax Use Exemption"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.50.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "AvaTax use-exemption code (overrides customer's cert per-line)."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: avatax_use_exemption
+    qep_evidence:
+      - "database.types.ts parts_catalog.avatax_use_exemption"
+    qep_gap_notes: ""
+    severity: must
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile — Tax block"
+    dependencies: []
+
+  - id: part.tax_applies_1_2_3_4
+    intellidealer_label: "Tax 1-4 Applies (Yes/No)"
+    intellidealer_screen: "Parts Profile (Pricing detail)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.50.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Per-part toggles for whether each of Tax 1 / 2 / 3 / 4 applies to
+      this line. Drives the AvaTax-vs-line-pre-tax decision.
+    qep_status: MISSING
+    qep_table: parts_catalog
+    qep_column: tax_1_applies
+    qep_evidence: []
+    qep_gap_notes: "No per-part tax-applies booleans."
+    severity: must
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE parts_catalog ADD COLUMN tax_1_applies BOOLEAN NOT NULL DEFAULT true;
+      ALTER TABLE parts_catalog ADD COLUMN tax_2_applies BOOLEAN NOT NULL DEFAULT true;
+      ALTER TABLE parts_catalog ADD COLUMN tax_3_applies BOOLEAN NOT NULL DEFAULT true;
+      ALTER TABLE parts_catalog ADD COLUMN tax_4_applies BOOLEAN NOT NULL DEFAULT true;
+    ui_surface_hint: "Parts Profile — Tax block"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 6 — STOCKING / REORDER
+  # ==========================================================================
+  - id: part.reorder_point
+    intellidealer_label: "Reorder Point"
+    intellidealer_screen: "Parts Profile (Ordering Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "On-hand level that triggers a reorder."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: reorder_point
+    qep_evidence:
+      - "database.types.ts parts_catalog.reorder_point, .reorder_point_manual_override"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile — Ordering block"
+    dependencies: []
+
+  - id: part.safety_stock
+    intellidealer_label: "Safety Stock"
+    intellidealer_screen: "Parts Profile (Ordering Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "Buffer level below which the part is considered at-risk."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: safety_stock_qty
+    qep_evidence:
+      - "database.types.ts parts_catalog.safety_stock_qty, .safety_stock_manual_override"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile — Ordering block"
+    dependencies: []
+
+  - id: part.eoq
+    intellidealer_label: "Order Quantity (EOQ)"
+    intellidealer_screen: "Parts Profile (Ordering Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "Economic Order Quantity — system-suggested or operator-set order qty."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: eoq
+    qep_evidence:
+      - "database.types.ts parts_catalog.eoq, .eoq_manual_override"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile — Ordering block"
+    dependencies: []
+
+  - id: part.lead_time
+    intellidealer_label: "Lead Time (days)"
+    intellidealer_screen: "Parts Profile (Ordering Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "Vendor lead time — drives reorder-point math."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: lead_time_days
+    qep_evidence:
+      - "database.types.ts parts_catalog.lead_time_days"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile — Ordering block"
+    dependencies: []
+
+  - id: part.amax_apr_code
+    intellidealer_label: "AMAX APR Code / Source"
+    intellidealer_screen: "Parts Profile (Ordering Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Manufacturer 'Annual Min/Max Auto-Parts Replenishment' code +
+      source. Drives OEM-portal-fed auto-reorder cycle.
+    qep_status: MISSING
+    qep_table: parts_catalog
+    qep_column: amax_apr_code
+    qep_evidence: []
+    qep_gap_notes: "No AMAX APR columns."
+    severity: should
+    category: workflow
+    migration_hint: |
+      ALTER TABLE parts_catalog ADD COLUMN amax_apr_code TEXT;
+      ALTER TABLE parts_catalog ADD COLUMN amax_apr_source TEXT;
+    ui_surface_hint: "Parts Profile — Ordering block"
+    dependencies: []
+
+  - id: part.season_code_length
+    intellidealer_label: "Season Code / Length"
+    intellidealer_screen: "Parts Profile (Ordering Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Seasonal demand modifier (e.g. snowblower-belt season Oct-Mar).
+      Drives the seasonal-adjusted reorder math.
+    qep_status: MISSING
+    qep_table: parts_catalog
+    qep_column: season_code
+    qep_evidence: []
+    qep_gap_notes: "No season columns."
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE parts_catalog ADD COLUMN season_code TEXT;
+      ALTER TABLE parts_catalog ADD COLUMN season_length_months INTEGER;
+    ui_surface_hint: "Parts Profile — Ordering block"
+    dependencies: []
+
+  - id: part.effectual_pct
+    intellidealer_label: "Effectual %"
+    intellidealer_screen: "Parts Profile (Ordering Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: percent
+    intellidealer_purpose: "Forecasting confidence factor — discounts the EOQ proportionally."
+    qep_status: MISSING
+    qep_table: parts_catalog
+    qep_column: effectual_pct
+    qep_evidence: []
+    qep_gap_notes: "No effectual % column."
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE parts_catalog ADD COLUMN effectual_pct NUMERIC(5,2);
+    ui_surface_hint: "Parts Profile — Ordering block"
+    dependencies: []
+
+  - id: part.required_quantity
+    intellidealer_label: "Required Quantity (next period forecast)"
+    intellidealer_screen: "Parts Profile (Ordering Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "Forecasted next-period demand qty (computed by the demand engine)."
+    qep_status: PARTIAL
+    qep_table: parts_demand_forecasts
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts parts_demand_forecasts (table exists)"
+    qep_gap_notes: ""
+    severity: should
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile — Ordering block (read-only from forecast)"
+    dependencies: []
+
+  - id: part.protect_months_quantity_code
+    intellidealer_label: "Protect Months / Quantity / Code"
+    intellidealer_screen: "Parts Profile (Ordering Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      'Protect' levels — qty held back from sale-pick (e.g. for warranty
+      reserve, or minimum-display). Months + Quantity + Code combine
+      to control the protect logic.
+    qep_status: MISSING
+    qep_table: parts_catalog
+    qep_column: protect_months
+    qep_evidence: []
+    qep_gap_notes: "No protect-stock columns."
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE parts_catalog ADD COLUMN protect_months INTEGER;
+      ALTER TABLE parts_catalog ADD COLUMN protect_quantity INTEGER;
+      ALTER TABLE parts_catalog ADD COLUMN protect_code TEXT;
+    ui_surface_hint: "Parts Profile — Ordering block"
+    dependencies: []
+
+  - id: part.do_not_order
+    intellidealer_label: "Do Not Order (flag + date)"
+    intellidealer_screen: "Parts Profile (Ordering Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Hard-stop on auto-reorder for this part (e.g. discontinued by OEM,
+      or quality-hold). The Date is when the flag was set.
+    qep_status: MISSING
+    qep_table: parts_catalog
+    qep_column: do_not_order
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: workflow
+    migration_hint: |
+      ALTER TABLE parts_catalog ADD COLUMN do_not_order BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE parts_catalog ADD COLUMN do_not_order_set_at DATE;
+      ALTER TABLE parts_catalog ADD COLUMN do_not_order_reason TEXT;
+    ui_surface_hint: "Parts Profile — Ordering block (red badge if true)"
+    dependencies: []
+
+  - id: part.movement_code
+    intellidealer_label: "Movement Code"
+    intellidealer_screen: "Parts Profile (Additional Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Velocity classifier (A=fast, B=medium, C=slow, D=dead). Drives stock-mix decisions."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: movement_code
+    qep_evidence:
+      - "database.types.ts parts_catalog.movement_code"
+    qep_gap_notes: ""
+    severity: must
+    category: reporting
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile + listing filter"
+    dependencies: []
+
+  - id: part.activity_code
+    intellidealer_label: "Activity Code"
+    intellidealer_screen: "Parts Profile (Additional Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Activity classifier (recent-activity vs cold)."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: activity_code
+    qep_evidence:
+      - "database.types.ts parts_catalog.activity_code"
+    qep_gap_notes: ""
+    severity: should
+    category: reporting
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile"
+    dependencies: []
+
+  - id: part.stocking_code
+    intellidealer_label: "Stocking Code"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Stocking strategy (e.g. 'STOCK', 'NON-STOCK', 'SPECIAL ORDER ONLY')."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: stocking_code
+    qep_evidence:
+      - "database.types.ts parts_catalog.stocking_code"
+    qep_gap_notes: ""
+    severity: must
+    category: workflow
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 7 — LOST SALE / SPECIAL ORDER METRICS
+  # ==========================================================================
+  - id: part.lost_sale_frequency
+    intellidealer_label: "Lost Sale Frequency"
+    intellidealer_screen: "Parts Profile (Additional Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      How many times a customer asked for this part and we couldn't
+      fill it. Stockout-impact metric — drives stock-mix decisions.
+    qep_status: MISSING
+    qep_table: parts_lost_sales
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No lost-sale tracking. Critical metric for stock-mix optimization.
+    severity: must
+    category: reporting
+    migration_hint: |
+      CREATE TABLE parts_lost_sales (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        part_catalog_id uuid NOT NULL REFERENCES parts_catalog(id),
+        branch_id uuid REFERENCES branches(id),
+        quantity_requested INTEGER NOT NULL,
+        customer_id uuid REFERENCES qrm_companies(id),
+        recorded_by UUID REFERENCES profiles(id),
+        recorded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        reason TEXT,
+        substitute_offered_part_id uuid REFERENCES parts_catalog(id)
+      );
+      CREATE INDEX ON parts_lost_sales (workspace_id, part_catalog_id, recorded_at DESC);
+      -- Optional: aggregate counters on parts_catalog
+      ALTER TABLE parts_catalog ADD COLUMN lost_sale_frequency INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE parts_catalog ADD COLUMN lost_sale_quantity INTEGER NOT NULL DEFAULT 0;
+    ui_surface_hint: "Parts Profile — Lost Sale block + record-lost-sale button on parts counter"
+    dependencies: []
+
+  - id: part.lost_sale_quantity
+    intellidealer_label: "Lost Sale Quantity"
+    intellidealer_screen: "Parts Profile (Additional Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "Aggregate qty lost across all lost-sale events."
+    qep_status: MISSING
+    qep_table: parts_catalog
+    qep_column: lost_sale_quantity
+    qep_evidence: []
+    qep_gap_notes: "(see part.lost_sale_frequency)"
+    severity: must
+    category: reporting
+    migration_hint: "(see part.lost_sale_frequency)"
+    ui_surface_hint: "Parts Profile"
+    dependencies: [part.lost_sale_frequency]
+
+  - id: part.special_order_frequency_quantity
+    intellidealer_label: "Special Order Frequency / Quantity"
+    intellidealer_screen: "Parts Profile (Additional Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      How many times this part was special-ordered (vs pulled from stock)
+      + cumulative qty. Used to convert frequent special-orders into
+      stock items.
+    qep_status: MISSING
+    qep_table: parts_catalog
+    qep_column: special_order_frequency
+    qep_evidence: []
+    qep_gap_notes: "No special-order counters."
+    severity: should
+    category: reporting
+    migration_hint: |
+      ALTER TABLE parts_catalog ADD COLUMN special_order_frequency INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE parts_catalog ADD COLUMN special_order_quantity INTEGER NOT NULL DEFAULT 0;
+    ui_surface_hint: "Parts Profile — Special Order block"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 8 — SALES HISTORY
+  # ==========================================================================
+  - id: part.ytd_sales_dollars
+    intellidealer_label: "YTD Sales $"
+    intellidealer_screen: "Parts Profile (Additional Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Year-to-date sales dollars."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: ytd_sales_dollars
+    qep_evidence:
+      - "database.types.ts parts_catalog.ytd_sales_dollars"
+    qep_gap_notes: ""
+    severity: must
+    category: reporting
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile"
+    dependencies: []
+
+  - id: part.last_year_sales
+    intellidealer_label: "Last Year Sales (LYR)"
+    intellidealer_screen: "Parts Profile (Additional Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Trailing 12-month $ + qty. Drives YoY comparison."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: last_year_sales_dollars
+    qep_evidence:
+      - "database.types.ts parts_catalog.last_year_sales_dollars, .last_year_sales_qty, .last_12mo_sales, .region_last_12mo_sales"
+    qep_gap_notes: ""
+    severity: must
+    category: reporting
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile — Sales History grid"
+    dependencies: []
+
+  - id: part.sales_history_grid
+    intellidealer_label: "Sales History Grid (Quantity / Demand / Trips / Average × 24 months)"
+    intellidealer_screen: "Parts Profile (Additional Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Per-month grid (current + prior 24 months + LYR + 2YR/3YR rolls)
+      of Quantity sold, Demand requested, Trips (number of distinct
+      sales events), Average per trip. Drives all forecasting.
+    qep_status: BUILT
+    qep_table: parts_history_monthly
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts parts_history_monthly (table exists)"
+    qep_gap_notes: ""
+    severity: must
+    category: reporting
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile — History grid"
+    dependencies: []
+
+  - id: part.last_sale_date
+    intellidealer_label: "Date Last Sale"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: "Most-recent sale date — drives dead-capital aging."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: last_sale_date
+    qep_evidence:
+      - "database.types.ts parts_catalog.last_sale_date"
+    qep_gap_notes: ""
+    severity: must
+    category: reporting
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile + dead-capital report"
+    dependencies: []
+
+  - id: part.last_order_number_type
+    intellidealer_label: "Last Order Number / Type"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Most-recent customer-order #/type for this part."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: last_po_number
+    qep_evidence:
+      - "database.types.ts parts_catalog.last_po_number"
+    qep_gap_notes: |
+      last_po_number captures vendor PO. Need a separate column for
+      last customer order # / type if not already.
+    severity: should
+    category: reporting
+    migration_hint: |
+      ALTER TABLE parts_catalog ADD COLUMN last_customer_order_number TEXT;
+      ALTER TABLE parts_catalog ADD COLUMN last_customer_order_type TEXT;
+    ui_surface_hint: "Parts Profile"
+    dependencies: []
+
+  - id: part.last_receipt_date
+    intellidealer_label: "Last Receipt Date"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: "Most-recent vendor receipt for this part."
+    qep_status: PARTIAL
+    qep_table: parts_catalog
+    qep_column: dms_last_stock_ordered
+    qep_evidence:
+      - "database.types.ts parts_catalog.dms_last_stock_ordered, .dms_last_ordered"
+    qep_gap_notes: ""
+    severity: must
+    category: reporting
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile"
+    dependencies: []
+
+  - id: part.months_supply
+    intellidealer_label: "Months Supply"
+    intellidealer_screen: "Parts Profile (Additional Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "On-hand divided by monthly demand — months of stock at current burn rate."
+    qep_status: PARTIAL
+    qep_table: null
+    qep_column: null
+    qep_evidence:
+      - "computed via parts_catalog.on_hand / parts_history_monthly aggregation"
+    qep_gap_notes: ""
+    severity: should
+    category: reporting
+    migration_hint: |
+      CREATE OR REPLACE VIEW v_parts_months_supply AS
+        SELECT pc.id, pc.workspace_id,
+          CASE WHEN m.avg_monthly_qty > 0
+               THEN pc.on_hand::numeric / m.avg_monthly_qty
+               ELSE NULL END AS months_supply
+        FROM parts_catalog pc
+        LEFT JOIN (
+          SELECT part_catalog_id, AVG(quantity_sold) AS avg_monthly_qty
+          FROM parts_history_monthly
+          WHERE month_start > now() - INTERVAL '6 months'
+          GROUP BY part_catalog_id
+        ) m ON m.part_catalog_id = pc.id;
+    ui_surface_hint: "Parts Profile — Additional Info block"
+    dependencies: []
+
+  - id: part.last_count_date
+    intellidealer_label: "Last Count Date"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: "Most-recent physical-inventory count date."
+    qep_status: BUILT
+    qep_table: parts_catalog
+    qep_column: last_count_date
+    qep_evidence:
+      - "database.types.ts parts_catalog.last_count_date"
+    qep_gap_notes: ""
+    severity: must
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile + cycle-count audit report"
+    dependencies: []
+
+  - id: part.ofc_reclass
+    intellidealer_label: "OFC Reclass (From / To Element)"
+    intellidealer_screen: "Parts Profile (Additional Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Original Factory Code reclassification trail (when manufacturer
+      moves a part from one classification to another).
+    qep_status: MISSING
+    qep_table: parts_catalog
+    qep_column: ofc_reclass_from
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE parts_catalog ADD COLUMN ofc_reclass_from TEXT;
+      ALTER TABLE parts_catalog ADD COLUMN ofc_reclass_to TEXT;
+      ALTER TABLE parts_catalog ADD COLUMN ofc_reclass_at DATE;
+    ui_surface_hint: "Parts Profile — OFC block"
+    dependencies: []
+
+  - id: part.suppress_mydealer_pricing
+    intellidealer_label: "Suppress MyDealer Pricing"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.50.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: "If TRUE, hide pricing for this part on the customer-portal MyDealer interface."
+    qep_status: MISSING
+    qep_table: parts_catalog
+    qep_column: suppress_portal_pricing
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: workflow
+    migration_hint: |
+      ALTER TABLE parts_catalog ADD COLUMN suppress_portal_pricing BOOLEAN NOT NULL DEFAULT false;
+    ui_surface_hint: "Parts Profile + MyDealer portal pricing controls"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 9 — PARTS INVOICING HEADER
+  # ==========================================================================
+  - id: parts_invoice.order_number
+    intellidealer_label: "Order Number (Parts Invoice)"
+    intellidealer_screen: "Parts Invoicing Header"
+    intellidealer_data_source: "PINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.20.16.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Six-digit parts invoice/order number (e.g. '023743'). Customer-facing."
+    qep_status: PARTIAL
+    qep_table: parts_invoices
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts parts_invoices (table exists)"
+    qep_gap_notes: |
+      Verify parts_invoices has a human-readable order_number column
+      separate from the UUID id.
+    severity: must
+    category: operational
+    migration_hint: |
+      ALTER TABLE parts_invoices ADD COLUMN IF NOT EXISTS order_number TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_parts_invoices_order_number
+        ON parts_invoices (workspace_id, order_number)
+        WHERE order_number IS NOT NULL;
+    ui_surface_hint: "Parts Invoice header bar"
+    dependencies: []
+
+  - id: parts_invoice.customer
+    intellidealer_label: "Customer (parts invoice)"
+    intellidealer_screen: "Parts Invoicing Header"
+    intellidealer_data_source: "PINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: "Customer the invoice is billed to."
+    qep_status: PARTIAL
+    qep_table: parts_invoices
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts parts_invoices (table)"
+    qep_gap_notes: "Confirm FK to qrm_companies."
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Parts Invoice header"
+    dependencies: []
+
+  - id: parts_invoice.salesperson
+    intellidealer_label: "Salesperson (parts invoice)"
+    intellidealer_screen: "Parts Invoicing Header"
+    intellidealer_data_source: "PINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: "Counter-staff or rep credited with the sale."
+    qep_status: PARTIAL
+    qep_table: parts_invoices
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "Confirm salesperson_id column on parts_invoices."
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE parts_invoices ADD COLUMN IF NOT EXISTS salesperson_id UUID
+        REFERENCES profiles(id);
+    ui_surface_hint: "Parts Invoice header"
+    dependencies: []
+
+  - id: parts_invoice.po_number
+    intellidealer_label: "PO Number (parts invoice)"
+    intellidealer_screen: "Parts Invoicing Header"
+    intellidealer_data_source: "PINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Customer's PO # for this invoice (defaults from per-customer Phase-1 PO)."
+    qep_status: MISSING
+    qep_table: parts_invoices
+    qep_column: po_number
+    qep_evidence: []
+    qep_gap_notes: "No per-invoice PO column."
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE parts_invoices ADD COLUMN po_number TEXT;
+    ui_surface_hint: "Parts Invoice header — PO field (red if customer.po_required and missing)"
+    dependencies: []
+
+  - id: parts_invoice.ship_via_freight_terms
+    intellidealer_label: "Ship Via / Freight Terms"
+    intellidealer_screen: "Parts Invoicing Header"
+    intellidealer_data_source: "PINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Carrier + freight terms for the shipment."
+    qep_status: MISSING
+    qep_table: parts_invoices
+    qep_column: ship_via
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE parts_invoices ADD COLUMN ship_via TEXT;
+      ALTER TABLE parts_invoices ADD COLUMN freight_terms TEXT;
+    ui_surface_hint: "Parts Invoice header — Shipping block"
+    dependencies: []
+
+  - id: parts_invoice.tax_codes_1_2_3_4
+    intellidealer_label: "Parts Invoice Tax 1-4"
+    intellidealer_screen: "Parts Invoicing Header"
+    intellidealer_data_source: "PINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: enum
+    intellidealer_purpose: "Same 4-slot tax routing as elsewhere — defaults from customer + ship-to override."
+    qep_status: MISSING
+    qep_table: parts_invoices
+    qep_column: tax_code_1
+    qep_evidence: []
+    qep_gap_notes: "Per-invoice tax routing missing."
+    severity: must
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE parts_invoices ADD COLUMN tax_code_1 TEXT;
+      ALTER TABLE parts_invoices ADD COLUMN tax_code_2 TEXT;
+      ALTER TABLE parts_invoices ADD COLUMN tax_code_3 TEXT;
+      ALTER TABLE parts_invoices ADD COLUMN tax_code_4 TEXT;
+    ui_surface_hint: "Parts Invoice header — Tax block"
+    dependencies: []
+
+  - id: parts_invoice.discount
+    intellidealer_label: "Parts Invoice Discount"
+    intellidealer_screen: "Parts Invoicing Header"
+    intellidealer_data_source: "PINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Per-invoice discount group override."
+    qep_status: MISSING
+    qep_table: parts_invoices
+    qep_column: discount_code
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: financial
+    migration_hint: |
+      ALTER TABLE parts_invoices ADD COLUMN discount_code TEXT;
+    ui_surface_hint: "Parts Invoice header — Discount block"
+    dependencies: []
+
+  - id: parts_invoice.sold_to_ship_to
+    intellidealer_label: "Parts Invoice Sold-To / Ship-To"
+    intellidealer_screen: "Parts Invoicing Header"
+    intellidealer_data_source: "PINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: "Sold-to + Ship-to addresses on the invoice (defaults from customer's ship-to book)."
+    qep_status: MISSING
+    qep_table: parts_invoices
+    qep_column: sold_to_address_id
+    qep_evidence: []
+    qep_gap_notes: "(depends on Phase-1 customer.ship_to_addresses)"
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE parts_invoices ADD COLUMN sold_to_address_id UUID
+        REFERENCES qrm_company_ship_to_addresses(id);
+      ALTER TABLE parts_invoices ADD COLUMN ship_to_address_id UUID
+        REFERENCES qrm_company_ship_to_addresses(id);
+    ui_surface_hint: "Parts Invoice header — Sold-To / Ship-To block"
+    dependencies: []
+
+  - id: parts_invoice.line_qty_ladder
+    intellidealer_label: "Parts Invoice Line: Ord / Iss / Ship / Inv quantities"
+    intellidealer_screen: "Parts Invoicing Detail"
+    intellidealer_data_source: "PINVL"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.20.16.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Per-line four-stage quantity ladder: Ordered → Issued (pulled
+      from bin) → Shipped → Invoiced. Tracks the parts handoff
+      from counter to customer. Critical workflow primitive.
+    qep_status: PARTIAL
+    qep_table: parts_invoices
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts parts_invoices (table exists; verify line-item shape)"
+    qep_gap_notes: |
+      Need parts_invoice_lines with the four-quantity ladder columns.
+    severity: must
+    category: workflow
+    migration_hint: |
+      CREATE TABLE parts_invoice_lines (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        parts_invoice_id uuid NOT NULL REFERENCES parts_invoices(id) ON DELETE CASCADE,
+        sort_order INTEGER NOT NULL,
+        cash_code TEXT,
+        part_catalog_id uuid REFERENCES parts_catalog(id),
+        part_number TEXT NOT NULL,
+        description TEXT,
+        bin_location TEXT,
+        ofc TEXT,
+        qty_ordered INTEGER NOT NULL DEFAULT 0,
+        qty_issued INTEGER NOT NULL DEFAULT 0,
+        qty_shipped INTEGER NOT NULL DEFAULT 0,
+        qty_invoiced INTEGER NOT NULL DEFAULT 0,
+        unit_price_cents BIGINT NOT NULL,
+        discount_pct NUMERIC(5,2),
+        tax_applies BOOLEAN NOT NULL DEFAULT true,
+        extended_price_cents BIGINT NOT NULL,
+        substituted_part_id uuid REFERENCES parts_catalog(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX ON parts_invoice_lines (workspace_id, parts_invoice_id);
+    ui_surface_hint: "Parts Invoice Detail — Lines grid"
+    dependencies: []
+
+  - id: parts_invoice.cash_code
+    intellidealer_label: "Cash Code (per-line)"
+    intellidealer_screen: "Parts Invoicing Detail"
+    intellidealer_data_source: "PINVL"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.20.16.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Per-line cash receipt code (when paid at counter vs on account).
+      Drives the daily cash deposit reconciliation.
+    qep_status: MISSING
+    qep_table: parts_invoice_lines
+    qep_column: cash_code
+    qep_evidence: []
+    qep_gap_notes: "(see parts_invoice.line_qty_ladder)"
+    severity: should
+    category: financial
+    migration_hint: "(see parts_invoice.line_qty_ladder)"
+    ui_surface_hint: "Parts Invoice Detail — line cash-code"
+    dependencies: [parts_invoice.line_qty_ladder]
+
+  - id: parts_invoice.view_back_orders
+    intellidealer_label: "View Back Orders (button)"
+    intellidealer_screen: "Parts Invoicing Header"
+    intellidealer_data_source: "PINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: "Drill into open back-orders for the customer (across invoices)."
+    qep_status: PARTIAL
+    qep_table: parts_invoice_lines
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "Requires parts_invoice_lines with back-order tracking via qty_ordered > qty_shipped."
+    severity: should
+    category: workflow
+    migration_hint: ""
+    ui_surface_hint: "Parts Invoice Header — View Back Orders button"
+    dependencies: [parts_invoice.line_qty_ladder]
+
+  - id: parts_invoice.print_parameters
+    intellidealer_label: "Print Parameters"
+    intellidealer_screen: "Parts Invoicing"
+    intellidealer_data_source: "PINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-3_Parts/Parts Invoicing.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: "Per-invoice print configuration (form, copies, label option)."
+    qep_status: MISSING
+    qep_table: parts_invoices
+    qep_column: print_parameters
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: could
+    category: nice_to_have
+    migration_hint: |
+      ALTER TABLE parts_invoices ADD COLUMN print_parameters JSONB;
+    ui_surface_hint: "Parts Invoice — Print modal"
+    dependencies: []
+
+  - id: parts_invoice.tethr_it_now
+    intellidealer_label: "Tethr It Now (telematics lookup)"
+    intellidealer_screen: "Parts Invoicing"
+    intellidealer_data_source: "PINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-3_Parts/Parts Invoicing.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Tethr telematics integration — finds parts compatible with a
+      machine identified by telematics ID. Speeds up rural/field
+      ordering when the operator only has the machine.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "No Tethr integration. Defer to telemetry phase."
+    severity: could
+    category: nice_to_have
+    migration_hint: ""
+    ui_surface_hint: "Parts Invoice — Tethr It Now button"
+    dependencies: []
+
+  - id: parts_invoice.ups_worldship_import
+    intellidealer_label: "UPS WorldShip Import"
+    intellidealer_screen: "Parts Invoicing Detail"
+    intellidealer_data_source: "PINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.20.16.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Pushes the invoice's ship-to into UPS WorldShip and pulls back
+      tracking #. Saves manual data entry on every shipment.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "No UPS integration."
+    severity: should
+    category: workflow
+    migration_hint: |
+      CREATE TABLE shipping_label_runs (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        parts_invoice_id uuid REFERENCES parts_invoices(id),
+        carrier TEXT NOT NULL,
+        tracking_number TEXT,
+        label_url TEXT,
+        cost_cents BIGINT,
+        ran_by UUID REFERENCES profiles(id),
+        ran_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    ui_surface_hint: "Parts Invoice — UPS WorldShip Import button"
+    dependencies: []
+
+  - id: parts_invoice.adjust_ldttn
+    intellidealer_label: "Adjust LDTTN"
+    intellidealer_screen: "Parts Invoicing Detail"
+    intellidealer_data_source: "PINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.20.16.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      IntelliDealer-specific bulk-adjust function (Loose Dead-Track
+      Total Number) — likely an inventory adjustment workflow.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "Unclear function — defer pending owner clarification."
+    severity: could
+    category: nice_to_have
+    migration_hint: ""
+    ui_surface_hint: "Parts Invoice — Adjust LDTTN button"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 10 — PARTS ORDERING (internal stock orders)
+  # ==========================================================================
+  - id: parts_order.order_number
+    intellidealer_label: "Parts Order Number"
+    intellidealer_screen: "Parts Ordering"
+    intellidealer_data_source: "PORD"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Ordering__3.20.33.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Customer-facing parts-order number (e.g. '009520')."
+    qep_status: BUILT
+    qep_table: parts_orders
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts parts_orders (table exists)"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Parts Order header"
+    dependencies: []
+
+  - id: parts_order.status
+    intellidealer_label: "Parts Order Status"
+    intellidealer_screen: "Parts Ordering"
+    intellidealer_data_source: "PORD"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Ordering__3.20.33.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "On Order"
+      - "Back Ordered"
+      - "Changeable"
+      - "Received"
+      - "Cancelled"
+    intellidealer_purpose: "Order pipeline state."
+    qep_status: PARTIAL
+    qep_table: parts_orders
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "Verify status enum matches IntelliDealer values."
+    severity: must
+    category: workflow
+    migration_hint: ""
+    ui_surface_hint: "Parts Order listing — status filter"
+    dependencies: []
+
+  - id: parts_order.order_type
+    intellidealer_label: "Parts Order Type"
+    intellidealer_screen: "Parts Ordering"
+    intellidealer_data_source: "PORD"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Ordering__3.20.33.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Stock Order (SO)"
+      - "Customer Order (CO)"
+      - "Special Order"
+      - "Emergency"
+      - "Service Order"
+    intellidealer_purpose: "Type of order — drives sourcing rules and freight terms."
+    qep_status: PARTIAL
+    qep_table: parts_orders
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "Verify type enum."
+    severity: must
+    category: workflow
+    migration_hint: ""
+    ui_surface_hint: "Parts Order header"
+    dependencies: []
+
+  - id: parts_order.released_date
+    intellidealer_label: "Parts Order Released Date"
+    intellidealer_screen: "Parts Ordering"
+    intellidealer_data_source: "PORD"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Ordering__3.20.33.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: "Date the order was released to the vendor."
+    qep_status: PARTIAL
+    qep_table: parts_orders
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "Verify released_at column."
+    severity: must
+    category: workflow
+    migration_hint: ""
+    ui_surface_hint: "Parts Order header"
+    dependencies: []
+
+  - id: parts_order.line_items
+    intellidealer_label: "Parts Order Line Items count"
+    intellidealer_screen: "Parts Ordering"
+    intellidealer_data_source: "PORD"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Ordering__3.20.33.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "Count of line items on the order — display column on listing."
+    qep_status: BUILT
+    qep_table: parts_order_lines
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts parts_order_lines (table)"
+    qep_gap_notes: ""
+    severity: should
+    category: reporting
+    migration_hint: ""
+    ui_surface_hint: "Parts Order listing"
+    dependencies: []
+
+  - id: parts_order.vendor_block
+    intellidealer_label: "Parts Order Vendor Block (Vendors tab)"
+    intellidealer_screen: "Parts Ordering — Vendors"
+    intellidealer_data_source: "PORD"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Ordering-Vendors__3.20.37.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Per-line vendor block (Vendor Code, Name, Address, Phone, Contact).
+      Used to confirm sourcing details before release.
+    qep_status: BUILT
+    qep_table: vendor_profiles
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts vendor_profiles, vendor_contacts"
+    qep_gap_notes: ""
+    severity: must
+    category: workflow
+    migration_hint: ""
+    ui_surface_hint: "Parts Order — Vendors tab"
+    dependencies: []
+
+  - id: parts_order.price_breaks
+    intellidealer_label: "Parts Order Price Breaks"
+    intellidealer_screen: "Parts Ordering — Price Breaks"
+    intellidealer_data_source: "PORD"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Ordering-Price-Breaks__3.20.41.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Vendor-published quantity-bracket pricing (e.g. 1-9 = $5, 10-99 =
+      $4.50, 100+ = $4.00). Used to bump order qty up to the next price
+      break for margin.
+    qep_status: PARTIAL
+    qep_table: parts_vendor_prices
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts parts_vendor_prices (table exists)"
+    qep_gap_notes: "Verify quantity-bracket schema."
+    severity: should
+    category: financial
+    migration_hint: |
+      -- If parts_vendor_prices doesn't include qty_break ladder:
+      ALTER TABLE parts_vendor_prices ADD COLUMN IF NOT EXISTS min_qty INTEGER;
+      ALTER TABLE parts_vendor_prices ADD COLUMN IF NOT EXISTS max_qty INTEGER;
+    ui_surface_hint: "Parts Order — Price Breaks tab"
+    dependencies: []
+
+  - id: parts_order.purchase_details
+    intellidealer_label: "Parts Order Purchase Details"
+    intellidealer_screen: "Parts Ordering — Purchase Details"
+    intellidealer_data_source: "PORD"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Ordering-Purchase-Details__3.21.22.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Per-line purchase details (extended cost, freight allocation,
+      receipt history).
+    qep_status: PARTIAL
+    qep_table: parts_order_lines
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Parts Order — Purchase Details tab"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 11 — PARTS QUOTING
+  # ==========================================================================
+  - id: parts_quote.reference_number
+    intellidealer_label: "Parts Quote Reference Number"
+    intellidealer_screen: "Parts Quoting"
+    intellidealer_data_source: "PQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Quoting__3.22.54.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Six-digit parts-quote number (e.g. '003176'). Customer-facing."
+    qep_status: MISSING
+    qep_table: parts_quotes
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No parts-side quote table. qb_quotes is equipment-side only.
+      Need a parts_quotes table for parts-only quotes (e.g. PM-kit
+      quotes, fast-moving inventory restock proposals).
+    severity: must
+    category: financial
+    migration_hint: |
+      CREATE TABLE parts_quotes (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        quote_number TEXT NOT NULL,
+        customer_id uuid NOT NULL REFERENCES qrm_companies(id),
+        contact_id uuid REFERENCES qrm_contacts(id),
+        salesperson_id uuid REFERENCES profiles(id),
+        assigned_salesperson_id uuid REFERENCES profiles(id),
+        description TEXT,
+        location_branch_id uuid REFERENCES branches(id),
+        is_master BOOLEAN NOT NULL DEFAULT false,
+        cloned_from_quote_id uuid REFERENCES parts_quotes(id),
+        status TEXT NOT NULL DEFAULT 'pending',
+        expiry_date DATE,
+        subtotal_cents BIGINT,
+        discount_cents BIGINT,
+        tax_cents BIGINT,
+        total_cents BIGINT,
+        notes TEXT,
+        pdf_url TEXT,
+        sent_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        deleted_at TIMESTAMPTZ,
+        UNIQUE (workspace_id, quote_number)
+      );
+      CREATE TABLE parts_quote_lines (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        parts_quote_id uuid NOT NULL REFERENCES parts_quotes(id) ON DELETE CASCADE,
+        sort_order INTEGER NOT NULL,
+        part_catalog_id uuid REFERENCES parts_catalog(id),
+        part_number TEXT NOT NULL,
+        description TEXT,
+        qty INTEGER NOT NULL,
+        unit_price_cents BIGINT NOT NULL,
+        discount_pct NUMERIC(5,2),
+        extended_price_cents BIGINT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    ui_surface_hint: "Parts Quoting — own page"
+    dependencies: []
+
+  - id: parts_quote.status
+    intellidealer_label: "Parts Quote Status"
+    intellidealer_screen: "Parts Quoting"
+    intellidealer_data_source: "PQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Quoting__3.22.54.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Pending"
+      - "Quoted"
+      - "Accepted"
+      - "Rejected"
+      - "Expired"
+      - "Converted"
+    intellidealer_purpose: "Pipeline state for parts quote."
+    qep_status: MISSING
+    qep_table: parts_quotes
+    qep_column: status
+    qep_evidence: []
+    qep_gap_notes: "(see parts_quote.reference_number)"
+    severity: must
+    category: workflow
+    migration_hint: "(see parts_quote.reference_number)"
+    ui_surface_hint: "Parts Quoting listing — status filter + badge"
+    dependencies: [parts_quote.reference_number]
+
+  - id: parts_quote.expiry_date
+    intellidealer_label: "Parts Quote Expiry Date"
+    intellidealer_screen: "Parts Quoting"
+    intellidealer_data_source: "PQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Quoting__3.22.54.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: "Quote expiry — drives auto-flip to Expired."
+    qep_status: MISSING
+    qep_table: parts_quotes
+    qep_column: expiry_date
+    qep_evidence: []
+    qep_gap_notes: "(see parts_quote.reference_number)"
+    severity: must
+    category: workflow
+    migration_hint: "(see parts_quote.reference_number)"
+    ui_surface_hint: "Parts Quoting header"
+    dependencies: [parts_quote.reference_number]
+
+  - id: parts_quote.master_quote_flag
+    intellidealer_label: "Parts Quote Master Quote (filter)"
+    intellidealer_screen: "Parts Quoting"
+    intellidealer_data_source: "PQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Quoting__3.22.54.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Templated parts quotes (e.g. '500-hr PM kit for Bobcat T770').
+      Cloned into customer-specific quotes.
+    qep_status: MISSING
+    qep_table: parts_quotes
+    qep_column: is_master
+    qep_evidence: []
+    qep_gap_notes: "(see parts_quote.reference_number)"
+    severity: should
+    category: workflow
+    migration_hint: "(see parts_quote.reference_number)"
+    ui_surface_hint: "Parts Quoting listing toggle"
+    dependencies: [parts_quote.reference_number]
+
+  - id: parts_quote.assigned_salesperson
+    intellidealer_label: "Parts Quote Assigned Salesperson"
+    intellidealer_screen: "Parts Quoting"
+    intellidealer_data_source: "PQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Quoting__3.22.54.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: "Rep responsible for closing the quote."
+    qep_status: MISSING
+    qep_table: parts_quotes
+    qep_column: assigned_salesperson_id
+    qep_evidence: []
+    qep_gap_notes: "(see parts_quote.reference_number)"
+    severity: should
+    category: operational
+    migration_hint: "(see parts_quote.reference_number)"
+    ui_surface_hint: "Parts Quoting listing column"
+    dependencies: [parts_quote.reference_number]
+
+  - id: parts_quote.service_link
+    intellidealer_label: "Parts Quoting → Service link"
+    intellidealer_screen: "Parts Quoting Service"
+    intellidealer_data_source: "PQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Quoting-Service__3.13.53.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      When a parts quote is converted into a service WO (e.g. PM-kit
+      quote becomes a scheduled PM job), link the resulting
+      service_job_id back to the originating quote.
+    qep_status: MISSING
+    qep_table: parts_quotes
+    qep_column: converted_service_job_id
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: workflow
+    migration_hint: |
+      ALTER TABLE parts_quotes ADD COLUMN converted_service_job_id UUID
+        REFERENCES service_jobs(id);
+      ALTER TABLE parts_quotes ADD COLUMN converted_at TIMESTAMPTZ;
+    ui_surface_hint: "Parts Quote — Convert to Service WO button"
+    dependencies: [parts_quote.reference_number]
+
+  # ==========================================================================
+  # SECTION 12 — PURCHASE ORDERS (vendor side)
+  # ==========================================================================
+  - id: purchase_order.po_number
+    intellidealer_label: "Purchase Order Number"
+    intellidealer_screen: "Purchase Orders"
+    intellidealer_data_source: "POH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.40.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Vendor PO # (e.g. 'RM3043025')."
+    qep_status: PARTIAL
+    qep_table: parts_orders
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts parts_orders (table — covers parts orders, possibly equipment too)"
+    qep_gap_notes: |
+      parts_orders may double-up as PO + parts order. Verify single
+      vs separate tables — Equipment POs are distinct from parts POs
+      in IntelliDealer (e.g. "Type: Equipment" on the PO header).
+    severity: must
+    category: financial
+    migration_hint: |
+      -- If equipment POs are missing, add a po_type column or
+      -- separate equipment_purchase_orders table.
+      ALTER TABLE parts_orders ADD COLUMN IF NOT EXISTS po_type TEXT;
+    ui_surface_hint: "Purchase Order header"
+    dependencies: []
+
+  - id: purchase_order.type
+    intellidealer_label: "Purchase Order Type"
+    intellidealer_screen: "Purchase Orders"
+    intellidealer_data_source: "POH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.40.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Equipment"
+      - "Parts"
+      - "Service"
+      - "Misc"
+    intellidealer_purpose: "PO type (drives GL routing + receipt workflow)."
+    qep_status: MISSING
+    qep_table: parts_orders
+    qep_column: po_type
+    qep_evidence: []
+    qep_gap_notes: "(see purchase_order.po_number)"
+    severity: must
+    category: financial
+    migration_hint: "(see purchase_order.po_number)"
+    ui_surface_hint: "PO header"
+    dependencies: [purchase_order.po_number]
+
+  - id: purchase_order.status
+    intellidealer_label: "Purchase Order Status"
+    intellidealer_screen: "Purchase Orders"
+    intellidealer_data_source: "POH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.40.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "PO Request"
+      - "Waiting for Authorization"
+      - "Authorized"
+      - "On Order"
+      - "Canceled"
+      - "Back Order"
+      - "Completed"
+      - "Rejected"
+    intellidealer_purpose: "PO pipeline state (8 values)."
+    qep_status: PARTIAL
+    qep_table: parts_orders
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "Verify status enum covers all 8 values."
+    severity: must
+    category: workflow
+    migration_hint: |
+      CREATE TYPE purchase_order_status AS ENUM
+        ('po_request','waiting_for_authorization','authorized','on_order','canceled','back_order','completed','rejected');
+      -- Apply if column shape allows.
+    ui_surface_hint: "PO listing — status filter + workflow badges"
+    dependencies: []
+
+  - id: purchase_order.actor_lifecycle
+    intellidealer_label: "PO Actor Lifecycle (Created/Modified/Authorized/Ordered/Closed by + at)"
+    intellidealer_screen: "Purchase Orders"
+    intellidealer_data_source: "POH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.40.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Audit trail of who took which action and when (Created by Rylee
+      McKenzie 04/30/2025; Authorized by same; Closed 05/12/2025).
+      Required for vendor-PO compliance audit.
+    qep_status: PARTIAL
+    qep_table: parts_order_events
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts parts_order_events (table exists)"
+    qep_gap_notes: ""
+    severity: must
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "PO header — Activity log sub-panel"
+    dependencies: []
+
+  - id: purchase_order.vendor_block
+    intellidealer_label: "PO Vendor Block (Number/Name/Address/Zip/Contact)"
+    intellidealer_screen: "Purchase Orders"
+    intellidealer_data_source: "POH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.40.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Vendor block on the PO header (Vendor #, Name, Address 1-3, Zip,
+      Phone, Fax, Contact Name, Contact Phone, Contact Email, Dealer flag).
+    qep_status: BUILT
+    qep_table: vendor_profiles
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts vendor_profiles, vendor_contacts"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "PO header — Vendor block"
+    dependencies: []
+
+  - id: purchase_order.items_total
+    intellidealer_label: "PO Items Total"
+    intellidealer_screen: "Purchase Orders"
+    intellidealer_data_source: "POH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.40.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Sum of line-item costs on the PO."
+    qep_status: PARTIAL
+    qep_table: parts_orders
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "Computed from parts_order_lines or column on header."
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "PO header — Total block"
+    dependencies: []
+
+  - id: purchase_order.freight_charge
+    intellidealer_label: "PO Freight Charge"
+    intellidealer_screen: "Purchase Orders"
+    intellidealer_data_source: "POH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.40.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Vendor freight charge — added to landed cost."
+    qep_status: MISSING
+    qep_table: parts_orders
+    qep_column: freight_charge_cents
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: financial
+    migration_hint: |
+      ALTER TABLE parts_orders ADD COLUMN freight_charge_cents BIGINT NOT NULL DEFAULT 0;
+      ALTER TABLE parts_orders ADD COLUMN po_total_cents BIGINT NOT NULL DEFAULT 0;
+    ui_surface_hint: "PO header — Total block"
+    dependencies: []
+
+  - id: purchase_order.po_total
+    intellidealer_label: "PO Total"
+    intellidealer_screen: "Purchase Orders"
+    intellidealer_data_source: "POH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.40.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Items + Freight = PO Total."
+    qep_status: MISSING
+    qep_table: parts_orders
+    qep_column: po_total_cents
+    qep_evidence: []
+    qep_gap_notes: "(see purchase_order.freight_charge)"
+    severity: must
+    category: financial
+    migration_hint: "(see purchase_order.freight_charge)"
+    ui_surface_hint: "PO header"
+    dependencies: [purchase_order.freight_charge]
+
+  - id: purchase_order.customer_link
+    intellidealer_label: "PO Customer (placed for)"
+    intellidealer_screen: "Purchase Orders"
+    intellidealer_data_source: "POH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.40.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Customer the PO was placed for (e.g. customer-special-order PO
+      vs internal stock PO). Drives the cost-recovery vs inventory
+      decision.
+    qep_status: PARTIAL
+    qep_table: parts_orders
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "Verify FK to qrm_companies for customer-special POs."
+    severity: should
+    category: financial
+    migration_hint: |
+      ALTER TABLE parts_orders ADD COLUMN IF NOT EXISTS customer_id UUID
+        REFERENCES qrm_companies(id);
+    ui_surface_hint: "PO header — Customer block"
+    dependencies: []
+
+  - id: purchase_order.receipt_history
+    intellidealer_label: "PO Receipt History"
+    intellidealer_screen: "Purchase Orders"
+    intellidealer_data_source: "POH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.40.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: "Per-line receipt events (qty received, date, by whom, packing slip)."
+    qep_status: PARTIAL
+    qep_table: parts_order_events
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: must
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "PO header — Receipt History sub-panel"
+    dependencies: []
+
+  - id: purchase_order_line.parts
+    intellidealer_label: "PO Items grid (Part #, Qty, Cost, Extended Cost, Receipt Status)"
+    intellidealer_screen: "Purchase Orders — Parts"
+    intellidealer_data_source: "POL"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders-Parts__3.11.28.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: "Per-line PO content (part, qty, cost, ext cost, received qty)."
+    qep_status: BUILT
+    qep_table: parts_order_lines
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts parts_order_lines"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "PO — Parts grid"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 13 — PRICE MATRIX
+  # ==========================================================================
+  - id: price_matrix.matrix_code
+    intellidealer_label: "Price Matrix (matrix code)"
+    intellidealer_screen: "Price Matrix"
+    intellidealer_data_source: "PMTX"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Price-Matrix__3.23.24.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Named matrix (e.g. 'YANMAR' for Yanmar OEM matrix). Each part
+      assigned to a matrix gets its sell-price computed from the
+      matrix's pricing-method ladder.
+    qep_status: PARTIAL
+    qep_table: parts_pricing_rules
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts parts_pricing_rules (table exists)"
+    qep_gap_notes: |
+      parts_pricing_rules may cover this. Verify that rules support
+      named-matrix grouping (vs per-part rule).
+    severity: must
+    category: financial
+    migration_hint: |
+      -- If parts_pricing_rules doesn't model matrices:
+      CREATE TABLE price_matrices (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        matrix_code TEXT NOT NULL,
+        description TEXT,
+        pricing_method TEXT NOT NULL,  -- 'cost_plus','list_minus','tiered','formula'
+        apply_order INTEGER NOT NULL DEFAULT 100,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, matrix_code)
+      );
+      ALTER TABLE parts_catalog ADD COLUMN IF NOT EXISTS price_matrix_id UUID
+        REFERENCES price_matrices(id);
+    ui_surface_hint: "Price Matrix — own page + per-part link"
+    dependencies: []
+
+  - id: price_matrix.pricing_detail
+    intellidealer_label: "Price Matrix Pricing Detail (Source/List/Cost/Avg/Level1-4 mapping)"
+    intellidealer_screen: "Price Matrix — Pricing Detail"
+    intellidealer_data_source: "PMTX"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Price-Matrix-Pricing-Detail__3.23.29.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Maps each pricing source (Source / List Price / Cost / Average
+      Cost / Level 1-4) into the computed sell price via
+      addition/multiplication/lookup.
+    qep_status: MISSING
+    qep_table: price_matrix_pricing_details
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: financial
+    migration_hint: |
+      CREATE TABLE price_matrix_pricing_details (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        price_matrix_id uuid NOT NULL REFERENCES price_matrices(id) ON DELETE CASCADE,
+        source_field TEXT NOT NULL,       -- 'cost_price','list_price','average_cost','pricing_level_1'..
+        operation TEXT NOT NULL,          -- 'multiply','add','subtract','lookup_break'
+        operand NUMERIC(12,4),
+        priority INTEGER NOT NULL DEFAULT 100,
+        notes TEXT
+      );
+    ui_surface_hint: "Price Matrix — Pricing Detail sub-grid"
+    dependencies: [price_matrix.matrix_code]
+
+  - id: price_matrix.price_breaks
+    intellidealer_label: "Price Matrix Price Breaks"
+    intellidealer_screen: "Price Matrix — Price Breaks"
+    intellidealer_data_source: "PMTX"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Price-Matrix-Price-Breaks__3.24.33.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Quantity-bracket pricing tied to a matrix (e.g. matrix YANMAR:
+      qty 1-9 = +20%, qty 10-99 = +15%, qty 100+ = +10%).
+    qep_status: MISSING
+    qep_table: price_matrix_price_breaks
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: financial
+    migration_hint: |
+      CREATE TABLE price_matrix_price_breaks (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        price_matrix_id uuid NOT NULL REFERENCES price_matrices(id) ON DELETE CASCADE,
+        min_qty INTEGER NOT NULL,
+        max_qty INTEGER,
+        markup_pct NUMERIC(5,2),
+        flat_amount_cents BIGINT,
+        priority INTEGER NOT NULL DEFAULT 100
+      );
+      CREATE INDEX ON price_matrix_price_breaks (workspace_id, price_matrix_id, min_qty);
+    ui_surface_hint: "Price Matrix — Price Breaks sub-grid"
+    dependencies: [price_matrix.matrix_code]
+
+  - id: part.update_type_matrix
+    intellidealer_label: "Update Type / Matrix (per-part)"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Drives how prices are auto-updated (e.g. 'Automatic' triggers
+      matrix-recompute on each receipt). Matrix is the named pricing
+      matrix (e.g. 'YANMAR') applied to this part.
+    qep_status: PARTIAL
+    qep_table: parts_catalog
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No update_type / matrix_id columns. Add when price_matrices is
+      built.
+    severity: should
+    category: financial
+    migration_hint: |
+      ALTER TABLE parts_catalog ADD COLUMN price_update_type TEXT;  -- 'automatic','manual'
+    ui_surface_hint: "Parts Profile + bulk-edit"
+    dependencies: [price_matrix.matrix_code]
+
+  # ==========================================================================
+  # SECTION 14 — MEMOS / COMMENT
+  # ==========================================================================
+  - id: part.memos
+    intellidealer_label: "Memos / Comment (per-part)"
+    intellidealer_screen: "Parts Profile (Memos sub-panel)"
+    intellidealer_data_source: "PMASTR_MEMO"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.55.txt
+    intellidealer_field_type: multiline
+    intellidealer_purpose: |
+      Free-text memo / comment per part (e.g. 'Use OEM only — aftermarket
+      cracks the housing'). Visible to the buyer and counter staff.
+    qep_status: MISSING
+    qep_table: parts_memos
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: operational
+    migration_hint: |
+      CREATE TABLE parts_memos (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        part_catalog_id uuid NOT NULL REFERENCES parts_catalog(id),
+        body TEXT NOT NULL,
+        pinned BOOLEAN NOT NULL DEFAULT false,
+        created_by UUID REFERENCES profiles(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        deleted_at TIMESTAMPTZ
+      );
+      CREATE INDEX ON parts_memos (workspace_id, part_catalog_id, pinned DESC);
+    ui_surface_hint: "Parts Profile — Memos sub-panel + pinned banner on counter screen"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 15 — RECEIPT / PARTS RECEIPT HISTORY
+  # ==========================================================================
+  - id: part.receipt_history
+    intellidealer_label: "Part Receipt History (per-part)"
+    intellidealer_screen: "Parts Profile (Receipt sub-panel)"
+    intellidealer_data_source: "PRECPT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.55.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      All receipts of this part — Order #, Type, Vendor, Date, Time,
+      Quantity, Parts/Package, Cost. Audit trail of inbound flow.
+    qep_status: PARTIAL
+    qep_table: parts_order_events
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts parts_order_events"
+    qep_gap_notes: ""
+    severity: must
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile — Receipt History tab"
+    dependencies: []
+
+  - id: part.sales_history_per_invoice
+    intellidealer_label: "Part Sales History (per-invoice)"
+    intellidealer_screen: "Parts Profile (Sales History sub-panel)"
+    intellidealer_data_source: "PSHIST"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.55.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: "All sales of this part — Date, Invoice #, Customer, Quantity, Price."
+    qep_status: PARTIAL
+    qep_table: parts_invoice_lines
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "(once parts_invoice_lines exists per Section 9)"
+    severity: must
+    category: reporting
+    migration_hint: ""
+    ui_surface_hint: "Parts Profile — Sales History tab"
+    dependencies: [parts_invoice.line_qty_ladder]
+
+  # ==========================================================================
+  # SECTION 16 — REMAN / REBUILD
+  # ==========================================================================
+  - id: part.reman_flag
+    intellidealer_label: "Reman (Yes/No)"
+    intellidealer_screen: "Parts Profile"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Whether this is a remanufactured part. Drives core-charge
+      handling on sale + return.
+    qep_status: MISSING
+    qep_table: parts_catalog
+    qep_column: is_reman
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: financial
+    migration_hint: |
+      ALTER TABLE parts_catalog ADD COLUMN is_reman BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE parts_catalog ADD COLUMN core_charge_cents BIGINT;
+      ALTER TABLE parts_catalog ADD COLUMN core_part_id UUID REFERENCES parts_catalog(id);
+    ui_surface_hint: "Parts Profile — Reman toggle + Core block"
+    dependencies: []
+
+  - id: part.core_charge
+    intellidealer_label: "Core Charge"
+    intellidealer_screen: "Parts Profile (Reman block)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Refundable core deposit on a reman part. Returned when the
+      customer turns in the worn-out core.
+    qep_status: MISSING
+    qep_table: parts_catalog
+    qep_column: core_charge_cents
+    qep_evidence: []
+    qep_gap_notes: "(see part.reman_flag)"
+    severity: should
+    category: financial
+    migration_hint: "(see part.reman_flag)"
+    ui_surface_hint: "Parts Profile — Reman block"
+    dependencies: [part.reman_flag]
+
+  # ==========================================================================
+  # SECTION 17 — CENTRAL BRANCH ROUTING
+  # ==========================================================================
+  - id: part.central_branch_order
+    intellidealer_label: "Central Branch / Central Order"
+    intellidealer_screen: "Parts Profile (Ordering Information)"
+    intellidealer_data_source: "PMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Multi-branch consolidation: route orders for this part through a
+      central distribution branch instead of each branch ordering
+      separately. Reduces freight + improves bulk pricing.
+    qep_status: MISSING
+    qep_table: parts_catalog
+    qep_column: central_branch_id
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: workflow
+    migration_hint: |
+      ALTER TABLE parts_catalog ADD COLUMN central_branch_id UUID REFERENCES branches(id);
+      ALTER TABLE parts_catalog ADD COLUMN use_central_order BOOLEAN NOT NULL DEFAULT false;
+    ui_surface_hint: "Parts Profile — Central Branch block"
+    dependencies: []

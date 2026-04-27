@@ -1,0 +1,2897 @@
+phase: Phase-5_Deal-Genome
+generated_at: 2026-04-25T00:00:00Z
+source_artifacts:
+  pdfs:
+    - docs/IntelliDealer/Phase-5_Deal-Genome/Data Miner.pdf
+  png_screenshots:
+    - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.03.png
+    - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.10.png
+    - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.15.png
+    - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.21.png
+    - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.26.png
+    - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.32.png
+    - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.39.png
+    - docs/IntelliDealer/Phase-5_Deal-Genome/Credit-Limit-Analysis__3.26.20.png
+    - docs/IntelliDealer/Phase-5_Deal-Genome/Profitability-Analysis__3.25.42.png
+  ocr_text_paths:
+    - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Data Miner.txt
+    - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Analysis-Reports__3.19.32.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.03.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.10.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.21.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.26.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.32.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.39.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Credit-Limit-Analysis__3.26.20.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Profitability-Analysis__3.25.42.txt
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUDITOR NOTE
+# Phase-5 in IntelliDealer ("Deal Genome / BI") is composed of three surfaces:
+#   1. Data Miner   — saved-query repository for ad-hoc data extraction
+#                     (Data Source: WEBQRYAL/C/F/H/R, Security: 505)
+#   2. Analysis Reports — 7 service/operations dashboards under Product
+#                     Support > Service > Analysis Reports:
+#                       • Billing
+#                       • Days  (open/start/complete/billing aging)
+#                       • Efficiency  (hours worked vs charged, recovery)
+#                       • Work In Process  (WIP balancing aging buckets)
+#                       • Quote Gain or Loss  (standard hrs vs worked)
+#                       • Payroll Hours  (premium-code summary)
+#   3. Management Central > Financial > Credit Limit Analysis
+#   4. Management Central > CRM > Profitability  (margin $/% by customer)
+#
+# These are *output / reporting* surfaces, not inventory records, but they
+# expose the field set that QEP must compute and persist (or compute on read)
+# to replace IntelliDealer for daily management. Each grid column captured
+# below is an independently load-bearing field.
+#
+# QEP has qb_deals (commission/margin), qb_quotes (rich cost layers), qrm_deals
+# (pipeline-level margin), and qrm_equipment (asset-level cost) — but NO
+# saved-query (Data Miner) layer, NO work-order analytics, NO WIP aging
+# buckets, NO AR credit-limit table, NO labor-recovery table, NO payroll
+# premium-code rollup, and NO customer-profitability materialized view.
+# ─────────────────────────────────────────────────────────────────────────────
+
+fields:
+  # ============================================================================
+  # SURFACE 1 — DATA MINER  (Management Central > Utilities > Data Miner)
+  # Saved-query repository for ad-hoc reporting. Security 505.
+  # Data sources: WEBQRYAL, WEBQRYC, WEBQRYF, WEBQRYH, WEBQRYR
+  # ============================================================================
+  - id: data_miner_query.select_user
+    intellidealer_label: "Select User"
+    intellidealer_screen: "Data Miner"
+    intellidealer_data_source: "WEBQRYAL/C/F/H/R"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Data Miner.pdf
+      - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Data Miner.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Search filter that limits the visible saved-query list to those
+      authored by a specific user ID. Lets a manager see only their own
+      reports or a teammate's. Tied to security system 505.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP has no saved-query / Data Miner concept. There is no
+      `qrm_saved_queries` table and no per-user authored-by filter.
+    severity: should
+    category: reporting
+    migration_hint: |
+      -- Saved-query repository (Data Miner replacement) — needs an
+      -- entire new domain. The "Select User" filter resolves to:
+      --   WHERE qrm_saved_queries.created_by = :user_id
+      -- See data_miner_query.created_by below for the canonical column.
+    ui_surface_hint: "Reports → Saved Queries → filter chip 'Owner'"
+    dependencies: []
+
+  - id: data_miner_query.select_query_name
+    intellidealer_label: "Select Query"
+    intellidealer_screen: "Data Miner"
+    intellidealer_data_source: "WEBQRYAL/C/F/H/R"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Data Miner.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Free-text search filter against the query name column, allowing
+      a user to find a saved Data Miner query by partial title.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No saved-query domain in QEP, so no name-search filter exists.
+    severity: should
+    category: reporting
+    migration_hint: |
+      -- Resolves against qrm_saved_queries.name (see column below).
+    ui_surface_hint: "Reports → Saved Queries → search bar"
+    dependencies:
+      - data_miner_query.name
+
+  - id: data_miner_query.select_description
+    intellidealer_label: "Select Description"
+    intellidealer_screen: "Data Miner"
+    intellidealer_data_source: "WEBQRYAL/C/F/H/R"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Data Miner.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Free-text search filter against the description column of the
+      saved-query repository.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No saved-query domain in QEP — therefore no description search.
+    severity: could
+    category: reporting
+    migration_hint: |
+      -- Resolves against qrm_saved_queries.description.
+    ui_surface_hint: "Reports → Saved Queries → advanced filter"
+    dependencies:
+      - data_miner_query.description
+
+  - id: data_miner_query.name
+    intellidealer_label: "Query Name"
+    intellidealer_screen: "Data Miner"
+    intellidealer_data_source: "WEBQRYAL/C/F/H/R"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Data Miner.pdf
+      - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Data Miner.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Human-readable name of the saved query, displayed in the
+      repository list. Hover exposes Edit / Copy / Run actions, so the
+      name is the primary handle for re-running an analysis.
+    qep_status: MISSING
+    qep_table: qrm_saved_queries
+    qep_column: name
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP has no qrm_saved_queries table. To replace Data Miner's
+      "queries can be saved for future use" capability we need a
+      first-class saved-query store with name + filters + columns.
+    severity: should
+    category: reporting
+    migration_hint: |
+      CREATE TABLE qrm_saved_queries (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        name text NOT NULL,
+        description text,
+        created_by uuid NOT NULL REFERENCES auth.users(id),
+        data_source text NOT NULL,           -- replaces WEBQRYAL/C/F/H/R
+        select_columns jsonb NOT NULL,       -- column picker
+        filter_criteria jsonb NOT NULL,      -- selection criteria
+        sort_order jsonb,                    -- sort spec
+        authority_role_codes text[],         -- "set authorities for your query"
+        last_run_at timestamptz,
+        last_modified_at timestamptz,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        deleted_at timestamptz
+      );
+      CREATE INDEX qrm_saved_queries_workspace_idx ON qrm_saved_queries(workspace_id);
+      CREATE INDEX qrm_saved_queries_owner_idx ON qrm_saved_queries(workspace_id, created_by);
+      ALTER TABLE qrm_saved_queries ENABLE ROW LEVEL SECURITY;
+      COMMENT ON COLUMN qrm_saved_queries.name IS
+        'IntelliDealer Data Miner Query Name';
+    ui_surface_hint: "Reports → Saved Queries → row title"
+    dependencies: []
+
+  - id: data_miner_query.description
+    intellidealer_label: "Description"
+    intellidealer_screen: "Data Miner"
+    intellidealer_data_source: "WEBQRYAL/C/F/H/R"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Data Miner.txt
+    intellidealer_field_type: multiline
+    intellidealer_purpose: |
+      Brief description of what a saved query returns. Used so that
+      users browsing the repository can identify the right query
+      without needing to open or run it.
+    qep_status: MISSING
+    qep_table: qrm_saved_queries
+    qep_column: description
+    qep_evidence: []
+    qep_gap_notes: |
+      Field does not exist; depends on creation of qrm_saved_queries.
+    severity: could
+    category: reporting
+    migration_hint: |
+      -- Included in qrm_saved_queries DDL above (description text).
+    ui_surface_hint: "Reports → Saved Queries → secondary line"
+    dependencies:
+      - data_miner_query.name
+
+  - id: data_miner_query.created_by
+    intellidealer_label: "Created by"
+    intellidealer_screen: "Data Miner"
+    intellidealer_data_source: "WEBQRYAL/C/F/H/R"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Data Miner.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      User ID of the query author. Drives the per-user search filter
+      and the authority model for "who can view it".
+    qep_status: MISSING
+    qep_table: qrm_saved_queries
+    qep_column: created_by
+    qep_evidence: []
+    qep_gap_notes: |
+      Field does not exist; depends on creation of qrm_saved_queries.
+    severity: should
+    category: reporting
+    migration_hint: |
+      -- Included in qrm_saved_queries DDL above
+      -- (created_by uuid REFERENCES auth.users(id)).
+    ui_surface_hint: "Reports → Saved Queries → row 'Owner' column"
+    dependencies:
+      - data_miner_query.name
+
+  - id: data_miner_query.date_created
+    intellidealer_label: "Date Created"
+    intellidealer_screen: "Data Miner"
+    intellidealer_data_source: "WEBQRYAL/C/F/H/R"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Data Miner.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      Date the saved query was originally authored.
+    qep_status: PARTIAL
+    qep_table: qrm_saved_queries
+    qep_column: created_at
+    qep_evidence:
+      - "Convention: every QEP table has created_at timestamptz default now() per CLAUDE.md"
+    qep_gap_notes: |
+      QEP convention provides created_at on every table, so the
+      column-shape mapping is trivial — but the host table itself
+      (qrm_saved_queries) does not yet exist, so this is PARTIAL
+      pending migration.
+    severity: could
+    category: reporting
+    migration_hint: |
+      -- Included in qrm_saved_queries DDL above
+      -- (created_at timestamptz NOT NULL DEFAULT now()).
+    ui_surface_hint: "Reports → Saved Queries → row column 'Created'"
+    dependencies:
+      - data_miner_query.name
+
+  - id: data_miner_query.date_last_modified
+    intellidealer_label: "Date Last Modified"
+    intellidealer_screen: "Data Miner"
+    intellidealer_data_source: "WEBQRYAL/C/F/H/R"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Data Miner.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      Date the saved query definition was last edited. Helps users
+      identify stale queries.
+    qep_status: PARTIAL
+    qep_table: qrm_saved_queries
+    qep_column: last_modified_at
+    qep_evidence: []
+    qep_gap_notes: |
+      Convention `updated_at` is close, but IntelliDealer separates
+      "last modified" (a definition edit) from "last run" (an execution
+      event). We should keep last_modified_at distinct so that simply
+      re-running a query does not appear as an edit.
+    severity: could
+    category: reporting
+    migration_hint: |
+      -- Included in qrm_saved_queries DDL above:
+      --   last_modified_at timestamptz
+      -- Updated only by definition edits, not by Run.
+    ui_surface_hint: "Reports → Saved Queries → row column 'Modified'"
+    dependencies:
+      - data_miner_query.name
+
+  - id: data_miner_query.date_last_run
+    intellidealer_label: "Date Last Run"
+    intellidealer_screen: "Data Miner"
+    intellidealer_data_source: "WEBQRYAL/C/F/H/R"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Data Miner.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      Date the query was most recently executed by any user. Lets
+      managers archive cold queries.
+    qep_status: MISSING
+    qep_table: qrm_saved_queries
+    qep_column: last_run_at
+    qep_evidence: []
+    qep_gap_notes: |
+      No equivalent in QEP today.
+    severity: could
+    category: reporting
+    migration_hint: |
+      -- Included in qrm_saved_queries DDL above (last_run_at timestamptz).
+      -- Bumped on every execution.
+    ui_surface_hint: "Reports → Saved Queries → row column 'Last Run'"
+    dependencies:
+      - data_miner_query.name
+
+  - id: data_miner_query.row_action_edit
+    intellidealer_label: "Edit (row hover action)"
+    intellidealer_screen: "Data Miner"
+    intellidealer_data_source: "WEBQRYAL/C/F/H/R"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Data Miner.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Hover-revealed action allowing the user to edit a saved query's
+      definition in place.
+    qep_status: MISSING
+    qep_table: qrm_saved_queries
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Pure UX affordance dependent on qrm_saved_queries existing.
+    severity: should
+    category: workflow
+    migration_hint: |
+      -- No additional column needed; resolved by RPC update_saved_query
+      -- with workspace + role check.
+    ui_surface_hint: "Reports → Saved Queries → row hover menu → Edit"
+    dependencies:
+      - data_miner_query.name
+
+  - id: data_miner_query.row_action_copy
+    intellidealer_label: "Copy (row hover action)"
+    intellidealer_screen: "Data Miner"
+    intellidealer_data_source: "WEBQRYAL/C/F/H/R"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Data Miner.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Hover-revealed action that duplicates a saved query under a new
+      name, used to fork a query without destroying the original.
+    qep_status: MISSING
+    qep_table: qrm_saved_queries
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Pure UX affordance.
+    severity: could
+    category: workflow
+    migration_hint: |
+      -- RPC clone_saved_query(uuid) → INSERT new row with " (copy)" suffix.
+    ui_surface_hint: "Reports → Saved Queries → row hover menu → Duplicate"
+    dependencies:
+      - data_miner_query.name
+
+  - id: data_miner_query.row_action_run
+    intellidealer_label: "Run (row hover action)"
+    intellidealer_screen: "Data Miner"
+    intellidealer_data_source: "WEBQRYAL/C/F/H/R"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Data Miner.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Hover-revealed action that executes the saved query and returns
+      a result set. Bumps last_run_at.
+    qep_status: MISSING
+    qep_table: qrm_saved_queries
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Pure UX affordance + execution endpoint.
+    severity: should
+    category: workflow
+    migration_hint: |
+      -- Edge function run-saved-query that compiles select_columns +
+      -- filter_criteria + sort_order into a parameterized SQL query
+      -- against an allow-listed set of QEP tables, with workspace_id
+      -- enforced and role authority_role_codes checked.
+    ui_surface_hint: "Reports → Saved Queries → row hover menu → Run"
+    dependencies:
+      - data_miner_query.name
+
+  - id: data_miner_query.add_new_query
+    intellidealer_label: "Need to create a new query? Click here to add"
+    intellidealer_screen: "Data Miner"
+    intellidealer_data_source: "WEBQRYAL/C/F/H/R"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Data Miner.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Entry point that launches the query builder for a new saved
+      query: pick data source → pick columns → pick filters → pick sort.
+    qep_status: MISSING
+    qep_table: qrm_saved_queries
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Whole UI flow missing.
+    severity: should
+    category: workflow
+    migration_hint: |
+      -- UI flow only; no schema beyond qrm_saved_queries.
+    ui_surface_hint: "Reports → Saved Queries → primary CTA 'New query'"
+    dependencies:
+      - data_miner_query.name
+
+  - id: data_miner_query.download_repository
+    intellidealer_label: "Download query from Data Miner Repository"
+    intellidealer_screen: "Data Miner"
+    intellidealer_data_source: "WEBQRYAL/C/F/H/R"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Data Miner.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Conditionally-displayed link that lets a user import a
+      pre-published query from the vendor (Emphasys/VitalEdge) Data
+      Miner Repository. Visible only when security switch 505
+      "Download Queries from Data Miner Repository" is on.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Vendor-published query catalog has no QEP analog. For QEP we
+      could ship a built-in starter library (curated saved queries)
+      installable per workspace.
+    severity: could
+    category: nice_to_have
+    migration_hint: |
+      -- Optional: seed table qrm_saved_query_templates that holds
+      -- vendor/QEP-published query definitions installable per
+      -- workspace via RPC import_saved_query_template(uuid).
+    ui_surface_hint: "Reports → Saved Queries → 'Browse template library'"
+    dependencies:
+      - data_miner_query.name
+
+  - id: data_miner_query.security_switch_505
+    intellidealer_label: "Security switch 505"
+    intellidealer_screen: "Data Miner"
+    intellidealer_data_source: "Security 505 — Management Central > Utilities > Data Miner Security"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-5_Deal-Genome/Data Miner.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "View"
+      - "Run"
+      - "Edit"
+      - "Download Queries from Data Miner Repository"
+    intellidealer_purpose: |
+      IntelliDealer security node 505 governs the per-role authority
+      to view, run, edit, and download Data Miner queries.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP role/permission model exists but does not yet model
+      per-saved-query authority. Need to map onto get_my_role().
+    severity: should
+    category: regulatory
+    migration_hint: |
+      -- Already provided as authority_role_codes text[] on
+      -- qrm_saved_queries. Per-action gating handled in RLS:
+      --   USING (get_my_role() = ANY(authority_role_codes)
+      --          OR created_by = auth.uid())
+    ui_surface_hint: "Reports → Saved Queries → query authority chip"
+    dependencies:
+      - data_miner_query.name
+
+  # ============================================================================
+  # SURFACE 2 — ANALYSIS REPORTS  (Product Support > Service > Analysis Reports)
+  # 6 sub-tabs, each with its own filter set + grid:
+  #   Billing | Days | Efficiency | Work In Process | Quote Gain or Loss | Payroll Hours
+  # ============================================================================
+
+  # --- Billing tab filters --------------------------------------------------
+  - id: analysis_billing.select_by
+    intellidealer_label: "Select By"
+    intellidealer_screen: "Analysis Reports: Billing"
+    intellidealer_data_source: "Billing/Service ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.03.png
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.10.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.03.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Technician"
+      - "Type"
+      - "Reason"
+    intellidealer_purpose: |
+      Primary grouping for the Billing analysis grid. Lets a service
+      manager slice billed work by who did it (technician), the work
+      class (type), or the cause code (reason).
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP has no work-order billing analytics surface. There is no
+      qrm_work_orders / service_job_segments / qrm_billing_ledger
+      to slice by.
+    severity: must
+    category: reporting
+    migration_hint: |
+      -- Requires the Service domain (work orders + segments + billing).
+      -- Once present, the "Select By" filter resolves to a GROUP BY in
+      -- a qrm_billing_analysis materialized view or read RPC.
+    ui_surface_hint: "Service → Analytics → Billing → group-by toggle"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_billing.subtotal_by
+    intellidealer_label: "Subtotal By"
+    intellidealer_screen: "Analysis Reports: Billing"
+    intellidealer_data_source: "Billing/Service ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.03.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Technician"
+      - "Type"
+      - "Reason"
+    intellidealer_purpose: |
+      Secondary grouping that produces subtotal rows under the primary
+      grouping.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Same as Select By — depends on Service domain.
+    severity: should
+    category: reporting
+    migration_hint: |
+      -- Resolves to a second GROUP BY column in qrm_billing_analysis.
+    ui_surface_hint: "Service → Analytics → Billing → subtotal toggle"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_billing.include_type
+    intellidealer_label: "Include Type"
+    intellidealer_screen: "Analysis Reports: Billing"
+    intellidealer_data_source: "Work order ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.03.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "All"
+      - "Internal"
+      - "Warranty"
+      - "Customer"
+    intellidealer_purpose: |
+      Filters which work-order revenue type is included. "Internal"
+      = dealer-owned equipment repair, "Warranty" = manufacturer-paid,
+      "Customer" = customer-paid retail labor. The split drives margin
+      reporting at the dealership level.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP has no work_order.revenue_type enum.
+    severity: must
+    category: financial
+    migration_hint: |
+      CREATE TYPE qrm_work_order_revenue_type AS ENUM (
+        'internal','warranty','customer'
+      );
+      -- when qrm_work_orders is built:
+      ALTER TABLE qrm_work_orders ADD COLUMN revenue_type
+        qrm_work_order_revenue_type NOT NULL DEFAULT 'customer';
+    ui_surface_hint: "Service → Analytics → Billing → revenue type chips"
+    dependencies:
+      - work_order.revenue_type
+
+  - id: analysis_billing.include_totals
+    intellidealer_label: "Include Totals"
+    intellidealer_screen: "Analysis Reports: Billing"
+    intellidealer_data_source: "Service ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.03.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Toggle that appends a grand-total row to the Billing grid.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      UI affordance; depends on the analytics surface.
+    severity: could
+    category: reporting
+    migration_hint: |
+      -- UI flag only; renders sum row on the read RPC.
+    ui_surface_hint: "Service → Analytics → Billing → 'Show totals' toggle"
+    dependencies: []
+
+  - id: analysis_billing.select_technician
+    intellidealer_label: "Select Technician"
+    intellidealer_screen: "Analysis Reports: Billing"
+    intellidealer_data_source: "Employee master"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.10.png
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Filter that scopes the Billing grid to a single technician.
+      Resolves against the dealership's technician master.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP has no qrm_technicians (or generic qrm_employees) table —
+      only qrm_users (auth) and qrm_absence_engine_rep_snapshots.
+      Without a technician role on employees, the filter cannot exist.
+    severity: must
+    category: operational
+    migration_hint: |
+      -- Once qrm_employees exists with role tagging:
+      --   WHERE qrm_employees.role_codes && ARRAY['technician']
+    ui_surface_hint: "Service → Analytics → Billing → technician picker"
+    dependencies:
+      - employee.id
+
+  - id: analysis_billing.select_location
+    intellidealer_label: "Select Location"
+    intellidealer_screen: "Analysis Reports: Billing"
+    intellidealer_data_source: "Branch master (defaults 01 = LAKE CITY)"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.03.png
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.10.png
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Filters by service branch. The screenshots show "01 - LAKE CITY"
+      as the active context. Multi-branch dealers must be able to
+      pull branch-level analytics independently.
+    qep_status: PARTIAL
+    qep_table: qrm_companies
+    qep_column: territory_code
+    qep_evidence:
+      - "_full_schema.json qrm_companies.territory_code"
+    qep_gap_notes: |
+      qrm_companies.territory_code is closer to a sales territory than
+      a service branch. QEP has no qrm_branches or qrm_locations
+      table. Branch-level analytics will not be possible without it.
+    severity: must
+    category: operational
+    migration_hint: |
+      CREATE TABLE qrm_branches (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        code text NOT NULL,                     -- '01', '02', etc.
+        name text NOT NULL,                     -- 'LAKE CITY'
+        address_line_1 text, city text, state text, postal_code text,
+        is_service boolean NOT NULL DEFAULT true,
+        is_sales boolean NOT NULL DEFAULT true,
+        is_rental boolean NOT NULL DEFAULT false,
+        deleted_at timestamptz,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, code)
+      );
+    ui_surface_hint: "Service → Analytics → Billing → branch picker"
+    dependencies: []
+
+  - id: analysis_billing.select_date_range
+    intellidealer_label: "Select Date Range (From / To)"
+    intellidealer_screen: "Analysis Reports: Billing"
+    intellidealer_data_source: "Billing run dates"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.03.png
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      Two-input fiscal date range (From + To) for the analysis. Default
+      example shows 04/01/2026 onwards (current fiscal period).
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP has no qrm_billing_runs / qrm_work_orders.billed_at to filter
+      against.
+    severity: must
+    category: reporting
+    migration_hint: |
+      -- When qrm_work_orders exists:
+      ALTER TABLE qrm_work_orders ADD COLUMN billed_at timestamptz;
+      CREATE INDEX qrm_work_orders_billed_at_idx
+        ON qrm_work_orders(workspace_id, billed_at);
+    ui_surface_hint: "Service → Analytics → Billing → date range pair"
+    dependencies:
+      - work_order.id
+
+  # --- Billing grid columns ---
+  - id: analysis_billing.grid_technician
+    intellidealer_label: "Technician (column)"
+    intellidealer_screen: "Analysis Reports: Billing grid"
+    intellidealer_data_source: "Employee master"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.10.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.10.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Row label = technician name. Note synthetic categories like
+      "** Not Assigned **", "CUSTOMER REPAIRS", "SHOP GRAPPLE TRUCK
+      JOBS", "INTERNAL REPAIRS" — these are revenue buckets, not real
+      employees, and must be modelled as well.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Depends on qrm_employees + revenue-bucket pseudonyms.
+    severity: must
+    category: operational
+    migration_hint: |
+      -- Resolved on read by COALESCE(qrm_employees.display_name,
+      --   qrm_work_orders.synthetic_bucket_name).
+    ui_surface_hint: "Service → Analytics → Billing → grid row label"
+    dependencies:
+      - employee.id
+
+  - id: analysis_billing.grid_work_orders
+    intellidealer_label: "Work Orders (count)"
+    intellidealer_screen: "Analysis Reports: Billing grid"
+    intellidealer_data_source: "Work order ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.10.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      Count of work orders attributed to the row.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Requires Service domain.
+    severity: must
+    category: reporting
+    migration_hint: |
+      -- COUNT(DISTINCT qrm_work_orders.id) computed on read.
+    ui_surface_hint: "Service → Analytics → Billing → 'WO Count' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_billing.grid_segments
+    intellidealer_label: "Segments (count)"
+    intellidealer_screen: "Analysis Reports: Billing grid"
+    intellidealer_data_source: "Work order segments"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.10.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      Count of work-order *segments* (sub-jobs / phases). One WO can
+      have many segments and each segment carries its own labor + parts.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Service segments are authoritative in Phase-4 as
+      `service_job_segments`. Reuse that table for this billing grid;
+      do not introduce a second segments table in Phase-5.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Phase-4 is authoritative for segment storage:
+      -- reuse `service_job_segments` for Billing analytics and
+      -- add only missing columns there as needed.
+    ui_surface_hint: "Service → Analytics → Billing → 'Segments' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_billing.grid_parts
+    intellidealer_label: "Parts ($)"
+    intellidealer_screen: "Analysis Reports: Billing grid"
+    intellidealer_data_source: "WO parts revenue"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.10.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Parts revenue billed in the period. From screenshot: e.g.
+      "CUSTOMER REPAIRS — Parts 18,132.17".
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Requires qrm_work_order_parts ledger.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- SUM(qrm_work_order_parts.extended_price_cents) per row, /100.
+    ui_surface_hint: "Service → Analytics → Billing → 'Parts $' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_billing.grid_labor
+    intellidealer_label: "Labor ($)"
+    intellidealer_screen: "Analysis Reports: Billing grid"
+    intellidealer_data_source: "WO labor revenue"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.10.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Labor revenue billed in the period.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Requires qrm_work_order_labor ledger.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- SUM(qrm_work_order_labor.extended_billed_cents) per row, /100.
+    ui_surface_hint: "Service → Analytics → Billing → 'Labor $' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_billing.grid_other
+    intellidealer_label: "Other ($)"
+    intellidealer_screen: "Analysis Reports: Billing grid"
+    intellidealer_data_source: "WO misc revenue"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.10.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Miscellaneous billed amount (sublet, freight, environmental fees,
+      shop supplies). Caught here so margin doesn't leak.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Requires misc-charge line items on the work order.
+    severity: should
+    category: financial
+    migration_hint: |
+      -- SUM(qrm_work_order_misc.extended_cents) per row.
+    ui_surface_hint: "Service → Analytics → Billing → 'Other $' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_billing.grid_total
+    intellidealer_label: "Total ($)"
+    intellidealer_screen: "Analysis Reports: Billing grid"
+    intellidealer_data_source: "WO billed total"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.10.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Sum of Parts + Labor + Other for the row.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Computed; requires the three sub-amounts.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Computed in read RPC: parts + labor + other.
+    ui_surface_hint: "Service → Analytics → Billing → 'Total $' col"
+    dependencies:
+      - analysis_billing.grid_parts
+      - analysis_billing.grid_labor
+      - analysis_billing.grid_other
+
+  - id: analysis_billing.results_per_page
+    intellidealer_label: "Results to display"
+    intellidealer_screen: "Analysis Reports: Billing"
+    intellidealer_data_source: "UI"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.10.png
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      Page-size selector for the Billing grid (defaults to 10).
+    qep_status: BUILT
+    qep_table: null
+    qep_column: null
+    qep_evidence:
+      - "Standard list-page convention; not persisted server-side."
+    qep_gap_notes: |
+      UI-only state, not persisted. Treat as parity.
+    severity: could
+    category: reporting
+    migration_hint: |
+      -- No DDL; pure UI control.
+    ui_surface_hint: "Service → Analytics → Billing → page-size dropdown"
+    dependencies: []
+
+  # --- Days tab filters ---
+  - id: analysis_days.sort_by
+    intellidealer_label: "Sort by"
+    intellidealer_screen: "Analysis Reports: Days"
+    intellidealer_data_source: "Work-order timing ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.15.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Work Order"
+      - "Customer"
+      - "Open to Start"
+      - "Open to Completed"
+      - "Open to Billing"
+      - "Start to Completed"
+      - "Start to Billing"
+      - "Completed to Billing"
+      - "Last Labor to Completed"
+      - "Last Labor to Signed Off"
+      - "Last Labor to Billing"
+      - "Signed Off to Billing"
+    intellidealer_purpose: |
+      Sort selector for the Days analysis grid. The fact that 12 sort
+      keys exist tells us each of those time-deltas is an independent
+      KPI tracked on every WO.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      None of these milestones are tracked on QEP today.
+    severity: must
+    category: operational
+    migration_hint: |
+      -- All 12 deltas are computed from milestone timestamps on
+      -- qrm_work_orders / service_job_segments:
+      --   opened_at, started_at, last_labor_at, completed_at,
+      --   signed_off_at, billed_at.
+    ui_surface_hint: "Service → Analytics → Days → sort dropdown"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_days.show_all_segments
+    intellidealer_label: "Show all Segments"
+    intellidealer_screen: "Analysis Reports: Days"
+    intellidealer_data_source: "WO segments"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Toggle: when on, expands one row per segment; when off,
+      consolidates segments to one row per WO.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      UX affordance gated by segment domain.
+    severity: should
+    category: reporting
+    migration_hint: |
+      -- UI flag; alters GROUP BY in read RPC.
+    ui_surface_hint: "Service → Analytics → Days → 'Expand segments' toggle"
+    dependencies:
+      - analysis_billing.grid_segments
+
+  - id: analysis_days.select_customer
+    intellidealer_label: "Select Customer"
+    intellidealer_screen: "Analysis Reports: Days"
+    intellidealer_data_source: "Customer master"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Customer-level filter on the Days grid.
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: id
+    qep_evidence:
+      - "_full_schema.json qrm_companies.id"
+    qep_gap_notes: |
+      The customer master exists; the filter resolves once Service
+      domain is built and exposes work_order.company_id.
+    severity: must
+    category: reporting
+    migration_hint: |
+      -- Resolves to qrm_work_orders.company_id once that table exists.
+    ui_surface_hint: "Service → Analytics → Days → customer picker"
+    dependencies:
+      - work_order.id
+
+  # --- Days grid columns (the 9 day-delta columns + WO + customer + location) ---
+  - id: analysis_days.grid_work_order
+    intellidealer_label: "Work Order (column)"
+    intellidealer_screen: "Analysis Reports: Days grid"
+    intellidealer_data_source: "WO header"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.15.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Work-order number, e.g. PM0426, W06283, W06414.
+    qep_status: MISSING
+    qep_table: qrm_work_orders
+    qep_column: wo_number
+    qep_evidence: []
+    qep_gap_notes: |
+      qrm_work_orders does not exist.
+    severity: must
+    category: operational
+    migration_hint: |
+      -- Part of qrm_work_orders DDL:
+      --   wo_number text NOT NULL UNIQUE (workspace_id, wo_number)
+    ui_surface_hint: "Service → Analytics → Days → 'WO #' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_days.grid_customer
+    intellidealer_label: "Customer (column)"
+    intellidealer_screen: "Analysis Reports: Days grid"
+    intellidealer_data_source: "WO header"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Customer label per WO (e.g. "BANDIT INDUSTRIES INC", "GROUND
+      LEVEL INC"). Includes synthetic buckets like "EQUIP INVENTORY
+      REPAIR EXPENSE PAS Gay" — internal-equipment expense rollups.
+    qep_status: PARTIAL
+    qep_table: qrm_companies
+    qep_column: name
+    qep_evidence:
+      - "_full_schema.json qrm_companies.name"
+    qep_gap_notes: |
+      Customer name is fine, but synthetic internal-bucket labels are
+      not represented in qrm_companies.
+    severity: must
+    category: reporting
+    migration_hint: |
+      -- Add an internal-bucket flag on qrm_companies, OR a separate
+      -- qrm_internal_cost_buckets table to host synthetic labels.
+      ALTER TABLE qrm_companies
+        ADD COLUMN is_internal_cost_bucket boolean NOT NULL DEFAULT false;
+    ui_surface_hint: "Service → Analytics → Days → 'Customer' col"
+    dependencies: []
+
+  - id: analysis_days.grid_location
+    intellidealer_label: "Location (column)"
+    intellidealer_screen: "Analysis Reports: Days grid"
+    intellidealer_data_source: "Branch master"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Service branch handling the WO (e.g. "LAKE CITY").
+    qep_status: MISSING
+    qep_table: qrm_branches
+    qep_column: name
+    qep_evidence: []
+    qep_gap_notes: |
+      Depends on qrm_branches creation.
+    severity: must
+    category: operational
+    migration_hint: |
+      -- Resolves via qrm_work_orders.branch_id → qrm_branches.name.
+    ui_surface_hint: "Service → Analytics → Days → 'Location' col"
+    dependencies:
+      - analysis_billing.select_location
+
+  - id: analysis_days.col_open_to_start
+    intellidealer_label: "Open to Start (days)"
+    intellidealer_screen: "Analysis Reports: Days grid"
+    intellidealer_data_source: "Computed from WO milestones"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Days between WO opened and labor first started. Direct measure of
+      shop backlog responsiveness.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP captures none of: opened_at, started_at on a service ledger.
+    severity: must
+    category: operational
+    migration_hint: |
+      -- Computed: EXTRACT(DAY FROM started_at - opened_at).
+      -- See qrm_work_orders DDL plan.
+    ui_surface_hint: "Service → Analytics → Days → 'Open→Start' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_days.col_open_to_completed
+    intellidealer_label: "Open to Completed (days)"
+    intellidealer_screen: "Analysis Reports: Days grid"
+    intellidealer_data_source: "Computed from WO milestones"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Total cycle time from open to completed.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Same as above — needs WO milestones.
+    severity: must
+    category: operational
+    migration_hint: |
+      -- Computed: EXTRACT(DAY FROM completed_at - opened_at).
+    ui_surface_hint: "Service → Analytics → Days → 'Open→Complete' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_days.col_open_to_billing
+    intellidealer_label: "Open to Billing (days)"
+    intellidealer_screen: "Analysis Reports: Days grid"
+    intellidealer_data_source: "Computed from WO milestones"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Cycle time from open to invoice. Drives DSO on service receivables.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Same — needs WO milestones.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Computed: EXTRACT(DAY FROM billed_at - opened_at).
+    ui_surface_hint: "Service → Analytics → Days → 'Open→Billing' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_days.col_start_to_completed
+    intellidealer_label: "Start to Completed (days)"
+    intellidealer_screen: "Analysis Reports: Days grid"
+    intellidealer_data_source: "Computed"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Pure shop wrench time.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Needs milestones.
+    severity: must
+    category: operational
+    migration_hint: |
+      -- Computed: EXTRACT(DAY FROM completed_at - started_at).
+    ui_surface_hint: "Service → Analytics → Days → 'Start→Complete' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_days.col_start_to_billing
+    intellidealer_label: "Start to Billing (days)"
+    intellidealer_screen: "Analysis Reports: Days grid"
+    intellidealer_data_source: "Computed"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Time from work begun to invoice issued.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Needs milestones.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Computed: EXTRACT(DAY FROM billed_at - started_at).
+    ui_surface_hint: "Service → Analytics → Days → 'Start→Billing' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_days.col_last_labor_to_completed
+    intellidealer_label: "Last Labor to Completed (days)"
+    intellidealer_screen: "Analysis Reports: Days grid"
+    intellidealer_data_source: "Computed"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Days idle after last labor entry until WO marked complete.
+      Highlights administrative drag.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Needs last_labor_at milestone.
+    severity: should
+    category: operational
+    migration_hint: |
+      -- Computed: EXTRACT(DAY FROM completed_at - last_labor_at).
+    ui_surface_hint: "Service → Analytics → Days → 'LL→Complete' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_days.col_last_labor_to_billing
+    intellidealer_label: "Last Labor to Billing (days)"
+    intellidealer_screen: "Analysis Reports: Days grid"
+    intellidealer_data_source: "Computed"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Days from last labor to invoice. Pure billing-clerk delay.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Needs last_labor_at + billed_at.
+    severity: should
+    category: financial
+    migration_hint: |
+      -- Computed: EXTRACT(DAY FROM billed_at - last_labor_at).
+    ui_surface_hint: "Service → Analytics → Days → 'LL→Billing' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_days.col_completed_to_billing
+    intellidealer_label: "Completed to Billing (days)"
+    intellidealer_screen: "Analysis Reports: Days grid"
+    intellidealer_data_source: "Computed"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Days from completion to billing.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Needs milestones.
+    severity: should
+    category: financial
+    migration_hint: |
+      -- Computed: EXTRACT(DAY FROM billed_at - completed_at).
+    ui_surface_hint: "Service → Analytics → Days → 'Complete→Billing' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_days.col_last_labor_to_signed_off
+    intellidealer_label: "Last Labor to Signed Off (days)"
+    intellidealer_screen: "Analysis Reports: Days grid"
+    intellidealer_data_source: "Computed"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Days from last labor to supervisor sign-off. Flags work waiting
+      for QC review.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Needs signed_off_at milestone.
+    severity: should
+    category: operational
+    migration_hint: |
+      -- Computed: EXTRACT(DAY FROM signed_off_at - last_labor_at).
+    ui_surface_hint: "Service → Analytics → Days → 'LL→SignOff' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_days.col_signed_off_to_billing
+    intellidealer_label: "Signed Off to Billing (days)"
+    intellidealer_screen: "Analysis Reports: Days grid"
+    intellidealer_data_source: "Computed"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.15.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Days from sign-off to invoice. Pure billing-team latency.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Needs signed_off_at + billed_at.
+    severity: should
+    category: financial
+    migration_hint: |
+      -- Computed: EXTRACT(DAY FROM billed_at - signed_off_at).
+    ui_surface_hint: "Service → Analytics → Days → 'SignOff→Billing' col"
+    dependencies:
+      - work_order.id
+
+  # --- Efficiency tab filters/cols ---
+  - id: analysis_efficiency.sort_by
+    intellidealer_label: "Sort by"
+    intellidealer_screen: "Analysis Reports: Efficiency"
+    intellidealer_data_source: "Labor ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.21.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.21.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Technician"
+      - "Sale Account"
+      - "Type"
+      - "Reason"
+      - "Down Time Delay"
+    intellidealer_purpose: |
+      Primary grouping for the Efficiency analysis. The presence of
+      "Down Time Delay" tells us QEP must capture *why* a tech was idle
+      (not just hours worked vs charged).
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No labor ledger, no sale-account dim, no down-time codes.
+    severity: must
+    category: reporting
+    migration_hint: |
+      -- Once qrm_work_order_labor exists, group on:
+      --   technician_id | sale_account | segment_type | reason_code | downtime_code
+    ui_surface_hint: "Service → Analytics → Efficiency → group-by"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_efficiency.subtotal_by
+    intellidealer_label: "Subtotal By"
+    intellidealer_screen: "Analysis Reports: Efficiency"
+    intellidealer_data_source: "Labor ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.21.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Sale Account"
+      - "Type"
+      - "Reason"
+      - "Down Time Delay"
+    intellidealer_purpose: |
+      Secondary grouping for Efficiency.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Same dependencies as Sort By.
+    severity: should
+    category: reporting
+    migration_hint: |
+      -- Same as analysis_efficiency.sort_by.
+    ui_surface_hint: "Service → Analytics → Efficiency → subtotal toggle"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_efficiency.select_inside_outside_shift
+    intellidealer_label: "Select Inside / Outside / Shift"
+    intellidealer_screen: "Analysis Reports: Efficiency"
+    intellidealer_data_source: "Labor ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.21.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.21.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "All"
+      - "Inside"
+      - "Outside"
+      - "Shift 1"
+      - "Shift 2"
+      - "Shift 3"
+    intellidealer_purpose: |
+      Filters technicians by shop classification (inside / road tech /
+      shift). Critical for separating field tech vs in-shop performance.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No technician classification in QEP.
+    severity: should
+    category: operational
+    migration_hint: |
+      -- On qrm_employees:
+      ALTER TABLE qrm_employees ADD COLUMN tech_shop_class text
+        CHECK (tech_shop_class IN ('inside','outside'));
+      ALTER TABLE qrm_employees ADD COLUMN shift_code text;
+    ui_surface_hint: "Service → Analytics → Efficiency → I/O/Shift filter"
+    dependencies:
+      - employee.id
+
+  - id: analysis_efficiency.include_revenue_type
+    intellidealer_label: "Include Revenue Type"
+    intellidealer_screen: "Analysis Reports: Efficiency"
+    intellidealer_data_source: "Labor ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.21.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "All"
+      - "Internal"
+      - "Warranty"
+      - "Customer"
+    intellidealer_purpose: |
+      Same enum as Billing's Include Type but at labor row level.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Depends on qrm_work_order_labor.revenue_type.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- ALTER TABLE qrm_work_order_labor ADD COLUMN revenue_type
+      --   qrm_work_order_revenue_type NOT NULL DEFAULT 'customer';
+    ui_surface_hint: "Service → Analytics → Efficiency → revenue type chips"
+    dependencies:
+      - analysis_billing.include_type
+
+  - id: analysis_efficiency.include_unbilled_transactions
+    intellidealer_label: "Include Unbilled Transaction"
+    intellidealer_screen: "Analysis Reports: Efficiency"
+    intellidealer_data_source: "Labor ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.21.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Toggle that includes labor rows that have not yet been invoiced.
+      Without this you cannot see WIP profitability before billing.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Implies a billed_status flag on every labor row.
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE qrm_work_order_labor
+        ADD COLUMN billed_status text NOT NULL DEFAULT 'unbilled'
+        CHECK (billed_status IN ('unbilled','billed','wip_writeoff'));
+    ui_surface_hint: "Service → Analytics → Efficiency → 'include unbilled' toggle"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_efficiency.select_by_billing_or_labor_date
+    intellidealer_label: "Select By"
+    intellidealer_screen: "Analysis Reports: Efficiency"
+    intellidealer_data_source: "Labor ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.21.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Billing Run Date"
+      - "Labor Date"
+    intellidealer_purpose: |
+      Determines whether the date-range filter resolves against the
+      billing run date or the actual labor-entry date. Different
+      managers need both lenses.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP work order labor would need both labor_date and billed_run_date.
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE qrm_work_order_labor
+        ADD COLUMN labor_date date NOT NULL,
+        ADD COLUMN billing_run_date date;
+    ui_surface_hint: "Service → Analytics → Efficiency → date-basis radio"
+    dependencies:
+      - work_order.id
+
+  # --- Efficiency grid columns ---
+  - id: analysis_efficiency.col_hours_worked
+    intellidealer_label: "Hours Worked"
+    intellidealer_screen: "Analysis Reports: Efficiency grid"
+    intellidealer_data_source: "Labor punch ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.21.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.21.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      Total clocked hours for the technician in the period (e.g.
+      Colton Noerring 157.02).
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No labor punch ledger.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- SUM(qrm_work_order_labor.hours_clocked).
+    ui_surface_hint: "Service → Analytics → Efficiency → 'Hrs Worked' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_efficiency.col_rework_hours
+    intellidealer_label: "Rework Hours"
+    intellidealer_screen: "Analysis Reports: Efficiency grid"
+    intellidealer_data_source: "Labor punch ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.21.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      Hours flagged as rework (re-doing prior work). Direct quality
+      KPI; e.g. Michael Dougherty 2.86 hrs rework.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Needs is_rework flag on labor rows.
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE qrm_work_order_labor
+        ADD COLUMN is_rework boolean NOT NULL DEFAULT false,
+        ADD COLUMN rework_of_labor_id uuid REFERENCES qrm_work_order_labor(id);
+    ui_surface_hint: "Service → Analytics → Efficiency → 'Rework Hrs' col"
+    dependencies:
+      - analysis_efficiency.col_hours_worked
+
+  - id: analysis_efficiency.col_hours_charged
+    intellidealer_label: "Hours Charged"
+    intellidealer_screen: "Analysis Reports: Efficiency grid"
+    intellidealer_data_source: "Labor billing ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.21.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      Hours billed to a customer/internal account. Diverges from
+      Hours Worked when there is unbilled WIP, write-down, or warranty
+      cap. Drives the recovery percentage.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Needs hours_billed on labor row.
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE qrm_work_order_labor
+        ADD COLUMN hours_clocked numeric(8,2),
+        ADD COLUMN hours_billed numeric(8,2);
+    ui_surface_hint: "Service → Analytics → Efficiency → 'Hrs Charged' col"
+    dependencies:
+      - analysis_efficiency.col_hours_worked
+
+  - id: analysis_efficiency.col_recovery_hours_pct
+    intellidealer_label: "Recovery Hours %"
+    intellidealer_screen: "Analysis Reports: Efficiency grid"
+    intellidealer_data_source: "Computed"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.21.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.21.txt
+    intellidealer_field_type: percent
+    intellidealer_purpose: |
+      Hours Charged / Hours Worked × 100. Shows how much of the
+      tech's clocked time recovered as billed work. Cornerstone KPI:
+      e.g. Kenneth Lepinski 71.22%.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Computed metric; depends on the two hour columns.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Computed: hours_billed / NULLIF(hours_clocked,0) * 100.
+    ui_surface_hint: "Service → Analytics → Efficiency → 'Recovery %' col"
+    dependencies:
+      - analysis_efficiency.col_hours_worked
+      - analysis_efficiency.col_hours_charged
+
+  - id: analysis_efficiency.col_possible_income
+    intellidealer_label: "Possible Income"
+    intellidealer_screen: "Analysis Reports: Efficiency grid"
+    intellidealer_data_source: "Computed (clocked_hours × shop_rate)"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.21.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Theoretical revenue if all clocked hours were billed at the
+      tech's standard shop rate. e.g. Colton Noerring $21,860.00.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Requires technician shop_rate_cents on qrm_employees.
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE qrm_employees
+        ADD COLUMN shop_rate_cents integer;
+      -- Possible Income = hours_clocked * shop_rate_cents / 100.
+    ui_surface_hint: "Service → Analytics → Efficiency → 'Possible Inc' col"
+    dependencies:
+      - analysis_efficiency.col_hours_worked
+
+  - id: analysis_efficiency.col_actual_income
+    intellidealer_label: "Actual Income"
+    intellidealer_screen: "Analysis Reports: Efficiency grid"
+    intellidealer_data_source: "Labor billing ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.21.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Actual revenue produced by the tech in the period. e.g. Colton
+      Noerring $21,898.40.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Needs labor extended billed amount.
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE qrm_work_order_labor
+        ADD COLUMN extended_billed_cents integer;
+    ui_surface_hint: "Service → Analytics → Efficiency → 'Actual Inc' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_efficiency.col_income_gain_loss
+    intellidealer_label: "Income Gain/Loss"
+    intellidealer_screen: "Analysis Reports: Efficiency grid"
+    intellidealer_data_source: "Computed"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.21.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Actual − Possible income. Positive on overperformance, negative
+      on underperformance. e.g. Donald McAllister $-973.55.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Computed delta.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Computed: actual_income - possible_income.
+    ui_surface_hint: "Service → Analytics → Efficiency → 'Inc Gain/Loss' col"
+    dependencies:
+      - analysis_efficiency.col_actual_income
+      - analysis_efficiency.col_possible_income
+
+  - id: analysis_efficiency.col_recovery_income_pct
+    intellidealer_label: "Recovery Income %"
+    intellidealer_screen: "Analysis Reports: Efficiency grid"
+    intellidealer_data_source: "Computed"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.21.txt
+    intellidealer_field_type: percent
+    intellidealer_purpose: |
+      Actual / Possible × 100. Mirror of Recovery Hours but in dollars.
+      e.g. Kenneth Lepinski 83.26%.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Computed.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Computed: actual_income / NULLIF(possible_income,0) * 100.
+    ui_surface_hint: "Service → Analytics → Efficiency → 'Recovery $%' col"
+    dependencies:
+      - analysis_efficiency.col_actual_income
+      - analysis_efficiency.col_possible_income
+
+  # --- Work In Process tab ---
+  - id: analysis_wip.wip_method
+    intellidealer_label: "WIP Method"
+    intellidealer_screen: "Analysis Reports: Work In Process"
+    intellidealer_data_source: "WIP balancing"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.26.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.26.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "WIP Balancing"
+      - "Account Aging"
+    intellidealer_purpose: |
+      Selects the calculation method for work-in-process. WIP Balancing
+      reconciles WIP ledger to GL; Account Aging buckets transactions
+      by age.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No WIP layer in QEP.
+    severity: must
+    category: financial
+    migration_hint: |
+      CREATE TABLE qrm_work_order_wip_snapshots (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        snapshot_date date NOT NULL,
+        method text NOT NULL CHECK (method IN ('balancing','aging')),
+        branch_id uuid,
+        unprocessed_included boolean NOT NULL DEFAULT false,
+        bucket_current_cents bigint NOT NULL DEFAULT 0,
+        bucket_31_60_cents bigint NOT NULL DEFAULT 0,
+        bucket_61_90_cents bigint NOT NULL DEFAULT 0,
+        bucket_91_120_cents bigint NOT NULL DEFAULT 0,
+        bucket_over_120_cents bigint NOT NULL DEFAULT 0,
+        total_cents bigint GENERATED ALWAYS AS (
+          bucket_current_cents + bucket_31_60_cents + bucket_61_90_cents
+          + bucket_91_120_cents + bucket_over_120_cents
+        ) STORED,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+    ui_surface_hint: "Service → Analytics → WIP → method picker"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_wip.select_account
+    intellidealer_label: "Select Account"
+    intellidealer_screen: "Analysis Reports: Work In Process"
+    intellidealer_data_source: "GL chart of accounts"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.26.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      GL account to pull WIP balance for.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No GL account dim in QEP.
+    severity: must
+    category: financial
+    migration_hint: |
+      CREATE TABLE gl_accounts (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        account_code text NOT NULL,
+        account_name text NOT NULL,
+        account_type text,
+        is_wip boolean NOT NULL DEFAULT false,
+        deleted_at timestamptz,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, account_code)
+      );
+    ui_surface_hint: "Service → Analytics → WIP → GL account picker"
+    dependencies: []
+
+  - id: analysis_wip.select_status
+    intellidealer_label: "Select Status"
+    intellidealer_screen: "Analysis Reports: Work In Process"
+    intellidealer_data_source: "Work order status master"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.26.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "All"
+      - "Open"
+      - "Completed"
+      - "Signed Off"
+      - "Closed"
+    intellidealer_purpose: |
+      Filters which work-order statuses to include in the WIP rollup.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Depends on qrm_work_orders.status.
+    severity: should
+    category: workflow
+    migration_hint: |
+      CREATE TYPE qrm_work_order_status AS ENUM (
+        'open','in_progress','completed','signed_off','billed','closed','voided'
+      );
+    ui_surface_hint: "Service → Analytics → WIP → status filter"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_wip.include_unprocessed_transactions
+    intellidealer_label: "Include Unprocessed Transactions"
+    intellidealer_screen: "Analysis Reports: Work In Process"
+    intellidealer_data_source: "Labor + parts ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.26.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Toggle that includes transactions not yet posted to GL. Critical
+      for true real-time WIP visibility.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Implies a posted_to_gl_at flag on labor and parts rows.
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE qrm_work_order_labor
+        ADD COLUMN posted_to_gl_at timestamptz;
+      ALTER TABLE qrm_work_order_parts
+        ADD COLUMN posted_to_gl_at timestamptz;
+    ui_surface_hint: "Service → Analytics → WIP → 'Include unposted' toggle"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_wip.bucket_current
+    intellidealer_label: "Current"
+    intellidealer_screen: "Analysis Reports: Work In Process"
+    intellidealer_data_source: "Aging bucket"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.26.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.26.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      WIP balance aged 0-30 days. Sample 89,197.93 (26.4% of 337k).
+    qep_status: MISSING
+    qep_table: qrm_work_order_wip_snapshots
+    qep_column: bucket_current_cents
+    qep_evidence: []
+    qep_gap_notes: |
+      Inside the new WIP table.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Defined in qrm_work_order_wip_snapshots DDL above.
+    ui_surface_hint: "Service → Analytics → WIP → 'Current' band"
+    dependencies:
+      - analysis_wip.wip_method
+
+  - id: analysis_wip.bucket_31_60
+    intellidealer_label: "31-60"
+    intellidealer_screen: "Analysis Reports: Work In Process"
+    intellidealer_data_source: "Aging bucket"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.26.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      WIP balance aged 31-60 days (110,343.65, 32.7%).
+    qep_status: MISSING
+    qep_table: qrm_work_order_wip_snapshots
+    qep_column: bucket_31_60_cents
+    qep_evidence: []
+    qep_gap_notes: |
+      Inside the new WIP table.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Defined in qrm_work_order_wip_snapshots DDL above.
+    ui_surface_hint: "Service → Analytics → WIP → '31-60' band"
+    dependencies:
+      - analysis_wip.wip_method
+
+  - id: analysis_wip.bucket_61_90
+    intellidealer_label: "61-90"
+    intellidealer_screen: "Analysis Reports: Work In Process"
+    intellidealer_data_source: "Aging bucket"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.26.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      WIP balance aged 61-90 days (64,633.47, 19.2%).
+    qep_status: MISSING
+    qep_table: qrm_work_order_wip_snapshots
+    qep_column: bucket_61_90_cents
+    qep_evidence: []
+    qep_gap_notes: |
+      Inside the new WIP table.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Defined in qrm_work_order_wip_snapshots DDL above.
+    ui_surface_hint: "Service → Analytics → WIP → '61-90' band"
+    dependencies:
+      - analysis_wip.wip_method
+
+  - id: analysis_wip.bucket_91_120
+    intellidealer_label: "91-120"
+    intellidealer_screen: "Analysis Reports: Work In Process"
+    intellidealer_data_source: "Aging bucket"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.26.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      WIP balance aged 91-120 days (34,773.05, 10.3%). Crosses the
+      stale threshold at most dealerships.
+    qep_status: MISSING
+    qep_table: qrm_work_order_wip_snapshots
+    qep_column: bucket_91_120_cents
+    qep_evidence: []
+    qep_gap_notes: |
+      Inside the new WIP table.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Defined in qrm_work_order_wip_snapshots DDL above.
+    ui_surface_hint: "Service → Analytics → WIP → '91-120' band"
+    dependencies:
+      - analysis_wip.wip_method
+
+  - id: analysis_wip.bucket_over_120
+    intellidealer_label: "Over 120"
+    intellidealer_screen: "Analysis Reports: Work In Process"
+    intellidealer_data_source: "Aging bucket"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.26.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      WIP balance over 120 days (38,406.35, 11.4%). Often write-off
+      candidates.
+    qep_status: MISSING
+    qep_table: qrm_work_order_wip_snapshots
+    qep_column: bucket_over_120_cents
+    qep_evidence: []
+    qep_gap_notes: |
+      Inside the new WIP table.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Defined in qrm_work_order_wip_snapshots DDL above.
+    ui_surface_hint: "Service → Analytics → WIP → 'Over 120' band"
+    dependencies:
+      - analysis_wip.wip_method
+
+  - id: analysis_wip.bucket_total
+    intellidealer_label: "Total"
+    intellidealer_screen: "Analysis Reports: Work In Process"
+    intellidealer_data_source: "Aging total"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.26.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Sum of all WIP buckets (337,354.45).
+    qep_status: MISSING
+    qep_table: qrm_work_order_wip_snapshots
+    qep_column: total_cents
+    qep_evidence: []
+    qep_gap_notes: |
+      Generated column on the new table.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Generated stored column in qrm_work_order_wip_snapshots DDL.
+    ui_surface_hint: "Service → Analytics → WIP → total row"
+    dependencies:
+      - analysis_wip.bucket_current
+      - analysis_wip.bucket_31_60
+      - analysis_wip.bucket_61_90
+      - analysis_wip.bucket_91_120
+      - analysis_wip.bucket_over_120
+
+  - id: analysis_wip.create_wip_report_link
+    intellidealer_label: "Create a Work In Process Report"
+    intellidealer_screen: "Analysis Reports: Work In Process"
+    intellidealer_data_source: "Reporting"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.26.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Link that exports the WIP snapshot to a printable / emailable
+      report.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Requires reporting export pipeline.
+    severity: should
+    category: reporting
+    migration_hint: |
+      -- Edge function export-wip-report → PDF + CSV via shared
+      -- reporting infrastructure.
+    ui_surface_hint: "Service → Analytics → WIP → 'Export report' CTA"
+    dependencies:
+      - analysis_wip.bucket_total
+
+  # --- Quote Gain or Loss tab ---
+  - id: analysis_quote_gain.select_technician
+    intellidealer_label: "Select Technician"
+    intellidealer_screen: "Analysis Reports: Quote Gain or Loss"
+    intellidealer_data_source: "Labor ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.32.png
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Filter to one technician.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Depends on qrm_employees.
+    severity: should
+    category: reporting
+    migration_hint: |
+      -- Same as analysis_billing.select_technician.
+    ui_surface_hint: "Service → Analytics → Quote → tech picker"
+    dependencies:
+      - employee.id
+
+  - id: analysis_quote_gain.select_inside_outside_shift
+    intellidealer_label: "Select Inside / Outside / Shift"
+    intellidealer_screen: "Analysis Reports: Quote Gain or Loss"
+    intellidealer_data_source: "Employee classification"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.32.png
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "All"
+      - "Inside"
+      - "Outside"
+      - "Shift 1"
+      - "Shift 2"
+      - "Shift 3"
+    intellidealer_purpose: |
+      Same shop-shift filter as Efficiency.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Depends on shop classification fields.
+    severity: should
+    category: operational
+    migration_hint: |
+      -- See analysis_efficiency.select_inside_outside_shift.
+    ui_surface_hint: "Service → Analytics → Quote → I/O/Shift filter"
+    dependencies:
+      - analysis_efficiency.select_inside_outside_shift
+
+  - id: analysis_quote_gain.col_standard_hours
+    intellidealer_label: "Standard Hours"
+    intellidealer_screen: "Analysis Reports: Quote Gain or Loss grid"
+    intellidealer_data_source: "Quoted standard hours"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.32.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.32.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      Quoted ("flat-rate") hours for the work, e.g. Michael Dougherty
+      30.00 std hrs. The flat-rate book is the dealership's contract
+      with the customer.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Requires a flat-rate / standard-hours catalog and per-WO
+      standard_hours column.
+    severity: must
+    category: financial
+    migration_hint: |
+      CREATE TABLE qrm_flat_rate_codes (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        code text NOT NULL,
+        description text,
+        standard_hours numeric(8,2) NOT NULL,
+        deleted_at timestamptz,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, code)
+      );
+      ALTER TABLE service_job_segments
+        ADD COLUMN flat_rate_code_id uuid REFERENCES qrm_flat_rate_codes(id),
+        ADD COLUMN standard_hours numeric(8,2);
+    ui_surface_hint: "Service → Analytics → Quote → 'Std Hrs' col"
+    dependencies:
+      - work_order.id
+
+  - id: analysis_quote_gain.col_hours_worked
+    intellidealer_label: "Hours Worked"
+    intellidealer_screen: "Analysis Reports: Quote Gain or Loss grid"
+    intellidealer_data_source: "Labor ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.32.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      Actual clocked hours on this segment. Compared against Standard
+      Hours to compute flat-rate gain/loss.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Same dependency as analysis_efficiency.col_hours_worked.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- SUM(qrm_work_order_labor.hours_clocked) per segment.
+    ui_surface_hint: "Service → Analytics → Quote → 'Hrs Worked' col"
+    dependencies:
+      - analysis_efficiency.col_hours_worked
+
+  - id: analysis_quote_gain.col_gain_loss
+    intellidealer_label: "Gain/Loss"
+    intellidealer_screen: "Analysis Reports: Quote Gain or Loss grid"
+    intellidealer_data_source: "Computed"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.32.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      Standard − Worked. Negative = tech ran over the flat-rate book
+      (eats margin); Positive = under quote, dealer gains. e.g.
+      Michael Dougherty -38.87, Paul Morrison +30.33.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Computed.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Computed: standard_hours - SUM(hours_clocked).
+    ui_surface_hint: "Service → Analytics → Quote → 'Gain/Loss' col"
+    dependencies:
+      - analysis_quote_gain.col_standard_hours
+      - analysis_quote_gain.col_hours_worked
+
+  - id: analysis_quote_gain.col_rework_hours
+    intellidealer_label: "Rework Hours"
+    intellidealer_screen: "Analysis Reports: Quote Gain or Loss grid"
+    intellidealer_data_source: "Labor ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.32.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      Hours flagged as rework. e.g. Colton Noerring 32.06, Michael
+      Marksberry -2.86 (negative entry = correction reversal).
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Same dependency as analysis_efficiency.col_rework_hours.
+    severity: should
+    category: operational
+    migration_hint: |
+      -- Same as analysis_efficiency.col_rework_hours.
+    ui_surface_hint: "Service → Analytics → Quote → 'Rework' col"
+    dependencies:
+      - analysis_efficiency.col_rework_hours
+
+  # --- Payroll Hours tab ---
+  - id: analysis_payroll.summary_by
+    intellidealer_label: "Summary By"
+    intellidealer_screen: "Analysis Reports: Payroll Hours"
+    intellidealer_data_source: "Payroll ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.39.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.39.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Premium Code"
+      - "Date"
+    intellidealer_purpose: |
+      Selects whether to roll up payroll hours by premium code (REG,
+      OT, holiday, etc.) or by date.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No payroll layer in QEP.
+    severity: should
+    category: operational
+    migration_hint: |
+      CREATE TABLE qrm_payroll_premium_codes (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        code text NOT NULL,           -- '01','21','25','28'
+        description text NOT NULL,    -- 'REG HOURS','202 REG'
+        multiplier numeric(6,3) NOT NULL DEFAULT 1.0,
+        is_taxable boolean NOT NULL DEFAULT true,
+        deleted_at timestamptz,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, code)
+      );
+      CREATE TABLE qrm_payroll_entries (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        employee_id uuid NOT NULL,
+        premium_code_id uuid NOT NULL REFERENCES qrm_payroll_premium_codes(id),
+        labor_date date NOT NULL,
+        billing_run_date date,
+        hours numeric(8,2) NOT NULL,
+        branch_id uuid,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+    ui_surface_hint: "Service → Analytics → Payroll → group-by toggle"
+    dependencies:
+      - employee.id
+
+  - id: analysis_payroll.col_premium_code
+    intellidealer_label: "Premium Code (col)"
+    intellidealer_screen: "Analysis Reports: Payroll Hours grid"
+    intellidealer_data_source: "Payroll premium codes"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.39.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.39.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "01 - REG HOURS"
+      - "21 - 202 REG"
+      - "25 -"
+      - "28 -"
+    intellidealer_purpose: |
+      Payroll classification code with description, e.g.
+      "01 - REG HOURS", "21 - 202 REG". Drives gross-pay calc.
+    qep_status: MISSING
+    qep_table: qrm_payroll_premium_codes
+    qep_column: code
+    qep_evidence: []
+    qep_gap_notes: |
+      Inside the new payroll tables above.
+    severity: should
+    category: operational
+    migration_hint: |
+      -- Defined in qrm_payroll_premium_codes DDL above.
+    ui_surface_hint: "Service → Analytics → Payroll → 'Code' col"
+    dependencies:
+      - analysis_payroll.summary_by
+
+  - id: analysis_payroll.col_hours_worked
+    intellidealer_label: "Hours Worked (col)"
+    intellidealer_screen: "Analysis Reports: Payroll Hours grid"
+    intellidealer_data_source: "Payroll entries"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.39.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      Hours per premium code per technician. Sample Colton Noerring:
+      26.40 REG + 29.74 / 4.35 / 96.53 = 157.02 total.
+    qep_status: MISSING
+    qep_table: qrm_payroll_entries
+    qep_column: hours
+    qep_evidence: []
+    qep_gap_notes: |
+      Inside the new payroll table.
+    severity: should
+    category: operational
+    migration_hint: |
+      -- Defined in qrm_payroll_entries DDL above.
+    ui_surface_hint: "Service → Analytics → Payroll → 'Hrs Worked' col"
+    dependencies:
+      - analysis_payroll.summary_by
+
+  - id: analysis_payroll.print_action
+    intellidealer_label: "Print"
+    intellidealer_screen: "Analysis Reports: Payroll Hours"
+    intellidealer_data_source: "Reporting"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Analysis-Reports__3.19.39.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Analysis-Reports__3.19.39.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Direct-print action for the payroll report.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Implies a printable report.
+    severity: could
+    category: reporting
+    migration_hint: |
+      -- Edge function print-payroll-hours → PDF.
+    ui_surface_hint: "Service → Analytics → Payroll → print CTA"
+    dependencies: []
+
+  # ============================================================================
+  # SURFACE 3 — CREDIT LIMIT ANALYSIS
+  # Management Central > Financial > Credit Limit Analysis
+  # ============================================================================
+  - id: credit_limit_analysis.select_percentage_of_credit_limit
+    intellidealer_label: "Select Percentage Of Credit Limit"
+    intellidealer_screen: "Credit Limit Analysis"
+    intellidealer_data_source: "AR ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Credit-Limit-Analysis__3.26.20.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Credit-Limit-Analysis__3.26.20.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "75%"
+      - "80%"
+      - "90%"
+      - "95%"
+      - "100%"
+      - "Over 100%"
+    intellidealer_purpose: |
+      Filters customers whose A/R balance is at or above the chosen
+      percentage of their credit limit. The screen forces both a
+      percentage and an account selection: "You must select both a
+      percentage and an account for results to be displayed".
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP has no AR module and no credit-limit field on the customer.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE qrm_companies
+        ADD COLUMN credit_limit_cents bigint,
+        ADD COLUMN credit_limit_set_at timestamptz,
+        ADD COLUMN credit_limit_set_by uuid REFERENCES auth.users(id),
+        ADD COLUMN credit_terms text,            -- 'NET30', 'COD', etc.
+        ADD COLUMN credit_hold boolean NOT NULL DEFAULT false,
+        ADD COLUMN credit_hold_reason text;
+      -- And an AR open-items table feeding the analysis:
+      CREATE TABLE qrm_ar_open_items (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        receivable_account_id uuid,
+        invoice_number text,
+        invoice_date date,
+        due_date date,
+        original_amount_cents bigint NOT NULL,
+        balance_cents bigint NOT NULL,
+        days_outstanding int,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+    ui_surface_hint: "Finance → Credit → 'Threshold %' picker"
+    dependencies:
+      - customer.id
+
+  - id: credit_limit_analysis.select_receivable_account
+    intellidealer_label: "Select Receivable Account"
+    intellidealer_screen: "Credit Limit Analysis"
+    intellidealer_data_source: "GL chart of accounts"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Credit-Limit-Analysis__3.26.20.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Credit-Limit-Analysis__3.26.20.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      GL account that holds the AR balance to query (allows splitting
+      AR by branch / sales class).
+    qep_status: MISSING
+    qep_table: gl_accounts
+    qep_column: id
+    qep_evidence: []
+    qep_gap_notes: |
+      Depends on gl_accounts (see WIP Select Account).
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Already defined under analysis_wip.select_account.
+      ALTER TABLE gl_accounts
+        ADD COLUMN is_receivable boolean NOT NULL DEFAULT false;
+    ui_surface_hint: "Finance → Credit → 'Account' picker"
+    dependencies:
+      - analysis_wip.select_account
+
+  - id: credit_limit_analysis.show_zero_credit_limit
+    intellidealer_label: "Show Customers With Zero Credit Limit"
+    intellidealer_screen: "Credit Limit Analysis"
+    intellidealer_data_source: "AR + customer master"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Credit-Limit-Analysis__3.26.20.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Credit-Limit-Analysis__3.26.20.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Toggle that includes customers with credit_limit = 0 (cash-only
+      or never-set accounts) in the result. Critical to find new
+      customers who have racked up balances without a limit.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      UI flag; depends on credit_limit_cents existing.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- UI flag; resolves to:
+      --   WHERE qrm_companies.credit_limit_cents IS NOT NULL
+      --     AND qrm_companies.credit_limit_cents > 0
+      -- with override when toggle is on.
+    ui_surface_hint: "Finance → Credit → 'Show $0 limit accounts' toggle"
+    dependencies:
+      - credit_limit_analysis.select_percentage_of_credit_limit
+
+  - id: credit_limit_analysis.col_customer_name
+    intellidealer_label: "Customer Name (col)"
+    intellidealer_screen: "Credit Limit Analysis grid"
+    intellidealer_data_source: "Customer master"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Credit-Limit-Analysis__3.26.20.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Credit-Limit-Analysis__3.26.20.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Customer name in the result grid.
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: name
+    qep_evidence:
+      - "_full_schema.json qrm_companies.name"
+    qep_gap_notes: |
+      Already present.
+    severity: must
+    category: reporting
+    migration_hint: |
+      -- No DDL.
+    ui_surface_hint: "Finance → Credit → 'Customer' col"
+    dependencies:
+      - customer.id
+
+  - id: credit_limit_analysis.col_total_ar
+    intellidealer_label: "Total A/R (col)"
+    intellidealer_screen: "Credit Limit Analysis grid"
+    intellidealer_data_source: "AR ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Credit-Limit-Analysis__3.26.20.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Credit-Limit-Analysis__3.26.20.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Open AR balance for the customer at the time of query.
+    qep_status: MISSING
+    qep_table: qrm_ar_open_items
+    qep_column: balance_cents
+    qep_evidence: []
+    qep_gap_notes: |
+      Depends on qrm_ar_open_items (see select_percentage migration).
+    severity: must
+    category: financial
+    migration_hint: |
+      -- SUM(qrm_ar_open_items.balance_cents) per company_id.
+    ui_surface_hint: "Finance → Credit → 'Total A/R' col"
+    dependencies:
+      - credit_limit_analysis.select_percentage_of_credit_limit
+
+  - id: credit_limit_analysis.col_credit_limit
+    intellidealer_label: "Credit Limit (col)"
+    intellidealer_screen: "Credit Limit Analysis grid"
+    intellidealer_data_source: "Customer master"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Credit-Limit-Analysis__3.26.20.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Credit-Limit-Analysis__3.26.20.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Customer's approved credit limit in currency.
+    qep_status: MISSING
+    qep_table: qrm_companies
+    qep_column: credit_limit_cents
+    qep_evidence: []
+    qep_gap_notes: |
+      Add to qrm_companies (see select_percentage migration).
+    severity: must
+    category: regulatory
+    migration_hint: |
+      -- Already in select_percentage migration: credit_limit_cents bigint.
+    ui_surface_hint: "Finance → Credit → 'Credit Limit' col"
+    dependencies:
+      - credit_limit_analysis.select_percentage_of_credit_limit
+
+  - id: credit_limit_analysis.col_percentage
+    intellidealer_label: "Percentage (col)"
+    intellidealer_screen: "Credit Limit Analysis grid"
+    intellidealer_data_source: "Computed"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Credit-Limit-Analysis__3.26.20.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Credit-Limit-Analysis__3.26.20.txt
+    intellidealer_field_type: percent
+    intellidealer_purpose: |
+      Total A/R / Credit Limit × 100. Drives whether the row passes
+      the threshold filter.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Computed.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Computed: total_ar_cents / NULLIF(credit_limit_cents,0) * 100.
+    ui_surface_hint: "Finance → Credit → 'Utilization %' col"
+    dependencies:
+      - credit_limit_analysis.col_total_ar
+      - credit_limit_analysis.col_credit_limit
+
+  - id: credit_limit_analysis.col_phone_number
+    intellidealer_label: "Phone Number (col)"
+    intellidealer_screen: "Credit Limit Analysis grid"
+    intellidealer_data_source: "Customer master"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Credit-Limit-Analysis__3.26.20.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Credit-Limit-Analysis__3.26.20.txt
+    intellidealer_field_type: phone
+    intellidealer_purpose: |
+      Phone for the AR clerk to call. Inline contact info turns the
+      grid into an action list.
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: phone
+    qep_evidence:
+      - "_full_schema.json qrm_companies.phone"
+    qep_gap_notes: |
+      Phone exists on qrm_companies.
+    severity: should
+    category: operational
+    migration_hint: |
+      -- No DDL.
+    ui_surface_hint: "Finance → Credit → 'Phone' col"
+    dependencies:
+      - customer.id
+
+  # ============================================================================
+  # SURFACE 4 — PROFITABILITY (Management Central > CRM > Profitability)
+  # ============================================================================
+  - id: profitability.sort_by
+    intellidealer_label: "Sort by"
+    intellidealer_screen: "Customer Profitability"
+    intellidealer_data_source: "Sales / cost ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Profitability-Analysis__3.25.42.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Profitability-Analysis__3.25.42.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Margin $"
+      - "Margin %"
+    intellidealer_purpose: |
+      Sort order for the profitability ranking — by absolute margin
+      dollars or by margin percentage.
+    qep_status: PARTIAL
+    qep_table: qb_deals
+    qep_column: gross_margin_cents
+    qep_evidence:
+      - "_full_schema.json qb_deals.gross_margin_cents"
+      - "_full_schema.json qb_deals.gross_margin_pct"
+    qep_gap_notes: |
+      qb_deals carries per-deal margin in cents and pct. But there is
+      no customer-level rollup table or view — so the sort/filter
+      cannot operate without scanning every deal.
+    severity: should
+    category: reporting
+    migration_hint: |
+      CREATE MATERIALIZED VIEW qrm_customer_profitability_mv AS
+      SELECT
+        d.workspace_id,
+        d.company_id,
+        SUM(d.total_revenue_cents) AS sales_cents,
+        SUM(d.total_cost_cents) AS cost_cents,
+        SUM(d.gross_margin_cents) AS margin_cents,
+        CASE WHEN SUM(d.total_revenue_cents) = 0 THEN 0
+             ELSE SUM(d.gross_margin_cents)::numeric
+                  / SUM(d.total_revenue_cents) * 100
+        END AS margin_pct,
+        date_trunc('day', now()) AS as_of_date
+      FROM qb_deals d
+      WHERE d.deleted_at IS NULL
+      GROUP BY d.workspace_id, d.company_id;
+      CREATE UNIQUE INDEX qrm_customer_profitability_mv_pk
+        ON qrm_customer_profitability_mv(workspace_id, company_id);
+    ui_surface_hint: "Reports → Customer Profitability → sort dropdown"
+    dependencies: []
+
+  - id: profitability.sort_order
+    intellidealer_label: "Sort Order"
+    intellidealer_screen: "Customer Profitability"
+    intellidealer_data_source: "UI"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Profitability-Analysis__3.25.42.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Descending"
+      - "Ascending"
+    intellidealer_purpose: |
+      Direction of the sort.
+    qep_status: BUILT
+    qep_table: null
+    qep_column: null
+    qep_evidence:
+      - "Standard list sort convention."
+    qep_gap_notes: |
+      UI-only state.
+    severity: could
+    category: reporting
+    migration_hint: |
+      -- No DDL.
+    ui_surface_hint: "Reports → Customer Profitability → sort direction"
+    dependencies: []
+
+  - id: profitability.analysis_by
+    intellidealer_label: "Analysis By"
+    intellidealer_screen: "Customer Profitability"
+    intellidealer_data_source: "Fiscal calendar"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Profitability-Analysis__3.25.42.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Profitability-Analysis__3.25.42.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Current Fiscal YTD"
+      - "Prior Fiscal YTD"
+      - "Current Fiscal Period"
+      - "Prior Fiscal Period"
+      - "Custom"
+    intellidealer_purpose: |
+      Period basis for the analysis. Implies a fiscal-period dim.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP has no fiscal calendar — only timestamps.
+    severity: should
+    category: financial
+    migration_hint: |
+      CREATE TABLE qrm_fiscal_periods (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        period_year int NOT NULL,
+        period_number int NOT NULL,
+        starts_on date NOT NULL,
+        ends_on date NOT NULL,
+        is_closed boolean NOT NULL DEFAULT false,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, period_year, period_number)
+      );
+    ui_surface_hint: "Reports → Customer Profitability → period picker"
+    dependencies: []
+
+  - id: profitability.select_customer_number
+    intellidealer_label: "Select Customer Number"
+    intellidealer_screen: "Customer Profitability"
+    intellidealer_data_source: "Customer master"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Profitability-Analysis__3.25.42.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Profitability-Analysis__3.25.42.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Filter to a single customer.
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: id
+    qep_evidence:
+      - "_full_schema.json qrm_companies.id"
+    qep_gap_notes: |
+      Customer master exists.
+    severity: should
+    category: reporting
+    migration_hint: |
+      -- No DDL.
+    ui_surface_hint: "Reports → Customer Profitability → customer picker"
+    dependencies:
+      - customer.id
+
+  - id: profitability.area
+    intellidealer_label: "Area"
+    intellidealer_screen: "Customer Profitability"
+    intellidealer_data_source: "Sales area master"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Profitability-Analysis__3.25.42.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Profitability-Analysis__3.25.42.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Total"
+      - "Equipment"
+      - "Parts"
+      - "Service"
+      - "Rental"
+    intellidealer_purpose: |
+      Slices the profitability across the dealership's revenue areas
+      so a CFO can see margin from equipment vs parts vs service.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No revenue-area dimension; needs a tag on every revenue line.
+    severity: must
+    category: financial
+    migration_hint: |
+      CREATE TYPE qrm_revenue_area AS ENUM (
+        'equipment','parts','service','rental','other'
+      );
+      ALTER TABLE qb_deals
+        ADD COLUMN revenue_area qrm_revenue_area NOT NULL DEFAULT 'equipment';
+      -- And on qrm_work_orders, qrm_parts_invoices, qrm_rental_billing
+      -- as those tables come online.
+    ui_surface_hint: "Reports → Customer Profitability → area filter"
+    dependencies: []
+
+  - id: profitability.summarize_by
+    intellidealer_label: "Summarize By"
+    intellidealer_screen: "Customer Profitability"
+    intellidealer_data_source: "UI"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Profitability-Analysis__3.25.42.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Profitability-Analysis__3.25.42.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Customer"
+      - "Customer Class"
+      - "Salesperson"
+      - "Territory"
+    intellidealer_purpose: |
+      Grouping dimension for the profitability rollup. Customer Class
+      and Salesperson dimensions are common dealership management lens.
+    qep_status: PARTIAL
+    qep_table: qrm_companies
+    qep_column: classification
+    qep_evidence:
+      - "_full_schema.json qrm_companies.classification"
+      - "_full_schema.json qrm_companies.territory_code"
+      - "_full_schema.json qrm_deals.assigned_rep_id"
+    qep_gap_notes: |
+      Customer + classification + territory + rep all exist; what's
+      missing is the materialized view that aggregates margin by these
+      dimensions.
+    severity: should
+    category: reporting
+    migration_hint: |
+      -- Extend qrm_customer_profitability_mv (above) with classification,
+      -- territory_code, assigned_rep_id columns to support all four
+      -- summarize-by axes.
+    ui_surface_hint: "Reports → Customer Profitability → group-by toggle"
+    dependencies:
+      - profitability.sort_by
+
+  # --- Profitability grid columns ---
+  - id: profitability.col_customer
+    intellidealer_label: "Customer (col)"
+    intellidealer_screen: "Customer Profitability grid"
+    intellidealer_data_source: "Customer master"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Profitability-Analysis__3.25.42.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Profitability-Analysis__3.25.42.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Row label = customer name.
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: name
+    qep_evidence:
+      - "_full_schema.json qrm_companies.name"
+    qep_gap_notes: |
+      Already in QEP.
+    severity: must
+    category: reporting
+    migration_hint: |
+      -- No DDL.
+    ui_surface_hint: "Reports → Customer Profitability → 'Customer' col"
+    dependencies:
+      - customer.id
+
+  - id: profitability.col_sales
+    intellidealer_label: "Sales (col)"
+    intellidealer_screen: "Customer Profitability grid"
+    intellidealer_data_source: "Sales ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Profitability-Analysis__3.25.42.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Profitability-Analysis__3.25.42.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Total customer revenue for the period (e.g. COOPER TIMBER
+      HARVESTING, INC. $1,309,255.06).
+    qep_status: PARTIAL
+    qep_table: qb_deals
+    qep_column: total_revenue_cents
+    qep_evidence:
+      - "_full_schema.json qb_deals.total_revenue_cents"
+    qep_gap_notes: |
+      qb_deals.total_revenue_cents at the deal level only — needs
+      customer-level aggregate via the proposed materialized view.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See profitability.sort_by migration_hint
+      -- (qrm_customer_profitability_mv.sales_cents).
+    ui_surface_hint: "Reports → Customer Profitability → 'Sales $' col"
+    dependencies:
+      - profitability.sort_by
+
+  - id: profitability.col_cost
+    intellidealer_label: "Cost (col)"
+    intellidealer_screen: "Customer Profitability grid"
+    intellidealer_data_source: "Cost ledger"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Profitability-Analysis__3.25.42.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Profitability-Analysis__3.25.42.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Total COGS for the customer in the period. Note BACKWOODS LAND
+      CLEARING shows -95,193.84 (negative cost — a credit/return).
+    qep_status: PARTIAL
+    qep_table: qb_deals
+    qep_column: total_cost_cents
+    qep_evidence:
+      - "_full_schema.json qb_deals.total_cost_cents"
+    qep_gap_notes: |
+      Needs the customer-level materialized view rollup.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See profitability.sort_by migration_hint
+      -- (qrm_customer_profitability_mv.cost_cents).
+    ui_surface_hint: "Reports → Customer Profitability → 'Cost $' col"
+    dependencies:
+      - profitability.sort_by
+
+  - id: profitability.col_margin_dollar
+    intellidealer_label: "Margin $ (col)"
+    intellidealer_screen: "Customer Profitability grid"
+    intellidealer_data_source: "Computed"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Profitability-Analysis__3.25.42.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Profitability-Analysis__3.25.42.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Sales − Cost, in dollars. Sample COOPER TIMBER 182,636.99,
+      PMC SERVICES 170,000.00 (100% — i.e. zero cost recorded).
+    qep_status: PARTIAL
+    qep_table: qb_deals
+    qep_column: gross_margin_cents
+    qep_evidence:
+      - "_full_schema.json qb_deals.gross_margin_cents"
+      - "_full_schema.json qrm_deals.margin_amount"
+    qep_gap_notes: |
+      Per-deal margin exists. Need the customer-level rollup.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See profitability.sort_by migration_hint
+      -- (qrm_customer_profitability_mv.margin_cents).
+    ui_surface_hint: "Reports → Customer Profitability → 'Margin $' col"
+    dependencies:
+      - profitability.sort_by
+
+  - id: profitability.col_margin_pct
+    intellidealer_label: "Margin % (col)"
+    intellidealer_screen: "Customer Profitability grid"
+    intellidealer_data_source: "Computed"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-5_Deal-Genome/Profitability-Analysis__3.25.42.png
+      - docs/IntelliDealer/_OCR_PNG/Phase-5_Deal-Genome_Profitability-Analysis__3.25.42.txt
+    intellidealer_field_type: percent
+    intellidealer_purpose: |
+      Margin as percentage of Sales. Note "999.99" sentinel for
+      BACKWOODS LAND CLEARING (negative cost on $1,672 sale =
+      effectively infinite margin %, capped).
+    qep_status: PARTIAL
+    qep_table: qb_deals
+    qep_column: gross_margin_pct
+    qep_evidence:
+      - "_full_schema.json qb_deals.gross_margin_pct"
+      - "_full_schema.json qrm_deals.margin_pct"
+    qep_gap_notes: |
+      Same as margin $: needs customer-level rollup. Also need
+      handling for negative-cost / infinite-margin sentinel.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See profitability.sort_by migration_hint
+      -- (qrm_customer_profitability_mv.margin_pct).
+      -- Cap absurd values at 999.99 in read RPC for parity.
+    ui_surface_hint: "Reports → Customer Profitability → 'Margin %' col"
+    dependencies:
+      - profitability.sort_by

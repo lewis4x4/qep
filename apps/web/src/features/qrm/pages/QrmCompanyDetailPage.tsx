@@ -285,6 +285,14 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
     : "Log the next meaningful touch now so the account has visible momentum."
   const canManageDefinitions = userRole === "admin" || userRole === "owner";
   const canManageHierarchy = userRole === "admin" || userRole === "manager" || userRole === "owner";
+  const canManageEin = userRole === "admin" || userRole === "manager" || userRole === "owner";
+  const account360Company = account360Query.data?.company;
+  const hasEinValue = Boolean(account360Company && Object.prototype.hasOwnProperty.call(account360Company, "ein"));
+  const einValue = hasEinValue ? account360Company?.ein ?? null : undefined;
+  const einMasked = Boolean(account360Company?.ein_masked);
+  const einDisplayValue = einValue === undefined
+    ? (account360Query.isLoading ? "Loading..." : "Not available")
+    : einValue ?? "Not recorded";
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8 lg:pb-8">
@@ -441,7 +449,24 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
           />
 
           <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-4 sm:p-5">
-            <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+            <div className="mb-3 border-b border-qep-deck-rule/60 pb-2">
+              <h3 className="text-sm font-semibold text-foreground">Tax / Regulatory</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Federal identity fields used for 1099, AvaTax exemption, and OFAC screening.
+              </p>
+            </div>
+            <dl className="mb-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-muted-foreground">Federal EIN</dt>
+                <dd className="font-medium text-foreground">
+                  {einDisplayValue}
+                </dd>
+                {einMasked ? (
+                  <p className="mt-1 text-xs text-muted-foreground">Masked for unauthorized roles.</p>
+                ) : null}
+              </div>
+            </dl>
+            <dl className="grid grid-cols-1 gap-3 border-t border-qep-deck-rule/60 pt-3 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-muted-foreground">Assigned rep</dt>
                 <dd className="font-medium text-foreground">
@@ -681,7 +706,8 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
       <QrmCompanyEditorSheet
         open={editorOpen}
         onOpenChange={setEditorOpen}
-        company={companyQuery.data}
+        company={companyQuery.data ? { ...companyQuery.data, ein: einValue, einMasked } : companyQuery.data}
+        canManageEin={canManageEin}
         onArchived={() => navigate("/qrm/companies")}
       />
     </div>

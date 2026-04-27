@@ -1,0 +1,2429 @@
+phase: Phase-6_Rental
+generated_at: 2026-04-25T00:00:00Z
+source_artifacts:
+  pdfs:
+    - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf
+  png_screenshots: []
+  ocr_text_paths:
+    - docs/IntelliDealer/_OCR/Phase-6_Rental/Rental Counter.txt
+
+# NOTE on completeness: The Phase-6_Rental folder ships ONLY the Rental Counter
+# help page. The Rental Counter is the *list/search* surface; the rental
+# contract editor, billing engine, rate cards, fleet utilization, and sub-rental
+# screens are referenced via context-menu actions ("Edit", "Print", "Close",
+# "Return", "Need to create a new contract? Click here", "Reverse a Rental
+# Invoice") but no separate help PDFs were captured. To meet the task's
+# "Capture EVERY field" bar — and because rental insurance, damage waiver, RPO,
+# hours, deposit, sub-rental and fuel charges are financial-must concepts — I
+# have inferred the full rental contract surface from:
+#   1. Rental Counter PDF (data source RMCONT, security switch 840, return
+#      codes R/O/E/H, contract type enum rental/rent-to-purchase/reservation/
+#      request/demo/loaner/held, VESign signing, multi-unit asterisk).
+#   2. The QEP rental_* tables already shipped (rental_contracts,
+#      rental_contract_extensions, rental_rate_rules, rental_returns).
+#   3. Standard IntelliDealer/VitalEdge rental contract data model conventions
+#      (RMCONT header + RMCONTL line + RMRATE + RMRPO + RMINS sub-files).
+# Every inferred row is flagged in `intellidealer_evidence` as
+# "PDF mentions context-menu action ... no field-level help page captured" so
+# downstream readers know which rows came from documented help text vs.
+# inferred-from-workflow.
+
+fields:
+  # ─── RENTAL COUNTER: SEARCH / SORT FILTERS ────────────────────────────────
+  - id: rental_counter.include_history
+    intellidealer_label: "Include History"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 2 — search fields table)
+      - docs/IntelliDealer/_OCR/Phase-6_Rental/Rental Counter.txt (lines 70-75)
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      When checked, search results include closed/historical rental
+      contracts, not just live ones. Operationally lets a counter rep
+      pull last year's contract for a repeat customer to clone.
+    qep_status: PARTIAL
+    qep_table: rental_contracts
+    qep_column: status
+    qep_evidence:
+      - "rental_contracts.status (database.types.ts)"
+    qep_gap_notes: |
+      QEP has a `status` column on rental_contracts but no convention for
+      what 'history' means (closed, returned, archived, billed-out). UI
+      filter must explicitly map a "Show closed contracts" toggle to a
+      defined status set. Today the contract list has no "include
+      history" affordance.
+    severity: should
+    category: operational
+    migration_hint: |
+      -- No DDL change needed. Document the convention in code:
+      -- ALIVE statuses: 'requested','approved','active','on_rent'
+      -- HISTORY statuses: 'returned','closed','cancelled','expired'
+      COMMENT ON COLUMN public.rental_contracts.status IS
+        'Lifecycle: requested|approved|active|on_rent|returned|closed|cancelled|expired. UI "Include History" surfaces returned/closed/cancelled/expired.';
+    ui_surface_hint: "Rental list page — header filter chip 'Include History'"
+    dependencies: []
+
+  - id: rental_counter.select_contract_number
+    intellidealer_label: "Select Contract Number"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 2)
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Free-text search by contract number. Primary lookup path used by
+      counter reps and dispatch when a customer calls with a contract
+      number from their rental ticket.
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: id
+    qep_evidence:
+      - "rental_contracts.id (uuid PK)"
+    qep_gap_notes: |
+      QEP uses uuid for contract id; IntelliDealer uses a human-readable
+      contract number. We will need a `contract_number` text column with
+      a sequence-style format like 'RC-2026-00042' for human search.
+      Currently customers cannot search by a friendly contract number.
+    severity: must
+    category: operational
+    migration_hint: |
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN contract_number TEXT;
+      CREATE UNIQUE INDEX rental_contracts_contract_number_uniq
+        ON public.rental_contracts (workspace_id, contract_number)
+        WHERE contract_number IS NOT NULL;
+      -- Backfill via per-workspace sequence:
+      CREATE SEQUENCE IF NOT EXISTS public.rental_contract_number_seq;
+      COMMENT ON COLUMN public.rental_contracts.contract_number IS
+        'Human-readable contract number, e.g. RC-2026-00042. Maps to IntelliDealer RMCONT contract number.';
+    ui_surface_hint: "Rental list search input + contract detail header"
+    dependencies: []
+
+  - id: rental_counter.select_customer_number
+    intellidealer_label: "Select Customer Number"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT/CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 2)
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Filter rental contracts by customer number. Supports walk-in
+      pull-up workflow: rep types or scans the customer number and sees
+      all their open and historical rentals.
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: portal_customer_id
+    qep_evidence:
+      - "rental_contracts.portal_customer_id"
+    qep_gap_notes: |
+      Built. The fk points at the portal_customers/crm_companies
+      identity. UI list filter just needs to expose "filter by customer"
+      via the existing column.
+    severity: must
+    category: operational
+    migration_hint: |
+      -- No DDL needed.
+      CREATE INDEX IF NOT EXISTS rental_contracts_customer_idx
+        ON public.rental_contracts (workspace_id, portal_customer_id);
+    ui_surface_hint: "Rental list page — customer search/picker filter"
+    dependencies: []
+
+  - id: rental_counter.select_stock_number
+    intellidealer_label: "Select Stock Number"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT/EQMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 2)
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Filter contracts by the stock number of the unit on rent. Critical
+      when a service tech finds a ticket and needs to know what contract
+      that unit is currently tied to before moving it.
+    qep_status: PARTIAL
+    qep_table: rental_contracts
+    qep_column: equipment_id
+    qep_evidence:
+      - "rental_contracts.equipment_id"
+      - "qrm_equipment.serial_number / vin_pin"
+    qep_gap_notes: |
+      QEP has equipment_id on rental_contracts and serial_number on
+      qrm_equipment, but there is no canonical 'stock_number' field on
+      qrm_equipment. IntelliDealer stock numbers are short branded
+      identifiers (e.g. 'A12345'), distinct from VIN/serial. Need a
+      first-class stock_number column for fast cross-screen lookup.
+    severity: must
+    category: operational
+    migration_hint: |
+      ALTER TABLE public.qrm_equipment
+        ADD COLUMN stock_number TEXT;
+      CREATE INDEX qrm_equipment_stock_number_idx
+        ON public.qrm_equipment (workspace_id, stock_number);
+      COMMENT ON COLUMN public.qrm_equipment.stock_number IS
+        'Branch-issued stock number used across rental, sales, service. Distinct from serial_number/vin_pin.';
+    ui_surface_hint: "Rental list filter + every equipment header chip"
+    dependencies: []
+
+  - id: rental_counter.select_salesperson
+    intellidealer_label: "Select Salesperson"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT/EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 2)
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Filter by the salesperson who originated/owns the contract. Drives
+      commission attribution and "my rentals" personal view.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: salesperson_id
+    qep_evidence: []
+    qep_gap_notes: |
+      No salesperson_id on rental_contracts. Without it, commission
+      reporting on rental gross profit is impossible and the rep cannot
+      filter to their own book.
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN salesperson_id UUID REFERENCES public.profiles(id);
+      CREATE INDEX rental_contracts_salesperson_idx
+        ON public.rental_contracts (workspace_id, salesperson_id);
+      COMMENT ON COLUMN public.rental_contracts.salesperson_id IS
+        'Owning salesperson for commission attribution. Maps to RMCONT salesperson code.';
+    ui_surface_hint: "Rental list filter + contract header"
+    dependencies: []
+
+  - id: rental_counter.select_job_site
+    intellidealer_label: "Select Job Site"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 2-4)
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Filter by the customer's job site location where the unit is
+      deployed. Customers often have multiple active jobs, and dispatch
+      uses job site to schedule pickups, deliveries and fuel runs.
+    qep_status: PARTIAL
+    qep_table: rental_contracts
+    qep_column: delivery_location
+    qep_evidence:
+      - "rental_contracts.delivery_location"
+    qep_gap_notes: |
+      QEP has delivery_location as free text. IntelliDealer treats Job
+      Site as a structured concept that can be reused across multiple
+      contracts for the same customer (so dispatch can group all units
+      at "Acme Tower Phase 2"). Need a `customer_job_sites` lookup with
+      foreign key into rental_contracts.
+    severity: should
+    category: operational
+    migration_hint: |
+      CREATE TABLE public.customer_job_sites (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        portal_customer_id UUID NOT NULL,
+        name TEXT NOT NULL,
+        address TEXT,
+        city TEXT,
+        state TEXT,
+        postal_code TEXT,
+        latitude NUMERIC,
+        longitude NUMERIC,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN job_site_id UUID REFERENCES public.customer_job_sites(id);
+    ui_surface_hint: "Rental list filter + contract delivery card + customer hub job site list"
+    dependencies: [customer.id]
+
+  - id: rental_counter.select_category
+    intellidealer_label: "Select Category"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT/IMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 2)
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Filter contracts by equipment category (e.g. 'Excavator', 'Skid
+      Steer'). Drives utilization-by-category reporting and catalog
+      searches.
+    qep_status: PARTIAL
+    qep_table: rental_contracts
+    qep_column: requested_category
+    qep_evidence:
+      - "rental_contracts.requested_category"
+      - "rental_rate_rules.category"
+    qep_gap_notes: |
+      QEP captures requested_category on the contract but it is free
+      text, not constrained to a `equipment_categories` lookup. Cross-
+      contract category filtering will be inconsistent.
+    severity: should
+    category: reporting
+    migration_hint: |
+      CREATE TABLE public.equipment_categories (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        code TEXT NOT NULL,
+        name TEXT NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE
+      );
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN category_id UUID REFERENCES public.equipment_categories(id);
+    ui_surface_hint: "Rental list filter + rate card editor + utilization dashboards"
+    dependencies: []
+
+  - id: rental_counter.select_class
+    intellidealer_label: "Select Class"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 2)
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Class within category — typically size class (e.g. '5-10t' for
+      excavators). Used to match a rental request to a rate-card-eligible
+      pool of substitute units.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: equipment_class
+    qep_evidence: []
+    qep_gap_notes: |
+      No class field. Without category+class+subclass, rate cards cannot
+      cleanly express "any 5-10t excavator @ $X/day" pricing.
+    severity: should
+    category: financial
+    migration_hint: |
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN equipment_class TEXT;
+      ALTER TABLE public.rental_rate_rules
+        ADD COLUMN equipment_class TEXT;
+      ALTER TABLE public.qrm_equipment
+        ADD COLUMN equipment_class TEXT;
+      COMMENT ON COLUMN public.rental_contracts.equipment_class IS
+        'Class within category (e.g. tonnage band). Maps to RMCONT class.';
+    ui_surface_hint: "Rental list filter + rate card builder"
+    dependencies: [rental_counter.select_category]
+
+  - id: rental_counter.select_subclass
+    intellidealer_label: "Select Subclass"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 2)
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Subclass within class (e.g. 'Cab/Open ROPS' or 'Tracked/Wheeled').
+      Refines substitution rules and rate variance.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: equipment_subclass
+    qep_evidence: []
+    qep_gap_notes: |
+      No subclass field. Necessary for tight rental rate matching.
+    severity: could
+    category: reporting
+    migration_hint: |
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN equipment_subclass TEXT;
+      ALTER TABLE public.qrm_equipment
+        ADD COLUMN equipment_subclass TEXT;
+    ui_surface_hint: "Rental list filter + rate card builder"
+    dependencies: [rental_counter.select_class]
+
+  - id: rental_counter.select_type
+    intellidealer_label: "Select Type"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 2, 5)
+      - docs/IntelliDealer/_OCR/Phase-6_Rental/Rental Counter.txt (lines 216-218)
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "rental"
+      - "rent_to_purchase"
+      - "reservation"
+      - "request"
+      - "demo_rent"
+      - "loaner"
+      - "held"
+    intellidealer_purpose: |
+      Contract type filter. Each type has different financial behavior:
+      rent_to_purchase accrues credit toward eventual sale, demo_rent is
+      rep-driven trial, loaner is a goodwill cover during service, held
+      is a soft-reserve before billing starts. Drives revenue recognition.
+    qep_status: PARTIAL
+    qep_table: rental_contracts
+    qep_column: request_type
+    qep_evidence:
+      - "rental_contracts.request_type"
+    qep_gap_notes: |
+      QEP has `request_type` (string) but the enum values are not
+      pinned to the IntelliDealer set. Need to formalize, especially
+      rent_to_purchase, demo_rent and loaner — each affects how revenue
+      and inventory are treated downstream.
+    severity: must
+    category: financial
+    migration_hint: |
+      CREATE TYPE public.rental_contract_type AS ENUM (
+        'rental','rent_to_purchase','reservation','request',
+        'demo_rent','loaner','held'
+      );
+      ALTER TABLE public.rental_contracts
+        ALTER COLUMN request_type TYPE public.rental_contract_type
+        USING request_type::public.rental_contract_type;
+      COMMENT ON COLUMN public.rental_contracts.request_type IS
+        'IntelliDealer contract type. Drives revenue recognition: rent_to_purchase accrues RPO credit; demo_rent/loaner are non-billed.';
+    ui_surface_hint: "Rental list type filter + contract editor type picker"
+    dependencies: []
+
+  - id: rental_counter.select_location
+    intellidealer_label: "Select Location"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 3)
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Filter contracts by the originating branch. Multi-branch dealers
+      need to slice rental performance by store and route inter-store
+      transfers correctly.
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: branch_id
+    qep_evidence:
+      - "rental_contracts.branch_id"
+    qep_gap_notes: |
+      Built — branch_id already exists on rental_contracts. Just expose
+      filter in UI.
+    severity: must
+    category: operational
+    migration_hint: |
+      -- No DDL needed.
+      CREATE INDEX IF NOT EXISTS rental_contracts_branch_idx
+        ON public.rental_contracts (workspace_id, branch_id);
+    ui_surface_hint: "Rental list branch filter dropdown"
+    dependencies: []
+
+  # ─── RENTAL COUNTER: SORT FIELDS ──────────────────────────────────────────
+  - id: rental_counter.sort_contract_number
+    intellidealer_label: "Sort by Contract Number"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 1-2 — sort table)
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "contract_number"
+      - "date_out"
+      - "stock_number"
+      - "salesperson"
+      - "type"
+    intellidealer_purpose: |
+      One of five sort orders for the rental list. UI-level state, not
+      stored data — but operator workflow expectation that all five are
+      first-class sort options.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Not a database concern, but a UI convention: list view must offer
+      these five sort options to mirror IntelliDealer rep muscle memory.
+    severity: should
+    category: operational
+    migration_hint: |
+      -- No DDL. Frontend list-view sort state.
+    ui_surface_hint: "Rental list page — column header click + sort dropdown"
+    dependencies: []
+
+  # ─── RENTAL COUNTER: DISPLAY COLUMNS ──────────────────────────────────────
+  - id: rental_contract.contract_number
+    intellidealer_label: "Contract Number"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 3)
+      - docs/IntelliDealer/_OCR/Phase-6_Rental/Rental Counter.txt (lines 120-128)
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Primary key shown to the operator. Hover reveals context menu
+      (Edit, Print, Close, Return). Reverse-highlighted contract numbers
+      indicate the rental rates were manually overridden — a financial
+      audit signal that requires manager review.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: contract_number
+    qep_evidence: []
+    qep_gap_notes: |
+      Same as rental_counter.select_contract_number — need a friendly
+      contract_number column AND a `rate_overridden` flag to drive the
+      reverse-highlight UI signal.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See rental_counter.select_contract_number for contract_number DDL.
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN rate_overridden BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN rate_override_reason TEXT,
+        ADD COLUMN rate_override_by UUID REFERENCES public.profiles(id),
+        ADD COLUMN rate_override_at TIMESTAMPTZ;
+      COMMENT ON COLUMN public.rental_contracts.rate_overridden IS
+        'TRUE if any agreed_*_rate was manually changed from the rate-card price. Drives the IntelliDealer reverse-highlight audit signal.';
+    ui_surface_hint: "Rental list table — primary column + audit chip when rate_overridden = TRUE"
+    dependencies: [rental_counter.select_contract_number]
+
+  - id: rental_contract.customer_or_salesperson_display
+    intellidealer_label: "Customer/Salesperson"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT/CMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 3)
+      - docs/IntelliDealer/_OCR/Phase-6_Rental/Rental Counter.txt (lines 129-137)
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Composite display showing customer name OR salesperson if the
+      contract is for a miscellaneous (cash) customer. For misc
+      customers the Ship To name shown on the Customer tab fills in.
+    qep_status: PARTIAL
+    qep_table: rental_contracts
+    qep_column: portal_customer_id
+    qep_evidence:
+      - "rental_contracts.portal_customer_id"
+    qep_gap_notes: |
+      QEP supports a customer fk but has no concept of a "miscellaneous"
+      cash customer where ship-to name substitutes. Need miscellaneous
+      flag + ship_to_name fallback.
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN is_miscellaneous_customer BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN miscellaneous_customer_name TEXT,
+        ADD COLUMN ship_to_name TEXT,
+        ADD COLUMN ship_to_address TEXT,
+        ADD COLUMN ship_to_city TEXT,
+        ADD COLUMN ship_to_state TEXT,
+        ADD COLUMN ship_to_postal_code TEXT;
+    ui_surface_hint: "Rental list — customer column shows miscellaneous_customer_name when is_miscellaneous_customer = TRUE"
+    dependencies: [rental_counter.select_customer_number]
+
+  - id: rental_contract.date_out
+    intellidealer_label: "Date Out"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 3)
+      - docs/IntelliDealer/_OCR/Phase-6_Rental/Rental Counter.txt (lines 138-141)
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      The date the unit physically left the yard / went on rent. Anchors
+      billing-cycle calculations: daily/weekly/monthly counts begin from
+      Date Out.
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: approved_start_date
+    qep_evidence:
+      - "rental_contracts.approved_start_date"
+      - "rental_contracts.requested_start_date"
+    qep_gap_notes: |
+      Built. Operationally, `approved_start_date` is the rental clock
+      start; UI should label as "Date Out" to match rep vocabulary.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- No DDL needed; just UI label.
+      COMMENT ON COLUMN public.rental_contracts.approved_start_date IS
+        'Rental clock start (IntelliDealer "Date Out"). Anchors daily/weekly/monthly billing cycle counters.';
+    ui_surface_hint: "Rental list column header label 'Date Out'"
+    dependencies: []
+
+  - id: rental_contract.date_in
+    intellidealer_label: "Date In"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 3)
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      Scheduled return date. Drives the late-return aging signal and the
+      auto-billing cycle close-out.
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: approved_end_date
+    qep_evidence:
+      - "rental_contracts.approved_end_date"
+      - "rental_contracts.requested_end_date"
+    qep_gap_notes: |
+      Built. Same labeling note as date_out — UI must display as
+      "Date In".
+    severity: must
+    category: financial
+    migration_hint: |
+      -- No DDL.
+      COMMENT ON COLUMN public.rental_contracts.approved_end_date IS
+        'Scheduled return date (IntelliDealer "Date In"). Late-return calculator aged off this column.';
+    ui_surface_hint: "Rental list 'Date In' column + dispatch overdue dashboard"
+    dependencies: []
+
+  - id: rental_contract.actual_returned_at
+    intellidealer_label: "Actual Return Timestamp"
+    intellidealer_screen: "Rental Counter (implied — rental_returns module)"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 4-5 — Return codes R/O/E/H)
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      The real timestamp the unit physically came back. Different from
+      Date In (scheduled). Required for true days-out and overage-fee
+      calculation.
+    qep_status: PARTIAL
+    qep_table: rental_returns
+    qep_column: inspection_date
+    qep_evidence:
+      - "rental_returns.inspection_date"
+      - "rental_returns.inspection_started_at"
+    qep_gap_notes: |
+      QEP captures inspection_date on rental_returns but does not have a
+      first-class `actual_returned_at` on rental_contracts. Need to
+      either denormalize or always join. For dashboarding speed, suggest
+      denormalize.
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN actual_returned_at TIMESTAMPTZ,
+        ADD COLUMN actual_off_rent_at TIMESTAMPTZ;
+      CREATE INDEX rental_contracts_actual_returned_idx
+        ON public.rental_contracts (workspace_id, actual_returned_at);
+    ui_surface_hint: "Rental contract detail — Returned At pill + utilization metrics"
+    dependencies: [rental_contract.return_code]
+
+  - id: rental_contract.stock_number_display
+    intellidealer_label: "Stock Number"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT/EQMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 3)
+      - docs/IntelliDealer/_OCR/Phase-6_Rental/Rental Counter.txt (lines 142-146)
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      The stock number of the unit on rent. Reverse-highlight indicates
+      the equipment profile has memos attached — a manager-attention
+      signal (warranty issue, customer complaint, lien hold).
+    qep_status: PARTIAL
+    qep_table: rental_contracts
+    qep_column: equipment_id
+    qep_evidence:
+      - "rental_contracts.equipment_id"
+    qep_gap_notes: |
+      Equipment fk exists, but stock_number must be added on
+      qrm_equipment (see rental_counter.select_stock_number). Also need
+      a way to flag equipment as 'has memos' for the reverse-highlight
+      cue.
+    severity: must
+    category: operational
+    migration_hint: |
+      -- See rental_counter.select_stock_number for stock_number DDL.
+      CREATE TABLE public.equipment_memos (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        equipment_id UUID NOT NULL REFERENCES public.qrm_equipment(id) ON DELETE CASCADE,
+        body TEXT NOT NULL,
+        is_alert BOOLEAN NOT NULL DEFAULT FALSE,
+        author_id UUID REFERENCES public.profiles(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        deleted_at TIMESTAMPTZ
+      );
+      CREATE INDEX equipment_memos_eq_idx ON public.equipment_memos (workspace_id, equipment_id) WHERE deleted_at IS NULL;
+    ui_surface_hint: "Rental list stock number cell — memo dot when active alert exists"
+    dependencies: [rental_counter.select_stock_number]
+
+  - id: rental_contract.vesign_status
+    intellidealer_label: "VESign Status"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 3-4)
+      - docs/IntelliDealer/_OCR/Phase-6_Rental/Rental Counter.txt (lines 156-184)
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "awaiting_signature"
+      - "partially_signed"
+      - "signed"
+      - "canceled"
+      - "not_sent"
+    intellidealer_purpose: |
+      OneSpan VESign electronic signature status for the rental
+      agreement. Without 'signed' the dealer is exposed contractually —
+      damage, late charges and lien claims need a signed agreement.
+      120-day OneSpan expiry rule means stale unsigned quotes silently
+      void the e-sign.
+    qep_status: PARTIAL
+    qep_table: rental_contracts
+    qep_column: signed_terms_url
+    qep_evidence:
+      - "rental_contracts.signed_terms_url"
+    qep_gap_notes: |
+      QEP has a signed_terms_url but no enum status, no e-sign provider,
+      no per-signer state, no 120-day expiry tracking. This is a
+      financial-must: an unsigned rental agreement that goes south is a
+      collections nightmare.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      CREATE TYPE public.esign_status AS ENUM (
+        'not_sent','awaiting_signature','partially_signed','signed','canceled','expired'
+      );
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN esign_status public.esign_status NOT NULL DEFAULT 'not_sent',
+        ADD COLUMN esign_provider TEXT,
+        ADD COLUMN esign_envelope_id TEXT,
+        ADD COLUMN esign_sent_at TIMESTAMPTZ,
+        ADD COLUMN esign_signed_at TIMESTAMPTZ,
+        ADD COLUMN esign_expires_at TIMESTAMPTZ;
+      CREATE TABLE public.rental_contract_signers (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        rental_contract_id UUID NOT NULL REFERENCES public.rental_contracts(id) ON DELETE CASCADE,
+        signer_role TEXT NOT NULL,
+        signer_name TEXT NOT NULL,
+        signer_email TEXT,
+        signed_at TIMESTAMPTZ,
+        ip_address TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    ui_surface_hint: "Rental list — VESign chip; contract detail — signers timeline"
+    dependencies: []
+
+  - id: rental_contract.category_display
+    intellidealer_label: "Category/Class/Job Site (display)"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 4)
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Composite display: equipment category + class on first line, job
+      site on second. Quick visual scan for dispatch.
+    qep_status: PARTIAL
+    qep_table: rental_contracts
+    qep_column: requested_category
+    qep_evidence:
+      - "rental_contracts.requested_category"
+      - "rental_contracts.delivery_location"
+    qep_gap_notes: |
+      Same gaps as category, class, job_site individually. Just a
+      composite of those.
+    severity: should
+    category: operational
+    migration_hint: |
+      -- See category, class, job_site individually. No new DDL.
+    ui_surface_hint: "Rental list — composite cell"
+    dependencies:
+      - rental_counter.select_category
+      - rental_counter.select_class
+      - rental_counter.select_job_site
+
+  - id: rental_contract.return_code
+    intellidealer_label: "Return"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 4-5)
+      - docs/IntelliDealer/_OCR/Phase-6_Rental/Rental Counter.txt (lines 209-214)
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "R - Returned"
+      - "O - Off Rent"
+      - "E - Exchange"
+      - "H - Hold Unit"
+    intellidealer_purpose: |
+      Single-character lifecycle code. Drives billing: 'O' (Off Rent)
+      stops the meter without ending the contract; 'H' (Held) is set
+      when an hours-billed unit is awaiting hour-meter close-out; 'E'
+      (Exchange) is a swap-out (tracks substitution chain); 'R'
+      (Returned) closes the line.  An asterisk indicates the unit is
+      part of a multi-unit contract.
+    qep_status: PARTIAL
+    qep_table: rental_returns
+    qep_column: status
+    qep_evidence:
+      - "rental_returns.status"
+      - "rental_contracts.assignment_status"
+    qep_gap_notes: |
+      QEP rental_returns.status is a string; no enum constrained to
+      these four codes. Also missing: the 'multi-unit asterisk' concept.
+      Each line on a multi-unit contract needs its own return code —
+      currently rental_contracts is single-equipment, so multi-unit
+      contracts can't be modeled.
+    severity: must
+    category: workflow
+    migration_hint: |
+      CREATE TYPE public.rental_return_code AS ENUM (
+        'returned','off_rent','exchange','hold_unit'
+      );
+      -- Per-line return code lives on rental_contract_lines (see
+      -- rental_contract_line.* below). On rental_returns add the same enum:
+      ALTER TABLE public.rental_returns
+        ADD COLUMN return_code public.rental_return_code;
+    ui_surface_hint: "Rental list return code badge + per-line return code on multi-unit contracts"
+    dependencies: [rental_contract_line.return_code]
+
+  - id: rental_contract.type_display
+    intellidealer_label: "Type"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 5)
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "rental"
+      - "rent_to_purchase"
+      - "reservation"
+      - "request"
+      - "demo_rent"
+      - "loaner"
+      - "held"
+    intellidealer_purpose: |
+      Same as Select Type — list-page display column.
+    qep_status: PARTIAL
+    qep_table: rental_contracts
+    qep_column: request_type
+    qep_evidence:
+      - "rental_contracts.request_type"
+    qep_gap_notes: |
+      Duplicated from rental_counter.select_type — needs the typed enum.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See rental_counter.select_type for ENUM DDL.
+    ui_surface_hint: "Rental list 'Type' column badge"
+    dependencies: [rental_counter.select_type]
+
+  - id: rental_contract.location_display
+    intellidealer_label: "Location"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 5)
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Originating branch where the contract was created (not necessarily
+      where the unit currently is). Drives commission allocation when an
+      out-of-territory rental is booked.
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: branch_id
+    qep_evidence:
+      - "rental_contracts.branch_id"
+    qep_gap_notes: |
+      Built.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- No DDL.
+    ui_surface_hint: "Rental list 'Location' column"
+    dependencies: []
+
+  # ─── RENTAL COUNTER: ROW-LEVEL ACTIONS ────────────────────────────────────
+  - id: rental_contract.action_edit
+    intellidealer_label: "Edit (context menu)"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 5)
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Contract-row context-menu action. Opens the rental agreement
+      editor.
+    qep_status: PARTIAL
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Frontend route exists for rental_contracts (admin), but full
+      "edit rental contract" wizard with line-item rate override + e-sign
+      kickoff is not built.
+    severity: must
+    category: workflow
+    migration_hint: |
+      -- No DDL. UI route /rentals/{id}/edit.
+    ui_surface_hint: "Rental list row context menu — Edit"
+    dependencies: []
+
+  - id: rental_contract.action_print
+    intellidealer_label: "Print (context menu)"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 5)
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Generate a print-ready PDF of the contract. Used for in-person
+      sign-out (when no e-sign) and customer file copy.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No PDF-render endpoint for rental_contracts. Need a Supabase
+      edge function to assemble the contract into the company-branded
+      PDF template.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      -- No DDL. New edge function: rental-contract-pdf.
+      -- Store generated PDFs for audit trail:
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN print_pdf_url TEXT,
+        ADD COLUMN print_pdf_generated_at TIMESTAMPTZ;
+    ui_surface_hint: "Rental list row context menu — Print"
+    dependencies: []
+
+  - id: rental_contract.action_close
+    intellidealer_label: "Close (hard-close, context menu)"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 5)
+      - docs/IntelliDealer/_OCR/Phase-6_Rental/Rental Counter.txt (lines 231-238)
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Hard-close: delete the contract AND any open invoices regardless
+      of pending invoices or unreturned units. A nuclear-option used by
+      managers when a contract has corrupt data.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No hard-close path. Critical safeguard: must require manager role
+      and write to an audit log.
+    severity: should
+    category: workflow
+    migration_hint: |
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN hard_closed_at TIMESTAMPTZ,
+        ADD COLUMN hard_closed_by UUID REFERENCES public.profiles(id),
+        ADD COLUMN hard_close_reason TEXT;
+      -- Soft-delete via deleted_at preferred over physical delete.
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN deleted_at TIMESTAMPTZ;
+    ui_surface_hint: "Rental list row context menu — Close (manager-gated)"
+    dependencies: []
+
+  - id: rental_contract.action_return
+    intellidealer_label: "Return (context menu)"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 5)
+      - docs/IntelliDealer/_OCR/Phase-6_Rental/Rental Counter.txt (lines 241-243)
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Returned"
+      - "Off Rent"
+      - "Hold Unit"
+      - "Exchanged"
+      - "Partial Return"
+    intellidealer_purpose: |
+      Triggers the return workflow. Five sub-options each have different
+      billing/inventory effects: Off Rent stops billing meter, Hold Unit
+      pauses while hours are reconciled, Exchanged swaps to a new unit
+      (sub-rental potential), Partial Return only checks in some lines
+      from a multi-unit contract.
+    qep_status: PARTIAL
+    qep_table: rental_returns
+    qep_column: status
+    qep_evidence:
+      - "rental_returns.status"
+    qep_gap_notes: |
+      rental_returns table exists with status column but no enum
+      constraint and no Partial Return concept (depends on
+      rental_contract_lines).
+    severity: must
+    category: workflow
+    migration_hint: |
+      CREATE TYPE public.rental_return_action AS ENUM (
+        'returned','off_rent','hold_unit','exchanged','partial_return'
+      );
+      ALTER TABLE public.rental_returns
+        ADD COLUMN return_action public.rental_return_action;
+    ui_surface_hint: "Rental list row context menu — Return submenu"
+    dependencies: [rental_contract_line.return_code]
+
+  - id: rental_counter.action_create_contract
+    intellidealer_label: "Need to create a new contract? Click here to add"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 6)
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Entry point to the rental contract create wizard (header +
+      customer + units + rates + e-sign).
+    qep_status: PARTIAL
+    qep_table: null
+    qep_column: null
+    qep_evidence:
+      - "Existing /rentals/new admin route assumed"
+    qep_gap_notes: |
+      Need a polished operator-facing rental contract wizard mirroring
+      IntelliDealer's flow.
+    severity: must
+    category: workflow
+    migration_hint: |
+      -- No DDL. UI route /rentals/new.
+    ui_surface_hint: "Rental list page — primary 'New Rental' button"
+    dependencies: []
+
+  - id: rental_counter.action_create_reservation
+    intellidealer_label: "Need to create a new reservation/request? Click here to add"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 6)
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Soft-hold path: customer wants to lock in a unit + dates without
+      yet starting the rental. Reservations and requests share the
+      RMCONT table but with type=reservation/request (no billing meter).
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: request_type
+    qep_evidence:
+      - "rental_contracts.request_type"
+      - "rental_contracts.status"
+    qep_gap_notes: |
+      Built — rental_contracts can hold reservation/request types. UI
+      just needs the affordance.
+    severity: should
+    category: workflow
+    migration_hint: |
+      -- No DDL.
+    ui_surface_hint: "Rental list page — secondary 'New Reservation' button"
+    dependencies: [rental_counter.select_type]
+
+  - id: rental_counter.action_modify_print_params
+    intellidealer_label: "Modify default print parameters"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 6)
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Configure the default fields/branding on the printed contract. A
+      branch-level setting.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      Settings table for rental contract print/branding does not exist.
+    severity: could
+    category: nice_to_have
+    migration_hint: |
+      CREATE TABLE public.rental_print_settings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        branch_id UUID,
+        logo_url TEXT,
+        terms_template_id UUID,
+        font_family TEXT DEFAULT 'Helvetica',
+        accent_color TEXT,
+        show_serial_numbers BOOLEAN DEFAULT TRUE,
+        show_rate_breakdown BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    ui_surface_hint: "Rental list page — settings affordance"
+    dependencies: []
+
+  - id: rental_counter.action_reverse_invoice
+    intellidealer_label: "Reverse a Rental Invoice"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 6)
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Reverse a posted rental invoice (creates a credit memo and
+      reopens the billing cycle). Manager-gated audited action.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No reverse-invoice path. Without this, mistakes in cycle billing
+      cannot be corrected without manual GL entries.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See rental_billing.* below for invoice schema. Reversal action:
+      ALTER TABLE public.rental_invoices
+        ADD COLUMN reversed_at TIMESTAMPTZ,
+        ADD COLUMN reversed_by UUID REFERENCES public.profiles(id),
+        ADD COLUMN reversal_reason TEXT,
+        ADD COLUMN reversal_credit_memo_id UUID;
+    ui_surface_hint: "Rental list page — admin action 'Reverse Invoice'"
+    dependencies: [rental_invoice.id]
+
+  - id: rental_counter.action_tethr_it
+    intellidealer_label: "Tethr It Now"
+    intellidealer_screen: "Rental Counter"
+    intellidealer_data_source: "TETHR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 6)
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Launch the Tethr It telematics interface to ping a rental unit's
+      live location/hours. Used to verify a customer claim that "the
+      machine has been off-rent since Friday".
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No Tethr integration. QEP has telematics_feeds in the broader
+      schema; this would be a button to open the live telematics view.
+    severity: should
+    category: operational
+    migration_hint: |
+      -- No DDL. UI deeplink to /equipment/{id}/telematics.
+    ui_surface_hint: "Rental list page — context action 'Live Telematics'"
+    dependencies: []
+
+  # ─── INFERRED: RENTAL CONTRACT HEADER (financial-must) ────────────────────
+  - id: rental_contract.billing_cycle
+    intellidealer_label: "Billing Cycle"
+    intellidealer_screen: "Rental Contract Editor (inferred — no help PDF captured)"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - "PDF references contract type (rental, rent_to_purchase, etc.) implying cycle billing logic; no field-level help PDF captured."
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "daily"
+      - "weekly"
+      - "monthly"
+      - "hourly"
+      - "flat"
+    intellidealer_purpose: |
+      The cycle on which rental invoices are auto-generated. Combined
+      with Date Out, drives whether a 14-day rental is billed as 14
+      daily lines, 2 weekly lines or fractional-monthly. Mis-set cycle
+      is one of the top three causes of rental invoice disputes.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: billing_cycle
+    qep_evidence: []
+    qep_gap_notes: |
+      No billing_cycle column on rental_contracts. Without it, the
+      auto-billing engine cannot correctly cycle a contract.
+    severity: must
+    category: financial
+    migration_hint: |
+      CREATE TYPE public.rental_billing_cycle AS ENUM (
+        'daily','weekly','monthly','hourly','flat'
+      );
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN billing_cycle public.rental_billing_cycle NOT NULL DEFAULT 'daily',
+        ADD COLUMN next_billing_date DATE,
+        ADD COLUMN last_billed_through DATE;
+      COMMENT ON COLUMN public.rental_contracts.billing_cycle IS
+        'How rental invoices are auto-generated. Maps to RMCONT cycle code.';
+    ui_surface_hint: "Rental contract editor — Billing Cycle picker"
+    dependencies: []
+
+  - id: rental_contract.proration_rule
+    intellidealer_label: "Proration Rule"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - "Inferred from rental contract domain — no field-level help PDF captured."
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "actual_days"
+      - "calendar_month"
+      - "best_of_dwm"
+      - "no_proration"
+    intellidealer_purpose: |
+      Determines how partial periods are billed. 'best_of_dwm' is
+      industry-standard: customer is billed at whichever of D/W/M is
+      cheapest. Required to compete with national rental houses.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: proration_rule
+    qep_evidence: []
+    qep_gap_notes: |
+      Missing entirely. Without best-of-D/W/M proration, dealer either
+      under-bills (revenue leak) or over-bills (customer churn).
+    severity: must
+    category: financial
+    migration_hint: |
+      CREATE TYPE public.rental_proration_rule AS ENUM (
+        'actual_days','calendar_month','best_of_dwm','no_proration'
+      );
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN proration_rule public.rental_proration_rule NOT NULL DEFAULT 'best_of_dwm';
+    ui_surface_hint: "Rental contract editor — Proration picker"
+    dependencies: [rental_contract.billing_cycle]
+
+  - id: rental_contract.po_number
+    intellidealer_label: "Customer PO Number"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - "Inferred — standard rental header field; no field-level help PDF captured."
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Customer's purchase-order number for AR matching. Many fleet/
+      construction customers will not pay an invoice without PO
+      reference printed on it.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: po_number
+    qep_evidence: []
+    qep_gap_notes: |
+      No PO number column. Required for AR collections in commercial
+      rental.
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN po_number TEXT,
+        ADD COLUMN po_expires_on DATE,
+        ADD COLUMN po_amount_authorized NUMERIC(14,2);
+      CREATE INDEX rental_contracts_po_idx
+        ON public.rental_contracts (workspace_id, po_number)
+        WHERE po_number IS NOT NULL;
+    ui_surface_hint: "Rental contract editor — Customer PO field; printed on every invoice"
+    dependencies: []
+
+  - id: rental_contract.salesperson_split
+    intellidealer_label: "Salesperson Commission Split"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - "Inferred — standard rental commission concept; no field-level help PDF captured."
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Multi-rep commission split allocation. Dealer-of-record vs
+      relationship-rep, or a manager taking a piece of a junior rep's
+      deal.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No commission split table. Single salesperson_id only supports
+      one rep per contract.
+    severity: should
+    category: financial
+    migration_hint: |
+      CREATE TABLE public.rental_contract_commissions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        rental_contract_id UUID NOT NULL REFERENCES public.rental_contracts(id) ON DELETE CASCADE,
+        salesperson_id UUID NOT NULL,
+        split_pct NUMERIC(5,2) NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    ui_surface_hint: "Rental contract editor — Commission split editor"
+    dependencies: [rental_counter.select_salesperson]
+
+  - id: rental_contract.tax_jurisdiction
+    intellidealer_label: "Tax Jurisdiction / Sales Tax Code"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONT/CMASTR"
+    intellidealer_evidence:
+      - "Inferred — sales tax handling on rentals varies by state; no field-level help PDF captured."
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      The tax jurisdiction code used to compute sales tax on the rental.
+      Job site location often differs from customer billing address —
+      and many states tax rentals at the use location, not the bill-to
+      location. Mis-applied tax = audit liability.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: tax_jurisdiction_code
+    qep_evidence: []
+    qep_gap_notes: |
+      No tax jurisdiction handling. This is a state-level audit risk:
+      tax authorities can assess back-taxes on misapplied rental tax for
+      up to 7 years.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN tax_jurisdiction_code TEXT,
+        ADD COLUMN tax_exemption_certificate_id UUID,
+        ADD COLUMN total_tax_amount NUMERIC(14,2);
+      COMMENT ON COLUMN public.rental_contracts.tax_jurisdiction_code IS
+        'Tax jurisdiction (typically derived from job site, not bill-to). Required for state sales-tax compliance.';
+    ui_surface_hint: "Rental contract editor — Tax block"
+    dependencies: [rental_counter.select_job_site]
+
+  # ─── INFERRED: RENTAL CONTRACT LINES (multi-unit, sub/swap) ───────────────
+  - id: rental_contract_line.id
+    intellidealer_label: "Rental Contract Line"
+    intellidealer_screen: "Rental Contract Editor (inferred from PDF: 'multiple unit contract' marker)"
+    intellidealer_data_source: "RMCONTL"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 5 — 'An * beside a return code denotes that the unit is part of a multiple unit contract.')
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Per-unit line on a multi-unit contract. The asterisk on the return
+      code in the list view signals "this is one line of many on the
+      same contract". QEP currently models rental_contracts 1:1 with
+      equipment, blocking multi-unit rentals.
+    qep_status: MISSING
+    qep_table: rental_contract_lines
+    qep_column: id
+    qep_evidence: []
+    qep_gap_notes: |
+      No rental_contract_lines table exists. This is the single largest
+      structural gap in the rental subsystem — multi-unit contracts are
+      the norm in commercial rental (a customer renting one excavator
+      almost always also rents an attachment).
+    severity: must
+    category: financial
+    migration_hint: |
+      CREATE TABLE public.rental_contract_lines (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        rental_contract_id UUID NOT NULL REFERENCES public.rental_contracts(id) ON DELETE CASCADE,
+        line_number INT NOT NULL,
+        equipment_id UUID REFERENCES public.qrm_equipment(id),
+        equipment_class TEXT,
+        equipment_subclass TEXT,
+        date_out TIMESTAMPTZ,
+        date_in TIMESTAMPTZ,
+        actual_returned_at TIMESTAMPTZ,
+        return_code public.rental_return_code,
+        is_sub_rental BOOLEAN NOT NULL DEFAULT FALSE,
+        sub_rental_vendor_id UUID,
+        sub_rental_cost NUMERIC(14,2),
+        substituted_from_line_id UUID REFERENCES public.rental_contract_lines(id),
+        daily_rate NUMERIC(12,2),
+        weekly_rate NUMERIC(12,2),
+        monthly_rate NUMERIC(12,2),
+        hourly_rate NUMERIC(12,2),
+        hours_included_per_period NUMERIC(8,1),
+        hours_overage_rate NUMERIC(12,2),
+        meter_out NUMERIC(10,1),
+        meter_in NUMERIC(10,1),
+        rpo_credit_pct NUMERIC(5,2),
+        rpo_credit_cap NUMERIC(14,2),
+        rpo_credit_accrued NUMERIC(14,2),
+        damage_waiver_pct NUMERIC(5,2),
+        damage_waiver_amount NUMERIC(14,2),
+        insurance_required BOOLEAN NOT NULL DEFAULT FALSE,
+        line_status TEXT NOT NULL DEFAULT 'active',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX rcl_contract_idx ON public.rental_contract_lines (workspace_id, rental_contract_id);
+      CREATE INDEX rcl_equipment_idx ON public.rental_contract_lines (workspace_id, equipment_id);
+    ui_surface_hint: "Rental contract editor — Lines table"
+    dependencies: []
+
+  - id: rental_contract_line.return_code
+    intellidealer_label: "Per-line Return Code (multi-unit)"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONTL"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 5)
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "R - Returned"
+      - "O - Off Rent"
+      - "E - Exchange"
+      - "H - Hold Unit"
+    intellidealer_purpose: |
+      Per-unit lifecycle code on a multi-unit contract. A customer can
+      return the attachment but keep the excavator — each line tracks
+      independently.
+    qep_status: MISSING
+    qep_table: rental_contract_lines
+    qep_column: return_code
+    qep_evidence: []
+    qep_gap_notes: |
+      Depends on rental_contract_lines existing. See above.
+    severity: must
+    category: workflow
+    migration_hint: |
+      -- See rental_contract_line.id for full DDL including return_code column.
+    ui_surface_hint: "Rental contract editor — Lines table per-line return badge"
+    dependencies: [rental_contract_line.id, rental_contract.return_code]
+
+  - id: rental_contract_line.exchange_chain
+    intellidealer_label: "Exchange / Swap Chain"
+    intellidealer_screen: "Rental Contract Editor (inferred from 'E - Exchange' return code)"
+    intellidealer_data_source: "RMCONTL"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 5 — 'E- Exchange')
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Tracks substitution: when a unit fails on rent and is swapped for
+      a different stock unit, both lines are linked. Used to maintain
+      single billing-clock continuity even though the physical unit
+      changed.
+    qep_status: MISSING
+    qep_table: rental_contract_lines
+    qep_column: substituted_from_line_id
+    qep_evidence: []
+    qep_gap_notes: |
+      Depends on rental_contract_lines. The self-fk substituted_from_line_id
+      on the DDL above models this chain.
+    severity: must
+    category: workflow
+    migration_hint: |
+      -- See rental_contract_line.id DDL — substituted_from_line_id column.
+    ui_surface_hint: "Rental contract editor — Lines table arrow showing swap source"
+    dependencies: [rental_contract_line.id]
+
+  # ─── INFERRED: RATE STRUCTURE (financial-must) ────────────────────────────
+  - id: rental_contract.rate_daily
+    intellidealer_label: "Daily Rate"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONT/RMRATE"
+    intellidealer_evidence:
+      - "Inferred — standard rental rate concept; no field-level PDF captured for rate sub-screen."
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Per-day rental rate. Always present even on weekly/monthly cycles
+      because best-of-D/W/M proration needs all three.
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: agreed_daily_rate
+    qep_evidence:
+      - "rental_contracts.agreed_daily_rate"
+      - "rental_contracts.estimate_daily_rate"
+      - "rental_rate_rules.daily_rate"
+    qep_gap_notes: |
+      Built. UI must surface both estimate_daily_rate (as quoted) and
+      agreed_daily_rate (after override) to drive the
+      'rate_overridden' indicator.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- No DDL.
+    ui_surface_hint: "Rental contract editor — Rate table 'Daily' column"
+    dependencies: []
+
+  - id: rental_contract.rate_weekly
+    intellidealer_label: "Weekly Rate"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONT/RMRATE"
+    intellidealer_evidence:
+      - "Inferred — standard rental rate concept; no field-level PDF captured."
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Per-week rental rate. Typically ~4x daily rate.
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: agreed_weekly_rate
+    qep_evidence:
+      - "rental_contracts.agreed_weekly_rate"
+      - "rental_rate_rules.weekly_rate"
+    qep_gap_notes: |
+      Built.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- No DDL.
+    ui_surface_hint: "Rental contract editor — Rate table 'Weekly' column"
+    dependencies: []
+
+  - id: rental_contract.rate_monthly
+    intellidealer_label: "Monthly Rate"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONT/RMRATE"
+    intellidealer_evidence:
+      - "Inferred — standard rental rate concept; no field-level PDF captured."
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Per-month rental rate. Typically ~3x weekly rate.
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: agreed_monthly_rate
+    qep_evidence:
+      - "rental_contracts.agreed_monthly_rate"
+      - "rental_rate_rules.monthly_rate"
+    qep_gap_notes: |
+      Built.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- No DDL.
+    ui_surface_hint: "Rental contract editor — Rate table 'Monthly' column"
+    dependencies: []
+
+  - id: rental_contract.rate_hourly
+    intellidealer_label: "Hourly Rate"
+    intellidealer_screen: "Rental Contract Editor (inferred — PDF 'rate has been set to hour usage')"
+    intellidealer_data_source: "RMCONT/RMRATE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 4 — 'If the rate has been set to hour usage, lines are set to Held (H), until the hours in is updated.')
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Hourly billing for hour-meter equipment. Triggers the Held (H)
+      lifecycle: line cannot close until hour-meter close-out reading
+      is recorded.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: agreed_hourly_rate
+    qep_evidence: []
+    qep_gap_notes: |
+      No hourly rate column. Critical for hour-meter-based rentals
+      (compactors, generators, light towers — many small-equipment
+      categories rent hourly).
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN agreed_hourly_rate NUMERIC(12,2),
+        ADD COLUMN estimate_hourly_rate NUMERIC(12,2);
+      ALTER TABLE public.rental_rate_rules
+        ADD COLUMN hourly_rate NUMERIC(12,2);
+    ui_surface_hint: "Rental contract editor — Rate table 'Hourly' row"
+    dependencies: []
+
+  - id: rental_contract.hours_included_per_period
+    intellidealer_label: "Hours Included per Period"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONT/RMRATE"
+    intellidealer_evidence:
+      - "Inferred — standard rental hours-included concept; no field-level PDF captured."
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      Hours included before overage charges kick in (e.g. '8 hrs/day,
+      40 hrs/week, 160 hrs/month'). Must be tracked alongside the cycle
+      to compute overage.
+    qep_status: MISSING
+    qep_table: rental_contract_lines
+    qep_column: hours_included_per_period
+    qep_evidence: []
+    qep_gap_notes: |
+      No hours-included column. Without this, the dealer cannot bill
+      legitimate overage hours — a meaningful revenue line for
+      construction equipment rental.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See rental_contract_line.id DDL — hours_included_per_period column.
+      -- Or per-contract default:
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN hours_included_per_period NUMERIC(8,1) DEFAULT 8.0,
+        ADD COLUMN hours_overage_rate NUMERIC(12,2);
+    ui_surface_hint: "Rental contract editor — Hours block"
+    dependencies: [rental_contract.rate_hourly]
+
+  - id: rental_contract.hour_meter_out
+    intellidealer_label: "Hour Meter Out"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - "Inferred — required to compute usage; no field-level PDF captured."
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      The hour-meter reading at delivery. Anchor for usage calculation.
+    qep_status: MISSING
+    qep_table: rental_contract_lines
+    qep_column: meter_out
+    qep_evidence: []
+    qep_gap_notes: |
+      Missing. Required to compute hours used.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See rental_contract_line.id DDL — meter_out column.
+    ui_surface_hint: "Rental contract editor — Hours block 'Meter Out'"
+    dependencies: [rental_contract_line.id]
+
+  - id: rental_contract.hour_meter_in
+    intellidealer_label: "Hour Meter In"
+    intellidealer_screen: "Rental Contract Editor (inferred — PDF 'hours in is updated')"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 4 — 'until the hours in is updated.')
+    intellidealer_field_type: number
+    intellidealer_purpose: |
+      Hour-meter at return. Until set, the H (Held) status blocks
+      contract close. Drives final overage billing.
+    qep_status: MISSING
+    qep_table: rental_contract_lines
+    qep_column: meter_in
+    qep_evidence: []
+    qep_gap_notes: |
+      Missing. Without it, the H-status flow described in the PDF
+      cannot complete.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See rental_contract_line.id DDL — meter_in column.
+    ui_surface_hint: "Rental return inspection — Meter In input"
+    dependencies: [rental_contract.hour_meter_out]
+
+  - id: rental_contract.delivery_charge
+    intellidealer_label: "Delivery Charge"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - "Inferred — standard line-item; no field-level PDF captured."
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      One-time delivery charge to deliver the unit to the job site.
+      Often distance-based and waivable for VIP customers.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: delivery_charge
+    qep_evidence: []
+    qep_gap_notes: |
+      No delivery charge column. Currently impossible to itemize
+      delivery on the contract.
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN delivery_charge NUMERIC(12,2) DEFAULT 0,
+        ADD COLUMN delivery_charge_waived BOOLEAN DEFAULT FALSE,
+        ADD COLUMN delivery_distance_miles NUMERIC(8,1),
+        ADD COLUMN delivered_by_user_id UUID,
+        ADD COLUMN delivered_at TIMESTAMPTZ;
+    ui_surface_hint: "Rental contract editor — Charges block 'Delivery'"
+    dependencies: []
+
+  - id: rental_contract.pickup_charge
+    intellidealer_label: "Pickup Charge"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - "Inferred — standard line-item; no field-level PDF captured."
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      One-time pickup charge to retrieve the unit from the job site at
+      contract end.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: pickup_charge
+    qep_evidence: []
+    qep_gap_notes: |
+      No pickup charge column.
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN pickup_charge NUMERIC(12,2) DEFAULT 0,
+        ADD COLUMN pickup_charge_waived BOOLEAN DEFAULT FALSE,
+        ADD COLUMN picked_up_by_user_id UUID,
+        ADD COLUMN picked_up_at TIMESTAMPTZ;
+    ui_surface_hint: "Rental contract editor — Charges block 'Pickup'"
+    dependencies: []
+
+  # ─── INFERRED: RPO (RENT-TO-PURCHASE OPTION) ──────────────────────────────
+  - id: rental_contract.rpo_enabled
+    intellidealer_label: "RPO (Rent-to-Purchase Option) Enabled"
+    intellidealer_screen: "Rental Contract Editor (inferred — PDF type 'rent to purchase')"
+    intellidealer_data_source: "RMCONT/RMRPO"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 5 — 'rent to purchase' contract type)
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Marks the contract as RPO: a percentage of each rental payment
+      accrues as credit toward the eventual purchase. Major sales tool
+      for big-ticket equipment.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: rpo_enabled
+    qep_evidence: []
+    qep_gap_notes: |
+      No RPO column. RPO is one of the most common contract types in
+      heavy equipment — financial-must.
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN rpo_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN rpo_credit_pct NUMERIC(5,2),
+        ADD COLUMN rpo_credit_cap NUMERIC(14,2),
+        ADD COLUMN rpo_credit_accrued NUMERIC(14,2) NOT NULL DEFAULT 0,
+        ADD COLUMN rpo_purchase_price NUMERIC(14,2),
+        ADD COLUMN rpo_purchase_deadline DATE,
+        ADD COLUMN rpo_converted_at TIMESTAMPTZ,
+        ADD COLUMN rpo_converted_to_invoice_id UUID;
+      COMMENT ON COLUMN public.rental_contracts.rpo_credit_pct IS
+        'Percentage of each rental payment that accrues as credit toward purchase. Typical 50%-100%.';
+    ui_surface_hint: "Rental contract editor — RPO block (only when type = rent_to_purchase)"
+    dependencies: [rental_counter.select_type]
+
+  - id: rental_contract.rpo_credit_pct
+    intellidealer_label: "RPO Credit Percentage"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONT/RMRPO"
+    intellidealer_evidence:
+      - "Inferred — see rpo_enabled."
+    intellidealer_field_type: percent
+    intellidealer_purpose: |
+      The percentage (typically 50-100%) of each rental payment that
+      accrues toward the eventual purchase price.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: rpo_credit_pct
+    qep_evidence: []
+    qep_gap_notes: |
+      Missing. Industry-standard rates: 50% common, 75% for premium
+      buyers, 100% on dealer-promoted RPO programs.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See rental_contract.rpo_enabled DDL — rpo_credit_pct column.
+    ui_surface_hint: "Rental contract editor — RPO block percentage input"
+    dependencies: [rental_contract.rpo_enabled]
+
+  - id: rental_contract.rpo_credit_cap
+    intellidealer_label: "RPO Credit Cap"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMRPO"
+    intellidealer_evidence:
+      - "Inferred — see rpo_enabled."
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Maximum total credit that can accrue toward purchase. Caps
+      dealer's exposure when a customer rents for many years.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: rpo_credit_cap
+    qep_evidence: []
+    qep_gap_notes: |
+      Missing. Without a cap, long-running RPO can erode purchase
+      profit.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See rental_contract.rpo_enabled DDL — rpo_credit_cap column.
+    ui_surface_hint: "Rental contract editor — RPO block cap input"
+    dependencies: [rental_contract.rpo_enabled]
+
+  - id: rental_contract.rpo_credit_accrued
+    intellidealer_label: "RPO Credit Accrued"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMRPO"
+    intellidealer_evidence:
+      - "Inferred — see rpo_enabled."
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Running total of accrued credit. Incremented every time a rental
+      invoice is paid. Shown to the customer on every invoice as
+      'remaining toward purchase'.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: rpo_credit_accrued
+    qep_evidence: []
+    qep_gap_notes: |
+      Missing. This is the running ledger that turns RPO into a real
+      sales tool.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See rental_contract.rpo_enabled DDL — rpo_credit_accrued column.
+    ui_surface_hint: "Rental contract detail — RPO progress bar 'X / Y accrued'"
+    dependencies: [rental_contract.rpo_enabled]
+
+  - id: rental_contract.rpo_purchase_deadline
+    intellidealer_label: "RPO Purchase Deadline"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMRPO"
+    intellidealer_evidence:
+      - "Inferred — see rpo_enabled."
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      Deadline by which the customer must exercise the RPO conversion
+      to keep accrued credit. After this date, credit expires.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: rpo_purchase_deadline
+    qep_evidence: []
+    qep_gap_notes: |
+      Missing.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See rental_contract.rpo_enabled DDL — rpo_purchase_deadline column.
+    ui_surface_hint: "Rental contract detail — RPO countdown chip"
+    dependencies: [rental_contract.rpo_enabled]
+
+  # ─── INFERRED: DAMAGE WAIVER / INSURANCE ──────────────────────────────────
+  - id: rental_contract.damage_waiver_enabled
+    intellidealer_label: "Damage Waiver Enabled"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMINS"
+    intellidealer_evidence:
+      - "Inferred — standard rental damage waiver concept; no field-level PDF captured."
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Whether the customer purchased the dealer's damage waiver (LDW).
+      LDW is a high-margin add-on (typically 10-15% of rental subtotal)
+      that limits customer's liability for non-negligent damage.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: damage_waiver_enabled
+    qep_evidence: []
+    qep_gap_notes: |
+      Damage waiver is one of the highest-margin lines on a rental
+      contract. Industry-standard 10-15% upcharge — financial-must.
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN damage_waiver_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN damage_waiver_pct NUMERIC(5,2),
+        ADD COLUMN damage_waiver_amount NUMERIC(14,2),
+        ADD COLUMN damage_waiver_declined_at TIMESTAMPTZ,
+        ADD COLUMN damage_waiver_declined_signature_url TEXT;
+      COMMENT ON COLUMN public.rental_contracts.damage_waiver_pct IS
+        'LDW percentage applied on rental subtotal. Typical 10-15%.';
+    ui_surface_hint: "Rental contract editor — Insurance block + decline-signature when off"
+    dependencies: []
+
+  - id: rental_contract.damage_waiver_pct
+    intellidealer_label: "Damage Waiver Percentage"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMINS"
+    intellidealer_evidence:
+      - "Inferred — see damage_waiver_enabled."
+    intellidealer_field_type: percent
+    intellidealer_purpose: |
+      LDW percentage applied to rental subtotal.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: damage_waiver_pct
+    qep_evidence: []
+    qep_gap_notes: |
+      Missing.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See rental_contract.damage_waiver_enabled DDL.
+    ui_surface_hint: "Rental contract editor — Insurance block percentage"
+    dependencies: [rental_contract.damage_waiver_enabled]
+
+  - id: rental_contract.insurance_required
+    intellidealer_label: "Customer Insurance Required"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMINS"
+    intellidealer_evidence:
+      - "Inferred — standard insurance verification concept; no field-level PDF captured."
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Whether the customer is required to provide their own COI
+      (Certificate of Insurance) listing the dealer as additional
+      insured. Required for high-value units when LDW is declined.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: insurance_required
+    qep_evidence: []
+    qep_gap_notes: |
+      Without this, the dealer cannot enforce 'no COI = no rental'
+      policy and is exposed to uninsured-loss risk.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN insurance_required BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN insurance_coi_url TEXT,
+        ADD COLUMN insurance_carrier TEXT,
+        ADD COLUMN insurance_policy_number TEXT,
+        ADD COLUMN insurance_coverage_limit NUMERIC(14,2),
+        ADD COLUMN insurance_expires_on DATE,
+        ADD COLUMN insurance_verified_by UUID REFERENCES public.profiles(id),
+        ADD COLUMN insurance_verified_at TIMESTAMPTZ;
+    ui_surface_hint: "Rental contract editor — COI upload + verification card"
+    dependencies: []
+
+  - id: rental_contract.coi_expires_on
+    intellidealer_label: "COI Expiration Date"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMINS"
+    intellidealer_evidence:
+      - "Inferred — standard COI tracking; no field-level PDF captured."
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      COI expiration date. If COI lapses mid-rental, dealer must pause
+      rental or convert to LDW. Drives a daily check job.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: insurance_expires_on
+    qep_evidence: []
+    qep_gap_notes: |
+      Missing.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      -- See rental_contract.insurance_required DDL — insurance_expires_on column.
+    ui_surface_hint: "Rental contract detail — COI expiration alert chip"
+    dependencies: [rental_contract.insurance_required]
+
+  # ─── INFERRED: DEPOSIT / SECURITY ─────────────────────────────────────────
+  - id: rental_contract.deposit_required
+    intellidealer_label: "Deposit Required"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - "Standard rental deposit concept — also reflected in QEP rental_contracts.deposit_required."
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Whether a security deposit is required before delivery. Standard
+      for retail/cash rentals; waived for established commercial
+      accounts on credit terms.
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: deposit_required
+    qep_evidence:
+      - "rental_contracts.deposit_required"
+    qep_gap_notes: |
+      Built.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- No DDL.
+    ui_surface_hint: "Rental contract editor — Deposit toggle"
+    dependencies: []
+
+  - id: rental_contract.deposit_amount
+    intellidealer_label: "Deposit Amount"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - "QEP rental_contracts.deposit_amount."
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      The dollar amount of the security deposit. Often computed as a
+      multiple of weekly rate.
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: deposit_amount
+    qep_evidence:
+      - "rental_contracts.deposit_amount"
+    qep_gap_notes: |
+      Built.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- No DDL.
+    ui_surface_hint: "Rental contract editor — Deposit amount input"
+    dependencies: [rental_contract.deposit_required]
+
+  - id: rental_contract.deposit_status
+    intellidealer_label: "Deposit Status"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - "QEP rental_contracts.deposit_status."
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "pending"
+      - "received"
+      - "applied"
+      - "refunded"
+      - "forfeited"
+    intellidealer_purpose: |
+      Lifecycle of the deposit. Critical for refund-on-return workflow.
+    qep_status: PARTIAL
+    qep_table: rental_contracts
+    qep_column: deposit_status
+    qep_evidence:
+      - "rental_contracts.deposit_status"
+    qep_gap_notes: |
+      QEP has a string column but no enum. Need to formalize.
+    severity: must
+    category: financial
+    migration_hint: |
+      CREATE TYPE public.rental_deposit_status AS ENUM (
+        'pending','received','applied','refunded','forfeited'
+      );
+      ALTER TABLE public.rental_contracts
+        ALTER COLUMN deposit_status TYPE public.rental_deposit_status
+        USING deposit_status::public.rental_deposit_status;
+    ui_surface_hint: "Rental contract detail — Deposit status badge"
+    dependencies: [rental_contract.deposit_amount]
+
+  - id: rental_contract.deposit_invoice_id
+    intellidealer_label: "Deposit Invoice"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - "QEP rental_contracts.deposit_invoice_id."
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      The invoice issued to collect the deposit.
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: deposit_invoice_id
+    qep_evidence:
+      - "rental_contracts.deposit_invoice_id"
+    qep_gap_notes: |
+      Built.
+    severity: should
+    category: financial
+    migration_hint: |
+      -- No DDL.
+    ui_surface_hint: "Rental contract detail — Deposit invoice link"
+    dependencies: [rental_contract.deposit_amount]
+
+  # ─── INFERRED: RETURN CONDITION / FUEL / CLEANING CHARGES ────────────────
+  - id: rental_return.fuel_charge
+    intellidealer_label: "Fuel Charge"
+    intellidealer_screen: "Rental Return (inferred)"
+    intellidealer_data_source: "RMRTN"
+    intellidealer_evidence:
+      - "Inferred — standard return-condition charge; no field-level PDF captured."
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Charge applied if the unit is returned with less fuel than at
+      delivery. Standard 'fuel-out, fuel-in' policy with markup.
+    qep_status: MISSING
+    qep_table: rental_returns
+    qep_column: fuel_charge
+    qep_evidence: []
+    qep_gap_notes: |
+      No fuel charge field. rental_returns has charge_amount but no
+      fuel/cleaning/damage breakdown.
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE public.rental_returns
+        ADD COLUMN fuel_charge NUMERIC(12,2),
+        ADD COLUMN fuel_level_out NUMERIC(5,2),
+        ADD COLUMN fuel_level_in NUMERIC(5,2),
+        ADD COLUMN fuel_gallons_short NUMERIC(8,2),
+        ADD COLUMN fuel_per_gallon_rate NUMERIC(8,2);
+    ui_surface_hint: "Rental return inspection — Fuel block"
+    dependencies: []
+
+  - id: rental_return.cleaning_charge
+    intellidealer_label: "Cleaning Charge"
+    intellidealer_screen: "Rental Return (inferred)"
+    intellidealer_data_source: "RMRTN"
+    intellidealer_evidence:
+      - "Inferred — standard return-condition charge; no field-level PDF captured."
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Charge applied if the unit is returned dirty / requires cleaning
+      beyond normal wear.
+    qep_status: MISSING
+    qep_table: rental_returns
+    qep_column: cleaning_charge
+    qep_evidence: []
+    qep_gap_notes: |
+      Missing.
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE public.rental_returns
+        ADD COLUMN cleaning_charge NUMERIC(12,2),
+        ADD COLUMN cleaning_required BOOLEAN DEFAULT FALSE,
+        ADD COLUMN cleaning_notes TEXT;
+    ui_surface_hint: "Rental return inspection — Cleaning block"
+    dependencies: []
+
+  - id: rental_return.damage_charge
+    intellidealer_label: "Damage Charge"
+    intellidealer_screen: "Rental Return (inferred)"
+    intellidealer_data_source: "RMRTN"
+    intellidealer_evidence:
+      - "QEP rental_returns.damage_description."
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Charge for damage beyond LDW. Itemized: estimated repair cost,
+      part numbers, labor hours.
+    qep_status: PARTIAL
+    qep_table: rental_returns
+    qep_column: damage_description
+    qep_evidence:
+      - "rental_returns.damage_description"
+      - "rental_returns.charge_amount"
+      - "rental_returns.condition_photos"
+    qep_gap_notes: |
+      QEP captures damage_description, condition_photos and
+      charge_amount but no first-class damage_charge column separated
+      from fuel/cleaning. Need separation for line-item billing.
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE public.rental_returns
+        ADD COLUMN damage_charge NUMERIC(12,2),
+        ADD COLUMN damage_repair_work_order_id UUID,
+        ADD COLUMN damage_estimated_repair_cost NUMERIC(12,2),
+        ADD COLUMN damage_covered_by_ldw BOOLEAN,
+        ADD COLUMN damage_covered_by_customer_insurance BOOLEAN,
+        ADD COLUMN damage_severity TEXT;
+    ui_surface_hint: "Rental return inspection — Damage block (linked to work order)"
+    dependencies: []
+
+  # ─── INFERRED: SUB-RENTAL (rented FROM another dealer) ───────────────────
+  - id: rental_contract.is_sub_rental
+    intellidealer_label: "Is Sub-Rental"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMCONTL/RMSUB"
+    intellidealer_evidence:
+      - "Inferred — sub-rental is a standard rental dealer concept (rented FROM another dealer to fulfill THIS dealer's customer); no field-level PDF captured."
+    intellidealer_field_type: bool
+    intellidealer_purpose: |
+      Marks a contract line as a sub-rental — the dealer rented the
+      unit FROM another dealer to fulfill THIS customer's request. The
+      dealer pays a sub-rental cost to the source dealer and bills the
+      customer at a markup.
+    qep_status: MISSING
+    qep_table: rental_contract_lines
+    qep_column: is_sub_rental
+    qep_evidence: []
+    qep_gap_notes: |
+      No sub-rental concept. Critical for a dealer to handle
+      out-of-stock requests without losing the rental to a competitor.
+      Missing means the dealer either turns away the customer or has
+      to manually track sub-rental P&L outside the system.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See rental_contract_line.id DDL for is_sub_rental and
+      -- sub_rental_vendor_id columns. Plus a vendors table:
+      CREATE TABLE public.sub_rental_vendors (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        company_name TEXT NOT NULL,
+        contact_name TEXT,
+        phone TEXT,
+        email TEXT,
+        ap_terms TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    ui_surface_hint: "Rental contract editor — Lines table 'Sub-Rental' toggle + vendor picker"
+    dependencies: [rental_contract_line.id]
+
+  - id: rental_contract.sub_rental_cost
+    intellidealer_label: "Sub-Rental Cost"
+    intellidealer_screen: "Rental Contract Editor (inferred)"
+    intellidealer_data_source: "RMSUB"
+    intellidealer_evidence:
+      - "Inferred — standard sub-rental P&L; no field-level PDF captured."
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      The cost the dealer pays to the source dealer for the sub-rented
+      unit. The margin is (customer rate - sub_rental_cost).
+    qep_status: MISSING
+    qep_table: rental_contract_lines
+    qep_column: sub_rental_cost
+    qep_evidence: []
+    qep_gap_notes: |
+      Missing. Required to compute true rental margin on sub-rentals.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See rental_contract_line.id DDL — sub_rental_cost column.
+    ui_surface_hint: "Rental contract editor — Lines table sub-rental cost cell"
+    dependencies: [rental_contract.is_sub_rental]
+
+  # ─── INFERRED: RENTAL BILLING ─────────────────────────────────────────────
+  - id: rental_invoice.id
+    intellidealer_label: "Rental Invoice"
+    intellidealer_screen: "Rental Billing (inferred — no field-level PDF captured; PDF references 'Reverse a Rental Invoice')"
+    intellidealer_data_source: "RMINV"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 6 — 'Reverse a Rental Invoice link to reverse a rental invoice')
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Per-cycle rental invoice. Auto-generated by the billing engine
+      based on contract billing_cycle. Each invoice covers a billing
+      period and references back to the contract.
+    qep_status: MISSING
+    qep_table: rental_invoices
+    qep_column: id
+    qep_evidence: []
+    qep_gap_notes: |
+      No rental_invoices table. This is a structural gap: without
+      cycle invoices, automated billing is impossible. Dealer must
+      bill manually = revenue leak + collections delay.
+    severity: must
+    category: financial
+    migration_hint: |
+      CREATE TABLE public.rental_invoices (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        rental_contract_id UUID NOT NULL REFERENCES public.rental_contracts(id),
+        invoice_number TEXT NOT NULL,
+        invoice_date DATE NOT NULL,
+        period_start DATE NOT NULL,
+        period_end DATE NOT NULL,
+        rental_subtotal NUMERIC(14,2) NOT NULL DEFAULT 0,
+        damage_waiver_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+        delivery_charge NUMERIC(14,2) NOT NULL DEFAULT 0,
+        pickup_charge NUMERIC(14,2) NOT NULL DEFAULT 0,
+        fuel_charge NUMERIC(14,2) NOT NULL DEFAULT 0,
+        cleaning_charge NUMERIC(14,2) NOT NULL DEFAULT 0,
+        damage_charge NUMERIC(14,2) NOT NULL DEFAULT 0,
+        hours_overage_charge NUMERIC(14,2) NOT NULL DEFAULT 0,
+        rpo_credit_applied NUMERIC(14,2) NOT NULL DEFAULT 0,
+        deposit_applied NUMERIC(14,2) NOT NULL DEFAULT 0,
+        tax_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+        total NUMERIC(14,2) NOT NULL DEFAULT 0,
+        balance_due NUMERIC(14,2) NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'draft',
+        reversed_at TIMESTAMPTZ,
+        reversed_by UUID REFERENCES public.profiles(id),
+        reversal_reason TEXT,
+        reversal_credit_memo_id UUID,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX rental_invoices_number_uniq
+        ON public.rental_invoices (workspace_id, invoice_number);
+      CREATE INDEX rental_invoices_contract_idx
+        ON public.rental_invoices (workspace_id, rental_contract_id);
+    ui_surface_hint: "Rental contract detail — Invoices subtab + Billing dashboard"
+    dependencies: []
+
+  - id: rental_invoice.period_start
+    intellidealer_label: "Billing Period Start"
+    intellidealer_screen: "Rental Billing (inferred)"
+    intellidealer_data_source: "RMINV"
+    intellidealer_evidence:
+      - "Inferred — see rental_invoice.id."
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      Start of the billing period this invoice covers.
+    qep_status: MISSING
+    qep_table: rental_invoices
+    qep_column: period_start
+    qep_evidence: []
+    qep_gap_notes: |
+      Depends on rental_invoices.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See rental_invoice.id DDL — period_start column.
+    ui_surface_hint: "Rental invoice detail — Period header"
+    dependencies: [rental_invoice.id]
+
+  - id: rental_invoice.period_end
+    intellidealer_label: "Billing Period End"
+    intellidealer_screen: "Rental Billing (inferred)"
+    intellidealer_data_source: "RMINV"
+    intellidealer_evidence:
+      - "Inferred — see rental_invoice.id."
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      End of the billing period this invoice covers.
+    qep_status: MISSING
+    qep_table: rental_invoices
+    qep_column: period_end
+    qep_evidence: []
+    qep_gap_notes: |
+      Depends on rental_invoices.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- See rental_invoice.id DDL — period_end column.
+    ui_surface_hint: "Rental invoice detail — Period header"
+    dependencies: [rental_invoice.id]
+
+  - id: rental_invoice.cycle_billing_run_id
+    intellidealer_label: "Cycle Billing Run"
+    intellidealer_screen: "Rental Billing (inferred)"
+    intellidealer_data_source: "RMINV"
+    intellidealer_evidence:
+      - "Inferred — standard cycle-billing batch concept; no field-level PDF captured."
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Links the invoice to the batch run that created it. Required for
+      audit / reversal at batch level.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No batch tracking. Without it, manager cannot see "tonight's
+      billing run created N invoices for $X" or roll back a bad batch.
+    severity: should
+    category: financial
+    migration_hint: |
+      CREATE TABLE public.rental_billing_runs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        run_date DATE NOT NULL,
+        invoice_count INT NOT NULL DEFAULT 0,
+        total_billed NUMERIC(14,2) NOT NULL DEFAULT 0,
+        triggered_by UUID REFERENCES public.profiles(id),
+        completed_at TIMESTAMPTZ,
+        rolled_back_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      ALTER TABLE public.rental_invoices
+        ADD COLUMN rental_billing_run_id UUID REFERENCES public.rental_billing_runs(id);
+    ui_surface_hint: "Rental billing dashboard — Batch run history"
+    dependencies: [rental_invoice.id]
+
+  # ─── INFERRED: FLEET MANAGEMENT (utilization) ─────────────────────────────
+  - id: equipment.utilization_pct
+    intellidealer_label: "Utilization %"
+    intellidealer_screen: "Fleet Management Dashboard (inferred — no field-level PDF captured)"
+    intellidealer_data_source: "RMUTIL"
+    intellidealer_evidence:
+      - "Inferred — standard fleet utilization metric; no field-level PDF captured."
+    intellidealer_field_type: percent
+    intellidealer_purpose: |
+      Percentage of available days the unit was on rent over a window.
+      The single most important fleet KPI: targets are typically 65-75%
+      for heavy equipment. Below 50% = consider divestment; above 85% =
+      under-supplied.
+    qep_status: MISSING
+    qep_table: fleet_intelligence
+    qep_column: utilization_trend
+    qep_evidence:
+      - "fleet_intelligence.utilization_trend (string only, not a numeric pct)"
+    qep_gap_notes: |
+      QEP fleet_intelligence has utilization_trend as string. Need
+      numeric utilization_pct_30d / _90d / _ytd for dashboards and the
+      AI-driven predicted_replacement model.
+    severity: must
+    category: reporting
+    migration_hint: |
+      ALTER TABLE public.fleet_intelligence
+        ADD COLUMN utilization_pct_30d NUMERIC(5,2),
+        ADD COLUMN utilization_pct_90d NUMERIC(5,2),
+        ADD COLUMN utilization_pct_ytd NUMERIC(5,2),
+        ADD COLUMN days_on_rent_ytd INT,
+        ADD COLUMN days_available_ytd INT;
+    ui_surface_hint: "Fleet dashboard — Utilization heatmap + per-unit KPI tile"
+    dependencies: []
+
+  - id: equipment.fleet_status
+    intellidealer_label: "Fleet Status"
+    intellidealer_screen: "Fleet Management Dashboard (inferred)"
+    intellidealer_data_source: "EQMASTR"
+    intellidealer_evidence:
+      - "Inferred — standard fleet lifecycle status; no field-level PDF captured."
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "available"
+      - "on_rent"
+      - "in_service"
+      - "off_rent_held"
+      - "in_transit"
+      - "sold"
+      - "retired"
+    intellidealer_purpose: |
+      Single source of truth for what the unit is doing right now.
+      Drives availability calendar, rental quoting, and dispatch.
+    qep_status: PARTIAL
+    qep_table: qrm_equipment
+    qep_column: readiness_status
+    qep_evidence:
+      - "qrm_equipment.readiness_status"
+    qep_gap_notes: |
+      QEP has readiness_status (string) but not constrained to a
+      typed enum. Standard rental dealer ops requires the listed
+      enum values.
+    severity: must
+    category: operational
+    migration_hint: |
+      CREATE TYPE public.equipment_fleet_status AS ENUM (
+        'available','on_rent','in_service','off_rent_held','in_transit','sold','retired'
+      );
+      ALTER TABLE public.qrm_equipment
+        ADD COLUMN fleet_status public.equipment_fleet_status NOT NULL DEFAULT 'available';
+      CREATE INDEX qrm_equipment_fleet_status_idx
+        ON public.qrm_equipment (workspace_id, fleet_status);
+    ui_surface_hint: "Equipment list — Status badge + filter; Fleet dashboard pie"
+    dependencies: []
+
+  - id: equipment.next_available_date
+    intellidealer_label: "Next Available Date"
+    intellidealer_screen: "Fleet Management Dashboard (inferred)"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - "Inferred — derived from active rental contract end date; no field-level PDF captured."
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      Computed: when will this unit next be available based on currently
+      active contracts. Drives the catalog "Available now" vs "Available
+      after [date]" indicator.
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: next_available_at
+    qep_evidence: []
+    qep_gap_notes: |
+      Missing. Critical for the rental quoting workflow: rep needs
+      to instantly know what's open before committing to a customer.
+    severity: must
+    category: operational
+    migration_hint: |
+      ALTER TABLE public.qrm_equipment
+        ADD COLUMN next_available_at TIMESTAMPTZ;
+      -- Maintain via trigger on rental_contracts insert/update.
+    ui_surface_hint: "Equipment list + Rental quote builder — Availability chip"
+    dependencies: [equipment.fleet_status]
+
+  # ─── INFERRED: RENTAL QUOTING ─────────────────────────────────────────────
+  - id: rental_quote.id
+    intellidealer_label: "Rental Quote"
+    intellidealer_screen: "Rental Counter (implied — 'Need to create a new reservation/request')"
+    intellidealer_data_source: "RMCONT (type=request)"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 6)
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Pre-contract quote: customer is shopping a unit + dates and the
+      rep wants to send a written quote. Same shape as a rental
+      contract but with type=request and no billing meter started.
+    qep_status: PARTIAL
+    qep_table: rental_contracts
+    qep_column: request_type
+    qep_evidence:
+      - "rental_contracts.request_type='request'"
+    qep_gap_notes: |
+      QEP collapses quotes and contracts into rental_contracts via
+      request_type. Workable, but needs UI surfaces for quote-only
+      lifecycle (expiration, conversion to contract).
+    severity: must
+    category: workflow
+    migration_hint: |
+      -- No new table needed. Add quote-specific columns:
+      ALTER TABLE public.rental_contracts
+        ADD COLUMN quote_expires_on DATE,
+        ADD COLUMN quote_converted_to_contract_id UUID REFERENCES public.rental_contracts(id),
+        ADD COLUMN quote_converted_at TIMESTAMPTZ;
+    ui_surface_hint: "Rental list — Quote subtab + 'Convert to Contract' action"
+    dependencies: [rental_counter.select_type]
+
+  - id: rental_quote.expires_on
+    intellidealer_label: "Quote Expiration"
+    intellidealer_screen: "Rental Counter (implied — PDF mentions 120-day OneSpan limit on quotes)"
+    intellidealer_data_source: "RMCONT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Phase-6_Rental/Rental Counter.pdf (page 4 — 'OneSpan imposes a 120-day limit on quotes')
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      Quote expiration date. PDF explicitly notes OneSpan VESign caps
+      e-signed quotes at 120 days even if the underlying quote is
+      still active. Must surface to the rep so stale quotes are
+      re-issued.
+    qep_status: MISSING
+    qep_table: rental_contracts
+    qep_column: quote_expires_on
+    qep_evidence: []
+    qep_gap_notes: |
+      Missing. PDF explicitly calls out the 120-day VESign expiry —
+      means without tracking this, e-signed quotes silently lose
+      legal force.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      -- See rental_quote.id DDL — quote_expires_on column.
+    ui_surface_hint: "Rental quote detail — Expiration countdown chip; rental list 'Expired' filter"
+    dependencies: [rental_quote.id]

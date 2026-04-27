@@ -1,0 +1,4428 @@
+{
+  "tables": {
+    "crm_campaign_recipients": [
+      {
+        "name": "activity_id",
+        "type": "string | null"
+      },
+      {
+        "name": "attempted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "campaign_id",
+        "type": "string"
+      },
+      {
+        "name": "completed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "contact_id",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "error_code",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "ineligibility_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "provider_message_id",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "crm_campaigns": [
+      {
+        "name": "audience_snapshot",
+        "type": "Json"
+      },
+      {
+        "name": "channel",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "execution_summary",
+        "type": "Json"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "state",
+        "type": "string"
+      },
+      {
+        "name": "template_id",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "crm_communication_messages": [
+      {
+        "name": "activity_id",
+        "type": "string | null"
+      },
+      {
+        "name": "body_preview",
+        "type": "string | null"
+      },
+      {
+        "name": "campaign_id",
+        "type": "string | null"
+      },
+      {
+        "name": "channel",
+        "type": "string"
+      },
+      {
+        "name": "contact_id",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "direction",
+        "type": "string"
+      },
+      {
+        "name": "failure_code",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "idempotency_key",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "occurred_at",
+        "type": "string"
+      },
+      {
+        "name": "provider",
+        "type": "string | null"
+      },
+      {
+        "name": "provider_message_id",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "subject",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "crm_communication_webhook_receipts": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "event_id",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "payload_hash",
+        "type": "string | null"
+      },
+      {
+        "name": "processed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "provider",
+        "type": "string"
+      },
+      {
+        "name": "route_binding_key",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "customer_profiles_extended": [
+      {
+        "name": "attachment_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "avg_days_to_close",
+        "type": "number | null"
+      },
+      {
+        "name": "avg_deal_size",
+        "type": "number | null"
+      },
+      {
+        "name": "avg_discount_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "budget_cycle_month",
+        "type": "number | null"
+      },
+      {
+        "name": "budget_cycle_notes",
+        "type": "string | null"
+      },
+      {
+        "name": "company_name",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "crm_company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "customer_name",
+        "type": "string"
+      },
+      {
+        "name": "fiscal_year_end_month",
+        "type": "number | null"
+      },
+      {
+        "name": "fleet_size",
+        "type": "number | null"
+      },
+      {
+        "name": "health_score",
+        "type": "number | null"
+      },
+      {
+        "name": "health_score_components",
+        "type": "Json | null"
+      },
+      {
+        "name": "health_score_updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "industry",
+        "type": "string | null"
+      },
+      {
+        "name": "intellidealer_customer_id",
+        "type": "string | null"
+      },
+      {
+        "name": "last_deal_at",
+        "type": "string | null"
+      },
+      {
+        "name": "last_interaction_at",
+        "type": "string | null"
+      },
+      {
+        "name": "lifetime_value",
+        "type": "number | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "persona_confidence",
+        "type": "number | null"
+      },
+      {
+        "name": "persona_model_version",
+        "type": "string | null"
+      },
+      {
+        "name": "price_sensitivity_score",
+        "type": "number | null"
+      },
+      {
+        "name": "pricing_persona",
+        "type": "Database[\"public\"][\"Enums\"][\"pricing_persona\"] | null"
+      },
+      {
+        "name": "region",
+        "type": "string | null"
+      },
+      {
+        "name": "revenue_attribution",
+        "type": "Json | null"
+      },
+      {
+        "name": "seasonal_pattern",
+        "type": "string | null"
+      },
+      {
+        "name": "service_contract_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "total_deals",
+        "type": "number | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      }
+    ],
+    "machine_profiles": [
+      {
+        "name": "category",
+        "type": "string"
+      },
+      {
+        "name": "common_wear_parts",
+        "type": "Json"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "extraction_confidence",
+        "type": "number | null"
+      },
+      {
+        "name": "fluid_capacities",
+        "type": "Json"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "maintenance_schedule",
+        "type": "Json"
+      },
+      {
+        "name": "manually_verified",
+        "type": "boolean"
+      },
+      {
+        "name": "manufacturer",
+        "type": "string"
+      },
+      {
+        "name": "model",
+        "type": "string"
+      },
+      {
+        "name": "model_family",
+        "type": "string | null"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "source_documents",
+        "type": "string[] | null"
+      },
+      {
+        "name": "specs",
+        "type": "Json"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      },
+      {
+        "name": "year_range_end",
+        "type": "number | null"
+      },
+      {
+        "name": "year_range_start",
+        "type": "number | null"
+      }
+    ],
+    "parts_reorder_profiles": [
+      {
+        "name": "avg_lead_time_days",
+        "type": "number"
+      },
+      {
+        "name": "branch_id",
+        "type": "string"
+      },
+      {
+        "name": "computation_source",
+        "type": "string"
+      },
+      {
+        "name": "consumption_velocity",
+        "type": "number"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "economic_order_qty",
+        "type": "number"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "last_computed_at",
+        "type": "string"
+      },
+      {
+        "name": "lead_time_std_dev",
+        "type": "number"
+      },
+      {
+        "name": "next_compute_at",
+        "type": "string"
+      },
+      {
+        "name": "part_number",
+        "type": "string"
+      },
+      {
+        "name": "reorder_point",
+        "type": "number"
+      },
+      {
+        "name": "safety_factor",
+        "type": "number"
+      },
+      {
+        "name": "safety_stock",
+        "type": "number"
+      },
+      {
+        "name": "total_consumed",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "velocity_window_days",
+        "type": "number"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "profiles": [
+      {
+        "name": "active_workspace_id",
+        "type": "string"
+      },
+      {
+        "name": "audience",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "email",
+        "type": "string | null"
+      },
+      {
+        "name": "full_name",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "iron_role",
+        "type": "string | null"
+      },
+      {
+        "name": "iron_role_display",
+        "type": "string | null"
+      },
+      {
+        "name": "is_active",
+        "type": "boolean"
+      },
+      {
+        "name": "is_support",
+        "type": "boolean"
+      },
+      {
+        "name": "role",
+        "type": "Database[\"public\"][\"Enums\"][\"user_role\"]"
+      },
+      {
+        "name": "stakeholder_subrole",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      }
+    ],
+    "qrm_absence_engine_rep_snapshots": [
+      {
+        "name": "absence_score",
+        "type": "number"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deal_count",
+        "type": "number"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "iron_role",
+        "type": "string | null"
+      },
+      {
+        "name": "missing_amount",
+        "type": "number"
+      },
+      {
+        "name": "missing_close_date",
+        "type": "number"
+      },
+      {
+        "name": "missing_company",
+        "type": "number"
+      },
+      {
+        "name": "missing_contact",
+        "type": "number"
+      },
+      {
+        "name": "rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "rep_name",
+        "type": "string"
+      },
+      {
+        "name": "run_id",
+        "type": "string"
+      },
+      {
+        "name": "snapshot_date",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_absence_engine_runs": [
+      {
+        "name": "generated_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "snapshot_date",
+        "type": "string"
+      },
+      {
+        "name": "top_gap_count",
+        "type": "number"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      },
+      {
+        "name": "worst_fields",
+        "type": "Json"
+      }
+    ],
+    "qrm_activities": [
+      {
+        "name": "activity_type",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_activity_type\"]"
+      },
+      {
+        "name": "body",
+        "type": "string | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "occurred_at",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_activity_templates": [
+      {
+        "name": "activity_type",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_activity_type\"]"
+      },
+      {
+        "name": "body",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_active",
+        "type": "boolean"
+      },
+      {
+        "name": "label",
+        "type": "string"
+      },
+      {
+        "name": "sort_order",
+        "type": "number"
+      },
+      {
+        "name": "task_due_minutes",
+        "type": "number | null"
+      },
+      {
+        "name": "task_status",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_auth_audit_events": [
+      {
+        "name": "actor_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "event_type",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_auth_event_type\"]"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "ip_inet",
+        "type": "unknown"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "occurred_at",
+        "type": "string"
+      },
+      {
+        "name": "outcome",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_auth_event_outcome\"]"
+      },
+      {
+        "name": "request_id",
+        "type": "string | null"
+      },
+      {
+        "name": "resource",
+        "type": "string | null"
+      },
+      {
+        "name": "subject_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "user_agent",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_companies": [
+      {
+        "name": "address_line_1",
+        "type": "string | null"
+      },
+      {
+        "name": "address_line_2",
+        "type": "string | null"
+      },
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "city",
+        "type": "string | null"
+      },
+      {
+        "name": "classification",
+        "type": "string | null"
+      },
+      {
+        "name": "country",
+        "type": "string | null"
+      },
+      {
+        "name": "county",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "dba",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "legal_name",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "parent_company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "phone",
+        "type": "string | null"
+      },
+      {
+        "name": "postal_code",
+        "type": "string | null"
+      },
+      {
+        "name": "state",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string | null"
+      },
+      {
+        "name": "territory_code",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "website",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_company_merge_audit": [
+      {
+        "name": "affected_row_ids",
+        "type": "Json"
+      },
+      {
+        "name": "caller_notes",
+        "type": "string | null"
+      },
+      {
+        "name": "discarded_company_id",
+        "type": "string"
+      },
+      {
+        "name": "discarded_company_snapshot",
+        "type": "Json | null"
+      },
+      {
+        "name": "dry_run",
+        "type": "boolean"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "kept_company_id",
+        "type": "string"
+      },
+      {
+        "name": "kept_company_snapshot",
+        "type": "Json | null"
+      },
+      {
+        "name": "performed_at",
+        "type": "string"
+      },
+      {
+        "name": "performed_by",
+        "type": "string | null"
+      },
+      {
+        "name": "table_row_counts",
+        "type": "Json"
+      },
+      {
+        "name": "total_rows_updated",
+        "type": "number"
+      },
+      {
+        "name": "undone_at",
+        "type": "string | null"
+      },
+      {
+        "name": "undone_by",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_contact_companies": [
+      {
+        "name": "company_id",
+        "type": "string"
+      },
+      {
+        "name": "contact_id",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_primary",
+        "type": "boolean"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_contact_tags": [
+      {
+        "name": "contact_id",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "tag_id",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_contact_territories": [
+      {
+        "name": "contact_id",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "territory_id",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_contacts": [
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "dge_customer_profile_id",
+        "type": "string | null"
+      },
+      {
+        "name": "email",
+        "type": "string | null"
+      },
+      {
+        "name": "first_name",
+        "type": "string"
+      },
+      {
+        "name": "hubspot_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "last_name",
+        "type": "string"
+      },
+      {
+        "name": "merged_into_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "phone",
+        "type": "string | null"
+      },
+      {
+        "name": "primary_company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "sms_opt_in",
+        "type": "boolean"
+      },
+      {
+        "name": "sms_opt_in_at",
+        "type": "string | null"
+      },
+      {
+        "name": "sms_opt_in_source",
+        "type": "string | null"
+      },
+      {
+        "name": "title",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_custom_field_definitions": [
+      {
+        "name": "constraints",
+        "type": "Json"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "data_type",
+        "type": "string"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "key",
+        "type": "string"
+      },
+      {
+        "name": "label",
+        "type": "string"
+      },
+      {
+        "name": "object_type",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_custom_field_object_type\"]"
+      },
+      {
+        "name": "required",
+        "type": "boolean"
+      },
+      {
+        "name": "sort_order",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "visibility_roles",
+        "type": "Json"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_custom_field_values": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "definition_id",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "record_id",
+        "type": "string"
+      },
+      {
+        "name": "record_type",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_custom_field_object_type\"]"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "value",
+        "type": "Json | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_deal_equipment": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deal_id",
+        "type": "string"
+      },
+      {
+        "name": "equipment_id",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "role",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_deal_equipment_role\"]"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_deal_stages": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_stage_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_closed_lost",
+        "type": "boolean"
+      },
+      {
+        "name": "is_closed_won",
+        "type": "boolean"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "probability",
+        "type": "number | null"
+      },
+      {
+        "name": "sla_minutes",
+        "type": "number | null"
+      },
+      {
+        "name": "sort_order",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_deals": [
+      {
+        "name": "amount",
+        "type": "number | null"
+      },
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "closed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "competitor",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deal_score",
+        "type": "number | null"
+      },
+      {
+        "name": "deal_score_factors",
+        "type": "Json | null"
+      },
+      {
+        "name": "deal_score_updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deposit_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "deposit_status",
+        "type": "string"
+      },
+      {
+        "name": "dge_last_scored_at",
+        "type": "string | null"
+      },
+      {
+        "name": "dge_scenario_count",
+        "type": "number | null"
+      },
+      {
+        "name": "dge_score",
+        "type": "number | null"
+      },
+      {
+        "name": "expected_close_on",
+        "type": "string | null"
+      },
+      {
+        "name": "forecast_confidence_score",
+        "type": "number | null"
+      },
+      {
+        "name": "hubspot_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "last_activity_at",
+        "type": "string | null"
+      },
+      {
+        "name": "loaded_margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "loss_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "margin_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "margin_check_status",
+        "type": "string"
+      },
+      {
+        "name": "margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "needs_assessment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "net_contribution_after_load",
+        "type": "number | null"
+      },
+      {
+        "name": "next_follow_up_at",
+        "type": "string | null"
+      },
+      {
+        "name": "primary_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "selected_scenario",
+        "type": "Database[\"public\"][\"Enums\"][\"scenario_type\"] | null"
+      },
+      {
+        "name": "sla_deadline_at",
+        "type": "string | null"
+      },
+      {
+        "name": "sla_started_at",
+        "type": "string | null"
+      },
+      {
+        "name": "sort_position",
+        "type": "number | null"
+      },
+      {
+        "name": "stage_id",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_duplicate_candidates": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "left_contact_id",
+        "type": "string"
+      },
+      {
+        "name": "right_contact_id",
+        "type": "string"
+      },
+      {
+        "name": "rule_id",
+        "type": "string"
+      },
+      {
+        "name": "score",
+        "type": "number"
+      },
+      {
+        "name": "status",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_duplicate_candidate_status\"]"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_embeddings": [
+      {
+        "name": "content",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "embedding",
+        "type": "string | null"
+      },
+      {
+        "name": "entity_id",
+        "type": "string"
+      },
+      {
+        "name": "entity_type",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      }
+    ],
+    "qrm_equipment": [
+      {
+        "name": "aging_bucket",
+        "type": "string | null"
+      },
+      {
+        "name": "asset_tag",
+        "type": "string | null"
+      },
+      {
+        "name": "availability",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_equipment_availability\"]"
+      },
+      {
+        "name": "category",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_equipment_category\"] | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string"
+      },
+      {
+        "name": "condition",
+        "type": "| Database[\"public\"][\"Enums\"][\"crm_equipment_condition\"]"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "current_market_value",
+        "type": "number | null"
+      },
+      {
+        "name": "daily_rental_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "engine_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "fuel_type",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "intake_stage",
+        "type": "number | null"
+      },
+      {
+        "name": "last_inspection_at",
+        "type": "string | null"
+      },
+      {
+        "name": "latitude",
+        "type": "number | null"
+      },
+      {
+        "name": "location_description",
+        "type": "string | null"
+      },
+      {
+        "name": "longitude",
+        "type": "number | null"
+      },
+      {
+        "name": "make",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "mileage",
+        "type": "number | null"
+      },
+      {
+        "name": "model",
+        "type": "string | null"
+      },
+      {
+        "name": "monthly_rental_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "next_service_due_at",
+        "type": "string | null"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "operating_capacity",
+        "type": "string | null"
+      },
+      {
+        "name": "ownership",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_equipment_ownership\"]"
+      },
+      {
+        "name": "photo_urls",
+        "type": "Json"
+      },
+      {
+        "name": "primary_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "purchase_date",
+        "type": "string | null"
+      },
+      {
+        "name": "purchase_price",
+        "type": "number | null"
+      },
+      {
+        "name": "purchased_from_qep",
+        "type": "boolean | null"
+      },
+      {
+        "name": "readiness_blocker_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "readiness_status",
+        "type": "string | null"
+      },
+      {
+        "name": "replacement_cost",
+        "type": "number | null"
+      },
+      {
+        "name": "sale_ready_at",
+        "type": "string | null"
+      },
+      {
+        "name": "serial_number",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "vin_pin",
+        "type": "string | null"
+      },
+      {
+        "name": "warranty_expires_on",
+        "type": "string | null"
+      },
+      {
+        "name": "weekly_rental_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "weight_class",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      },
+      {
+        "name": "year",
+        "type": "number | null"
+      }
+    ],
+    "qrm_external_id_map": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "external_id",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "internal_id",
+        "type": "string"
+      },
+      {
+        "name": "object_type",
+        "type": "string"
+      },
+      {
+        "name": "source_system",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_geofences": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "geofence_type",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_active",
+        "type": "boolean"
+      },
+      {
+        "name": "linked_company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "linked_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "polygon",
+        "type": "unknown"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_honesty_daily": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "honesty_index",
+        "type": "number"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "probe_breakdown",
+        "type": "Json"
+      },
+      {
+        "name": "rollup_date",
+        "type": "string"
+      },
+      {
+        "name": "total_discrepancy",
+        "type": "number"
+      },
+      {
+        "name": "total_observations",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_honesty_observations": [
+      {
+        "name": "actual_state",
+        "type": "string"
+      },
+      {
+        "name": "assigned_owner_id",
+        "type": "string"
+      },
+      {
+        "name": "attributed_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "discrepancy_score",
+        "type": "number"
+      },
+      {
+        "name": "entity_id",
+        "type": "string | null"
+      },
+      {
+        "name": "entity_type",
+        "type": "string | null"
+      },
+      {
+        "name": "expected_state",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "observation_type",
+        "type": "string"
+      },
+      {
+        "name": "observed_at",
+        "type": "string"
+      },
+      {
+        "name": "probe_id",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_honesty_probes": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "depends_on",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_enabled",
+        "type": "boolean"
+      },
+      {
+        "name": "probe_name",
+        "type": "string"
+      },
+      {
+        "name": "probe_type",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_hubspot_import_errors": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "entity_type",
+        "type": "string"
+      },
+      {
+        "name": "external_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "message",
+        "type": "string | null"
+      },
+      {
+        "name": "payload_snippet",
+        "type": "Json | null"
+      },
+      {
+        "name": "reason_code",
+        "type": "string"
+      },
+      {
+        "name": "run_id",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_hubspot_import_runs": [
+      {
+        "name": "activities_processed",
+        "type": "number"
+      },
+      {
+        "name": "companies_processed",
+        "type": "number"
+      },
+      {
+        "name": "completed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "contacts_processed",
+        "type": "number"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deals_processed",
+        "type": "number"
+      },
+      {
+        "name": "error_count",
+        "type": "number"
+      },
+      {
+        "name": "error_summary",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "initiated_by",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "started_at",
+        "type": "string"
+      },
+      {
+        "name": "status",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_import_run_status\"]"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_idea_backlog": [
+      {
+        "name": "ai_confidence",
+        "type": "number | null"
+      },
+      {
+        "name": "body",
+        "type": "string | null"
+      },
+      {
+        "name": "captured_at",
+        "type": "string"
+      },
+      {
+        "name": "captured_by",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "priority",
+        "type": "string | null"
+      },
+      {
+        "name": "shipped_at",
+        "type": "string | null"
+      },
+      {
+        "name": "source",
+        "type": "string"
+      },
+      {
+        "name": "source_voice_capture_id",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "tags",
+        "type": "Json"
+      },
+      {
+        "name": "title",
+        "type": "string"
+      },
+      {
+        "name": "triaged_at",
+        "type": "string | null"
+      },
+      {
+        "name": "triaged_by",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_in_app_notifications": [
+      {
+        "name": "body",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "kind",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "read_at",
+        "type": "string | null"
+      },
+      {
+        "name": "reminder_instance_id",
+        "type": "string | null"
+      },
+      {
+        "name": "title",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "user_id",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_merge_audit_events": [
+      {
+        "name": "actor_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "loser_contact_id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "occurred_at",
+        "type": "string"
+      },
+      {
+        "name": "snapshot",
+        "type": "Json"
+      },
+      {
+        "name": "survivor_contact_id",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_prediction_outcomes": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "evidence",
+        "type": "Json"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "logged_by",
+        "type": "string | null"
+      },
+      {
+        "name": "observed_at",
+        "type": "string"
+      },
+      {
+        "name": "outcome",
+        "type": "string"
+      },
+      {
+        "name": "prediction_id",
+        "type": "string"
+      },
+      {
+        "name": "source",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_predictions": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "inputs_hash",
+        "type": "string"
+      },
+      {
+        "name": "model_source",
+        "type": "string"
+      },
+      {
+        "name": "outcome",
+        "type": "string | null"
+      },
+      {
+        "name": "outcome_at",
+        "type": "string | null"
+      },
+      {
+        "name": "outcome_logged_by",
+        "type": "string | null"
+      },
+      {
+        "name": "predicted_at",
+        "type": "string"
+      },
+      {
+        "name": "prediction_kind",
+        "type": "string"
+      },
+      {
+        "name": "rationale",
+        "type": "Json"
+      },
+      {
+        "name": "rationale_hash",
+        "type": "string"
+      },
+      {
+        "name": "role_blend",
+        "type": "Json"
+      },
+      {
+        "name": "score",
+        "type": "number"
+      },
+      {
+        "name": "signals_hash",
+        "type": "string"
+      },
+      {
+        "name": "subject_id",
+        "type": "string"
+      },
+      {
+        "name": "subject_type",
+        "type": "string"
+      },
+      {
+        "name": "trace_id",
+        "type": "string"
+      },
+      {
+        "name": "trace_steps",
+        "type": "Json"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_quote_audit_events": [
+      {
+        "name": "actor_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "event_type",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "quote_id",
+        "type": "string"
+      },
+      {
+        "name": "request_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_reminder_instances": [
+      {
+        "name": "assigned_user_id",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deal_id",
+        "type": "string"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "due_at",
+        "type": "string"
+      },
+      {
+        "name": "fired_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "idempotency_key",
+        "type": "string"
+      },
+      {
+        "name": "source",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_reminder_source\"]"
+      },
+      {
+        "name": "status",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_reminder_status\"]"
+      },
+      {
+        "name": "task_activity_id",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_rename_marker": [
+      {
+        "name": "id",
+        "type": "number"
+      },
+      {
+        "name": "renamed_at",
+        "type": "string"
+      },
+      {
+        "name": "source_migration",
+        "type": "string"
+      }
+    ],
+    "qrm_stage_transitions": [
+      {
+        "name": "at",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deal_id",
+        "type": "string"
+      },
+      {
+        "name": "from_stage_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "source",
+        "type": "string"
+      },
+      {
+        "name": "to_stage_id",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_tags": [
+      {
+        "name": "color",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_territories": [
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "technician_profiles": [
+      {
+        "name": "active_workload",
+        "type": "number"
+      },
+      {
+        "name": "average_efficiency",
+        "type": "number | null"
+      },
+      {
+        "name": "branch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "brands_supported",
+        "type": "Json"
+      },
+      {
+        "name": "certifications",
+        "type": "Json"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "field_eligible",
+        "type": "boolean"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "job_type_history",
+        "type": "Json"
+      },
+      {
+        "name": "shop_eligible",
+        "type": "boolean"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "user_id",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "vendor_profiles": [
+      {
+        "name": "after_hours_contact",
+        "type": "string | null"
+      },
+      {
+        "name": "avg_lead_time_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "category_support",
+        "type": "Json"
+      },
+      {
+        "name": "composite_score",
+        "type": "number | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "fill_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "machine_down_escalation_path",
+        "type": "string | null"
+      },
+      {
+        "name": "machine_down_priority",
+        "type": "boolean"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "price_competitiveness",
+        "type": "number | null"
+      },
+      {
+        "name": "responsiveness_score",
+        "type": "number | null"
+      },
+      {
+        "name": "score_computed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "supplier_type",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "voice_qrm_results": [
+      {
+        "name": "additional_deal_ids",
+        "type": "string[] | null"
+      },
+      {
+        "name": "budget_cycle_captured",
+        "type": "boolean | null"
+      },
+      {
+        "name": "cadence_id",
+        "type": "string | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "company_match_confidence",
+        "type": "number | null"
+      },
+      {
+        "name": "company_match_method",
+        "type": "string | null"
+      },
+      {
+        "name": "contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "contact_match_confidence",
+        "type": "number | null"
+      },
+      {
+        "name": "contact_match_method",
+        "type": "string | null"
+      },
+      {
+        "name": "content_type",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deal_action",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "entity_creation_duration_ms",
+        "type": "number | null"
+      },
+      {
+        "name": "errors",
+        "type": "Json | null"
+      },
+      {
+        "name": "extracted_equipment_ids",
+        "type": "string[] | null"
+      },
+      {
+        "name": "extraction_duration_ms",
+        "type": "number | null"
+      },
+      {
+        "name": "follow_up_suggestions",
+        "type": "Json | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "needs_assessment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "qrm_narrative",
+        "type": "string | null"
+      },
+      {
+        "name": "scheduled_follow_up_ids",
+        "type": "string[] | null"
+      },
+      {
+        "name": "sentiment_score",
+        "type": "number | null"
+      },
+      {
+        "name": "total_duration_ms",
+        "type": "number | null"
+      },
+      {
+        "name": "voice_capture_id",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "crm_activities": [
+      {
+        "name": "activity_type",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_activity_type\"] | null"
+      },
+      {
+        "name": "body",
+        "type": "string | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "occurred_at",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_activity_templates": [
+      {
+        "name": "activity_type",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_activity_type\"] | null"
+      },
+      {
+        "name": "body",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "is_active",
+        "type": "boolean | null"
+      },
+      {
+        "name": "label",
+        "type": "string | null"
+      },
+      {
+        "name": "sort_order",
+        "type": "number | null"
+      },
+      {
+        "name": "task_due_minutes",
+        "type": "number | null"
+      },
+      {
+        "name": "task_status",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_auth_audit_events": [
+      {
+        "name": "actor_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "event_type",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_auth_event_type\"] | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "ip_inet",
+        "type": "unknown"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "occurred_at",
+        "type": "string | null"
+      },
+      {
+        "name": "outcome",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_auth_event_outcome\"] | null"
+      },
+      {
+        "name": "request_id",
+        "type": "string | null"
+      },
+      {
+        "name": "resource",
+        "type": "string | null"
+      },
+      {
+        "name": "subject_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "user_agent",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_companies": [
+      {
+        "name": "address_line_1",
+        "type": "string | null"
+      },
+      {
+        "name": "address_line_2",
+        "type": "string | null"
+      },
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "city",
+        "type": "string | null"
+      },
+      {
+        "name": "classification",
+        "type": "string | null"
+      },
+      {
+        "name": "country",
+        "type": "string | null"
+      },
+      {
+        "name": "county",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "dba",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "legal_name",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "parent_company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "phone",
+        "type": "string | null"
+      },
+      {
+        "name": "postal_code",
+        "type": "string | null"
+      },
+      {
+        "name": "state",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string | null"
+      },
+      {
+        "name": "territory_code",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "website",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_contact_companies": [
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "is_primary",
+        "type": "boolean | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_contact_tags": [
+      {
+        "name": "contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "tag_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_contact_territories": [
+      {
+        "name": "contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "territory_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_contacts": [
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "dge_customer_profile_id",
+        "type": "string | null"
+      },
+      {
+        "name": "email",
+        "type": "string | null"
+      },
+      {
+        "name": "first_name",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "last_name",
+        "type": "string | null"
+      },
+      {
+        "name": "merged_into_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "phone",
+        "type": "string | null"
+      },
+      {
+        "name": "primary_company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "title",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_custom_field_definitions": [
+      {
+        "name": "constraints",
+        "type": "Json | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "data_type",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "key",
+        "type": "string | null"
+      },
+      {
+        "name": "label",
+        "type": "string | null"
+      },
+      {
+        "name": "object_type",
+        "type": "| Database[\"public\"][\"Enums\"][\"crm_custom_field_object_type\"]"
+      },
+      {
+        "name": "required",
+        "type": "boolean | null"
+      },
+      {
+        "name": "sort_order",
+        "type": "number | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "visibility_roles",
+        "type": "Json | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_custom_field_values": [
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "definition_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "record_id",
+        "type": "string | null"
+      },
+      {
+        "name": "record_type",
+        "type": "| Database[\"public\"][\"Enums\"][\"crm_custom_field_object_type\"]"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "value",
+        "type": "Json | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_deal_equipment": [
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "role",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_deal_equipment_role\"] | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_deal_stages": [
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_stage_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "is_closed_lost",
+        "type": "boolean | null"
+      },
+      {
+        "name": "is_closed_won",
+        "type": "boolean | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "probability",
+        "type": "number | null"
+      },
+      {
+        "name": "sla_minutes",
+        "type": "number | null"
+      },
+      {
+        "name": "sort_order",
+        "type": "number | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_deals": [
+      {
+        "name": "amount",
+        "type": "number | null"
+      },
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "closed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "competitor",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_score",
+        "type": "number | null"
+      },
+      {
+        "name": "deal_score_factors",
+        "type": "Json | null"
+      },
+      {
+        "name": "deal_score_updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deposit_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "deposit_status",
+        "type": "string | null"
+      },
+      {
+        "name": "dge_last_scored_at",
+        "type": "string | null"
+      },
+      {
+        "name": "dge_scenario_count",
+        "type": "number | null"
+      },
+      {
+        "name": "dge_score",
+        "type": "number | null"
+      },
+      {
+        "name": "expected_close_on",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "last_activity_at",
+        "type": "string | null"
+      },
+      {
+        "name": "loss_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "margin_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "margin_check_status",
+        "type": "string | null"
+      },
+      {
+        "name": "margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "needs_assessment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "next_follow_up_at",
+        "type": "string | null"
+      },
+      {
+        "name": "primary_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "sla_deadline_at",
+        "type": "string | null"
+      },
+      {
+        "name": "sla_started_at",
+        "type": "string | null"
+      },
+      {
+        "name": "sort_position",
+        "type": "number | null"
+      },
+      {
+        "name": "stage_id",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_deals_elevated_full": [
+      {
+        "name": "amount",
+        "type": "number | null"
+      },
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "closed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "competitor",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "expected_close_on",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "last_activity_at",
+        "type": "string | null"
+      },
+      {
+        "name": "loss_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "margin_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "next_follow_up_at",
+        "type": "string | null"
+      },
+      {
+        "name": "primary_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "stage_id",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_deals_rep_safe": [
+      {
+        "name": "amount",
+        "type": "number | null"
+      },
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "closed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deposit_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "deposit_status",
+        "type": "string | null"
+      },
+      {
+        "name": "expected_close_on",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "last_activity_at",
+        "type": "string | null"
+      },
+      {
+        "name": "margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "next_follow_up_at",
+        "type": "string | null"
+      },
+      {
+        "name": "primary_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "sla_deadline_at",
+        "type": "string | null"
+      },
+      {
+        "name": "sort_position",
+        "type": "number | null"
+      },
+      {
+        "name": "stage_id",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_deals_weighted": [
+      {
+        "name": "amount",
+        "type": "number | null"
+      },
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "closed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "expected_close_on",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "last_activity_at",
+        "type": "string | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "next_follow_up_at",
+        "type": "string | null"
+      },
+      {
+        "name": "primary_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "stage_id",
+        "type": "string | null"
+      },
+      {
+        "name": "stage_name",
+        "type": "string | null"
+      },
+      {
+        "name": "stage_probability",
+        "type": "number | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "weighted_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "columns",
+        "type": "[\"assigned_rep_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"company_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"company_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"company_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"primary_contact_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"primary_contact_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"stage_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"stage_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"stage_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"stage_id\"]"
+      },
+      {
+        "name": "crm_duplicate_candidates",
+        "type": "{"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "left_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "right_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "rule_id",
+        "type": "string | null"
+      },
+      {
+        "name": "score",
+        "type": "number | null"
+      },
+      {
+        "name": "status",
+        "type": "| Database[\"public\"][\"Enums\"][\"crm_duplicate_candidate_status\"]"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_embeddings": [
+      {
+        "name": "content",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "embedding",
+        "type": "string | null"
+      },
+      {
+        "name": "entity_id",
+        "type": "string | null"
+      },
+      {
+        "name": "entity_type",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      }
+    ],
+    "crm_equipment": [
+      {
+        "name": "aging_bucket",
+        "type": "string | null"
+      },
+      {
+        "name": "asset_tag",
+        "type": "string | null"
+      },
+      {
+        "name": "availability",
+        "type": "| Database[\"public\"][\"Enums\"][\"crm_equipment_availability\"]"
+      },
+      {
+        "name": "category",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_equipment_category\"] | null"
+      },
+      {
+        "name": "company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "condition",
+        "type": "| Database[\"public\"][\"Enums\"][\"crm_equipment_condition\"]"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "current_market_value",
+        "type": "number | null"
+      },
+      {
+        "name": "daily_rental_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "engine_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "fuel_type",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "intake_stage",
+        "type": "number | null"
+      },
+      {
+        "name": "last_inspection_at",
+        "type": "string | null"
+      },
+      {
+        "name": "latitude",
+        "type": "number | null"
+      },
+      {
+        "name": "location_description",
+        "type": "string | null"
+      },
+      {
+        "name": "longitude",
+        "type": "number | null"
+      },
+      {
+        "name": "make",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "mileage",
+        "type": "number | null"
+      },
+      {
+        "name": "model",
+        "type": "string | null"
+      },
+      {
+        "name": "monthly_rental_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "next_service_due_at",
+        "type": "string | null"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "operating_capacity",
+        "type": "string | null"
+      },
+      {
+        "name": "ownership",
+        "type": "| Database[\"public\"][\"Enums\"][\"crm_equipment_ownership\"]"
+      },
+      {
+        "name": "photo_urls",
+        "type": "Json | null"
+      },
+      {
+        "name": "primary_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "purchase_date",
+        "type": "string | null"
+      },
+      {
+        "name": "purchase_price",
+        "type": "number | null"
+      },
+      {
+        "name": "purchased_from_qep",
+        "type": "boolean | null"
+      },
+      {
+        "name": "readiness_blocker_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "readiness_status",
+        "type": "string | null"
+      },
+      {
+        "name": "replacement_cost",
+        "type": "number | null"
+      },
+      {
+        "name": "sale_ready_at",
+        "type": "string | null"
+      },
+      {
+        "name": "serial_number",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "vin_pin",
+        "type": "string | null"
+      },
+      {
+        "name": "warranty_expires_on",
+        "type": "string | null"
+      },
+      {
+        "name": "weekly_rental_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "weight_class",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "year",
+        "type": "number | null"
+      }
+    ],
+    "crm_external_id_map": [
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "external_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "internal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "object_type",
+        "type": "string | null"
+      },
+      {
+        "name": "source_system",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_geofences": [
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "geofence_type",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "is_active",
+        "type": "boolean | null"
+      },
+      {
+        "name": "linked_company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "linked_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "polygon",
+        "type": "unknown"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_hubspot_import_errors": [
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "entity_type",
+        "type": "string | null"
+      },
+      {
+        "name": "external_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "message",
+        "type": "string | null"
+      },
+      {
+        "name": "payload_snippet",
+        "type": "Json | null"
+      },
+      {
+        "name": "reason_code",
+        "type": "string | null"
+      },
+      {
+        "name": "run_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_hubspot_import_runs": [
+      {
+        "name": "activities_processed",
+        "type": "number | null"
+      },
+      {
+        "name": "companies_processed",
+        "type": "number | null"
+      },
+      {
+        "name": "completed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "contacts_processed",
+        "type": "number | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deals_processed",
+        "type": "number | null"
+      },
+      {
+        "name": "error_count",
+        "type": "number | null"
+      },
+      {
+        "name": "error_summary",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "initiated_by",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "started_at",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_import_run_status\"] | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_in_app_notifications": [
+      {
+        "name": "body",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "kind",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "read_at",
+        "type": "string | null"
+      },
+      {
+        "name": "reminder_instance_id",
+        "type": "string | null"
+      },
+      {
+        "name": "title",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_merge_audit_events": [
+      {
+        "name": "actor_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "loser_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "occurred_at",
+        "type": "string | null"
+      },
+      {
+        "name": "snapshot",
+        "type": "Json | null"
+      },
+      {
+        "name": "survivor_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_quote_audit_events": [
+      {
+        "name": "actor_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "event_type",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "quote_id",
+        "type": "string | null"
+      },
+      {
+        "name": "request_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_reminder_instances": [
+      {
+        "name": "assigned_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "due_at",
+        "type": "string | null"
+      },
+      {
+        "name": "fired_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "idempotency_key",
+        "type": "string | null"
+      },
+      {
+        "name": "source",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_reminder_source\"] | null"
+      },
+      {
+        "name": "status",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_reminder_status\"] | null"
+      },
+      {
+        "name": "task_activity_id",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_tags": [
+      {
+        "name": "color",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_territories": [
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ]
+  }
+}

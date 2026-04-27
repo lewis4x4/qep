@@ -1,0 +1,67 @@
+Phase,IntelliDealer Screen,IntelliDealer Field,Field Description (abbr),Source,QEP Table,QEP Column,Parity Status,Migration / Gap Notes
+Phase-3_Parts,Parts Invoicing,Customer,Search for parts invoices by entering a customer,Table,crm_companies,name,BUILT,Company name field
+Phase-3_Parts,Parts Invoicing,Search,search word.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Invoicing,Number,number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Invoicing,PO Number,Search for part invoices by entering a purchase order number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Invoicing,Order,"The order number associated with the parts invoice. Number A reverse highlight on the order number indicates that a part, or parts, have been issued o...",Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Invoicing,Cash Code,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Invoicing,E-mail,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Invoicing,If the Iss,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Invoicing,Iss,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Invoicing,LDTTTTN,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Invoicing,Ord,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Invoicing,Part Number,(inferred from workflow prose),Prose,vendor_part_catalog,part_number,BUILT,
+Phase-3_Parts,Parts Invoicing,Price,(inferred from workflow prose),Prose,parts_vendor_prices,price,BUILT,
+Phase-3_Parts,Parts Invoicing,Print Parts Invoices,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Invoicing,Salesperson,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Invoicing,The Salesperson,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Invoicing,The Total Charge,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Invoicing,This,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Ordering,Order,Sort the search results by parts order number. Number,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Ordering,Vendor,Sort the search results by vendor number.,Table,vendor_part_catalog,vendor_id,BUILT,
+Phase-3_Parts,Parts Ordering,Date,Sort the search results by date the part order,Table,(multiple),timestamp fields,BUILT,
+Phase-3_Parts,Parts Ordering,Released,was released.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Ordering,Select,Search for a parts order by entering an order,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Ordering,Location,location.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Ordering,Status,"status from the drop down list (for example on order, back ordered, or changeable).",Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Ordering,Type,The type of order.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Ordering,Line,The number of line items on the selected part,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Ordering,Items,order.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Ordering,Order Number,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Profile: Listing,Part,The part number assigned to the selected part. Number Hover over the Part Number on the search results to display the options to View or Copy the entr...,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Profile: Listing,Search,Search for parts by entering a search option. Use this optional field to search using a key word.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Profile: Listing,Vendor,The vendor number that supplies the part.,Table,vendor_part_catalog,vendor_id,BUILT,
+Phase-3_Parts,Parts Profile: Listing,Source,The part's source of supply code. This typically represents the part's originating warehouse location.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Profile: Listing,Dealers can use this,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Profile: Listing,If this,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Parts Profile: Listing,The Description,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Price Matrix,Matrix,Sort the search results by matrix.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Price Matrix,Select,Search for price matrix by entering a vendor. Vendor,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Price Matrix,Pricing,base from the drop down list. Base,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Price Matrix,Include,"If selected, includes inactive price matrices",Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Price Matrix,Inactive,within the search results.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Price Matrix,Vendor,The vendor name.,Table,vendor_part_catalog,vendor_id,BUILT,
+Phase-3_Parts,Price Matrix,Group,The name of the group this matrix belongs to.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Price Matrix,Base,cost.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Price Matrix,If the Matrix,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Price Matrix,Include Blank Matrix,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Price Matrix,Parts Add Matrix,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Price Matrix,Pricing Base,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Price Matrix,Reclass/Matrix Trigger,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Price Matrix,The Matrix,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Price Matrix,Then if the Matrix,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Purchase Orders,Type,Sort the search results by PO type.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Purchase Orders,Status,Sort the search results by PO status.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Purchase Orders,All,Search through all status options.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Purchase Orders,PO Request,"The PO has been created and saved, but has not been submitted for Authorization.",Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Purchase Orders,Waiting for,The PO is waiting for the approval of the supervisor Authorization (the PO system user with the proper authority).,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Purchase Orders,Authorized,"A supervisor has approved the PO, but it has not been submitted to the vendor.",Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Purchase Orders,On Order,The PO has been authorized and sent to the vendor. On Order POs do not have any items received or canceled.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Purchase Orders,Select PO,A unique PO number. Number,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Purchase Orders,Select,A vendor number. Click the Search         icon to open,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Purchase Orders,Vendor,the Vendor Selection screen.,Table,vendor_part_catalog,vendor_id,BUILT,
+Phase-3_Parts,Purchase Orders,Location,Location Selection screen.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Purchase Orders,Modified,Search icon to open the User Selection screen. By,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Purchase Orders,Takeover,Click the Search icon to open the User Selection,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Purchase Orders,By,screen.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-3_Parts,Purchase Orders,Distribute,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed

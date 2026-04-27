@@ -1,0 +1,82 @@
+IntelliDealer
+
+i>
+
+by VitalEdge
+Financial Management >
+
+‘s| Customer Care >
+Product Support
+
+e| Management Central >
+a| support >
+Quick Links >
+
+.
+
+ID InspectionPlus
+
+@
+
+> Product Support > Equipment > Equipment Profile >> Profile 01/01/01-LAKECIY @ JY & x
+
+Stock Number: [ CNVoO0OO08 > Make/Model: BR MPHD24' 09/23/2019
+
+N
+Profile Base & Options Attachments Parts List MyDealer Multimedia Warranty Dates Rental Specifications
+
+"Stock Number [CNVoo0O08——i‘i—s~CSC*dS “status (Invoiced 2)
+"ease [MISOBASE SY Ghass Internal ‘wou GD
+“Description [ BED | In/Out Sub Type (Available 3)
+"Make/ModeV/Year [BR fe MPHD24" [2019 | “Type
+Price With Options “Location [01 - LAKE CITY ~ |
+“Machine Serial Number | MPHD-390163 | Yard Location | CONV
+
+Purchase Order # Last Count Method
+
+Engine Serial Number | | Control Number 7 a 3 |
+Transmission Serial Number | BEAUROC Equipment Identifier LE
+
+“Ordered/Reserved | 09-30-2019 El 09-30-2019 Last Count Date | MIM-da-yy |=)
+Rental Fleet Date [ IVi-dd-yy |) AvataxProductCode[
+Category/Class/Subclass la] | |
+
+Basic Warranty Hours/Code/Date | ie} I | MM-da-yyyy
+“Invoice Number Extended Warranty Hours/Code/Date | 0 l[ I MM-da-yyyy
+
+|
+Invoice Date — cdkglobal-id.net
+[0.00
+[0.00
+[0.00
+
+“Invoice Amount
+
+Current Cost
+
+@ Net Book Value
+Inventory Account | 1200001 [fey
+
+Reference Amount
+
+Include on Print
+
+© Base & Options
+
+© Unit History
+
+Note Amount/Code/Due Date ll @ Costing
+Finance Amount/Due Date I MM-dd-yyyy
+Settlement Number/Date |[Mm-da-yyyy Continue —Close
+
+Maintenance Expense
+
+Rental Cost Percentage
+Rental Insurable Amount
+Rental Amount
+
+Machine History | | Memos | | Machine Hours | | Costing | | Margins | | Washout | | Print | | Print Label
+ine Breakdown
+Price Price With Options
+MISCBASE BED 0.01 0.01
+= Description > Option = Price

@@ -1,0 +1,306 @@
+{
+  "tables": {
+    "market_valuations": [
+      {
+        "name": "condition",
+        "type": "string | null"
+      },
+      {
+        "name": "confidence_score",
+        "type": "number | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "estimated_fmv",
+        "type": "number | null"
+      },
+      {
+        "name": "expires_at",
+        "type": "string"
+      },
+      {
+        "name": "high_estimate",
+        "type": "number | null"
+      },
+      {
+        "name": "hours",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "location",
+        "type": "string | null"
+      },
+      {
+        "name": "low_estimate",
+        "type": "number | null"
+      },
+      {
+        "name": "make",
+        "type": "string"
+      },
+      {
+        "name": "model",
+        "type": "string"
+      },
+      {
+        "name": "override_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "source",
+        "type": "string"
+      },
+      {
+        "name": "source_detail",
+        "type": "Json | null"
+      },
+      {
+        "name": "stock_number",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "valued_by",
+        "type": "string | null"
+      },
+      {
+        "name": "year",
+        "type": "number"
+      }
+    ],
+    "qb_trade_ins": [
+      {
+        "name": "allowance_cents",
+        "type": "number"
+      },
+      {
+        "name": "approved_at",
+        "type": "string | null"
+      },
+      {
+        "name": "approved_by",
+        "type": "string | null"
+      },
+      {
+        "name": "book_value_cents",
+        "type": "number | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "crm_equipment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "disposition",
+        "type": "string | null"
+      },
+      {
+        "name": "hours",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "make",
+        "type": "string"
+      },
+      {
+        "name": "model",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "over_under_cents",
+        "type": "number | null"
+      },
+      {
+        "name": "quote_id",
+        "type": "string | null"
+      },
+      {
+        "name": "serial",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "valuation_source",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      },
+      {
+        "name": "year",
+        "type": "number | null"
+      }
+    ],
+    "trade_valuations": [
+      {
+        "name": "ai_condition_notes",
+        "type": "string | null"
+      },
+      {
+        "name": "ai_condition_score",
+        "type": "number | null"
+      },
+      {
+        "name": "ai_detected_damage",
+        "type": "string[] | null"
+      },
+      {
+        "name": "approval_notes",
+        "type": "string | null"
+      },
+      {
+        "name": "approved_by",
+        "type": "string | null"
+      },
+      {
+        "name": "attachments_included",
+        "type": "string[] | null"
+      },
+      {
+        "name": "auction_value",
+        "type": "number | null"
+      },
+      {
+        "name": "conditional_language",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "discount_percentage",
+        "type": "number | null"
+      },
+      {
+        "name": "discounted_value",
+        "type": "number | null"
+      },
+      {
+        "name": "final_value",
+        "type": "number | null"
+      },
+      {
+        "name": "hours",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "last_full_service",
+        "type": "string | null"
+      },
+      {
+        "name": "make",
+        "type": "string"
+      },
+      {
+        "name": "market_comps",
+        "type": "Json | null"
+      },
+      {
+        "name": "model",
+        "type": "string"
+      },
+      {
+        "name": "needed_repairs",
+        "type": "string | null"
+      },
+      {
+        "name": "operational_status",
+        "type": "string | null"
+      },
+      {
+        "name": "over_allowance",
+        "type": "boolean | null"
+      },
+      {
+        "name": "photos",
+        "type": "Json"
+      },
+      {
+        "name": "preliminary_value",
+        "type": "number | null"
+      },
+      {
+        "name": "reconditioning_estimate",
+        "type": "number | null"
+      },
+      {
+        "name": "serial_number",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "suggested_resale_price",
+        "type": "number | null"
+      },
+      {
+        "name": "target_resale_margin_max",
+        "type": "number | null"
+      },
+      {
+        "name": "target_resale_margin_min",
+        "type": "number | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "video_url",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      },
+      {
+        "name": "year",
+        "type": "number | null"
+      }
+    ]
+  }
+}

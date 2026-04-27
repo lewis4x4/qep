@@ -287,7 +287,7 @@ export function FloorPage({
                 03 The Floor
               </p>
               <h2 className="mt-0.5 text-base font-semibold tracking-tight text-white">
-                Role-specific signals
+                Work Queue signals
               </h2>
             </div>
             <div className="text-xs text-slate-500">

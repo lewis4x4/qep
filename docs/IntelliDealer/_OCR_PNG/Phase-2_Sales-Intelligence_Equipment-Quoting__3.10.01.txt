@@ -1,0 +1,59 @@
+el
+
+Equipment Quoting -...
+
+IntelliDealer
+
+@
+
+> Product Support > Equipment > Equipment Quoting
+
+01/01/01 - LAKE CITY @
+
+=:
+
+x
+i>
+by VitalEdge
+
+Financial Management >
+
+Customer Care
+
+Product Support
+
+Management Central
+
+Support >
+
+Quick Links >
+
+ID InspectionPlus
+
+Sort by: @ Reference Number © Customer© Expiry Date
+Select Status: @ All () Quoted © Pending © Pending Approval (2) Accepted C) Expired
+
+Select Reference Number: | Select Stock Number: P
+Select Customer Number: va] Select Make: 2
+Select Salesperson: Select Model:
+Select Location: 01 ye) Select Group: ye)
+Show Extended Description: Select Type: All ¢
+
+Include Master Quotes: Go >>
+Equipment Quoting Results to displa' 10 ¢
+Reference Stock
+Number Customer Salesperson Number Location Expiry Date Quote Status
+Q00001 ALL RELIABLE SERVICES, INC RANDY MCKENZIE *Multiple* LAKE CITY 11/09/2019 Accepted
+iQ00002 = Xtreme Lawn Jobsite RYAN MCKENZIE CNV00001 LAKE CITY 01/04/2020 Expired
+(Q00003 + BOKUM & HOWE HOLDINGS, INC RYAN MCKENZIE Q000140 LAKE CITY 02/19/2020 Accepted
+Q00004_ = Green Circle Demolition RYAN MCKENZIE **BUILD** LAKE CITY 05/15/2020 Expired
+Q00005 NEXTRAN TRUCK CENTER (LC) RYAN MCKENZIE *Multiple* LAKE CITY 07/09/2020 Accepted
+Q00006 = WwWTree L.L.C. RANDY MCKENZIE *Multiple* LAKE CITY 06/12/2020 Accepted
+Q00007 + RESSLER'S PROFESSIONAL TREE SERVICE, INC RYAN MCKENZIE *Multiple* LAKE CITY 07/15/2020 Accepted
+Q00008 DURON WILLIAMSON'S TREE SERVICE, LLC RYAN MCKENZIE Q000316 LAKE CITY 06/30/2020 Expired
+Q00009 = Arrowcut, LLC RANDY MCKENZIE Q000319 LAKE CITY 06/30/2020 Accepted
+Q00010 Nextran Truck Center RANDY MCKENZIE *Multiple* LAKE CITY 07/01/2021 Expired
+
+(1 - 10 Of 2601) Next >
+
+Modify default print parameters

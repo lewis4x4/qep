@@ -54,6 +54,8 @@ export interface QrmCompanySummary {
   state: string | null;
   postalCode: string | null;
   country: string | null;
+  ein?: string | null;
+  einMasked?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -298,6 +300,7 @@ export interface QrmCompanyUpsertInput {
   state?: string | null;
   postalCode?: string | null;
   country?: string | null;
+  ein?: string | null;
   archive?: boolean;
 }
 

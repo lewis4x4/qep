@@ -1,0 +1,52 @@
+(4)
+
+pfwf5066.cdkglobal-id.net
+
+eo @ > Product Support > Equipment > Equipment Profile >> Profile 01/01/01 -LAKECITY @ dh %&
+
+ln Stock Number: MS 000788 > Status: Invoiced Description: Equipment haul : Mi DELIVER Date Added: 02/25/2020 Date Modi : 03/31/2026 =
+
+N
+Profile Base & Options Attachments Parts List MyDealer Multimedia Warranty Dates Rental Specifications
+
+( *Stock Number [ Q000188 o “status (Invoiced 2)
+4 “Base [ MISCBASE >| Class Internal “in/out (Sold 5
+ru “Description [ Equipment haul | In/Out Sub Type (Available 9)]
+"“Make/Model/Year [Mi Ea[oevver [o S| “Type
+| “Price ‘aroup [accx
+Price With Options “Location [01 - LAKE CITY x |
+oy “Machine Serial Number [ HAULING ] YardLocation [|
+Engine Serial Number ] Control Number FF Q
+A Transmission Serial Number Equipment identifier [
+
+*Ordered/Reserved Last Count Date | 03-31-2021 |=)
+
+Rental Fleet Date [/MIV/-da- AvataxProductCode[
+
+Purchase Order # | Last Count Method
+[02-25-2020
+
+Category/Class/Subclass | Ell |
+Basic Warranty Hours/Code/Date | 0 I | MM-da-yyyy
+“Invoice Number Extended Warranty Hours/Code/Date | 0 I | MM-da-yyyy
+“Invoice Date
+"Invoice Amount [0.01 |[0.00 | “Sale Account
+Current Gost [0.01 |[0.00 | Salesperson fey SYSTEM QUICK ADDED
+Net Book Value | 0.01 I 0.00 | Customer Invoice Number
+Inventory Account Q Customer Invoice Date @
+Reference Amount | 0.00 I 0.00 Invoice Amount
+Note Amount/Gode/Due Date [ 0.00 I | mi-da-yyyy
+Finance Amount/Due Date [0.00 |[unraayyy Customer... FF Q Customer Name | Standard Sand & Silica (714696)
+Settlement Number/Date I MM-da-yyyy Customer Fleet Number Ld
+Traded Date @
+Rental Insurable Amount
+Rental Amount [ 0.00 |[0.00 |
+
+| Machine History il Memos il Machine Hours il Costing il Margins il Washout il Print il Print Label il Open Work Orders |
+
+Machine Breakdown
+Base Price Price With Options
+
+MISCBASE Equipment haul 0.01 0.01
+
+Le jE | arcorg [5 > | ES

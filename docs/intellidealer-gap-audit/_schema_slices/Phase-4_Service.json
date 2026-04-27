@@ -1,0 +1,1372 @@
+{
+  "tables": {
+    "demo_inspections": [
+      {
+        "name": "checklist_items",
+        "type": "Json"
+      },
+      {
+        "name": "completed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "damage_description",
+        "type": "string | null"
+      },
+      {
+        "name": "damage_found",
+        "type": "boolean | null"
+      },
+      {
+        "name": "damage_photos",
+        "type": "Json | null"
+      },
+      {
+        "name": "demo_id",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "inspection_type",
+        "type": "string"
+      },
+      {
+        "name": "inspector_id",
+        "type": "string | null"
+      },
+      {
+        "name": "overall_condition",
+        "type": "string | null"
+      },
+      {
+        "name": "photos",
+        "type": "Json | null"
+      }
+    ],
+    "equipment_service_intervals": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "equipment_id",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "interval_hours",
+        "type": "number"
+      },
+      {
+        "name": "interval_label",
+        "type": "string"
+      },
+      {
+        "name": "last_completed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "last_completed_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "next_due_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "portal_warranty_claims": [
+      {
+        "name": "claim_type",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "description",
+        "type": "string"
+      },
+      {
+        "name": "fleet_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "photos",
+        "type": "Json | null"
+      },
+      {
+        "name": "portal_customer_id",
+        "type": "string"
+      },
+      {
+        "name": "resolution_notes",
+        "type": "string | null"
+      },
+      {
+        "name": "resolved_at",
+        "type": "string | null"
+      },
+      {
+        "name": "resolved_by",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "submitted_at",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qb_service_credit_config": [
+      {
+        "name": "category",
+        "type": "string"
+      },
+      {
+        "name": "credit_cents",
+        "type": "number"
+      },
+      {
+        "name": "travel_budget_cents",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_branch_config": [
+      {
+        "name": "appointment_slot_minutes",
+        "type": "number"
+      },
+      {
+        "name": "branch_id",
+        "type": "string"
+      },
+      {
+        "name": "business_hours",
+        "type": "Json"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "default_advisor_pool",
+        "type": "Json"
+      },
+      {
+        "name": "default_technician_pool",
+        "type": "Json"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "parts_team_notify_user_ids",
+        "type": "Json"
+      },
+      {
+        "name": "planner_rules",
+        "type": "Json"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_completion_feedback": [
+      {
+        "name": "actual_problem_fixed",
+        "type": "boolean | null"
+      },
+      {
+        "name": "additional_issues",
+        "type": "Json"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "job_id",
+        "type": "string"
+      },
+      {
+        "name": "missing_parts",
+        "type": "Json"
+      },
+      {
+        "name": "return_visit_risk",
+        "type": "string | null"
+      },
+      {
+        "name": "serial_specific_note",
+        "type": "string | null"
+      },
+      {
+        "name": "submitted_by",
+        "type": "string | null"
+      },
+      {
+        "name": "time_saver_notes",
+        "type": "string | null"
+      },
+      {
+        "name": "upsell_suggestions",
+        "type": "Json"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_cron_runs": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "error",
+        "type": "string | null"
+      },
+      {
+        "name": "finished_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "job_name",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "ok",
+        "type": "boolean"
+      },
+      {
+        "name": "started_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_customer_notifications": [
+      {
+        "name": "channel",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "job_id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "notification_type",
+        "type": "string"
+      },
+      {
+        "name": "recipient",
+        "type": "string | null"
+      },
+      {
+        "name": "sent_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_internal_billing_line_staging": [
+      {
+        "name": "consumed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "customer_invoice_id",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "line_total",
+        "type": "number | null"
+      },
+      {
+        "name": "line_type",
+        "type": "string"
+      },
+      {
+        "name": "part_number",
+        "type": "string | null"
+      },
+      {
+        "name": "quantity",
+        "type": "number"
+      },
+      {
+        "name": "requirement_id",
+        "type": "string | null"
+      },
+      {
+        "name": "service_job_id",
+        "type": "string"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "unit_cost",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_job_blockers": [
+      {
+        "name": "blocker_type",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "job_id",
+        "type": "string"
+      },
+      {
+        "name": "resolved_at",
+        "type": "string | null"
+      },
+      {
+        "name": "resolved_by",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_job_events": [
+      {
+        "name": "actor_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "event_type",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "job_id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "new_stage",
+        "type": "Database[\"public\"][\"Enums\"][\"service_stage\"] | null"
+      },
+      {
+        "name": "old_stage",
+        "type": "Database[\"public\"][\"Enums\"][\"service_stage\"] | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_jobs": [
+      {
+        "name": "advisor_id",
+        "type": "string | null"
+      },
+      {
+        "name": "ai_diagnosis_summary",
+        "type": "string | null"
+      },
+      {
+        "name": "branch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "closed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "current_stage",
+        "type": "Database[\"public\"][\"Enums\"][\"service_stage\"]"
+      },
+      {
+        "name": "current_stage_entered_at",
+        "type": "string"
+      },
+      {
+        "name": "customer_id",
+        "type": "string | null"
+      },
+      {
+        "name": "customer_problem_summary",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "fulfillment_run_id",
+        "type": "string | null"
+      },
+      {
+        "name": "haul_required",
+        "type": "boolean"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "invoice_total",
+        "type": "number | null"
+      },
+      {
+        "name": "machine_id",
+        "type": "string | null"
+      },
+      {
+        "name": "portal_request_id",
+        "type": "string | null"
+      },
+      {
+        "name": "priority",
+        "type": "Database[\"public\"][\"Enums\"][\"service_priority\"]"
+      },
+      {
+        "name": "quote_total",
+        "type": "number | null"
+      },
+      {
+        "name": "request_type",
+        "type": "Database[\"public\"][\"Enums\"][\"service_request_type\"]"
+      },
+      {
+        "name": "requested_by_name",
+        "type": "string | null"
+      },
+      {
+        "name": "scheduled_end_at",
+        "type": "string | null"
+      },
+      {
+        "name": "scheduled_start_at",
+        "type": "string | null"
+      },
+      {
+        "name": "selected_job_code_id",
+        "type": "string | null"
+      },
+      {
+        "name": "service_manager_id",
+        "type": "string | null"
+      },
+      {
+        "name": "shop_or_field",
+        "type": "string"
+      },
+      {
+        "name": "source_type",
+        "type": "Database[\"public\"][\"Enums\"][\"service_source_type\"]"
+      },
+      {
+        "name": "status_flags",
+        "type": "Database[\"public\"][\"Enums\"][\"service_status_flag\"][]"
+      },
+      {
+        "name": "technician_id",
+        "type": "string | null"
+      },
+      {
+        "name": "tracking_token",
+        "type": "string"
+      },
+      {
+        "name": "traffic_ticket_id",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_knowledge_base": [
+      {
+        "name": "contributed_by",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "fault_code",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "make",
+        "type": "string | null"
+      },
+      {
+        "name": "model",
+        "type": "string | null"
+      },
+      {
+        "name": "parts_used",
+        "type": "Json"
+      },
+      {
+        "name": "solution",
+        "type": "string"
+      },
+      {
+        "name": "symptom",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "use_count",
+        "type": "number"
+      },
+      {
+        "name": "verified",
+        "type": "boolean"
+      },
+      {
+        "name": "verified_at",
+        "type": "string | null"
+      },
+      {
+        "name": "verified_by",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_parts_actions": [
+      {
+        "name": "action_type",
+        "type": "Database[\"public\"][\"Enums\"][\"service_parts_action_type\"]"
+      },
+      {
+        "name": "actor_id",
+        "type": "string | null"
+      },
+      {
+        "name": "completed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "expected_date",
+        "type": "string | null"
+      },
+      {
+        "name": "from_branch",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "job_id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "plan_batch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "po_reference",
+        "type": "string | null"
+      },
+      {
+        "name": "requirement_id",
+        "type": "string"
+      },
+      {
+        "name": "superseded_at",
+        "type": "string | null"
+      },
+      {
+        "name": "to_branch",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "vendor_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_parts_inventory_overrides": [
+      {
+        "name": "actor_id",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "insufficient",
+        "type": "boolean"
+      },
+      {
+        "name": "job_id",
+        "type": "string"
+      },
+      {
+        "name": "part_number",
+        "type": "string"
+      },
+      {
+        "name": "qty_on_hand_after",
+        "type": "number | null"
+      },
+      {
+        "name": "quantity_requested",
+        "type": "number"
+      },
+      {
+        "name": "reason",
+        "type": "string"
+      },
+      {
+        "name": "requirement_id",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_parts_requirements": [
+      {
+        "name": "confidence",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "intake_line_status",
+        "type": "string"
+      },
+      {
+        "name": "job_id",
+        "type": "string"
+      },
+      {
+        "name": "need_by_date",
+        "type": "string | null"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "part_number",
+        "type": "string"
+      },
+      {
+        "name": "quantity",
+        "type": "number"
+      },
+      {
+        "name": "source",
+        "type": "string"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "unit_cost",
+        "type": "number | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "vendor_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_parts_staging": [
+      {
+        "name": "bin_location",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "job_id",
+        "type": "string"
+      },
+      {
+        "name": "requirement_id",
+        "type": "string"
+      },
+      {
+        "name": "staged_at",
+        "type": "string"
+      },
+      {
+        "name": "staged_by",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_quote_approvals": [
+      {
+        "name": "approval_type",
+        "type": "string"
+      },
+      {
+        "name": "approved_at",
+        "type": "string"
+      },
+      {
+        "name": "approved_by",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "method",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "quote_id",
+        "type": "string"
+      },
+      {
+        "name": "signature_url",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_quote_lines": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "description",
+        "type": "string"
+      },
+      {
+        "name": "extended_price",
+        "type": "number"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "line_type",
+        "type": "string"
+      },
+      {
+        "name": "part_requirement_id",
+        "type": "string | null"
+      },
+      {
+        "name": "quantity",
+        "type": "number"
+      },
+      {
+        "name": "quote_id",
+        "type": "string"
+      },
+      {
+        "name": "sort_order",
+        "type": "number"
+      },
+      {
+        "name": "unit_price",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_quotes": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "expires_at",
+        "type": "string | null"
+      },
+      {
+        "name": "haul_total",
+        "type": "number"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "job_id",
+        "type": "string"
+      },
+      {
+        "name": "labor_total",
+        "type": "number"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "parts_total",
+        "type": "number"
+      },
+      {
+        "name": "sent_at",
+        "type": "string | null"
+      },
+      {
+        "name": "shop_supplies",
+        "type": "number"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "total",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "version",
+        "type": "number"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_requests": [
+      {
+        "name": "actual_completion",
+        "type": "string | null"
+      },
+      {
+        "name": "assigned_to",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "department",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string"
+      },
+      {
+        "name": "estimate_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "estimated_completion",
+        "type": "string | null"
+      },
+      {
+        "name": "final_amount",
+        "type": "number | null"
+      },
+      {
+        "name": "fleet_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "invoice_reference",
+        "type": "string | null"
+      },
+      {
+        "name": "photos",
+        "type": "Json | null"
+      },
+      {
+        "name": "portal_customer_id",
+        "type": "string"
+      },
+      {
+        "name": "preferred_branch",
+        "type": "string | null"
+      },
+      {
+        "name": "preferred_date",
+        "type": "string | null"
+      },
+      {
+        "name": "request_type",
+        "type": "string"
+      },
+      {
+        "name": "service_job_id",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "urgency",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_tat_metrics": [
+      {
+        "name": "actual_duration_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "completed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_machine_down",
+        "type": "boolean"
+      },
+      {
+        "name": "job_id",
+        "type": "string"
+      },
+      {
+        "name": "segment_name",
+        "type": "string"
+      },
+      {
+        "name": "started_at",
+        "type": "string"
+      },
+      {
+        "name": "target_duration_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_tat_targets": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "current_stage",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "machine_down_target_hours",
+        "type": "number"
+      },
+      {
+        "name": "target_hours",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_timecards": [
+      {
+        "name": "clocked_in_at",
+        "type": "string"
+      },
+      {
+        "name": "clocked_out_at",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "hours",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "service_job_id",
+        "type": "string"
+      },
+      {
+        "name": "technician_id",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "technician_job_performance": [
+      {
+        "name": "actual_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "comeback",
+        "type": "boolean"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "estimated_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "job_code_id",
+        "type": "string | null"
+      },
+      {
+        "name": "job_id",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "technician_id",
+        "type": "string"
+      },
+      {
+        "name": "variance",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "technician_profiles": [
+      {
+        "name": "active_workload",
+        "type": "number"
+      },
+      {
+        "name": "average_efficiency",
+        "type": "number | null"
+      },
+      {
+        "name": "branch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "brands_supported",
+        "type": "Json"
+      },
+      {
+        "name": "certifications",
+        "type": "Json"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "field_eligible",
+        "type": "boolean"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "job_type_history",
+        "type": "Json"
+      },
+      {
+        "name": "shop_eligible",
+        "type": "boolean"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "user_id",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ]
+  }
+}

@@ -1,0 +1,1544 @@
+{
+  "tables": {
+    "branch_transfer_edges": [
+      {
+        "name": "active",
+        "type": "boolean"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "from_branch",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "lead_time_hours",
+        "type": "number"
+      },
+      {
+        "name": "to_branch",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "branches": [
+      {
+        "name": "address_line1",
+        "type": "string | null"
+      },
+      {
+        "name": "address_line2",
+        "type": "string | null"
+      },
+      {
+        "name": "business_hours",
+        "type": "Json"
+      },
+      {
+        "name": "capabilities",
+        "type": "Json"
+      },
+      {
+        "name": "city",
+        "type": "string | null"
+      },
+      {
+        "name": "country",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "default_tax_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "delivery_radius_miles",
+        "type": "number | null"
+      },
+      {
+        "name": "display_name",
+        "type": "string"
+      },
+      {
+        "name": "doc_footer_text",
+        "type": "string | null"
+      },
+      {
+        "name": "email_main",
+        "type": "string | null"
+      },
+      {
+        "name": "email_parts",
+        "type": "string | null"
+      },
+      {
+        "name": "email_sales",
+        "type": "string | null"
+      },
+      {
+        "name": "email_service",
+        "type": "string | null"
+      },
+      {
+        "name": "fax",
+        "type": "string | null"
+      },
+      {
+        "name": "general_manager_id",
+        "type": "string | null"
+      },
+      {
+        "name": "header_tagline",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_active",
+        "type": "boolean"
+      },
+      {
+        "name": "latitude",
+        "type": "number | null"
+      },
+      {
+        "name": "license_numbers",
+        "type": "Json"
+      },
+      {
+        "name": "logo_url",
+        "type": "string | null"
+      },
+      {
+        "name": "longitude",
+        "type": "number | null"
+      },
+      {
+        "name": "max_service_bays",
+        "type": "number | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "parts_counter",
+        "type": "boolean"
+      },
+      {
+        "name": "parts_manager_id",
+        "type": "string | null"
+      },
+      {
+        "name": "phone_main",
+        "type": "string | null"
+      },
+      {
+        "name": "phone_parts",
+        "type": "string | null"
+      },
+      {
+        "name": "phone_sales",
+        "type": "string | null"
+      },
+      {
+        "name": "phone_service",
+        "type": "string | null"
+      },
+      {
+        "name": "postal_code",
+        "type": "string | null"
+      },
+      {
+        "name": "rental_yard_capacity",
+        "type": "number | null"
+      },
+      {
+        "name": "sales_manager_id",
+        "type": "string | null"
+      },
+      {
+        "name": "service_manager_id",
+        "type": "string | null"
+      },
+      {
+        "name": "short_code",
+        "type": "string | null"
+      },
+      {
+        "name": "slug",
+        "type": "string"
+      },
+      {
+        "name": "state_province",
+        "type": "string | null"
+      },
+      {
+        "name": "tax_id",
+        "type": "string | null"
+      },
+      {
+        "name": "timezone",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "website_url",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "customer_profiles_extended": [
+      {
+        "name": "attachment_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "avg_days_to_close",
+        "type": "number | null"
+      },
+      {
+        "name": "avg_deal_size",
+        "type": "number | null"
+      },
+      {
+        "name": "avg_discount_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "budget_cycle_month",
+        "type": "number | null"
+      },
+      {
+        "name": "budget_cycle_notes",
+        "type": "string | null"
+      },
+      {
+        "name": "company_name",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "crm_company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "customer_name",
+        "type": "string"
+      },
+      {
+        "name": "fiscal_year_end_month",
+        "type": "number | null"
+      },
+      {
+        "name": "fleet_size",
+        "type": "number | null"
+      },
+      {
+        "name": "health_score",
+        "type": "number | null"
+      },
+      {
+        "name": "health_score_components",
+        "type": "Json | null"
+      },
+      {
+        "name": "health_score_updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "hubspot_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "industry",
+        "type": "string | null"
+      },
+      {
+        "name": "intellidealer_customer_id",
+        "type": "string | null"
+      },
+      {
+        "name": "last_deal_at",
+        "type": "string | null"
+      },
+      {
+        "name": "last_interaction_at",
+        "type": "string | null"
+      },
+      {
+        "name": "lifetime_value",
+        "type": "number | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "persona_confidence",
+        "type": "number | null"
+      },
+      {
+        "name": "persona_model_version",
+        "type": "string | null"
+      },
+      {
+        "name": "price_sensitivity_score",
+        "type": "number | null"
+      },
+      {
+        "name": "pricing_persona",
+        "type": "Database[\"public\"][\"Enums\"][\"pricing_persona\"] | null"
+      },
+      {
+        "name": "region",
+        "type": "string | null"
+      },
+      {
+        "name": "revenue_attribution",
+        "type": "Json | null"
+      },
+      {
+        "name": "seasonal_pattern",
+        "type": "string | null"
+      },
+      {
+        "name": "service_contract_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "total_deals",
+        "type": "number | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      }
+    ],
+    "document_audit_events": [
+      {
+        "name": "actor_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "document_id",
+        "type": "string | null"
+      },
+      {
+        "name": "document_title_snapshot",
+        "type": "string | null"
+      },
+      {
+        "name": "event_type",
+        "type": "Database[\"public\"][\"Enums\"][\"document_audit_event_type\"]"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      }
+    ],
+    "geofence_events": [
+      {
+        "name": "ai_confidence",
+        "type": "number | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "equipment_id",
+        "type": "string"
+      },
+      {
+        "name": "event_at",
+        "type": "string"
+      },
+      {
+        "name": "event_type",
+        "type": "string"
+      },
+      {
+        "name": "geofence_id",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "reading_lat",
+        "type": "number | null"
+      },
+      {
+        "name": "reading_lng",
+        "type": "number | null"
+      },
+      {
+        "name": "triggered_action_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "integration_status_credential_audit_events": [
+      {
+        "name": "actor_role",
+        "type": "string | null"
+      },
+      {
+        "name": "actor_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "changed_fields",
+        "type": "string[]"
+      },
+      {
+        "name": "event_type",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "integration_key",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "occurred_at",
+        "type": "string"
+      },
+      {
+        "name": "request_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "machine_profiles": [
+      {
+        "name": "category",
+        "type": "string"
+      },
+      {
+        "name": "common_wear_parts",
+        "type": "Json"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "extraction_confidence",
+        "type": "number | null"
+      },
+      {
+        "name": "fluid_capacities",
+        "type": "Json"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "maintenance_schedule",
+        "type": "Json"
+      },
+      {
+        "name": "manually_verified",
+        "type": "boolean"
+      },
+      {
+        "name": "manufacturer",
+        "type": "string"
+      },
+      {
+        "name": "model",
+        "type": "string"
+      },
+      {
+        "name": "model_family",
+        "type": "string | null"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "source_documents",
+        "type": "string[] | null"
+      },
+      {
+        "name": "specs",
+        "type": "Json"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      },
+      {
+        "name": "year_range_end",
+        "type": "number | null"
+      },
+      {
+        "name": "year_range_start",
+        "type": "number | null"
+      }
+    ],
+    "parts_reorder_profiles": [
+      {
+        "name": "avg_lead_time_days",
+        "type": "number"
+      },
+      {
+        "name": "branch_id",
+        "type": "string"
+      },
+      {
+        "name": "computation_source",
+        "type": "string"
+      },
+      {
+        "name": "consumption_velocity",
+        "type": "number"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "economic_order_qty",
+        "type": "number"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "last_computed_at",
+        "type": "string"
+      },
+      {
+        "name": "lead_time_std_dev",
+        "type": "number"
+      },
+      {
+        "name": "next_compute_at",
+        "type": "string"
+      },
+      {
+        "name": "part_number",
+        "type": "string"
+      },
+      {
+        "name": "reorder_point",
+        "type": "number"
+      },
+      {
+        "name": "safety_factor",
+        "type": "number"
+      },
+      {
+        "name": "safety_stock",
+        "type": "number"
+      },
+      {
+        "name": "total_consumed",
+        "type": "number"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "velocity_window_days",
+        "type": "number"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "profiles": [
+      {
+        "name": "active_workspace_id",
+        "type": "string"
+      },
+      {
+        "name": "audience",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "email",
+        "type": "string | null"
+      },
+      {
+        "name": "full_name",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "iron_role",
+        "type": "string | null"
+      },
+      {
+        "name": "iron_role_display",
+        "type": "string | null"
+      },
+      {
+        "name": "is_active",
+        "type": "boolean"
+      },
+      {
+        "name": "is_support",
+        "type": "boolean"
+      },
+      {
+        "name": "role",
+        "type": "Database[\"public\"][\"Enums\"][\"user_role\"]"
+      },
+      {
+        "name": "stakeholder_subrole",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      }
+    ],
+    "qrm_auth_audit_events": [
+      {
+        "name": "actor_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "event_type",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_auth_event_type\"]"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "ip_inet",
+        "type": "unknown"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "occurred_at",
+        "type": "string"
+      },
+      {
+        "name": "outcome",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_auth_event_outcome\"]"
+      },
+      {
+        "name": "request_id",
+        "type": "string | null"
+      },
+      {
+        "name": "resource",
+        "type": "string | null"
+      },
+      {
+        "name": "subject_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "user_agent",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_company_merge_audit": [
+      {
+        "name": "affected_row_ids",
+        "type": "Json"
+      },
+      {
+        "name": "caller_notes",
+        "type": "string | null"
+      },
+      {
+        "name": "discarded_company_id",
+        "type": "string"
+      },
+      {
+        "name": "discarded_company_snapshot",
+        "type": "Json | null"
+      },
+      {
+        "name": "dry_run",
+        "type": "boolean"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "kept_company_id",
+        "type": "string"
+      },
+      {
+        "name": "kept_company_snapshot",
+        "type": "Json | null"
+      },
+      {
+        "name": "performed_at",
+        "type": "string"
+      },
+      {
+        "name": "performed_by",
+        "type": "string | null"
+      },
+      {
+        "name": "table_row_counts",
+        "type": "Json"
+      },
+      {
+        "name": "total_rows_updated",
+        "type": "number"
+      },
+      {
+        "name": "undone_at",
+        "type": "string | null"
+      },
+      {
+        "name": "undone_by",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_contact_territories": [
+      {
+        "name": "contact_id",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "territory_id",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_geofences": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "geofence_type",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_active",
+        "type": "boolean"
+      },
+      {
+        "name": "linked_company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "linked_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "polygon",
+        "type": "unknown"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_merge_audit_events": [
+      {
+        "name": "actor_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "loser_contact_id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "occurred_at",
+        "type": "string"
+      },
+      {
+        "name": "snapshot",
+        "type": "Json"
+      },
+      {
+        "name": "survivor_contact_id",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_quote_audit_events": [
+      {
+        "name": "actor_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "event_type",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "quote_id",
+        "type": "string"
+      },
+      {
+        "name": "request_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_territories": [
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_branch_config": [
+      {
+        "name": "appointment_slot_minutes",
+        "type": "number"
+      },
+      {
+        "name": "branch_id",
+        "type": "string"
+      },
+      {
+        "name": "business_hours",
+        "type": "Json"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "default_advisor_pool",
+        "type": "Json"
+      },
+      {
+        "name": "default_technician_pool",
+        "type": "Json"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "parts_team_notify_user_ids",
+        "type": "Json"
+      },
+      {
+        "name": "planner_rules",
+        "type": "Json"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "technician_profiles": [
+      {
+        "name": "active_workload",
+        "type": "number"
+      },
+      {
+        "name": "average_efficiency",
+        "type": "number | null"
+      },
+      {
+        "name": "branch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "brands_supported",
+        "type": "Json"
+      },
+      {
+        "name": "certifications",
+        "type": "Json"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "field_eligible",
+        "type": "boolean"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "job_type_history",
+        "type": "Json"
+      },
+      {
+        "name": "shop_eligible",
+        "type": "boolean"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "user_id",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "traffic_tickets": [
+      {
+        "name": "billing_comments",
+        "type": "string"
+      },
+      {
+        "name": "blocker_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "completed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "coordinator_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "delivery_address",
+        "type": "string | null"
+      },
+      {
+        "name": "delivery_lat",
+        "type": "number | null"
+      },
+      {
+        "name": "delivery_lng",
+        "type": "number | null"
+      },
+      {
+        "name": "delivery_photos",
+        "type": "Json | null"
+      },
+      {
+        "name": "delivery_signature_url",
+        "type": "string | null"
+      },
+      {
+        "name": "demo_id",
+        "type": "string | null"
+      },
+      {
+        "name": "departed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "department",
+        "type": "string"
+      },
+      {
+        "name": "driver_checklist",
+        "type": "Json | null"
+      },
+      {
+        "name": "driver_id",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "from_location",
+        "type": "string"
+      },
+      {
+        "name": "hour_meter_reading",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "late_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "locked",
+        "type": "boolean | null"
+      },
+      {
+        "name": "problems_reported",
+        "type": "string | null"
+      },
+      {
+        "name": "promised_delivery_at",
+        "type": "string | null"
+      },
+      {
+        "name": "proof_of_delivery_complete",
+        "type": "boolean | null"
+      },
+      {
+        "name": "requested_at",
+        "type": "string | null"
+      },
+      {
+        "name": "requested_by",
+        "type": "string | null"
+      },
+      {
+        "name": "scheduled_confirmed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "service_job_id",
+        "type": "string | null"
+      },
+      {
+        "name": "shipping_date",
+        "type": "string"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "stock_number",
+        "type": "string"
+      },
+      {
+        "name": "ticket_type",
+        "type": "string"
+      },
+      {
+        "name": "to_contact_name",
+        "type": "string"
+      },
+      {
+        "name": "to_contact_phone",
+        "type": "string"
+      },
+      {
+        "name": "to_location",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "urgency",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "vendor_profiles": [
+      {
+        "name": "after_hours_contact",
+        "type": "string | null"
+      },
+      {
+        "name": "avg_lead_time_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "category_support",
+        "type": "Json"
+      },
+      {
+        "name": "composite_score",
+        "type": "number | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "fill_rate",
+        "type": "number | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "machine_down_escalation_path",
+        "type": "string | null"
+      },
+      {
+        "name": "machine_down_priority",
+        "type": "boolean"
+      },
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "notes",
+        "type": "string | null"
+      },
+      {
+        "name": "price_competitiveness",
+        "type": "number | null"
+      },
+      {
+        "name": "responsiveness_score",
+        "type": "number | null"
+      },
+      {
+        "name": "score_computed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "supplier_type",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "crm_auth_audit_events": [
+      {
+        "name": "actor_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "event_type",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_auth_event_type\"] | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "ip_inet",
+        "type": "unknown"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "occurred_at",
+        "type": "string | null"
+      },
+      {
+        "name": "outcome",
+        "type": "Database[\"public\"][\"Enums\"][\"crm_auth_event_outcome\"] | null"
+      },
+      {
+        "name": "request_id",
+        "type": "string | null"
+      },
+      {
+        "name": "resource",
+        "type": "string | null"
+      },
+      {
+        "name": "subject_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "user_agent",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_contact_territories": [
+      {
+        "name": "contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "territory_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_geofences": [
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "created_by",
+        "type": "string | null"
+      },
+      {
+        "name": "geofence_type",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "is_active",
+        "type": "boolean | null"
+      },
+      {
+        "name": "linked_company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "linked_deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "polygon",
+        "type": "unknown"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_merge_audit_events": [
+      {
+        "name": "actor_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "loser_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "occurred_at",
+        "type": "string | null"
+      },
+      {
+        "name": "snapshot",
+        "type": "Json | null"
+      },
+      {
+        "name": "survivor_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_quote_audit_events": [
+      {
+        "name": "actor_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "event_type",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json | null"
+      },
+      {
+        "name": "quote_id",
+        "type": "string | null"
+      },
+      {
+        "name": "request_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ],
+    "crm_territories": [
+      {
+        "name": "assigned_rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "deleted_at",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "name",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ]
+  }
+}

@@ -1,0 +1,80 @@
+Phase,IntelliDealer Screen,IntelliDealer Field,Field Description (abbr),Source,QEP Table,QEP Column,Parity Status,Migration / Gap Notes
+Phase-4_Service,ID InspectionPlus,Actions,"Depending on the status of the inspection form, you can either Start, Edit, or Review an inspection form.",Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,ID InspectionPlus,Assignee from the Assignee,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,IntelliTech Scheduled Work Orders,Priority,The priority of this work order/segment in relation to the other,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,IntelliTech Scheduled Work Orders,Code,"work order/segments for the selected technician, as displayed on the Scheduled Work Orders screen. See Work Order: Segments.",Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,IntelliTech Scheduled Work Orders,Log On,Indicates whether the technician is: On—Logged on to (working on) the work order segment. Yes—Can be logged on to the work order segment by,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,IntelliTech Scheduled Work Orders,Start Time,The start time of the labor transaction.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,IntelliTech Scheduled Work Orders,Stop Time,"The stop time of the labor transaction, which will default to the current time.",Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,IntelliTech Scheduled Work Orders,Check the select technician,(inferred from workflow prose),Prose,service_job_router,assigned_tech,BUILT,
+Phase-4_Service,IntelliTech Scheduled Work Orders,Name                Description,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,IntelliTech Scheduled Work Orders,Select Technician,(inferred from workflow prose),Prose,service_job_router,assigned_tech,BUILT,
+Phase-4_Service,IntelliTech Scheduled Work Orders,Service Call,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,IntelliTech Scheduled Work Orders,Yes link in the Log On,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Labor Pricing,Select,Search for labor pricing by entering a Customer/Group customer name or group.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Labor Pricing,Select Premium,Search for labor pricing by entering a,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Labor Pricing,Code,premium code.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Labor Pricing,Select Type,Search for labor pricing by entering a type code.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Labor Pricing,Select Work,Search for labor pricing by selecting a work,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Labor Pricing,Order Status,"order status from the drop down list (e.g. customer, warranty or internal).",Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Labor Pricing,Select Default,Search for labor pricing by entering a,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Labor Pricing,Premium Code,default premium code.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Labor Pricing,Select Location,Search for labor pricing by entering a location.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Labor Pricing,Show Extended,"If selected, includes extended information",Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Labor Pricing,Information,(% Price and Pricing fields) within the labor pricing search results.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Labor Pricing,Price,increase or decrease from cost or list (based on the Pricing Code).,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Labor Pricing,Customer/Group,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Labor Pricing,Show Extended Information,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Service Agreements (Product Support Quick Links),Select,Search for service agreements by entering a,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Service Agreements (Product Support Quick Links),Contract,contract number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Service Agreements (Product Support Quick Links),Stock,machine stock number. Number,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Service Agreements (Product Support Quick Links),Location,branch location.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Service Agreements (Product Support Quick Links),Program,SAM program from the drop down list.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Service Agreements (Product Support Quick Links),Show,"If selected, includes expired service agreements",Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Service Agreements (Product Support Quick Links),Expired,within the service agreement search results.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Service Agreements (Product Support Quick Links),Field,Service,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Service Agreements (Product Support Quick Links),Contract Number,The service agreement's contract number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Service Agreements (Product Support Quick Links),Stock Number,The machine/unit stock number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Service Agreements (Product Support Quick Links),Machine Serial,The machine/unit serial number. Number,Table,crm_deal_equipment,serial,BUILT,
+Phase-4_Service,Technician Service Scheduling,Search,Search for work order segment blocks by work order number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Technician Service Scheduling,Scheduled,displays one of these options: Sidebar Unassigned work order segments that are,Table,service_scheduling_calendar,slot_date/slot_time,BUILT,
+Phase-4_Service,Technician Service Scheduling,Date,(inferred from workflow prose),Prose,(multiple),timestamp fields,BUILT,
+Phase-4_Service,Technician Service Scheduling,Estimated Hours,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Technician Service Scheduling,If the Estimated Hours,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Technician Service Scheduling,Inside/Outside/Shift,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Technician Service Scheduling,Priority Code,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Technician Service Scheduling,Select Technician,(inferred from workflow prose),Prose,service_job_router,assigned_tech,BUILT,
+Phase-4_Service,Technician Service Scheduling,Service Location,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Technician Service Scheduling,Termination Date,(inferred from workflow prose),Prose,(multiple),timestamp fields,BUILT,
+Phase-4_Service,Technician Service Scheduling,When you use this,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Order Quoting/Parts Quoting,Reference,Sort the search results by reference,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Order Quoting/Parts Quoting,Number,number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Order Quoting/Parts Quoting,Customer,Sort the search results by customer number.,Table,crm_companies,name,BUILT,Company name field
+Phase-4_Service,Work Order Quoting/Parts Quoting,Expiry Date,Sort the search results by expiration date.,Table,(multiple),timestamp fields,BUILT,
+Phase-4_Service,Work Order Quoting/Parts Quoting,Select,Search for quotes by entering a reference,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Order Quoting/Parts Quoting,Select Part,Search for quotes by entering a part number. Number,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Order Quoting/Parts Quoting,Description,A brief description about the quote.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Order Quoting/Parts Quoting,Location,The branch location where the quote was created.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Order Quoting/Parts Quoting,Quote,The status of the quote. Status,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Order Quoting/Parts Quoting,Include,"If selected, includes the master quotes within",Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Order Quoting/Parts Quoting,Master,the quote search. Master quotes are user-,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Order Quoting/Parts Quoting,Quotes,created quote templates.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Order Quoting/Parts Quoting,Status,"expired, pending or accepted).",Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Orders: Listing,Work Order,Search for an open work order by entering a,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Orders: Listing,Number,work order number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Orders: Listing,Customer,Search for work orders opened by a specific,Table,crm_companies,name,BUILT,Company name field
+Phase-4_Service,Work Orders: Listing,Stock,Search for work orders opened by a specific,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Orders: Listing,Model,Search for work orders opened by a specific model by entering a model.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Orders: Listing,Serial,Search for work orders opened by a specific,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Orders: Listing,PO Number,Search for open work orders by entering a,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Orders: Listing,Order,The work order number. Number,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Orders: Listing,Quick Add,Opens the Add Work Order screen so you can,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Orders: Listing,Work,quickly add a new Work Order. Order/Request,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Orders: Listing,Quick close,Opens the Close Work Orders screen so you work orders                 can quickly close Work Orders.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work Orders: Listing,Reverse Work,Opens the Invoice History screen so you can,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work in Process,WIP Method,Select which method to use to analyze the WIP data. WIP Balancing—lists outstanding work orders by the dollar amount that was posted to the general le...,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work in Process,Select,Search for work in process by entering a specific,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work in Process,Account,WIP account number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work in Process,Status,"from the drop down list (e.g. all, customer, warranty, or internal).",Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work in Process,Include,Select the checkbox to include any transactions,Table,(unmapped),,REVIEW,Manual review needed
+Phase-4_Service,Work in Process,Total,Totals up all of the open work orders current values for each aging period.,Table,(unmapped),,REVIEW,Manual review needed

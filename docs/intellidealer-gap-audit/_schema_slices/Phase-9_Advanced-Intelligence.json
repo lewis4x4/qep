@@ -1,0 +1,2184 @@
+{
+  "tables": {
+    "analytics_action_log": [
+      {
+        "name": "action_type",
+        "type": "string"
+      },
+      {
+        "name": "after_state",
+        "type": "Json | null"
+      },
+      {
+        "name": "alert_id",
+        "type": "string | null"
+      },
+      {
+        "name": "before_state",
+        "type": "Json | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "entity_id",
+        "type": "string | null"
+      },
+      {
+        "name": "entity_type",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "metric_key",
+        "type": "string | null"
+      },
+      {
+        "name": "source_widget",
+        "type": "string | null"
+      },
+      {
+        "name": "user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "analytics_alerts": [
+      {
+        "name": "acknowledged_at",
+        "type": "string | null"
+      },
+      {
+        "name": "acknowledged_by",
+        "type": "string | null"
+      },
+      {
+        "name": "alert_type",
+        "type": "string"
+      },
+      {
+        "name": "branch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "business_impact_type",
+        "type": "string | null"
+      },
+      {
+        "name": "business_impact_value",
+        "type": "number | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "dedupe_key",
+        "type": "string | null"
+      },
+      {
+        "name": "department_id",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "entity_id",
+        "type": "string | null"
+      },
+      {
+        "name": "entity_type",
+        "type": "string | null"
+      },
+      {
+        "name": "exception_queue_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "metric_key",
+        "type": "string | null"
+      },
+      {
+        "name": "owner_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "resolved_at",
+        "type": "string | null"
+      },
+      {
+        "name": "resolved_by",
+        "type": "string | null"
+      },
+      {
+        "name": "role_target",
+        "type": "string"
+      },
+      {
+        "name": "root_cause_guess",
+        "type": "string | null"
+      },
+      {
+        "name": "severity",
+        "type": "string"
+      },
+      {
+        "name": "source_record_ids",
+        "type": "Json"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "suggested_action",
+        "type": "string | null"
+      },
+      {
+        "name": "title",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "analytics_events": [
+      {
+        "name": "actor_id",
+        "type": "string | null"
+      },
+      {
+        "name": "actor_type",
+        "type": "string | null"
+      },
+      {
+        "name": "consumed_by_runs",
+        "type": "Json"
+      },
+      {
+        "name": "context",
+        "type": "Json"
+      },
+      {
+        "name": "correlation_id",
+        "type": "string | null"
+      },
+      {
+        "name": "entity_id",
+        "type": "string | null"
+      },
+      {
+        "name": "entity_type",
+        "type": "string | null"
+      },
+      {
+        "name": "event_id",
+        "type": "string"
+      },
+      {
+        "name": "event_name",
+        "type": "string"
+      },
+      {
+        "name": "event_version",
+        "type": "number"
+      },
+      {
+        "name": "flow_event_type",
+        "type": "string | null"
+      },
+      {
+        "name": "flow_event_version",
+        "type": "number | null"
+      },
+      {
+        "name": "occurred_at",
+        "type": "string"
+      },
+      {
+        "name": "parent_event_id",
+        "type": "string | null"
+      },
+      {
+        "name": "project_id",
+        "type": "string"
+      },
+      {
+        "name": "properties",
+        "type": "Json | null"
+      },
+      {
+        "name": "received_at",
+        "type": "string"
+      },
+      {
+        "name": "request_id",
+        "type": "string | null"
+      },
+      {
+        "name": "role",
+        "type": "string"
+      },
+      {
+        "name": "session_id",
+        "type": "string | null"
+      },
+      {
+        "name": "source",
+        "type": "string"
+      },
+      {
+        "name": "source_module",
+        "type": "string | null"
+      },
+      {
+        "name": "user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "analytics_kpi_snapshots": [
+      {
+        "name": "branch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "calculated_at",
+        "type": "string"
+      },
+      {
+        "name": "comparison_value",
+        "type": "number | null"
+      },
+      {
+        "name": "confidence_score",
+        "type": "number | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "data_quality_score",
+        "type": "number | null"
+      },
+      {
+        "name": "department_id",
+        "type": "string | null"
+      },
+      {
+        "name": "entity_id",
+        "type": "string | null"
+      },
+      {
+        "name": "entity_type",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "metric_key",
+        "type": "string"
+      },
+      {
+        "name": "metric_value",
+        "type": "number | null"
+      },
+      {
+        "name": "period_end",
+        "type": "string"
+      },
+      {
+        "name": "period_start",
+        "type": "string"
+      },
+      {
+        "name": "refresh_state",
+        "type": "string"
+      },
+      {
+        "name": "role_scope",
+        "type": "string | null"
+      },
+      {
+        "name": "supersedes_id",
+        "type": "string | null"
+      },
+      {
+        "name": "target_value",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "analytics_metric_definitions": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "display_category",
+        "type": "string"
+      },
+      {
+        "name": "drill_contract",
+        "type": "Json"
+      },
+      {
+        "name": "enabled",
+        "type": "boolean"
+      },
+      {
+        "name": "formula_sql",
+        "type": "string | null"
+      },
+      {
+        "name": "formula_text",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "is_executive_metric",
+        "type": "boolean"
+      },
+      {
+        "name": "label",
+        "type": "string"
+      },
+      {
+        "name": "metric_key",
+        "type": "string"
+      },
+      {
+        "name": "owner_role",
+        "type": "string"
+      },
+      {
+        "name": "refresh_cadence",
+        "type": "string"
+      },
+      {
+        "name": "source_tables",
+        "type": "Json"
+      },
+      {
+        "name": "synthetic_weights",
+        "type": "Json | null"
+      },
+      {
+        "name": "threshold_config",
+        "type": "Json"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "version",
+        "type": "number"
+      }
+    ],
+    "knowledge_gaps": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "frequency",
+        "type": "number"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "last_asked_at",
+        "type": "string"
+      },
+      {
+        "name": "question",
+        "type": "string"
+      },
+      {
+        "name": "question_normalized",
+        "type": "string | null"
+      },
+      {
+        "name": "resolved",
+        "type": "boolean"
+      },
+      {
+        "name": "trace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "machine_knowledge_notes": [
+      {
+        "name": "content",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "embedding",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "job_id",
+        "type": "string | null"
+      },
+      {
+        "name": "metadata",
+        "type": "Json"
+      },
+      {
+        "name": "note_type",
+        "type": "string"
+      },
+      {
+        "name": "source_user_id",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "owner_predictive_interventions_cache": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "generated_at",
+        "type": "string"
+      },
+      {
+        "name": "model",
+        "type": "string | null"
+      },
+      {
+        "name": "payload",
+        "type": "Json"
+      },
+      {
+        "name": "tokens_in",
+        "type": "number | null"
+      },
+      {
+        "name": "tokens_out",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "parts_analytics_snapshots": [
+      {
+        "name": "computation_batch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "dead_stock_count",
+        "type": "number"
+      },
+      {
+        "name": "dead_stock_value",
+        "type": "number"
+      },
+      {
+        "name": "fastest_moving",
+        "type": "Json"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "line_count",
+        "type": "number"
+      },
+      {
+        "name": "order_count",
+        "type": "number"
+      },
+      {
+        "name": "revenue_by_branch",
+        "type": "Json"
+      },
+      {
+        "name": "revenue_by_category",
+        "type": "Json"
+      },
+      {
+        "name": "revenue_by_source",
+        "type": "Json"
+      },
+      {
+        "name": "slowest_moving",
+        "type": "Json"
+      },
+      {
+        "name": "snapshot_date",
+        "type": "string"
+      },
+      {
+        "name": "top_customers",
+        "type": "Json"
+      },
+      {
+        "name": "total_cost",
+        "type": "number"
+      },
+      {
+        "name": "total_inventory_value",
+        "type": "number"
+      },
+      {
+        "name": "total_margin",
+        "type": "number"
+      },
+      {
+        "name": "total_revenue",
+        "type": "number"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "parts_predictive_kits": [
+      {
+        "name": "computation_batch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "confidence",
+        "type": "number"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "crm_company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "current_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "dismissed_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "drivers",
+        "type": "Json"
+      },
+      {
+        "name": "equipment_make",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_model",
+        "type": "string | null"
+      },
+      {
+        "name": "equipment_serial",
+        "type": "string | null"
+      },
+      {
+        "name": "expires_at",
+        "type": "string | null"
+      },
+      {
+        "name": "fleet_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "kit_part_count",
+        "type": "number"
+      },
+      {
+        "name": "kit_parts",
+        "type": "Json"
+      },
+      {
+        "name": "kit_value",
+        "type": "number"
+      },
+      {
+        "name": "model_version",
+        "type": "string"
+      },
+      {
+        "name": "nearest_branch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "parts_in_stock",
+        "type": "number"
+      },
+      {
+        "name": "parts_total",
+        "type": "number"
+      },
+      {
+        "name": "predicted_failure_type",
+        "type": "string | null"
+      },
+      {
+        "name": "predicted_service_window",
+        "type": "string"
+      },
+      {
+        "name": "service_interval_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "staged_order_id",
+        "type": "string | null"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "stock_status",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "predicted_parts_plays": [
+      {
+        "name": "action_note",
+        "type": "string | null"
+      },
+      {
+        "name": "actioned_at",
+        "type": "string | null"
+      },
+      {
+        "name": "actioned_by",
+        "type": "string | null"
+      },
+      {
+        "name": "computation_batch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "current_on_hand",
+        "type": "number | null"
+      },
+      {
+        "name": "fleet_id",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "input_signals",
+        "type": "Json"
+      },
+      {
+        "name": "llm_cost_usd_cents",
+        "type": "number | null"
+      },
+      {
+        "name": "llm_model",
+        "type": "string | null"
+      },
+      {
+        "name": "llm_reasoning",
+        "type": "string | null"
+      },
+      {
+        "name": "machine_profile_id",
+        "type": "string | null"
+      },
+      {
+        "name": "part_description",
+        "type": "string | null"
+      },
+      {
+        "name": "part_id",
+        "type": "string | null"
+      },
+      {
+        "name": "part_number",
+        "type": "string"
+      },
+      {
+        "name": "portal_customer_id",
+        "type": "string"
+      },
+      {
+        "name": "probability",
+        "type": "number"
+      },
+      {
+        "name": "projected_due_date",
+        "type": "string"
+      },
+      {
+        "name": "projected_revenue",
+        "type": "number | null"
+      },
+      {
+        "name": "projection_window",
+        "type": "string"
+      },
+      {
+        "name": "reason",
+        "type": "string"
+      },
+      {
+        "name": "recommended_order_qty",
+        "type": "number | null"
+      },
+      {
+        "name": "signal_type",
+        "type": "string"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "suggested_order_by",
+        "type": "string | null"
+      },
+      {
+        "name": "suggested_vendor_id",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "predictive_visit_lists": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "generated_at",
+        "type": "string"
+      },
+      {
+        "name": "generation_context",
+        "type": "Json | null"
+      },
+      {
+        "name": "generation_model",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "list_date",
+        "type": "string"
+      },
+      {
+        "name": "recommendations",
+        "type": "Json"
+      },
+      {
+        "name": "rep_id",
+        "type": "string"
+      },
+      {
+        "name": "visits_completed",
+        "type": "number | null"
+      },
+      {
+        "name": "visits_total",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_prediction_outcomes": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "evidence",
+        "type": "Json"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "logged_by",
+        "type": "string | null"
+      },
+      {
+        "name": "observed_at",
+        "type": "string"
+      },
+      {
+        "name": "outcome",
+        "type": "string"
+      },
+      {
+        "name": "prediction_id",
+        "type": "string"
+      },
+      {
+        "name": "source",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "qrm_predictions": [
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "inputs_hash",
+        "type": "string"
+      },
+      {
+        "name": "model_source",
+        "type": "string"
+      },
+      {
+        "name": "outcome",
+        "type": "string | null"
+      },
+      {
+        "name": "outcome_at",
+        "type": "string | null"
+      },
+      {
+        "name": "outcome_logged_by",
+        "type": "string | null"
+      },
+      {
+        "name": "predicted_at",
+        "type": "string"
+      },
+      {
+        "name": "prediction_kind",
+        "type": "string"
+      },
+      {
+        "name": "rationale",
+        "type": "Json"
+      },
+      {
+        "name": "rationale_hash",
+        "type": "string"
+      },
+      {
+        "name": "role_blend",
+        "type": "Json"
+      },
+      {
+        "name": "score",
+        "type": "number"
+      },
+      {
+        "name": "signals_hash",
+        "type": "string"
+      },
+      {
+        "name": "subject_id",
+        "type": "string"
+      },
+      {
+        "name": "subject_type",
+        "type": "string"
+      },
+      {
+        "name": "trace_id",
+        "type": "string"
+      },
+      {
+        "name": "trace_steps",
+        "type": "Json"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "service_knowledge_base": [
+      {
+        "name": "contributed_by",
+        "type": "string | null"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "fault_code",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "make",
+        "type": "string | null"
+      },
+      {
+        "name": "model",
+        "type": "string | null"
+      },
+      {
+        "name": "parts_used",
+        "type": "Json"
+      },
+      {
+        "name": "solution",
+        "type": "string"
+      },
+      {
+        "name": "symptom",
+        "type": "string"
+      },
+      {
+        "name": "updated_at",
+        "type": "string"
+      },
+      {
+        "name": "use_count",
+        "type": "number"
+      },
+      {
+        "name": "verified",
+        "type": "boolean"
+      },
+      {
+        "name": "verified_at",
+        "type": "string | null"
+      },
+      {
+        "name": "verified_by",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string"
+      }
+    ],
+    "margin_analytics_view": [
+      {
+        "name": "avg_margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "deal_count",
+        "type": "number | null"
+      },
+      {
+        "name": "equipment_category",
+        "type": "string | null"
+      },
+      {
+        "name": "flagged_deal_count",
+        "type": "number | null"
+      },
+      {
+        "name": "month_bucket",
+        "type": "string | null"
+      },
+      {
+        "name": "rep_id",
+        "type": "string | null"
+      },
+      {
+        "name": "rep_name",
+        "type": "string | null"
+      },
+      {
+        "name": "total_pipeline",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "columns",
+        "type": "[\"rep_id\"]"
+      },
+      {
+        "name": "mv_exec_deposits_aging",
+        "type": "{"
+      },
+      {
+        "name": "ar_exposure_dollars",
+        "type": "number | null"
+      },
+      {
+        "name": "avg_verification_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "pending_count",
+        "type": "number | null"
+      },
+      {
+        "name": "received_unverified_count",
+        "type": "number | null"
+      },
+      {
+        "name": "refund_exposure_dollars",
+        "type": "number | null"
+      },
+      {
+        "name": "refund_in_flight_count",
+        "type": "number | null"
+      },
+      {
+        "name": "requested_count",
+        "type": "number | null"
+      },
+      {
+        "name": "verified_count",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "mv_exec_inventory_readiness",
+        "type": "{"
+      },
+      {
+        "name": "blocked_units",
+        "type": "number | null"
+      },
+      {
+        "name": "in_prep_units",
+        "type": "number | null"
+      },
+      {
+        "name": "intake_stalled",
+        "type": "number | null"
+      },
+      {
+        "name": "ready_rate_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "ready_units",
+        "type": "number | null"
+      },
+      {
+        "name": "total_units",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "mv_exec_margin_daily",
+        "type": "{"
+      },
+      {
+        "name": "day",
+        "type": "string | null"
+      },
+      {
+        "name": "margin_dollars",
+        "type": "number | null"
+      },
+      {
+        "name": "median_margin",
+        "type": "number | null"
+      },
+      {
+        "name": "negative_margin_deal_count",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "mv_exec_margin_waterfall",
+        "type": "{"
+      },
+      {
+        "name": "gross_margin_dollars",
+        "type": "number | null"
+      },
+      {
+        "name": "load_dollars",
+        "type": "number | null"
+      },
+      {
+        "name": "loaded_margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "month",
+        "type": "string | null"
+      },
+      {
+        "name": "net_contribution_dollars",
+        "type": "number | null"
+      },
+      {
+        "name": "revenue",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "mv_exec_payment_compliance",
+        "type": "{"
+      },
+      {
+        "name": "day",
+        "type": "string | null"
+      },
+      {
+        "name": "exception_attempts",
+        "type": "number | null"
+      },
+      {
+        "name": "exception_rate_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "overrides",
+        "type": "number | null"
+      },
+      {
+        "name": "passed_attempts",
+        "type": "number | null"
+      },
+      {
+        "name": "total_attempts",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "mv_exec_pipeline_stage_summary",
+        "type": "{"
+      },
+      {
+        "name": "avg_age_days",
+        "type": "number | null"
+      },
+      {
+        "name": "avg_inactivity_days",
+        "type": "number | null"
+      },
+      {
+        "name": "open_deal_count",
+        "type": "number | null"
+      },
+      {
+        "name": "raw_pipeline",
+        "type": "number | null"
+      },
+      {
+        "name": "stage_id",
+        "type": "string | null"
+      },
+      {
+        "name": "stage_name",
+        "type": "string | null"
+      },
+      {
+        "name": "stage_probability",
+        "type": "number | null"
+      },
+      {
+        "name": "weighted_pipeline",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "mv_exec_rental_return_summary",
+        "type": "{"
+      },
+      {
+        "name": "aging_returns",
+        "type": "number | null"
+      },
+      {
+        "name": "avg_resolution_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "fresh_returns",
+        "type": "number | null"
+      },
+      {
+        "name": "open_returns",
+        "type": "number | null"
+      },
+      {
+        "name": "refund_pending",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "mv_exec_revenue_daily",
+        "type": "{"
+      },
+      {
+        "name": "closed_deal_count",
+        "type": "number | null"
+      },
+      {
+        "name": "day",
+        "type": "string | null"
+      },
+      {
+        "name": "margin_dollars",
+        "type": "number | null"
+      },
+      {
+        "name": "margin_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "revenue",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "mv_exec_traffic_summary",
+        "type": "{"
+      },
+      {
+        "name": "at_risk_24h",
+        "type": "number | null"
+      },
+      {
+        "name": "avg_cycle_time_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "blocked",
+        "type": "number | null"
+      },
+      {
+        "name": "completed",
+        "type": "number | null"
+      },
+      {
+        "name": "completed_on_time",
+        "type": "number | null"
+      },
+      {
+        "name": "day",
+        "type": "string | null"
+      },
+      {
+        "name": "on_time_rate_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "total_tickets",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "parts_forecast_risk_summary",
+        "type": "{"
+      },
+      {
+        "name": "branch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "computed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "confidence_high",
+        "type": "number | null"
+      },
+      {
+        "name": "confidence_low",
+        "type": "number | null"
+      },
+      {
+        "name": "consumption_velocity",
+        "type": "number | null"
+      },
+      {
+        "name": "coverage_status",
+        "type": "string | null"
+      },
+      {
+        "name": "current_qty_on_hand",
+        "type": "number | null"
+      },
+      {
+        "name": "current_reorder_point",
+        "type": "number | null"
+      },
+      {
+        "name": "days_of_stock_remaining",
+        "type": "number | null"
+      },
+      {
+        "name": "drivers",
+        "type": "Json | null"
+      },
+      {
+        "name": "forecast_month",
+        "type": "string | null"
+      },
+      {
+        "name": "part_number",
+        "type": "string | null"
+      },
+      {
+        "name": "predicted_qty",
+        "type": "number | null"
+      },
+      {
+        "name": "qty_on_hand_at_forecast",
+        "type": "number | null"
+      },
+      {
+        "name": "reorder_point_at_forecast",
+        "type": "number | null"
+      },
+      {
+        "name": "stockout_risk",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "columns",
+        "type": "[\"workspace_id\", \"branch_id\"]"
+      },
+      {
+        "name": "parts_inventory_reorder_status",
+        "type": "{"
+      },
+      {
+        "name": "avg_lead_time_days",
+        "type": "number | null"
+      },
+      {
+        "name": "bin_location",
+        "type": "string | null"
+      },
+      {
+        "name": "branch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "catalog_id",
+        "type": "string | null"
+      },
+      {
+        "name": "consumption_velocity",
+        "type": "number | null"
+      },
+      {
+        "name": "days_until_stockout",
+        "type": "number | null"
+      },
+      {
+        "name": "economic_order_qty",
+        "type": "number | null"
+      },
+      {
+        "name": "inventory_id",
+        "type": "string | null"
+      },
+      {
+        "name": "part_number",
+        "type": "string | null"
+      },
+      {
+        "name": "qty_on_hand",
+        "type": "number | null"
+      },
+      {
+        "name": "reorder_computed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "reorder_point",
+        "type": "number | null"
+      },
+      {
+        "name": "safety_stock",
+        "type": "number | null"
+      },
+      {
+        "name": "stock_status",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "columns",
+        "type": "[\"catalog_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"catalog_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"catalog_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"catalog_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"catalog_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"catalog_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"catalog_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"catalog_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"catalog_id\"]"
+      },
+      {
+        "name": "portal_trade_in_opportunities",
+        "type": "{"
+      },
+      {
+        "name": "crm_company_id",
+        "type": "string | null"
+      },
+      {
+        "name": "crm_contact_id",
+        "type": "string | null"
+      },
+      {
+        "name": "current_hours",
+        "type": "number | null"
+      },
+      {
+        "name": "customer_email",
+        "type": "string | null"
+      },
+      {
+        "name": "customer_name",
+        "type": "string | null"
+      },
+      {
+        "name": "fleet_id",
+        "type": "string | null"
+      },
+      {
+        "name": "make",
+        "type": "string | null"
+      },
+      {
+        "name": "model",
+        "type": "string | null"
+      },
+      {
+        "name": "outreach_status",
+        "type": "Database[\"public\"][\"Enums\"][\"outreach_status\"] | null"
+      },
+      {
+        "name": "portal_customer_id",
+        "type": "string | null"
+      },
+      {
+        "name": "predicted_replacement_date",
+        "type": "string | null"
+      },
+      {
+        "name": "replacement_confidence",
+        "type": "number | null"
+      },
+      {
+        "name": "trade_in_notes",
+        "type": "string | null"
+      },
+      {
+        "name": "warranty_expiry",
+        "type": "string | null"
+      },
+      {
+        "name": "year",
+        "type": "number | null"
+      },
+      {
+        "name": "columns",
+        "type": "[\"portal_customer_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"crm_company_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"crm_company_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"crm_company_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"crm_contact_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"crm_contact_id\"]"
+      },
+      {
+        "name": "price_change_impact",
+        "type": "{"
+      },
+      {
+        "name": "catalog_entry_id",
+        "type": "string | null"
+      },
+      {
+        "name": "current_list_price",
+        "type": "number | null"
+      },
+      {
+        "name": "deal_id",
+        "type": "string | null"
+      },
+      {
+        "name": "line_item_id",
+        "type": "string | null"
+      },
+      {
+        "name": "make",
+        "type": "string | null"
+      },
+      {
+        "name": "model",
+        "type": "string | null"
+      },
+      {
+        "name": "price_change_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "price_change_source",
+        "type": "string | null"
+      },
+      {
+        "name": "price_changed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "price_delta_total",
+        "type": "number | null"
+      },
+      {
+        "name": "quote_created_at",
+        "type": "string | null"
+      },
+      {
+        "name": "quote_package_id",
+        "type": "string | null"
+      },
+      {
+        "name": "quote_status",
+        "type": "string | null"
+      },
+      {
+        "name": "quote_total",
+        "type": "number | null"
+      },
+      {
+        "name": "quoted_list_price",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "columns",
+        "type": "[\"catalog_entry_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"deal_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"deal_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"deal_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"deal_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"deal_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"deal_id\"]"
+      },
+      {
+        "name": "revenue_by_make_model",
+        "type": "{"
+      },
+      {
+        "name": "avg_lifetime_revenue_per_unit",
+        "type": "number | null"
+      },
+      {
+        "name": "make",
+        "type": "string | null"
+      },
+      {
+        "name": "model",
+        "type": "string | null"
+      },
+      {
+        "name": "total_lifetime_revenue",
+        "type": "number | null"
+      },
+      {
+        "name": "unit_count",
+        "type": "number | null"
+      },
+      {
+        "name": "service_dashboard_rollup",
+        "type": "{"
+      },
+      {
+        "name": "active_count",
+        "type": "number | null"
+      },
+      {
+        "name": "branch_id",
+        "type": "string | null"
+      },
+      {
+        "name": "closed_count",
+        "type": "number | null"
+      },
+      {
+        "name": "overdue_count",
+        "type": "number | null"
+      },
+      {
+        "name": "pending_count",
+        "type": "number | null"
+      },
+      {
+        "name": "total_count",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "sop_compliance_summary",
+        "type": "{"
+      },
+      {
+        "name": "abandoned_executions",
+        "type": "number | null"
+      },
+      {
+        "name": "blocked_executions",
+        "type": "number | null"
+      },
+      {
+        "name": "completed_executions",
+        "type": "number | null"
+      },
+      {
+        "name": "completion_rate_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "completions",
+        "type": "number | null"
+      },
+      {
+        "name": "deferred_count",
+        "type": "number | null"
+      },
+      {
+        "name": "department",
+        "type": "string | null"
+      },
+      {
+        "name": "eligible_executions",
+        "type": "number | null"
+      },
+      {
+        "name": "na_count",
+        "type": "number | null"
+      },
+      {
+        "name": "satisfied_elsewhere_count",
+        "type": "number | null"
+      },
+      {
+        "name": "skips",
+        "type": "number | null"
+      },
+      {
+        "name": "sort_order",
+        "type": "number | null"
+      },
+      {
+        "name": "step_compliance_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "step_id",
+        "type": "string | null"
+      },
+      {
+        "name": "step_title",
+        "type": "string | null"
+      },
+      {
+        "name": "template_id",
+        "type": "string | null"
+      },
+      {
+        "name": "template_title",
+        "type": "string | null"
+      },
+      {
+        "name": "total_executions",
+        "type": "number | null"
+      },
+      {
+        "name": "version",
+        "type": "number | null"
+      },
+      {
+        "name": "v_branch_stack_ranking",
+        "type": "{"
+      },
+      {
+        "name": "at_reorder_count",
+        "type": "number | null"
+      },
+      {
+        "name": "branch_code",
+        "type": "string | null"
+      },
+      {
+        "name": "dead_parts",
+        "type": "number | null"
+      },
+      {
+        "name": "dead_parts_quartile_asc",
+        "type": "number | null"
+      },
+      {
+        "name": "dead_pct",
+        "type": "number | null"
+      },
+      {
+        "name": "inventory_quartile",
+        "type": "number | null"
+      },
+      {
+        "name": "inventory_value",
+        "type": "number | null"
+      },
+      {
+        "name": "parts_count",
+        "type": "number | null"
+      },
+      {
+        "name": "reorder_quartile_asc",
+        "type": "number | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "v_machine_parts_connections",
+        "type": "{"
+      },
+      {
+        "name": "association_strength",
+        "type": "number | null"
+      },
+      {
+        "name": "branch_code",
+        "type": "string | null"
+      },
+      {
+        "name": "cost_price",
+        "type": "number | null"
+      },
+      {
+        "name": "daily_velocity",
+        "type": "number | null"
+      },
+      {
+        "name": "history_12mo_sales",
+        "type": "number | null"
+      },
+      {
+        "name": "link_source",
+        "type": "string | null"
+      },
+      {
+        "name": "list_price",
+        "type": "number | null"
+      },
+      {
+        "name": "machine_category",
+        "type": "string | null"
+      },
+      {
+        "name": "machine_id",
+        "type": "string | null"
+      },
+      {
+        "name": "manufacturer",
+        "type": "string | null"
+      },
+      {
+        "name": "model",
+        "type": "string | null"
+      },
+      {
+        "name": "model_family",
+        "type": "string | null"
+      },
+      {
+        "name": "on_hand",
+        "type": "number | null"
+      },
+      {
+        "name": "part_description",
+        "type": "string | null"
+      },
+      {
+        "name": "part_id",
+        "type": "string | null"
+      },
+      {
+        "name": "part_number",
+        "type": "string | null"
+      },
+      {
+        "name": "usage_frequency",
+        "type": "string | null"
+      },
+      {
+        "name": "velocity_class",
+        "type": "string | null"
+      },
+      {
+        "name": "vendor_code",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "columns",
+        "type": "[\"machine_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"part_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"part_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"part_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"part_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"part_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"part_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"part_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"part_id\"]"
+      },
+      {
+        "name": "columns",
+        "type": "[\"part_id\"]"
+      },
+      {
+        "name": "v_parts_dead_capital",
+        "type": "{"
+      },
+      {
+        "name": "branch_code",
+        "type": "string | null"
+      },
+      {
+        "name": "capital_on_hand",
+        "type": "number | null"
+      },
+      {
+        "name": "cost_price",
+        "type": "number | null"
+      },
+      {
+        "name": "dead_pattern",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "on_hand",
+        "type": "number | null"
+      },
+      {
+        "name": "part_id",
+        "type": "string | null"
+      },
+      {
+        "name": "part_number",
+        "type": "string | null"
+      },
+      {
+        "name": "velocity_class",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      },
+      {
+        "name": "v_parts_embedding_backlog",
+        "type": "{"
+      },
+      {
+        "name": "backlog_reason",
+        "type": "string | null"
+      },
+      {
+        "name": "category",
+        "type": "string | null"
+      },
+      {
+        "name": "category_code",
+        "type": "string | null"
+      },
+      {
+        "name": "description",
+        "type": "string | null"
+      },
+      {
+        "name": "embedding_computed_at",
+        "type": "string | null"
+      },
+      {
+        "name": "id",
+        "type": "string | null"
+      },
+      {
+        "name": "machine_code",
+        "type": "string | null"
+      },
+      {
+        "name": "manufacturer",
+        "type": "string | null"
+      },
+      {
+        "name": "model_code",
+        "type": "string | null"
+      },
+      {
+        "name": "part_number",
+        "type": "string | null"
+      },
+      {
+        "name": "updated_at",
+        "type": "string | null"
+      },
+      {
+        "name": "vendor_code",
+        "type": "string | null"
+      },
+      {
+        "name": "workspace_id",
+        "type": "string | null"
+      }
+    ]
+  }
+}

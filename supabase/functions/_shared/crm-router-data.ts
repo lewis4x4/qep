@@ -12,6 +12,11 @@ import {
   hasRestrictedEquipmentFinancialPayload,
 } from "./crm-equipment-financial-access.ts";
 import {
+  canAccessCustomerEin,
+  hasCustomerEinPayload,
+  normalizeCustomerEin,
+} from "./customer-ein-access.ts";
+import {
   EQUIPMENT_FULL_SELECT_COLS,
   EQUIPMENT_SAFE_SELECT_COLS,
   mapEquipmentRow,
@@ -167,6 +172,7 @@ export interface CompanyUpsertPayload {
   state?: string | null;
   postalCode?: string | null;
   country?: string | null;
+  ein?: string | null;
   archive?: boolean;
 }
 
@@ -1105,28 +1111,38 @@ export async function createCompany(
 ): Promise<unknown> {
   const name = cleanText(payload.name);
   if (!name) throw new Error("VALIDATION_NAME_REQUIRED");
+  const hasEin = hasCustomerEinPayload(payload);
+  const normalizedEin = hasEin ? normalizeCustomerEin(payload.ein) : undefined;
+
+  if (hasEin && !canAccessCustomerEin(ctx.caller)) {
+    throw new Error("FORBIDDEN_CUSTOMER_EIN_WRITE");
+  }
+
+  const insertValues: Record<string, unknown> = {
+    workspace_id: ctx.workspaceId,
+    name,
+    assigned_rep_id: ctx.caller.userId,
+    search_1: cleanText(payload.search1 ?? null),
+    search_2: cleanText(payload.search2 ?? null),
+    address_line_1: cleanText(payload.addressLine1 ?? null),
+    address_line_2: cleanText(payload.addressLine2 ?? null),
+    city: cleanText(payload.city ?? null),
+    state: cleanText(payload.state ?? null),
+    postal_code: cleanText(payload.postalCode ?? null),
+    country: cleanText(payload.country ?? null),
+  };
+  if (hasEin) insertValues.ein = normalizedEin;
 
   const { data, error } = await ctx.callerDb
-    .from("crm_companies")
-    .insert({
-      workspace_id: ctx.workspaceId,
-      name,
-      assigned_rep_id: ctx.caller.userId,
-      search_1: cleanText(payload.search1 ?? null),
-      search_2: cleanText(payload.search2 ?? null),
-      address_line_1: cleanText(payload.addressLine1 ?? null),
-      address_line_2: cleanText(payload.addressLine2 ?? null),
-      city: cleanText(payload.city ?? null),
-      state: cleanText(payload.state ?? null),
-      postal_code: cleanText(payload.postalCode ?? null),
-      country: cleanText(payload.country ?? null),
-    })
+    .from(hasEin ? "qrm_companies" : "crm_companies")
+    .insert(insertValues)
     .select(
       "id, workspace_id, name, parent_company_id, assigned_rep_id, search_1, search_2, address_line_1, address_line_2, city, state, postal_code, country, created_at, updated_at",
     )
     .single();
 
   if (error) throw error;
+
   return {
     id: data.id,
     workspaceId: data.workspace_id,
@@ -1153,6 +1169,12 @@ export async function patchCompany(
 ): Promise<unknown> {
   const updates: Record<string, unknown> = {};
   const hasArchive = payload.archive === true;
+  const hasEin = hasCustomerEinPayload(payload);
+  const normalizedEin = hasEin ? normalizeCustomerEin(payload.ein) : undefined;
+
+  if (hasEin && !canAccessCustomerEin(ctx.caller)) {
+    throw new Error("FORBIDDEN_CUSTOMER_EIN_WRITE");
+  }
 
   if (payload.name !== undefined) {
     const name = cleanText(payload.name);
@@ -1193,12 +1215,16 @@ export async function patchCompany(
     return data;
   }
 
+  if (hasEin) {
+    updates.ein = normalizedEin;
+  }
+
   if (Object.keys(updates).length === 0) {
     throw new Error("VALIDATION_EMPTY_PATCH");
   }
 
   const { data, error } = await ctx.callerDb
-    .from("crm_companies")
+    .from(hasEin ? "qrm_companies" : "crm_companies")
     .update(updates)
     .eq("workspace_id", ctx.workspaceId)
     .eq("id", companyId)

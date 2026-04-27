@@ -1,0 +1,9 @@
+Phase,IntelliDealer Screen,IntelliDealer Field,Field Description (abbr),Source,QEP Table,QEP Column,Parity Status,Migration / Gap Notes
+Phase-9_Advanced-Intelligence,Customer Portal,Status,The customer's status.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-9_Advanced-Intelligence,Customer Portal,Name,The customer's name.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-9_Advanced-Intelligence,Customer Portal,Address,The customer's address.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-9_Advanced-Intelligence,Customer Portal,Zip/Postal,The customer's zip/postal code. Code,Table,(unmapped),,REVIEW,Manual review needed
+Phase-9_Advanced-Intelligence,Customer Portal,Contact,The name of the customer's primary contact.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-9_Advanced-Intelligence,Customer Portal,Phone,The customer's phone number. Number,Table,(unmapped),,REVIEW,Manual review needed
+Phase-9_Advanced-Intelligence,Customer Portal,E-mail,The customer's e-mail address. Address,Table,(unmapped),,REVIEW,Manual review needed
+Phase-9_Advanced-Intelligence,Customer Portal,Comment,A one line comment that is loaded on the customer's profile.,Table,crm_activities or custom_fields,body,BUILT,

@@ -1,0 +1,2842 @@
+phase: Cross-Cutting
+generated_at: 2026-04-25T00:00:00Z
+source_artifacts:
+  pdfs:
+    - docs/IntelliDealer/Cross-Cutting/Employee Profile.pdf
+    - docs/IntelliDealer/Cross-Cutting/Traffic Management.pdf
+  png_screenshots:
+    - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.14.28.png
+    - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.14.35.png
+    - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+    - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Shipping__3.18.45.png
+    - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Parts__3.18.48.png
+    - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Attachments__3.18.51.png
+    - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Weekly__3.15.27.png
+    - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Monthly__3.15.32.png
+  ocr_text_paths:
+    - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+    - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.txt
+    - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic-Management-Shipping__3.18.45.txt
+    - docs/IntelliDealer/_OCR_PNG/Cross-Cutting_Traffic-Management__3.14.28.txt
+    - docs/IntelliDealer/_OCR_PNG/Cross-Cutting_Traffic-Management__3.14.35.txt
+    - docs/IntelliDealer/_OCR_PNG/Cross-Cutting_Traffic-Management__3.18.30.txt
+    - docs/IntelliDealer/_OCR_PNG/Cross-Cutting_Traffic-Management-Dispatch__3.18.38.txt
+    - docs/IntelliDealer/_OCR_PNG/Cross-Cutting_Traffic-Management-Shipping__3.18.45.txt
+    - docs/IntelliDealer/_OCR_PNG/Cross-Cutting_Traffic-Management-Parts__3.18.48.txt
+    - docs/IntelliDealer/_OCR_PNG/Cross-Cutting_Traffic-Management-Attachments__3.18.51.txt
+    - docs/IntelliDealer/_OCR_PNG/Cross-Cutting_Traffic-Management-Weekly__3.15.27.txt
+    - docs/IntelliDealer/_OCR_PNG/Cross-Cutting_Traffic-Management-Monthly__3.15.32.txt
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUDITOR NOTE
+#
+# The Cross-Cutting phase covers six platform-wide surfaces that every
+# IntelliDealer module shares:
+#
+#   1. Employee Profile        (Financial Management > Payroll > Employee
+#                               Profile). Data Source: EMPLOYEE.
+#                               Security switch: 604 - Payroll. Rev 2024.10.
+#   2. Traffic Management      (Product Support > Equipment/Service/Rental >
+#                               Traffic). Data Source: CGIDR.
+#                               Security switch: 804 - Product Support, Traffic.
+#                               Rev 2026.02. Tabs: Listing, Weekly, Monthly,
+#                               Receipt, Shipping Information, Stock Add Ons,
+#                               Attachments, Comments, Multimedia.
+#                               Sub-types: Demo, Loaner, Rental, Transfer,
+#                               Sale, Purchase, Service, Trade In,
+#                               Miscellaneous, Re-rent, Customer Transfer,
+#                               Job Site Transfer.
+#   3. Branch / Location Master (CTLLOC + profit-center mapping). Carries the
+#                               GL profit-center digit (0=Balance, 1=Admin,
+#                               2=Equipment, 3=Parts, 4=Service, 5=Rental,
+#                               6-9=user-defined) referenced in nearly every
+#                               other phase.
+#   4. Security / Roles         IntelliDealer's numbered access-code system
+#                               (Security ###). Every screen documents its
+#                               own switch number; the user's role record
+#                               carries which switch numbers are granted.
+#   5. Audit                    Universal change history — who/what/when on
+#                               every transactional record.
+#   6. Geofence / Territory     Territory codes, geofence polygons, ZIP-to-
+#                               territory mapping (used by CRM, Service,
+#                               Rental, Deal Genome).
+#
+# QEP has reasonable coverage of (3) branches, (4) RLS-style role enforcement,
+# (5) per-domain audit (qrm_*_audit_events, qb_*_audit, parts_pricing_audit,
+# document_audit_events, customer_profile_access_audit), and (6) territory
+# + geofence. QEP has NO employee/payroll table — `profiles` is auth-only and
+# carries no employee number, hire/termination, GL routing class, profit-
+# center, shop class, shop rate, shift code, or supervisor. QEP has NO
+# branch-to-branch traffic ticket header (the `traffic_tickets` table that
+# exists is a delivery/dispatch ticket, not the inbound/outbound equipment-
+# movement receipt with type/sub-type, line items, attachments, weekly
+# calendar). QEP has NO dedicated security_switches table — RLS policies are
+# all-or-nothing per role, with no fine-grained per-screen switch number.
+#
+# These gaps block QEP from replacing IntelliDealer for:
+#   • Payroll / GL-cost-of-labor reconciliation (Phase-4 service profitability)
+#   • Yard-to-yard equipment moves (Phase-2/Rental ops)
+#   • Audit-grade who/what/when on shared cross-domain records
+#   • Customer / dealer-org access control beyond the role-coarse default
+# ─────────────────────────────────────────────────────────────────────────────
+
+fields:
+  # ============================================================================
+  # SURFACE 1 — EMPLOYEE PROFILE (CTLLOC/EMPLOYEE)
+  # Financial Management > Payroll > Employee Profile.
+  # Data Source: EMPLOYEE.   Security: 604 - Payroll.   Rev: 2024.10.
+  # ============================================================================
+  - id: employee.employee_number
+    intellidealer_label: "Employee Number"
+    intellidealer_screen: "Employee Profile: Listing"
+    intellidealer_data_source: "EMPLOYEE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Employee Profile.pdf
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Up-to-five-character alphanumeric identifier for an employee. Primary
+      sort key on the listing screen and the foreign key carried into every
+      payroll, work-order, parts-counter, sales, service, and traffic
+      transaction. Every cost roll-up in the system joins on this value. It
+      appears wherever "Salesperson", "Service Advisor", "Technician",
+      "Counter Person", "Driver", "Coordinator" is referenced in any other
+      phase.
+    qep_status: "MISSING"
+    qep_table: "employees"
+    qep_column: "employee_number"
+    qep_gap_notes: |
+      QEP `profiles` carries `id` (uuid) + `email` + `full_name` only. There
+      is no human-readable employee number for use on cost reports, no
+      stable code that survives email changes, no field for joining to
+      legacy IntelliDealer payroll feeds. Phase-4 service profitability
+      (labor cost-of-sales by tech) cannot reconcile without this.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE TABLE employees (
+        id uuid primary key default gen_random_uuid(),
+        workspace_id uuid not null references workspaces(id),
+        profile_id uuid references profiles(id),
+        employee_number text not null,
+        unique (workspace_id, employee_number)
+      );
+    ui_surface_hint: "Settings > Team > Employees; surfaced as join key on every cost report"
+    dependencies: []
+
+  - id: employee.full_name
+    intellidealer_label: "Name"
+    intellidealer_screen: "Employee Profile: Listing"
+    intellidealer_data_source: "EMPLOYEE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      The employee's printed name as it should appear on time-cards, work
+      orders, customer-facing delivery receipts, and HR rosters.
+    qep_status: "BUILT"
+    qep_table: "profiles"
+    qep_column: "full_name"
+    qep_evidence:
+      - "database.types.ts profiles.full_name"
+    qep_gap_notes: |
+      Built. Note QEP profiles are auth-tied; if a contractor signs paychecks
+      but does not log in, an employees row with a null profile_id will be
+      needed once `employees` exists.
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Settings > Team > Employees"
+    dependencies: [employee.employee_number]
+
+  - id: employee.class
+    intellidealer_label: "Class"
+    intellidealer_screen: "Employee Profile: Listing"
+    intellidealer_data_source: "EMPLOYEE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Class code (set up on the Classes screen) that determines the GL
+      expense account where the employee's wages are debited. Foundational
+      for service profitability, parts-counter labor allocation, and cost-
+      of-labor on every work order. Every payroll posting routes through
+      this code.
+    qep_status: "MISSING"
+    qep_table: "employees"
+    qep_column: "class_code"
+    qep_gap_notes: |
+      QEP has no employee.class concept. service_branch_config carries
+      `default_advisor_pool` / `default_technician_pool` (Json) but those
+      are scheduling buckets, not GL routing keys. Without a class code,
+      QEP cannot post payroll-derived labor cost to the right GL account
+      and Phase-4 service margin cannot be computed correctly.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE TABLE employee_classes (
+        id uuid primary key default gen_random_uuid(),
+        workspace_id uuid not null,
+        code text not null,
+        description text,
+        gl_expense_account text not null,
+        unique (workspace_id, code)
+      );
+      ALTER TABLE employees ADD COLUMN class_code text references employee_classes(code);
+    ui_surface_hint: "Settings > Payroll > Employee Classes; selectable on Employee form"
+    dependencies: [employee.employee_number]
+
+  - id: employee.profit_center
+    intellidealer_label: "Profit Center"
+    intellidealer_screen: "Employee Profile: Listing"
+    intellidealer_data_source: "EMPLOYEE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "0 - Balance Sheet"
+      - "1 - Administration"
+      - "2 - Equipment Sales"
+      - "3 - Parts"
+      - "4 - Service"
+      - "5 - Rental"
+      - "6 - User defined"
+      - "7 - User defined"
+      - "8 - User defined"
+      - "9 - User defined"
+    intellidealer_purpose: |
+      Single-digit profit-center / department code where the employee's
+      wages are charged. Anchors departmental P&L roll-ups across the
+      whole platform. The 0-9 enum is documented verbatim in the OCR.
+    qep_status: "MISSING"
+    qep_table: "employees"
+    qep_column: "profit_center_code"
+    qep_gap_notes: |
+      QEP has no profit-center taxonomy. branches.metadata is free-form
+      JSON. Without this, QEP cannot generate departmental P&L (Equipment
+      vs Parts vs Service vs Rental) — which is the standard way the
+      dealer-org reports financials.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE TYPE profit_center_code AS ENUM ('0','1','2','3','4','5','6','7','8','9');
+      ALTER TABLE employees ADD COLUMN profit_center profit_center_code;
+      COMMENT ON COLUMN employees.profit_center IS
+        '0=Balance Sheet,1=Admin,2=Equipment,3=Parts,4=Service,5=Rental,6-9=User';
+    ui_surface_hint: "Settings > Payroll > Employee form > Profit Center dropdown"
+    dependencies: [employee.employee_number]
+
+  - id: employee.category
+    intellidealer_label: "Category"
+    intellidealer_screen: "Employee Profile: Listing"
+    intellidealer_data_source: "EMPLOYEE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Three-character user-defined employee category. Used for ad-hoc
+      reporting groupings independent of class/profit-center (e.g.,
+      "FLD" field tech, "SHP" shop tech, "MGR" manager).
+    qep_status: "MISSING"
+    qep_table: "employees"
+    qep_column: "category_code"
+    qep_gap_notes: |
+      No equivalent. profiles.role is a fixed enum; it does not allow user-
+      defined categories.
+    severity: "should"
+    category: "reporting"
+    migration_hint: |
+      ALTER TABLE employees ADD COLUMN category_code text;
+    ui_surface_hint: "Settings > Payroll > Employee form > Category"
+    dependencies: [employee.employee_number]
+
+  - id: employee.pay_type
+    intellidealer_label: "Pay Type"
+    intellidealer_screen: "Employee Profile: Listing"
+    intellidealer_data_source: "EMPLOYEE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      The employee's pay type (e.g., hourly, salary, commission, piece-
+      work). Drives how time-cards roll into payroll and how labor cost is
+      computed for service profitability.
+    qep_status: "MISSING"
+    qep_table: "employees"
+    qep_column: "pay_type"
+    qep_gap_notes: |
+      No equivalent. Required for correct labor-cost computation in
+      Phase-4 service profitability and for downstream payroll feeds.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE TYPE pay_type AS ENUM ('hourly','salary','commission','piecework','flat_rate');
+      ALTER TABLE employees ADD COLUMN pay_type pay_type;
+    ui_surface_hint: "Settings > Payroll > Employee form > Pay Type"
+    dependencies: [employee.employee_number]
+
+  - id: employee.include_terminated
+    intellidealer_label: "Include Terminated"
+    intellidealer_screen: "Employee Profile: Listing (search)"
+    intellidealer_data_source: "EMPLOYEE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "bool"
+    intellidealer_purpose: |
+      List-view filter that, when checked, includes terminated employees
+      in the search results. Implies the system tracks termination status
+      / termination date as first-class data.
+    qep_status: "PARTIAL"
+    qep_table: "profiles"
+    qep_column: "is_active"
+    qep_evidence:
+      - "database.types.ts profiles.is_active"
+    qep_gap_notes: |
+      profiles.is_active gives a soft-active flag, but there is no
+      termination_date and no audit of who terminated the employee, when,
+      or why. For payroll closeout this is required.
+    severity: "must"
+    category: "regulatory"
+    migration_hint: |
+      ALTER TABLE employees ADD COLUMN hire_date date;
+      ALTER TABLE employees ADD COLUMN termination_date date;
+      ALTER TABLE employees ADD COLUMN termination_reason text;
+    ui_surface_hint: "Settings > Team > Employees list > 'Include terminated' toggle"
+    dependencies: [employee.employee_number]
+
+  - id: employee.hire_date
+    intellidealer_label: "Hire Date"
+    intellidealer_screen: "Employee Profile (full record, inferred from workflow)"
+    intellidealer_data_source: "EMPLOYEE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "date"
+    intellidealer_purpose: |
+      Date the employee was hired. Used for tenure-based commission tiers,
+      seniority sort, anniversary reporting, and HR compliance. Implied by
+      the documented Include Terminated filter and standard EMPLOYEE data
+      source.
+    qep_status: "MISSING"
+    qep_table: "employees"
+    qep_column: "hire_date"
+    qep_gap_notes: |
+      No equivalent in profiles. Tenure-based logic across Phase-1/2/4
+      cannot be computed without it.
+    severity: "must"
+    category: "regulatory"
+    migration_hint: |
+      ALTER TABLE employees ADD COLUMN hire_date date;
+    ui_surface_hint: "Settings > Team > Employees > HR section"
+    dependencies: [employee.employee_number]
+
+  - id: employee.termination_date
+    intellidealer_label: "Termination Date"
+    intellidealer_screen: "Employee Profile (full record, inferred from workflow)"
+    intellidealer_data_source: "EMPLOYEE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "date"
+    intellidealer_purpose: |
+      Date the employee was terminated / left the company. Drives the
+      Include Terminated filter, payroll closeout, and access-revocation
+      audit. Required for labor-tax compliance and final-paycheck workflows.
+    qep_status: "MISSING"
+    qep_table: "employees"
+    qep_column: "termination_date"
+    qep_gap_notes: |
+      No equivalent. profiles.is_active is binary; it does not record when
+      or why an employee left.
+    severity: "must"
+    category: "regulatory"
+    migration_hint: |
+      ALTER TABLE employees ADD COLUMN termination_date date;
+      ALTER TABLE employees ADD COLUMN termination_reason text;
+    ui_surface_hint: "Settings > Team > Employees > HR section"
+    dependencies: [employee.employee_number]
+
+  - id: employee.shop_class
+    intellidealer_label: "Shop Class (Inside / Outside)"
+    intellidealer_screen: "Employee Profile (full record, technician sub-form)"
+    intellidealer_data_source: "EMPLOYEE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "Inside"
+      - "Outside"
+      - "Both"
+    intellidealer_purpose: |
+      Shop class identifies whether the technician is an inside (shop) or
+      outside (field) technician. Drives dispatch eligibility, labor-rate
+      lookup, and overhead absorption for Phase-4 service profitability.
+      A field tech and a shop tech billing the same hours yield very
+      different gross margins because of truck/travel cost.
+    qep_status: "PARTIAL"
+    qep_table: "technician_profiles"
+    qep_column: "field_eligible / shop_eligible"
+    qep_evidence:
+      - "database.types.ts technician_profiles.field_eligible"
+      - "database.types.ts technician_profiles.shop_eligible"
+    qep_gap_notes: |
+      technician_profiles encodes eligibility as two booleans, which is
+      sufficient for dispatch but not for cost-recovery routing. There is
+      no link to a labor rate, no overhead-rate suffix, and the table is
+      tied to a profile_id (auth user) — non-auth contractors cannot be
+      represented.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      ALTER TABLE technician_profiles ADD COLUMN shop_class text
+        CHECK (shop_class IN ('inside','outside','both'));
+    ui_surface_hint: "Settings > Service > Technicians > Shop Class"
+    dependencies: [employee.employee_number]
+
+  - id: employee.shop_rate
+    intellidealer_label: "Shop Rate"
+    intellidealer_screen: "Employee Profile (full record, technician sub-form)"
+    intellidealer_data_source: "EMPLOYEE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      The shop / labor rate in dollars-per-hour at which the technician's
+      time is billed and/or costed. Foundational for labor cost-of-sales,
+      labor recovery, work-order margin, and standard-vs-actual labor
+      variance — all surfaced in Phase-4 Analysis Reports.
+    qep_status: "MISSING"
+    qep_table: "employees"
+    qep_column: "shop_rate_cents"
+    qep_gap_notes: |
+      No equivalent. technician_profiles records eligibility but no rate.
+      Without this, Phase-4 service profitability is uncomputable from
+      first principles.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      ALTER TABLE employees ADD COLUMN shop_rate_cents integer;
+      ALTER TABLE employees ADD COLUMN shop_rate_effective_from date;
+      -- consider an employee_rate_history side table for audit
+    ui_surface_hint: "Settings > Service > Technicians > Shop Rate"
+    dependencies: [employee.employee_number, employee.shop_class]
+
+  - id: employee.shift_code
+    intellidealer_label: "Shift Code"
+    intellidealer_screen: "Employee Profile (full record, technician sub-form)"
+    intellidealer_data_source: "EMPLOYEE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Code that maps the employee to a shift schedule (start/end time, days
+      of week, premium-pay multipliers). Drives time-card validation,
+      overtime calculation, and after-hours dispatch eligibility.
+    qep_status: "MISSING"
+    qep_table: "employees"
+    qep_column: "shift_code"
+    qep_gap_notes: |
+      No equivalent. service_branch_config.business_hours is per-branch,
+      not per-employee. Premium-code rollup in Phase-5 Payroll Hours
+      report cannot work without this.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      CREATE TABLE shift_codes (
+        id uuid primary key default gen_random_uuid(),
+        workspace_id uuid not null,
+        code text not null,
+        description text,
+        start_time time,
+        end_time time,
+        days_of_week int[],
+        ot_multiplier numeric,
+        unique (workspace_id, code)
+      );
+      ALTER TABLE employees ADD COLUMN shift_code text;
+    ui_surface_hint: "Settings > Payroll > Shift Codes; assigned on Employee form"
+    dependencies: [employee.employee_number]
+
+  - id: employee.certifications
+    intellidealer_label: "Certifications"
+    intellidealer_screen: "Employee Profile (full record, technician sub-form, inferred)"
+    intellidealer_data_source: "EMPLOYEE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Manufacturer / OEM technical certifications held by a technician
+      (engine endorsements, hydraulics, OEM-specific training). Drives
+      dispatch eligibility for warranty work and OEM rebate qualification.
+    qep_status: "BUILT"
+    qep_table: "technician_profiles"
+    qep_column: "certifications"
+    qep_evidence:
+      - "database.types.ts technician_profiles.certifications (Json)"
+    qep_gap_notes: |
+      Built as a Json column, but only on technician_profiles (not on the
+      generic employees record). Once employees is added, certifications
+      should fold there for non-tech roles too (parts pro, sales).
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Settings > Service > Technicians > Certifications"
+    dependencies: [employee.employee_number]
+
+  - id: employee.supervisor_id
+    intellidealer_label: "Supervisor"
+    intellidealer_screen: "Employee Profile (full record, inferred from workflow)"
+    intellidealer_data_source: "EMPLOYEE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Reporting-line supervisor for the employee. Drives approval routing
+      (PTO, expense, work-order writeoff), commission overrides, and the
+      org chart that surfaces in management reports.
+    qep_status: "PARTIAL"
+    qep_table: "branches"
+    qep_column: "general_manager_id / sales_manager_id / parts_manager_id / service_manager_id"
+    qep_evidence:
+      - "database.types.ts branches.general_manager_id"
+    qep_gap_notes: |
+      Branches carry four manager pointers, but there is no per-employee
+      supervisor link. Approval routing and commission-override logic
+      cannot be encoded.
+    severity: "should"
+    category: "workflow"
+    migration_hint: |
+      ALTER TABLE employees ADD COLUMN supervisor_id uuid references employees(id);
+    ui_surface_hint: "Settings > Team > Employees > Supervisor"
+    dependencies: [employee.employee_number]
+
+  - id: employee.email
+    intellidealer_label: "Email (employee record)"
+    intellidealer_screen: "Employee Profile (full record, inferred)"
+    intellidealer_data_source: "EMPLOYEE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "email"
+    intellidealer_purpose: |
+      Work email used for routing notifications and tying back to auth.
+    qep_status: "BUILT"
+    qep_table: "profiles"
+    qep_column: "email"
+    qep_evidence:
+      - "database.types.ts profiles.email"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Settings > Team > Employees"
+    dependencies: [employee.employee_number]
+
+  - id: employee.role
+    intellidealer_label: "Role / Pay Type role flag"
+    intellidealer_screen: "Employee Profile + Security"
+    intellidealer_data_source: "EMPLOYEE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      The application role assigned to the employee (Sales, Service, Parts,
+      Rental, Admin, Manager). Drives top-level menu visibility before
+      finer security switches are evaluated.
+    qep_status: "BUILT"
+    qep_table: "profiles"
+    qep_column: "role"
+    qep_evidence:
+      - "database.types.ts profiles.role (user_role enum)"
+      - "database.types.ts profile_role_blend (multi-role weights)"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Settings > Team > Roles"
+    dependencies: [employee.employee_number]
+
+  # ============================================================================
+  # SURFACE 2 — TRAFFIC MANAGEMENT  (CGIDR)
+  # Product Support > Equipment / Service / Rental > Traffic.
+  # Security 804 - Product Support, Traffic.   Rev 2026.02.
+  # Tabs: Listing, Weekly, Monthly, Receipt, Shipping Information,
+  #       Stock Add Ons, Attachments, Comments, Multimedia.
+  # ============================================================================
+
+  # ---- Listing-tab fields (header + grid columns) -----------------------------
+  - id: traffic_ticket.receipt_number
+    intellidealer_label: "Receipt Number"
+    intellidealer_screen: "Traffic Management - Listing / Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+      - docs/IntelliDealer/_OCR_PNG/Cross-Cutting_Traffic-Management__3.18.30.txt
+      - docs/IntelliDealer/_OCR_PNG/Cross-Cutting_Traffic-Management-Dispatch__3.18.38.txt
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      The traffic ticket / receipt identifier (e.g., 000613, 000622). Six-
+      digit zero-padded number that survives the entire move and is what
+      the driver, yard, and salesperson refer to. Indexed both as sort key
+      and as the primary lookup key on Listing tab. Click-through opens
+      Receipt Details.
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "receipt_number"
+    qep_gap_notes: |
+      The existing `traffic_tickets` table is a delivery/dispatch ticket
+      (post-sale delivery to a customer site) and uses uuid `id` only —
+      no human-readable receipt number for inbound/outbound yard moves.
+      Drivers and yard managers cannot quote a uuid over the radio.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN receipt_number text;
+      CREATE UNIQUE INDEX traffic_tickets_receipt_number_unique
+        ON traffic_tickets (workspace_id, receipt_number)
+        WHERE receipt_number IS NOT NULL;
+    ui_surface_hint: "Traffic Management list view, primary column"
+    dependencies: []
+
+  - id: traffic_ticket.receipt_date
+    intellidealer_label: "Date / Receipt Date"
+    intellidealer_screen: "Traffic Management - Listing"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+    intellidealer_field_type: "date"
+    intellidealer_purpose: |
+      The date the traffic ticket was received / created (top sort key on
+      the Listing tab). Anchors the in-transit aging calculation.
+    qep_status: "PARTIAL"
+    qep_table: "traffic_tickets"
+    qep_column: "shipping_date / requested_at"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.shipping_date"
+      - "database.types.ts traffic_tickets.requested_at"
+    qep_gap_notes: |
+      Built only as shipping/requested timestamps; there is no canonical
+      `received_at` (the moment the unit was logged onto the receipt at
+      origin). For inbound moves this is the actual creation timestamp.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN received_at timestamptz;
+    ui_surface_hint: "Listing tab Date column"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.direction_in_out
+    intellidealer_label: "In / Out (Inbound / Outbound)"
+    intellidealer_screen: "Traffic Management - Listing / Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "All"
+      - "Inbound"
+      - "Outbound"
+      - "Transfer"
+    intellidealer_purpose: |
+      Whether the ticket represents a unit moving in (Inbound) or out
+      (Outbound) of the recording branch. The Transfer value collapses
+      both legs of a branch-to-branch transfer into one search. Drives
+      dispatch board grouping and aging.
+    qep_status: "PARTIAL"
+    qep_table: "traffic_tickets"
+    qep_column: "ticket_type"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.ticket_type (text)"
+    qep_gap_notes: |
+      `ticket_type` is free text, not a typed direction enum. There is no
+      explicit way to filter inbound vs outbound at the database layer.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      CREATE TYPE traffic_direction AS ENUM ('inbound','outbound','transfer');
+      ALTER TABLE traffic_tickets ADD COLUMN direction traffic_direction;
+    ui_surface_hint: "Listing tab In/Out column + filter dropdown"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.type
+    intellidealer_label: "Type (Receipt Type)"
+    intellidealer_screen: "Traffic Management - Listing"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "Demo"
+      - "Loaner"
+      - "Rental"
+      - "Transfer"
+      - "Sale"
+      - "Purchase"
+      - "Service"
+      - "Trade In"
+      - "Miscellaneous"
+      - "Re-rent"
+      - "Customer Transfer"
+      - "Job Site Transfer"
+    intellidealer_purpose: |
+      Receipt type — what kind of move this is. Drives downstream linkage
+      (a Demo ticket points at a Quote, a Sale ticket at an Invoice, a
+      Service ticket at a Work Order). The 12-value enum is documented
+      verbatim in the OCR.
+    qep_status: "PARTIAL"
+    qep_table: "traffic_tickets"
+    qep_column: "ticket_type"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.ticket_type (text)"
+    qep_gap_notes: |
+      Stored as free text. No CHECK constraint, no enum. Re-rent, Customer
+      Transfer, Job Site Transfer, Trade In, Loaner are not represented
+      anywhere as canonical types.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      CREATE TYPE traffic_receipt_type AS ENUM (
+        'demo','loaner','rental','transfer','sale','purchase','service',
+        'trade_in','miscellaneous','rerent','customer_transfer','job_site_transfer'
+      );
+      ALTER TABLE traffic_tickets
+        ADD COLUMN receipt_type traffic_receipt_type;
+    ui_surface_hint: "Listing tab Type column + Type filter dropdown"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.subtype
+    intellidealer_label: "Subtype"
+    intellidealer_screen: "Traffic Management - Listing"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      User-defined subtype code listed beneath the Type column. Allows
+      dealers to break down e.g. "Demo" into "Customer Demo" vs "Trade
+      Show Demo" without changing the canonical type list.
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "subtype_code"
+    qep_gap_notes: |
+      No equivalent. The customizability that lets dealers report their
+      own way is absent.
+    severity: "should"
+    category: "reporting"
+    migration_hint: |
+      CREATE TABLE traffic_subtypes (
+        id uuid primary key default gen_random_uuid(),
+        workspace_id uuid not null,
+        receipt_type text not null,
+        code text not null,
+        description text,
+        unique (workspace_id, receipt_type, code)
+      );
+      ALTER TABLE traffic_tickets ADD COLUMN subtype_code text;
+    ui_surface_hint: "Listing tab subtype mini-row beneath Type"
+    dependencies: [traffic_ticket.type]
+
+  - id: traffic_ticket.status
+    intellidealer_label: "Status"
+    intellidealer_screen: "Traffic Management - Listing / Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "Pending"
+      - "In Transit"
+      - "Delivered"
+      - "Completed"
+      - "Cancelled"
+    intellidealer_purpose: |
+      Lifecycle status of the unit on the receipt. Captured on the Receipt
+      Details panel. The screenshots show "Pending" exclusively but the
+      Status drop-down on the listing search is multi-valued.
+    qep_status: "PARTIAL"
+    qep_table: "traffic_tickets"
+    qep_column: "status"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.status (text)"
+    qep_gap_notes: |
+      Built as free text. Not enum-constrained, no transition rules.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      CREATE TYPE traffic_ticket_status AS ENUM
+        ('pending','in_transit','delivered','completed','cancelled');
+      ALTER TABLE traffic_tickets ALTER COLUMN status TYPE traffic_ticket_status
+        USING status::traffic_ticket_status;
+    ui_surface_hint: "Listing Status column + filter"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.stock_number
+    intellidealer_label: "Stock Number"
+    intellidealer_screen: "Traffic Management - Listing / Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      The unit's stock number (the dealership's internal identifier — e.g.
+      Q001708, Q003048). Click-through opens Equipment Profile. Each row
+      shows machine hours below the stock number; the listing also expects
+      "Q-prefix" stock numbers from quoting.
+    qep_status: "BUILT"
+    qep_table: "traffic_tickets"
+    qep_column: "stock_number"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.stock_number"
+    qep_gap_notes: |
+      Built. Note QEP equipment is keyed by uuid; ensure the FK is
+      consistent with qrm_equipment.stock_number.
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Listing tab Stock Number column"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.machine_hours
+    intellidealer_label: "Machine Hours"
+    intellidealer_screen: "Traffic Management - Listing / Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "number"
+    intellidealer_purpose: |
+      The reading on the unit's hour meter at the time of the move.
+      Persisted on the receipt so that condition-on-receipt vs condition-
+      on-return is auditable. Critical for rental billing, demo wear
+      assessment, and warranty.
+    qep_status: "BUILT"
+    qep_table: "traffic_tickets"
+    qep_column: "hour_meter_reading"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.hour_meter_reading"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Listing tab + Receipt Details Hours field"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.unit_description
+    intellidealer_label: "Description / Unit Description"
+    intellidealer_screen: "Traffic Management - Listing / Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Snapshot text description of the unit at the time the ticket was
+      created (e.g., "66\" Root Grapple", "T-REX 300 WHEEL 3.0 MT"). Held
+      on the receipt independent of the equipment record so a rename of
+      the equipment does not rewrite history.
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "unit_description_snapshot"
+    qep_gap_notes: |
+      No snapshot column. delivery_address is captured but not the unit
+      description; if equipment is later edited, history changes silently.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE traffic_tickets
+        ADD COLUMN unit_description_snapshot text;
+    ui_surface_hint: "Listing tab Description column"
+    dependencies: [traffic_ticket.stock_number]
+
+  - id: traffic_ticket.make
+    intellidealer_label: "Make"
+    intellidealer_screen: "Traffic Management - Listing"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      The manufacturer of the unit (e.g., DE, BD, AV, YA). Two-character
+      OEM code in IntelliDealer convention.
+    qep_status: "PARTIAL"
+    qep_table: "traffic_tickets"
+    qep_column: "(via equipment join)"
+    qep_gap_notes: |
+      Available only by joining qrm_equipment. No snapshot field on the
+      ticket itself, so if an equipment record is later edited the
+      historical receipt changes.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN make_snapshot text;
+    ui_surface_hint: "Listing tab Make/Model column"
+    dependencies: [traffic_ticket.stock_number]
+
+  - id: traffic_ticket.model
+    intellidealer_label: "Model"
+    intellidealer_screen: "Traffic Management - Listing"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      The model number of the unit (e.g., 106080, DL250-7, T-REX 300 MT).
+    qep_status: "PARTIAL"
+    qep_table: "traffic_tickets"
+    qep_column: "(via equipment join)"
+    qep_gap_notes: |
+      Same as make — no snapshot. See traffic_ticket.make.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN model_snapshot text;
+    ui_surface_hint: "Listing tab Make/Model column"
+    dependencies: [traffic_ticket.stock_number]
+
+  - id: traffic_ticket.serial_number
+    intellidealer_label: "Serial Number"
+    intellidealer_screen: "Traffic Management - Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      The unit's serial number snapshot (e.g., 112951). Required for legal
+      handover documentation when the unit crosses a state line.
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "serial_number_snapshot"
+    qep_gap_notes: |
+      No snapshot. Serial is only present on qrm_equipment.
+    severity: "must"
+    category: "regulatory"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN serial_number_snapshot text;
+    ui_surface_hint: "Receipt Details body"
+    dependencies: [traffic_ticket.stock_number]
+
+  - id: traffic_ticket.group
+    intellidealer_label: "Group"
+    intellidealer_screen: "Traffic Management - Listing / Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Equipment group code (e.g., ROOT, ATTACHMENTS, COMPACT CONSTRUCTION).
+      Used for grouped reporting on the Weekly/Monthly views.
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "equipment_group_code"
+    qep_gap_notes: |
+      No equivalent. Reporting groupings cannot be reproduced.
+    severity: "should"
+    category: "reporting"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN equipment_group_code text;
+    ui_surface_hint: "Receipt Details Group field"
+    dependencies: [traffic_ticket.stock_number]
+
+  - id: traffic_ticket.from_city
+    intellidealer_label: "From / City (Origin)"
+    intellidealer_screen: "Traffic Management - Listing / Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      The origin location shipping the unit (e.g., LAKE CITY). For yard-to-
+      yard moves this is one of the dealer branches; for inbound from an
+      OEM it is the vendor's plant city.
+    qep_status: "PARTIAL"
+    qep_table: "traffic_tickets"
+    qep_column: "from_location"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.from_location"
+    qep_gap_notes: |
+      Built as `from_location` text. There is no link to a branch row, no
+      city/state break-out, and no support for vendor-origin. Click-
+      through to a branch profile is not implementable.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN from_branch_id uuid references branches(id);
+      ALTER TABLE traffic_tickets ADD COLUMN from_city text;
+      ALTER TABLE traffic_tickets ADD COLUMN from_state text;
+    ui_surface_hint: "Listing From/City column"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.to_city
+    intellidealer_label: "To / City (Destination)"
+    intellidealer_screen: "Traffic Management - Listing / Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      The destination location receiving the unit. For yard-to-yard moves
+      one of the dealer branches; for sales / customer transfer it is the
+      end-customer site (with full address on the Shipping Information
+      tab). Click-through opens Customer Profile.
+    qep_status: "PARTIAL"
+    qep_table: "traffic_tickets"
+    qep_column: "to_location"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.to_location"
+      - "database.types.ts traffic_tickets.to_contact_name"
+    qep_gap_notes: |
+      Same as from_location — text only, no branch FK, no customer FK.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN to_branch_id uuid references branches(id);
+      ALTER TABLE traffic_tickets ADD COLUMN to_customer_id uuid references qrm_companies(id);
+      ALTER TABLE traffic_tickets ADD COLUMN to_city text;
+      ALTER TABLE traffic_tickets ADD COLUMN to_state text;
+    ui_surface_hint: "Listing To/City column"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.from_address
+    intellidealer_label: "From Address (full street)"
+    intellidealer_screen: "Traffic Management - Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "address"
+    intellidealer_purpose: |
+      Full street address of the origin. Required for routing, fuel
+      reimbursement, and proof-of-pickup documentation.
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "from_address"
+    qep_gap_notes: |
+      Only delivery_address (destination) is present.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN from_address text;
+    ui_surface_hint: "Receipt Details From block"
+    dependencies: [traffic_ticket.from_city]
+
+  - id: traffic_ticket.to_address
+    intellidealer_label: "To Address (full street)"
+    intellidealer_screen: "Traffic Management - Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "address"
+    intellidealer_purpose: |
+      Full destination street address. The Receipt Details screenshot
+      shows: "241 SW GARDNER TERRACE / LAKE CITY FL 32024".
+    qep_status: "BUILT"
+    qep_table: "traffic_tickets"
+    qep_column: "delivery_address"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.delivery_address"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Receipt Details To block"
+    dependencies: [traffic_ticket.to_city]
+
+  - id: traffic_ticket.contact_name
+    intellidealer_label: "Contact"
+    intellidealer_screen: "Traffic Management - Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Site contact name for the receiving party (the person the driver
+      should call on arrival).
+    qep_status: "BUILT"
+    qep_table: "traffic_tickets"
+    qep_column: "to_contact_name"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.to_contact_name"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Receipt Details Contact field"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.phone_number
+    intellidealer_label: "Phone Number"
+    intellidealer_screen: "Traffic Management - Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "phone"
+    intellidealer_purpose: |
+      Site contact phone for the driver to call on arrival (e.g.,
+      3863655951).
+    qep_status: "BUILT"
+    qep_table: "traffic_tickets"
+    qep_column: "to_contact_phone"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.to_contact_phone"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Receipt Details Phone field"
+    dependencies: [traffic_ticket.contact_name]
+
+  - id: traffic_ticket.return_agreement
+    intellidealer_label: "Return Agreement"
+    intellidealer_screen: "Traffic Management - Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Reference number / contract id for the return agreement (when a demo
+      or loaner is going out, the unit must come back; this is the link to
+      the agreement governing that return).
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "return_agreement_ref"
+    qep_gap_notes: |
+      No equivalent. Without this, you can't enforce "demo unit must come
+      back by date X under terms Y" — a real audit gap when a unit goes
+      missing.
+    severity: "should"
+    category: "workflow"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN return_agreement_ref text;
+      ALTER TABLE traffic_tickets ADD COLUMN return_due_date date;
+    ui_surface_hint: "Receipt Details Return Agreement field"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.department
+    intellidealer_label: "Department"
+    intellidealer_screen: "Traffic Management - Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "Equipment"
+      - "Service"
+      - "Rental"
+      - "Parts"
+    intellidealer_purpose: |
+      The department that owns the ticket. Drives access (Service techs see
+      service tickets only) and report routing.
+    qep_status: "BUILT"
+    qep_table: "traffic_tickets"
+    qep_column: "department"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.department (text)"
+    qep_gap_notes: |
+      Built as text. Consider tightening to enum.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ALTER COLUMN department SET NOT NULL;
+      ALTER TABLE traffic_tickets ADD CONSTRAINT traffic_tickets_department_check
+        CHECK (department IN ('equipment','service','rental','parts'));
+    ui_surface_hint: "Receipt Details Department field"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.salesperson
+    intellidealer_label: "Salesperson"
+    intellidealer_screen: "Traffic Management - Receipt Details / Listing"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Weekly__3.15.27.png
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      The owning salesperson on the receipt (e.g., RM3 — three-character
+      employee code). Drives commission accrual on demos and sales-related
+      moves.
+    qep_status: "PARTIAL"
+    qep_table: "traffic_tickets"
+    qep_column: "requested_by"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.requested_by"
+    qep_gap_notes: |
+      `requested_by` is a generic uuid; there is no dedicated salesperson
+      pointer. If the same record needs both "logged it in" and "owns
+      commission" we lose that distinction.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN salesperson_id uuid references employees(id);
+    ui_surface_hint: "Receipt Details Salesperson field"
+    dependencies: [traffic_ticket.receipt_number, employee.employee_number]
+
+  - id: traffic_ticket.printed_count
+    intellidealer_label: "Printed (count)"
+    intellidealer_screen: "Traffic Management - Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "number"
+    intellidealer_purpose: |
+      How many times the receipt has been printed. Used as a tamper-
+      detection signal (a receipt printed five times after the move is
+      complete is suspicious).
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "printed_count"
+    qep_gap_notes: |
+      No equivalent. There's no doc-printed audit at all.
+    severity: "could"
+    category: "reporting"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN printed_count integer not null default 0;
+      ALTER TABLE traffic_tickets ADD COLUMN last_printed_at timestamptz;
+    ui_surface_hint: "Receipt Details Printed counter"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.shipping_pickup_or_delivery
+    intellidealer_label: "Pickup / Delivery (radio)"
+    intellidealer_screen: "Traffic Management - Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "Pickup"
+      - "Delivery"
+    intellidealer_purpose: |
+      Whether the move is a Pickup (we go get it) or a Delivery (we drop
+      it off). Two-state radio, drives dispatch lane and trucker quote.
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "move_mode"
+    qep_gap_notes: |
+      No equivalent. Conflated with direction (in/out).
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN move_mode text
+        CHECK (move_mode IN ('pickup','delivery'));
+    ui_surface_hint: "Receipt Details Pickup/Delivery radio"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.shipping_date
+    intellidealer_label: "Shipping Date"
+    intellidealer_screen: "Traffic Management - Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "date"
+    intellidealer_purpose: |
+      Promised pickup / delivery date.
+    qep_status: "BUILT"
+    qep_table: "traffic_tickets"
+    qep_column: "shipping_date"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.shipping_date"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Receipt Details Shipping Date"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.shipping_time
+    intellidealer_label: "Time (Shipping)"
+    intellidealer_screen: "Traffic Management - Receipt Details / Listing"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Time-of-day for the move (e.g., 09:00a, 01:00p, 02:00p, 08:00a).
+    qep_status: "PARTIAL"
+    qep_table: "traffic_tickets"
+    qep_column: "promised_delivery_at"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.promised_delivery_at"
+    qep_gap_notes: |
+      promised_delivery_at is a single timestamp. ID separates date and
+      time so users can sort/filter on "morning vs afternoon" alone.
+      Acceptable as PARTIAL; UI must derive time-of-day.
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Receipt Details Time field"
+    dependencies: [traffic_ticket.shipping_date]
+
+  - id: traffic_ticket.urgency
+    intellidealer_label: "Urgency / Priority"
+    intellidealer_screen: "Traffic Management - Receipt Details / Weekly+Monthly"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Weekly__3.15.27.png
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "Low"
+      - "Medium"
+      - "High"
+    intellidealer_purpose: |
+      Three-band urgency / priority used to color-code Weekly and Monthly
+      calendar views (yellow / orange / red). Drives dispatch ordering.
+    qep_status: "BUILT"
+    qep_table: "traffic_tickets"
+    qep_column: "urgency"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.urgency"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Receipt Details Urgency dropdown + calendar color"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.priority_code
+    intellidealer_label: "Priority (code)"
+    intellidealer_screen: "Traffic Management - Receipt Details / Listing"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Two-character shipment priority code (e.g., 01) shown beneath the
+      Vendor/Trucker column. Independent of Urgency; encodes the trucker's
+      route ordering.
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "priority_code"
+    qep_gap_notes: |
+      No equivalent. Routing optimizer cannot ingest dealer-side priority.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN priority_code text;
+    ui_surface_hint: "Receipt Details Priority field"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.return_date
+    intellidealer_label: "Return Date"
+    intellidealer_screen: "Traffic Management - Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "date"
+    intellidealer_purpose: |
+      Expected return date for demos / loaners. Anchors the inbound leg of
+      a round-trip move.
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "return_due_date"
+    qep_gap_notes: |
+      No equivalent. Demo/loaner aging cannot be computed.
+    severity: "must"
+    category: "workflow"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN return_due_date date;
+    ui_surface_hint: "Receipt Details Return Date"
+    dependencies: [traffic_ticket.return_agreement]
+
+  - id: traffic_ticket.units_count
+    intellidealer_label: "Units"
+    intellidealer_screen: "Traffic Management - Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "number"
+    intellidealer_purpose: |
+      Number of units on the receipt (often 0 because the parent unit is
+      the stock number; non-zero when bundled with attachments).
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "units_count"
+    qep_gap_notes: |
+      No equivalent.
+    severity: "could"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN units_count integer default 1;
+    ui_surface_hint: "Receipt Details Units field"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.billing_comments
+    intellidealer_label: "Billing Comments"
+    intellidealer_screen: "Traffic Management - Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "multiline"
+    intellidealer_purpose: |
+      Free-form billing comments (e.g., "OUTBOUND FIX") — used by AR for
+      coding the trucking charge.
+    qep_status: "BUILT"
+    qep_table: "traffic_tickets"
+    qep_column: "billing_comments"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.billing_comments"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "financial"
+    migration_hint: ""
+    ui_surface_hint: "Receipt Details Billing Comments"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.created_by_user
+    intellidealer_label: "Created By"
+    intellidealer_screen: "Traffic Management - Receipt Details / Sub-tabs"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Shipping__3.18.45.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Parts__3.18.48.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Attachments__3.18.51.png
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      The user who created the receipt (e.g., "Rylee McKenzie - LAKE CITY")
+      shown on every sub-tab. Audit trail for who logged the move.
+    qep_status: "PARTIAL"
+    qep_table: "traffic_tickets"
+    qep_column: "requested_by"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.requested_by"
+    qep_gap_notes: |
+      Stored but never explicitly stamped as the creator; conflates with
+      the salesperson concept.
+    severity: "must"
+    category: "regulatory"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN created_by_user_id uuid references profiles(id);
+    ui_surface_hint: "Receipt Details header 'Created By'"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.trucker_vendor
+    intellidealer_label: "Trucker / Vendor"
+    intellidealer_screen: "Traffic Management - Listing / Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      The vendor / trucker name shipping the unit (e.g., QUALITY EQUIPMENT
+      & PARTS, QEP001). Carries through to AR coding for the freight bill.
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "trucker_vendor_id"
+    qep_gap_notes: |
+      No equivalent. The screenshots clearly show "QEP001" trucker code on
+      Receipt Details. Without it freight cost cannot be reconciled.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN trucker_vendor_id uuid references vendor_profiles(id);
+      ALTER TABLE traffic_tickets ADD COLUMN trucker_code text;
+    ui_surface_hint: "Listing Vendor/Trucker column + Receipt Details"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.driver
+    intellidealer_label: "Driver"
+    intellidealer_screen: "Traffic Management - Listing / Receipt Details"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Driver code (e.g., JD) when an in-house driver is moving the unit.
+      Either Trucker (vendor) or Driver (employee) is set, not both.
+    qep_status: "BUILT"
+    qep_table: "traffic_tickets"
+    qep_column: "driver_id"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.driver_id"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Receipt Details Driver field"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.coordinator
+    intellidealer_label: "Coordinator (logistics)"
+    intellidealer_screen: "Traffic Management - Receipt Details (inferred)"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      The dispatch coordinator who owns the move from the dealer side.
+    qep_status: "BUILT"
+    qep_table: "traffic_tickets"
+    qep_column: "coordinator_id"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.coordinator_id"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Receipt Details Coordinator field"
+    dependencies: [traffic_ticket.receipt_number]
+
+  # ---- Receipt sub-tab: Shipping Information ---------------------------------
+  - id: traffic_ticket.ship_job_site_name
+    intellidealer_label: "Job Site (Name)"
+    intellidealer_screen: "Traffic Management - Shipping Information"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Shipping__3.18.45.png
+      - docs/IntelliDealer/_OCR_PNG/Cross-Cutting_Traffic-Management-Shipping__3.18.45.txt
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      The job-site name when the unit is being delivered to a customer's
+      project site (vs the customer's main yard).
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "ship_job_site_name"
+    qep_gap_notes: |
+      Tickets are addressed to a single delivery_address; no separate
+      concept of "job site within customer".
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN ship_job_site_id uuid;
+      ALTER TABLE traffic_tickets ADD COLUMN ship_job_site_name text;
+    ui_surface_hint: "Shipping Information sub-tab Job Site field"
+    dependencies: [traffic_ticket.to_address]
+
+  - id: traffic_ticket.ship_map_book_page_grid
+    intellidealer_label: "Map Book / Page / Grid Number"
+    intellidealer_screen: "Traffic Management - Shipping Information"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Shipping__3.18.45.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Paper-map coordinate fields (Map Book, Page, Grid Number) — legacy
+      fields still kept on Shipping Information.
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "ship_map_book / ship_map_page / ship_map_grid"
+    qep_gap_notes: |
+      Could be replaced by lat/lng (which QEP has). Documented for
+      completeness.
+    severity: "could"
+    category: "nice_to_have"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN ship_map_book text;
+      ALTER TABLE traffic_tickets ADD COLUMN ship_map_page text;
+      ALTER TABLE traffic_tickets ADD COLUMN ship_map_grid text;
+    ui_surface_hint: "Shipping Information sub-tab"
+    dependencies: [traffic_ticket.to_address]
+
+  - id: traffic_ticket.ship_zip_postal
+    intellidealer_label: "Zip / Postal Code"
+    intellidealer_screen: "Traffic Management - Shipping Information"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Shipping__3.18.45.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Postal code of the destination (separate from the inline city
+      because trucker rate-tables key on zip).
+    qep_status: "PARTIAL"
+    qep_table: "traffic_tickets"
+    qep_column: "(in delivery_address text)"
+    qep_gap_notes: |
+      Only carried as part of free-text delivery_address; can't query
+      "all moves into FL 32024".
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN ship_postal_code text;
+    ui_surface_hint: "Shipping Information sub-tab Zip"
+    dependencies: [traffic_ticket.to_address]
+
+  - id: traffic_ticket.ship_country_state
+    intellidealer_label: "Country / Prov / State"
+    intellidealer_screen: "Traffic Management - Shipping Information"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Shipping__3.18.45.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Country / Province / State code for cross-border moves (US/CAN
+      especially).
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "ship_country / ship_state"
+    qep_gap_notes: |
+      Not broken out separately; matters for cross-border haul-permits.
+    severity: "should"
+    category: "regulatory"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN ship_country text;
+      ALTER TABLE traffic_tickets ADD COLUMN ship_state text;
+    ui_surface_hint: "Shipping Information sub-tab"
+    dependencies: [traffic_ticket.to_address]
+
+  - id: traffic_ticket.ship_county
+    intellidealer_label: "County"
+    intellidealer_screen: "Traffic Management - Shipping Information / Weekly / Monthly"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Shipping__3.18.45.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Weekly__3.15.27.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Destination county. Carried so dispatch can route by county sales-
+      tax jurisdiction. Filter on Weekly/Monthly views.
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "ship_county"
+    qep_gap_notes: |
+      No equivalent. Tax routing requires this in many states.
+    severity: "should"
+    category: "regulatory"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN ship_county text;
+    ui_surface_hint: "Shipping Information sub-tab + Weekly/Monthly filter"
+    dependencies: [traffic_ticket.ship_country_state]
+
+  - id: traffic_ticket.estimated_shipping_charge
+    intellidealer_label: "Estimated Shipping Charge"
+    intellidealer_screen: "Traffic Management - Shipping Information"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Shipping__3.18.45.png
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Pre-move estimate of the shipping cost. Compared to the actual
+      trucker invoice for variance reporting.
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "estimated_shipping_charge_cents"
+    qep_gap_notes: |
+      No equivalent. Freight-variance reporting cannot be produced.
+    severity: "should"
+    category: "financial"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN estimated_shipping_charge_cents integer;
+      ALTER TABLE traffic_tickets ADD COLUMN actual_shipping_charge_cents integer;
+    ui_surface_hint: "Shipping Information sub-tab Estimated Shipping Charge"
+    dependencies: [traffic_ticket.trucker_vendor]
+
+  - id: traffic_ticket.ship_instructions
+    intellidealer_label: "Instructions"
+    intellidealer_screen: "Traffic Management - Shipping Information"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Shipping__3.18.45.png
+    intellidealer_field_type: "multiline"
+    intellidealer_purpose: |
+      Free-text instructions for the driver (gate codes, contact rules,
+      lift requirements).
+    qep_status: "MISSING"
+    qep_table: "traffic_tickets"
+    qep_column: "ship_instructions"
+    qep_gap_notes: |
+      No equivalent. Driver-facing notes are absent.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN ship_instructions text;
+    ui_surface_hint: "Shipping Information sub-tab Instructions textarea"
+    dependencies: [traffic_ticket.receipt_number]
+
+  # ---- Receipt sub-tab: Stock Add Ons (parts going with the unit) ------------
+  - id: traffic_ticket.add_ons_lines
+    intellidealer_label: "Stock Add Ons (lines)"
+    intellidealer_screen: "Traffic Management - Stock Add Ons"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Parts__3.18.48.png
+      - docs/IntelliDealer/_OCR_PNG/Cross-Cutting_Traffic-Management-Parts__3.18.48.txt
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Up-to-10 child line items each with Stock Number, Description, Hours,
+      Units. These are additional pieces shipped with the parent unit
+      (forks, blades, manuals, demo packs).
+    qep_status: "MISSING"
+    qep_table: "traffic_ticket_lines"
+    qep_column: "(new table)"
+    qep_gap_notes: |
+      Existing traffic_tickets is single-unit; there is no child-line
+      table for add-ons. Critical because an attachment going out with a
+      compactor must be on the receipt to come back.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      CREATE TABLE traffic_ticket_lines (
+        id uuid primary key default gen_random_uuid(),
+        workspace_id uuid not null,
+        traffic_ticket_id uuid not null references traffic_tickets(id) on delete cascade,
+        line_no int not null,
+        line_kind text not null check (line_kind in ('add_on','attachment','part')),
+        stock_number text,
+        part_number text,
+        description text,
+        hours numeric,
+        units integer,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (traffic_ticket_id, line_no)
+      );
+    ui_surface_hint: "Stock Add Ons sub-tab grid"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.attachments_lines
+    intellidealer_label: "Attachments (lines)"
+    intellidealer_screen: "Traffic Management - Attachments"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Attachments__3.18.51.png
+      - docs/IntelliDealer/_OCR_PNG/Cross-Cutting_Traffic-Management-Attachments__3.18.51.txt
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Up-to-10 attachment line items (Stock Number + Description) sent
+      with the parent unit. Distinct from Add Ons in that these are
+      mounted attachments rather than loose items.
+    qep_status: "MISSING"
+    qep_table: "traffic_ticket_lines"
+    qep_column: "(new table; line_kind='attachment')"
+    qep_gap_notes: |
+      Same gap as Stock Add Ons.
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Attachments sub-tab grid"
+    dependencies: [traffic_ticket.add_ons_lines]
+
+  - id: traffic_ticket.comments_tab
+    intellidealer_label: "Comments (sub-tab)"
+    intellidealer_screen: "Traffic Management - Comments"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Parts__3.18.48.png
+    intellidealer_field_type: "multiline"
+    intellidealer_purpose: |
+      Free-form comments about the move (visible to all roles).
+    qep_status: "PARTIAL"
+    qep_table: "traffic_tickets"
+    qep_column: "billing_comments / problems_reported"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.billing_comments"
+      - "database.types.ts traffic_tickets.problems_reported"
+    qep_gap_notes: |
+      Conflated with billing comments. A general-purpose comments
+      thread per ticket is missing.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      CREATE TABLE traffic_ticket_comments (
+        id uuid primary key default gen_random_uuid(),
+        workspace_id uuid not null,
+        traffic_ticket_id uuid not null references traffic_tickets(id) on delete cascade,
+        author_id uuid references profiles(id),
+        body text not null,
+        created_at timestamptz not null default now()
+      );
+    ui_surface_hint: "Comments sub-tab"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.multimedia_tab
+    intellidealer_label: "Multimedia (sub-tab)"
+    intellidealer_screen: "Traffic Management - Multimedia"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Parts__3.18.48.png
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Multimedia attachments (photos, PDFs, signed delivery receipts).
+    qep_status: "PARTIAL"
+    qep_table: "traffic_tickets"
+    qep_column: "delivery_photos / delivery_signature_url"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.delivery_photos (Json)"
+      - "database.types.ts traffic_tickets.delivery_signature_url"
+    qep_gap_notes: |
+      Built for delivery-photos and signature only. No general media
+      bucket per ticket (e.g., damage photos at pickup).
+    severity: "should"
+    category: "regulatory"
+    migration_hint: |
+      ALTER TABLE traffic_tickets ADD COLUMN multimedia_assets jsonb default '[]';
+    ui_surface_hint: "Multimedia sub-tab gallery"
+    dependencies: [traffic_ticket.receipt_number]
+
+  # ---- Listing-tab search filters --------------------------------------------
+  - id: traffic_ticket.include_history
+    intellidealer_label: "Include History"
+    intellidealer_screen: "Traffic Management - Listing (search)"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.14.28.png
+    intellidealer_field_type: "bool"
+    intellidealer_purpose: |
+      Search toggle that includes historical (completed / cancelled)
+      traffic movements in results. Confirms the system soft-archives
+      tickets rather than deleting them.
+    qep_status: "PARTIAL"
+    qep_table: "traffic_tickets"
+    qep_column: "completed_at"
+    qep_evidence:
+      - "database.types.ts traffic_tickets.completed_at"
+    qep_gap_notes: |
+      QEP can derive history from completed_at, but the listing UI does
+      not yet expose a single "Include History" toggle.
+    severity: "should"
+    category: "reporting"
+    migration_hint: ""
+    ui_surface_hint: "Listing tab search bar 'Include History' checkbox"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.search_date_range
+    intellidealer_label: "Select Date Range (From / To)"
+    intellidealer_screen: "Traffic Management - Listing (search)"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+    intellidealer_field_type: "date"
+    intellidealer_purpose: |
+      Search-narrowing date range (From / To) on the listing.
+    qep_status: "BUILT"
+    qep_table: "traffic_tickets"
+    qep_column: "shipping_date / received_at"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "reporting"
+    migration_hint: ""
+    ui_surface_hint: "Listing tab search Date Range inputs"
+    dependencies: []
+
+  # ---- Weekly / Monthly view fields ------------------------------------------
+  - id: traffic_ticket.view_display_options
+    intellidealer_label: "Display options (City/Time/Type/Salesperson/Make+Model/Stock/Group/Job Site/Customer Name/Machine Serial/Unit Description)"
+    intellidealer_screen: "Traffic Management - Weekly / Monthly"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Weekly__3.15.27.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Monthly__3.15.32.png
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Eleven-checkbox display-toggle set that controls which fields show
+      in each calendar tile on Weekly and Monthly views (City, Time, Type,
+      Salesperson, Make/Model, Stock Number, Group, Job Site Description,
+      Customer Name, Machine Serial Number, Unit Description). User
+      preference; persisted client-side.
+    qep_status: "MISSING"
+    qep_table: "user_preferences"
+    qep_column: "traffic_calendar_display_settings (jsonb)"
+    qep_gap_notes: |
+      Replaceable in QEP via per-user preferences but not currently built.
+    severity: "could"
+    category: "nice_to_have"
+    migration_hint: |
+      -- store in profiles.metadata or a user_preferences table
+    ui_surface_hint: "Weekly / Monthly view 'Display' toggles"
+    dependencies: []
+
+  - id: traffic_ticket.view_filter_department
+    intellidealer_label: "Select Department"
+    intellidealer_screen: "Traffic Management - Weekly / Monthly"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Weekly__3.15.27.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Monthly__3.15.32.png
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Calendar-view filter by department.
+    qep_status: "BUILT"
+    qep_table: "traffic_tickets"
+    qep_column: "department"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "reporting"
+    migration_hint: ""
+    ui_surface_hint: "Weekly/Monthly Select Department dropdown"
+    dependencies: [traffic_ticket.department]
+
+  - id: traffic_ticket.view_filter_location
+    intellidealer_label: "Select Location"
+    intellidealer_screen: "Traffic Management - Weekly / Monthly / Listing"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Weekly__3.15.27.png
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Branch-location filter (default "01" - LAKE CITY in screenshots).
+    qep_status: "PARTIAL"
+    qep_table: "traffic_tickets"
+    qep_column: "(via from_branch_id / to_branch_id once added)"
+    qep_gap_notes: |
+      Becomes BUILT once the from_branch_id / to_branch_id fields are
+      added per traffic_ticket.from_city / .to_city above.
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Weekly/Monthly Select Location dropdown"
+    dependencies: [traffic_ticket.from_city, traffic_ticket.to_city]
+
+  - id: traffic_ticket.weekly_memo
+    intellidealer_label: "Memo (calendar memo)"
+    intellidealer_screen: "Traffic Management - Weekly / Monthly"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Weekly__3.15.27.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Monthly__3.15.32.png
+    intellidealer_field_type: "multiline"
+    intellidealer_purpose: |
+      Free-text memo overlaid on a date in the calendar (e.g., "NEED
+      PROPANE TANK CAGE PICKED UP AT 4:30PM - SANDERSON, FL"). Edit /
+      Remove inline. A planner-level note independent of any ticket.
+    qep_status: "MISSING"
+    qep_table: "traffic_calendar_memos"
+    qep_column: "(new table)"
+    qep_gap_notes: |
+      No equivalent. Calendar-level memos cannot be authored.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      CREATE TABLE traffic_calendar_memos (
+        id uuid primary key default gen_random_uuid(),
+        workspace_id uuid not null,
+        memo_date date not null,
+        body text not null,
+        urgency text check (urgency in ('low','medium','high')),
+        created_by uuid references profiles(id),
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        deleted_at timestamptz
+      );
+    ui_surface_hint: "Weekly/Monthly view inline memo editor"
+    dependencies: []
+
+  - id: traffic_ticket.mass_change_print
+    intellidealer_label: "Mass Change / Print"
+    intellidealer_screen: "Traffic Management - Listing (action)"
+    intellidealer_data_source: "CGIDR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+    intellidealer_field_type: "computed"
+    intellidealer_purpose: |
+      Bulk action that lets the user change multiple tickets at once and
+      print associated delivery receipts.
+    qep_status: "MISSING"
+    qep_table: "(workflow)"
+    qep_column: "(action)"
+    qep_gap_notes: |
+      No bulk-edit on traffic tickets in QEP today.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      Implemented as a UI action; no schema change required beyond audit
+      events recording the bulk change.
+    ui_surface_hint: "Listing tab footer 'Mass Change/Print' button"
+    dependencies: [traffic_ticket.receipt_number]
+
+  - id: traffic_ticket.receipts_completed_this_month
+    intellidealer_label: "Receipts Completed This Month (CMPREP)"
+    intellidealer_screen: "Traffic Management - Listing (report)"
+    intellidealer_data_source: "CMPREP"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+    intellidealer_field_type: "computed"
+    intellidealer_purpose: |
+      Generates the "Deliveries Completed This Month" report.
+    qep_status: "MISSING"
+    qep_table: "(report)"
+    qep_column: "(action)"
+    qep_gap_notes: |
+      Equivalent dashboard not built.
+    severity: "could"
+    category: "reporting"
+    migration_hint: |
+      View / saved-query layer.
+    ui_surface_hint: "Listing tab footer link"
+    dependencies: [traffic_ticket.receipt_number]
+
+  # ============================================================================
+  # SURFACE 3 — BRANCH / LOCATION MASTER (CTLLOC)
+  # The location master that every other phase joins to. Profit-center digit
+  # comes from the Employee Profile profit-center enum.
+  # ============================================================================
+  - id: branch.branch_code
+    intellidealer_label: "Branch Code (Location Code, e.g., 01)"
+    intellidealer_screen: "Header chrome ('01/01/01 - LAKE CITY')"
+    intellidealer_data_source: "CTLLOC"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.14.28.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Weekly__3.15.27.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Two-or-three character branch / location code shown everywhere in
+      the global header chrome. Anchors every transaction (ticket, work
+      order, invoice, employee profit-center). The screenshots show
+      "01/01/01 - LAKE CITY".
+    qep_status: "PARTIAL"
+    qep_table: "branches"
+    qep_column: "short_code"
+    qep_evidence:
+      - "database.types.ts branches.short_code"
+    qep_gap_notes: |
+      `short_code` is nullable and not unique. IntelliDealer's branch code
+      is a stable, unique key used in EVERY downstream foreign key. Should
+      be NOT NULL + UNIQUE per workspace.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE branches ALTER COLUMN short_code SET NOT NULL;
+      CREATE UNIQUE INDEX branches_short_code_unique
+        ON branches (workspace_id, short_code);
+    ui_surface_hint: "Header chrome + branch picker"
+    dependencies: []
+
+  - id: branch.display_name
+    intellidealer_label: "Branch Name"
+    intellidealer_screen: "Header chrome / Listing"
+    intellidealer_data_source: "CTLLOC"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.18.30.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Friendly branch name (e.g., "LAKE CITY", "NEWBERRY", "EXPO/EVENT
+      EXPENSE ACCOUNT"). Note IntelliDealer treats internal expense
+      accounts as pseudo-branches.
+    qep_status: "BUILT"
+    qep_table: "branches"
+    qep_column: "display_name"
+    qep_evidence:
+      - "database.types.ts branches.display_name"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Header chrome / Branch picker"
+    dependencies: []
+
+  - id: branch.address
+    intellidealer_label: "Branch Address (full)"
+    intellidealer_screen: "Branch profile / Header"
+    intellidealer_data_source: "CTLLOC"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+    intellidealer_field_type: "address"
+    intellidealer_purpose: |
+      Full mailing/physical address of the branch. Used as the default
+      origin on outbound tickets and as the print-header on documents.
+    qep_status: "BUILT"
+    qep_table: "branches"
+    qep_column: "address_line1 / address_line2 / city / state_province / postal_code / country"
+    qep_evidence:
+      - "database.types.ts branches.address_line1"
+      - "database.types.ts branches.city"
+      - "database.types.ts branches.state_province"
+      - "database.types.ts branches.postal_code"
+      - "database.types.ts branches.country"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Branch settings"
+    dependencies: [branch.branch_code]
+
+  - id: branch.timezone
+    intellidealer_label: "Time Zone"
+    intellidealer_screen: "Branch profile (inferred)"
+    intellidealer_data_source: "CTLLOC"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Branch time zone — anchors timestamps for service appointments,
+      delivery windows, and trucker dispatch.
+    qep_status: "BUILT"
+    qep_table: "branches"
+    qep_column: "timezone"
+    qep_evidence:
+      - "database.types.ts branches.timezone"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Branch settings"
+    dependencies: [branch.branch_code]
+
+  - id: branch.profit_center_code
+    intellidealer_label: "GL Profit Center (per branch override)"
+    intellidealer_screen: "Branch profile (inferred)"
+    intellidealer_data_source: "CTLLOC"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "0 - Balance Sheet"
+      - "1 - Administration"
+      - "2 - Equipment Sales"
+      - "3 - Parts"
+      - "4 - Service"
+      - "5 - Rental"
+      - "6 - User defined"
+      - "7 - User defined"
+      - "8 - User defined"
+      - "9 - User defined"
+    intellidealer_purpose: |
+      The default GL profit center digit applied to transactions at this
+      branch when not specified at the employee level. Foundational for
+      branch P&L.
+    qep_status: "MISSING"
+    qep_table: "branches"
+    qep_column: "default_profit_center_code"
+    qep_gap_notes: |
+      Branches table has no profit_center column. Without it, branch P&L
+      cannot be derived from transactions.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      ALTER TABLE branches ADD COLUMN default_profit_center_code text
+        CHECK (default_profit_center_code ~ '^[0-9]$');
+    ui_surface_hint: "Branch settings > GL & Accounting"
+    dependencies: [branch.branch_code, employee.profit_center]
+
+  - id: branch.default_warehouse
+    intellidealer_label: "Default Warehouse"
+    intellidealer_screen: "Branch profile (inferred)"
+    intellidealer_data_source: "CTLLOC"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      The default warehouse / parts location for the branch. Drives
+      parts-counter pick lists and inbound parts-receipt routing.
+    qep_status: "MISSING"
+    qep_table: "branches"
+    qep_column: "default_warehouse_code"
+    qep_gap_notes: |
+      Not represented. parts_inventory carries branch_id but no concept of
+      warehouse-within-branch.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE branches ADD COLUMN default_warehouse_code text;
+    ui_surface_hint: "Branch settings > Parts"
+    dependencies: [branch.branch_code]
+
+  - id: branch.tax_id
+    intellidealer_label: "Branch Tax ID / EIN"
+    intellidealer_screen: "Branch profile (inferred)"
+    intellidealer_data_source: "CTLLOC"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Federal tax id / EIN used for the branch on 1099s and sales-tax
+      returns where the branch is a separate legal entity.
+    qep_status: "BUILT"
+    qep_table: "branches"
+    qep_column: "tax_id"
+    qep_evidence:
+      - "database.types.ts branches.tax_id"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "regulatory"
+    migration_hint: ""
+    ui_surface_hint: "Branch settings > GL & Accounting"
+    dependencies: [branch.branch_code]
+
+  - id: branch.default_tax_rate
+    intellidealer_label: "Default Tax Rate"
+    intellidealer_screen: "Branch profile (inferred)"
+    intellidealer_data_source: "CTLLOC"
+    intellidealer_field_type: "percent"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+    intellidealer_purpose: |
+      Default sales-tax rate at the branch.
+    qep_status: "BUILT"
+    qep_table: "branches"
+    qep_column: "default_tax_rate"
+    qep_evidence:
+      - "database.types.ts branches.default_tax_rate"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "regulatory"
+    migration_hint: ""
+    ui_surface_hint: "Branch settings > GL & Accounting"
+    dependencies: [branch.branch_code]
+
+  - id: branch.contact_block
+    intellidealer_label: "Contact Block (phone / email per channel)"
+    intellidealer_screen: "Branch profile (inferred)"
+    intellidealer_data_source: "CTLLOC"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Channel-segmented contact info (main / sales / service / parts /
+      fax). IntelliDealer surfaces single phone+address; QEP has richer.
+    qep_status: "BUILT"
+    qep_table: "branches"
+    qep_column: "phone_main / phone_sales / phone_service / phone_parts / fax / email_main / email_sales / email_service / email_parts"
+    qep_evidence:
+      - "database.types.ts branches.phone_main"
+      - "database.types.ts branches.email_service"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Branch settings > Contact Info"
+    dependencies: [branch.branch_code]
+
+  - id: branch.role_managers
+    intellidealer_label: "Branch Managers (GM / Sales / Service / Parts)"
+    intellidealer_screen: "Branch profile (inferred)"
+    intellidealer_data_source: "CTLLOC"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Pointers to the four department managers at the branch (GM, Sales,
+      Service, Parts).
+    qep_status: "BUILT"
+    qep_table: "branches"
+    qep_column: "general_manager_id / sales_manager_id / service_manager_id / parts_manager_id"
+    qep_evidence:
+      - "database.types.ts branches.general_manager_id"
+      - "database.types.ts branches.service_manager_id"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Branch settings > Roles"
+    dependencies: [branch.branch_code]
+
+  - id: branch.transfer_lead_time
+    intellidealer_label: "Branch Transfer Lead Time"
+    intellidealer_screen: "(implicit; configures Traffic Management transfer routing)"
+    intellidealer_data_source: "CTLLOC"
+    intellidealer_evidence:
+      - "database.types.ts branch_transfer_edges.lead_time_hours"
+    intellidealer_field_type: "number"
+    intellidealer_purpose: |
+      Per-edge lead time (in hours) for moves between two branches. Used
+      to propose realistic shipping_date defaults.
+    qep_status: "BUILT"
+    qep_table: "branch_transfer_edges"
+    qep_column: "lead_time_hours"
+    qep_evidence:
+      - "database.types.ts branch_transfer_edges.lead_time_hours"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Branch settings > Transfers"
+    dependencies: [branch.branch_code]
+
+  # ============================================================================
+  # SURFACE 4 — SECURITY / ROLES (NUMBERED ACCESS CODES)
+  # IntelliDealer's per-screen security switch (e.g., 604 - Payroll, 804 -
+  # Product Support / Traffic). Carried on the user/role record.
+  # ============================================================================
+  - id: security_switch.code
+    intellidealer_label: "Security Switch (per-screen access code)"
+    intellidealer_screen: "(displayed at the top of every help page)"
+    intellidealer_data_source: "EMPLOYEE / SECURITY tables"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Three-digit numbered access code referenced on every IntelliDealer
+      screen (e.g., "Security: 604 - Payroll", "Security: 804 - Product
+      Support, Traffic"). The user / role record carries the set of switch
+      numbers granted to that user. This is the canonical authorization
+      taxonomy referenced from every other phase's documentation.
+    qep_status: "MISSING"
+    qep_table: "security_switches"
+    qep_column: "(new table)"
+    qep_gap_notes: |
+      QEP enforces authorization via Postgres RLS + role checks
+      (`get_my_role()` / `get_my_workspace()`). There is NO equivalent
+      numbered switch table mapping screen-id ⇄ permission code ⇄ role.
+      For a regulatory replacement we need the audit-trace path
+      "user X had switch 604 at time T" — RLS alone cannot answer this.
+    severity: "must"
+    category: "regulatory"
+    migration_hint: |
+      CREATE TABLE security_switches (
+        id uuid primary key default gen_random_uuid(),
+        workspace_id uuid not null,
+        code text not null,
+        screen_id text,
+        description text,
+        unique (workspace_id, code)
+      );
+
+      CREATE TABLE security_role_switches (
+        role_id uuid not null,
+        switch_code text not null,
+        granted_at timestamptz not null default now(),
+        granted_by uuid references profiles(id),
+        revoked_at timestamptz,
+        primary key (role_id, switch_code)
+      );
+
+      CREATE TABLE security_user_switch_overrides (
+        profile_id uuid not null,
+        switch_code text not null,
+        grant boolean not null,
+        effective_from timestamptz not null default now(),
+        effective_to timestamptz,
+        primary key (profile_id, switch_code, effective_from)
+      );
+    ui_surface_hint: "Settings > Security > Switch Map"
+    dependencies: [employee.role]
+
+  - id: security_switch.screen_map
+    intellidealer_label: "Screen → Switch map"
+    intellidealer_screen: "(implicit, every help page)"
+    intellidealer_data_source: "SECURITY"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Employee Profile.txt
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      The mapping of every screen in the system to its required switch
+      number. Used at render-time to decide whether to show / hide the
+      menu item.
+    qep_status: "MISSING"
+    qep_table: "security_screens"
+    qep_column: "(new table)"
+    qep_gap_notes: |
+      QEP screens are gated by client-side role checks; there is no
+      durable mapping in the database.
+    severity: "should"
+    category: "regulatory"
+    migration_hint: |
+      CREATE TABLE security_screens (
+        id uuid primary key default gen_random_uuid(),
+        screen_id text not null unique,
+        required_switch_code text not null references security_switches(code),
+        notes text
+      );
+    ui_surface_hint: "Settings > Security > Screen Map"
+    dependencies: [security_switch.code]
+
+  - id: security.role_membership
+    intellidealer_label: "Role Membership"
+    intellidealer_screen: "(Security > Role Setup, inferred)"
+    intellidealer_data_source: "SECURITY"
+    intellidealer_evidence:
+      - "database.types.ts profiles.role"
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Which role(s) a user belongs to. IntelliDealer supports multi-role
+      assignment with overrides.
+    qep_status: "BUILT"
+    qep_table: "profiles + profile_role_blend"
+    qep_column: "role + iron_role + profile_role_blend.iron_role with weight"
+    qep_evidence:
+      - "database.types.ts profiles.role"
+      - "database.types.ts profile_role_blend"
+    qep_gap_notes: |
+      Built. Note QEP's iron_role + role_blend goes BEYOND IntelliDealer's
+      single-role model — a Phase-2 strength.
+    severity: "must"
+    category: "regulatory"
+    migration_hint: ""
+    ui_surface_hint: "Settings > Security > Roles"
+    dependencies: []
+
+  - id: security.ip_device_restriction
+    intellidealer_label: "IP / Device Restrictions"
+    intellidealer_screen: "(Security > Restrictions, inferred)"
+    intellidealer_data_source: "SECURITY"
+    intellidealer_evidence:
+      - "database.types.ts qrm_auth_audit_events.ip_inet"
+      - "database.types.ts qrm_auth_audit_events.user_agent"
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Allow-list / deny-list of IPs and devices for sensitive roles
+      (payroll, AR, executive). Common in dealership ERPs to keep field
+      reps from running payroll from a coffee shop.
+    qep_status: "PARTIAL"
+    qep_table: "qrm_auth_audit_events"
+    qep_column: "ip_inet + user_agent"
+    qep_evidence:
+      - "database.types.ts qrm_auth_audit_events.ip_inet"
+      - "database.types.ts qrm_auth_audit_events.user_agent"
+    qep_gap_notes: |
+      QEP records IP / user_agent in the audit log AFTER the fact, but has
+      no preventive allow-list. For payroll / AR, an enforced allow-list
+      is regulatory hygiene.
+    severity: "should"
+    category: "regulatory"
+    migration_hint: |
+      CREATE TABLE security_ip_allowlist (
+        id uuid primary key default gen_random_uuid(),
+        workspace_id uuid not null,
+        scope text not null check (scope in ('role','user','switch')),
+        scope_ref text not null,
+        cidr inet not null,
+        created_at timestamptz not null default now(),
+        created_by uuid references profiles(id),
+        revoked_at timestamptz
+      );
+    ui_surface_hint: "Settings > Security > IP Allowlist"
+    dependencies: [security_switch.code]
+
+  # ============================================================================
+  # SURFACE 5 — AUDIT (CHANGE HISTORY PER RECORD)
+  # IntelliDealer surfaces "Created By", "Modified", "Added" timestamps on
+  # every record (e.g., Base & Options shows Added 08/17/2023, Modified
+  # 11/14/2025). Implies a universal change history.
+  # ============================================================================
+  - id: audit.created_by
+    intellidealer_label: "Created By"
+    intellidealer_screen: "(displayed on every record)"
+    intellidealer_data_source: "(every entity)"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Dispatch__3.18.38.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management-Shipping__3.18.45.png
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      The user who created the record (e.g., "Created By: Rylee McKenzie -
+      LAKE CITY"). Universal across all phases.
+    qep_status: "PARTIAL"
+    qep_table: "(varies)"
+    qep_column: "created_by / actor_user_id / requested_by"
+    qep_evidence:
+      - "database.types.ts qrm_auth_audit_events.actor_user_id"
+      - "database.types.ts document_audit_events.actor_user_id"
+      - "database.types.ts qrm_geofences.created_by"
+    qep_gap_notes: |
+      Implemented inconsistently: some tables (qrm_geofences) carry
+      created_by, but most domain tables (traffic_tickets, qrm_companies,
+      branches) lack it as a first-class column. Audit must trawl
+      multiple *_audit_events tables.
+    severity: "must"
+    category: "regulatory"
+    migration_hint: |
+      Standardize: every workspace-scoped table gets created_by uuid
+      references profiles(id) NOT NULL DEFAULT auth.uid().
+    ui_surface_hint: "Record header on every detail screen"
+    dependencies: []
+
+  - id: audit.modified_at
+    intellidealer_label: "Modified (timestamp)"
+    intellidealer_screen: "(displayed on every record)"
+    intellidealer_data_source: "(every entity)"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.14.28.png
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.14.35.png
+    intellidealer_field_type: "date"
+    intellidealer_purpose: |
+      Last-modified timestamp on every record (e.g., Base & Options grid
+      shows Modified 11/14/2025).
+    qep_status: "BUILT"
+    qep_table: "(every workspace table)"
+    qep_column: "updated_at"
+    qep_evidence:
+      - "CLAUDE.md backend conventions: updated_at timestamptz not null default now()"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "regulatory"
+    migration_hint: ""
+    ui_surface_hint: "Record header on every detail screen"
+    dependencies: []
+
+  - id: audit.added_at
+    intellidealer_label: "Added (timestamp)"
+    intellidealer_screen: "(displayed on every record)"
+    intellidealer_data_source: "(every entity)"
+    intellidealer_evidence:
+      - docs/IntelliDealer/Cross-Cutting/Traffic-Management__3.14.28.png
+    intellidealer_field_type: "date"
+    intellidealer_purpose: |
+      Date the record was added to the system.
+    qep_status: "BUILT"
+    qep_table: "(every workspace table)"
+    qep_column: "created_at"
+    qep_evidence:
+      - "CLAUDE.md backend conventions: created_at timestamptz not null default now()"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "regulatory"
+    migration_hint: ""
+    ui_surface_hint: "Record header on every detail screen"
+    dependencies: []
+
+  - id: audit.field_level_change_history
+    intellidealer_label: "Field-level change history (who changed what, when)"
+    intellidealer_screen: "(implicit, surfaced via change-history reports)"
+    intellidealer_data_source: "SECURITY / AUDIT"
+    intellidealer_evidence:
+      - "database.types.ts qb_deals_audit.changed_fields"
+      - "database.types.ts qb_quotes_audit.changed_fields"
+      - "database.types.ts integration_status_credential_audit_events.changed_fields"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Field-level diff (old_value / new_value) tied to actor + timestamp.
+      Required for any record that affects price, commission, or
+      regulatory state.
+    qep_status: "PARTIAL"
+    qep_table: "qb_*_audit / qrm_*_audit_events / parts_pricing_audit / document_audit_events / customer_profile_access_audit"
+    qep_column: "changed_fields / snapshot / metadata"
+    qep_evidence:
+      - "database.types.ts qb_deals_audit"
+      - "database.types.ts qb_quotes_audit"
+      - "database.types.ts qrm_quote_audit_events"
+      - "database.types.ts parts_pricing_audit"
+      - "database.types.ts qrm_merge_audit_events"
+      - "database.types.ts qrm_company_merge_audit"
+    qep_gap_notes: |
+      Per-domain audit exists for the QuickBuilder, QRM, parts pricing,
+      documents, and customer-profile access. NO field-level audit on
+      branches, traffic_tickets, equipment, work_orders, rentals — the
+      operational backbone. A central trigger-based history table would
+      close this gap.
+    severity: "must"
+    category: "regulatory"
+    migration_hint: |
+      CREATE TABLE record_change_history (
+        id uuid primary key default gen_random_uuid(),
+        workspace_id uuid not null,
+        table_name text not null,
+        record_id uuid not null,
+        actor_user_id uuid references profiles(id),
+        action text not null check (action in ('insert','update','delete')),
+        changed_fields jsonb not null,
+        before_snapshot jsonb,
+        after_snapshot jsonb,
+        occurred_at timestamptz not null default now()
+      );
+      -- attach AFTER trigger to every workspace table that needs audit
+    ui_surface_hint: "Record detail > 'History' tab on every entity"
+    dependencies: [audit.created_by]
+
+  - id: audit.auth_events
+    intellidealer_label: "Authentication / Access Audit"
+    intellidealer_screen: "(implicit, security log)"
+    intellidealer_data_source: "SECURITY"
+    intellidealer_evidence:
+      - "database.types.ts qrm_auth_audit_events"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Who logged in, from where, when, with what outcome (success / fail /
+      lockout). Required for regulatory replacement.
+    qep_status: "BUILT"
+    qep_table: "qrm_auth_audit_events"
+    qep_column: "actor_user_id / event_type / outcome / ip_inet / user_agent / occurred_at"
+    qep_evidence:
+      - "database.types.ts qrm_auth_audit_events"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "regulatory"
+    migration_hint: ""
+    ui_surface_hint: "Settings > Security > Auth Audit"
+    dependencies: []
+
+  - id: audit.merge_history
+    intellidealer_label: "Merge History (companies / contacts)"
+    intellidealer_screen: "(implicit)"
+    intellidealer_data_source: "SECURITY"
+    intellidealer_evidence:
+      - "database.types.ts qrm_company_merge_audit"
+      - "database.types.ts qrm_merge_audit_events"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Records what got merged into what, by whom, when, with snapshot of
+      the discarded entity for undo.
+    qep_status: "BUILT"
+    qep_table: "qrm_company_merge_audit / qrm_merge_audit_events"
+    qep_column: "(see slice)"
+    qep_evidence:
+      - "database.types.ts qrm_company_merge_audit"
+      - "database.types.ts qrm_merge_audit_events"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "regulatory"
+    migration_hint: ""
+    ui_surface_hint: "Customer / Contact > History"
+    dependencies: []
+
+  - id: audit.document_visibility
+    intellidealer_label: "Document Visibility Audit"
+    intellidealer_screen: "(implicit)"
+    intellidealer_data_source: "SECURITY"
+    intellidealer_evidence:
+      - "database.types.ts document_visibility_audit"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Tracks who flipped a document from internal to customer-visible.
+    qep_status: "BUILT"
+    qep_table: "document_visibility_audit"
+    qep_column: "changed_by / visibility_before / visibility_after / reason"
+    qep_evidence:
+      - "database.types.ts document_visibility_audit"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "regulatory"
+    migration_hint: ""
+    ui_surface_hint: "Document > Visibility History"
+    dependencies: []
+
+  - id: audit.integration_credential
+    intellidealer_label: "Integration Credential Audit"
+    intellidealer_screen: "(implicit)"
+    intellidealer_data_source: "SECURITY"
+    intellidealer_evidence:
+      - "database.types.ts integration_status_credential_audit_events"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Audit of changes to integration credentials (e.g., HubSpot, OEM
+      portal). Records who rotated which secret and when.
+    qep_status: "BUILT"
+    qep_table: "integration_status_credential_audit_events"
+    qep_column: "actor_user_id / event_type / changed_fields / occurred_at"
+    qep_evidence:
+      - "database.types.ts integration_status_credential_audit_events"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "regulatory"
+    migration_hint: ""
+    ui_surface_hint: "Settings > Integrations > Audit"
+    dependencies: []
+
+  - id: audit.customer_profile_access
+    intellidealer_label: "Customer Profile Access Audit"
+    intellidealer_screen: "(implicit)"
+    intellidealer_data_source: "SECURITY"
+    intellidealer_evidence:
+      - "database.types.ts customer_profile_access_audit"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Logs every read of a customer profile by an actor — used by privacy
+      and antitrust compliance.
+    qep_status: "BUILT"
+    qep_table: "customer_profile_access_audit"
+    qep_column: "actor_user_id / customer_profile_id / access_mode / source"
+    qep_evidence:
+      - "database.types.ts customer_profile_access_audit"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "regulatory"
+    migration_hint: ""
+    ui_surface_hint: "Customer > Access History"
+    dependencies: []
+
+  # ============================================================================
+  # SURFACE 6 — GEOFENCE / TERRITORY
+  # IntelliDealer geofence + territory: ZIP-to-territory mapping plus geofence
+  # polygons drawn around customer sites.
+  # ============================================================================
+  - id: territory.code
+    intellidealer_label: "Territory Code / Name"
+    intellidealer_screen: "(referenced from CRM phase + dispatch)"
+    intellidealer_data_source: "SLSPRTN"
+    intellidealer_evidence:
+      - "database.types.ts qrm_territories"
+      - "database.types.ts qrm_contact_territories"
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Territory identifier — owns rep assignment, commission split, and
+      dispatch geography.
+    qep_status: "BUILT"
+    qep_table: "qrm_territories"
+    qep_column: "name"
+    qep_evidence:
+      - "database.types.ts qrm_territories.name"
+      - "database.types.ts qrm_territories.assigned_rep_id"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Settings > Territories"
+    dependencies: []
+
+  - id: territory.assigned_rep
+    intellidealer_label: "Assigned Rep (per territory)"
+    intellidealer_screen: "(territory record)"
+    intellidealer_data_source: "SLSPRTN"
+    intellidealer_evidence:
+      - "database.types.ts qrm_territories.assigned_rep_id"
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      The salesperson the territory rolls up to.
+    qep_status: "BUILT"
+    qep_table: "qrm_territories"
+    qep_column: "assigned_rep_id"
+    qep_evidence:
+      - "database.types.ts qrm_territories.assigned_rep_id"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Territory record header"
+    dependencies: [territory.code]
+
+  - id: territory.contact_membership
+    intellidealer_label: "Contact ↔ Territory Membership"
+    intellidealer_screen: "(implicit)"
+    intellidealer_data_source: "SLSPRTN"
+    intellidealer_evidence:
+      - "database.types.ts qrm_contact_territories"
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Maps a contact to one or more territories.
+    qep_status: "BUILT"
+    qep_table: "qrm_contact_territories"
+    qep_column: "contact_id / territory_id"
+    qep_evidence:
+      - "database.types.ts qrm_contact_territories"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Contact > Territories"
+    dependencies: [territory.code]
+
+  - id: territory.zip_mapping
+    intellidealer_label: "ZIP-to-Territory mapping"
+    intellidealer_screen: "(implicit)"
+    intellidealer_data_source: "SLSPRTN"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Cross-Cutting/Traffic Management.txt
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Postal-code → territory rules used to auto-assign newly-imported
+      leads. Without this, every new lead must be manually owned.
+    qep_status: "MISSING"
+    qep_table: "qrm_territory_zip_rules"
+    qep_column: "(new table)"
+    qep_gap_notes: |
+      No equivalent. Auto-assignment of new leads cannot be implemented.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      CREATE TABLE qrm_territory_zip_rules (
+        id uuid primary key default gen_random_uuid(),
+        workspace_id uuid not null,
+        territory_id uuid not null references qrm_territories(id),
+        country text not null default 'US',
+        postal_prefix text not null,
+        rank int not null default 100,
+        created_at timestamptz not null default now(),
+        deleted_at timestamptz,
+        unique (workspace_id, country, postal_prefix)
+      );
+    ui_surface_hint: "Settings > Territories > Zip Rules"
+    dependencies: [territory.code]
+
+  - id: geofence.polygon
+    intellidealer_label: "Geofence Polygon"
+    intellidealer_screen: "(referenced from Equipment / Rental phases)"
+    intellidealer_data_source: "GEOFENCE"
+    intellidealer_evidence:
+      - "database.types.ts qrm_geofences.polygon"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Drawn polygon (PostGIS-ish) around a customer site or job site. Used
+      to detect ingress / egress events for rental / asset tracking.
+    qep_status: "BUILT"
+    qep_table: "qrm_geofences"
+    qep_column: "polygon"
+    qep_evidence:
+      - "database.types.ts qrm_geofences.polygon"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Equipment / Customer > Geofence map"
+    dependencies: []
+
+  - id: geofence.linked_company
+    intellidealer_label: "Geofence Linked Company / Deal"
+    intellidealer_screen: "(implicit)"
+    intellidealer_data_source: "GEOFENCE"
+    intellidealer_evidence:
+      - "database.types.ts qrm_geofences.linked_company_id"
+      - "database.types.ts qrm_geofences.linked_deal_id"
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Anchors a geofence to a customer or open deal.
+    qep_status: "BUILT"
+    qep_table: "qrm_geofences"
+    qep_column: "linked_company_id / linked_deal_id"
+    qep_evidence:
+      - "database.types.ts qrm_geofences.linked_company_id"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Geofence record"
+    dependencies: [geofence.polygon]
+
+  - id: geofence.event_history
+    intellidealer_label: "Geofence Event History"
+    intellidealer_screen: "(implicit)"
+    intellidealer_data_source: "GEOFENCE"
+    intellidealer_evidence:
+      - "database.types.ts geofence_events"
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Time series of ingress / egress events with lat/lng + AI confidence
+      score (when inferred from imprecise telematics).
+    qep_status: "BUILT"
+    qep_table: "geofence_events"
+    qep_column: "event_type / event_at / reading_lat / reading_lng / ai_confidence"
+    qep_evidence:
+      - "database.types.ts geofence_events"
+    qep_gap_notes: |
+      QEP geofence_events go BEYOND IntelliDealer (which is purely
+      polygon-based) by carrying ai_confidence + triggered_action_id.
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Equipment / Customer > Geofence History"
+    dependencies: [geofence.polygon]
+
+  - id: geofence.event_type_taxonomy
+    intellidealer_label: "Geofence Event Type taxonomy"
+    intellidealer_screen: "(implicit)"
+    intellidealer_data_source: "GEOFENCE"
+    intellidealer_evidence:
+      - "database.types.ts geofence_events.event_type"
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "enter"
+      - "exit"
+      - "dwell"
+      - "shock"
+      - "unauthorized"
+    intellidealer_purpose: |
+      The event types fired by the geofence engine.
+    qep_status: "PARTIAL"
+    qep_table: "geofence_events"
+    qep_column: "event_type"
+    qep_evidence:
+      - "database.types.ts geofence_events.event_type (text)"
+    qep_gap_notes: |
+      Free text. Could be tightened to enum.
+    severity: "could"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE geofence_events ADD CONSTRAINT geofence_events_event_type_check
+        CHECK (event_type IN ('enter','exit','dwell','shock','unauthorized'));
+    ui_surface_hint: "Geofence event type filter"
+    dependencies: [geofence.event_history]

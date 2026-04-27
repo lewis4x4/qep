@@ -1,0 +1,55 @@
+Work Orders -
+
+@
+
+Intelli...
+
+> Product Support > Service > Work Orders
+
+IntelliDealer” jy
+by VitalEdge \>
+
+Financial Management >
+
+Customer Care
+
+Product Support
+
+Management Central
+Support >
+Quick Links >
+
+ID InspectionPlus
+
+el
+
+Work Orders Service Requests
+Search by work order number, customer name or number, stock number, machine model or serial number, or salesperson Reset
+Work Order Number Customer Number Salesperson
+Stock Number Model Serial Number
+PO Number Ship Via Location *
+
+01 - LAKE CITY
+
+Segment Status Include All Segments
+
+All c
+Outstanding POs
+
+= Location > Customer = Machine = Description + Current Value Make/Model + Serial Number > Date Added > Last Activity
+
+* Order Number
+CN0426 01 - LAKE CITY NON-REVENUE TIME INTERNAL STOCK NON REVENUE TIM... 1,834.40 MI INSSTK INTERNAL STOCK 03/31/2026 04/20/2026
+DM0426 01 - LAKE CITY INTERNAL USE INTERNAL STOCK NON REVENUE TIM... 200.07 MIINSSTK INTERNAL STOCK 03/31/2026 04/21/2026
+KL0426 01 - LAKE CITY NON-REVENUE TIME INTERNAL STOCK NON REVENUE TIM... 0.00 MIINSSTK INTERNAL STOCK 03/31/2026 04/21/2026
+LLO426 01 - LAKE CITY LOG LIGHTS WORK... INTERNAL STOCK Log Light Brackets 6,090.45 MIINSSTK INTERNAL STOCK 03/31/2026 04/21/2026
+MD0426 01 - LAKE CITY MIKE D- NON REV... INTERNAL STOCK NON REVENUE TIM... 0.00 MIINSSTK INTERNAL STOCK 03/31/2026 04/21/2026
+PD0326 01 - LAKE CITY MISC PARTS EXPE... INTERNAL STOCK Parts Pick/Up Delive... 2,512.55 MI INSSTK INTERNAL STOCK 03/31/2026 04/21/2026
+SD0426 01 - LAKE CITY MISC SALES EXPE... Equipment haul SALE DEPARTMENT 100.35 MI DELIVER HAULING 03/31/2026 04/01/2026
+SF0426 01 - LAKE CITY NON-REVENUE TIME INTERNAL STOCK NON REVENUE TIM... 498.42 MIINSSTK INTERNAL STOCK 03/31/2026 04/20/2026
+ST0426 01 - LAKE CITY SHOP TIME MONT... INTERNAL STOCK Non Revenue Time- ... 0.00 MIINSSTK INTERNAL STOCK 03/31/2026 04/21/2026
+TB0426 01 - LAKE CITY NON-REVENUE TIME INTERNAL STOCK NON REVENUE TIM... 3,828.24 MIINSSTK INTERNAL STOCK 03/31/2026 04/21/2026
+
+wl. + | 2l3alals Showing 1 to 10 of 133 results Page Size: 10 | 20 | 50
+
+Quick Add Work Order/Requ

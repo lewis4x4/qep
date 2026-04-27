@@ -1,0 +1,21 @@
+Phase,IntelliDealer Screen,IntelliDealer Field,Field Description (abbr),Source,QEP Table,QEP Column,Parity Status,Migration / Gap Notes
+Cross-Cutting,Employee Profile,Employee,Sort the search results by employee         Profile,Table,profiles,id,BUILT,
+Cross-Cutting,Employee Profile,Number,number. Revision:,Table,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Employee Profile,Name,Sort the search results by employee name.   2024.10,Table,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Employee Profile,Select,Search for an employee by entering an,Table,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Employee Profile,Class,The class of the employee. This field determines the G/L expense account which the employee's wages are debited. Valid class codes are set up on the C...,Table,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Employee Profile,Profit,The profit center or department where the,Table,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Employee Profile,Center,employee's wages are charged.,Table,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Employee Profile,This,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Traffic Management,Date,Sort by the date the traffic ticket was received.,Table,(multiple),timestamp fields,BUILT,
+Cross-Cutting,Traffic Management,Receipt,Sort by the receipt number. Number,Table,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Traffic Management,Type,Sort by the traffic ticket type.,Table,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Traffic Management,Include History,"If selected, includes historical traffic movements within the search.",Table,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Traffic Management,Select Receipt,Search by receipt number. Number,Table,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Traffic Management,Select,Select one of these options from the Inbound/Outbound drop down list:,Table,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Traffic Management,Select Type,Search by selecting a receipt type from the drop down list.,Table,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Traffic Management,Select Customer,Search by customer number. Number,Table,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Traffic Management,From/To,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Traffic Management,Name next to the From/To,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Traffic Management,Stock Number,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Cross-Cutting,Traffic Management,Vendor/Trucker,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed

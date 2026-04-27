@@ -1,0 +1,2662 @@
+phase: Phase-8_Financial-Operations
+generated_at: 2026-04-25T00:00:00Z
+source_artifacts:
+  pdfs:
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Accounts Payable Outstanding.pdf
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Accounts Receivable - Credit Limit Analysis.pdf
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Accounts Receivable - Outstanding A:R.pdf
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Billing Analysis.pdf
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Customer Pricing.pdf
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Invoice History Listing.pdf
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Real-time Billing Queue.pdf
+  png_screenshots:
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Accounts-Payable__3.26.26.png
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Accounts-Payable__3.26.32.png
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Accounts-Receivable__3.26.00.png
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Accounts-Receivable__3.26.05.png
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Customer-Pricing-Detail__3.23.50.png
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Customer-Pricing-Dialog__3.23.57.png
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Customer-Pricing__3.23.34.png
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Employee-Profile-Payroll-Detail__3.00.18.png
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Employee-Profile-Payroll__3.00.01.png
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Invoice-History-Detail__3.26.42.png
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Invoice-History__3.26.38.png
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Real-time-Billing-Queue__3.00.59.png
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.27.png
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.39.png
+    - docs/IntelliDealer/Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.44.png
+  ocr_text_paths:
+    - docs/IntelliDealer/_OCR/Phase-8_Financial-Operations/Accounts Payable Outstanding.txt
+    - docs/IntelliDealer/_OCR/Phase-8_Financial-Operations/Accounts Receivable - Credit Limit Analysis.txt
+    - docs/IntelliDealer/_OCR/Phase-8_Financial-Operations/Accounts Receivable - Outstanding A:R.txt
+    - docs/IntelliDealer/_OCR/Phase-8_Financial-Operations/Billing Analysis.txt
+    - docs/IntelliDealer/_OCR/Phase-8_Financial-Operations/Customer Pricing.txt
+    - docs/IntelliDealer/_OCR/Phase-8_Financial-Operations/Invoice History Listing.txt
+    - docs/IntelliDealer/_OCR/Phase-8_Financial-Operations/Real-time Billing Queue.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-8_Financial-Operations_Accounts-Payable__3.26.26.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-8_Financial-Operations_Accounts-Payable__3.26.32.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-8_Financial-Operations_Accounts-Receivable-Outstanding-Details__3.26.11.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-8_Financial-Operations_Accounts-Receivable__3.26.00.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-8_Financial-Operations_Accounts-Receivable__3.26.05.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-8_Financial-Operations_Customer-Pricing-Detail__3.23.50.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-8_Financial-Operations_Customer-Pricing-Dialog__3.23.57.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-8_Financial-Operations_Customer-Pricing__3.23.34.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-8_Financial-Operations_Employee-Profile-Payroll-Detail__3.00.18.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-8_Financial-Operations_Employee-Profile-Payroll__3.00.01.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-8_Financial-Operations_Invoice-History-Detail__3.26.42.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-8_Financial-Operations_Invoice-History__3.26.38.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-8_Financial-Operations_Real-time-Billing-Queue__3.00.59.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-8_Financial-Operations_Real-time-Billing-Queue__3.01.27.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-8_Financial-Operations_Real-time-Billing-Queue__3.01.39.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-8_Financial-Operations_Real-time-Billing-Queue__3.01.44.txt
+
+fields:
+  # ─────────────────────────────────────────────────────────────────────
+  # ACCOUNTS RECEIVABLE — Outstanding A/R, Aging, Customer A/R Details
+  # ─────────────────────────────────────────────────────────────────────
+  - id: ar_aging.invoice_first_digit
+    intellidealer_label: "Select Invoice 1st Digit"
+    intellidealer_screen: "Accounts Receivable - Outstanding A/R"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Receivable - Outstanding A:R.pdf
+      - Phase-8_Financial-Operations/Accounts-Receivable__3.26.00.png
+      - Phase-8_Financial-Operations/Accounts-Receivable__3.26.05.png
+      - _OCR_PNG/Phase-8_Financial-Operations_Accounts-Receivable__3.26.00.txt
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "G (Equipment)"
+      - "P (Parts)"
+      - "R (Rental)"
+      - "W (Work Order/Service)"
+      - "User Defined (custom location-specific digits)"
+    intellidealer_purpose: |
+      First-digit prefix of the invoice number identifies which sub-system
+      generated the invoice (Equipment/Parts/Rental/Work Order). Drives
+      sub-ledger filtering for AR aging reports. Each location can configure
+      additional custom digits via System Settings-Location. Reserved letters
+      Q, L, R cannot be used (sales-order reserved). This is foundational for
+      AR drill-downs and reconciliation by source system.
+    qep_status: "MISSING"
+    qep_table: "customer_invoices"
+    qep_column: "invoice_source_code"
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP customer_invoices has invoice_number (free text) but no source
+      classifier. Cannot run AR-aging segmented by Equipment vs Parts vs
+      Rental vs Service today. Real ID dealers rely on this to reconcile each
+      sub-ledger to the GL.
+    severity: "should"
+    category: "financial"
+    migration_hint: |
+      ALTER TABLE customer_invoices
+        ADD COLUMN invoice_source_code TEXT
+          CHECK (invoice_source_code IN ('EQUIPMENT','PARTS','RENTAL','SERVICE','GENERAL'));
+      CREATE INDEX customer_invoices_source_idx ON customer_invoices(workspace_id, invoice_source_code);
+      COMMENT ON COLUMN customer_invoices.invoice_source_code IS 'IntelliDealer invoice 1st-digit equivalent: EQUIPMENT(E)/PARTS(P)/RENTAL(R)/SERVICE(W).';
+    ui_surface_hint: "AR aging filter chips on Finance > AR Outstanding; sub-ledger reconciliation views"
+    dependencies: []
+
+  - id: ar_aging.bucket_current
+    intellidealer_label: "Current"
+    intellidealer_screen: "Accounts Receivable - Outstanding A/R"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable__3.26.00.png
+      - _OCR_PNG/Phase-8_Financial-Operations_Accounts-Receivable__3.26.00.txt
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Total dollars of A/R that are not past due. First aging bucket on the
+      AR Outstanding bar chart and pie chart. Drives DSO and credit-hold
+      decisions across the business. Real values seen on screen: 158,806.72
+      (LAKE CITY 04/21/2026).
+    qep_status: "MISSING"
+    qep_table: "ar_aging_view"
+    qep_column: "current_amount"
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP has customer_invoices.balance_due but no aging-bucket view or
+      materialized aggregate. The mission's AR-aging dashboard cannot be
+      rendered without this. Must derive from invoice_date / due_date.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE OR REPLACE VIEW ar_aging_view AS
+      SELECT
+        i.workspace_id,
+        i.crm_company_id,
+        i.branch_id,
+        SUM(CASE WHEN (CURRENT_DATE - i.due_date::date) <= 0 THEN i.balance_due ELSE 0 END) AS current_amount,
+        SUM(CASE WHEN (CURRENT_DATE - i.due_date::date) BETWEEN 1 AND 30  THEN i.balance_due ELSE 0 END) AS bucket_1_30,
+        SUM(CASE WHEN (CURRENT_DATE - i.due_date::date) BETWEEN 31 AND 60 THEN i.balance_due ELSE 0 END) AS bucket_31_60,
+        SUM(CASE WHEN (CURRENT_DATE - i.due_date::date) BETWEEN 61 AND 90 THEN i.balance_due ELSE 0 END) AS bucket_61_90,
+        SUM(CASE WHEN (CURRENT_DATE - i.due_date::date) BETWEEN 91 AND 120 THEN i.balance_due ELSE 0 END) AS bucket_91_120,
+        SUM(CASE WHEN (CURRENT_DATE - i.due_date::date) > 120 THEN i.balance_due ELSE 0 END) AS bucket_over_120,
+        SUM(i.balance_due) AS total_outstanding
+      FROM customer_invoices i
+      WHERE i.balance_due > 0 AND i.status NOT IN ('void','cancelled')
+      GROUP BY 1,2,3;
+    ui_surface_hint: "Finance > AR Outstanding (bar/pie chart and tabular drilldown)"
+    dependencies:
+      - customer_invoices.balance_due
+      - customer_invoices.due_date
+
+  - id: ar_aging.bucket_31_60
+    intellidealer_label: "31-60"
+    intellidealer_screen: "Accounts Receivable - Outstanding A/R"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable__3.26.00.png
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Dollars of A/R 31-60 days past due. Bucket triggers initial dunning
+      letter and credit-watch at most dealers. Real values: 66,163.74 in
+      LAKE CITY example.
+    qep_status: "MISSING"
+    qep_table: "ar_aging_view"
+    qep_column: "bucket_31_60"
+    qep_evidence: []
+    qep_gap_notes: |
+      Same as ar_aging.bucket_current — view does not exist yet.
+    severity: "must"
+    category: "financial"
+    migration_hint: "(see ar_aging_view definition above)"
+    ui_surface_hint: "Finance > AR Outstanding"
+    dependencies:
+      - ar_aging.bucket_current
+
+  - id: ar_aging.bucket_61_90
+    intellidealer_label: "61-90"
+    intellidealer_screen: "Accounts Receivable - Outstanding A/R"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable__3.26.00.png
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Dollars of A/R 61-90 days past due. Most dealers escalate to phone
+      collections at this bucket and freeze new charge sales.
+    qep_status: "MISSING"
+    qep_table: "ar_aging_view"
+    qep_column: "bucket_61_90"
+    qep_evidence: []
+    qep_gap_notes: "Bucket missing in QEP; needs ar_aging_view."
+    severity: "must"
+    category: "financial"
+    migration_hint: "(see ar_aging_view above)"
+    ui_surface_hint: "Finance > AR Outstanding; Credit hold thresholds"
+    dependencies:
+      - ar_aging.bucket_current
+
+  - id: ar_aging.bucket_91_120
+    intellidealer_label: "91-120"
+    intellidealer_screen: "Accounts Receivable - Outstanding A/R"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable__3.26.00.png
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Dollars of A/R 91-120 days past due. At most dealers, this bucket
+      auto-triggers credit hold and finance-charge accrual.
+    qep_status: "MISSING"
+    qep_table: "ar_aging_view"
+    qep_column: "bucket_91_120"
+    qep_evidence: []
+    qep_gap_notes: "Missing aging view."
+    severity: "must"
+    category: "financial"
+    migration_hint: "(see ar_aging_view above)"
+    ui_surface_hint: "Finance > AR Outstanding"
+    dependencies:
+      - ar_aging.bucket_current
+
+  - id: ar_aging.bucket_over_120
+    intellidealer_label: "Over 120"
+    intellidealer_screen: "Accounts Receivable - Outstanding A/R"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable__3.26.00.png
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Dollars of A/R over 120 days past due. Write-off candidate and
+      collection-agency referral threshold.
+    qep_status: "MISSING"
+    qep_table: "ar_aging_view"
+    qep_column: "bucket_over_120"
+    qep_evidence: []
+    qep_gap_notes: "Missing aging view."
+    severity: "must"
+    category: "financial"
+    migration_hint: "(see ar_aging_view above)"
+    ui_surface_hint: "Finance > AR Outstanding; Write-off review queue"
+    dependencies:
+      - ar_aging.bucket_current
+
+  - id: ar_aging.future_amount
+    intellidealer_label: "Future"
+    intellidealer_screen: "Accounts Receivable - Outstanding A/R"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable__3.26.00.png
+      - _OCR_PNG/Phase-8_Financial-Operations_Accounts-Receivable__3.26.00.txt
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Dollars of invoices with a due_date later than today (not yet due, not
+      yet a "Current" charge). Captures pre-billed rental/service. Distinct
+      from Current which is bills already issued and not yet past due.
+    qep_status: "MISSING"
+    qep_table: "ar_aging_view"
+    qep_column: "future_amount"
+    qep_evidence: []
+    qep_gap_notes: "Field implied; not derivable today without aging view."
+    severity: "should"
+    category: "financial"
+    migration_hint: |
+      ALTER VIEW ar_aging_view ADD COLUMN future_amount NUMERIC;
+      -- Compute as SUM(balance_due) WHERE invoice_date > CURRENT_DATE
+    ui_surface_hint: "Finance > AR Outstanding total panel"
+    dependencies:
+      - ar_aging.bucket_current
+
+  - id: ar_aging.total_outstanding
+    intellidealer_label: "Total"
+    intellidealer_screen: "Accounts Receivable - Outstanding A/R"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable__3.26.00.png
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Workspace-level grand total A/R outstanding. Header KPI on the AR
+      dashboard. Real example: 227,526.49 (LAKE CITY 04/21/2026).
+    qep_status: "PARTIAL"
+    qep_table: "customer_invoices"
+    qep_column: "balance_due (sum)"
+    qep_evidence:
+      - "customer_invoices.balance_due"
+    qep_gap_notes: |
+      Can be summed today via SUM(balance_due), but no canonical view or
+      cached aggregate. AR dashboards must implement aggregation manually.
+    severity: "should"
+    category: "financial"
+    migration_hint: "(included in ar_aging_view total_outstanding)"
+    ui_surface_hint: "Finance > AR Outstanding total card"
+    dependencies:
+      - ar_aging.bucket_current
+
+  - id: ar_aging.percent_per_bucket
+    intellidealer_label: "%"
+    intellidealer_screen: "Accounts Receivable - Outstanding A/R"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable__3.26.00.png
+    intellidealer_field_type: "percent"
+    intellidealer_purpose: |
+      Percentage share of total A/R in each aging bucket. Drives the bar
+      graph visual on the AR Outstanding screen.
+    qep_status: "MISSING"
+    qep_table: "ar_aging_view"
+    qep_column: "(computed at view layer)"
+    qep_evidence: []
+    qep_gap_notes: "Computed from total_outstanding + bucket totals; not stored."
+    severity: "could"
+    category: "reporting"
+    migration_hint: |
+      -- Compute in select layer:
+      -- bucket_amount / NULLIF(total_outstanding,0) AS bucket_pct
+    ui_surface_hint: "AR Outstanding bar/pie chart"
+    dependencies:
+      - ar_aging.total_outstanding
+
+  - id: ar_aging.responsible_location_filter
+    intellidealer_label: "Responsible Location"
+    intellidealer_screen: "Accounts Receivable - Outstanding A/R"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Receivable - Outstanding A:R.pdf
+    intellidealer_field_type: "bool"
+    intellidealer_purpose: |
+      Toggles AR aging to filter by the customer's default home location vs
+      the location where the invoice was actually billed. Critical for
+      multi-branch dealers measuring branch-manager AR performance fairly.
+    qep_status: "MISSING"
+    qep_table: "crm_companies"
+    qep_column: "responsible_branch_id"
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP has branch_id on customer_invoices but no concept of the customer's
+      "home" or "responsible" branch independent of the billing branch.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE crm_companies
+        ADD COLUMN responsible_branch_id UUID REFERENCES branches(id);
+      COMMENT ON COLUMN crm_companies.responsible_branch_id IS 'Default home branch for AR responsibility (Customer Profile location). Distinct from invoice branch_id.';
+    ui_surface_hint: "AR Outstanding filter; Customer Profile > Locations"
+    dependencies: []
+
+  - id: ar_aging.responsible_salesperson_filter
+    intellidealer_label: "Select Responsible Salesperson"
+    intellidealer_screen: "Accounts Receivable - Outstanding A/R"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Receivable - Outstanding A:R.pdf
+      - Phase-8_Financial-Operations/Accounts-Receivable__3.26.00.png
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Filter AR aging by the salesperson responsible for the customer's
+      account. Used by sales managers to drive collections accountability.
+    qep_status: "PARTIAL"
+    qep_table: "crm_companies"
+    qep_column: "assigned_rep_id"
+    qep_evidence:
+      - "crm_companies.assigned_rep_id"
+    qep_gap_notes: |
+      assigned_rep_id covers ownership but is not surfaced as a filter on the
+      AR aging view. Need ar_aging_view to expose this dimension and a UI
+      control. Salesperson-level aging is foundational for commission and
+      collection KPIs.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER VIEW ar_aging_view RENAME TO ar_aging_view_v0;
+      -- Recreate with assigned_rep_id selected from joined crm_companies
+      -- so dashboards can filter by responsible salesperson.
+    ui_surface_hint: "AR Outstanding filter row"
+    dependencies:
+      - ar_aging.bucket_current
+
+  - id: ar_aging.user_defined_first_digit
+    intellidealer_label: "User Defined"
+    intellidealer_screen: "Accounts Receivable - Outstanding A/R"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Receivable - Outstanding A:R.pdf
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Free-text override allowing AR aging to filter by a custom invoice
+      first-digit configured via System Settings-Location for unusual
+      sub-ledgers (e.g., dealer-defined fleet billing).
+    qep_status: "MISSING"
+    qep_table: "branches"
+    qep_column: "custom_invoice_prefixes"
+    qep_evidence: []
+    qep_gap_notes: |
+      Branch-scoped invoice prefix configuration is not represented in QEP.
+    severity: "could"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE branches ADD COLUMN custom_invoice_prefixes TEXT[];
+      COMMENT ON COLUMN branches.custom_invoice_prefixes IS 'Per-branch list of allowed first-digit/letter prefixes for invoice numbers. Mirrors IntelliDealer System Settings-Location > Invoice 1st Digits.';
+    ui_surface_hint: "Settings > Branches > Invoice prefixes"
+    dependencies:
+      - ar_aging.invoice_first_digit
+
+  # ─────────────────────────────────────────────────────────────────────
+  # CUSTOMER A/R DETAIL HEADER (Outstanding Details screen)
+  # ─────────────────────────────────────────────────────────────────────
+  - id: customer_ar.business_phone
+    intellidealer_label: "Business Phone Number"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "ARFile / CMASTRE"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+      - _OCR_PNG/Phase-8_Financial-Operations_Accounts-Receivable-Outstanding-Details__3.26.11.txt
+    intellidealer_field_type: "phone"
+    intellidealer_purpose: |
+      Customer's primary business phone displayed on AR detail header.
+      Collections clerks need it without leaving the AR screen. Real value:
+      (863) 767-0290 for GROUND LEVEL, INC.
+    qep_status: "BUILT"
+    qep_table: "crm_companies"
+    qep_column: "phone"
+    qep_evidence:
+      - "crm_companies.phone"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "AR Customer Detail header"
+    dependencies: []
+
+  - id: customer_ar.customer_number
+    intellidealer_label: "Customer Number"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "CMASTRE"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+      - _OCR_PNG/Phase-8_Financial-Operations_Accounts-Receivable-Outstanding-Details__3.26.11.txt
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Legacy IntelliDealer customer key (e.g., GROUNOO1). Required for
+      cross-referencing migrated AR data with IntelliDealer reports during
+      cutover and beyond. Salesperson on header: RYAN MCKENZIE.
+    qep_status: "BUILT"
+    qep_table: "dge_customer_profiles"
+    qep_column: "intellidealer_customer_id"
+    qep_evidence:
+      - "dge_customer_profiles.intellidealer_customer_id"
+    qep_gap_notes: |
+      Field exists on dge_customer_profiles but not exposed on crm_companies.
+      For mission, AR detail header should display IntelliDealer ID alongside
+      QEP id during transition. Recommend mirroring on crm_companies.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE crm_companies
+        ADD COLUMN intellidealer_customer_id TEXT;
+      CREATE INDEX crm_companies_idealer_idx ON crm_companies(workspace_id, intellidealer_customer_id);
+      COMMENT ON COLUMN crm_companies.intellidealer_customer_id IS 'Legacy IntelliDealer customer number for cross-system reconciliation.';
+    ui_surface_hint: "Customer Profile header; AR detail breadcrumb"
+    dependencies: []
+
+  - id: customer_ar.account_type
+    intellidealer_label: "Type"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "CMASTRE"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "Open Item"
+      - "Balance Forward"
+    intellidealer_purpose: |
+      AR account type. Open Item = each invoice tracked separately and
+      payments applied to specific invoices. Balance Forward = single rolling
+      balance, payments applied to oldest first. Drives invoicing/statement
+      logic, dunning escalation, and reconciliation behavior.
+    qep_status: "MISSING"
+    qep_table: "crm_companies"
+    qep_column: "ar_account_type"
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP has no concept of AR account type. Without this, payment
+      application logic (oldest-first vs invoice-specific) cannot be
+      enforced. Daily payment posting will be wrong.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      ALTER TABLE crm_companies
+        ADD COLUMN ar_account_type TEXT DEFAULT 'open_item'
+          CHECK (ar_account_type IN ('open_item','balance_forward'));
+      COMMENT ON COLUMN crm_companies.ar_account_type IS 'Open Item (per-invoice tracking) or Balance Forward (rolling balance). Drives payment application policy.';
+    ui_surface_hint: "Customer Profile > Financial tab; visible on AR detail header"
+    dependencies: []
+
+  - id: customer_ar.last_invoice_date
+    intellidealer_label: "Last Invoice"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+    intellidealer_field_type: "date"
+    intellidealer_purpose: |
+      Date of customer's most recent invoice. Used for activity recency and
+      collections triage. Real value: 04/15/2026.
+    qep_status: "PARTIAL"
+    qep_table: "customer_invoices"
+    qep_column: "MAX(invoice_date) per crm_company_id"
+    qep_evidence:
+      - "customer_invoices.invoice_date"
+    qep_gap_notes: |
+      Computable via aggregation; not surfaced on crm_companies. Recommend
+      cached column for header performance.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE crm_companies ADD COLUMN last_invoice_date DATE;
+      -- Backfill via trigger on customer_invoices insert/update.
+    ui_surface_hint: "AR detail header; Customer Profile financial summary"
+    dependencies: []
+
+  - id: customer_ar.terms
+    intellidealer_label: "Terms"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "CMASTRE"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+      - _OCR_PNG/Phase-8_Financial-Operations_Accounts-Receivable-Outstanding-Details__3.26.11.txt
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "Normal"
+      - "Net 10"
+      - "Net 15"
+      - "Net 30"
+      - "Net 45"
+      - "Net 60"
+      - "COD"
+      - "Prepaid"
+      - "Credit Card"
+    intellidealer_purpose: |
+      Customer's negotiated payment terms. Drives due_date computation on
+      every new invoice, dunning sequence, and finance charge accrual. Real
+      value: "Normal" for GROUND LEVEL, INC. This is regulatory contract
+      language and must match the credit application on file.
+    qep_status: "MISSING"
+    qep_table: "crm_companies"
+    qep_column: "payment_terms_code"
+    qep_evidence: []
+    qep_gap_notes: |
+      No payment-terms field on crm_companies. customer_invoices.due_date is
+      stored per-invoice but the canonical customer-level term is missing.
+      Cannot auto-compute due_date or detect terms-violation invoices.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE TABLE payment_terms (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        code TEXT NOT NULL,
+        name TEXT NOT NULL,
+        net_days INTEGER NOT NULL,
+        discount_pct NUMERIC,
+        discount_days INTEGER,
+        is_cod BOOLEAN DEFAULT false,
+        is_prepaid BOOLEAN DEFAULT false,
+        active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, code)
+      );
+      ALTER TABLE crm_companies
+        ADD COLUMN payment_terms_id UUID REFERENCES payment_terms(id),
+        ADD COLUMN payment_terms_code TEXT;
+      COMMENT ON COLUMN crm_companies.payment_terms_id IS 'Default AR terms applied to new invoices.';
+    ui_surface_hint: "Customer Profile > Financial tab; AR detail header; Quote/Invoice creation"
+    dependencies: []
+
+  - id: customer_ar.average_payment_days
+    intellidealer_label: "Average Payment Days"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+      - _OCR_PNG/Phase-8_Financial-Operations_Accounts-Receivable-Outstanding-Details__3.26.11.txt
+    intellidealer_field_type: "number"
+    intellidealer_purpose: |
+      Rolling average days customer takes to pay invoices. Real value: 113
+      days for GROUND LEVEL (significant past-terms drag). Foundational
+      payment-history KPI for credit decisions.
+    qep_status: "MISSING"
+    qep_table: "crm_companies"
+    qep_column: "avg_payment_days"
+    qep_evidence: []
+    qep_gap_notes: |
+      Not stored or computed in QEP. Required for credit-risk scoring.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      ALTER TABLE crm_companies
+        ADD COLUMN avg_payment_days NUMERIC,
+        ADD COLUMN avg_payment_days_calculated_at TIMESTAMPTZ;
+      -- Nightly job: AVG(EXTRACT(DAY FROM paid_at - invoice_date))
+    ui_surface_hint: "Customer Profile financial summary; AR detail header"
+    dependencies:
+      - customer_invoices.paid_at
+      - customer_invoices.invoice_date
+
+  - id: customer_ar.last_payment_date
+    intellidealer_label: "Last Payment"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+    intellidealer_field_type: "date"
+    intellidealer_purpose: |
+      Date of customer's most recent payment received. Used in collections
+      and credit review. Real value: 04/10/2026.
+    qep_status: "PARTIAL"
+    qep_table: "customer_invoices"
+    qep_column: "MAX(paid_at) per crm_company_id"
+    qep_evidence:
+      - "customer_invoices.paid_at"
+    qep_gap_notes: |
+      Derivable from customer_invoices.paid_at aggregation; recommend cached
+      column on crm_companies for performance.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      ALTER TABLE crm_companies ADD COLUMN last_payment_date DATE;
+    ui_surface_hint: "AR detail header; Customer Profile"
+    dependencies: []
+
+  - id: customer_ar.ar_agency_default
+    intellidealer_label: "A/R Agency Default"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "CMASTRE"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+      - _OCR_PNG/Phase-8_Financial-Operations_Accounts-Receivable-Outstanding-Details__3.26.11.txt
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Default A/R agency (cash-code) used to classify the customer's
+      receivable to a specific GL receivable account. Real value: "1-A/R".
+      Drives sub-ledger to GL posting and credit-limit/credit-rating
+      lookup.
+    qep_status: "MISSING"
+    qep_table: "crm_companies"
+    qep_column: "ar_agency_id"
+    qep_evidence: []
+    qep_gap_notes: |
+      No AR-agency / cash-code concept in QEP. Without it, multiple AR
+      sub-ledgers (e.g., wholesale vs retail vs floor-plan) cannot be
+      isolated.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE TABLE ar_agencies (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        code TEXT NOT NULL,
+        name TEXT NOT NULL,
+        gl_receivable_account TEXT NOT NULL,
+        active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, code)
+      );
+      ALTER TABLE crm_companies ADD COLUMN ar_agency_id UUID REFERENCES ar_agencies(id);
+      ALTER TABLE customer_invoices ADD COLUMN ar_agency_id UUID REFERENCES ar_agencies(id);
+    ui_surface_hint: "Customer Profile > Financial tab"
+    dependencies: []
+
+  - id: customer_ar.highest_balance
+    intellidealer_label: "Highest Balance"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "CMASTRE"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+      - _OCR_PNG/Phase-8_Financial-Operations_Accounts-Receivable-Outstanding-Details__3.26.11.txt
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Highest-ever recorded AR balance for this customer. Drives credit-
+      limit re-evaluation and tells finance team how exposed the dealer has
+      been historically. Real value: 25,749.42.
+    qep_status: "MISSING"
+    qep_table: "crm_companies"
+    qep_column: "highest_ar_balance"
+    qep_evidence: []
+    qep_gap_notes: "Not tracked in QEP."
+    severity: "should"
+    category: "financial"
+    migration_hint: |
+      ALTER TABLE crm_companies
+        ADD COLUMN highest_ar_balance NUMERIC,
+        ADD COLUMN highest_ar_balance_date DATE;
+    ui_surface_hint: "Customer Profile financial summary"
+    dependencies: []
+
+  - id: customer_ar.highest_balance_date
+    intellidealer_label: "Highest Balance Date"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "CMASTRE"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+    intellidealer_field_type: "date"
+    intellidealer_purpose: |
+      Date when highest-ever AR balance was recorded. Real value: 05/01/2023.
+    qep_status: "MISSING"
+    qep_table: "crm_companies"
+    qep_column: "highest_ar_balance_date"
+    qep_evidence: []
+    qep_gap_notes: "Companion to highest_ar_balance."
+    severity: "could"
+    category: "financial"
+    migration_hint: "(see customer_ar.highest_balance)"
+    ui_surface_hint: "Customer Profile financial summary"
+    dependencies:
+      - customer_ar.highest_balance
+
+  - id: customer_ar.credit_limit
+    intellidealer_label: "Credit Limit"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details / Credit Limit Analysis"
+    intellidealer_data_source: "CMASTRE"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+      - Phase-8_Financial-Operations/Accounts Receivable - Credit Limit Analysis.pdf
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Customer-level credit limit dollar amount. Real value: 15000 for
+      GROUND LEVEL. Drives the ar_credit_block automation that prevents new
+      charge sales when AR exceeds limit. Foundational regulatory contract
+      term that must match the credit-application package on file.
+    qep_status: "MISSING"
+    qep_table: "crm_companies"
+    qep_column: "credit_limit"
+    qep_evidence: []
+    qep_gap_notes: |
+      ar_credit_blocks captures the BLOCK event but the underlying credit
+      limit dollar value is nowhere on crm_companies. Cannot make a credit
+      decision without the limit number itself.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      ALTER TABLE crm_companies
+        ADD COLUMN credit_limit NUMERIC DEFAULT 0,
+        ADD COLUMN credit_limit_currency TEXT DEFAULT 'USD',
+        ADD COLUMN credit_limit_set_at TIMESTAMPTZ,
+        ADD COLUMN credit_limit_set_by UUID REFERENCES auth.users(id),
+        ADD COLUMN credit_limit_review_at TIMESTAMPTZ;
+      COMMENT ON COLUMN crm_companies.credit_limit IS 'Approved credit limit dollar amount. Drives credit-hold automation.';
+    ui_surface_hint: "Customer Profile > Financial; Credit Limit Analysis report; Quote workflow"
+    dependencies: []
+
+  - id: customer_ar.total_ar_balance
+    intellidealer_label: "Total A/R"
+    intellidealer_screen: "Accounts Receivable - Credit Limit Analysis"
+    intellidealer_data_source: "CMASTRE / ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Receivable - Credit Limit Analysis.pdf
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Customer's total AR balance for the receivable-account selected.
+      Compared against credit limit to determine % of limit used.
+    qep_status: "PARTIAL"
+    qep_table: "customer_invoices"
+    qep_column: "SUM(balance_due) WHERE crm_company_id=..."
+    qep_evidence:
+      - "customer_invoices.balance_due"
+    qep_gap_notes: |
+      Derivable but not surfaced as a per-customer cached field. Need it
+      cached on crm_companies for credit-block evaluation performance.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      ALTER TABLE crm_companies
+        ADD COLUMN current_ar_balance NUMERIC DEFAULT 0,
+        ADD COLUMN current_ar_balance_updated_at TIMESTAMPTZ;
+      -- Maintain via trigger on customer_invoices.
+    ui_surface_hint: "Customer Profile financial summary; Credit Limit Analysis"
+    dependencies:
+      - customer_ar.credit_limit
+
+  - id: customer_ar.credit_rating
+    intellidealer_label: "Credit Rating"
+    intellidealer_screen: "Accounts Receivable - Credit Limit Analysis"
+    intellidealer_data_source: "CMASTRE"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Receivable - Credit Limit Analysis.pdf
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "A"
+      - "B"
+      - "C"
+      - "D"
+      - "F"
+      - "Hold"
+    intellidealer_purpose: |
+      Internal credit rating (state of customer's credit). Sourced from cash
+      code on the A/R Agency tab of Customer Profile. Drives quote pricing
+      authority, terms negotiation, and collections priority.
+    qep_status: "MISSING"
+    qep_table: "crm_companies"
+    qep_column: "credit_rating"
+    qep_evidence: []
+    qep_gap_notes: "Field absent."
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      ALTER TABLE crm_companies
+        ADD COLUMN credit_rating TEXT
+          CHECK (credit_rating IN ('A','B','C','D','F','HOLD','UNRATED')),
+        ADD COLUMN credit_rating_source TEXT,
+        ADD COLUMN credit_rating_updated_at TIMESTAMPTZ;
+    ui_surface_hint: "Customer Profile > Financial; AR detail header; Quote workflow"
+    dependencies:
+      - customer_ar.ar_agency_default
+
+  - id: customer_ar.percentage_of_credit_limit
+    intellidealer_label: "Percentage"
+    intellidealer_screen: "Accounts Receivable - Credit Limit Analysis"
+    intellidealer_data_source: "CMASTRE"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Receivable - Credit Limit Analysis.pdf
+    intellidealer_field_type: "percent"
+    intellidealer_purpose: |
+      Percentage by which the customer has exceeded their credit limit. Used
+      as the search threshold (Select Percentage of Credit Limit) and as a
+      column in results to flag worst offenders.
+    qep_status: "MISSING"
+    qep_table: "crm_companies"
+    qep_column: "(computed)"
+    qep_evidence: []
+    qep_gap_notes: |
+      Cannot exist until credit_limit and current_ar_balance are stored.
+    severity: "should"
+    category: "financial"
+    migration_hint: |
+      -- View column: current_ar_balance / NULLIF(credit_limit,0) AS pct_of_limit
+    ui_surface_hint: "Credit Limit Analysis dashboard"
+    dependencies:
+      - customer_ar.credit_limit
+      - customer_ar.total_ar_balance
+
+  - id: customer_ar.equipment_disposition
+    intellidealer_label: "Equipment Disposition"
+    intellidealer_screen: "Accounts Receivable - Credit Limit Analysis"
+    intellidealer_data_source: "MNBDD / CMASTRE"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Receivable - Credit Limit Analysis.pdf
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "On Work Order"
+      - "On Rental"
+      - "None"
+    intellidealer_purpose: |
+      Indicator showing whether the customer currently has equipment in the
+      shop on a Work Order, or on Rental. Critical context when freezing
+      credit — dealer cannot release a unit on lien if customer is over
+      limit.
+    qep_status: "MISSING"
+    qep_table: "crm_companies"
+    qep_column: "(derived flag in ar_aging_view)"
+    qep_evidence: []
+    qep_gap_notes: |
+      Not derivable today; requires join across rentals/work_orders. Mission-
+      critical for collections + repossession workflow.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      -- View ar_aging_view should expose
+      --   has_open_work_order BOOLEAN
+      --   has_active_rental    BOOLEAN
+      -- via EXISTS joins to work_orders and rental_contracts.
+    ui_surface_hint: "Credit Limit Analysis row indicator; AR detail header"
+    dependencies: []
+
+  - id: customer_ar.show_zero_credit_limit
+    intellidealer_label: "Show Customers with Zero Credit Limit"
+    intellidealer_screen: "Accounts Receivable - Credit Limit Analysis"
+    intellidealer_data_source: "CMASTRE"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Receivable - Credit Limit Analysis.pdf
+    intellidealer_field_type: "bool"
+    intellidealer_purpose: |
+      Filter toggle for the Credit Limit Analysis screen — when enabled,
+      includes customers whose credit_limit is 0. Useful for finding cash-
+      only customers who have unexpectedly run a balance.
+    qep_status: "MISSING"
+    qep_table: "(UI filter)"
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      UI-only filter; depends on credit_limit being stored.
+    severity: "could"
+    category: "reporting"
+    migration_hint: ""
+    ui_surface_hint: "Credit Limit Analysis filter toggle"
+    dependencies:
+      - customer_ar.credit_limit
+
+  # ─────────────────────────────────────────────────────────────────────
+  # AR INVOICE LINE (Outstanding Details row)
+  # ─────────────────────────────────────────────────────────────────────
+  - id: ar_invoice.invoice_number
+    intellidealer_label: "Invoice Number"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "ARFile / INVHH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Unique invoice identifier (e.g., W06745 for a service invoice). First
+      letter encodes source. Hyperlinks to invoice detail.
+    qep_status: "BUILT"
+    qep_table: "customer_invoices"
+    qep_column: "invoice_number"
+    qep_evidence:
+      - "customer_invoices.invoice_number"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "financial"
+    migration_hint: ""
+    ui_surface_hint: "AR detail row hyperlink"
+    dependencies: []
+
+  - id: ar_invoice.account_number
+    intellidealer_label: "Account"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      GL receivable account number for this invoice (e.g., 1100001). Drives
+      sub-ledger-to-GL reconciliation. The same customer may have invoices
+      across multiple receivable accounts.
+    qep_status: "MISSING"
+    qep_table: "customer_invoices"
+    qep_column: "ar_account_number"
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP customer_invoices does not store the receivable GL account.
+      Without it, the AR-to-GL reconciliation report cannot match.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      ALTER TABLE customer_invoices
+        ADD COLUMN ar_account_number TEXT,
+        ADD COLUMN ar_agency_id UUID REFERENCES ar_agencies(id);
+      CREATE INDEX customer_invoices_ar_account_idx
+        ON customer_invoices(workspace_id, ar_account_number);
+    ui_surface_hint: "AR detail row column; Sub-ledger reconciliation report"
+    dependencies:
+      - customer_ar.ar_agency_default
+
+  - id: ar_invoice.invoice_date
+    intellidealer_label: "Date"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+    intellidealer_field_type: "date"
+    intellidealer_purpose: "The date the transaction was invoiced."
+    qep_status: "BUILT"
+    qep_table: "customer_invoices"
+    qep_column: "invoice_date"
+    qep_evidence:
+      - "customer_invoices.invoice_date"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "financial"
+    migration_hint: ""
+    ui_surface_hint: "AR detail row column"
+    dependencies: []
+
+  - id: ar_invoice.location
+    intellidealer_label: "Location"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: "Branch where invoice was processed (e.g., LAKE CITY)."
+    qep_status: "BUILT"
+    qep_table: "customer_invoices"
+    qep_column: "branch_id"
+    qep_evidence:
+      - "customer_invoices.branch_id"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "AR detail row column; aging filter"
+    dependencies: []
+
+  - id: ar_invoice.description
+    intellidealer_label: "Description"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Short description for the invoice — typically customer name on AR row,
+      or a free-text annotation.
+    qep_status: "BUILT"
+    qep_table: "customer_invoices"
+    qep_column: "description"
+    qep_evidence:
+      - "customer_invoices.description"
+    qep_gap_notes: ""
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "AR detail row column"
+    dependencies: []
+
+  - id: ar_invoice.invoice_amount
+    intellidealer_label: "Invoice Amount"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "ARFile / INVHH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: "Total invoice amount before payments/credits."
+    qep_status: "BUILT"
+    qep_table: "customer_invoices"
+    qep_column: "amount"
+    qep_evidence:
+      - "customer_invoices.amount"
+      - "customer_invoices.total"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "financial"
+    migration_hint: ""
+    ui_surface_hint: "AR detail row column"
+    dependencies: []
+
+  - id: ar_invoice.outstanding_amount
+    intellidealer_label: "Outstanding Amount"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Remaining unpaid balance on the invoice. The number that ages.
+    qep_status: "BUILT"
+    qep_table: "customer_invoices"
+    qep_column: "balance_due"
+    qep_evidence:
+      - "customer_invoices.balance_due"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "financial"
+    migration_hint: ""
+    ui_surface_hint: "AR detail row column"
+    dependencies: []
+
+  - id: ar_invoice.aging_bucket_color
+    intellidealer_label: "Aging color (Current/31-60/61-90/91-120/Over 120)"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "Current"
+      - "31-60"
+      - "61-90"
+      - "91-120"
+      - "Over 120"
+    intellidealer_purpose: |
+      Color-band tag per row (legend visible at bottom of AR detail screen).
+      Identifies the aging bucket each individual invoice falls into so AR
+      clerks can prioritize calls.
+    qep_status: "MISSING"
+    qep_table: "customer_invoices"
+    qep_column: "(derived from balance_due/due_date)"
+    qep_evidence: []
+    qep_gap_notes: |
+      Should be a generated column or view column for cheap rendering.
+    severity: "should"
+    category: "reporting"
+    migration_hint: |
+      ALTER TABLE customer_invoices
+        ADD COLUMN aging_bucket TEXT GENERATED ALWAYS AS (
+          CASE
+            WHEN balance_due <= 0 THEN 'paid'
+            WHEN (CURRENT_DATE - due_date::date) <= 0    THEN 'current'
+            WHEN (CURRENT_DATE - due_date::date) <= 30   THEN '1_30'
+            WHEN (CURRENT_DATE - due_date::date) <= 60   THEN '31_60'
+            WHEN (CURRENT_DATE - due_date::date) <= 90   THEN '61_90'
+            WHEN (CURRENT_DATE - due_date::date) <= 120  THEN '91_120'
+            ELSE 'over_120'
+          END
+        ) STORED;
+    ui_surface_hint: "AR detail row color tag"
+    dependencies:
+      - ar_aging.bucket_current
+
+  - id: ar_invoice.ar_memo
+    intellidealer_label: "A/R Memo - Click here"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+    intellidealer_field_type: "multiline"
+    intellidealer_purpose: |
+      Free-text collections memo. Used by AR/credit team to track call
+      attempts, promises-to-pay, and dispute reasons.
+    qep_status: "MISSING"
+    qep_table: "ar_memos"
+    qep_column: "body"
+    qep_evidence: []
+    qep_gap_notes: |
+      No collections-memo log exists. crm_activities is the closest analog
+      but is not AR-scoped.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      CREATE TABLE ar_memos (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        crm_company_id UUID NOT NULL REFERENCES crm_companies(id),
+        invoice_id UUID REFERENCES customer_invoices(id),
+        memo_type TEXT CHECK (memo_type IN ('call','dispute','promise_to_pay','note')),
+        body TEXT NOT NULL,
+        promise_amount NUMERIC,
+        promise_date DATE,
+        created_by UUID REFERENCES auth.users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      ALTER TABLE ar_memos ENABLE ROW LEVEL SECURITY;
+    ui_surface_hint: "AR detail screen flyout / Customer Profile collections tab"
+    dependencies: []
+
+  - id: ar_invoice.customer_ar_history_link
+    intellidealer_label: "Customer A/R History"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "ARFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+    intellidealer_field_type: "computed"
+    intellidealer_purpose: |
+      Hyperlink that opens a full payment-and-invoice history for the
+      customer. Required for credit re-evaluation and audit trails.
+    qep_status: "PARTIAL"
+    qep_table: "customer_invoices"
+    qep_column: "(view: per-customer history)"
+    qep_evidence:
+      - "customer_invoices"
+    qep_gap_notes: |
+      Data exists but the consolidated history view + UI do not.
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      CREATE OR REPLACE VIEW customer_ar_history AS
+      SELECT i.*, p.amount_cents AS payment_amount_cents, p.succeeded_at
+      FROM customer_invoices i
+      LEFT JOIN portal_payment_intents p ON p.invoice_id = i.id;
+    ui_surface_hint: "Customer Profile > Financial > AR History tab"
+    dependencies: []
+
+  - id: ar_invoice.print_email_actions
+    intellidealer_label: "Print / Email / Select All"
+    intellidealer_screen: "Accounts Receivable - Outstanding Details"
+    intellidealer_data_source: "ARFile / SOINV / WORKORD / RENTINV / EQINV"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Receivable - Outstanding A:R.pdf
+      - Phase-8_Financial-Operations/Accounts-Receivable-Outstanding-Details__3.26.11.png
+    intellidealer_field_type: "computed"
+    intellidealer_purpose: |
+      Bulk actions to print or email invoices/statements directly from the
+      AR detail screen. Outputs map to source-system reports
+      (SOINV/WORKORD/RENTINV/EQINV).
+    qep_status: "MISSING"
+    qep_table: "ar_statement_runs"
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No bulk-statement / bulk-email infrastructure for AR in QEP yet.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      CREATE TABLE ar_statement_runs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        run_type TEXT CHECK (run_type IN ('statement','dunning','reminder')),
+        scope_filter JSONB,
+        delivered_count INTEGER DEFAULT 0,
+        failed_count INTEGER DEFAULT 0,
+        scheduled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        completed_at TIMESTAMPTZ,
+        created_by UUID REFERENCES auth.users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    ui_surface_hint: "AR detail bulk action toolbar"
+    dependencies: []
+
+
+  # ─────────────────────────────────────────────────────────────────────
+  # ACCOUNTS PAYABLE — A/P Outstanding, Vendor Aging
+  # ─────────────────────────────────────────────────────────────────────
+  - id: ap_aging.aging_method
+    intellidealer_label: "Aging Method (Due Date / Invoice Date)"
+    intellidealer_screen: "Accounts Payable Outstanding"
+    intellidealer_data_source: "OUTSTD"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Payable Outstanding.pdf
+      - Phase-8_Financial-Operations/Accounts-Payable__3.26.26.png
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "Due Date"
+      - "Invoice Date"
+    intellidealer_purpose: |
+      Aging basis for AP outstanding report. Due Date age = days since
+      invoice was due (cash-flow planning view). Invoice Date age = days
+      since invoice issued (DPO measurement view).
+    qep_status: "MISSING"
+    qep_table: "ap_aging_view"
+    qep_column: "aging_basis"
+    qep_evidence: []
+    qep_gap_notes: |
+      No AP aging at all in QEP today. Without this, dealer cannot project
+      cash needs or take advantage of early-pay discounts.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE OR REPLACE VIEW ap_aging_view AS
+      SELECT v.id AS vendor_id, v.workspace_id, v.code AS vendor_code, v.name AS vendor_name,
+        SUM(CASE WHEN i.balance_due > 0 AND (CURRENT_DATE - i.due_date::date) <= 0 THEN i.balance_due ELSE 0 END) AS current_amount,
+        SUM(CASE WHEN i.balance_due > 0 AND (CURRENT_DATE - i.due_date::date) BETWEEN 1 AND 30 THEN i.balance_due ELSE 0 END) AS bucket_1_30,
+        SUM(CASE WHEN i.balance_due > 0 AND (CURRENT_DATE - i.due_date::date) BETWEEN 31 AND 60 THEN i.balance_due ELSE 0 END) AS bucket_31_60,
+        SUM(CASE WHEN i.balance_due > 0 AND (CURRENT_DATE - i.due_date::date) BETWEEN 61 AND 90 THEN i.balance_due ELSE 0 END) AS bucket_61_90,
+        SUM(CASE WHEN i.balance_due > 0 AND (CURRENT_DATE - i.due_date::date) > 90 THEN i.balance_due ELSE 0 END) AS bucket_over_90,
+        SUM(CASE WHEN i.balance_due > 0 THEN i.balance_due ELSE 0 END) AS total_outstanding
+      FROM vendor_invoices i
+      JOIN vendor_profiles v ON v.id = i.vendor_id
+      GROUP BY 1,2,3,4;
+    ui_surface_hint: "Finance > AP Outstanding"
+    dependencies: []
+
+  - id: ap_aging.select_vendor_number
+    intellidealer_label: "Select Vendor Number"
+    intellidealer_screen: "Accounts Payable Outstanding"
+    intellidealer_data_source: "OUTSTD"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Payable Outstanding.pdf
+      - Phase-8_Financial-Operations/Accounts-Payable__3.26.26.png
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Vendor lookup for filtering AP outstanding. Vendor number is the
+      primary AP identifier and matches IntelliDealer vendor master.
+    qep_status: "PARTIAL"
+    qep_table: "vendor_profiles"
+    qep_column: "(no `vendor_number` field; only id/code)"
+    qep_evidence:
+      - "vendor_profiles"
+    qep_gap_notes: |
+      vendor_profiles exists but a clean vendor_number column is unclear.
+      Confirm code is canonical vendor number; otherwise add vendor_number.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      -- Confirm/expose vendor_profiles.vendor_number TEXT NOT NULL UNIQUE per workspace.
+      ALTER TABLE vendor_profiles
+        ADD COLUMN IF NOT EXISTS vendor_number TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS vendor_profiles_workspace_number_uidx
+        ON vendor_profiles(workspace_id, vendor_number);
+    ui_surface_hint: "AP Outstanding filter; Vendor lookup"
+    dependencies: []
+
+  - id: ap_aging.select_payable_account
+    intellidealer_label: "Select Payable Account"
+    intellidealer_screen: "Accounts Payable Outstanding"
+    intellidealer_data_source: "OUTSTD"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Payable Outstanding.pdf
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Filter AP aging by a specific GL payable sub-account so dealers can
+      isolate floor-plan vendors vs trade vendors vs lease companies.
+    qep_status: "MISSING"
+    qep_table: "vendor_invoices"
+    qep_column: "ap_account_number"
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP does not have a vendor_invoices table at all today, nor an AP
+      account dimension on payments.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE TABLE vendor_invoices (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        vendor_id UUID NOT NULL REFERENCES vendor_profiles(id),
+        vendor_invoice_number TEXT NOT NULL,
+        invoice_date DATE NOT NULL,
+        due_date DATE NOT NULL,
+        amount NUMERIC NOT NULL,
+        amount_paid NUMERIC DEFAULT 0,
+        balance_due NUMERIC GENERATED ALWAYS AS (amount - COALESCE(amount_paid,0)) STORED,
+        ap_account_number TEXT,
+        po_number TEXT,
+        terms_code TEXT,
+        hold_status TEXT CHECK (hold_status IN ('none','disputed','approval_pending','price_mismatch','quantity_mismatch')),
+        is_1099_reportable BOOLEAN DEFAULT false,
+        branch_id UUID REFERENCES branches(id),
+        notes TEXT,
+        status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','partial','paid','void')),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        deleted_at TIMESTAMPTZ
+      );
+      CREATE INDEX vendor_invoices_vendor_idx ON vendor_invoices(workspace_id, vendor_id, status);
+      CREATE INDEX vendor_invoices_due_idx ON vendor_invoices(workspace_id, due_date) WHERE status != 'paid';
+      ALTER TABLE vendor_invoices ENABLE ROW LEVEL SECURITY;
+    ui_surface_hint: "AP Outstanding filter; Vendor invoice list"
+    dependencies: []
+
+  - id: ap_aging.bucket_current
+    intellidealer_label: "Current"
+    intellidealer_screen: "Accounts Payable Outstanding"
+    intellidealer_data_source: "OUTSTD"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Payable__3.26.26.png
+      - _OCR_PNG/Phase-8_Financial-Operations_Accounts-Payable__3.26.26.txt
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Dollars of AP not yet due. Real example: -6,243.37 (negative indicates
+      vendor credits). Drives weekly cash-disbursement plan.
+    qep_status: "MISSING"
+    qep_table: "ap_aging_view"
+    qep_column: "current_amount"
+    qep_evidence: []
+    qep_gap_notes: "No vendor_invoices table; cannot age."
+    severity: "must"
+    category: "financial"
+    migration_hint: "(see ap_aging_view above)"
+    ui_surface_hint: "AP Outstanding chart"
+    dependencies:
+      - ap_aging.aging_method
+
+  - id: ap_aging.bucket_month_one
+    intellidealer_label: "April 2026 (current month)"
+    intellidealer_screen: "Accounts Payable Outstanding"
+    intellidealer_data_source: "OUTSTD"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Payable__3.26.26.png
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: "Dollars of AP due in current month. Real: 437,593.96."
+    qep_status: "MISSING"
+    qep_table: "ap_aging_view"
+    qep_column: "bucket_month_1"
+    qep_evidence: []
+    qep_gap_notes: "Same as ap_aging.bucket_current."
+    severity: "must"
+    category: "financial"
+    migration_hint: "(see ap_aging_view)"
+    ui_surface_hint: "AP Outstanding chart"
+    dependencies:
+      - ap_aging.aging_method
+
+  - id: ap_aging.bucket_month_two
+    intellidealer_label: "May 2026"
+    intellidealer_screen: "Accounts Payable Outstanding"
+    intellidealer_data_source: "OUTSTD"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Payable__3.26.26.png
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: "Dollars of AP due in second month. Real: 308,245.63."
+    qep_status: "MISSING"
+    qep_table: "ap_aging_view"
+    qep_column: "bucket_month_2"
+    qep_evidence: []
+    qep_gap_notes: "Same."
+    severity: "must"
+    category: "financial"
+    migration_hint: "(see ap_aging_view)"
+    ui_surface_hint: "AP Outstanding chart"
+    dependencies:
+      - ap_aging.aging_method
+
+  - id: ap_aging.bucket_month_three
+    intellidealer_label: "June 2026"
+    intellidealer_screen: "Accounts Payable Outstanding"
+    intellidealer_data_source: "OUTSTD"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Payable__3.26.26.png
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: "Dollars of AP due in third month. Real: 84,666.15."
+    qep_status: "MISSING"
+    qep_table: "ap_aging_view"
+    qep_column: "bucket_month_3"
+    qep_evidence: []
+    qep_gap_notes: "Same."
+    severity: "must"
+    category: "financial"
+    migration_hint: "(see ap_aging_view)"
+    ui_surface_hint: "AP Outstanding chart"
+    dependencies:
+      - ap_aging.aging_method
+
+  - id: ap_aging.bucket_after_month_three
+    intellidealer_label: "After June (>3 months out)"
+    intellidealer_screen: "Accounts Payable Outstanding"
+    intellidealer_data_source: "OUTSTD"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Payable__3.26.26.png
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: "Dollars of AP due more than 3 months out. Real: 2,780.00."
+    qep_status: "MISSING"
+    qep_table: "ap_aging_view"
+    qep_column: "bucket_after_3"
+    qep_evidence: []
+    qep_gap_notes: "Same."
+    severity: "must"
+    category: "financial"
+    migration_hint: "(see ap_aging_view)"
+    ui_surface_hint: "AP Outstanding chart"
+    dependencies:
+      - ap_aging.aging_method
+
+  - id: ap_aging.total_outstanding
+    intellidealer_label: "Total A/P"
+    intellidealer_screen: "Accounts Payable Outstanding"
+    intellidealer_data_source: "OUTSTD"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Payable__3.26.26.png
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: "Total AP outstanding. Real: 827,042.37."
+    qep_status: "MISSING"
+    qep_table: "ap_aging_view"
+    qep_column: "total_outstanding"
+    qep_evidence: []
+    qep_gap_notes: "No AP exists in QEP."
+    severity: "must"
+    category: "financial"
+    migration_hint: "(see ap_aging_view)"
+    ui_surface_hint: "AP Outstanding total card"
+    dependencies:
+      - ap_aging.aging_method
+
+  - id: ap_aging.vendor_name
+    intellidealer_label: "Name (vendor)"
+    intellidealer_screen: "Accounts Payable - Outstanding Details"
+    intellidealer_data_source: "OUTSTD"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts-Payable__3.26.32.png
+      - _OCR_PNG/Phase-8_Financial-Operations_Accounts-Payable__3.26.32.txt
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Vendor business name (e.g., SHEAREX, INC., MITSUBISHI CAPITAL,
+      HD HYUNDAI INFRACORE LLC). Hyperlink to vendor invoice list.
+    qep_status: "BUILT"
+    qep_table: "vendor_profiles"
+    qep_column: "name"
+    qep_evidence:
+      - "vendor_profiles"
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "AP Outstanding Details row"
+    dependencies: []
+
+  - id: ap_invoice.invoice_number
+    intellidealer_label: "Invoice Number (AP)"
+    intellidealer_screen: "Accounts Payable - Outstanding Details (Vouchers Information)"
+    intellidealer_data_source: "OUTSTD"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Payable Outstanding.pdf
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Vendor invoice number — link drills to the Vouchers Information tab
+      showing GL accounts impacted by this invoice (sub-ledger to GL
+      mapping).
+    qep_status: "MISSING"
+    qep_table: "vendor_invoices"
+    qep_column: "vendor_invoice_number"
+    qep_evidence: []
+    qep_gap_notes: "vendor_invoices not present."
+    severity: "must"
+    category: "financial"
+    migration_hint: "(part of vendor_invoices DDL above)"
+    ui_surface_hint: "AP detail / vendor profile"
+    dependencies:
+      - ap_aging.select_payable_account
+
+  - id: ap_invoice.due_date
+    intellidealer_label: "Due Date"
+    intellidealer_screen: "Accounts Payable - Outstanding Details"
+    intellidealer_data_source: "OUTSTD"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Payable Outstanding.pdf
+      - Phase-8_Financial-Operations/Accounts-Payable__3.26.32.png
+    intellidealer_field_type: "date"
+    intellidealer_purpose: "Date AP invoice is due."
+    qep_status: "MISSING"
+    qep_table: "vendor_invoices"
+    qep_column: "due_date"
+    qep_evidence: []
+    qep_gap_notes: "vendor_invoices missing."
+    severity: "must"
+    category: "financial"
+    migration_hint: "(part of vendor_invoices DDL)"
+    ui_surface_hint: "AP detail row"
+    dependencies:
+      - ap_aging.select_payable_account
+
+  - id: ap_invoice.gl_distribution
+    intellidealer_label: "Vouchers Information (GL accounts impacted)"
+    intellidealer_screen: "Accounts Payable - Outstanding Details > Vouchers Information"
+    intellidealer_data_source: "OUTSTD"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Payable Outstanding.pdf
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      The set of GL accounts (debits and credits) generated by an AP
+      invoice. Critical for sub-ledger to GL reconciliation. IntelliDealer
+      shows this as the Vouchers Information tab.
+    qep_status: "MISSING"
+    qep_table: "ap_invoice_distributions"
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "No AP distribution table; cannot post AP to GL today."
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE TABLE ap_invoice_distributions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        vendor_invoice_id UUID NOT NULL REFERENCES vendor_invoices(id) ON DELETE CASCADE,
+        line_number INTEGER NOT NULL,
+        gl_account_number TEXT NOT NULL,
+        gl_segment_branch TEXT,
+        gl_segment_department TEXT,
+        gl_segment_profit_center TEXT,
+        debit_amount NUMERIC NOT NULL DEFAULT 0,
+        credit_amount NUMERIC NOT NULL DEFAULT 0,
+        memo TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (vendor_invoice_id, line_number)
+      );
+    ui_surface_hint: "Vendor Invoice detail flyout > Voucher tab"
+    dependencies:
+      - ap_aging.select_payable_account
+
+  # ─────────────────────────────────────────────────────────────────────
+  # VENDOR PROFILE — 1099 / TIN / W-9 fields (regulatory MUST)
+  # ─────────────────────────────────────────────────────────────────────
+  - id: vendor.is_1099_vendor
+    intellidealer_label: "1099 Vendor (flag)"
+    intellidealer_screen: "Vendor Profile (cross-cutting; AP Outstanding context)"
+    intellidealer_data_source: "VENDOR / OUTSTD"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Payable Outstanding.pdf
+    intellidealer_field_type: "bool"
+    intellidealer_purpose: |
+      Flag indicating vendor must receive a 1099 form for IRS reporting
+      (vendors paid $600+/year for services, and most non-corporate vendors).
+      IRS-required.
+    qep_status: "MISSING"
+    qep_table: "vendor_profiles"
+    qep_column: "is_1099_reportable"
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP vendor_profiles has no 1099 flag. Without it, year-end 1099
+      generation is impossible. Hard regulatory requirement.
+    severity: "must"
+    category: "regulatory"
+    migration_hint: |
+      ALTER TABLE vendor_profiles
+        ADD COLUMN is_1099_reportable BOOLEAN DEFAULT false,
+        ADD COLUMN form_1099_type TEXT
+          CHECK (form_1099_type IN ('1099-NEC','1099-MISC','1099-INT','1099-DIV','1099-K','1099-R')),
+        ADD COLUMN form_1099_box TEXT,
+        ADD COLUMN tin TEXT,
+        ADD COLUMN tin_type TEXT CHECK (tin_type IN ('EIN','SSN','ITIN','Other')),
+        ADD COLUMN w9_received_at DATE,
+        ADD COLUMN w9_document_url TEXT,
+        ADD COLUMN backup_withholding BOOLEAN DEFAULT false;
+      CREATE INDEX vendor_profiles_1099_idx
+        ON vendor_profiles(workspace_id, is_1099_reportable) WHERE is_1099_reportable;
+      COMMENT ON COLUMN vendor_profiles.tin IS 'Vendor Tax Identification Number (EIN/SSN). Stored encrypted at rest. Required for 1099 reporting to IRS.';
+    ui_surface_hint: "Vendor Profile > Tax/1099 tab"
+    dependencies: []
+
+  - id: vendor.form_1099_type
+    intellidealer_label: "1099 Type (NEC/MISC)"
+    intellidealer_screen: "Vendor Profile"
+    intellidealer_data_source: "VENDOR"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Payable Outstanding.pdf
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "1099-NEC"
+      - "1099-MISC"
+      - "1099-INT"
+      - "1099-DIV"
+      - "1099-K"
+      - "1099-R"
+    intellidealer_purpose: |
+      IRS form classification for the vendor. NEC for non-employee
+      compensation (most service vendors), MISC for rent/royalties/etc.
+      Required by IRS.
+    qep_status: "MISSING"
+    qep_table: "vendor_profiles"
+    qep_column: "form_1099_type"
+    qep_evidence: []
+    qep_gap_notes: "Same as vendor.is_1099_vendor."
+    severity: "must"
+    category: "regulatory"
+    migration_hint: "(see vendor.is_1099_vendor migration)"
+    ui_surface_hint: "Vendor Profile > Tax/1099 tab"
+    dependencies:
+      - vendor.is_1099_vendor
+
+  - id: vendor.form_1099_box
+    intellidealer_label: "1099 Box"
+    intellidealer_screen: "Vendor Profile"
+    intellidealer_data_source: "VENDOR"
+    intellidealer_evidence: []
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Specific IRS box (e.g., 1099-NEC Box 1, 1099-MISC Box 1/3/7) where
+      payments accrue. Required for accurate 1099 generation.
+    qep_status: "MISSING"
+    qep_table: "vendor_profiles"
+    qep_column: "form_1099_box"
+    qep_evidence: []
+    qep_gap_notes: "Missing along with rest of 1099 stack."
+    severity: "must"
+    category: "regulatory"
+    migration_hint: "(see vendor.is_1099_vendor migration)"
+    ui_surface_hint: "Vendor Profile > Tax/1099 tab"
+    dependencies:
+      - vendor.is_1099_vendor
+
+  - id: vendor.tin
+    intellidealer_label: "Vendor TIN (EIN/SSN)"
+    intellidealer_screen: "Vendor Profile"
+    intellidealer_data_source: "VENDOR"
+    intellidealer_evidence: []
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Tax Identification Number. EIN for corporations, SSN for sole props,
+      ITIN for non-resident aliens. IRS-mandatory for 1099. Must be
+      collected via signed W-9 before any reportable payment.
+    qep_status: "MISSING"
+    qep_table: "vendor_profiles"
+    qep_column: "tin"
+    qep_evidence: []
+    qep_gap_notes: "Sensitive PII. Must be encrypted at rest with row-level audit."
+    severity: "must"
+    category: "regulatory"
+    migration_hint: |
+      -- Must be encrypted (e.g., pgcrypto or supabase Vault).
+      -- See vendor.is_1099_vendor migration.
+    ui_surface_hint: "Vendor Profile > Tax/1099 tab (masked input)"
+    dependencies:
+      - vendor.is_1099_vendor
+
+  - id: vendor.tin_type
+    intellidealer_label: "TIN Type"
+    intellidealer_screen: "Vendor Profile"
+    intellidealer_data_source: "VENDOR"
+    intellidealer_evidence: []
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "EIN"
+      - "SSN"
+      - "ITIN"
+      - "Other"
+    intellidealer_purpose: "Classifies the TIN above for IRS form selection."
+    qep_status: "MISSING"
+    qep_table: "vendor_profiles"
+    qep_column: "tin_type"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "must"
+    category: "regulatory"
+    migration_hint: "(see vendor.is_1099_vendor)"
+    ui_surface_hint: "Vendor Profile > Tax/1099 tab"
+    dependencies:
+      - vendor.tin
+
+  - id: vendor.w9_received_at
+    intellidealer_label: "W-9 Received Date"
+    intellidealer_screen: "Vendor Profile"
+    intellidealer_data_source: "VENDOR"
+    intellidealer_evidence: []
+    intellidealer_field_type: "date"
+    intellidealer_purpose: |
+      Date dealer received signed W-9 from vendor. Required to substantiate
+      TIN and to release backup withholding if applicable.
+    qep_status: "MISSING"
+    qep_table: "vendor_profiles"
+    qep_column: "w9_received_at"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "must"
+    category: "regulatory"
+    migration_hint: "(see vendor.is_1099_vendor)"
+    ui_surface_hint: "Vendor Profile > Tax/1099 tab"
+    dependencies:
+      - vendor.tin
+
+  - id: vendor.w9_document_url
+    intellidealer_label: "W-9 Document"
+    intellidealer_screen: "Vendor Profile"
+    intellidealer_data_source: "VENDOR"
+    intellidealer_evidence: []
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      URL or storage reference to the scanned signed W-9 PDF. Required for
+      audit defense.
+    qep_status: "MISSING"
+    qep_table: "vendor_profiles"
+    qep_column: "w9_document_url"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "must"
+    category: "regulatory"
+    migration_hint: "(see vendor.is_1099_vendor)"
+    ui_surface_hint: "Vendor Profile > Tax/1099 tab attachment slot"
+    dependencies:
+      - vendor.w9_received_at
+
+  - id: vendor.backup_withholding
+    intellidealer_label: "Backup Withholding"
+    intellidealer_screen: "Vendor Profile"
+    intellidealer_data_source: "VENDOR"
+    intellidealer_evidence: []
+    intellidealer_field_type: "bool"
+    intellidealer_purpose: |
+      Flag for vendors subject to IRS backup withholding (currently 24%
+      federal). When true, AP must withhold from each payment.
+    qep_status: "MISSING"
+    qep_table: "vendor_profiles"
+    qep_column: "backup_withholding"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "must"
+    category: "regulatory"
+    migration_hint: "(see vendor.is_1099_vendor)"
+    ui_surface_hint: "Vendor Profile > Tax/1099 tab"
+    dependencies:
+      - vendor.tin
+
+  - id: vendor.form_1099_ytd_amount
+    intellidealer_label: "1099 YTD Amount"
+    intellidealer_screen: "Vendor Profile"
+    intellidealer_data_source: "VENDOR / OUTSTD"
+    intellidealer_evidence: []
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Year-to-date 1099-reportable payment total per vendor. Used to drive
+      year-end 1099 forms and to surface vendors approaching the $600
+      threshold during the year.
+    qep_status: "MISSING"
+    qep_table: "vendor_1099_ytd"
+    qep_column: "ytd_amount"
+    qep_evidence: []
+    qep_gap_notes: "Required regulatory output."
+    severity: "must"
+    category: "regulatory"
+    migration_hint: |
+      CREATE TABLE vendor_1099_ytd (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        vendor_id UUID NOT NULL REFERENCES vendor_profiles(id),
+        tax_year INTEGER NOT NULL,
+        form_type TEXT NOT NULL,
+        ytd_amount NUMERIC NOT NULL DEFAULT 0,
+        last_payment_at TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, vendor_id, tax_year, form_type)
+      );
+    ui_surface_hint: "Vendor Profile YTD card; year-end 1099 export view"
+    dependencies:
+      - vendor.is_1099_vendor
+
+  - id: vendor.payment_terms
+    intellidealer_label: "Vendor Payment Terms"
+    intellidealer_screen: "Vendor Profile"
+    intellidealer_data_source: "VENDOR"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Accounts Payable Outstanding.pdf
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: |
+      Negotiated terms with vendor (Net 30, 2/10 Net 30, etc.). Drives AP
+      due_date and early-pay discount automation.
+    qep_status: "MISSING"
+    qep_table: "vendor_profiles"
+    qep_column: "payment_terms_id"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      ALTER TABLE vendor_profiles
+        ADD COLUMN payment_terms_id UUID REFERENCES payment_terms(id),
+        ADD COLUMN payment_terms_code TEXT;
+    ui_surface_hint: "Vendor Profile > Financial tab"
+    dependencies:
+      - customer_ar.terms
+
+  - id: vendor.hold_status
+    intellidealer_label: "AP Hold Status"
+    intellidealer_screen: "Vendor Invoice"
+    intellidealer_data_source: "VENDOR"
+    intellidealer_evidence: []
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "None"
+      - "Disputed"
+      - "Approval Pending"
+      - "Price Mismatch"
+      - "Quantity Mismatch"
+      - "Manual Hold"
+    intellidealer_purpose: |
+      Reason a payable is being held back from the next pay run. Drives the
+      AP review/release workflow.
+    qep_status: "MISSING"
+    qep_table: "vendor_invoices"
+    qep_column: "hold_status"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: "(included in vendor_invoices DDL above)"
+    ui_surface_hint: "AP review queue chip"
+    dependencies:
+      - ap_aging.select_payable_account
+
+
+  # ─────────────────────────────────────────────────────────────────────
+  # GENERAL LEDGER — Chart of Accounts, Cost Centers, Journal Entries
+  # ─────────────────────────────────────────────────────────────────────
+  - id: gl_account.account_number
+    intellidealer_label: "Account Number"
+    intellidealer_screen: "Sales Analysis/Depreciation Journal (GL drill-down)"
+    intellidealer_data_source: "GLFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.44.png
+      - _OCR_PNG/Phase-8_Financial-Operations_Real-time-Billing-Queue__3.01.44.txt
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Chart-of-accounts numeric identifier (e.g., 10220, 28000, 28100,
+      42700, 42781). Foundation for all GL postings and financial reports.
+    qep_status: "PARTIAL"
+    qep_table: "gl_routing_rules"
+    qep_column: "gl_number"
+    qep_evidence:
+      - "gl_routing_rules.gl_number"
+    qep_gap_notes: |
+      gl_routing_rules captures rules that ROUTE to GL accounts but the
+      authoritative chart-of-accounts table itself does not exist. Need
+      gl_accounts master table with hierarchy, type, and balance.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE TABLE gl_accounts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        account_number TEXT NOT NULL,
+        account_name TEXT NOT NULL,
+        account_type TEXT NOT NULL CHECK (account_type IN
+          ('asset','liability','equity','revenue','cogs','expense','contra_asset','contra_liability','contra_revenue')),
+        account_subtype TEXT,
+        parent_account_id UUID REFERENCES gl_accounts(id),
+        is_header BOOLEAN DEFAULT false,
+        is_active BOOLEAN DEFAULT true,
+        normal_balance TEXT NOT NULL CHECK (normal_balance IN ('debit','credit')),
+        currency TEXT DEFAULT 'USD',
+        cost_center_required BOOLEAN DEFAULT false,
+        branch_segment_required BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        deleted_at TIMESTAMPTZ,
+        UNIQUE (workspace_id, account_number)
+      );
+      CREATE INDEX gl_accounts_parent_idx ON gl_accounts(parent_account_id);
+      ALTER TABLE gl_accounts ENABLE ROW LEVEL SECURITY;
+    ui_surface_hint: "Settings > Chart of Accounts; GL Reports"
+    dependencies: []
+
+  - id: gl_account.account_description
+    intellidealer_label: "Account Description"
+    intellidealer_screen: "Sales Analysis/Depreciation Journal"
+    intellidealer_data_source: "GLFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.44.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Human-readable account name (e.g., Incoming Wire Transfers, Security
+      Deposit Holding, Write-Down, State Sales Tax Payable, License Tax
+      Payable, Rental, Rental Cost-of-Sales, Rental Hauling Account).
+    qep_status: "PARTIAL"
+    qep_table: "gl_routing_rules"
+    qep_column: "gl_name"
+    qep_evidence:
+      - "gl_routing_rules.gl_name"
+    qep_gap_notes: |
+      Captured per routing rule but not authoritative on a chart-of-accounts
+      master.
+    severity: "must"
+    category: "financial"
+    migration_hint: "(account_name in gl_accounts DDL)"
+    ui_surface_hint: "Chart of Accounts list"
+    dependencies:
+      - gl_account.account_number
+
+  - id: gl_account.cost_center
+    intellidealer_label: "Cost Center"
+    intellidealer_screen: "Sales Analysis/Depreciation Journal"
+    intellidealer_data_source: "GLFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.44.png
+      - _OCR_PNG/Phase-8_Financial-Operations_Real-time-Billing-Queue__3.01.44.txt
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Two-digit cost-center segment (e.g., '01' = LAKE CITY) appended to
+      base GL account. IntelliDealer report shows column "Cost Center".
+      Foundation for branch P&L.
+    qep_status: "MISSING"
+    qep_table: "gl_cost_centers"
+    qep_column: "code"
+    qep_evidence: []
+    qep_gap_notes: |
+      QEP has branches but no concept of a GL cost-center segment used in
+      multi-segment account coding.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE TABLE gl_cost_centers (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        code TEXT NOT NULL,
+        name TEXT NOT NULL,
+        branch_id UUID REFERENCES branches(id),
+        department TEXT,
+        active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, code)
+      );
+    ui_surface_hint: "Settings > Cost Centers; GL postings"
+    dependencies:
+      - gl_account.account_number
+
+  - id: gl_account.profit_center
+    intellidealer_label: "Profit Center"
+    intellidealer_screen: "Employee Profile (Profit Center field)"
+    intellidealer_data_source: "EMPMSTR"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Employee-Profile-Payroll-Detail__3.00.18.png
+      - _OCR_PNG/Phase-8_Financial-Operations_Employee-Profile-Payroll-Detail__3.00.18.txt
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Department/profit-center segment (e.g., '41 SERVICE', '22'). Drives
+      department P&L. Tied to employees and to GL postings.
+    qep_status: "MISSING"
+    qep_table: "gl_profit_centers"
+    qep_column: "code"
+    qep_evidence: []
+    qep_gap_notes: "No profit-center master in QEP."
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE TABLE gl_profit_centers (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        code TEXT NOT NULL,
+        name TEXT NOT NULL,
+        department TEXT,
+        manager_id UUID,
+        active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, code)
+      );
+    ui_surface_hint: "Employee Profile; GL postings; departmental P&L"
+    dependencies: []
+
+  - id: gl_account.company
+    intellidealer_label: "Company (multi-entity)"
+    intellidealer_screen: "Sales Analysis/Depreciation Journal"
+    intellidealer_data_source: "GLFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.44.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Reporting-entity segment. Header shows 'Company: 01 QUALITY EQUIPMENT'.
+      Required for multi-entity dealers consolidating financials.
+    qep_status: "MISSING"
+    qep_table: "gl_companies"
+    qep_column: "code"
+    qep_evidence: []
+    qep_gap_notes: |
+      No multi-entity concept in QEP today. Would block any future
+      acquisition or multi-LLC structure.
+    severity: "should"
+    category: "financial"
+    migration_hint: |
+      CREATE TABLE gl_companies (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        code TEXT NOT NULL,
+        legal_name TEXT NOT NULL,
+        ein TEXT,
+        currency TEXT NOT NULL DEFAULT 'USD',
+        fiscal_year_end_month INTEGER NOT NULL DEFAULT 12,
+        active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, code)
+      );
+    ui_surface_hint: "Settings > Companies; consolidated reports"
+    dependencies: []
+
+  - id: gl_account.division
+    intellidealer_label: "Division"
+    intellidealer_screen: "Sales Analysis/Depreciation Journal"
+    intellidealer_data_source: "GLFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.44.png
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Sub-entity segment within a company (Division: 01 QUALITY EQUIPMENT).
+      Used for divisional roll-ups.
+    qep_status: "MISSING"
+    qep_table: "gl_divisions"
+    qep_column: "code"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "could"
+    category: "financial"
+    migration_hint: |
+      CREATE TABLE gl_divisions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        company_id UUID NOT NULL REFERENCES gl_companies(id),
+        code TEXT NOT NULL,
+        name TEXT NOT NULL,
+        active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, company_id, code)
+      );
+    ui_surface_hint: "GL postings segment; divisional P&L"
+    dependencies:
+      - gl_account.company
+
+  - id: gl_journal.debit_amount
+    intellidealer_label: "Debit"
+    intellidealer_screen: "Sales Analysis/Depreciation Journal"
+    intellidealer_data_source: "GLFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.44.png
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Per-account debit amount. Real values seen: 28202.00, 7280.00,
+      .38552.00 (header total). End-of-report total must equal credit total.
+    qep_status: "MISSING"
+    qep_table: "gl_journal_lines"
+    qep_column: "debit_amount"
+    qep_evidence: []
+    qep_gap_notes: |
+      No journal-line table exists in QEP. Cannot post sub-ledger transactions
+      to GL.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE TABLE gl_journal_entries (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        company_id UUID REFERENCES gl_companies(id),
+        journal_number TEXT NOT NULL,
+        journal_type TEXT NOT NULL CHECK (journal_type IN
+          ('sales','cogs','ar_cash_receipt','ap_payment','ap_invoice','adjusting','closing','manual','reversal','recurring','depreciation')),
+        source_module TEXT,
+        source_reference TEXT,
+        posting_date DATE NOT NULL,
+        period_id UUID,
+        memo TEXT,
+        status TEXT NOT NULL DEFAULT 'unposted' CHECK (status IN ('unposted','posted','voided','reversed')),
+        reversed_by_entry_id UUID REFERENCES gl_journal_entries(id),
+        reverses_entry_id UUID REFERENCES gl_journal_entries(id),
+        posted_at TIMESTAMPTZ,
+        posted_by UUID REFERENCES auth.users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, journal_number)
+      );
+      CREATE TABLE gl_journal_lines (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        journal_entry_id UUID NOT NULL REFERENCES gl_journal_entries(id) ON DELETE CASCADE,
+        line_number INTEGER NOT NULL,
+        gl_account_id UUID NOT NULL REFERENCES gl_accounts(id),
+        cost_center_id UUID REFERENCES gl_cost_centers(id),
+        profit_center_id UUID REFERENCES gl_profit_centers(id),
+        branch_id UUID REFERENCES branches(id),
+        debit_amount NUMERIC NOT NULL DEFAULT 0,
+        credit_amount NUMERIC NOT NULL DEFAULT 0,
+        memo TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (journal_entry_id, line_number),
+        CHECK (NOT (debit_amount > 0 AND credit_amount > 0))
+      );
+      ALTER TABLE gl_journal_entries ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE gl_journal_lines ENABLE ROW LEVEL SECURITY;
+    ui_surface_hint: "Finance > GL > Journal Entry detail"
+    dependencies:
+      - gl_account.account_number
+
+  - id: gl_journal.credit_amount
+    intellidealer_label: "Credit"
+    intellidealer_screen: "Sales Analysis/Depreciation Journal"
+    intellidealer_data_source: "GLFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.44.png
+    intellidealer_field_type: "currency"
+    intellidealer_purpose: |
+      Per-account credit amount (real example values: 2500.00, 7380.00,
+      1452.00, 50.00, 1000.00, 9200.00, .38552.00 grand total).
+    qep_status: "MISSING"
+    qep_table: "gl_journal_lines"
+    qep_column: "credit_amount"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "must"
+    category: "financial"
+    migration_hint: "(see gl_journal_lines DDL above)"
+    ui_surface_hint: "Journal Entry detail"
+    dependencies:
+      - gl_journal.debit_amount
+
+  - id: gl_journal.distribution_indicator
+    intellidealer_label: "+ INDICATES THAT DISTRIBUTION CURRENTLY EXISTS FOR THIS ACCOUNT"
+    intellidealer_screen: "Sales Analysis/Depreciation Journal"
+    intellidealer_data_source: "GLFile"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.44.png
+      - _OCR_PNG/Phase-8_Financial-Operations_Real-time-Billing-Queue__3.01.44.txt
+    intellidealer_field_type: "bool"
+    intellidealer_purpose: |
+      "+" marker beside an account number on the GL report indicates a
+      distribution is currently posted for that account. A signal that the
+      account is in active use this period.
+    qep_status: "MISSING"
+    qep_table: "gl_journal_lines"
+    qep_column: "(derived)"
+    qep_evidence: []
+    qep_gap_notes: "Reporting-only flag derived from EXISTS lookup."
+    severity: "could"
+    category: "reporting"
+    migration_hint: ""
+    ui_surface_hint: "Journal report account list"
+    dependencies:
+      - gl_journal.debit_amount
+
+  - id: gl_period.fiscal_period
+    intellidealer_label: "A/R Date (current month-end open)"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
+    intellidealer_field_type: "date"
+    intellidealer_purpose: |
+      "A/R Date" column on the Real-time Billing Queue is the currently-open
+      AR period. Drives sub-ledger cutoff for closing.
+    qep_status: "MISSING"
+    qep_table: "gl_periods"
+    qep_column: "period_end"
+    qep_evidence: []
+    qep_gap_notes: |
+      No fiscal-period table. Cannot enforce period close, accruals, or
+      prepaid amortization.
+    severity: "must"
+    category: "financial"
+    migration_hint: |
+      CREATE TABLE gl_periods (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        company_id UUID REFERENCES gl_companies(id),
+        period_year INTEGER NOT NULL,
+        period_month INTEGER NOT NULL CHECK (period_month BETWEEN 1 AND 12),
+        period_start DATE NOT NULL,
+        period_end DATE NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open'
+          CHECK (status IN ('future','open','soft_closed','hard_closed')),
+        ar_closed_at TIMESTAMPTZ,
+        ap_closed_at TIMESTAMPTZ,
+        gl_closed_at TIMESTAMPTZ,
+        closed_by UUID REFERENCES auth.users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, company_id, period_year, period_month)
+      );
+    ui_surface_hint: "Finance > Period Close console"
+    dependencies:
+      - gl_account.company
+
+  - id: gl_period.period_status
+    intellidealer_label: "Period Status (Open/Soft-Close/Hard-Close)"
+    intellidealer_screen: "Period Close (workflow)"
+    intellidealer_data_source: "GLFile"
+    intellidealer_evidence: []
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "Future"
+      - "Open"
+      - "Soft Closed"
+      - "Hard Closed"
+    intellidealer_purpose: |
+      Lifecycle of the fiscal period. Soft Close prevents new postings but
+      allows reversal; Hard Close locks period entirely.
+    qep_status: "MISSING"
+    qep_table: "gl_periods"
+    qep_column: "status"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "must"
+    category: "financial"
+    migration_hint: "(see gl_periods DDL)"
+    ui_surface_hint: "Period Close console"
+    dependencies:
+      - gl_period.fiscal_period
+
+  # ─────────────────────────────────────────────────────────────────────
+  # SUB-LEDGER → GL POSTING (Real-time Billing Queue)
+  # ─────────────────────────────────────────────────────────────────────
+  - id: billing_queue.reference_number
+    intellidealer_label: "Reference Number"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.27.png
+      - _OCR_PNG/Phase-8_Financial-Operations_Real-time-Billing-Queue__3.01.27.txt
+    intellidealer_field_type: "text"
+    intellidealer_purpose: |
+      Unique billing-queue reference (e.g., 000417, 000354, E00025, E01385).
+      Hyperlinks to Data Portal showing reports for that billing.
+    qep_status: "MISSING"
+    qep_table: "billing_queue"
+    qep_column: "reference_number"
+    qep_evidence: []
+    qep_gap_notes: |
+      No real-time billing queue table. QEP doesn't track sub-ledger
+      billing-run state today.
+    severity: "must"
+    category: "operational"
+    migration_hint: |
+      CREATE TABLE billing_queue (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        reference_number TEXT NOT NULL,
+        billing_type TEXT NOT NULL CHECK (billing_type IN
+          ('parts','service','rental','equipment','general','rental_counter')),
+        location_id UUID REFERENCES branches(id),
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN
+          ('pending','processing','completed','failed')),
+        billing_date DATE,
+        ar_period_id UUID REFERENCES gl_periods(id),
+        printer TEXT,
+        invoice_printer TEXT,
+        billing_output TEXT,
+        print_format TEXT,
+        submitted_by UUID REFERENCES auth.users(id),
+        submitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        processing_start TIMESTAMPTZ,
+        processing_end TIMESTAMPTZ,
+        error_message TEXT,
+        error_stack_trace TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (workspace_id, reference_number)
+      );
+      CREATE INDEX billing_queue_status_idx ON billing_queue(workspace_id, status, submitted_at DESC);
+      ALTER TABLE billing_queue ENABLE ROW LEVEL SECURITY;
+    ui_surface_hint: "Finance > Real-time Billing Queue list"
+    dependencies: []
+
+  - id: billing_queue.location
+    intellidealer_label: "Location (originating branch)"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.27.png
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: "Branch that originated the billing job (e.g., 01 - LAKE CITY, 02 - OCALA)."
+    qep_status: "MISSING"
+    qep_table: "billing_queue"
+    qep_column: "location_id"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: "(see billing_queue DDL)"
+    ui_surface_hint: "Billing Queue filter"
+    dependencies:
+      - billing_queue.reference_number
+
+  - id: billing_queue.billing_type
+    intellidealer_label: "Type (billing source)"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.27.png
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "Parts"
+      - "Service"
+      - "Rental"
+      - "Equipment"
+      - "General Invoice"
+      - "Rental Counter"
+    intellidealer_purpose: "Source sub-ledger for the billing run."
+    qep_status: "MISSING"
+    qep_table: "billing_queue"
+    qep_column: "billing_type"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: "(see billing_queue DDL)"
+    ui_surface_hint: "Billing Queue filter"
+    dependencies:
+      - billing_queue.reference_number
+
+  - id: billing_queue.status
+    intellidealer_label: "Status"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.27.png
+    intellidealer_field_type: "enum"
+    intellidealer_enum_values:
+      - "Pending"
+      - "Processing"
+      - "Failed"
+      - "Completed"
+    intellidealer_purpose: |
+      Lifecycle status of the billing run. Failed jobs require remediation
+      before period close.
+    qep_status: "MISSING"
+    qep_table: "billing_queue"
+    qep_column: "status"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: "(see billing_queue DDL)"
+    ui_surface_hint: "Billing Queue status chip"
+    dependencies:
+      - billing_queue.reference_number
+
+  - id: billing_queue.error_message
+    intellidealer_label: "Error"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.00.59.png
+    intellidealer_field_type: "multiline"
+    intellidealer_purpose: |
+      Click "Error" link to see error description and full stack trace. "No
+      Transactions Found" is treated as informational, not failure.
+    qep_status: "MISSING"
+    qep_table: "billing_queue"
+    qep_column: "error_message + error_stack_trace"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: "(see billing_queue DDL)"
+    ui_surface_hint: "Billing Queue Error flyout"
+    dependencies:
+      - billing_queue.status
+
+  - id: billing_queue.submitted_by
+    intellidealer_label: "Submitted By"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.27.png
+    intellidealer_field_type: "fk"
+    intellidealer_purpose: "User who submitted the billing run (audit trail)."
+    qep_status: "MISSING"
+    qep_table: "billing_queue"
+    qep_column: "submitted_by"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: "(see billing_queue DDL)"
+    ui_surface_hint: "Billing Queue row"
+    dependencies:
+      - billing_queue.reference_number
+
+  - id: billing_queue.submitted_at
+    intellidealer_label: "Submitted Date"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.27.png
+    intellidealer_field_type: "date"
+    intellidealer_purpose: "Date and time the billing was submitted."
+    qep_status: "MISSING"
+    qep_table: "billing_queue"
+    qep_column: "submitted_at"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "must"
+    category: "operational"
+    migration_hint: "(see billing_queue DDL)"
+    ui_surface_hint: "Billing Queue row"
+    dependencies:
+      - billing_queue.reference_number
+
+  - id: billing_queue.processing_start
+    intellidealer_label: "Processing Start"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.27.png
+    intellidealer_field_type: "date"
+    intellidealer_purpose: "Date and time the job started running from the queue."
+    qep_status: "MISSING"
+    qep_table: "billing_queue"
+    qep_column: "processing_start"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "should"
+    category: "operational"
+    migration_hint: "(see billing_queue DDL)"
+    ui_surface_hint: "Billing Queue row"
+    dependencies:
+      - billing_queue.reference_number
+
+  - id: billing_queue.processing_end
+    intellidealer_label: "Processing End"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.27.png
+    intellidealer_field_type: "date"
+    intellidealer_purpose: "Date and time the job ended."
+    qep_status: "MISSING"
+    qep_table: "billing_queue"
+    qep_column: "processing_end"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "should"
+    category: "operational"
+    migration_hint: "(see billing_queue DDL)"
+    ui_surface_hint: "Billing Queue row"
+    dependencies:
+      - billing_queue.reference_number
+
+  - id: billing_queue.billing_date
+    intellidealer_label: "Billing Date"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
+    intellidealer_field_type: "date"
+    intellidealer_purpose: "User-selected date for when to bill the invoice."
+    qep_status: "PARTIAL"
+    qep_table: "customer_invoices"
+    qep_column: "invoice_date"
+    qep_evidence:
+      - "customer_invoices.invoice_date"
+    qep_gap_notes: |
+      Existing customer_invoices.invoice_date is invoice-level; billing-run-
+      level billing_date is missing on the queue.
+    severity: "must"
+    category: "financial"
+    migration_hint: "(billing_date in billing_queue DDL)"
+    ui_surface_hint: "Billing Queue row"
+    dependencies:
+      - billing_queue.reference_number
+
+  - id: billing_queue.ar_date
+    intellidealer_label: "A/R Date"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
+    intellidealer_field_type: "date"
+    intellidealer_purpose: "Currently-open AR month-end. Drives the period this billing posts to."
+    qep_status: "MISSING"
+    qep_table: "billing_queue"
+    qep_column: "ar_period_id"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "must"
+    category: "financial"
+    migration_hint: "(see billing_queue DDL)"
+    ui_surface_hint: "Billing Queue row"
+    dependencies:
+      - gl_period.fiscal_period
+
+  - id: billing_queue.printer
+    intellidealer_label: "Printer"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
+    intellidealer_field_type: "text"
+    intellidealer_purpose: "Printer assigned to print the billing reports."
+    qep_status: "MISSING"
+    qep_table: "billing_queue"
+    qep_column: "printer"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "could"
+    category: "operational"
+    migration_hint: "(see billing_queue DDL)"
+    ui_surface_hint: "Billing Queue row"
+    dependencies:
+      - billing_queue.reference_number
+
+  - id: billing_queue.invoice_printer
+    intellidealer_label: "Invoice Printer"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
+    intellidealer_field_type: "text"
+    intellidealer_purpose: "Printer assigned for the invoice copies."
+    qep_status: "MISSING"
+    qep_table: "billing_queue"
+    qep_column: "invoice_printer"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "could"
+    category: "operational"
+    migration_hint: "(see billing_queue DDL)"
+    ui_surface_hint: "Billing Queue row"
+    dependencies:
+      - billing_queue.reference_number
+
+  - id: billing_queue.billing_output
+    intellidealer_label: "Billing Output"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
+    intellidealer_field_type: "text"
+    intellidealer_purpose: "Output target determined at the time of billing the invoice."
+    qep_status: "MISSING"
+    qep_table: "billing_queue"
+    qep_column: "billing_output"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "could"
+    category: "operational"
+    migration_hint: "(see billing_queue DDL)"
+    ui_surface_hint: "Billing Queue row"
+    dependencies:
+      - billing_queue.reference_number
+
+  - id: billing_queue.print_format
+    intellidealer_label: "Print Format"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
+    intellidealer_field_type: "text"
+    intellidealer_purpose: "Format of the print output."
+    qep_status: "MISSING"
+    qep_table: "billing_queue"
+    qep_column: "print_format"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "could"
+    category: "operational"
+    migration_hint: "(see billing_queue DDL)"
+    ui_surface_hint: "Billing Queue row"
+    dependencies:
+      - billing_queue.reference_number
+
+  - id: billing_queue.show_all_attempted
+    intellidealer_label: "Show All Attempted Billings"
+    intellidealer_screen: "Real-time Billing Queue"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.27.png
+    intellidealer_field_type: "bool"
+    intellidealer_purpose: |
+      Filter toggle to include billings that were attempted but not
+      successfully submitted. Required for diagnosing failed runs.
+    qep_status: "MISSING"
+    qep_table: "(UI filter)"
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "UI-only; depends on billing_queue persistence."
+    severity: "should"
+    category: "operational"
+    migration_hint: ""
+    ui_surface_hint: "Billing Queue filter"
+    dependencies:
+      - billing_queue.status
+
+  - id: billing_queue.purge_trigger
+    intellidealer_label: "Real-Time Billing Queue Purge (weekly trigger)"
+    intellidealer_screen: "Real-time Billing Queue (purge automation)"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
+    intellidealer_field_type: "computed"
+    intellidealer_purpose: |
+      Scheduled job that purges Completed/Failed jobs older than one month.
+      Required for billing-queue housekeeping and audit retention.
+    qep_status: "MISSING"
+    qep_table: "(cron job)"
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "No batch-job scheduler entry today."
+    severity: "should"
+    category: "operational"
+    migration_hint: |
+      -- pg_cron schedule
+      SELECT cron.schedule('billing_queue_purge', '0 2 * * 0',
+        $$DELETE FROM billing_queue
+          WHERE status IN ('completed','failed')
+            AND submitted_at < now() - INTERVAL '30 days'$$);
+    ui_surface_hint: "Settings > Batch Jobs > Billing Queue Purge"
+    dependencies:
+      - billing_queue.reference_number
+
+  - id: billing_queue.related_reports
+    intellidealer_label: "Generated Reports (Sales Analysis Journal, Invoice Register, etc.)"
+    intellidealer_screen: "Real-time Billing Queue > Data Portal"
+    intellidealer_data_source: "BILLINGSCH"
+    intellidealer_evidence:
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.39.png
+      - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.44.png
+    intellidealer_field_type: "json"
+    intellidealer_purpose: |
+      Reports auto-generated by the billing run (SAJR, IRR, SAASR, SAARR,
+      RCOSJ, RBPR — Sales Analysis Journal, Invoice Register, Sales Analysis
+      Allocation Sales/Returns, Rental Cost-of-Sales Journal, Rental Billing
+      Preliminary Report). Each report number drillable to PDF preview.
+    qep_status: "MISSING"
+    qep_table: "billing_run_reports"
+    qep_column: "report_number, report_name, document_url"
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: "should"
+    category: "reporting"
+    migration_hint: |
+      CREATE TABLE billing_run_reports (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL,
+        billing_queue_id UUID NOT NULL REFERENCES billing_queue(id) ON DELETE CASCADE,
+        report_number TEXT NOT NULL,
+        report_name TEXT NOT NULL,
+        document_url TEXT,
+        location_id UUID REFERENCES branches(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    ui_surface_hint: "Billing Queue > Data Portal flyout"
+    dependencies:
+      - billing_queue.reference_number

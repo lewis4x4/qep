@@ -3,9 +3,11 @@ import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import type { RouterCtx } from "./crm-router-service.ts";
 import {
   createActivity,
+  createCompany,
   deliverActivity,
   getCommunicationTarget,
   patchActivity,
+  patchCompany,
 } from "./crm-router-data.ts";
 
 interface QueryResult {
@@ -204,6 +206,34 @@ function makeActivityMutationClient(
     },
   } as unknown as SupabaseClient;
 }
+
+Deno.test("createCompany rejects rep EIN writes before database mutation", async () => {
+  const ctx = makeCtx({
+    callerDb: makeClient(async () => {
+      throw new Error("database should not be called for unauthorized EIN writes");
+    }),
+  });
+
+  await assertRejects(
+    () => createCompany(ctx, { name: "Evergreen Farms", ein: "12-3456789" }),
+    Error,
+    "FORBIDDEN_CUSTOMER_EIN_WRITE",
+  );
+});
+
+Deno.test("patchCompany rejects rep EIN writes before database mutation", async () => {
+  const ctx = makeCtx({
+    callerDb: makeClient(async () => {
+      throw new Error("database should not be called for unauthorized EIN writes");
+    }),
+  });
+
+  await assertRejects(
+    () => patchCompany(ctx, "company-1", { name: "Evergreen Farms", ein: "12-3456789" }),
+    Error,
+    "FORBIDDEN_CUSTOMER_EIN_WRITE",
+  );
+});
 
 Deno.test("getCommunicationTarget fails closed for cross-rep hidden contacts", async () => {
   const ctx = makeCtx({

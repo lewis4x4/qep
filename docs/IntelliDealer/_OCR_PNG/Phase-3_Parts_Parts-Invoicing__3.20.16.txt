@@ -1,0 +1,110 @@
+pfwf5066.cdkglobal-id.net
+
+= [ir = ear Bo
+— Sell: 0.51
+Description: M16 NUT Source: List Price: 0.35
+Q Ii Parts / Package: 1 Class: Cost: 0.35
+| Vendor: PRINOTH GMBH Type: Average Cost: 0.35
+Finanet Machine: SYS ADD, P/O MAINT Return: Level 1: 0.00
+Model: Weight: 0.00 Level 2: 0.00
+| Update Type: Automatic Matrix: YANMAR Level 3: 0.00
+is | Custom Label: Yes OFC Reclass: Level 4: 0.00
+Category: None
+Last Count:
+Last Count Date:
+Subs: Added: 02/08/2023
+Managq Reman: Modified: 02/19/2026
+= | Comment:
+
+Suppor Update/View Receipt
+
+Current Mar26Feb26Jan26 Dec25 Nov25 Oct25Sep25Aug25Jul25Jun25May25Apr25 L6L12
+FF Dit: Quantity ty) 0 0 () ty) ty) 0 0 o oO 0 0 000 c
+Demand 0 oO oO 0 0 0 oO oO oO 0 oO oO 0 oOo 0
+Trips 0 oO oO 0 0 0 oO oO oO 0 oO oO 0 oOo 0
+Average 0 oO oO 0 0 0 oO oO oO 0 oO oO 0 Oo Oo 4
+Mar25Feb25Jan25 Dec24Nov24 Oct24Sep24Aug24Jul24Jun24May24Apr24LYR2YR 3
+Quantity
+Demand od
+Trips
+Average ¥
+; On . Do not Order 4
+Location Hand2" Order OFC OFC: 5 Code: q
+OCALA 0 0 5 Package 1 Do not Order
+Quantity: Date: ’
+Parts Per 1 Season
+Set: Length: 1
+Order 4
+Quantity: Effectual %:
+Safety Number of
+Stock: Months: ee! 100
++ AMAX APR
+Lead Time: Code / Source: /
+Reorder Season Code:
+Point:
+rst Month Required 0
+Shift: Quantity:
+0
+
+oooo
+oooo
+oooo
+oooo
+oooo
+oooo
+oooo
+oooo
+oooo
+oooo
+oooo
+oooo
+oooo
+oeooo
+
+Central
+Branch:
+Central
+Order:
+Reclass: N Reserved:
+Protect
+Months:
+Protect
+Quantity:
+Protect
+Code:
+
+N/A Inventory: 0
+
+Allocated:
+
+On Hand:
+On Order: te)
+
+In Transit: te)
+
+@ Ad
+
+ional Information
+
+Lost Sale, Special Order) Movement Code: ?
+Frequency: Frequency:
+
+Lost Sale Special Order, — .
+
+Quantity: 0 Quanti 0 Activity Code:
+
+YTD Sales $: 0.00 Last Order: 009520 Last Stock Order: 03/28/2026
+
+YTD Sales past OFC
+Last Order Type: SO Reclass:
+From / To
+
+Element:
+
+Quantity: 0
+Date Last Sale: 04/24/2023 Last Receipt Date: 04/06/2023
+
+Company Last,
+12:
+
+Months Supply: 0.0

@@ -1,0 +1,337 @@
+manifest_version: '1.0'
+generated_at: '2026-04-26T00:00:00Z'
+description: "IntelliDealer \u2192 QEP Gap Audit \u2014 assembled from 9 phase YAMLs"
+phases:
+- phase: Phase-1_CRM
+  yaml_path: docs/intellidealer-gap-audit/phase-1-crm.yaml
+  field_count: 93
+  must_count: 39
+  must_missing_count: 22
+  pdf_count: 3
+  png_count: 10
+  ocr_count: 13
+- phase: Phase-2_Sales-Intelligence
+  yaml_path: docs/intellidealer-gap-audit/phase-2-sales-intelligence.yaml
+  field_count: 102
+  must_count: 54
+  must_missing_count: 18
+  pdf_count: 5
+  png_count: 40
+  ocr_count: 43
+- phase: Phase-3_Parts
+  yaml_path: docs/intellidealer-gap-audit/phase-3-parts.yaml
+  field_count: 106
+  must_count: 66
+  must_missing_count: 11
+  pdf_count: 5
+  png_count: 30
+  ocr_count: 35
+- phase: Phase-4_Service
+  yaml_path: docs/intellidealer-gap-audit/phase-4-service.yaml
+  field_count: 101
+  must_count: 58
+  must_missing_count: 26
+  pdf_count: 8
+  png_count: 36
+  ocr_count: 44
+- phase: Phase-5_Deal-Genome
+  yaml_path: docs/intellidealer-gap-audit/phase-5-deal-genome.yaml
+  field_count: 100
+  must_count: 57
+  must_missing_count: 48
+  pdf_count: 1
+  png_count: 9
+  ocr_count: 11
+- phase: Phase-6_Rental
+  yaml_path: docs/intellidealer-gap-audit/phase-6-rental.yaml
+  field_count: 76
+  must_count: 60
+  must_missing_count: 36
+  pdf_count: 1
+  png_count: 0
+  ocr_count: 1
+- phase: Phase-8_Financial-Operations
+  yaml_path: docs/intellidealer-gap-audit/phase-8-financial-operations.yaml
+  field_count: 92
+  must_count: 60
+  must_missing_count: 49
+  pdf_count: 7
+  png_count: 16
+  ocr_count: 23
+- phase: Phase-9_Advanced-Intelligence
+  yaml_path: docs/intellidealer-gap-audit/phase-9-advanced-intelligence.yaml
+  field_count: 75
+  must_count: 47
+  must_missing_count: 9
+  pdf_count: 1
+  png_count: 0
+  ocr_count: 1
+- phase: Cross-Cutting
+  yaml_path: docs/intellidealer-gap-audit/cross-cutting.yaml
+  field_count: 102
+  must_count: 55
+  must_missing_count: 15
+  pdf_count: 2
+  png_count: 9
+  ocr_count: 13
+totals:
+  phases: 9
+  total_fields: 847
+  severity_must: 496
+  severity_should: 300
+  severity_could: 51
+  qep_status_missing: 441
+  qep_status_partial: 171
+  qep_status_built: 235
+  must_fix_blocker_count: 234
+must_fix_blockers:
+- phase: Phase-1_CRM
+  id: customer.ein
+  label: Federal Tax ID / EIN
+  category: regulatory
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.tax_code_1
+  label: Tax Code 1 (Equipment)
+  category: regulatory
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.tax_code_2
+  label: Tax Code 2 (Mailing)
+  category: regulatory
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.tax_code_3
+  label: Tax Code 3
+  category: regulatory
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.tax_code_4
+  label: Tax Code 4
+  category: regulatory
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.labor_tax_code_1
+  label: Labor Tax Code 1
+  category: regulatory
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.labor_tax_code_2
+  label: Labor Tax Code 2
+  category: regulatory
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.exempt_status
+  label: Exempt Status
+  category: regulatory
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.avatax_entity_use_code
+  label: AvaTax Entity Use Code
+  category: regulatory
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.opt_out_sale_pi
+  label: Opt Out of Sale of PI / Do Not Share PI
+  category: regulatory
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.ar_type
+  label: A/R Type
+  category: financial
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.terms
+  label: Terms
+  category: financial
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.po_number_required
+  label: PO Number
+  category: financial
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.po_expiry
+  label: PO Expiry
+  category: financial
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.customer_pricing_group
+  label: Customer Pricing Group
+  category: financial
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.pricing_level
+  label: Pricing Level
+  category: financial
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.preferred_language
+  label: Preferred Language
+  category: regulatory
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.salesperson_per_department
+  label: Per-Department Salesperson
+  category: operational
+  qep_table: qrm_company_department_reps
+- phase: Phase-1_CRM
+  id: customer.notify_payment_issues
+  label: History of payment issues
+  category: financial
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.notify_multiple_accounts
+  label: Use of multiple or alternate accounts
+  category: financial
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.notify_legal_concerns
+  label: Legal concerns expressed during contact
+  category: regulatory
+  qep_table: qrm_companies
+- phase: Phase-1_CRM
+  id: customer.ship_to_addresses
+  label: Ship-To Addresses (book)
+  category: operational
+  qep_table: qrm_company_ship_to_addresses
+- phase: Phase-2_Sales-Intelligence
+  id: equipment.base_code
+  label: Base
+  category: regulatory
+  qep_table: equipment_base_codes
+- phase: Phase-2_Sales-Intelligence
+  id: equipment.options
+  label: Options (per-base option list)
+  category: regulatory
+  qep_table: equipment_options
+- phase: Phase-2_Sales-Intelligence
+  id: equipment.engine_serial_number
+  label: Engine Serial Number
+  category: regulatory
+  qep_table: qrm_equipment
+- phase: Phase-2_Sales-Intelligence
+  id: equipment.group
+  label: Group
+  category: financial
+  qep_table: qrm_equipment
+- phase: Phase-2_Sales-Intelligence
+  id: equipment.extended_warranty_hours_code_date
+  label: Extended Warranty Hours / Code / Date
+  category: regulatory
+  qep_table: equipment_warranty_terms
+- phase: Phase-2_Sales-Intelligence
+  id: equipment.invoice_number
+  label: Invoice Number
+  category: financial
+  qep_table: qrm_equipment
+- phase: Phase-2_Sales-Intelligence
+  id: equipment.invoice_date
+  label: Invoice Date
+  category: financial
+  qep_table: qrm_equipment
+- phase: Phase-2_Sales-Intelligence
+  id: equipment.current_cost
+  label: Current Cost
+  category: financial
+  qep_table: qrm_equipment
+- phase: Phase-2_Sales-Intelligence
+  id: equipment.net_book_value
+  label: Net Book Value
+  category: financial
+  qep_table: qrm_equipment
+- phase: Phase-2_Sales-Intelligence
+  id: equipment.note_amount
+  label: Note Amount / Code / Due Date
+  category: financial
+  qep_table: qrm_equipment
+- phase: Phase-2_Sales-Intelligence
+  id: equipment.sale_account
+  label: Sale Account (GL)
+  category: financial
+  qep_table: qrm_equipment
+- phase: Phase-2_Sales-Intelligence
+  id: equipment.inventory_account
+  label: Inventory Account (GL)
+  category: financial
+  qep_table: qrm_equipment
+- phase: Phase-2_Sales-Intelligence
+  id: equipment.avatax_product_code
+  label: Avatax Product Code
+  category: regulatory
+  qep_table: qrm_equipment
+- phase: Phase-2_Sales-Intelligence
+  id: equipment.delivery_date
+  label: Delivery Date
+  category: regulatory
+  qep_table: qrm_equipment
+- phase: Phase-2_Sales-Intelligence
+  id: equipment_quote.po_number
+  label: Quote PO Number
+  category: financial
+  qep_table: qb_quotes
+- phase: Phase-2_Sales-Intelligence
+  id: trade_in.payoff_amount
+  label: Trade-In Pay-Off
+  category: regulatory
+  qep_table: qb_trade_ins
+- phase: Phase-2_Sales-Intelligence
+  id: trade_in.lien_holder
+  label: Trade-In Lien Holder
+  category: regulatory
+  qep_table: qb_trade_ins
+- phase: Phase-2_Sales-Intelligence
+  id: trade_in.title_received
+  label: Trade-In Title Received Date
+  category: regulatory
+  qep_table: qb_trade_ins
+- phase: Phase-3_Parts
+  id: part.tax_applies_1_2_3_4
+  label: Tax 1-4 Applies (Yes/No)
+  category: regulatory
+  qep_table: parts_catalog
+- phase: Phase-3_Parts
+  id: part.lost_sale_frequency
+  label: Lost Sale Frequency
+  category: reporting
+  qep_table: parts_lost_sales
+- phase: Phase-3_Parts
+  id: part.lost_sale_quantity
+  label: Lost Sale Quantity
+  category: reporting
+  qep_table: parts_catalog
+- phase: Phase-3_Parts
+  id: parts_invoice.po_number
+  label: PO Number (parts invoice)
+  category: financial
+  qep_table: parts_invoices
+- phase: Phase-3_Parts
+  id: parts_invoice.tax_codes_1_2_3_4
+  label: Parts Invoice Tax 1-4
+  category: regulatory
+  qep_table: parts_invoices
+- phase: Phase-3_Parts
+  id: parts_invoice.sold_to_ship_to
+  label: Parts Invoice Sold-To / Ship-To
+  category: financial
+  qep_table: parts_invoices
+- phase: Phase-3_Parts
+  id: parts_quote.reference_number
+  label: Parts Quote Reference Number
+  category: financial
+  qep_table: parts_quotes
+- phase: Phase-3_Parts
+  id: parts_quote.status
+  label: Parts Quote Status
+  category: workflow
+  qep_table: parts_quotes
+- phase: Phase-3_Parts
+  id: parts_quote.expiry_date
+  label: Parts Quote Expiry Date
+  category: workflow
+  qep_table: parts_quotes
+- phase: Phase-3_Parts
+  id: purchase_order.type
+  label: Purchase Order Type
+  category: financial
+  qep_table: parts_orders

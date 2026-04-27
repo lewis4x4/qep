@@ -1,0 +1,25 @@
+pfwf5066.cdkglobal-id.net
+
+b b) bl Printing
+
+Parameters
+Printing Parameters
+Reference Number: Q00001 AIl Reliable Services - Accepted Location: LAKE CITY
+
+Print stock prices: @
+Print Part Prices:
+Print Miscellaneous Charge/Credit Prices: @ |
+Print trade in prices:
+Print Segment Totals: @ >
+Print Parts At Bottom:
+Print Miscellaneous Charges/Credits At Bottom: @
+Print trade ins at bottom: O
+Print sale total line: O
+Print Comments: @ Start EndQ© None
+
+Printer: | P75066LCLA ?
+
+Override Date:
+Printed: 3 times
+
+Save Save & Close Close

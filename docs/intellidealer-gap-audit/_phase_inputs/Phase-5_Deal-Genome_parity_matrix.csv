@@ -1,0 +1,7 @@
+Phase,IntelliDealer Screen,IntelliDealer Field,Field Description (abbr),Source,QEP Table,QEP Column,Parity Status,Migration / Gap Notes
+Phase-5_Deal-Genome,Data Miner,Select,Search for queries by name. How to Query Create a Data,Table,(unmapped),,REVIEW,Manual review needed
+Phase-5_Deal-Genome,Data Miner,Query Name,The name of the query.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-5_Deal-Genome,Data Miner,Description,A brief description of the query.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-5_Deal-Genome,Data Miner,Created by,The user who created the query.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-5_Deal-Genome,Data Miner,Date Created,The date the query was created.,Table,(multiple),timestamp fields,BUILT,
+Phase-5_Deal-Genome,Data Miner,Date Last Run,The date the query was last run.,Table,(multiple),timestamp fields,BUILT,

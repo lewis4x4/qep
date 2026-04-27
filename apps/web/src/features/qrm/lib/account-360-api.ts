@@ -7,6 +7,8 @@ export interface Account360Company {
   city?: string | null;
   state?: string | null;
   metadata?: Record<string, unknown>;
+  ein?: string | null;
+  ein_masked?: boolean | null;
 }
 
 export interface Account360Profile {

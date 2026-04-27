@@ -12,6 +12,7 @@ interface QrmCompanyEditorSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   company?: QrmCompanySummary | null;
+  canManageEin?: boolean;
   onSaved?: (company: QrmCompanySummary) => void;
   onArchived?: () => void;
 }
@@ -20,6 +21,7 @@ export function QrmCompanyEditorSheet({
   open,
   onOpenChange,
   company,
+  canManageEin = false,
   onSaved,
   onArchived,
 }: QrmCompanyEditorSheetProps) {
@@ -34,7 +36,9 @@ export function QrmCompanyEditorSheet({
   const [state, setState] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [country, setCountry] = useState("");
+  const [ein, setEin] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const einCanBeSubmitted = canManageEin && (!company || company.ein !== undefined);
 
   useEffect(() => {
     if (!open) return;
@@ -47,6 +51,7 @@ export function QrmCompanyEditorSheet({
     setState(company?.state ?? "");
     setPostalCode(company?.postalCode ?? "");
     setCountry(company?.country ?? "");
+    setEin(company?.ein && !company.einMasked ? company.ein : "");
     setFormError(null);
   }, [company, open]);
 
@@ -69,6 +74,7 @@ export function QrmCompanyEditorSheet({
         state: state.trim() || null,
         postalCode: postalCode.trim() || null,
         country: country.trim() || null,
+        ...(einCanBeSubmitted ? { ein: ein.trim() || null } : {}),
       };
 
       return company
@@ -79,6 +85,8 @@ export function QrmCompanyEditorSheet({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["crm", "companies"] }),
         queryClient.invalidateQueries({ queryKey: ["crm", "company", savedCompany.id] }),
+        queryClient.invalidateQueries({ queryKey: ["account-360", savedCompany.id] }),
+        queryClient.invalidateQueries({ queryKey: ["account-command", savedCompany.id] }),
       ]);
       toast({
         title: variables.archive ? "Company archived" : company ? "Company updated" : "Company created",
@@ -225,6 +233,40 @@ export function QrmCompanyEditorSheet({
               />
             </div>
           </div>
+
+          {einCanBeSubmitted ? (
+            <div className="rounded-md border border-qep-deck-rule/70 bg-muted/20 p-3">
+              <div className="space-y-2">
+                <Label htmlFor="crm-company-ein">Federal EIN</Label>
+                <Input
+                  id="crm-company-ein"
+                  value={ein}
+                  onChange={(event) => setEin(event.target.value)}
+                  placeholder="12-3456789"
+                  inputMode="numeric"
+                  pattern="[0-9]{2}-[0-9]{7}"
+                />
+                <p className="text-xs text-muted-foreground">
+                  NN-NNNNNNN format. Visible only to elevated roles.
+                </p>
+              </div>
+            </div>
+          ) : canManageEin && company ? (
+            <div className="rounded-md border border-qep-deck-rule/70 bg-muted/20 p-3 text-sm text-muted-foreground">
+              Federal EIN is still loading or unavailable. Saving this form will not change the existing EIN.
+            </div>
+          ) : company?.ein ? (
+            <div className="rounded-md border border-qep-deck-rule/70 bg-muted/20 p-3 text-sm">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Tax / Regulatory</p>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Federal EIN</span>
+                <span className="font-medium text-foreground">{company.ein}</span>
+              </div>
+              {company.einMasked ? (
+                <p className="mt-1 text-xs text-muted-foreground">Masked for unauthorized roles.</p>
+              ) : null}
+            </div>
+          ) : null}
 
           {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
 

@@ -1,0 +1,418 @@
+[
+  {
+    "phase": "Phase-2_Sales-Intelligence",
+    "source_file": "Base & Options.txt",
+    "screen_name": "Base & Options",
+    "data_source": "B",
+    "security_switch": "",
+    "revision": "2025.04",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Equipment Product Support > Base & Options:"
+    ],
+    "purpose": [],
+    "tabs": [],
+    "buttons": [
+      "Bobcat Base and Options Import",
+      "Perform a mass increase/decrease",
+      "Vermeer Base and Options Import"
+    ],
+    "fields": [
+      {
+        "name": "Base",
+        "description": "Sort the search results by base number."
+      },
+      {
+        "name": "Class",
+        "description": "Sort the search results by class."
+      },
+      {
+        "name": "Select Base",
+        "description": "Search for base & option codes by entering a"
+      },
+      {
+        "name": "Number",
+        "description": "base number."
+      },
+      {
+        "name": "Select",
+        "description": "Search for base & option codes by entering a"
+      },
+      {
+        "name": "Model",
+        "description": "model."
+      },
+      {
+        "name": "Include",
+        "description": "If selected, includes inactive base & option"
+      },
+      {
+        "name": "Inactive",
+        "description": "codes within the search results."
+      },
+      {
+        "name": "Price",
+        "description": "Retail price for the base code. For new equipment the price is automatically loaded on the base code."
+      },
+      {
+        "name": "Added",
+        "description": "The date the base number was first added to the system."
+      },
+      {
+        "name": "Modified",
+        "description": "The date the base number was last modified."
+      }
+    ],
+    "prose_fields": [
+      "Class                   This"
+    ],
+    "topics": [],
+    "linked_screens": []
+  },
+  {
+    "phase": "Phase-2_Sales-Intelligence",
+    "source_file": "Equipment Invoicing (Sales Support Portal).txt",
+    "screen_name": "Equipment Invoicing (Sales Support Portal)",
+    "data_source": "CGIINH",
+    "security_switch": "802 - create an invoice Equipment Invoicing",
+    "revision": "2026.04",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Equipment Product Support > Equipment Invoicing: Listing"
+    ],
+    "purpose": [
+      "Data Source: CGIINH",
+      "search for equipment invoices",
+      "Security: 802 -",
+      "create an invoice                                                                                Equipment Invoicing",
+      "modify printing parameters                                                                       Revision: 2026.04",
+      "reverse the sales of a stock number",
+      "view or edit an equipment invoice",
+      "copy an equipment invoice",
+      "To open the Equipment Invoicing screen, navigate to Product Support > Equipment > Equipment",
+      "Invoicing",
+      "Click on the View Details icon next to the Pending Equipment Sales field on the Sales Support Portal",
+      "screen",
+      "Equipment Invoicing screen",
+      "The sorting options on the Equipment Invoicing screen are:",
+      "Sort by",
+      "Field                    Description",
+      "Reference Number Sort the search results by reference number",
+      "Customer                 Sort the search results by customer"
+    ],
+    "tabs": [],
+    "buttons": [
+      "Access JD POs",
+      "Close",
+      "JD Proactive Jobs",
+      "Modify default printing parameters",
+      "Reverse the sales of a stock number",
+      "Tethr It Now"
+    ],
+    "fields": [
+      {
+        "name": "Customer",
+        "description": "Sort the search results by customer."
+      },
+      {
+        "name": "Select Reference",
+        "description": "Search for equipment invoices by entering a reference number. Number"
+      },
+      {
+        "name": "Select Salesperson",
+        "description": "Search for equipment invoices by entering a salesperson."
+      },
+      {
+        "name": "Show Extended",
+        "description": "If selected, includes extended equipment description within the invoice search"
+      },
+      {
+        "name": "Description",
+        "description": "results."
+      },
+      {
+        "name": "Select Stock Number",
+        "description": "Search for equipment invoices by entering a stock number."
+      },
+      {
+        "name": "Select Location",
+        "description": "Search for equipment invoices by entering a location."
+      },
+      {
+        "name": "Select Status",
+        "description": "Search for equipment invoices by selecting an invoice status from the drop down list."
+      },
+      {
+        "name": "Reference",
+        "description": "The reference number for the equipment invoice. Used to locate and identify equipment"
+      },
+      {
+        "name": "Number",
+        "description": "invoices throughout the system."
+      },
+      {
+        "name": "Salesperson",
+        "description": "The salesperson assigned to the equipment invoice."
+      },
+      {
+        "name": "Stock",
+        "description": "The stock number of the unit. Number"
+      },
+      {
+        "name": "Location",
+        "description": "The branch location of the equipment invoice."
+      },
+      {
+        "name": "Date Added",
+        "description": "The date the equipment invoice was created."
+      },
+      {
+        "name": "Invoice",
+        "description": "The status of the equipment invoice Status Pending\u2014the invoice is not yet been processed."
+      },
+      {
+        "name": "VESign",
+        "description": "The signing status of the VESign document. Can be one of: Status Awaiting Signature\u2014all signatures are pending. Partially Signed\u2014more than one signature is pending. Signed\u2014all required signatures are complete. Canceled\u2014signing has been canceled. If no status is present, then the document has not been sent for electronic signing. IntelliDealer checks for a status update every 30 minutes."
+      }
+    ],
+    "prose_fields": [
+      "Pending Equipment Sales"
+    ],
+    "topics": [],
+    "linked_screens": []
+  },
+  {
+    "phase": "Phase-2_Sales-Intelligence",
+    "source_file": "Equipment Listing.txt",
+    "screen_name": "Equipment Listing",
+    "data_source": "M",
+    "security_switch": "",
+    "revision": "",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Equipment Product Support > Equipment Profile:",
+      "Management Central > Equipment > Equipment Profile CGIBASE",
+      "Product Support > Equipment > Equipment Profile - for Profile"
+    ],
+    "purpose": [],
+    "tabs": [
+      "Options"
+    ],
+    "buttons": [
+      "Copy Equipment",
+      "Create",
+      "Delete Quick Add Unit",
+      "Quick Add On Order Unit"
+    ],
+    "fields": [
+      {
+        "name": "All",
+        "description": "Search through all status options for the selected unit."
+      },
+      {
+        "name": "Invoiced",
+        "description": "Search Invoiced equipment status (the unit has been invoiced to a customer) for the selected unit."
+      },
+      {
+        "name": "Inventory",
+        "description": "Search Inventory equipment status (the unit is physically in stock) for the selected unit."
+      },
+      {
+        "name": "On Order",
+        "description": "Search On Order equipment status (the unit is on order with the supplier) for the selected unit."
+      },
+      {
+        "name": "Sold",
+        "description": "Search Sold equipment status (the unit is physically in stock and has been tagged for a"
+      },
+      {
+        "name": "Stock",
+        "description": "Search for a stock number by entering a stock"
+      },
+      {
+        "name": "Number",
+        "description": "number."
+      },
+      {
+        "name": "Customer",
+        "description": "Search for a stock number by entering a"
+      },
+      {
+        "name": "Supplier",
+        "description": "Search for a stock number by entering a"
+      },
+      {
+        "name": "Invoice",
+        "description": "supplier invoice number."
+      },
+      {
+        "name": "Fleet",
+        "description": "Search for a stock number by entering a fleet"
+      },
+      {
+        "name": "Class",
+        "description": "Search for a stock number by entering a class code."
+      },
+      {
+        "name": "Group",
+        "description": "Search for a stock number by entering a group code."
+      },
+      {
+        "name": "Location",
+        "description": "The location where the unit is current located."
+      },
+      {
+        "name": "Type",
+        "description": "The unit's type code (e.g. New or Used)."
+      },
+      {
+        "name": "Status",
+        "description": "The unit's current status"
+      },
+      {
+        "name": "Base",
+        "description": "The unit's base number."
+      },
+      {
+        "name": "Yard",
+        "description": "A designated physical place within the selected"
+      },
+      {
+        "name": "In/Out",
+        "description": "Whether the unit is in the location(in) or not in the location(out). The Traffic Sub Code appears next to the In/Out field value."
+      },
+      {
+        "name": "Model",
+        "description": "The model year of the unit. Year"
+      },
+      {
+        "name": "Hours 2",
+        "description": "If available, the amount of hours currently on the second hour meter on the unit."
+      }
+    ],
+    "prose_fields": [
+      "From",
+      "In/Out",
+      "The behavior of this search"
+    ],
+    "topics": [],
+    "linked_screens": []
+  },
+  {
+    "phase": "Phase-2_Sales-Intelligence",
+    "source_file": "Equipment Quoting.txt",
+    "screen_name": "Equipment Quoting",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "2026.04",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Equipment Product Support > Equipment"
+    ],
+    "purpose": [
+      "search for an equipment quote                              Source: CGIINH,",
+      "CGIIND",
+      "view or edit an equipment quote",
+      "Security",
+      "create an equipment quote                                  Switch: 801 -",
+      "reactivate an equipment quote                              Product",
+      "Support -",
+      "copy an equipment quote                                    Equipment",
+      "Quoting",
+      "modify default printing parameters",
+      "Learning",
+      "To open the Equipment Quoting screen, navigate to Product",
+      "Resources:",
+      "Support > Equipment > Equipment Quoting",
+      "Reactivating",
+      "an Equipment",
+      "Equipment Quoting screen                                      Quote",
+      "Revision:",
+      "2026.04"
+    ],
+    "tabs": [],
+    "buttons": [],
+    "fields": [
+      {
+        "name": "Reference",
+        "description": "Sort the search results by reference number. Number"
+      },
+      {
+        "name": "Customer",
+        "description": "Sort the search results by customer."
+      },
+      {
+        "name": "Expiry Date",
+        "description": "Sort the search results by the expiry date of the equipment quote."
+      },
+      {
+        "name": "Select",
+        "description": "Search for equipment quotes by selecting an"
+      },
+      {
+        "name": "Status",
+        "description": "equipment quote status."
+      },
+      {
+        "name": "Stock",
+        "description": "The stock number of the unit on the quote"
+      },
+      {
+        "name": "Number",
+        "description": "which acts as an inventory identification number."
+      },
+      {
+        "name": "Location",
+        "description": "The branch location of the equipment quote."
+      },
+      {
+        "name": "Quote",
+        "description": "The status of the equipment quote. Status"
+      },
+      {
+        "name": "VESign",
+        "description": "The signing status of the VESign document. Can"
+      }
+    ],
+    "prose_fields": [
+      "This"
+    ],
+    "topics": [],
+    "linked_screens": []
+  },
+  {
+    "phase": "Phase-2_Sales-Intelligence",
+    "source_file": "Sales Support Portal.txt",
+    "screen_name": "Sales Support Portal",
+    "data_source": "",
+    "security_switch": "808 - to stay on top of active sales, current sales figures, contacts, call",
+    "revision": "",
+    "menu_paths": [
+      "Equipment Product Support > Sales Support Portal",
+      "IntelliDealer Menus > Product Support > Equipment Product Support > Sales Support Portal"
+    ],
+    "purpose": [],
+    "tabs": [],
+    "buttons": [
+      "Customers - My column",
+      "Delete",
+      "My Calls - All column",
+      "Not Contacted - My column",
+      "Personalize Portal",
+      "View Details"
+    ],
+    "fields": [
+      {
+        "name": "Select",
+        "description": "Search for a sales support portal by entering a"
+      },
+      {
+        "name": "Salesperson",
+        "description": "salesperson's ID."
+      }
+    ],
+    "prose_fields": [
+      "The search"
+    ],
+    "topics": [],
+    "linked_screens": [
+      "Setting up a Sales Support Portal"
+    ]
+  }
+]

@@ -1,0 +1,78 @@
+Equipment Profile - I...
+
+IntelliDeale
+
+oN
+“by VitalEdge VitalEdge \>
+
+Menu Search
+
+Financial Management
+
+Customer Care
+
+Product Support
+
+Management Central
+
+Support
+
+Quick Links
+
+ID InspectionPlus
+
+>
+
+01/01/01-LAKECITY @ Ym
+04/17/2013 Date Modified: 04/16/2024
+
+@ = = > Product Support > Equipment > Equipment Profile >> Profile
+
+> Status: MI BLADES Date Adde
+
+Stock Number: Mf} [BLADES
+
+Invoiced Description: BLADES Make/Model:
+
+N
+Profile Base & Options Parts List | MyDealer Warranty Dates Rental Specifications
+
+Machine Profile
+
+Attachments Multimedia
+
+*Stock Number | BLADES |4| *Status ( Invoiced 5)
+*Base | MISCBASE >| Class |? Internal *in/Out
+“Description | BLADES In/Out Sub Type ( Available 5)
+*Make/Model/Year | Ml /Q,| BLADES 0 S “Type
+*Price | 0.01 *Group | MISC /Q,|
+Price With Options | 0.01 *Location | 01 - LAKE CITY Y
+*Machine Serial Number | BLADES Yard Location
+Engine Serial Number Control Number |- Q
+Transmission Serial Number Equipment Identifier
+Purchase Order # Last Count Method
+*ordered/Reserved | 04-17-2013 04-17-2013 Last Count Date | MM-dd-yyyy [ES
+Rental Fleet Date | M//-da-yyyy ES Avatax Product Code es |
+Category/Class/Subclass }Q.|
+Machine Hours/Code/Date | 1 ( Actual é] 04-16-2024
+*Invoice Number | NOTAVA Machine2 Hours/Code/Date | 1 ( Estimate é] 06-29-202¢
+“Invoice Date | 04-17-2013 ES Basic Warranty Hours/Cod... | 9 MM-dd-yyy
+“Invoice Amount | 0.01 0.00 Extended Warranty Hours/... | 9 MM-dd-yyy
+Current Cost | 0.01 0.00
+Net Book Value | 0.01 0.00 *Sale Account [s2eo021 fe
+Inventory Account | 1200001 }Q| Salesperson | 000 UNASSIGNED
+Reference Amount | 0.00 0.00 Customer Invoice Number | NOTAVA >|
+Note Amount/Code/Due Date | 0.00 MM-da-yyyy Customer Invoice Date | 04-17-2013 ES
+Finance Amount/Due Date | 9.00 MM-dd-yyyy Invoice Amount | -0.01
+Settlement Number/Date MM-dd-yyyy
+Maintenance Expense | 0.00 0.00 Cus... Q Customer Name | !|NTERNAL USE
+Rental Cost Percentage | 0 S
+Rental Insurable Amount | 9.00 a SAS
+Rental Amount | 9.00 0.00 Welae7BELS
+Traded Date | MM-dd-yyyy |:
+
+Machine Quick Links
+
+Washout
+
+Machine History Memos Machine Hours Costing Margins Print

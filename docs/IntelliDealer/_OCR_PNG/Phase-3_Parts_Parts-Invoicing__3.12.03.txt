@@ -1,0 +1,16 @@
+pfwf5066.cdkglobal-id.net
+
+4 Invoicing
+
+| Invoicing Results to display:
+is | Cust Agreement Number: 000417 ‘BALFOUR TIMBER - Invoiced Location: LAKE CITY
+Charge Method: B ~~ Insurance Certificate: O
+co pa
+Identification 1: Insurance Expiry:
+e| Rie Expiry: re Identification 2:
+_| Pre-Authorization: Expiry: re
+Supp Invoice Start Dig
+7 ‘Invoice Invoice Date Net Amount Cover From Cover To
+Quick Sorry, but no information was found.
+
+ID Ins Bill Invoice Recalculate Totals Save Print Agreement Close

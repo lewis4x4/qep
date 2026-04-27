@@ -1,0 +1,2719 @@
+phase: Phase-2_Sales-Intelligence
+generated_at: 2026-04-26T00:00:00Z
+source_artifacts:
+  pdfs:
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Base & Options.pdf
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).pdf
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment Listing.pdf
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment Quoting.pdf
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Sales Support Portal.pdf
+  png_screenshots:
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Profile__3.02.42.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Profile__3.02.50.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Profile__3.03.06.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Profile__3.03.14.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Profile__3.03.17.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Profile__3.03.32.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Profile__3.03.40.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Profile__3.03.45.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Profile__3.03.48.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Profile__3.03.52.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Quoting__3.04.54.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Quoting__3.05.01.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Quoting__3.05.10.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Quoting__3.05.19.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Quoting__3.05.26.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Quoting__3.05.32.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Quoting__3.05.42.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Quoting__3.10.01.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Quoting__3.13.11.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Sales-Support-Portal__3.07.02.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Sales-Support-Portal__3.07.06.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Sales-Support-Portal__3.13.30.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Listing__3.07.12.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Listing__3.07.16.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Listing__3.07.27.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Listing__3.07.32.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Listing__3.07.36.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Listing__3.07.40.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Listing__3.07.45.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Invoicing__3.06.45.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Invoicing__3.06.51.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Invoicing__3.10.45.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Invoicing__3.10.49.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Invoicing__3.10.53.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Invoicing__3.10.57.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Invoicing__3.11.01.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Invoicing__3.11.04.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Invoicing__3.11.08.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Invoicing-Trade-Ins__3.10.34.png
+    - docs/IntelliDealer/Phase-2_Sales-Intelligence/Equipment-Invoicing-Trade-Ins__3.10.40.png
+  ocr_text_paths:
+    - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Base & Options.txt
+    - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).txt
+    - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Listing.txt
+    - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Quoting.txt
+    - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Sales Support Portal.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.02.42.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.02.50.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.14.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.17.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.32.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.40.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.45.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.48.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.52.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.05.01.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.05.10.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.05.19.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.05.26.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.05.32.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.05.42.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Listing__3.07.12.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Listing__3.07.16.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Listing__3.07.27.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Listing__3.07.32.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Listing__3.07.36.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Listing__3.07.40.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Listing__3.07.45.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing__3.06.45.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing__3.06.51.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing__3.10.45.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing__3.10.49.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing__3.10.53.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing__3.10.57.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing__3.11.01.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing__3.11.04.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing__3.11.08.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing-Trade-Ins__3.10.34.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing-Trade-Ins__3.10.40.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Sales-Support-Portal__3.07.02.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Sales-Support-Portal__3.07.06.txt
+    - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Sales-Support-Portal__3.13.30.txt
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUDITOR NOTE — Phase-2 Sales Intelligence
+# Equipment-side commerce: the Profile (the asset of record), the Quoting
+# pipeline (selling motion), the Listing (inventory search), the Invoicing
+# pipeline (post-sale ledger), Trade-In handling (the largest single source
+# of margin leak in the industry), the Sales Support Portal (rep workspace),
+# and the Base & Options catalog (manufacturer-published configurations).
+#
+# Surfaces (per IntelliDealer):
+#   1. Equipment Profile (Profile / Base & Options / Attachments / Parts List
+#      / MyDealer / Multimedia / Warranty Dates / Rental Specifications tabs)
+#   2. Equipment Listing (filterable search across Status × In/Out × Make ×
+#      Model × Class × Group × Customer × Location × Options × Identifier)
+#   3. Equipment Quoting (Quote Header + N Quote Segments — each is a
+#      stock-number/option line with Unit Price, Trade-In, Other deductions)
+#   4. Equipment Invoicing (Sales Support Portal): post-sale invoice ledger
+#      with Pending / Posted / VESign signing-status / Reference / Salesperson
+#      / Stock # search; child surfaces for Trade-Ins, Sub-Pmts, Programs
+#   5. Equipment Invoicing Trade-Ins  (multi-trade-per-invoice with
+#      Pay-Off, Lien Holder, Allowance, Disposition)
+#   6. Sales Support Portal (cross-stock workspace for the salesman: Quotes,
+#      Pending, Quick Adds, Telematics)
+#   7. Base & Options  (manufacturer-published base+options codes, Mass
+#      Increase/Decrease, Bobcat Base & Options Import, Vermeer Import)
+#
+# QEP COVERAGE TODAY:
+#   qrm_equipment           (asset record — id, name, make, model, year,
+#                            serial_number, vin_pin, asset_tag,
+#                            engine_hours, mileage, condition, availability,
+#                            ownership, category, weight_class, fuel_type,
+#                            location_description, lat/lng, photo_urls,
+#                            purchase_date, purchase_price, current_market_value,
+#                            replacement_cost, daily/weekly/monthly_rental_rate,
+#                            warranty_expires_on, last_inspection_at,
+#                            next_service_due_at, intake_stage, readiness_status,
+#                            sale_ready_at, aging_bucket, primary_contact_id,
+#                            company_id, metadata Json)
+#   qb_quotes               (quoting engine with margin layers — quote_number,
+#                            equipment_model_id, equipment_cost_cents,
+#                            list_price_cents, baseline_sales_price_cents,
+#                            markup_cents/pct, dealer_discount_cents/pct,
+#                            good_faith_cents/pct, attachments_*_cents (4),
+#                            cil_amount_cents, doc_fee_cents, freight_cents,
+#                            pdi_cents, tariff_cents/pct, rebate_total_cents,
+#                            tax_cents/rate_pct, trade_in_allowance_cents,
+#                            trade_in_book_value_cents, subtotal_cents,
+#                            total_cents, status, valid_until, version,
+#                            applied_program_ids, financing_scenario,
+#                            customer_type/details, parent_quote_id, pdf_url,
+#                            requires_approval, approved_by/at,
+#                            originating_log_id, salesman_id)
+#   qb_quote_line_items     (per-line equipment, attachments, services)
+#   qb_quote_outcomes       (won/lost reasons, deal closure)
+#   qb_deals                (executed sale — deal_number, quote_id,
+#                            commission_cents/rate_pct/paid, gross_margin,
+#                            invoice_number, total_cost/revenue,
+#                            warranty_registration_date, rebate_filed_at/by/due,
+#                            close_date, delivery_date, won/lost_reason)
+#   qb_trade_ins            (trade-in record — make, model, year, serial,
+#                            hours, allowance_cents, book_value_cents,
+#                            over_under_cents, disposition, valuation_source,
+#                            crm_equipment_id (incoming asset), deal_id)
+#   qb_brands, qb_brand_sheet_sources, qb_equipment_models, qb_price_sheets,
+#   qb_price_sheet_items/programs, qb_program_stacking_rules,
+#   qb_freight_zones, qb_internal_freight_rules, qb_margin_thresholds,
+#   qb_margin_exceptions, qb_service_credit_config
+#   qb_attachments          (PDFs/photos attached to a quote)
+#   qb_notifications, qb_sheet_watch_events, qb_ai_request_log
+#   qb_deal_coach_actions   (AI-suggested coaching for sales)
+#   customer_invoices       (downstream AR side)
+#   quote_packages, quote_package_line_items, quote_signatures,
+#   quote_tax_breakdowns, quote_incentive_applications, quotes (legacy)
+#
+# QEP MAJOR GAPS for Phase-2:
+#   * Stock Number (legacy IntelliDealer alphanumeric, e.g. "Q003418" or
+#     "CNV00006") — qrm_equipment.id is a UUID; asset_tag and name are
+#     free-text. Need a dedicated stock_number column with workspace-
+#     unique constraint.
+#   * Base / Options model — qrm_equipment has make/model but no Base
+#     code (e.g. "MISCBASE" or "A-T24-V35BKP*EBS") and no Option-list
+#     subtable. Manufacturer-published Base & Options is a regulated
+#     vocabulary used in OEM portals.
+#   * Equipment Status enum (Invoiced / Inventory / On Order / Sold /
+#     Presold / Rental / Consignment / Transferred) — current enum
+#     crm_equipment_availability covers some of this but not all 8 values.
+#   * In/Out + In/Out Sub Type (Available, Sold, Reserved, Pending Sale,
+#     Hold) — second-level workflow state separate from Status.
+#   * Class / Type / Group / Category / Subclass — multi-level
+#     manufacturer taxonomy (e.g. ATTACHMENTS / TRENCH BUCKET /
+#     16/24INCH); qrm_equipment has only category.
+#   * Yard Location / Control Number / Equipment Identifier — physical
+#     location and dealer-internal alphanumeric identifiers distinct from
+#     stock #.
+#   * Engine Serial #, Transmission Serial # (qrm_equipment has serial_number
+#     only — need engine + transmission serials separately for warranty).
+#   * Hour-meter ledger (Machine Hours/Code/Date with Code = Actual /
+#     Estimate / Tampered / Replaced; Machine2 Hours/Code/Date for
+#     dual-meter machines). qrm_equipment.engine_hours is a single number
+#     with no audit trail.
+#   * Warranty Hours (Basic + Extended) with Code + Date — drives the
+#     warranty-eligibility decision on every WO. qrm_equipment has only
+#     warranty_expires_on (a date).
+#   * Cost layers visible on Equipment Profile: Invoice Amount, Current
+#     Cost, Net Book Value, Reference Amount, Note Amount, Finance Amount,
+#     Settlement Amount, Maintenance Expense, Rental Cost Percentage,
+#     Rental Insurable Amount, Rental Amount. qrm_equipment has only
+#     purchase_price and current_market_value.
+#   * Avatax Product Code — required AvaTax integration field for
+#     equipment-line tax decisions.
+#   * Sale Account / Inventory Account (per-equipment GL routing) —
+#     no GL columns on qrm_equipment.
+#   * Customer Invoice Number, Customer Invoice Date, Customer Name,
+#     Customer Fleet Number — denormalized invoice link on equipment
+#     for fast lookup. Need view or columns.
+#   * Last Count Method / Last Count Date — physical-inventory cycle-count
+#     audit fields.
+#   * Quote Segments (one quote → N stock-number lines) — qb_quotes has
+#     a single equipment_model_id. qb_quote_line_items exists which
+#     should cover this; need to verify shape matches IntelliDealer's
+#     two-digit segment numbering.
+#   * Quote Tax Codes 1-4 per quote (separate from equipment tax codes) —
+#     qb_quotes.tax_cents is a single total; need per-jurisdiction
+#     breakdown that quote_tax_breakdowns may already cover.
+#   * Quote Sold-To / Ship-To split (same as work_order in Phase-4) —
+#     qb_quotes has no per-quote address override.
+#   * Equipment Invoicing pipeline: Pending → Posted lifecycle. customer_
+#     invoices may handle this but verify the IntelliDealer status-set
+#     match.
+#   * VESign (e-signature) integration: signing status enum
+#     (Awaiting / Partially Signed / Signed / Declined) per invoice.
+#     quote_signatures may cover this for quotes; need an analogue for
+#     equipment invoices.
+#   * Trade-In Pay-Off + Lien Holder fields on trade record — qb_trade_ins
+#     has no payoff_amount or lien_holder columns. Critical for clean
+#     title transfer.
+#   * Trade-In Disposition (Wholesale / Recondition / Wholesale Auction
+#     / Retail / Crush). qb_trade_ins.disposition is free TEXT — needs
+#     enum.
+#   * F&I (Finance + Insurance) overlay on a quote — financing_scenario
+#     is JSON; need a typed F&I product-line table.
+#   * IBE Account # / Customer Pricing Group on the invoice header
+#     (carry-over from customer Phase-1).
+#   * Manufacturer warranty registration on delivery (Date + Confirmation
+#     # + OEM portal acknowledgment). qb_deals has warranty_registration_date
+#     but no portal-confirmation #.
+#   * Base & Options manufacturer import (Bobcat Base & Options Import,
+#     Vermeer Base and Options Import buttons) — entirely missing.
+#   * Mass Increase / Decrease on Base & Options pricing — bulk-edit
+#     workflow not supported.
+#   * Sales Support Portal cross-stock dashboard — no equivalent rep
+#     workspace surface.
+# ─────────────────────────────────────────────────────────────────────────────
+
+fields:
+  # ==========================================================================
+  # SECTION 1 — EQUIPMENT IDENTIFICATION
+  # ==========================================================================
+  - id: equipment.stock_number
+    intellidealer_label: "Stock Number"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.02.42.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Six-character alphanumeric stock number (e.g. "Q000188", "CNV00006",
+      "BLADES"). Customer-facing identifier on every quote, invoice,
+      work order, rental contract, and OEM warranty submission. Reps
+      know units by stock # not UUID; preserving the legacy convention
+      is non-negotiable for IntelliDealer cutover.
+    qep_status: PARTIAL
+    qep_table: qrm_equipment
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts qrm_equipment (asset_tag and name are free-text; no dedicated stock_number)"
+    qep_gap_notes: |
+      No first-class stock_number column. asset_tag is generic (any
+      identifier scheme) and name is the description. Need a UNIQUE-
+      indexed stock_number per workspace, separate from id (UUID).
+    severity: must
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE qrm_equipment ADD COLUMN stock_number TEXT;
+      CREATE UNIQUE INDEX ON qrm_equipment (workspace_id, stock_number)
+        WHERE stock_number IS NOT NULL;
+      COMMENT ON COLUMN qrm_equipment.stock_number IS
+        'IntelliDealer/EMASTR alphanumeric stock # (preserved through migration)';
+    ui_surface_hint: "Equipment Profile header + every list view"
+    dependencies: []
+
+  - id: equipment.base_code
+    intellidealer_label: "Base"
+    intellidealer_screen: "Equipment Profile (Profile tab) / Base & Options"
+    intellidealer_data_source: "EMASTR / EBASE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Base & Options.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: |
+      Manufacturer-published base configuration code (e.g. "MISCBASE"
+      catch-all, "A-T24-V35BKP*EBS" for an ASV trenching bucket). Drives
+      base-price loading on new equipment and serves as the parent for
+      the Option list. Required for OEM order-portal submission.
+    qep_status: MISSING
+    qep_table: equipment_base_codes
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: |
+      No base-code library. Without it the Base & Options screen has
+      no backing data and OEM order submission cannot resolve the SKU.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      CREATE TABLE equipment_base_codes (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        base_number TEXT NOT NULL,
+        description TEXT,
+        make TEXT,
+        model TEXT,
+        group_code TEXT,
+        class_code TEXT,
+        price_cents BIGINT,
+        cost_cents BIGINT,
+        active_for_build BOOLEAN NOT NULL DEFAULT true,
+        active_for_equipment BOOLEAN NOT NULL DEFAULT true,
+        added_at DATE,
+        modified_at DATE,
+        miscellaneous TEXT,
+        UNIQUE (workspace_id, base_number)
+      );
+      ALTER TABLE qrm_equipment ADD COLUMN base_code_id UUID REFERENCES equipment_base_codes(id);
+    ui_surface_hint: "Equipment Profile (Profile tab) — Base lookup; Base & Options master screen"
+    dependencies: []
+
+  - id: equipment.options
+    intellidealer_label: "Options (per-base option list)"
+    intellidealer_screen: "Equipment Profile (Base & Options tab)"
+    intellidealer_data_source: "EOPT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.32.txt
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Base & Options.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      List of optional features attached to a Base (e.g. cab heat,
+      hydraulic coupler, warranty extension). Each option has its own
+      Number, Description, Price, Master Price, Cost, Master Cost,
+      Added/Modified date, Active flag.
+    qep_status: MISSING
+    qep_table: equipment_options
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "No options table. Required for OEM order submission and quote line generation."
+    severity: must
+    category: regulatory
+    migration_hint: |
+      CREATE TABLE equipment_options (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        base_code_id uuid NOT NULL REFERENCES equipment_base_codes(id),
+        option_number TEXT NOT NULL,
+        description TEXT,
+        price_cents BIGINT,
+        master_price_cents BIGINT,
+        cost_cents BIGINT,
+        master_cost_cents BIGINT,
+        added_at DATE,
+        modified_at DATE,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        UNIQUE (workspace_id, base_code_id, option_number)
+      );
+      CREATE TABLE equipment_selected_options (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        equipment_id uuid NOT NULL REFERENCES qrm_equipment(id),
+        option_id uuid NOT NULL REFERENCES equipment_options(id),
+        UNIQUE (workspace_id, equipment_id, option_id)
+      );
+    ui_surface_hint: "Equipment Profile — Base & Options tab grid"
+    dependencies: [equipment.base_code]
+
+  - id: equipment.description
+    intellidealer_label: "Description"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Customer-facing description (e.g. 'BED', 'LOADER', 'Equipment haul')."
+    qep_status: BUILT
+    qep_table: qrm_equipment
+    qep_column: name
+    qep_evidence:
+      - "database.types.ts qrm_equipment.name (NOT NULL)"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Equipment Profile header"
+    dependencies: []
+
+  - id: equipment.make
+    intellidealer_label: "Make"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Manufacturer / brand (e.g. 'BR' Beau-Roc, 'BK' Barko, 'HD' Heiden)."
+    qep_status: BUILT
+    qep_table: qrm_equipment
+    qep_column: make
+    qep_evidence:
+      - "database.types.ts qrm_equipment.make"
+    qep_gap_notes: ""
+    severity: must
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Equipment Profile header + every list view"
+    dependencies: []
+
+  - id: equipment.model
+    intellidealer_label: "Model"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Manufacturer model (e.g. 'MPHD24', '80XLE', 'DELIVER')."
+    qep_status: BUILT
+    qep_table: qrm_equipment
+    qep_column: model
+    qep_evidence:
+      - "database.types.ts qrm_equipment.model"
+    qep_gap_notes: ""
+    severity: must
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Equipment Profile header + every list view"
+    dependencies: []
+
+  - id: equipment.year
+    intellidealer_label: "Year"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: number
+    intellidealer_purpose: "Model year (e.g. 2018, 2019). Drives depreciation, warranty calculation, used-equipment listing."
+    qep_status: BUILT
+    qep_table: qrm_equipment
+    qep_column: year
+    qep_evidence:
+      - "database.types.ts qrm_equipment.year"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Equipment Profile header"
+    dependencies: []
+
+  - id: equipment.machine_serial_number
+    intellidealer_label: "Machine Serial Number"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Manufacturer-issued chassis/frame serial (e.g. 'MPHD-390163',
+      '11808023926'). Authoritative identity for warranty claims,
+      OEM registration, lien filings.
+    qep_status: BUILT
+    qep_table: qrm_equipment
+    qep_column: serial_number
+    qep_evidence:
+      - "database.types.ts qrm_equipment.serial_number, .vin_pin"
+    qep_gap_notes: ""
+    severity: must
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Equipment Profile header"
+    dependencies: []
+
+  - id: equipment.engine_serial_number
+    intellidealer_label: "Engine Serial Number"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Engine serial — distinct from chassis. Engine OEMs (Cummins, Cat,
+      Kohler) issue warranties separately and require the engine serial
+      on every claim.
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: engine_serial_number
+    qep_evidence: []
+    qep_gap_notes: |
+      qrm_equipment has serial_number (chassis) and vin_pin only. Engine
+      serial is missing.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE qrm_equipment ADD COLUMN engine_serial_number TEXT;
+      ALTER TABLE qrm_equipment ADD COLUMN transmission_serial_number TEXT;
+      CREATE INDEX ON qrm_equipment (workspace_id, engine_serial_number);
+    ui_surface_hint: "Equipment Profile — under Machine Serial"
+    dependencies: []
+
+  - id: equipment.transmission_serial_number
+    intellidealer_label: "Transmission Serial Number"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Transmission serial — third independent OEM warranty surface
+      (Allison, Funk, ZF, etc.). Required for transmission-only claims.
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: transmission_serial_number
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: regulatory
+    migration_hint: "(see equipment.engine_serial_number)"
+    ui_surface_hint: "Equipment Profile — under Engine Serial"
+    dependencies: [equipment.engine_serial_number]
+
+  - id: equipment.equipment_identifier
+    intellidealer_label: "Equipment Identifier"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Dealer-internal alphanumeric identifier (asset tag, fleet plate,
+      etc.) — separate from stock # and customer fleet #. Often
+      sand-blasted onto the machine for shop-floor identification.
+    qep_status: PARTIAL
+    qep_table: qrm_equipment
+    qep_column: asset_tag
+    qep_evidence:
+      - "database.types.ts qrm_equipment.asset_tag"
+    qep_gap_notes: ""
+    severity: should
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Equipment Profile (Profile tab)"
+    dependencies: []
+
+  - id: equipment.control_number
+    intellidealer_label: "Control Number"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Internal-control alphanumeric (often used for floor-plan financing
+      tracking — the bank's reference number for the unit).
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: control_number
+    qep_evidence: []
+    qep_gap_notes: "No control_number; needed for floor-plan reconciliation."
+    severity: should
+    category: financial
+    migration_hint: |
+      ALTER TABLE qrm_equipment ADD COLUMN control_number TEXT;
+    ui_surface_hint: "Equipment Profile (Profile tab) — Financial block"
+    dependencies: []
+
+  - id: equipment.yard_location
+    intellidealer_label: "Yard Location"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Physical-location string within the dealer yard (e.g. 'Row C, Slot 7'
+      or 'Display lot front'). Drives wholesale-inspection routing and
+      customer-tour planning.
+    qep_status: PARTIAL
+    qep_table: qrm_equipment
+    qep_column: location_description
+    qep_evidence:
+      - "database.types.ts qrm_equipment.location_description"
+    qep_gap_notes: |
+      Free-text location_description exists. Could rename to yard_location
+      and constrain to a yard-cells lookup table over time.
+    severity: should
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Equipment Profile (Profile tab)"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 2 — STATUS / LIFECYCLE
+  # ==========================================================================
+  - id: equipment.status
+    intellidealer_label: "Status"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Listing__3.07.12.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Invoiced"
+      - "Inventory"
+      - "On Order"
+      - "Sold"
+      - "Presold"
+      - "Rental"
+      - "Consignment"
+      - "Transferred"
+    intellidealer_purpose: |
+      Top-level equipment lifecycle state. Drives every downstream
+      surface — listing filter, quote eligibility, GL routing on sale,
+      rental-fleet reporting.
+    qep_status: PARTIAL
+    qep_table: qrm_equipment
+    qep_column: availability
+    qep_evidence:
+      - "database.types.ts qrm_equipment.availability (enum crm_equipment_availability)"
+    qep_gap_notes: |
+      crm_equipment_availability covers some values but not all 8
+      IntelliDealer states (notably Presold, Consignment, Transferred,
+      Invoiced as a distinct vs Sold).
+    severity: must
+    category: workflow
+    migration_hint: |
+      -- Extend the enum
+      ALTER TYPE crm_equipment_availability ADD VALUE IF NOT EXISTS 'invoiced';
+      ALTER TYPE crm_equipment_availability ADD VALUE IF NOT EXISTS 'on_order';
+      ALTER TYPE crm_equipment_availability ADD VALUE IF NOT EXISTS 'presold';
+      ALTER TYPE crm_equipment_availability ADD VALUE IF NOT EXISTS 'consignment';
+      ALTER TYPE crm_equipment_availability ADD VALUE IF NOT EXISTS 'transferred';
+    ui_surface_hint: "Equipment Profile header badge + listing filter"
+    dependencies: []
+
+  - id: equipment.in_out
+    intellidealer_label: "In/Out"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "In"
+      - "Out"
+      - "Sold"
+    intellidealer_purpose: |
+      Secondary state — physical location (in the yard / out at customer /
+      sold and gone). Used in conjunction with In/Out Sub Type for finer
+      workflow control.
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: in_out_state
+    qep_evidence: []
+    qep_gap_notes: "No second-level In/Out + sub-type fields."
+    severity: should
+    category: workflow
+    migration_hint: |
+      CREATE TYPE equipment_in_out AS ENUM ('in','out','sold');
+      ALTER TABLE qrm_equipment ADD COLUMN in_out_state equipment_in_out;
+      ALTER TABLE qrm_equipment ADD COLUMN in_out_sub_type TEXT;
+    ui_surface_hint: "Equipment Profile (Profile tab) — Status block"
+    dependencies: []
+
+  - id: equipment.in_out_sub_type
+    intellidealer_label: "In/Out Sub Type"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Available"
+      - "Reserved"
+      - "Pending Sale"
+      - "Hold"
+      - "Out — Demo"
+      - "Out — Rental"
+      - "Out — Service Loaner"
+    intellidealer_purpose: "Secondary refinement of In/Out — what kind of 'out' the unit is in."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: in_out_sub_type
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: workflow
+    migration_hint: "(see equipment.in_out)"
+    ui_surface_hint: "Equipment Profile (Profile tab)"
+    dependencies: [equipment.in_out]
+
+  - id: equipment.class
+    intellidealer_label: "Class"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Manufacturer category (e.g. 'Internal', 'ATTACHMENTS', 'TRENCH BUCKET').
+      Used in OEM-portal taxonomy and in the Equipment Listing search filter.
+    qep_status: PARTIAL
+    qep_table: qrm_equipment
+    qep_column: category
+    qep_evidence:
+      - "database.types.ts qrm_equipment.category (enum crm_equipment_category)"
+    qep_gap_notes: |
+      qrm_equipment.category is a single enum. IntelliDealer has Class +
+      Type + Group + Category + Subclass — five-level taxonomy.
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE qrm_equipment ADD COLUMN class_code TEXT;
+      ALTER TABLE qrm_equipment ADD COLUMN type_code TEXT;
+      ALTER TABLE qrm_equipment ADD COLUMN group_code TEXT;
+      ALTER TABLE qrm_equipment ADD COLUMN subclass_code TEXT;
+    ui_surface_hint: "Equipment Profile (Profile tab) — Classification block"
+    dependencies: []
+
+  - id: equipment.type
+    intellidealer_label: "Type"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Sub-class within a Class (e.g. 'WHEEL LOADER' within Class 'CONSTRUCTION')."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: type_code
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.class)"
+    severity: should
+    category: operational
+    migration_hint: "(see equipment.class)"
+    ui_surface_hint: "Equipment Profile"
+    dependencies: [equipment.class]
+
+  - id: equipment.group
+    intellidealer_label: "Group"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Pricing-group code (e.g. 'MISC', 'ATTACHMENTS') — drives default
+      pricing layer selection and OEM rebate eligibility.
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: group_code
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.class)"
+    severity: must
+    category: financial
+    migration_hint: "(see equipment.class)"
+    ui_surface_hint: "Equipment Profile"
+    dependencies: [equipment.class]
+
+  - id: equipment.location
+    intellidealer_label: "Location"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: "Branch the equipment is assigned to (e.g. '01 - LAKE CITY')."
+    qep_status: PARTIAL
+    qep_table: qrm_equipment
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts branches (table exists; qrm_equipment has no FK)"
+    qep_gap_notes: "qrm_equipment has location_description (text) but no branch_id FK."
+    severity: must
+    category: operational
+    migration_hint: |
+      ALTER TABLE qrm_equipment ADD COLUMN home_branch_id UUID REFERENCES branches(id);
+      CREATE INDEX ON qrm_equipment (home_branch_id);
+    ui_surface_hint: "Equipment Profile + listing filter"
+    dependencies: []
+
+  - id: equipment.category_class_subclass
+    intellidealer_label: "Category / Class / Subclass"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Three-level OEM taxonomy roll-up — pre-populated from Base code or set manually."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: subclass_code
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.class)"
+    severity: should
+    category: reporting
+    migration_hint: "(see equipment.class)"
+    ui_surface_hint: "Equipment Profile"
+    dependencies: [equipment.class]
+
+  # ==========================================================================
+  # SECTION 3 — METER / WARRANTY LEDGER
+  # ==========================================================================
+  - id: equipment.machine_hours
+    intellidealer_label: "Machine Hours / Code / Date"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Hour-meter reading, plus a Code (Actual / Estimate / Tampered /
+      Replaced) and a Date the reading was taken. Drives warranty
+      eligibility, PM scheduling, and used-equipment valuation.
+    qep_status: PARTIAL
+    qep_table: qrm_equipment
+    qep_column: engine_hours
+    qep_evidence:
+      - "database.types.ts qrm_equipment.engine_hours (single number)"
+    qep_gap_notes: |
+      qrm_equipment.engine_hours is a single number with no audit trail.
+      Need a typed hours-ledger table to capture Code (Actual / Estimate /
+      Tampered / Replaced) and Date plus historical readings.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      CREATE TYPE meter_reading_code AS ENUM ('actual','estimate','tampered','replaced');
+      CREATE TABLE equipment_meter_readings (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        equipment_id uuid NOT NULL REFERENCES qrm_equipment(id),
+        meter_index INTEGER NOT NULL DEFAULT 1,  -- 1=primary 2=secondary
+        hours NUMERIC(10,1) NOT NULL,
+        code meter_reading_code NOT NULL DEFAULT 'actual',
+        recorded_at DATE NOT NULL,
+        recorded_by UUID REFERENCES profiles(id),
+        source TEXT,  -- 'manual','telematics','inspection'
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX ON equipment_meter_readings (workspace_id, equipment_id, recorded_at DESC);
+    ui_surface_hint: "Equipment Profile — Hours block + history sub-panel"
+    dependencies: []
+
+  - id: equipment.machine2_hours
+    intellidealer_label: "Machine2 Hours / Code / Date"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Secondary meter for dual-meter machines (e.g. PTO hours + engine
+      hours; hammer-strikes + travel hours). Same Code + Date semantics.
+    qep_status: MISSING
+    qep_table: equipment_meter_readings
+    qep_column: meter_index
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.machine_hours; meter_index = 2 for secondary)"
+    severity: should
+    category: regulatory
+    migration_hint: "(see equipment.machine_hours)"
+    ui_surface_hint: "Equipment Profile — Hours block"
+    dependencies: [equipment.machine_hours]
+
+  - id: equipment.basic_warranty_hours_code_date
+    intellidealer_label: "Basic Warranty Hours / Code / Date"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Manufacturer's basic warranty: cumulative hours + a Code marker +
+      the date warranty starts. Drives whether a WO can be filed under
+      basic warranty (vs extended, vs out-of-warranty customer-pay).
+    qep_status: PARTIAL
+    qep_table: qrm_equipment
+    qep_column: warranty_expires_on
+    qep_evidence:
+      - "database.types.ts qrm_equipment.warranty_expires_on (date only)"
+    qep_gap_notes: |
+      Single date column doesn't capture hours-or-time-whichever-comes-first
+      OEM warranty model. Need a structured warranty ledger.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      CREATE TABLE equipment_warranty_terms (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        equipment_id uuid NOT NULL REFERENCES qrm_equipment(id),
+        warranty_type TEXT NOT NULL,  -- 'basic','extended','powertrain'
+        max_hours NUMERIC(10,1),
+        max_months INTEGER,
+        start_date DATE NOT NULL,
+        end_date DATE,
+        provider TEXT,                 -- 'oem','dealer','third_party'
+        contract_number TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    ui_surface_hint: "Equipment Profile — Warranty block + Warranty Dates tab"
+    dependencies: []
+
+  - id: equipment.extended_warranty_hours_code_date
+    intellidealer_label: "Extended Warranty Hours / Code / Date"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Customer-purchased extended warranty (separate from basic).
+      Captured as the secondary row in the warranty ledger.
+    qep_status: MISSING
+    qep_table: equipment_warranty_terms
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.basic_warranty_hours_code_date)"
+    severity: must
+    category: regulatory
+    migration_hint: "(see equipment.basic_warranty_hours_code_date)"
+    ui_surface_hint: "Equipment Profile — Warranty block"
+    dependencies: [equipment.basic_warranty_hours_code_date]
+
+  # ==========================================================================
+  # SECTION 4 — COST / FINANCIAL LEDGER
+  # ==========================================================================
+  - id: equipment.invoice_number
+    intellidealer_label: "Invoice Number"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Vendor (supplier) invoice number from when the equipment was
+      acquired. Drives floor-plan-financing reconciliation.
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: supplier_invoice_number
+    qep_evidence: []
+    qep_gap_notes: "No supplier-invoice-# column."
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE qrm_equipment ADD COLUMN supplier_invoice_number TEXT;
+      ALTER TABLE qrm_equipment ADD COLUMN supplier_invoice_date DATE;
+      ALTER TABLE qrm_equipment ADD COLUMN supplier_invoice_amount_cents BIGINT;
+    ui_surface_hint: "Equipment Profile (Profile tab) — Financial block"
+    dependencies: []
+
+  - id: equipment.invoice_date
+    intellidealer_label: "Invoice Date"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: "Date of supplier invoice."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: supplier_invoice_date
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.invoice_number)"
+    severity: must
+    category: financial
+    migration_hint: "(see equipment.invoice_number)"
+    ui_surface_hint: "Equipment Profile (Profile tab)"
+    dependencies: [equipment.invoice_number]
+
+  - id: equipment.invoice_amount
+    intellidealer_label: "Invoice Amount"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Acquisition invoice amount (two decimals shown)."
+    qep_status: PARTIAL
+    qep_table: qrm_equipment
+    qep_column: purchase_price
+    qep_evidence:
+      - "database.types.ts qrm_equipment.purchase_price"
+    qep_gap_notes: |
+      purchase_price exists but is loosely typed (number). IntelliDealer
+      shows acquired and second cost amounts side-by-side.
+    severity: must
+    category: financial
+    migration_hint: "(see equipment.invoice_number — supplier_invoice_amount_cents)"
+    ui_surface_hint: "Equipment Profile (Profile tab)"
+    dependencies: []
+
+  - id: equipment.current_cost
+    intellidealer_label: "Current Cost"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Current dealer-cost basis (after add-ons, prep, freight). Used as
+      cost layer in margin calculation.
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: current_cost_cents
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE qrm_equipment ADD COLUMN current_cost_cents BIGINT;
+      ALTER TABLE qrm_equipment ADD COLUMN net_book_value_cents BIGINT;
+      ALTER TABLE qrm_equipment ADD COLUMN reference_amount_cents BIGINT;
+      ALTER TABLE qrm_equipment ADD COLUMN note_amount_cents BIGINT;
+      ALTER TABLE qrm_equipment ADD COLUMN note_code TEXT;
+      ALTER TABLE qrm_equipment ADD COLUMN note_due_date DATE;
+      ALTER TABLE qrm_equipment ADD COLUMN finance_amount_cents BIGINT;
+      ALTER TABLE qrm_equipment ADD COLUMN finance_due_date DATE;
+      ALTER TABLE qrm_equipment ADD COLUMN settlement_number TEXT;
+      ALTER TABLE qrm_equipment ADD COLUMN settlement_date DATE;
+      ALTER TABLE qrm_equipment ADD COLUMN maintenance_expense_cents BIGINT;
+      ALTER TABLE qrm_equipment ADD COLUMN rental_cost_pct NUMERIC(5,2);
+      ALTER TABLE qrm_equipment ADD COLUMN rental_insurable_amount_cents BIGINT;
+      ALTER TABLE qrm_equipment ADD COLUMN rental_amount_cents BIGINT;
+    ui_surface_hint: "Equipment Profile (Profile tab) — Financial block"
+    dependencies: []
+
+  - id: equipment.net_book_value
+    intellidealer_label: "Net Book Value"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Original cost minus accumulated depreciation. The accounting
+      carrying value of the asset. Drives gain/loss on sale.
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: net_book_value_cents
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.current_cost)"
+    severity: must
+    category: financial
+    migration_hint: "(see equipment.current_cost)"
+    ui_surface_hint: "Equipment Profile (Profile tab)"
+    dependencies: [equipment.current_cost]
+
+  - id: equipment.note_amount
+    intellidealer_label: "Note Amount / Code / Due Date"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Floor-plan note amount + note code + due date — drives the next
+      curtailment payment and the floor-plan-aging report.
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: note_amount_cents
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.current_cost)"
+    severity: must
+    category: financial
+    migration_hint: "(see equipment.current_cost)"
+    ui_surface_hint: "Equipment Profile (Profile tab) — Financial block"
+    dependencies: [equipment.current_cost]
+
+  - id: equipment.finance_amount
+    intellidealer_label: "Finance Amount / Due Date"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: "Customer-side financing amount + due date."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: finance_amount_cents
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.current_cost)"
+    severity: should
+    category: financial
+    migration_hint: "(see equipment.current_cost)"
+    ui_surface_hint: "Equipment Profile (Profile tab)"
+    dependencies: [equipment.current_cost]
+
+  - id: equipment.settlement_number_date
+    intellidealer_label: "Settlement Number / Date"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: "Final settlement reference (often from finance company on payoff)."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: settlement_number
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.current_cost)"
+    severity: should
+    category: financial
+    migration_hint: "(see equipment.current_cost)"
+    ui_surface_hint: "Equipment Profile (Profile tab)"
+    dependencies: [equipment.current_cost]
+
+  - id: equipment.maintenance_expense
+    intellidealer_label: "Maintenance Expense"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Lifetime maintenance dollars incurred against this unit. Used in margin/total-cost reporting."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: maintenance_expense_cents
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.current_cost)"
+    severity: should
+    category: financial
+    migration_hint: "(see equipment.current_cost)"
+    ui_surface_hint: "Equipment Profile (Profile tab)"
+    dependencies: [equipment.current_cost]
+
+  - id: equipment.rental_cost_percentage
+    intellidealer_label: "Rental Cost Percentage"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: percent
+    intellidealer_purpose: "Per-unit override of the standard rental-cost depreciation rate."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: rental_cost_pct
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.current_cost)"
+    severity: should
+    category: financial
+    migration_hint: "(see equipment.current_cost)"
+    ui_surface_hint: "Equipment Profile — Rental block"
+    dependencies: [equipment.current_cost]
+
+  - id: equipment.rental_insurable_amount
+    intellidealer_label: "Rental Insurable Amount"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Insured value when on rent — drives the COI requirement on the rental contract."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: rental_insurable_amount_cents
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.current_cost)"
+    severity: should
+    category: financial
+    migration_hint: "(see equipment.current_cost)"
+    ui_surface_hint: "Equipment Profile — Rental block"
+    dependencies: [equipment.current_cost]
+
+  - id: equipment.rental_amount
+    intellidealer_label: "Rental Amount"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Default rental rate for this unit. Distinct from the daily/weekly/
+      monthly_rental_rate columns in QEP — this is the historical
+      single-amount field IntelliDealer carries.
+    qep_status: PARTIAL
+    qep_table: qrm_equipment
+    qep_column: daily_rental_rate
+    qep_evidence:
+      - "database.types.ts qrm_equipment.daily_rental_rate, .weekly_rental_rate, .monthly_rental_rate"
+    qep_gap_notes: ""
+    severity: should
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Equipment Profile — Rental block"
+    dependencies: []
+
+  - id: equipment.sale_account
+    intellidealer_label: "Sale Account (GL)"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "GL revenue account when this unit is sold (e.g. '5652021')."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: sale_gl_account
+    qep_evidence: []
+    qep_gap_notes: "No GL routing on equipment."
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE qrm_equipment ADD COLUMN sale_gl_account TEXT;
+      ALTER TABLE qrm_equipment ADD COLUMN inventory_gl_account TEXT;
+    ui_surface_hint: "Equipment Profile (Profile tab) — GL block"
+    dependencies: []
+
+  - id: equipment.inventory_account
+    intellidealer_label: "Inventory Account (GL)"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "GL inventory asset account (e.g. '1200001'). Drives the cost-of-goods entry."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: inventory_gl_account
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.sale_account)"
+    severity: must
+    category: financial
+    migration_hint: "(see equipment.sale_account)"
+    ui_surface_hint: "Equipment Profile (Profile tab) — GL block"
+    dependencies: [equipment.sale_account]
+
+  - id: equipment.avatax_product_code
+    intellidealer_label: "Avatax Product Code"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      AvaTax-defined product code (e.g. 'P0000000'). Required for the
+      AvaTax decision payload on every equipment-line invoice — the
+      product code drives the tax-treatment rules.
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: avatax_product_code
+    qep_evidence: []
+    qep_gap_notes: "No AvaTax product code. Blocks AvaTax compliance for equipment sales."
+    severity: must
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE qrm_equipment ADD COLUMN avatax_product_code TEXT;
+      CREATE INDEX ON qrm_equipment (workspace_id, avatax_product_code);
+    ui_surface_hint: "Equipment Profile (Profile tab) — Tax block"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 5 — CYCLE-COUNT / AUDIT
+  # ==========================================================================
+  - id: equipment.last_count_method
+    intellidealer_label: "Last Count Method"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Visual"
+      - "Scan"
+      - "RFID"
+      - "Telematics"
+    intellidealer_purpose: |
+      How the most-recent physical-inventory cycle-count was performed.
+      Audit-trail field for SOX-style internal controls.
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: last_count_method
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: regulatory
+    migration_hint: |
+      CREATE TYPE inventory_count_method AS ENUM ('visual','scan','rfid','telematics');
+      ALTER TABLE qrm_equipment ADD COLUMN last_count_method inventory_count_method;
+      ALTER TABLE qrm_equipment ADD COLUMN last_count_at DATE;
+    ui_surface_hint: "Equipment Profile (Profile tab)"
+    dependencies: []
+
+  - id: equipment.last_count_date
+    intellidealer_label: "Last Count Date"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: "Date of most-recent physical-inventory verification."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: last_count_at
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.last_count_method)"
+    severity: should
+    category: regulatory
+    migration_hint: "(see equipment.last_count_method)"
+    ui_surface_hint: "Equipment Profile (Profile tab)"
+    dependencies: [equipment.last_count_method]
+
+  # ==========================================================================
+  # SECTION 6 — DATES (LIFECYCLE TIMESTAMPS)
+  # ==========================================================================
+  - id: equipment.ordered_reserved_date
+    intellidealer_label: "Ordered/Reserved Date"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: "Date the unit was ordered from the OEM or reserved by a customer."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: ordered_reserved_at
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: should
+    category: workflow
+    migration_hint: |
+      ALTER TABLE qrm_equipment ADD COLUMN ordered_reserved_at DATE;
+      ALTER TABLE qrm_equipment ADD COLUMN rental_fleet_date DATE;
+      ALTER TABLE qrm_equipment ADD COLUMN delivery_date DATE;
+      ALTER TABLE qrm_equipment ADD COLUMN traded_date DATE;
+    ui_surface_hint: "Equipment Profile (Profile tab) — Dates block"
+    dependencies: []
+
+  - id: equipment.rental_fleet_date
+    intellidealer_label: "Rental Fleet Date"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: "Date the unit was added to the rental fleet (drives rental-fleet-age reporting)."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: rental_fleet_date
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.ordered_reserved_date)"
+    severity: should
+    category: financial
+    migration_hint: "(see equipment.ordered_reserved_date)"
+    ui_surface_hint: "Equipment Profile (Profile tab)"
+    dependencies: [equipment.ordered_reserved_date]
+
+  - id: equipment.delivery_date
+    intellidealer_label: "Delivery Date"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: "Date physical-delivery occurred (warranty start clock)."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: delivery_date
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.ordered_reserved_date)"
+    severity: must
+    category: regulatory
+    migration_hint: "(see equipment.ordered_reserved_date)"
+    ui_surface_hint: "Equipment Profile (Profile tab)"
+    dependencies: [equipment.ordered_reserved_date]
+
+  - id: equipment.traded_date
+    intellidealer_label: "Traded Date"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: "Date the unit was traded in (when it became a used-inventory asset)."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: traded_date
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.ordered_reserved_date)"
+    severity: should
+    category: workflow
+    migration_hint: "(see equipment.ordered_reserved_date)"
+    ui_surface_hint: "Equipment Profile (Profile tab)"
+    dependencies: [equipment.ordered_reserved_date]
+
+  # ==========================================================================
+  # SECTION 7 — SALES ASSOCIATION
+  # ==========================================================================
+  - id: equipment.salesperson
+    intellidealer_label: "Salesperson"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: "Rep who sold (or is selling) the unit."
+    qep_status: PARTIAL
+    qep_table: qb_quotes
+    qep_column: salesman_id
+    qep_evidence:
+      - "database.types.ts qb_quotes.salesman_id, qb_deals.salesman_id"
+    qep_gap_notes: |
+      qb_deals carries salesman_id. qrm_equipment has no direct
+      salesperson — for inventory in stock awaiting a buyer, useful to
+      have an assigned rep. Add an optional column.
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE qrm_equipment ADD COLUMN assigned_salesperson_id UUID
+        REFERENCES profiles(id);
+    ui_surface_hint: "Equipment Profile (Profile tab) — Sales block"
+    dependencies: []
+
+  - id: equipment.customer_invoice_number
+    intellidealer_label: "Customer Invoice Number"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Customer-facing invoice # when the unit was sold (denormalized for fast lookup)."
+    qep_status: PARTIAL
+    qep_table: qb_deals
+    qep_column: invoice_number
+    qep_evidence:
+      - "database.types.ts qb_deals.invoice_number"
+    qep_gap_notes: "Live on the deal record; surface on the Equipment Profile via FK."
+    severity: should
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Equipment Profile — Customer Invoice block"
+    dependencies: []
+
+  - id: equipment.customer_invoice_date
+    intellidealer_label: "Customer Invoice Date"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: "Date of customer invoice."
+    qep_status: PARTIAL
+    qep_table: customer_invoices
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts customer_invoices (table exists)"
+    qep_gap_notes: ""
+    severity: should
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Equipment Profile — Customer Invoice block"
+    dependencies: []
+
+  - id: equipment.customer_name_link
+    intellidealer_label: "Customer Name (sold-to)"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: "Sold-to customer (e.g. 'Standard Sand & Silica (714696)' or 'INTERNAL USE')."
+    qep_status: BUILT
+    qep_table: qrm_equipment
+    qep_column: company_id
+    qep_evidence:
+      - "database.types.ts qrm_equipment.company_id"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Equipment Profile — links to Customer Profile"
+    dependencies: []
+
+  - id: equipment.customer_fleet_number
+    intellidealer_label: "Customer Fleet Number"
+    intellidealer_screen: "Equipment Profile (Profile tab)"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Customer's internal fleet number (their asset tag for the unit).
+      Required for customer-portal communications and for fleet-management
+      reporting.
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: customer_fleet_number
+    qep_evidence: []
+    qep_gap_notes: "No customer-fleet-# column."
+    severity: should
+    category: operational
+    migration_hint: |
+      ALTER TABLE qrm_equipment ADD COLUMN customer_fleet_number TEXT;
+    ui_surface_hint: "Equipment Profile (Profile tab) — Customer block"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 8 — EQUIPMENT QUOTING
+  # ==========================================================================
+  - id: equipment_quote.reference_number
+    intellidealer_label: "Quote Reference Number"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Five-digit quote number (e.g. 'Q00001'). Customer-facing identifier."
+    qep_status: BUILT
+    qep_table: qb_quotes
+    qep_column: quote_number
+    qep_evidence:
+      - "database.types.ts qb_quotes.quote_number"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Quote header"
+    dependencies: []
+
+  - id: equipment_quote.status
+    intellidealer_label: "Quote Status"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Draft"
+      - "Pending"
+      - "Quoted"
+      - "Accepted"
+      - "Rejected"
+      - "Expired"
+      - "Converted"
+    intellidealer_purpose: "Quote pipeline state."
+    qep_status: PARTIAL
+    qep_table: qb_quotes
+    qep_column: status
+    qep_evidence:
+      - "database.types.ts qb_quotes.status (TEXT)"
+    qep_gap_notes: "Status is free-text; constrain to enum aligned to IntelliDealer values."
+    severity: should
+    category: workflow
+    migration_hint: |
+      CREATE TYPE qb_quote_status AS ENUM ('draft','pending','quoted','accepted','rejected','expired','converted');
+      ALTER TABLE qb_quotes ALTER COLUMN status TYPE qb_quote_status USING status::qb_quote_status;
+    ui_surface_hint: "Quote header status badge + listing filter"
+    dependencies: []
+
+  - id: equipment_quote.expiry_date
+    intellidealer_label: "Expiry Date"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: "When the quote expires (defaults to issue+30 days)."
+    qep_status: BUILT
+    qep_table: qb_quotes
+    qep_column: valid_until
+    qep_evidence:
+      - "database.types.ts qb_quotes.valid_until"
+    qep_gap_notes: ""
+    severity: must
+    category: workflow
+    migration_hint: ""
+    ui_surface_hint: "Quote header"
+    dependencies: []
+
+  - id: equipment_quote.estimated_close_date
+    intellidealer_label: "Estimated Close Date"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: "Salesperson's estimated close date — drives the pipeline forecast."
+    qep_status: PARTIAL
+    qep_table: qrm_deals
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts qrm_deals (deal pipeline)"
+    qep_gap_notes: |
+      Lives on the deal side. Verify the IntelliDealer Equipment-Quote
+      Estimated Close Date maps to qrm_deals.expected_close_date or similar.
+    severity: should
+    category: reporting
+    migration_hint: |
+      ALTER TABLE qb_quotes ADD COLUMN estimated_close_date DATE;
+    ui_surface_hint: "Quote header"
+    dependencies: []
+
+  - id: equipment_quote.po_number
+    intellidealer_label: "Quote PO Number"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Customer PO referenced on the quote (defaults from customer's per-customer PO)."
+    qep_status: MISSING
+    qep_table: qb_quotes
+    qep_column: po_number
+    qep_evidence: []
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: |
+      ALTER TABLE qb_quotes ADD COLUMN po_number TEXT;
+      ALTER TABLE qb_quotes ADD COLUMN ship_via TEXT;
+      ALTER TABLE qb_quotes ADD COLUMN sold_to_address_id UUID REFERENCES qrm_company_ship_to_addresses(id);
+      ALTER TABLE qb_quotes ADD COLUMN ship_to_address_id UUID REFERENCES qrm_company_ship_to_addresses(id);
+    ui_surface_hint: "Quote header"
+    dependencies: []
+
+  - id: equipment_quote.tax_codes
+    intellidealer_label: "Quote Tax 1-4"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: enum
+    intellidealer_purpose: |
+      Four parallel tax slots on the quote (e.g. 'Florida State 6.00%',
+      'FL28 FLAGLER COUNTY', 'NO TAX4'). Drives AvaTax decision payload
+      and tax-line breakdown on the quote PDF.
+    qep_status: PARTIAL
+    qep_table: quote_tax_breakdowns
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts quote_tax_breakdowns (table exists)"
+      - "database.types.ts qb_quotes.tax_cents, .tax_rate_pct"
+    qep_gap_notes: |
+      Single tax_cents/tax_rate_pct on qb_quotes is too coarse.
+      quote_tax_breakdowns may already cover the breakdown — verify
+      jurisdictions match IntelliDealer's 4-slot model.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      -- If quote_tax_breakdowns is missing the 4-slot model, add columns:
+      ALTER TABLE qb_quotes ADD COLUMN tax_code_1 TEXT;
+      ALTER TABLE qb_quotes ADD COLUMN tax_code_2 TEXT;
+      ALTER TABLE qb_quotes ADD COLUMN tax_code_3 TEXT;
+      ALTER TABLE qb_quotes ADD COLUMN tax_code_4 TEXT;
+    ui_surface_hint: "Quote header — Tax block"
+    dependencies: []
+
+  - id: equipment_quote.discount_code
+    intellidealer_label: "Quote Discount"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Per-quote discount group (e.g. 'NOT ASSIGNED', 'CONTRACTOR-PROMO')."
+    qep_status: PARTIAL
+    qep_table: qb_quotes
+    qep_column: dealer_discount_cents
+    qep_evidence:
+      - "database.types.ts qb_quotes.dealer_discount_cents, .dealer_discount_pct"
+    qep_gap_notes: |
+      Discount is captured as cents/pct but no group code. Add a
+      discount_code text column.
+    severity: should
+    category: financial
+    migration_hint: |
+      ALTER TABLE qb_quotes ADD COLUMN discount_code TEXT;
+    ui_surface_hint: "Quote header — Discount block"
+    dependencies: []
+
+  - id: equipment_quote.segment
+    intellidealer_label: "Quote Segment (Stock # row)"
+    intellidealer_screen: "Equipment Quoting (segment grid)"
+    intellidealer_data_source: "EQSEG"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.05.10.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Per-quote line item for one stock #: Segment Number, Stock #,
+      Description, Unit Price, Trade-In, Other (deductions/adders).
+    qep_status: BUILT
+    qep_table: qb_quote_line_items
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts qb_quote_line_items (table exists)"
+    qep_gap_notes: |
+      qb_quote_line_items handles the line items. Ensure shape covers
+      Segment Number, Stock #, Description, Unit Price, Trade-In, Other.
+    severity: must
+    category: financial
+    migration_hint: |
+      -- Verify columns; if missing add:
+      ALTER TABLE qb_quote_line_items ADD COLUMN IF NOT EXISTS segment_number TEXT;
+      ALTER TABLE qb_quote_line_items ADD COLUMN IF NOT EXISTS stock_number TEXT;
+      ALTER TABLE qb_quote_line_items ADD COLUMN IF NOT EXISTS trade_in_cents BIGINT;
+      ALTER TABLE qb_quote_line_items ADD COLUMN IF NOT EXISTS other_cents BIGINT;
+    ui_surface_hint: "Quote — Segments grid"
+    dependencies: []
+
+  - id: equipment_quote.trade_in_allowance
+    intellidealer_label: "Quote Trade-In Allowance"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Aggregated trade-in allowance across quote line items."
+    qep_status: BUILT
+    qep_table: qb_quotes
+    qep_column: trade_in_allowance_cents
+    qep_evidence:
+      - "database.types.ts qb_quotes.trade_in_allowance_cents, .trade_in_book_value_cents"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Quote totals"
+    dependencies: []
+
+  - id: equipment_quote.responsible_salesperson
+    intellidealer_label: "Quote Responsible (Salesperson)"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: "Salesperson responsible for the quote."
+    qep_status: BUILT
+    qep_table: qb_quotes
+    qep_column: salesman_id
+    qep_evidence:
+      - "database.types.ts qb_quotes.salesman_id"
+    qep_gap_notes: ""
+    severity: must
+    category: operational
+    migration_hint: ""
+    ui_surface_hint: "Quote header"
+    dependencies: []
+
+  - id: equipment_quote.requires_approval
+    intellidealer_label: "Quote Requires Approval"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: "Quote needs sales-manager approval (drives the approval queue)."
+    qep_status: BUILT
+    qep_table: qb_quotes
+    qep_column: requires_approval
+    qep_evidence:
+      - "database.types.ts qb_quotes.requires_approval, .approved_by, .approved_at, .approval_reason"
+    qep_gap_notes: ""
+    severity: should
+    category: workflow
+    migration_hint: ""
+    ui_surface_hint: "Quote header — approval banner"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 9 — EQUIPMENT INVOICING (Sales Support Portal)
+  # ==========================================================================
+  - id: equipment_invoice.reference_number
+    intellidealer_label: "Invoice Reference Number"
+    intellidealer_screen: "Equipment Invoicing (Sales Support Portal)"
+    intellidealer_data_source: "EINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing__3.06.45.txt
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Five-digit equipment-invoice reference (customer-facing)."
+    qep_status: PARTIAL
+    qep_table: qb_deals
+    qep_column: invoice_number
+    qep_evidence:
+      - "database.types.ts qb_deals.invoice_number, customer_invoices (table)"
+    qep_gap_notes: |
+      qb_deals.invoice_number captures the dealer-issued #. Verify the
+      lifecycle covers Pending → Posted distinct states.
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Equipment Invoicing listing"
+    dependencies: []
+
+  - id: equipment_invoice.status
+    intellidealer_label: "Invoice Status"
+    intellidealer_screen: "Equipment Invoicing"
+    intellidealer_data_source: "EINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).txt
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing__3.10.45.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Pending"
+      - "Posted"
+      - "Voided"
+      - "Cancelled"
+    intellidealer_purpose: |
+      Invoice lifecycle. Pending = drafted but not posted to GL; Posted =
+      booked and on the AR ledger; Voided = corrected; Cancelled = killed
+      pre-post.
+    qep_status: PARTIAL
+    qep_table: customer_invoices
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts customer_invoices (table exists)"
+    qep_gap_notes: "Verify the status enum matches IntelliDealer values."
+    severity: must
+    category: financial
+    migration_hint: |
+      -- If customer_invoices.status is free-text, constrain:
+      CREATE TYPE customer_invoice_status AS ENUM ('pending','posted','voided','cancelled','open','paid','partially_paid');
+      ALTER TABLE customer_invoices ALTER COLUMN status TYPE customer_invoice_status USING status::customer_invoice_status;
+    ui_surface_hint: "Equipment Invoicing listing — status filter + badge"
+    dependencies: []
+
+  - id: equipment_invoice.vesign_status
+    intellidealer_label: "VESign Status (e-signature)"
+    intellidealer_screen: "Equipment Invoicing"
+    intellidealer_data_source: "EINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Awaiting Signature"
+      - "Partially Signed"
+      - "Signed"
+      - "Declined"
+      - "Not Required"
+    intellidealer_purpose: |
+      VESign (VitalEdge eSign) signing status for the invoice. Drives
+      the rep's "chase the customer" queue.
+    qep_status: PARTIAL
+    qep_table: quote_signatures
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts quote_signatures (table exists for quotes)"
+    qep_gap_notes: |
+      quote_signatures handles the quote-side signature. Need an
+      analogous invoice_signatures table or a status column on
+      customer_invoices.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      CREATE TYPE esign_status AS ENUM ('awaiting','partially_signed','signed','declined','not_required');
+      ALTER TABLE customer_invoices ADD COLUMN esign_status esign_status NOT NULL DEFAULT 'not_required';
+      ALTER TABLE customer_invoices ADD COLUMN esign_envelope_id TEXT;
+      ALTER TABLE customer_invoices ADD COLUMN esign_signed_at TIMESTAMPTZ;
+    ui_surface_hint: "Invoice header — VESign badge + 'send for sig' button"
+    dependencies: []
+
+  - id: equipment_invoice.salesperson
+    intellidealer_label: "Invoice Salesperson"
+    intellidealer_screen: "Equipment Invoicing"
+    intellidealer_data_source: "EINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing__3.06.45.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: "Salesperson credited on the invoice (drives commission)."
+    qep_status: BUILT
+    qep_table: qb_deals
+    qep_column: salesman_id
+    qep_evidence:
+      - "database.types.ts qb_deals.salesman_id"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Invoice header"
+    dependencies: []
+
+  - id: equipment_invoice.show_extended_description
+    intellidealer_label: "Show Extended Description (filter)"
+    intellidealer_screen: "Equipment Invoicing"
+    intellidealer_data_source: "EINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).txt
+    intellidealer_field_type: bool
+    intellidealer_purpose: "Listing toggle that includes extended descriptions in the invoice search."
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "UI-only filter; no DDL needed."
+    severity: could
+    category: nice_to_have
+    migration_hint: ""
+    ui_surface_hint: "Invoice listing — toggle"
+    dependencies: []
+
+  - id: equipment_invoice.cash_code
+    intellidealer_label: "Invoice Cash Code"
+    intellidealer_screen: "Equipment Invoicing"
+    intellidealer_data_source: "EINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Cash receipt code if the invoice was paid at counter (vs. on
+      account). Drives the daily cash deposit reconciliation.
+    qep_status: MISSING
+    qep_table: customer_invoices
+    qep_column: cash_code
+    qep_evidence: []
+    qep_gap_notes: "No cash-code column."
+    severity: should
+    category: financial
+    migration_hint: |
+      ALTER TABLE customer_invoices ADD COLUMN cash_code TEXT;
+    ui_surface_hint: "Invoice header — Cash block"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 10 — TRADE-INS (rich detail beyond qb_trade_ins today)
+  # ==========================================================================
+  - id: trade_in.payoff_amount
+    intellidealer_label: "Trade-In Pay-Off"
+    intellidealer_screen: "Equipment Invoicing — Trade-Ins"
+    intellidealer_data_source: "ETRD"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing-Trade-Ins__3.10.34.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Payoff amount due to the customer's lien holder (bank/finance co)
+      to clear the title before the dealer can take possession.
+      Critical for clean title transfer; dealer cuts a check directly
+      to the lien holder.
+    qep_status: MISSING
+    qep_table: qb_trade_ins
+    qep_column: payoff_amount_cents
+    qep_evidence: []
+    qep_gap_notes: "qb_trade_ins has allowance/book-value but no payoff or lien-holder columns."
+    severity: must
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE qb_trade_ins ADD COLUMN payoff_amount_cents BIGINT;
+      ALTER TABLE qb_trade_ins ADD COLUMN payoff_good_through_date DATE;
+      ALTER TABLE qb_trade_ins ADD COLUMN lien_holder_name TEXT;
+      ALTER TABLE qb_trade_ins ADD COLUMN lien_holder_address TEXT;
+      ALTER TABLE qb_trade_ins ADD COLUMN lien_holder_account_number TEXT;
+      ALTER TABLE qb_trade_ins ADD COLUMN lien_release_received_at DATE;
+      ALTER TABLE qb_trade_ins ADD COLUMN title_received_at DATE;
+    ui_surface_hint: "Trade-In Detail — Payoff / Lien block"
+    dependencies: []
+
+  - id: trade_in.lien_holder
+    intellidealer_label: "Trade-In Lien Holder"
+    intellidealer_screen: "Equipment Invoicing — Trade-Ins"
+    intellidealer_data_source: "ETRD"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing-Trade-Ins__3.10.34.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Bank or finance-co name holding the lien on the trade-in. Required
+      on the title-payoff check.
+    qep_status: MISSING
+    qep_table: qb_trade_ins
+    qep_column: lien_holder_name
+    qep_evidence: []
+    qep_gap_notes: "(see trade_in.payoff_amount)"
+    severity: must
+    category: regulatory
+    migration_hint: "(see trade_in.payoff_amount)"
+    ui_surface_hint: "Trade-In Detail — Payoff / Lien block"
+    dependencies: [trade_in.payoff_amount]
+
+  - id: trade_in.disposition
+    intellidealer_label: "Trade-In Disposition"
+    intellidealer_screen: "Equipment Invoicing — Trade-Ins"
+    intellidealer_data_source: "ETRD"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing-Trade-Ins__3.10.34.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "Wholesale"
+      - "Recondition / Retail"
+      - "Wholesale Auction"
+      - "Crush / Salvage"
+      - "Hold for Parts"
+    intellidealer_purpose: |
+      What the dealer plans to do with the unit post-trade. Drives the
+      reconditioning-budget allocation, the wholesale-auction list, and
+      the parts-stripping decision.
+    qep_status: PARTIAL
+    qep_table: qb_trade_ins
+    qep_column: disposition
+    qep_evidence:
+      - "database.types.ts qb_trade_ins.disposition (TEXT)"
+    qep_gap_notes: "disposition is free-text; constrain to enum."
+    severity: should
+    category: financial
+    migration_hint: |
+      CREATE TYPE trade_in_disposition AS ENUM ('wholesale','recondition_retail','wholesale_auction','crush_salvage','hold_for_parts');
+      ALTER TABLE qb_trade_ins ALTER COLUMN disposition TYPE trade_in_disposition USING disposition::trade_in_disposition;
+    ui_surface_hint: "Trade-In Detail — Disposition selector"
+    dependencies: []
+
+  - id: trade_in.over_under_allowance
+    intellidealer_label: "Trade-In Over/Under (Allowance vs Book Value)"
+    intellidealer_screen: "Equipment Invoicing — Trade-Ins"
+    intellidealer_data_source: "ETRD"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing-Trade-Ins__3.10.34.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Allowance minus Book Value — positive means dealer over-allowed
+      (sales tactic at margin's expense), negative means under-allowed
+      (margin captured).
+    qep_status: BUILT
+    qep_table: qb_trade_ins
+    qep_column: over_under_cents
+    qep_evidence:
+      - "database.types.ts qb_trade_ins.over_under_cents"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Trade-In Detail — Allowance block"
+    dependencies: []
+
+  - id: trade_in.title_received
+    intellidealer_label: "Trade-In Title Received Date"
+    intellidealer_screen: "Equipment Invoicing — Trade-Ins"
+    intellidealer_data_source: "ETRD"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing-Trade-Ins__3.10.34.txt
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      Date the dealer received clean title from the customer. Until
+      title is in hand, the dealer cannot resell — drives a critical
+      compliance/aging report.
+    qep_status: MISSING
+    qep_table: qb_trade_ins
+    qep_column: title_received_at
+    qep_evidence: []
+    qep_gap_notes: "(see trade_in.payoff_amount)"
+    severity: must
+    category: regulatory
+    migration_hint: "(see trade_in.payoff_amount)"
+    ui_surface_hint: "Trade-In Detail — Title block + aging dashboard"
+    dependencies: [trade_in.payoff_amount]
+
+  - id: trade_in.appraisal_record
+    intellidealer_label: "Trade-In Appraisal (rep walk-around)"
+    intellidealer_screen: "(ambient — pre-trade appraisal)"
+    intellidealer_data_source: "ETRD_APPR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Invoicing-Trade-Ins__3.10.34.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Pre-trade rep walk-around record: condition photos, hours, damage,
+      tire/track depth, hours on attachments. Drives the dealer's allowance
+      offer and protects against post-trade damage disputes.
+    qep_status: PARTIAL
+    qep_table: trade_valuations
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts trade_valuations (table exists)"
+    qep_gap_notes: |
+      trade_valuations covers the valuation side. Need to wire the
+      InspectionPlus inspection_run to a trade-in record so the
+      walk-around photos accompany the appraisal.
+    severity: should
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE qb_trade_ins ADD COLUMN inspection_run_id UUID
+        REFERENCES inspection_runs(id);
+    ui_surface_hint: "Trade-In Detail — Appraisal sub-panel"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 11 — F&I (FINANCE & INSURANCE) OVERLAY
+  # ==========================================================================
+  - id: equipment_quote.financing_scenario
+    intellidealer_label: "Financing Scenario (F&I)"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: json
+    intellidealer_purpose: |
+      Financing scenario attached to the quote — lender, term, APR,
+      monthly payment, residual, GAP / extended warranty / tire-and-
+      wheel add-ons. Drives the F&I product upsell motion (highest-
+      margin part of an equipment sale).
+    qep_status: PARTIAL
+    qep_table: qb_quotes
+    qep_column: financing_scenario
+    qep_evidence:
+      - "database.types.ts qb_quotes.financing_scenario (JSON)"
+    qep_gap_notes: |
+      JSON is acceptable for now. Long-term, decompose into a typed
+      f_and_i_products table so reps can attach standard products.
+    severity: should
+    category: financial
+    migration_hint: |
+      CREATE TABLE f_and_i_products (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        product_code TEXT NOT NULL,
+        product_name TEXT NOT NULL,
+        product_type TEXT,         -- 'gap','extended_warranty','tire_wheel','credit_life'
+        cost_cents BIGINT,
+        retail_price_cents BIGINT,
+        commission_pct NUMERIC(5,2),
+        UNIQUE (workspace_id, product_code)
+      );
+      CREATE TABLE quote_f_and_i_attachments (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        quote_id uuid NOT NULL REFERENCES qb_quotes(id),
+        product_id uuid NOT NULL REFERENCES f_and_i_products(id),
+        retail_price_cents BIGINT NOT NULL,
+        cost_cents BIGINT NOT NULL,
+        commission_cents BIGINT
+      );
+    ui_surface_hint: "Quote — F&I sub-panel"
+    dependencies: []
+
+  - id: equipment_quote.financing_lender
+    intellidealer_label: "Financing Lender"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Which captive or third-party lender (JD Financial, Bobcat Finance, US Bank, etc.)."
+    qep_status: PARTIAL
+    qep_table: qb_quotes
+    qep_column: financing_scenario
+    qep_evidence: []
+    qep_gap_notes: "(part of financing_scenario JSON)"
+    severity: should
+    category: financial
+    migration_hint: "(see equipment_quote.financing_scenario)"
+    ui_surface_hint: "Quote — F&I sub-panel"
+    dependencies: [equipment_quote.financing_scenario]
+
+  # ==========================================================================
+  # SECTION 12 — EQUIPMENT LISTING SEARCH FILTERS
+  # ==========================================================================
+  - id: equipment_listing.status_filter
+    intellidealer_label: "Listing Status filter"
+    intellidealer_screen: "Equipment Listing"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Listing__3.07.12.txt
+    intellidealer_field_type: enum
+    intellidealer_purpose: "Filter by Status enum (8 states — see equipment.status)."
+    qep_status: PARTIAL
+    qep_table: qrm_equipment
+    qep_column: availability
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.status)"
+    severity: must
+    category: workflow
+    migration_hint: "(see equipment.status)"
+    ui_surface_hint: "Equipment listing top-bar filter"
+    dependencies: [equipment.status]
+
+  - id: equipment_listing.type_filter
+    intellidealer_label: "Listing Type filter (New & Used / no Trade)"
+    intellidealer_screen: "Equipment Listing"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Listing__3.07.12.txt
+    intellidealer_field_type: enum
+    intellidealer_enum_values:
+      - "New & Used (no Trade-In)"
+      - "New Only"
+      - "Used Only"
+      - "Trade-In Only"
+      - "All"
+    intellidealer_purpose: "Filter the listing by inventory-type slice."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: inventory_type
+    qep_evidence: []
+    qep_gap_notes: "No new/used/trade-in classifier. Currently inferred from condition + traded_date."
+    severity: should
+    category: reporting
+    migration_hint: |
+      CREATE TYPE inventory_type AS ENUM ('new','used','trade_in','consignment','demo','rental_fleet');
+      ALTER TABLE qrm_equipment ADD COLUMN inventory_type inventory_type;
+    ui_surface_hint: "Equipment listing top-bar filter"
+    dependencies: []
+
+  - id: equipment_listing.options_filter
+    intellidealer_label: "Listing Options filter"
+    intellidealer_screen: "Equipment Listing"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Listing__3.07.12.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Filter listing by selected option codes (e.g. 'CAB-HEAT')."
+    qep_status: MISSING
+    qep_table: equipment_selected_options
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.options — once equipment_options table exists)"
+    severity: should
+    category: workflow
+    migration_hint: "(see equipment.options)"
+    ui_surface_hint: "Equipment listing"
+    dependencies: [equipment.options]
+
+  - id: equipment_listing.fleet_number_filter
+    intellidealer_label: "Listing Fleet Number filter"
+    intellidealer_screen: "Equipment Listing"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Listing__3.07.12.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Filter listing by customer fleet number."
+    qep_status: MISSING
+    qep_table: qrm_equipment
+    qep_column: customer_fleet_number
+    qep_evidence: []
+    qep_gap_notes: "(see equipment.customer_fleet_number)"
+    severity: could
+    category: nice_to_have
+    migration_hint: "(see equipment.customer_fleet_number)"
+    ui_surface_hint: "Equipment listing"
+    dependencies: [equipment.customer_fleet_number]
+
+  - id: equipment_listing.serial_range_filter
+    intellidealer_label: "Listing Serial Number Range filter"
+    intellidealer_screen: "Equipment Listing"
+    intellidealer_data_source: "EMASTR"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Listing__3.07.12.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: |
+      Filter by From / To serial number range — used to find units in
+      a specific OEM-recall serial range.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "Query-only filter; existing serial_number column suffices once UI is wired."
+    severity: should
+    category: regulatory
+    migration_hint: ""
+    ui_surface_hint: "Equipment listing"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 13 — SALES SUPPORT PORTAL
+  # ==========================================================================
+  - id: sales_support_portal.dashboard
+    intellidealer_label: "Sales Support Portal (rep dashboard)"
+    intellidealer_screen: "Sales Support Portal"
+    intellidealer_data_source: "SSP"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Sales-Support-Portal__3.07.02.txt
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Sales Support Portal.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Cross-stock workspace for the salesman: open quotes, pending
+      invoices, customer-pending equipment sales, telematics callouts,
+      "Pending Equipment Sales" buckets. Drives the rep's daily focus.
+    qep_status: PARTIAL
+    qep_table: null
+    qep_column: null
+    qep_evidence:
+      - "database.types.ts v_rep_pipeline (view) + qb_quotes/qb_deals"
+    qep_gap_notes: |
+      Underlying data exists (v_rep_pipeline view, qb_quotes/qb_deals).
+      No dedicated Sales Support Portal page surface in QEP today;
+      build one that aggregates these.
+    severity: should
+    category: workflow
+    migration_hint: ""
+    ui_surface_hint: "Sales Support Portal page (own surface)"
+    dependencies: []
+
+  - id: sales_support_portal.pending_equipment_sales
+    intellidealer_label: "Pending Equipment Sales (queue)"
+    intellidealer_screen: "Sales Support Portal"
+    intellidealer_data_source: "EINVH"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: "List of equipment sales pending finalization (Posted but not signed, etc.)."
+    qep_status: PARTIAL
+    qep_table: customer_invoices
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "Compute via (status='pending' OR esign_status IN ('awaiting','partially_signed'))."
+    severity: should
+    category: reporting
+    migration_hint: ""
+    ui_surface_hint: "Sales Support Portal — Pending bucket"
+    dependencies: [equipment_invoice.vesign_status]
+
+  # ==========================================================================
+  # SECTION 14 — BASE & OPTIONS CATALOG MANAGEMENT
+  # ==========================================================================
+  - id: base_options.bobcat_import
+    intellidealer_label: "Bobcat Base & Options Import"
+    intellidealer_screen: "Base & Options"
+    intellidealer_data_source: "EBASE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Base & Options.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Button on Base & Options screen — uploads Bobcat-published
+      base+options spreadsheet to refresh the catalog. Required to keep
+      pricing current with manufacturer.
+    qep_status: MISSING
+    qep_table: equipment_base_codes_import_runs
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "No OEM-import infrastructure for Base & Options."
+    severity: should
+    category: workflow
+    migration_hint: |
+      CREATE TABLE equipment_base_codes_import_runs (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id uuid NOT NULL,
+        manufacturer TEXT NOT NULL,        -- 'bobcat','vermeer','jd','yanmar'
+        source_filename TEXT,
+        rows_inserted INTEGER NOT NULL DEFAULT 0,
+        rows_updated INTEGER NOT NULL DEFAULT 0,
+        rows_skipped INTEGER NOT NULL DEFAULT 0,
+        run_status TEXT NOT NULL,
+        error TEXT,
+        ran_by UUID REFERENCES profiles(id),
+        ran_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    ui_surface_hint: "Base & Options screen — Import buttons"
+    dependencies: [equipment.base_code]
+
+  - id: base_options.vermeer_import
+    intellidealer_label: "Vermeer Base & Options Import"
+    intellidealer_screen: "Base & Options"
+    intellidealer_data_source: "EBASE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Base & Options.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: "Vermeer-specific base/options import."
+    qep_status: MISSING
+    qep_table: equipment_base_codes_import_runs
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "(see base_options.bobcat_import)"
+    severity: should
+    category: workflow
+    migration_hint: "(see base_options.bobcat_import)"
+    ui_surface_hint: "Base & Options screen — Import buttons"
+    dependencies: [base_options.bobcat_import]
+
+  - id: base_options.mass_increase_decrease
+    intellidealer_label: "Mass Increase/Decrease (price)"
+    intellidealer_screen: "Base & Options"
+    intellidealer_data_source: "EBASE"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Base & Options.txt
+    intellidealer_field_type: computed
+    intellidealer_purpose: |
+      Bulk-edit workflow — apply X% increase or decrease across selected
+      base/option rows. Used at OEM mid-year price changes.
+    qep_status: MISSING
+    qep_table: null
+    qep_column: null
+    qep_evidence: []
+    qep_gap_notes: "Bulk-edit UI workflow only; no DDL needed beyond base/options tables."
+    severity: should
+    category: workflow
+    migration_hint: ""
+    ui_surface_hint: "Base & Options — Mass Increase/Decrease modal"
+    dependencies: [equipment.base_code]
+
+  # ==========================================================================
+  # SECTION 15 — DEAL CONVERSION + COMMISSION
+  # ==========================================================================
+  - id: deal.deal_number
+    intellidealer_label: "Deal Number"
+    intellidealer_screen: "Quote Conversion → Deal"
+    intellidealer_data_source: "EDEAL"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Customer-facing deal identifier (rolls up multiple line items / quotes into one transaction)."
+    qep_status: BUILT
+    qep_table: qb_deals
+    qep_column: deal_number
+    qep_evidence:
+      - "database.types.ts qb_deals.deal_number"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Deal record header"
+    dependencies: []
+
+  - id: deal.commission
+    intellidealer_label: "Deal Commission $ / Rate / Paid"
+    intellidealer_screen: "Quote Conversion → Deal"
+    intellidealer_data_source: "EDEAL"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Salesperson commission $ + commission rate % + paid date."
+    qep_status: BUILT
+    qep_table: qb_deals
+    qep_column: commission_cents
+    qep_evidence:
+      - "database.types.ts qb_deals.commission_cents, .commission_rate_pct, .commission_paid, .commission_paid_at"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Deal record — Commission block"
+    dependencies: []
+
+  - id: deal.gross_margin
+    intellidealer_label: "Deal Gross Margin $ / %"
+    intellidealer_screen: "Quote Conversion → Deal"
+    intellidealer_data_source: "EDEAL"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Total revenue - total cost = gross margin (with %)."
+    qep_status: BUILT
+    qep_table: qb_deals
+    qep_column: gross_margin_cents
+    qep_evidence:
+      - "database.types.ts qb_deals.gross_margin_cents, .gross_margin_pct, .total_revenue_cents, .total_cost_cents"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Deal record — Margin block"
+    dependencies: []
+
+  - id: deal.warranty_registration_date
+    intellidealer_label: "Warranty Registration Date"
+    intellidealer_screen: "Quote Conversion → Deal"
+    intellidealer_data_source: "EDEAL"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).txt
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      Date manufacturer warranty was registered (with the OEM portal).
+      Drives warranty-eligibility on subsequent WOs.
+    qep_status: BUILT
+    qep_table: qb_deals
+    qep_column: warranty_registration_date
+    qep_evidence:
+      - "database.types.ts qb_deals.warranty_registration_date"
+    qep_gap_notes: |
+      Date is captured but no OEM-portal-confirmation # / payload. Add
+      a confirmation column for audit.
+    severity: must
+    category: regulatory
+    migration_hint: |
+      ALTER TABLE qb_deals ADD COLUMN warranty_registration_confirmation TEXT;
+      ALTER TABLE qb_deals ADD COLUMN warranty_registration_payload JSONB;
+    ui_surface_hint: "Deal record — Warranty Registration block"
+    dependencies: []
+
+  - id: deal.rebate_filing
+    intellidealer_label: "OEM Rebate Filing (filed by / at / due)"
+    intellidealer_screen: "Quote Conversion → Deal"
+    intellidealer_data_source: "EDEAL"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).txt
+    intellidealer_field_type: date
+    intellidealer_purpose: |
+      OEM rebate filing tracking — when filed, by whom, when due. Missing
+      a rebate filing deadline forfeits a meaningful $ amount.
+    qep_status: BUILT
+    qep_table: qb_deals
+    qep_column: rebate_filed_at
+    qep_evidence:
+      - "database.types.ts qb_deals.rebate_filed_at, .rebate_filed_by, .rebate_filing_due_date"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Deal record — Rebate block + 60-day expiry alert"
+    dependencies: []
+
+  - id: deal.applied_program_ids
+    intellidealer_label: "Applied OEM Programs"
+    intellidealer_screen: "Quote / Deal"
+    intellidealer_data_source: "EDEAL"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).txt
+    intellidealer_field_type: json
+    intellidealer_purpose: "OEM rebate/incentive programs applied (e.g. 'Bobcat Q2 Spring Promo')."
+    qep_status: BUILT
+    qep_table: qb_deals
+    qep_column: applied_program_ids
+    qep_evidence:
+      - "database.types.ts qb_deals.applied_program_ids, qb_quotes.applied_program_ids"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Deal — Programs block"
+    dependencies: []
+
+  # ==========================================================================
+  # SECTION 16 — QUOTE COST LAYERS (margin transparency)
+  # ==========================================================================
+  - id: equipment_quote.equipment_cost
+    intellidealer_label: "Equipment Cost (cost layer)"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Dealer cost basis for the equipment line."
+    qep_status: BUILT
+    qep_table: qb_quotes
+    qep_column: equipment_cost_cents
+    qep_evidence:
+      - "database.types.ts qb_quotes.equipment_cost_cents"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Quote — Cost block (sales-mgr-only)"
+    dependencies: []
+
+  - id: equipment_quote.list_price
+    intellidealer_label: "List Price"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Manufacturer's suggested retail price."
+    qep_status: BUILT
+    qep_table: qb_quotes
+    qep_column: list_price_cents
+    qep_evidence:
+      - "database.types.ts qb_quotes.list_price_cents"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Quote — Pricing block"
+    dependencies: []
+
+  - id: equipment_quote.markup
+    intellidealer_label: "Markup $ / % / Achieved %"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Markup over cost — drives the margin display + margin-threshold approval."
+    qep_status: BUILT
+    qep_table: qb_quotes
+    qep_column: markup_cents
+    qep_evidence:
+      - "database.types.ts qb_quotes.markup_cents, .markup_pct, .markup_achieved_pct"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Quote — Margin block"
+    dependencies: []
+
+  - id: equipment_quote.attachments_pricing
+    intellidealer_label: "Attachments Cost / List / Markup / Sales Price"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Four-way cost layer for attachments (separate from base equipment)."
+    qep_status: BUILT
+    qep_table: qb_quotes
+    qep_column: attachments_cost_cents
+    qep_evidence:
+      - "database.types.ts qb_quotes.attachments_cost_cents, .attachments_list_price_cents, .attachments_markup_cents, .attachments_sales_price_cents"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Quote — Attachments block"
+    dependencies: []
+
+  - id: equipment_quote.freight_pdi_doc_fee_tariff
+    intellidealer_label: "Freight + PDI + Doc Fee + Tariff"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: |
+      Standard fee blocks added to the quote: Freight (delivery), PDI
+      (Pre-Delivery Inspection), Doc Fee (paperwork), Tariff (import
+      surcharge). Each is a distinct revenue line.
+    qep_status: BUILT
+    qep_table: qb_quotes
+    qep_column: freight_cents
+    qep_evidence:
+      - "database.types.ts qb_quotes.freight_cents, .pdi_cents, .doc_fee_cents, .tariff_cents, .tariff_pct"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Quote — Fees block"
+    dependencies: []
+
+  - id: equipment_quote.cil_amount
+    intellidealer_label: "CIL Amount (Cash-In-Lieu)"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Cash-in-lieu of trade (when customer takes cash instead of trade-in credit)."
+    qep_status: BUILT
+    qep_table: qb_quotes
+    qep_column: cil_amount_cents
+    qep_evidence:
+      - "database.types.ts qb_quotes.cil_amount_cents"
+    qep_gap_notes: ""
+    severity: should
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Quote — Trade block"
+    dependencies: []
+
+  - id: equipment_quote.good_faith_deposit
+    intellidealer_label: "Good Faith Deposit"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Deposit collected at quote acceptance (refundable per state law)."
+    qep_status: BUILT
+    qep_table: qb_quotes
+    qep_column: good_faith_cents
+    qep_evidence:
+      - "database.types.ts qb_quotes.good_faith_cents, .good_faith_pct"
+    qep_gap_notes: ""
+    severity: should
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Quote — Deposit block"
+    dependencies: []
+
+  - id: equipment_quote.rebate_total
+    intellidealer_label: "Quote Rebate Total"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: currency
+    intellidealer_purpose: "Aggregated OEM rebate total applied to the quote."
+    qep_status: BUILT
+    qep_table: qb_quotes
+    qep_column: rebate_total_cents
+    qep_evidence:
+      - "database.types.ts qb_quotes.rebate_total_cents"
+    qep_gap_notes: ""
+    severity: must
+    category: financial
+    migration_hint: ""
+    ui_surface_hint: "Quote — Rebates block"
+    dependencies: []
+
+  - id: equipment_quote.parent_quote
+    intellidealer_label: "Parent Quote (revision lineage)"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: fk
+    intellidealer_purpose: "Self-FK: this quote is a revision of an earlier quote."
+    qep_status: BUILT
+    qep_table: qb_quotes
+    qep_column: parent_quote_id
+    qep_evidence:
+      - "database.types.ts qb_quotes.parent_quote_id, .version"
+    qep_gap_notes: ""
+    severity: should
+    category: workflow
+    migration_hint: ""
+    ui_surface_hint: "Quote header — version history sub-panel"
+    dependencies: []
+
+  - id: equipment_quote.pdf_url
+    intellidealer_label: "Quote PDF URL"
+    intellidealer_screen: "Equipment Quoting"
+    intellidealer_data_source: "EQUOT"
+    intellidealer_evidence:
+      - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
+    intellidealer_field_type: text
+    intellidealer_purpose: "Storage URL for the rendered quote PDF (sent to customer)."
+    qep_status: BUILT
+    qep_table: qb_quotes
+    qep_column: pdf_url
+    qep_evidence:
+      - "database.types.ts qb_quotes.pdf_url"
+    qep_gap_notes: ""
+    severity: should
+    category: workflow
+    migration_hint: ""
+    ui_surface_hint: "Quote header — Send / Re-Send button"
+    dependencies: []

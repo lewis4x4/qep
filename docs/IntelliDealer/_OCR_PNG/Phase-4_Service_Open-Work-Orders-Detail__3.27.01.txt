@@ -1,0 +1,220 @@
+Financial
+
+Custome,
+
+Product
+
+Support
+
+it [ee] R | Ol
+
+Quick Lit}
+
+| Profile
+
+IntelliDgale
+
+@
+
+Stock Number: i}
+
+@___> Management Central > Service > Open Work Orders
+
+> Product Support > Equipment > Equipment Profile >> Profile
+
+InssTK >
+
+N
+Base & Options Attachments
+
+“stock Number
+
+“Base
+
+“Description
+*Make/Model/Year
+“Price
+
+Price With Options
+“Machine Serial Number
+Engine Serial Number
+Transmission Serial Number
+Purchase Order #
+“Ordered/Reserved
+Rental Fleet Date
+Category/Class/Subclass
+
+“Invoice Number
+
+“Invoice Date
+
+“Invoice Amount
+
+Current Cost
+
+Net Book Value
+
+Inventory Account
+Reference Amount
+
+Note Amount/Code/Due Date
+Finance Amount/Due Date
+Settlement Number/Date
+Maintenance Expense
+Rental Cost Percentage
+Rental Insurable Amount
+Rental Amount
+
+Parts List
+
+Status: Invoiced Description:
+
+MyDealer Multimedia Warranty Dates
+
+01/01/01-LAKECIY @ @& &
+
+pfwf5066.cdkglobal-i
+
+INTERNAL STOCK
+
+Rental Specifications
+
+¢
+
+> class
+[INTERNAL STOCK |
+
+[w_ Relinsst« [eo 3]
+
+0.01
+0.01
+
+2
+5
+nm
+Bl
+Zz
+=
+(P
+a)
+q
+fe}
+fe)
+xB
+
+2
+-
+x
+me
+S
+o
+
+[E) [o417-2013
+
+MM-da-yyy |i
+
+NOTAVA
+
+A
+
+[0.01 |[o.00 |
+
+[0.01 |[o.00 |
+
+[0.01 |[o.00 |
+
+Q
+
+[0.00 |[o.00 |
+
+[0.00 | |[Ma-ca-yyyy
+
+[0.00 ][Ma-aa-yyyy
+
+| |[M-da-yyyy
+
+[98.28 |[o.00 |
+|[o.00 |
+
+Make/Model: MI INSSTK
+
+Custome...
+
+01/01/01 -LAKECITY @ dh %&
+
+Date Added: 04/17/2013 Date Modified: 04/09/2026
+
+“Status
+
+Invoiced B))
+
+“out
+Available B))
+
+"pe
+
+“Group Q
+
+“Location [01 - LAKE CITY |
+
+Yard Location LE]
+ControtNumber FTO
+
+Equipment Identifier LE
+
+Last Count Method
+
+Last Count Date | 04-09-2021 | im)
+
+Avatax Product Code
+
+Internal
+In/Out Sub Type
+
+*
+
+|
+
+Machine Hours/Code/Date [1 ](Actual © )[ 04-09-2026
+Machine2 Hours/Code/Date [| 23 ](Actual © )[ 02-10-2026
+Basic Warranty Hours/Code/Date | ie} I | MM-da-yyyy
+Extended Warranty Hours/Code/Date | ie} I | MM-da-yyyy
+“sale Account Q
+Salesperson UNASSIGNED
+
+Customer Invoice Number
+Customer Invoice Date | 04-17-201: |=)
+
+-0.01
+
+Invoice Amount
+
+INTO1 Q
+
+Customer Fleet Number
+
+Customer Name | INTERNAL USE
+
+Delivery Date
+Traded Date
+
+MM-da-yy)
+MM-da-yy)
+
+il
+
+| Machine History il Memos il Machine Hours il Costing il Margins il Washout il Print il Print Label il Open Work Orders |
+
+Machine Breakdown a
+
+Base
+
+Price
+
+Price With Options
+
+ID Inspeq
+
+Quick Add Work Order/Request
+
+100

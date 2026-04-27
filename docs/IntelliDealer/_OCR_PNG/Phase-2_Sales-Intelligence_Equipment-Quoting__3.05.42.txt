@@ -1,0 +1,47 @@
+@
+
+> Customer Care > CRM > Customer Reports 01/01/01 - LAKE CITY (2)
+
+IntelliDealer eH
+
+oN
+“by VitalEdge VitalEdge \>
+
+Menu Search
+
+Customer Reports
+
+. . PI lect rt H
+Financial Management lease select a report type:
+
+Customer Master Summary
+
+Customer Care
+
+Product Support
+
+(?)
+
+Customer Master Summary
+
+Management Central > Select
+
+Support > Selection Criteria
+
+Description Field File Operator Value Group
+*** Please add selection criteria ***
+
+Quick Links >
+Click here to add selection criteria
+
+ID InspectionPlus Run —_ Load Saved Query _— Clear Select Close
+
+pfwf5066.cdkglobal-id.net
+
+(?)
+
+Selection Criteria
+
+Group: A ¢ Field: | PY Operator: Equal To e Value:
+
+Save Save / Exit Close

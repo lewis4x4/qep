@@ -1,0 +1,120 @@
+[
+  {
+    "phase": "Cross-Cutting",
+    "source_file": "Employee Profile.txt",
+    "screen_name": "Employee Profile",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "",
+    "menu_paths": [
+      "IntelliDealer Menus > Financial Management > Payroll > Employee Profile: Listing"
+    ],
+    "purpose": [],
+    "tabs": [
+      "Number to open the Employee Profile"
+    ],
+    "buttons": [],
+    "fields": [
+      {
+        "name": "Employee",
+        "description": "Sort the search results by employee         Profile"
+      },
+      {
+        "name": "Number",
+        "description": "number. Revision:"
+      },
+      {
+        "name": "Name",
+        "description": "Sort the search results by employee name.   2024.10"
+      },
+      {
+        "name": "Select",
+        "description": "Search for an employee by entering an"
+      },
+      {
+        "name": "Class",
+        "description": "The class of the employee. This field determines the G/L expense account which the employee's wages are debited. Valid class codes are set up on the Classes screen."
+      },
+      {
+        "name": "Profit",
+        "description": "The profit center or department where the"
+      },
+      {
+        "name": "Center",
+        "description": "employee's wages are charged."
+      }
+    ],
+    "prose_fields": [
+      "This"
+    ],
+    "topics": [],
+    "linked_screens": []
+  },
+  {
+    "phase": "Cross-Cutting",
+    "source_file": "Traffic Management.txt",
+    "screen_name": "Traffic Management",
+    "data_source": "",
+    "security_switch": "804 - Product",
+    "revision": "2026.02",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Equipment Product Support > Traffic -",
+      "Product Support > Equipment > Rental",
+      "Product Support > Equipment > Service",
+      "Product Support > Equipment > Traffic"
+    ],
+    "purpose": [],
+    "tabs": [
+      "Listing",
+      "Traffic Management - Listing",
+      "Traffic Management-Listing"
+    ],
+    "buttons": [
+      "Mass Change/ Print",
+      "Receipts Completed This Month"
+    ],
+    "fields": [
+      {
+        "name": "Date",
+        "description": "Sort by the date the traffic ticket was received."
+      },
+      {
+        "name": "Receipt",
+        "description": "Sort by the receipt number. Number"
+      },
+      {
+        "name": "Type",
+        "description": "Sort by the traffic ticket type."
+      },
+      {
+        "name": "Include History",
+        "description": "If selected, includes historical traffic movements within the search."
+      },
+      {
+        "name": "Select Receipt",
+        "description": "Search by receipt number. Number"
+      },
+      {
+        "name": "Select",
+        "description": "Select one of these options from the Inbound/Outbound drop down list:"
+      },
+      {
+        "name": "Select Type",
+        "description": "Search by selecting a receipt type from the drop down list."
+      },
+      {
+        "name": "Select Customer",
+        "description": "Search by customer number. Number"
+      }
+    ],
+    "prose_fields": [
+      "From/To",
+      "Name next to the From/To",
+      "Stock Number",
+      "Type",
+      "Vendor/Trucker"
+    ],
+    "topics": [],
+    "linked_screens": []
+  }
+]

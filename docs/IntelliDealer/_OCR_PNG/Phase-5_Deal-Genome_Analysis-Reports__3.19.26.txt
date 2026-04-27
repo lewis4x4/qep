@@ -1,0 +1,100 @@
+IntelliDealer
+
+Analysis Reports - In...
+
+@
+
+> Product Support > Service > Analysis Reports
+
+01/01/01 - LAKE CITY @
+
+&%
+
+by VitalEdge
+
+Financial Management
+
+Customer Care
+
+Product Support
+
+Management Central
+
+Support
+
+Quick Links
+
+ID InspectionPlus
+
+i>
+
+Work In
+Process
+
+>
+
+WIP Method:
+Select Account:
+Select Status:
+
+Select Location:
+
+WIP Balancing
+
+All
+o1
+
+Include Unprocessed Transactions: 2
+
+°
+
+Go >>
+
+Work In Process
+
+Current:
+31-60:
+61-90:
+
+91-120:
+
+Over 120:
+
+Total:
+
+Total
+89,197.93
+110,343.65
+64,633.47
+34,773.05
+38,406.35
+
+337,354.45
+
+% O 10 20 30
+26.4
+27 Ds
+19.2
+
+10.3 0
+
+11.4 (
+
+40
+
+60
+
+70
+
+80
+
+90 100
+
+26.4%
+
+32.7%
+
+e
+i
+
+Create a Work In Process Report

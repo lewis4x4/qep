@@ -1,0 +1,67 @@
+Phase,IntelliDealer Screen,IntelliDealer Field,Field Description (abbr),Source,QEP Table,QEP Column,Parity Status,Migration / Gap Notes
+Phase-2_Sales-Intelligence,Base & Options,Base,Sort the search results by base number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Base & Options,Class,Sort the search results by class.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Base & Options,Select Base,Search for base & option codes by entering a,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Base & Options,Number,base number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Base & Options,Select,Search for base & option codes by entering a,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Base & Options,Model,model.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Base & Options,Include,"If selected, includes inactive base & option",Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Base & Options,Inactive,codes within the search results.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Base & Options,Price,Retail price for the base code. For new equipment the price is automatically loaded on the base code.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Base & Options,Added,The date the base number was first added to the system.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Base & Options,Modified,The date the base number was last modified.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Base & Options,Class                   This,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),Customer,Sort the search results by customer.,Table,crm_companies,name,BUILT,Company name field
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),Select Reference,Search for equipment invoices by entering a reference number. Number,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),Select Salesperson,Search for equipment invoices by entering a salesperson.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),Show Extended,"If selected, includes extended equipment description within the invoice search",Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),Description,results.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),Select Stock Number,Search for equipment invoices by entering a stock number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),Select Location,Search for equipment invoices by entering a location.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),Select Status,Search for equipment invoices by selecting an invoice status from the drop down list.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),Reference,The reference number for the equipment invoice. Used to locate and identify equipment,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),Number,invoices throughout the system.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),Salesperson,The salesperson assigned to the equipment invoice.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),Stock,The stock number of the unit. Number,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),Location,The branch location of the equipment invoice.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),Date Added,The date the equipment invoice was created.,Table,(multiple),timestamp fields,BUILT,
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),Invoice,The status of the equipment invoice Status Pending—the invoice is not yet been processed.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),VESign,The signing status of the VESign document. Can be one of: Status Awaiting Signature—all signatures are pending. Partially Signed—more than one signatu...,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Invoicing (Sales Support Portal),Pending Equipment Sales,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,All,Search through all status options for the selected unit.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Invoiced,Search Invoiced equipment status (the unit has been invoiced to a customer) for the selected unit.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Inventory,Search Inventory equipment status (the unit is physically in stock) for the selected unit.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,On Order,Search On Order equipment status (the unit is on order with the supplier) for the selected unit.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Sold,Search Sold equipment status (the unit is physically in stock and has been tagged for a,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Stock,Search for a stock number by entering a stock,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Number,number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Customer,Search for a stock number by entering a,Table,crm_companies,name,BUILT,Company name field
+Phase-2_Sales-Intelligence,Equipment Listing,Supplier,Search for a stock number by entering a,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Invoice,supplier invoice number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Fleet,Search for a stock number by entering a fleet,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Class,Search for a stock number by entering a class code.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Group,Search for a stock number by entering a group code.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Location,The location where the unit is current located.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Type,The unit's type code (e.g. New or Used).,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Status,The unit's current status,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Base,The unit's base number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Yard,A designated physical place within the selected,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,In/Out,Whether the unit is in the location(in) or not in the location(out). The Traffic Sub Code appears next to the In/Out field value.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Model,The model year of the unit. Year,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,Hours 2,"If available, the amount of hours currently on the second hour meter on the unit.",Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,From,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Listing,The behavior of this search,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Quoting,Reference,Sort the search results by reference number. Number,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Quoting,Customer,Sort the search results by customer.,Table,crm_companies,name,BUILT,Company name field
+Phase-2_Sales-Intelligence,Equipment Quoting,Expiry Date,Sort the search results by the expiry date of the equipment quote.,Table,(multiple),timestamp fields,BUILT,
+Phase-2_Sales-Intelligence,Equipment Quoting,Select,Search for equipment quotes by selecting an,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Quoting,Status,equipment quote status.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Quoting,Stock,The stock number of the unit on the quote,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Quoting,Number,which acts as an inventory identification number.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Quoting,Location,The branch location of the equipment quote.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Quoting,Quote,The status of the equipment quote. Status,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Quoting,VESign,The signing status of the VESign document. Can,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Equipment Quoting,This,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Sales Support Portal,Select,Search for a sales support portal by entering a,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Sales Support Portal,Salesperson,salesperson's ID.,Table,(unmapped),,REVIEW,Manual review needed
+Phase-2_Sales-Intelligence,Sales Support Portal,The search,(inferred from workflow prose),Prose,(unmapped),,REVIEW,Manual review needed

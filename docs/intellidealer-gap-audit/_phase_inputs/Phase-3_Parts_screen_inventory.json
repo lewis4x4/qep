@@ -1,0 +1,346 @@
+[
+  {
+    "phase": "Phase-3_Parts",
+    "source_file": "Parts Invoicing.txt",
+    "screen_name": "Parts Invoicing",
+    "data_source": "",
+    "security_switch": "823 - When searching, if a Part Number or Bin Location is selected, Parts Invoicing",
+    "revision": "2026.04",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Parts Product Support > Parts Invoicing",
+      "Parts Product Support > Parts Invoicing"
+    ],
+    "purpose": [],
+    "tabs": [
+      "Click the Details",
+      "Closes the Parts Invoicing Details",
+      "Details",
+      "From the Details",
+      "Invoice button on the Details",
+      "Invoicing Details",
+      "Multimedia",
+      "On the Details",
+      "Parts Invoice and click the Details",
+      "Parts Invoicing Details",
+      "Ship Confirm Details",
+      "Updated Parts Invoicing Details"
+    ],
+    "buttons": [
+      "Print Parameters",
+      "Tethr It Now"
+    ],
+    "fields": [
+      {
+        "name": "Customer",
+        "description": "Search for parts invoices by entering a customer"
+      },
+      {
+        "name": "Search",
+        "description": "search word."
+      },
+      {
+        "name": "Number",
+        "description": "number."
+      },
+      {
+        "name": "PO Number",
+        "description": "Search for part invoices by entering a purchase order number."
+      },
+      {
+        "name": "Order",
+        "description": "The order number associated with the parts invoice. Number A reverse highlight on the order number indicates that a part, or parts, have been issued or reserved for this order but the order itself has not yet been invoiced."
+      }
+    ],
+    "prose_fields": [
+      "Cash Code",
+      "Customer",
+      "E-mail",
+      "If the Iss",
+      "Iss",
+      "LDTTTTN",
+      "Ord",
+      "Part Number",
+      "Price",
+      "Print Parts Invoices",
+      "Salesperson",
+      "The Salesperson",
+      "The Total Charge",
+      "This"
+    ],
+    "topics": [
+      "Creating a New Parts Invoice"
+    ],
+    "linked_screens": [
+      "Applying a",
+      "Creating a Parts Inquiry Invoice",
+      "Creating a Promotional Part",
+      "John Deere eCommerce Status Update",
+      "VESign Process Notes"
+    ]
+  },
+  {
+    "phase": "Phase-3_Parts",
+    "source_file": "Parts Ordering.txt",
+    "screen_name": "Parts Ordering",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "2026.03",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Parts Product Support > Parts Ordering"
+    ],
+    "purpose": [],
+    "tabs": [
+      "Opens the Order Status",
+      "Opens the Special Terms - Programs"
+    ],
+    "buttons": [],
+    "fields": [
+      {
+        "name": "Order",
+        "description": "Sort the search results by parts order number. Number"
+      },
+      {
+        "name": "Vendor",
+        "description": "Sort the search results by vendor number."
+      },
+      {
+        "name": "Date",
+        "description": "Sort the search results by date the part order"
+      },
+      {
+        "name": "Released",
+        "description": "was released."
+      },
+      {
+        "name": "Select",
+        "description": "Search for a parts order by entering an order"
+      },
+      {
+        "name": "Location",
+        "description": "location."
+      },
+      {
+        "name": "Status",
+        "description": "status from the drop down list (for example on order, back ordered, or changeable)."
+      },
+      {
+        "name": "Type",
+        "description": "The type of order."
+      },
+      {
+        "name": "Line",
+        "description": "The number of line items on the selected part"
+      },
+      {
+        "name": "Items",
+        "description": "order."
+      }
+    ],
+    "prose_fields": [
+      "Order Number",
+      "Vendor"
+    ],
+    "topics": [],
+    "linked_screens": [
+      "Create Stock Order Parameters"
+    ]
+  },
+  {
+    "phase": "Phase-3_Parts",
+    "source_file": "Parts Profile:\u00a0Listing.txt",
+    "screen_name": "Parts Profile: Listing",
+    "data_source": "I",
+    "security_switch": "",
+    "revision": "2025.09",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Parts Product Support > Parts Profile: Listing",
+      "Product Support > Parts > Parts Profile. - Parts Profile"
+    ],
+    "purpose": [],
+    "tabs": [
+      "Cross Reference"
+    ],
+    "buttons": [],
+    "fields": [
+      {
+        "name": "Part",
+        "description": "The part number assigned to the selected part. Number Hover over the Part Number on the search results to display the options to View or Copy the entry."
+      },
+      {
+        "name": "Search",
+        "description": "Search for parts by entering a search option. Use this optional field to search using a key word."
+      },
+      {
+        "name": "Vendor",
+        "description": "The vendor number that supplies the part."
+      },
+      {
+        "name": "Source",
+        "description": "The part's source of supply code. This typically represents the part's originating warehouse location."
+      }
+    ],
+    "prose_fields": [
+      "Dealers can use this",
+      "If this",
+      "The Description"
+    ],
+    "topics": [],
+    "linked_screens": [
+      "Order Formula Codes Summary"
+    ]
+  },
+  {
+    "phase": "Phase-3_Parts",
+    "source_file": "Price Matrix.txt",
+    "screen_name": "Price Matrix",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "2025.09",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Parts Product Support > Price Matrix"
+    ],
+    "purpose": [],
+    "tabs": [
+      "System Settings - Location"
+    ],
+    "buttons": [
+      "Print matrix reports"
+    ],
+    "fields": [
+      {
+        "name": "Matrix",
+        "description": "Sort the search results by matrix."
+      },
+      {
+        "name": "Select",
+        "description": "Search for price matrix by entering a vendor. Vendor"
+      },
+      {
+        "name": "Pricing",
+        "description": "base from the drop down list. Base"
+      },
+      {
+        "name": "Include",
+        "description": "If selected, includes inactive price matrices"
+      },
+      {
+        "name": "Inactive",
+        "description": "within the search results."
+      },
+      {
+        "name": "Vendor",
+        "description": "The vendor name."
+      },
+      {
+        "name": "Group",
+        "description": "The name of the group this matrix belongs to."
+      },
+      {
+        "name": "Base",
+        "description": "cost."
+      }
+    ],
+    "prose_fields": [
+      "If the Matrix",
+      "Include Blank Matrix",
+      "Matrix",
+      "Parts Add Matrix",
+      "Pricing Base",
+      "Reclass/Matrix Trigger",
+      "The Matrix",
+      "Then if the Matrix"
+    ],
+    "topics": [],
+    "linked_screens": []
+  },
+  {
+    "phase": "Phase-3_Parts",
+    "source_file": "Purchase Orders.txt",
+    "screen_name": "Purchase Orders",
+    "data_source": "",
+    "security_switch": "603 - Purchase Orders relate to units (Equipment Profile) and other",
+    "revision": "2024.07",
+    "menu_paths": [
+      "IntelliDealer Menus > Financial Management > Accounts Payable > Purchase Orders"
+    ],
+    "purpose": [],
+    "tabs": [
+      "Click the Details",
+      "Details",
+      "General",
+      "On each",
+      "Purchase Order General"
+    ],
+    "buttons": [
+      "Close",
+      "Created By Search",
+      "Modified             Search",
+      "Search"
+    ],
+    "fields": [
+      {
+        "name": "Type",
+        "description": "Sort the search results by PO type."
+      },
+      {
+        "name": "Status",
+        "description": "Sort the search results by PO status."
+      },
+      {
+        "name": "All",
+        "description": "Search through all status options."
+      },
+      {
+        "name": "PO Request",
+        "description": "The PO has been created and saved, but has not been submitted for Authorization."
+      },
+      {
+        "name": "Waiting for",
+        "description": "The PO is waiting for the approval of the supervisor Authorization (the PO system user with the proper authority)."
+      },
+      {
+        "name": "Authorized",
+        "description": "A supervisor has approved the PO, but it has not been submitted to the vendor."
+      },
+      {
+        "name": "On Order",
+        "description": "The PO has been authorized and sent to the vendor. On Order POs do not have any items received or canceled."
+      },
+      {
+        "name": "Select PO",
+        "description": "A unique PO number. Number"
+      },
+      {
+        "name": "Select",
+        "description": "A vendor number. Click the Search         icon to open"
+      },
+      {
+        "name": "Vendor",
+        "description": "the Vendor Selection screen."
+      },
+      {
+        "name": "Location",
+        "description": "Location Selection screen."
+      },
+      {
+        "name": "Modified",
+        "description": "Search icon to open the User Selection screen. By"
+      },
+      {
+        "name": "Takeover",
+        "description": "Click the Search icon to open the User Selection"
+      },
+      {
+        "name": "By",
+        "description": "screen."
+      }
+    ],
+    "prose_fields": [
+      "Distribute"
+    ],
+    "topics": [],
+    "linked_screens": [
+      "Creating a New Purchase Order"
+    ]
+  }
+]

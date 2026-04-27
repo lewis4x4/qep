@@ -124,6 +124,15 @@ function mapError(origin: string | null, error: unknown): Response {
     });
   }
 
+  if (message === "FORBIDDEN_CUSTOMER_EIN_WRITE") {
+    return crmFail({
+      origin,
+      status: 403,
+      code: "FORBIDDEN",
+      message: "Caller role is not authorized to write customer EIN.",
+    });
+  }
+
   if (message === "SERVICE_WORKSPACE_UNBOUND") {
     return crmFail({
       origin,

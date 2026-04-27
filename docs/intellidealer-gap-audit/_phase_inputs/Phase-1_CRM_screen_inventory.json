@@ -1,0 +1,172 @@
+[
+  {
+    "phase": "Phase-1_CRM",
+    "source_file": "Customer Profile: Search and Listing.txt",
+    "screen_name": "Customer Profile: Search and Listing",
+    "data_source": "CMASTR",
+    "security_switch": "996 - Financial Management > Accounts Receivable > Customer Profile",
+    "revision": "2025.09",
+    "menu_paths": [
+      "Customer Care > CRM > Customer Profile",
+      "Financial Management > Accounts Receivable > Customer Profile",
+      "IntelliDealer Menus > Financial Management > Accounts Receivable > Customer Profile: Listing",
+      "Management Central > CRM > Customer Profile"
+    ],
+    "purpose": [
+      "search for a customer profile and open it for edit. See Searching for Customer Profiles",
+      "or add a new Customer Profile",
+      "Searching for Customer Profiles",
+      "1. Enter your search criteria in the appropriate fields. See Screen Description",
+      "2. Click the Search button",
+      "The Customer Profiles that meet the search criteria are shown. If only one profile entry is found, the",
+      "system automatically opens the screen displaying the corresponding profile",
+      "3. Locate the desired customer from the results and click on it to open the Customer Profile",
+      "If Search Extended Fields is selected and you enter a Customer Name then executing a search also scans:",
+      "the Customer Profile: Contacts tab for a matching firstName or lastName",
+      "the Customer Profile: Ship To tab for a matching name"
+    ],
+    "tabs": [
+      "Contacts",
+      "Ship To"
+    ],
+    "buttons": [
+      "Search"
+    ],
+    "fields": [
+      {
+        "name": "Search 1 or 2",
+        "description": "Search for a customer by entering either search word 1 or 2."
+      },
+      {
+        "name": "Phone Number",
+        "description": "Search for a customer by entering a phone number."
+      },
+      {
+        "name": "Status",
+        "description": "Search for a customer by selecting a specific customer status from the drop down list. For example: All, Active, Deleted or prospect customer status."
+      },
+      {
+        "name": "Customer Number",
+        "description": "Search for a customer by entering a customer number."
+      },
+      {
+        "name": "City",
+        "description": "Search for a customer by entering a city location."
+      },
+      {
+        "name": "Territory",
+        "description": "Search within a specific territory"
+      },
+      {
+        "name": "Name",
+        "description": "Search for a customer by entering a customer name."
+      },
+      {
+        "name": "Location",
+        "description": "Search for a customer by entering a location."
+      },
+      {
+        "name": "Salesperson",
+        "description": "Search for a customer by entering a salesperson."
+      },
+      {
+        "name": "Search Extended",
+        "description": "Adds the data in the Contacts and Ship To tabs to the search to find more results"
+      },
+      {
+        "name": "Fields",
+        "description": "based on the search criteria."
+      },
+      {
+        "name": "The",
+        "description": "icon option Export to CSV creates a CSV file version of the results listed."
+      }
+    ],
+    "prose_fields": [
+      "Search 1 or Search 2"
+    ],
+    "topics": [],
+    "linked_screens": [
+      "Listing Screens",
+      "Screen Description",
+      "Searching for Customer Profiles"
+    ]
+  },
+  {
+    "phase": "Phase-1_CRM",
+    "source_file": "Customer Reports.txt",
+    "screen_name": "Customer Reports",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "",
+    "menu_paths": [
+      "IntelliDealer Menus > Financial Management > Accounts Receivable > Customer"
+    ],
+    "purpose": [],
+    "tabs": [],
+    "buttons": [],
+    "fields": [],
+    "prose_fields": [],
+    "topics": [],
+    "linked_screens": []
+  },
+  {
+    "phase": "Phase-1_CRM",
+    "source_file": "Prospect Board.txt",
+    "screen_name": "Prospect Board",
+    "data_source": "",
+    "security_switch": "",
+    "revision": "2025.05",
+    "menu_paths": [
+      "IntelliDealer Menus > Product Support > Equipment Product Support > Prospect Board"
+    ],
+    "purpose": [],
+    "tabs": [],
+    "buttons": [
+      "John Deere Quote Upload"
+    ],
+    "fields": [
+      {
+        "name": "Status",
+        "description": "Sort the search results by status."
+      },
+      {
+        "name": "Date",
+        "description": "Sort the search results by the date they were"
+      },
+      {
+        "name": "Modified",
+        "description": "last modified"
+      },
+      {
+        "name": "Select",
+        "description": "Search for a prospect by selecting a status radio"
+      },
+      {
+        "name": "Salesperson",
+        "description": "The name of the salesperson associated with the prospect."
+      },
+      {
+        "name": "Selling/Trading",
+        "description": "The unit being sold to the customer and any units being traded in by the customer."
+      },
+      {
+        "name": "Added/Modified",
+        "description": "The date the prospect was created, added or modified."
+      },
+      {
+        "name": "Source",
+        "description": "The source that the prospect originates from."
+      }
+    ],
+    "prose_fields": [
+      "Comments",
+      "Customer/Status",
+      "JDQuote is selected in this"
+    ],
+    "topics": [],
+    "linked_screens": [
+      "About JD Quote II"
+    ]
+  }
+]
