@@ -4,6 +4,7 @@ import {
   computeModelDiff,
   impactForOpenQuote,
   normalizeCode,
+  parseQuoteEquipmentLines,
   type ModelPriceChange,
   type QuoteEquipmentLine,
 } from "../sheet-diff-api";
@@ -188,6 +189,59 @@ describe("aggregateDiffSummary", () => {
       { modelCode: "B", nameDisplay: null, oldPriceCents: null, newPriceCents: 500, deltaCents: 0, deltaPct: 0, kind: "new" },
     ];
     expect(aggregateDiffSummary(changes).totalDeltaCents).toBe(30);
+  });
+});
+
+// ── parseQuoteEquipmentLines ────────────────────────────────────────────
+
+describe("parseQuoteEquipmentLines", () => {
+  test("non-array JSON returns empty equipment", () => {
+    expect(parseQuoteEquipmentLines(null)).toEqual([]);
+    expect(parseQuoteEquipmentLines({ model: "RT-135" })).toEqual([]);
+  });
+
+  test("normalizes current quote-builder equipment shape", () => {
+    expect(parseQuoteEquipmentLines([
+      {
+        id: "line-1",
+        make: "ASV",
+        model: "RT-135",
+        year: "2026",
+        price: "110000",
+      },
+    ])).toEqual([
+      {
+        id: "line-1",
+        make: "ASV",
+        model: "RT-135",
+        year: 2026,
+        price: 110000,
+      },
+    ]);
+  });
+
+  test("accepts legacy aliases and skips malformed entries", () => {
+    expect(parseQuoteEquipmentLines([
+      "bad",
+      { nested: { nope: true } },
+      {
+        model_code: "RT-120",
+        unitPrice: 75000,
+      },
+      {
+        title: "RT-135",
+        unit_price: "95000",
+      },
+    ])).toEqual([
+      {
+        model: "RT-120",
+        price: 75000,
+      },
+      {
+        model: "RT-135",
+        price: 95000,
+      },
+    ]);
   });
 });
 

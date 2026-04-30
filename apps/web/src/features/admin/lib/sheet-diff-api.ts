@@ -33,7 +33,7 @@
  */
 
 import { supabase } from "@/lib/supabase";
-import type { Database } from "@/lib/database.types";
+import type { Database, Json } from "@/lib/database.types";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -191,7 +191,7 @@ export async function getInFlightImpact(diff: SheetDiff): Promise<InFlightImpact
     Database["public"]["Tables"]["quote_packages"]["Row"],
     "id" | "quote_number" | "customer_name" | "status" | "equipment"
   >>) {
-    const equipment = Array.isArray(q.equipment) ? (q.equipment as unknown as QuoteEquipmentLine[]) : [];
+    const equipment = parseQuoteEquipmentLines(q.equipment);
     const impact = impactForOpenQuote(equipment, diff.modelChanges);
     if (impact.deltaCents === 0) continue;
     rows.push({
@@ -230,6 +230,63 @@ interface ExtractedModel {
   model_code?: string;
   name_display?: string;
   list_price_cents?: number;
+}
+
+type JsonRecord = { [key: string]: Json | undefined };
+
+function isJsonRecord(value: Json): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readString(...values: Array<Json | undefined>): string | null {
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function readNumber(...values: Array<Json | undefined>): number | null {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value !== "string") continue;
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+/**
+ * Normalize quote_packages.equipment JSON at the storage boundary.
+ *
+ * Quote Builder has written a few compatible shapes over time (`price`,
+ * `unitPrice`, `unit_price`, model/title aliases). The diff engine only
+ * needs stable identifiers and model codes, so malformed entries are
+ * ignored instead of being trusted via a broad cast.
+ */
+export function parseQuoteEquipmentLines(value: Json): QuoteEquipmentLine[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item): QuoteEquipmentLine[] => {
+    if (!isJsonRecord(item)) return [];
+
+    const id = readString(item.id);
+    const make = readString(item.make);
+    const model = readString(item.model, item.modelCode, item.model_code, item.title, item.name);
+    const year = readNumber(item.year);
+    const price = readNumber(item.price, item.unitPrice, item.unit_price, item.amount, item.list_price);
+
+    if (!id && !make && !model && year === null && price === null) return [];
+
+    return [{
+      ...(id ? { id } : {}),
+      ...(make ? { make } : {}),
+      ...(model ? { model } : {}),
+      ...(year !== null ? { year } : {}),
+      ...(price !== null ? { price } : {}),
+    }];
+  });
 }
 
 /** Extract (code, price) from a qb_price_sheet_items.extracted payload. */
