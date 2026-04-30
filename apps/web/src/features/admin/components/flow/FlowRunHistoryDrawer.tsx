@@ -6,6 +6,7 @@
  */
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
@@ -13,6 +14,11 @@ import { Card } from "@/components/ui/card";
 import { Loader2, Clock, AlertOctagon, Check } from "lucide-react";
 import { AskIronAdvisorButton, StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
+import type { Database, Json } from "@/lib/database.types";
+
+const db = supabase as SupabaseClient<Database>;
+
+type FlowRunStepDbRow = Database["public"]["Tables"]["flow_workflow_run_steps"]["Row"];
 
 export interface FlowRunRow {
   id: string;
@@ -40,6 +46,24 @@ interface StepRow {
   finished_at: string | null;
 }
 
+function toRecord(value: Json | null): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+
+function toStepRow(row: FlowRunStepDbRow): StepRow {
+  return {
+    id: row.id,
+    step_index: row.step_index,
+    step_type: row.step_type,
+    action_key: row.action_key,
+    status: row.status,
+    result: toRecord(row.result),
+    error_text: row.error_text,
+    started_at: row.started_at,
+    finished_at: row.finished_at,
+  };
+}
+
 const STATUS_TONE: Record<string, "blue" | "purple" | "orange" | "green" | "red" | "neutral"> = {
   pending: "neutral",
   running: "blue",
@@ -64,20 +88,13 @@ export function FlowRunHistoryDrawer({ run, onClose }: Props) {
     queryKey: ["flow-run-steps", run?.id],
     queryFn: async (): Promise<StepRow[]> => {
       if (!run) return [];
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            eq: (c: string, v: string) => {
-              order: (c: string, o: { ascending: boolean }) => Promise<{ data: StepRow[] | null; error: unknown }>;
-            };
-          };
-        };
-      }).from("flow_workflow_run_steps")
+      const { data, error } = await db
+        .from("flow_workflow_run_steps")
         .select("*")
         .eq("run_id", run.id)
         .order("step_index", { ascending: true });
       if (error) throw new Error("steps load failed");
-      return data ?? [];
+      return (data ?? []).map(toStepRow);
     },
   });
 

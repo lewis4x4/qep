@@ -7,12 +7,18 @@
  */
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ShieldCheck, Loader2, Check, X, Clock } from "lucide-react";
 import { StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
+import type { Database } from "@/lib/database.types";
+
+const db = supabase as SupabaseClient<Database>;
+
+type FlowApprovalRow = Database["public"]["Tables"]["flow_approvals"]["Row"];
 
 interface ApprovalRow {
   id: string;
@@ -31,6 +37,32 @@ interface ApprovalRow {
   requested_at: string;
 }
 
+type ApprovalQueryRow = Pick<
+  FlowApprovalRow,
+  "id" | "workflow_slug" | "subject" | "detail" | "assigned_role" | "assigned_to" | "status" | "due_at" | "escalate_at" | "requested_at"
+> & {
+  profiles:
+    | { full_name: string | null }
+    | Array<{ full_name: string | null }>
+    | null;
+};
+
+function toApprovalRow(row: ApprovalQueryRow): ApprovalRow {
+  return {
+    id: row.id,
+    workflow_slug: row.workflow_slug,
+    subject: row.subject,
+    detail: row.detail,
+    assigned_role: row.assigned_role,
+    assigned_to: row.assigned_to,
+    profiles: row.profiles,
+    status: row.status,
+    due_at: row.due_at,
+    escalate_at: row.escalate_at,
+    requested_at: row.requested_at,
+  };
+}
+
 export function FlowApprovalsPanel() {
   const queryClient = useQueryClient();
   const [reasonById, setReasonById] = useState<Record<string, string>>({});
@@ -38,20 +70,13 @@ export function FlowApprovalsPanel() {
   const { data: approvals = [], isLoading } = useQuery({
     queryKey: ["flow-approvals-pending"],
     queryFn: async (): Promise<ApprovalRow[]> => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            in: (col: string, vals: string[]) => {
-              order: (c: string, o: { ascending: boolean }) => Promise<{ data: ApprovalRow[] | null; error: unknown }>;
-            };
-          };
-        };
-      }).from("flow_approvals")
+      const { data, error } = await db
+        .from("flow_approvals")
         .select("id, workflow_slug, subject, detail, assigned_role, assigned_to, status, due_at, escalate_at, requested_at, profiles!flow_approvals_assigned_to_fkey(full_name)")
         .in("status", ["pending", "escalated"])
         .order("requested_at", { ascending: true });
       if (error) throw new Error("approvals load failed");
-      return data ?? [];
+      return (data ?? []).map(toApprovalRow);
     },
     staleTime: 30_000,
     refetchInterval: 60_000,
@@ -59,12 +84,10 @@ export function FlowApprovalsPanel() {
 
   const decide = useMutation({
     mutationFn: async (input: { id: string; decision: "approved" | "rejected"; reason: string }) => {
-      const { error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ error: { message?: string } | null }>;
-      }).rpc("decide_flow_approval", {
+      const { error } = await db.rpc("decide_flow_approval", {
         p_approval_id: input.id,
         p_decision: input.decision,
-        p_reason: input.reason || null,
+        p_reason: input.reason || undefined,
       });
       if (error) throw new Error(error.message ?? "decide failed");
     },
