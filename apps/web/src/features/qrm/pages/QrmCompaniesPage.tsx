@@ -3,7 +3,6 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Building2, ChevronRight, Database, Download, MapPin, Plus, Search } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/lib/supabase";
 import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
 import { QrmCompanyEditorSheet } from "../components/QrmCompanyEditorSheet";
 import { QrmPageHeader } from "../components/QrmPageHeader";
@@ -16,6 +15,12 @@ import {
 } from "../components/command-deck";
 import { buildAccountCommandHref } from "../lib/account-command";
 import { listCrmCompanies } from "../lib/qrm-api";
+import { crmSupabase, type QrmDatabase } from "../lib/qrm-supabase";
+
+type CustomerHealthProfileRow = Pick<
+  QrmDatabase["public"]["Tables"]["customer_profiles_extended"]["Row"],
+  "id" | "crm_company_id" | "health_score"
+>;
 
 function toneFromHealth(score: number | null | undefined): StatusTone {
   if (score == null) return "cool";
@@ -60,31 +65,22 @@ export function QrmCompaniesPage() {
     queryKey: ["crm", "companies", "health-profiles", companyIds.join(",")],
     enabled: companyIds.length > 0,
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            in: (
-              column: string,
-              values: string[],
-            ) => Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }>;
-          };
-        };
-      })
+      const { data, error } = await crmSupabase
         .from("customer_profiles_extended")
         .select("id, crm_company_id, health_score")
         .in("crm_company_id", companyIds);
       if (error) return [];
-      return data ?? [];
+      return (data ?? []) satisfies CustomerHealthProfileRow[];
     },
     staleTime: 60_000,
   });
   const healthProfileByCompanyId = useMemo(() => {
     const map = new Map<string, { profileId: string; score: number | null }>();
     for (const row of healthProfiles) {
-      if (typeof row.crm_company_id === "string" && typeof row.id === "string") {
+      if (row.crm_company_id) {
         map.set(row.crm_company_id, {
           profileId: row.id,
-          score: typeof row.health_score === "number" ? row.health_score : null,
+          score: row.health_score,
         });
       }
     }

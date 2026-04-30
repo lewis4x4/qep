@@ -12,7 +12,6 @@ import {
   Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/lib/supabase";
 import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
 import { QrmContactEditorSheet } from "../components/QrmContactEditorSheet";
 import { QrmPageHeader } from "../components/QrmPageHeader";
@@ -26,6 +25,12 @@ import {
 import { listCrmContacts } from "../lib/qrm-api";
 import { listDuplicateCandidates } from "../lib/qrm-router-api";
 import { isUuid } from "@/lib/uuid";
+import { crmSupabase, type QrmDatabase } from "../lib/qrm-supabase";
+
+type ContactHealthProfileRow = Pick<
+  QrmDatabase["public"]["Tables"]["customer_profiles_extended"]["Row"],
+  "id" | "health_score"
+>;
 
 /**
  * Map a raw health score (0–100) to a command-deck status tone.
@@ -106,30 +111,19 @@ export function QrmContactsPage() {
     queryKey: ["crm", "contacts", "health-profiles", profileIds.join(",")],
     enabled: profileIds.length > 0,
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            in: (
-              column: string,
-              values: string[],
-            ) => Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }>;
-          };
-        };
-      })
+      const { data, error } = await crmSupabase
         .from("customer_profiles_extended")
         .select("id, health_score")
         .in("id", profileIds);
       if (error) return [];
-      return data ?? [];
+      return (data ?? []) satisfies ContactHealthProfileRow[];
     },
     staleTime: 60_000,
   });
   const healthProfileById = useMemo(() => {
     const map = new Map<string, number | null>();
     for (const row of healthProfiles) {
-      if (typeof row.id === "string") {
-        map.set(row.id, typeof row.health_score === "number" ? row.health_score : null);
-      }
+      map.set(row.id, row.health_score);
     }
     return map;
   }, [healthProfiles]);

@@ -13,7 +13,6 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
-import { supabase } from "@/lib/supabase";
 import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
 import { QrmDealEditorSheet } from "../components/QrmDealEditorSheet";
 import { QrmPageHeader } from "../components/QrmPageHeader";
@@ -34,10 +33,16 @@ import { computePipelineAnalytics } from "../lib/pipeline-analytics";
 import { useOpenDealsHydration } from "../hooks/useOpenDealsHydration";
 import { useCrmPipelineComputed, type UrgencyFilter } from "../hooks/useCrmPipelineComputed";
 import { useCrmPipelineDragDrop } from "../hooks/useCrmPipelineDragDrop";
+import { crmSupabase, type QrmDatabase } from "../lib/qrm-supabase";
 
 interface QrmPipelinePageProps {
   userRole: UserRole;
 }
+
+type PipelineHealthProfileRow = Pick<
+  QrmDatabase["public"]["Tables"]["customer_profiles_extended"]["Row"],
+  "id" | "crm_company_id" | "health_score"
+>;
 
 export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
   const navigate = useNavigate();
@@ -83,28 +88,22 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
     queryKey: ["crm", "pipeline", "health-profiles", companyIds.join(",")],
     enabled: companyIds.length > 0,
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            in: (column: string, values: string[]) => Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }>;
-          };
-        };
-      })
+      const { data, error } = await crmSupabase
         .from("customer_profiles_extended")
         .select("id, crm_company_id, health_score")
         .in("crm_company_id", companyIds);
       if (error) return [];
-      return data ?? [];
+      return (data ?? []) satisfies PipelineHealthProfileRow[];
     },
     staleTime: 60_000,
   });
   const healthProfileByCompanyId = useMemo(() => {
     const map = new Map<string, { profileId: string; score: number | null }>();
     for (const row of healthProfiles) {
-      if (typeof row.crm_company_id === "string" && typeof row.id === "string") {
+      if (row.crm_company_id) {
         map.set(row.crm_company_id, {
           profileId: row.id,
-          score: typeof row.health_score === "number" ? row.health_score : null,
+          score: row.health_score,
         });
       }
     }
