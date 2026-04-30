@@ -194,10 +194,12 @@ async function resolveAuditEmail() {
     .select("email")
     .in("role", ["admin", "manager", "owner"])
     .not("email", "is", null)
-    .order("created_at", { ascending: true })
+    .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (error || !data?.email) throw new Error(`Could not resolve audit email: ${error?.message ?? "not found"}`);
+  if (error || !data?.email) {
+    throw new Error(`Could not resolve audit user email: ${error?.message ?? "no admin profile email"}`);
+  }
   return data.email;
 }
 
