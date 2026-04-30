@@ -10,7 +10,7 @@ Production target:
 
 - Supabase project: `iciddijgonywtxoelous`
 - Netlify production URL: `https://qualityequipmentparts.netlify.app`
-- Production deploy ID: `69f2aa525743004518b5f738`
+- Production deploy ID: `69f2b249da204f6946cd2c82`
 - Import run ID: `df74305e-d37a-4e4b-be5e-457633b2cd1d`
 
 ## Production Reconciliation
@@ -37,7 +37,7 @@ Read-only production verification returned:
 
 The latest local migration is applied remotely:
 
-- `510_intellidealer_ar_card_redaction.sql`
+- `511_intellidealer_customer_import_dashboard.sql`
 
 ## UI Readiness
 
@@ -54,6 +54,18 @@ The tab renders:
 - Imported profitability totals and area breakdowns.
 
 The browser query intentionally does not select `card_number`.
+
+The admin import dashboard is deployed at:
+
+- `/admin/intellidealer-imports`
+
+The dashboard renders:
+
+- Latest run status and source file name.
+- Source SHA-256 fingerprint and run id.
+- Source, staged, mapped, and delta counts.
+- Operational readiness checks for commit status, stage counts, errors, memo reconciliation, and card redaction.
+- Recent run history and recent import errors.
 
 ## Production Browser Smoke
 
@@ -74,6 +86,7 @@ Evidence:
 | Check | Result |
 | --- | --- |
 | Desktop Account 360 IntelliDealer tab | PASS |
+| Admin IntelliDealer import dashboard | PASS |
 | Mobile Account 360 IntelliDealer tab | PASS |
 | Visible redacted card rows | `4` |
 | Console errors | `0` |
@@ -81,6 +94,7 @@ Evidence:
 Screenshots:
 
 - `test-results/intellidealer-production-smoke/account-intellidealer-desktop.png`
+- `test-results/intellidealer-production-smoke/admin-intellidealer-imports.png`
 - `test-results/intellidealer-production-smoke/account-intellidealer-mobile.png`
 
 ## Memo Reconciliation
@@ -103,16 +117,27 @@ Passing checks:
 bun run build:web
 bun run migrations:check
 bun run audit:rls-initplan
+bun run intellidealer:customer:rerun-check
 bun run intellidealer:customer:verify -- df74305e-d37a-4e4b-be5e-457633b2cd1d
 bun run intellidealer:production:smoke
 git diff --check
 ```
 
+## Rerun Safety Gate
+
+Before staging or committing the same customer workbook again, run:
+
+```bash
+bun run intellidealer:customer:rerun-check
+```
+
+The gate compares the current local workbook to the committed production import. It fails if the workbook hash, source row counts, staged counts, mapped counts, import-error count, memo reconciliation, canonical fact counts, or A/R card redaction state no longer match the signed-off run.
+
 ## Remaining Follow-Up
 
-The customer import, canonical data load, redaction, deployment, and UI smoke test are complete.
+The customer import, canonical data load, redaction, deployment, admin dashboard, rerun-safety gate, and UI smoke test are complete.
 
 Recommended next slice:
 
-- Add an admin import dashboard for run history, row counts, warnings, and reconciliation exports.
 - Regenerate Supabase TypeScript types after the final IntelliDealer schema stabilizes.
+- Add deeper Account 360 operating cards for contact history, profitability trends, A/R exposure, and next-best-action signals.

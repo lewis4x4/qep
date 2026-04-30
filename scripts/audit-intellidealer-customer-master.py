@@ -251,6 +251,7 @@ def audit(path: Path) -> dict[str, Any]:
     real_cards = len(cards) - placeholder_cards
 
     status_counts = collections.Counter(row["Status"].strip() or "active_blank" for row in mast)
+    nonblank_memo_rows = sum(1 for row in memo_rows if row["Memo"].strip())
     coverage = {
         "contacts_customers": len({key(row["Company"], row["Division"], row["Customer #"]) for row in contact_rows}),
         "ar_agency_customers": len({key(row["Co"], row["Div"], row["Cus#"]) for row in ar_rows}),
@@ -289,6 +290,7 @@ def audit(path: Path) -> dict[str, Any]:
                 if row["First Name"].strip().lower() == "primary"
                 and row["Last Name"].strip().lower() == "contact"
             ),
+            "nonblank_contact_memos": nonblank_memo_rows,
             "ar_placeholder_cards": placeholder_cards,
             "ar_non_placeholder_cards": real_cards,
             "ar_default_agency_rows": sum(1 for row in ar_rows if row["Default Agency"].strip().upper() == "Y"),

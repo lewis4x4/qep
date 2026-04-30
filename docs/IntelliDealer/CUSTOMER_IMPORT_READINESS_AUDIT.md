@@ -88,11 +88,13 @@ Audit tooling added:
 - `scripts/purge-non-parts-seed-data.mjs`
 - `scripts/commit-intellidealer-customer-import.mjs`
 - `scripts/verify-intellidealer-customer-import.mjs`
+- `scripts/verify-intellidealer-customer-rerun-safety.mjs`
 - `scripts/verify/intellidealer-production-smoke.mjs`
 - `package.json` script: `intellidealer:customer:audit`
 - `package.json` script: `intellidealer:customer:stage`
 - `package.json` script: `intellidealer:customer:commit`
 - `package.json` script: `intellidealer:customer:verify`
+- `package.json` script: `intellidealer:customer:rerun-check`
 - `package.json` script: `intellidealer:production:smoke`
 - `package.json` script: `intellidealer:seed:purge`
 
@@ -111,8 +113,9 @@ Verified production results:
 - Profitability rows mapped: 9,894 / 9,894.
 - Import errors: 0.
 - Raw A/R card rows: 0.
-- Account 360 IntelliDealer tab deployed to Netlify production deploy `69f2aa525743004518b5f738`.
-- Authenticated desktop and mobile production smoke tests passed.
+- Account 360 IntelliDealer tab and admin import dashboard deployed to Netlify production deploy `69f2b249da204f6946cd2c82`.
+- Authenticated desktop, mobile, and admin-dashboard production smoke tests passed.
+- Rerun safety gate added with `bun run intellidealer:customer:rerun-check`.
 
 Memo reconciliation:
 
@@ -159,14 +162,13 @@ Ready:
 - Database now has canonical imported profitability facts separate from QEP-computed profitability.
 - RLS policies are in place for the new import and fact tables.
 
-Not ready yet:
+Still to harden:
 
-- The non-parts seed purge has not been dry-run against the target Supabase database yet.
-- The staging importer has not been run against the target Supabase database yet.
-- No admin import UI exists for upload, preview, conflict review, commit, rollback, or row-level error triage.
-- QRM company/contact editor UI exposes only a small subset of the imported fields.
-- Account 360 does not yet display imported A/R agency assignments or imported profitability facts.
-- `database.types.ts` has not been regenerated from the new migration.
+- `database.types.ts` has not been regenerated from the final IntelliDealer migrations.
+- Admin import UI is read-only; it does not yet support upload, preview, commit, rollback, or row-level export.
+- QRM company/contact editor UI exposes only a subset of the imported fields.
+- Account 360 displays source identity, A/R agency assignments, and imported profitability facts, but deeper trend/risk/action cards are still future work.
+- Deferred non-parts seed support rows that protected parts data still references remain intentionally preserved until a remap/nulling policy is approved.
 
 ## Required Next Work
 
