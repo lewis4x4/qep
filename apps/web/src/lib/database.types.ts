@@ -42702,6 +42702,26 @@ export type Database = {
         Args: { p_code: string }
         Returns: Database["public"]["Enums"]["ar_type"]
       }
+      qrm_intellidealer_customer_import_run_counts: {
+        Args: { p_run_id: string }
+        Returns: {
+          ar_agency_stage_count: number
+          canonical_ar_agencies_count: number
+          canonical_profitability_facts_count: number
+          contact_memos_nonblank_count: number
+          contact_memos_stage_count: number
+          contacts_stage_count: number
+          import_errors_count: number
+          mapped_ar_agency_count: number
+          mapped_contacts_count: number
+          mapped_master_count: number
+          mapped_profitability_count: number
+          master_stage_count: number
+          profitability_stage_count: number
+          raw_card_rows_count: number
+          redacted_card_rows_count: number
+        }[]
+      }
       qrm_intellidealer_date_yyyymmdd: {
         Args: { p_raw: string }
         Returns: string

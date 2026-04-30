@@ -2,56 +2,41 @@ import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle2, Clock3, Database, Download, FileSpreadsheet, Fingerprint, Loader2, RefreshCcw, ShieldCheck, UploadCloud } from "lucide-react";
 import { Link } from "react-router-dom";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import type { Database as SupabaseDatabase, Json } from "@/lib/database.types";
 import { supabase } from "@/lib/supabase";
 
-type QueryError = { message?: string };
+const db = supabase as SupabaseClient<SupabaseDatabase>;
 
-interface TableQuery<T> extends PromiseLike<{ data: T | null; error: QueryError | null; count?: number | null }> {
-  eq(column: string, value: unknown): TableQuery<T>;
-  order(column: string, options?: { ascending?: boolean }): TableQuery<T>;
-  limit(count: number): TableQuery<T>;
-  range(from: number, to: number): TableQuery<T>;
-}
-
-interface RpcQuery<T> extends PromiseLike<{ data: T | null; error: QueryError | null }> {}
-
-interface UntypedSupabase {
-  from<T = unknown>(table: string): {
-    select(columns: string, options?: { count?: "exact"; head?: boolean }): TableQuery<T>;
-  };
-  rpc<T = unknown>(functionName: string, args?: Record<string, unknown>): RpcQuery<T>;
-}
-
-interface WritableTable {
-  insert(rows: StageRow[]): PromiseLike<{ error: QueryError | null }>;
-}
-
-interface WritableSupabase {
-  from(table: string): WritableTable;
-}
-
-const db = supabase as unknown as UntypedSupabase;
-const writableDb = supabase as unknown as WritableSupabase;
-
-interface ImportRunRow {
-  id: string;
-  status: string;
-  source_file_name: string | null;
-  source_file_hash: string | null;
-  master_rows: number;
-  contact_rows: number;
-  contact_memo_rows: number;
-  ar_agency_rows: number;
-  profitability_rows: number;
-  error_count: number;
-  warning_count: number;
-  metadata: { preview_only?: boolean; audit_source?: string; staging_source?: string } | null;
-  created_at: string;
-  completed_at: string | null;
-}
+type Tables = SupabaseDatabase["public"]["Tables"];
+type ImportRunBaseRow = Tables["qrm_intellidealer_customer_import_runs"]["Row"];
+type ImportErrorRow = Pick<
+  Tables["qrm_intellidealer_customer_import_errors"]["Row"],
+  "id" | "source_sheet" | "row_number" | "severity" | "reason_code" | "message" | "created_at"
+>;
+type ImportRunCountsRow = SupabaseDatabase["public"]["Functions"]["qrm_intellidealer_customer_import_run_counts"]["Returns"][number];
+type ImportRunMetadata = { preview_only?: boolean; audit_source?: string; staging_source?: string } | null;
+type ImportRunRow = Pick<
+  ImportRunBaseRow,
+  | "id"
+  | "status"
+  | "source_file_name"
+  | "source_file_hash"
+  | "master_rows"
+  | "contact_rows"
+  | "contact_memo_rows"
+  | "ar_agency_rows"
+  | "profitability_rows"
+  | "error_count"
+  | "warning_count"
+  | "created_at"
+  | "completed_at"
+> & {
+  metadata: ImportRunMetadata;
+};
 
 interface DashboardRunRow extends ImportRunRow {
   master_stage_count: number;
@@ -71,17 +56,7 @@ interface DashboardRunRow extends ImportRunRow {
   import_errors_count: number;
 }
 
-type DashboardRunCountsRow = Omit<DashboardRunRow, keyof ImportRunRow>;
-
-interface ImportErrorRow {
-  id: string;
-  source_sheet: string | null;
-  row_number: number | null;
-  severity: string;
-  reason_code: string;
-  message: string;
-  created_at: string;
-}
+type DashboardRunCountsRow = ImportRunCountsRow;
 
 interface CountSummary {
   masterStage: number;
@@ -146,6 +121,13 @@ interface PreviewResponse {
 type WorkbookRow = Record<string, string>;
 type StageTableKey = "master" | "contacts" | "memos" | "arAgencies" | "profitability";
 type StageRow = Record<string, unknown>;
+type StageInsertRows = {
+  master: Tables["qrm_intellidealer_customer_master_stage"]["Insert"][];
+  contacts: Tables["qrm_intellidealer_customer_contacts_stage"]["Insert"][];
+  memos: Tables["qrm_intellidealer_customer_contact_memos_stage"]["Insert"][];
+  arAgencies: Tables["qrm_intellidealer_customer_ar_agency_stage"]["Insert"][];
+  profitability: Tables["qrm_intellidealer_customer_profitability_stage"]["Insert"][];
+};
 
 interface IntelliDealerWorkbookRows {
   master: WorkbookRow[];
@@ -202,7 +184,6 @@ interface ExportDefinition {
   key: ExportKey;
   label: string;
   description: string;
-  table: string;
   select: string;
   filenameSuffix: string;
   columns: ExportColumn[];
@@ -246,20 +227,19 @@ const STAGE_TABLES_FOR_UPLOAD: Array<{ key: StageTableKey; label: string }> = [
   { key: "arAgencies", label: "A/R agencies" },
   { key: "profitability", label: "profitability" },
 ];
-const STAGE_TABLE_NAMES: Record<StageTableKey, string> = {
+const STAGE_TABLE_NAMES = {
   master: "qrm_intellidealer_customer_master_stage",
   contacts: "qrm_intellidealer_customer_contacts_stage",
   memos: "qrm_intellidealer_customer_contact_memos_stage",
   arAgencies: "qrm_intellidealer_customer_ar_agency_stage",
   profitability: "qrm_intellidealer_customer_profitability_stage",
-};
+} as const satisfies Record<StageTableKey, keyof Tables>;
 
 const EXPORT_DEFINITIONS: ExportDefinition[] = [
   {
     key: "master",
     label: "Customer master",
     description: "Source keys, customer identity, address, status, sales ownership, canonical company mapping.",
-    table: "qrm_intellidealer_customer_master_stage",
     select: "source_sheet, row_number, company_code, division_code, customer_number, customer_name, status_code, branch_code, city, state, postal_code, country, terms_code, territory_code, salesperson_code, canonical_company_id, validation_errors",
     filenameSuffix: "customer-master",
     columns: [
@@ -286,7 +266,6 @@ const EXPORT_DEFINITIONS: ExportDefinition[] = [
     key: "contacts",
     label: "Contacts",
     description: "Safe contact profile fields, source contact numbers, canonical contact/company mappings.",
-    table: "qrm_intellidealer_customer_contacts_stage",
     select: "source_sheet, row_number, company_code, division_code, customer_number, contact_number, first_name, last_name, job_title, business_email, business_phone, business_cell, status_code, canonical_contact_id, canonical_company_id, validation_errors",
     filenameSuffix: "contacts",
     columns: [
@@ -312,7 +291,6 @@ const EXPORT_DEFINITIONS: ExportDefinition[] = [
     key: "memos",
     label: "Contact memos",
     description: "Memo row numbers, contact keys, memo text, and canonical company/memo mappings.",
-    table: "qrm_intellidealer_customer_contact_memos_stage",
     select: "source_sheet, row_number, company_code, division_code, customer_number, contact_number, sequence_number, memo, canonical_memo_id, canonical_company_id, validation_errors",
     filenameSuffix: "contact-memos",
     columns: [
@@ -333,7 +311,6 @@ const EXPORT_DEFINITIONS: ExportDefinition[] = [
     key: "arAgencies",
     label: "A/R agencies",
     description: "Safe A/R assignment fields only. Raw card identifiers and raw source JSON are not selected.",
-    table: "qrm_intellidealer_customer_ar_agency_stage",
     select: "source_sheet, row_number, company_code, division_code, customer_number, agency_code, expiration_date_raw, status_code, is_default_agency, credit_rating, default_promotion_code, credit_limit, transaction_limit, canonical_company_id, canonical_agency_id, validation_errors",
     filenameSuffix: "ar-agencies-safe",
     columns: [
@@ -359,7 +336,6 @@ const EXPORT_DEFINITIONS: ExportDefinition[] = [
     key: "profitability",
     label: "Profitability",
     description: "Area-level sales, cost, margin, territory, salesperson, and canonical company mapping.",
-    table: "qrm_intellidealer_customer_profitability_stage",
     select: "source_sheet, row_number, company_code, division_code, customer_number, area_code, ytd_sales_last_month_end, ytd_costs_last_month_end, current_month_sales, current_month_costs, ytd_margin, ytd_margin_pct, current_month_margin, current_month_margin_pct, fiscal_last_year_sales, fiscal_last_year_costs, fiscal_last_year_margin, fiscal_last_year_margin_pct, territory_code, salesperson_code, county_code, business_class_code, canonical_company_id, validation_errors",
     filenameSuffix: "profitability",
     columns: [
@@ -393,7 +369,6 @@ const EXPORT_DEFINITIONS: ExportDefinition[] = [
     key: "errors",
     label: "Import errors",
     description: "Blocking and warning rows with source sheet, row number, reason code, and message.",
-    table: "qrm_intellidealer_customer_import_errors",
     select: "source_sheet, row_number, company_code, division_code, customer_number, severity, reason_code, message, created_at",
     filenameSuffix: "import-errors",
     columns: [
@@ -1136,19 +1111,19 @@ export function IntelliDealerImportDashboardPage() {
 
 async function fetchDashboardData(): Promise<DashboardData> {
   const runsResult = await db
-    .from<ImportRunRow[]>("qrm_intellidealer_customer_import_runs")
+    .from("qrm_intellidealer_customer_import_runs")
     .select("id, status, source_file_name, source_file_hash, master_rows, contact_rows, contact_memo_rows, ar_agency_rows, profitability_rows, error_count, warning_count, metadata, created_at, completed_at")
     .order("created_at", { ascending: false })
     .limit(10);
   if (runsResult.error) throw new Error(runsResult.error.message ?? "Failed to load import runs");
 
-  const runs = runsResult.data ?? [];
+  const runs = (runsResult.data ?? []).map(toImportRunRow);
   const latestRunBase = runs.find((run) => run.status === "committed" && !isPreviewRun(run))
     ?? runs.find((run) => !isPreviewRun(run))
     ?? null;
   if (!latestRunBase) return { runs, latestRun: null, counts: null, errors: [] };
 
-  const countsResult = await db.rpc<DashboardRunCountsRow[]>("qrm_intellidealer_customer_import_run_counts", {
+  const countsResult = await db.rpc("qrm_intellidealer_customer_import_run_counts", {
     p_run_id: latestRunBase.id,
   });
   if (countsResult.error) throw new Error(countsResult.error.message ?? "Failed to load import reconciliation");
@@ -1160,7 +1135,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
   };
 
   const errorsResult = await db
-    .from<ImportErrorRow[]>("qrm_intellidealer_customer_import_errors")
+    .from("qrm_intellidealer_customer_import_errors")
     .select("id, source_sheet, row_number, severity, reason_code, message, created_at")
     .eq("run_id", latestRun.id)
     .order("created_at", { ascending: false })
@@ -1197,22 +1172,84 @@ async function fetchRowsForExport(definition: ExportDefinition, runId: string): 
   const rows: ExportRow[] = [];
   for (let from = 0; ; from += EXPORT_BATCH_SIZE) {
     const to = from + EXPORT_BATCH_SIZE - 1;
-    const result = await db
-      .from<ExportRow[]>(definition.table)
-      .select(definition.select)
-      .eq("run_id", runId)
-      .order("row_number", { ascending: true })
-      .range(from, to);
-
-    if (result.error) {
-      throw new Error(result.error.message ?? `Failed to export ${definition.label}`);
-    }
-
-    const batch = result.data ?? [];
+    const batch = await fetchExportBatch(definition, runId, from, to);
     rows.push(...batch);
     if (batch.length < EXPORT_BATCH_SIZE) break;
   }
   return rows;
+}
+
+async function fetchExportBatch(
+  definition: ExportDefinition,
+  runId: string,
+  from: number,
+  to: number,
+): Promise<ExportRow[]> {
+  const orderOptions = { ascending: true } as const;
+  const range = { from, to };
+  switch (definition.key) {
+    case "master":
+      return queryExportRows(
+        db.from("qrm_intellidealer_customer_master_stage").select(definition.select).eq("run_id", runId).order("row_number", orderOptions).range(range.from, range.to),
+        definition,
+      );
+    case "contacts":
+      return queryExportRows(
+        db.from("qrm_intellidealer_customer_contacts_stage").select(definition.select).eq("run_id", runId).order("row_number", orderOptions).range(range.from, range.to),
+        definition,
+      );
+    case "memos":
+      return queryExportRows(
+        db.from("qrm_intellidealer_customer_contact_memos_stage").select(definition.select).eq("run_id", runId).order("row_number", orderOptions).range(range.from, range.to),
+        definition,
+      );
+    case "arAgencies":
+      return queryExportRows(
+        db.from("qrm_intellidealer_customer_ar_agency_stage").select(definition.select).eq("run_id", runId).order("row_number", orderOptions).range(range.from, range.to),
+        definition,
+      );
+    case "profitability":
+      return queryExportRows(
+        db.from("qrm_intellidealer_customer_profitability_stage").select(definition.select).eq("run_id", runId).order("row_number", orderOptions).range(range.from, range.to),
+        definition,
+      );
+    case "errors":
+      return queryExportRows(
+        db.from("qrm_intellidealer_customer_import_errors").select(definition.select).eq("run_id", runId).order("row_number", orderOptions).range(range.from, range.to),
+        definition,
+      );
+  }
+}
+
+async function queryExportRows<T>(
+  query: PromiseLike<{ data: T[] | null; error: { message?: string } | null }>,
+  definition: ExportDefinition,
+): Promise<ExportRow[]> {
+  const result = await query;
+  if (result.error) {
+    throw new Error(result.error.message ?? `Failed to export ${definition.label}`);
+  }
+  return (result.data ?? []) as ExportRow[];
+}
+
+function toImportRunRow(row: Omit<ImportRunRow, "metadata"> & { metadata: Json }): ImportRunRow {
+  return {
+    ...row,
+    metadata: toImportRunMetadata(row.metadata),
+  };
+}
+
+function toImportRunMetadata(metadata: Json): ImportRunMetadata {
+  if (!isRecord(metadata)) return null;
+  return {
+    preview_only: metadata.preview_only === true,
+    audit_source: typeof metadata.audit_source === "string" ? metadata.audit_source : undefined,
+    staging_source: typeof metadata.staging_source === "string" ? metadata.staging_source : undefined,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isPreviewRun(run: Pick<ImportRunRow, "metadata">): boolean {
@@ -1598,9 +1635,38 @@ async function stageIntelliDealerChunk(runId: string, workspaceId: string, table
     workspace_id: workspaceId,
   }));
   await withRetry(async () => {
-    const result = await writableDb.from(STAGE_TABLE_NAMES[tableKey]).insert(safeRows);
-    if (result.error) throw new Error(result.error.message ?? `Failed to stage ${tableKey}`);
+    await insertStageRows(tableKey, safeRows);
   }, `stage ${tableKey}`);
+}
+
+async function insertStageRows(tableKey: StageTableKey, rows: StageRow[]): Promise<void> {
+  switch (tableKey) {
+    case "master": {
+      const result = await db.from(STAGE_TABLE_NAMES.master).insert(rows as StageInsertRows["master"]);
+      if (result.error) throw new Error(result.error.message ?? `Failed to stage ${tableKey}`);
+      return;
+    }
+    case "contacts": {
+      const result = await db.from(STAGE_TABLE_NAMES.contacts).insert(rows as StageInsertRows["contacts"]);
+      if (result.error) throw new Error(result.error.message ?? `Failed to stage ${tableKey}`);
+      return;
+    }
+    case "memos": {
+      const result = await db.from(STAGE_TABLE_NAMES.memos).insert(rows as StageInsertRows["memos"]);
+      if (result.error) throw new Error(result.error.message ?? `Failed to stage ${tableKey}`);
+      return;
+    }
+    case "arAgencies": {
+      const result = await db.from(STAGE_TABLE_NAMES.arAgencies).insert(rows as StageInsertRows["arAgencies"]);
+      if (result.error) throw new Error(result.error.message ?? `Failed to stage ${tableKey}`);
+      return;
+    }
+    case "profitability": {
+      const result = await db.from(STAGE_TABLE_NAMES.profitability).insert(rows as StageInsertRows["profitability"]);
+      if (result.error) throw new Error(result.error.message ?? `Failed to stage ${tableKey}`);
+      return;
+    }
+  }
 }
 
 async function completeIntelliDealerStage(runId: string): Promise<StageResponse> {
