@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,7 +9,13 @@ import {
 } from "lucide-react";
 import { AskIronAdvisorButton, FilterBar, type FilterDef } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
+import type { Database, Json } from "@/lib/database.types";
 import { resolveEntityAction, resolveExceptionPlaybook } from "../lib/action-links";
+
+const db = supabase as SupabaseClient<Database>;
+
+type ExceptionQueueRow = Database["public"]["Tables"]["exception_queue"]["Row"];
+type ExceptionQueueUpdate = Database["public"]["Tables"]["exception_queue"]["Update"];
 
 interface ExceptionRow {
   id: string;
@@ -21,6 +28,33 @@ interface ExceptionRow {
   entity_id: string | null;
   status: "open" | "in_progress" | "resolved" | "dismissed";
   created_at: string;
+}
+
+function toPayload(value: Json): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function toSeverity(value: string): ExceptionRow["severity"] {
+  return value === "critical" || value === "error" || value === "warn" || value === "info" ? value : "info";
+}
+
+function toStatus(value: string): ExceptionRow["status"] {
+  return value === "in_progress" || value === "resolved" || value === "dismissed" ? value : "open";
+}
+
+function toExceptionRow(row: ExceptionQueueRow): ExceptionRow {
+  return {
+    id: row.id,
+    source: row.source,
+    severity: toSeverity(row.severity),
+    title: row.title,
+    detail: row.detail,
+    payload: toPayload(row.payload),
+    entity_table: row.entity_table,
+    entity_id: row.entity_id,
+    status: toStatus(row.status),
+    created_at: row.created_at,
+  };
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -64,15 +98,14 @@ export function ExceptionInboxPage() {
   const { data = [], isLoading } = useQuery({
     queryKey: ["exceptions", "inbox"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { eq: (c: string, v: string) => { order: (c: string, o: Record<string, boolean>) => { limit: (n: number) => Promise<{ data: ExceptionRow[] | null; error: unknown }> } } } };
-      }).from("exception_queue")
+      const { data, error } = await db
+        .from("exception_queue")
         .select("*")
         .eq("status", "open")
         .order("created_at", { ascending: false })
         .limit(200);
       if (error) throw new Error("Failed to load exceptions");
-      return data ?? [];
+      return (data ?? []).map(toExceptionRow);
     },
     staleTime: 30_000,
     refetchInterval: 60_000,
@@ -80,14 +113,12 @@ export function ExceptionInboxPage() {
 
   const updateMutation = useMutation({
     mutationFn: async (input: { id: string; status: ExceptionRow["status"]; reason?: string }) => {
-      const patch: Record<string, unknown> = { status: input.status };
+      const patch: ExceptionQueueUpdate = { status: input.status };
       if (input.status === "resolved" || input.status === "dismissed") {
         patch.resolved_at = new Date().toISOString();
         if (input.reason) patch.resolution_reason = input.reason;
       }
-      const { error } = await (supabase as unknown as {
-        from: (t: string) => { update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<{ error: unknown }> } };
-      }).from("exception_queue").update(patch).eq("id", input.id);
+      const { error } = await db.from("exception_queue").update(patch).eq("id", input.id);
       if (error) throw new Error("Update failed");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["exceptions", "inbox"] }),
