@@ -113,8 +113,9 @@ Verified production results:
 - Profitability rows mapped: 9,894 / 9,894.
 - Import errors: 0.
 - Raw A/R card rows: 0.
-- Account 360 IntelliDealer tab, Companies legacy search, company editor safe imported fields, and admin import dashboard deployed to Netlify production deploy `69f2bbb8f211b68204e90e3f`.
-- Authenticated desktop, mobile, companies-search, company-editor, and admin-dashboard production smoke tests passed.
+- Account 360 IntelliDealer tab, Companies legacy search, company editor safe imported fields, contact editor safe imported fields, and admin import dashboard deployed to Netlify production deploy `69f2c85260f36ba5e206684b`.
+- Authenticated desktop, mobile, companies-search, company-editor, contact-editor, and admin-dashboard production smoke tests passed.
+- Migration `513_refresh_crm_contacts_contact_profile.sql` refreshed the `crm_contacts` compatibility view so safe contact profile fields are available through legacy QRM call sites.
 - Rerun safety gate added with `bun run intellidealer:customer:rerun-check`.
 
 Memo reconciliation:
@@ -164,12 +165,13 @@ Ready:
 - Companies list/search now supports IntelliDealer legacy customer number lookup and displays imported source badges.
 - Account 360 now exposes source identity, contact coverage, A/R exposure, profitability posture, and next-best-action operating signals.
 - Company editor now maintains safe imported profile fields: status, product category, A/R type, payment terms, terms code, territory, pricing level, do-not-contact, and sale-PI opt-out. Legacy customer number is read-only, and card/credit/redaction values remain excluded.
+- Contact editor now maintains safe imported profile fields: cell phone, direct phone, birth date, and SMS opt-in. IntelliDealer customer/contact numbers are read-only, and raw imported row metadata remains excluded.
 
 Still to harden:
 
 - Supabase TypeScript types have been regenerated from production, but the shared browser client remains broadly typed until legacy JSON/nullability and stale select-shape debt is migrated slice-by-slice.
 - Admin import UI is read-only; it does not yet support upload, preview, commit, rollback, or row-level export.
-- QRM contact editor UI exposes only a subset of imported contact fields.
+- QRM contact editor intentionally exposes only safe maintenance fields; imported memo/raw-row details remain display/reporting work, not edit-form work.
 - Memo history, A/R agency, and profitability views are summary-focused; controlled drill-down actions remain future work.
 - Deferred non-parts seed support rows that protected parts data still references remain intentionally preserved until a remap/nulling policy is approved.
 
@@ -197,7 +199,7 @@ Still to harden:
 
 6. Extend remaining customer UI/API surfaces.
 
-   Remaining display/edit coverage: contact edit forms, memo history surfacing, and controlled A/R agency/profitability drill-down beyond Account 360. Company edit now covers safe imported operating-profile fields and excludes sensitive card/credit values.
+   Remaining display/edit coverage: memo history surfacing and controlled A/R agency/profitability drill-down beyond Account 360. Company/contact edit now covers safe imported profile fields and excludes sensitive card/credit/raw-row values.
 
 7. Keep Supabase types current after migration application.
 

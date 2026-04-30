@@ -30,6 +30,10 @@ export function QrmContactEditorSheet({
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [cell, setCell] = useState("");
+  const [directPhone, setDirectPhone] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [smsOptIn, setSmsOptIn] = useState(false);
   const [title, setTitle] = useState("");
   const [companySearchInput, setCompanySearchInput] = useState("");
   const [companySearch, setCompanySearch] = useState("");
@@ -42,6 +46,10 @@ export function QrmContactEditorSheet({
     setLastName(contact?.lastName ?? "");
     setEmail(contact?.email ?? "");
     setPhone(contact?.phone ?? "");
+    setCell(contact?.cell ?? "");
+    setDirectPhone(contact?.directPhone ?? "");
+    setBirthDate(contact?.birthDate ?? "");
+    setSmsOptIn(contact?.smsOptIn ?? false);
     setTitle(contact?.title ?? "");
     setPrimaryCompanyId(contact?.primaryCompanyId ?? "");
     setCompanySearchInput("");
@@ -95,6 +103,10 @@ export function QrmContactEditorSheet({
         lastName,
         email: email.trim() || null,
         phone: phone.trim() || null,
+        cell: cell.trim() || null,
+        directPhone: directPhone.trim() || null,
+        birthDate: birthDate || null,
+        smsOptIn,
         title: title.trim() || null,
         primaryCompanyId: primaryCompanyId || null,
       };
@@ -214,6 +226,99 @@ export function QrmContactEditorSheet({
                 placeholder="(386) 555-0184"
               />
             </div>
+          </div>
+
+          {contact?.sourceCustomerNumber || contact?.sourceContactNumber ? (
+            <div className="rounded-md border border-sky-500/20 bg-sky-500/[0.04] p-3 text-sm">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Imported source</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {contact.sourceCustomerNumber ? (
+                  <div>
+                    <span className="block text-xs text-muted-foreground">IntelliDealer customer #</span>
+                    <span className="font-medium text-foreground">{contact.sourceCustomerNumber}</span>
+                  </div>
+                ) : null}
+                {contact.sourceContactNumber ? (
+                  <div>
+                    <span className="block text-xs text-muted-foreground">IntelliDealer contact #</span>
+                    <span className="font-medium text-foreground">{contact.sourceContactNumber}</span>
+                  </div>
+                ) : null}
+                {contact.sourceStatusCode ? (
+                  <div>
+                    <span className="block text-xs text-muted-foreground">Status code</span>
+                    <span className="font-medium text-foreground">{contact.sourceStatusCode}</span>
+                  </div>
+                ) : null}
+                {contact.sourceSalespersonCode ? (
+                  <div>
+                    <span className="block text-xs text-muted-foreground">Salesperson</span>
+                    <span className="font-medium text-foreground">{contact.sourceSalespersonCode}</span>
+                  </div>
+                ) : null}
+              </div>
+              {contact.myDealerUser ? (
+                <p className="mt-2 text-xs text-muted-foreground">MyDealer user: {contact.myDealerUser}</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="rounded-md border border-qep-deck-rule/70 bg-muted/20 p-3">
+            <div className="mb-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">IntelliDealer contact profile</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Safe imported contact fields used for calling, texting, and account context.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="crm-contact-cell">Cell phone</Label>
+                <Input
+                  id="crm-contact-cell"
+                  value={cell}
+                  onChange={(event) => setCell(event.target.value)}
+                  placeholder="(386) 555-0102"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="crm-contact-direct-phone">Direct phone</Label>
+                <Input
+                  id="crm-contact-direct-phone"
+                  value={directPhone}
+                  onChange={(event) => setDirectPhone(event.target.value)}
+                  placeholder="(386) 555-0138"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="crm-contact-birth-date">Birth date</Label>
+                <Input
+                  id="crm-contact-birth-date"
+                  type="date"
+                  value={birthDate}
+                  onChange={(event) => setBirthDate(event.target.value)}
+                />
+              </div>
+            </div>
+
+            <label
+              htmlFor="crm-contact-sms-opt-in"
+              className="mt-4 flex items-start gap-3 rounded-md border border-qep-deck-rule/60 bg-background/60 p-3 text-sm"
+            >
+              <input
+                id="crm-contact-sms-opt-in"
+                type="checkbox"
+                checked={smsOptIn}
+                onChange={(event) => setSmsOptIn(event.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-input"
+              />
+              <span>
+                <span className="block font-medium text-foreground">SMS opt-in</span>
+                <span className="text-xs text-muted-foreground">
+                  Use only when the customer has explicitly approved text communication.
+                </span>
+              </span>
+            </label>
           </div>
 
           <div className="space-y-2">

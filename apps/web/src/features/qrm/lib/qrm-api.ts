@@ -27,6 +27,14 @@ type QrmCompanyRow = QrmDatabase["public"]["Tables"]["crm_companies"]["Row"];
 type QrmActivityRow = QrmDatabase["public"]["Tables"]["crm_activities"]["Row"];
 type QrmActivityTemplateRow = QrmDatabase["public"]["Tables"]["crm_activity_templates"]["Row"];
 
+function metadataText(row: QrmContactRow, key: string): string | null {
+  const metadata = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+    ? row.metadata as Record<string, unknown>
+    : null;
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
 interface ContactListCursor {
   lastName: string;
   firstName: string;
@@ -47,10 +55,19 @@ function toContactSummary(row: QrmContactRow): QrmContactSummary {
     lastName: row.last_name,
     email: row.email,
     phone: row.phone,
+    cell: row.cell ?? null,
+    directPhone: row.direct_phone ?? null,
+    birthDate: row.birth_date ?? null,
+    smsOptIn: row.sms_opt_in ?? null,
     title: row.title,
     primaryCompanyId: row.primary_company_id,
     assignedRepId: row.assigned_rep_id,
     mergedIntoContactId: row.merged_into_contact_id,
+    sourceCustomerNumber: metadataText(row, "source_customer_number"),
+    sourceContactNumber: metadataText(row, "source_contact_number"),
+    sourceStatusCode: metadataText(row, "status_code"),
+    sourceSalespersonCode: metadataText(row, "salesperson_code"),
+    myDealerUser: metadataText(row, "mydealer_user"),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -297,7 +314,7 @@ export async function getCrmContact(contactId: string): Promise<QrmContactSummar
   const { data, error } = await crmSupabase
     .from("crm_contacts")
     .select(
-      "id, workspace_id, dge_customer_profile_id, first_name, last_name, email, phone, title, primary_company_id, assigned_rep_id, merged_into_contact_id, created_at, updated_at"
+      "id, workspace_id, dge_customer_profile_id, first_name, last_name, email, phone, cell, direct_phone, birth_date, sms_opt_in, title, primary_company_id, assigned_rep_id, merged_into_contact_id, metadata, created_at, updated_at"
     )
     .eq("id", contactId)
     .is("deleted_at", null)
@@ -317,7 +334,7 @@ export async function listCrmContactsByIds(contactIds: string[]): Promise<QrmCon
   const { data, error } = await crmSupabase
     .from("crm_contacts")
     .select(
-      "id, workspace_id, dge_customer_profile_id, first_name, last_name, email, phone, title, primary_company_id, assigned_rep_id, merged_into_contact_id, created_at, updated_at"
+      "id, workspace_id, dge_customer_profile_id, first_name, last_name, email, phone, cell, direct_phone, birth_date, sms_opt_in, title, primary_company_id, assigned_rep_id, merged_into_contact_id, metadata, created_at, updated_at"
     )
     .in("id", ids)
     .is("deleted_at", null);

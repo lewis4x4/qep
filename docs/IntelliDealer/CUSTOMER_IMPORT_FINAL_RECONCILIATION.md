@@ -10,7 +10,7 @@ Production target:
 
 - Supabase project: `iciddijgonywtxoelous`
 - Netlify production URL: `https://qualityequipmentparts.netlify.app`
-- Production deploy ID: `69f2bbb8f211b68204e90e3f`
+- Production deploy ID: `69f2c85260f36ba5e206684b`
 - Import run ID: `df74305e-d37a-4e4b-be5e-457633b2cd1d`
 
 ## Production Reconciliation
@@ -38,6 +38,7 @@ Read-only production verification returned:
 The latest local migration is applied remotely:
 
 - `512_intellidealer_company_legacy_search.sql`
+- `513_refresh_crm_contacts_contact_profile.sql`
 
 ## UI Readiness
 
@@ -68,6 +69,12 @@ The deployed company editor now supports safe post-cutover maintenance of import
 - Sensitive card, credit, and redaction-token values remain excluded from the editor.
 
 The updated `qrm-router` edge function is deployed so those editor fields persist through the production router API.
+
+The deployed contact editor now supports safe post-cutover maintenance of imported contact fields:
+
+- Read-only IntelliDealer customer/contact source numbers for traceability.
+- Editable cell phone, direct phone, birth date, and SMS opt-in.
+- Raw imported row metadata and memo bodies remain excluded from the editor.
 
 The admin import dashboard is deployed at:
 
@@ -102,6 +109,7 @@ Evidence:
 | Desktop Account 360 IntelliDealer tab | PASS |
 | Companies legacy-number search | PASS |
 | Company editor IntelliDealer profile | PASS |
+| Contact editor IntelliDealer profile | PASS |
 | Admin IntelliDealer import dashboard | PASS |
 | Mobile Account 360 IntelliDealer tab | PASS |
 | Visible redacted card rows | `4` |
@@ -112,6 +120,7 @@ Screenshots:
 - `test-results/intellidealer-production-smoke/account-intellidealer-desktop.png`
 - `test-results/intellidealer-production-smoke/companies-legacy-search.png`
 - `test-results/intellidealer-production-smoke/company-editor-intellidealer-profile.png`
+- `test-results/intellidealer-production-smoke/contact-editor-intellidealer-profile.png`
 - `test-results/intellidealer-production-smoke/admin-intellidealer-imports.png`
 - `test-results/intellidealer-production-smoke/account-intellidealer-mobile.png`
 
@@ -157,6 +166,5 @@ The customer import, canonical data load, redaction, deployment, admin dashboard
 
 Recommended next slice:
 
-- Extend imported contact fields into contact edit flows where operators maintain customer profile data after cutover.
 - Add controlled memo history, A/R agency, and profitability drill-down actions beyond the Account 360 summary view.
 - Migrate legacy Supabase call sites to the regenerated `Database` type slice-by-slice; the shared client remains broad until old JSON/nullability and stale select-shape debt is resolved.

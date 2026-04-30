@@ -157,6 +157,10 @@ export interface ContactUpsertPayload {
   lastName?: string;
   email?: string | null;
   phone?: string | null;
+  cell?: string | null;
+  directPhone?: string | null;
+  birthDate?: string | null;
+  smsOptIn?: boolean | null;
   title?: string | null;
   primaryCompanyId?: string | null;
   archive?: boolean;
@@ -216,6 +220,12 @@ function cleanText(value: string | null | undefined): string | null {
   if (!value) return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function cleanMetadataText(metadata: unknown, key: string): string | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === "string" ? cleanText(value) : null;
 }
 
 function cleanInteger(value: number | null | undefined): number | null {
@@ -1004,12 +1014,16 @@ export async function createContact(
       last_name: lastName,
       email: cleanText(payload.email ?? null),
       phone: cleanText(payload.phone ?? null),
+      cell: cleanText(payload.cell ?? null),
+      direct_phone: cleanText(payload.directPhone ?? null),
+      birth_date: cleanText(payload.birthDate ?? null),
+      ...(payload.smsOptIn !== undefined && payload.smsOptIn !== null ? { sms_opt_in: payload.smsOptIn } : {}),
       title: cleanText(payload.title ?? null),
       primary_company_id: primaryCompanyId,
       assigned_rep_id: ctx.caller.userId,
     })
     .select(
-      "id, workspace_id, dge_customer_profile_id, first_name, last_name, email, phone, title, primary_company_id, assigned_rep_id, merged_into_contact_id, created_at, updated_at",
+      "id, workspace_id, dge_customer_profile_id, first_name, last_name, email, phone, cell, direct_phone, birth_date, sms_opt_in, title, primary_company_id, assigned_rep_id, merged_into_contact_id, metadata, created_at, updated_at",
     )
     .single();
 
@@ -1022,10 +1036,19 @@ export async function createContact(
     lastName: data.last_name,
     email: data.email,
     phone: data.phone,
+    cell: data.cell ?? null,
+    directPhone: data.direct_phone ?? null,
+    birthDate: data.birth_date ?? null,
+    smsOptIn: data.sms_opt_in ?? null,
     title: data.title,
     primaryCompanyId: data.primary_company_id,
     assignedRepId: data.assigned_rep_id,
     mergedIntoContactId: data.merged_into_contact_id,
+    sourceCustomerNumber: cleanMetadataText(data.metadata, "source_customer_number"),
+    sourceContactNumber: cleanMetadataText(data.metadata, "source_contact_number"),
+    sourceStatusCode: cleanMetadataText(data.metadata, "status_code"),
+    sourceSalespersonCode: cleanMetadataText(data.metadata, "salesperson_code"),
+    myDealerUser: cleanMetadataText(data.metadata, "mydealer_user"),
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   };
@@ -1057,6 +1080,22 @@ export async function patchContact(
 
   if (payload.phone !== undefined) {
     updates.phone = cleanText(payload.phone ?? null);
+  }
+
+  if (payload.cell !== undefined) {
+    updates.cell = cleanText(payload.cell ?? null);
+  }
+
+  if (payload.directPhone !== undefined) {
+    updates.direct_phone = cleanText(payload.directPhone ?? null);
+  }
+
+  if (payload.birthDate !== undefined) {
+    updates.birth_date = cleanText(payload.birthDate ?? null);
+  }
+
+  if (payload.smsOptIn !== undefined) {
+    updates.sms_opt_in = payload.smsOptIn ?? false;
   }
 
   if (payload.title !== undefined) {
@@ -1091,7 +1130,7 @@ export async function patchContact(
     .eq("id", contactId)
     .is("deleted_at", null)
     .select(
-      "id, workspace_id, dge_customer_profile_id, first_name, last_name, email, phone, title, primary_company_id, assigned_rep_id, merged_into_contact_id, created_at, updated_at",
+      "id, workspace_id, dge_customer_profile_id, first_name, last_name, email, phone, cell, direct_phone, birth_date, sms_opt_in, title, primary_company_id, assigned_rep_id, merged_into_contact_id, metadata, created_at, updated_at",
     )
     .maybeSingle();
 
@@ -1105,10 +1144,19 @@ export async function patchContact(
     lastName: data.last_name,
     email: data.email,
     phone: data.phone,
+    cell: data.cell ?? null,
+    directPhone: data.direct_phone ?? null,
+    birthDate: data.birth_date ?? null,
+    smsOptIn: data.sms_opt_in ?? null,
     title: data.title,
     primaryCompanyId: data.primary_company_id,
     assignedRepId: data.assigned_rep_id,
     mergedIntoContactId: data.merged_into_contact_id,
+    sourceCustomerNumber: cleanMetadataText(data.metadata, "source_customer_number"),
+    sourceContactNumber: cleanMetadataText(data.metadata, "source_contact_number"),
+    sourceStatusCode: cleanMetadataText(data.metadata, "status_code"),
+    sourceSalespersonCode: cleanMetadataText(data.metadata, "salesperson_code"),
+    myDealerUser: cleanMetadataText(data.metadata, "mydealer_user"),
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   };

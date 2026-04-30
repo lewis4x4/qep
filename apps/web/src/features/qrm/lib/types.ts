@@ -32,10 +32,19 @@ export interface QrmContactSummary {
   lastName: string;
   email: string | null;
   phone: string | null;
+  cell: string | null;
+  directPhone: string | null;
+  birthDate: string | null;
+  smsOptIn: boolean | null;
   title: string | null;
   primaryCompanyId: string | null;
   assignedRepId: string | null;
   mergedIntoContactId: string | null;
+  sourceCustomerNumber: string | null;
+  sourceContactNumber: string | null;
+  sourceStatusCode: string | null;
+  sourceSalespersonCode: string | null;
+  myDealerUser: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -295,6 +304,10 @@ export interface QrmContactUpsertInput {
   lastName: string;
   email?: string | null;
   phone?: string | null;
+  cell?: string | null;
+  directPhone?: string | null;
+  birthDate?: string | null;
+  smsOptIn?: boolean | null;
   title?: string | null;
   primaryCompanyId?: string | null;
   archive?: boolean;

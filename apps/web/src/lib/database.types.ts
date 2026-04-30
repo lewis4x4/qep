@@ -36786,9 +36786,12 @@ export type Database = {
       crm_contacts: {
         Row: {
           assigned_rep_id: string | null
+          birth_date: string | null
+          cell: string | null
           created_at: string | null
           deleted_at: string | null
           dge_customer_profile_id: string | null
+          direct_phone: string | null
           email: string | null
           first_name: string | null
           hubspot_contact_id: string | null
@@ -36797,16 +36800,23 @@ export type Database = {
           merged_into_contact_id: string | null
           metadata: Json | null
           phone: string | null
+          portal_customer_id: string | null
           primary_company_id: string | null
+          sms_opt_in: boolean | null
+          sms_opt_in_at: string | null
+          sms_opt_in_source: string | null
           title: string | null
           updated_at: string | null
           workspace_id: string | null
         }
         Insert: {
           assigned_rep_id?: string | null
+          birth_date?: string | null
+          cell?: string | null
           created_at?: string | null
           deleted_at?: string | null
           dge_customer_profile_id?: string | null
+          direct_phone?: string | null
           email?: string | null
           first_name?: string | null
           hubspot_contact_id?: string | null
@@ -36815,16 +36825,23 @@ export type Database = {
           merged_into_contact_id?: string | null
           metadata?: Json | null
           phone?: string | null
+          portal_customer_id?: string | null
           primary_company_id?: string | null
+          sms_opt_in?: boolean | null
+          sms_opt_in_at?: string | null
+          sms_opt_in_source?: string | null
           title?: string | null
           updated_at?: string | null
           workspace_id?: string | null
         }
         Update: {
           assigned_rep_id?: string | null
+          birth_date?: string | null
+          cell?: string | null
           created_at?: string | null
           deleted_at?: string | null
           dge_customer_profile_id?: string | null
+          direct_phone?: string | null
           email?: string | null
           first_name?: string | null
           hubspot_contact_id?: string | null
@@ -36833,7 +36850,11 @@ export type Database = {
           merged_into_contact_id?: string | null
           metadata?: Json | null
           phone?: string | null
+          portal_customer_id?: string | null
           primary_company_id?: string | null
+          sms_opt_in?: boolean | null
+          sms_opt_in_at?: string | null
+          sms_opt_in_source?: string | null
           title?: string | null
           updated_at?: string | null
           workspace_id?: string | null
@@ -36901,6 +36922,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "qrm_contacts_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "portal_customers"
+            referencedColumns: ["id"]
           },
         ]
       }

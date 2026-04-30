@@ -54,6 +54,10 @@ type QrmTables = BaseTables & {
     last_name: string;
     email: string | null;
     phone: string | null;
+    cell: string | null;
+    direct_phone: string | null;
+    birth_date: string | null;
+    sms_opt_in: boolean | null;
     title: string | null;
     primary_company_id: string | null;
     assigned_rep_id: string | null;

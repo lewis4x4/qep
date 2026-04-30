@@ -29,6 +29,7 @@ const adminClient = createClient(supabaseUrl, serviceRoleKey, {
 });
 
 const company = await resolveImportedCompany();
+const contact = await resolveImportedContact(company.id);
 const session = await resolveBrowserSession();
 const evidence = [];
 
@@ -39,6 +40,7 @@ try {
   await smokeAccountIntelliDealerTab(desktop, company, "desktop");
   await smokeCompanyLegacySearch(desktop, company);
   await smokeCompanyEditorProfile(desktop, company);
+  await smokeContactEditorProfile(desktop, contact);
   await smokeAdminDashboard(desktop);
   await desktop.close();
 
@@ -81,6 +83,29 @@ async function resolveImportedCompany() {
   }
 
   return data.qrm_companies;
+}
+
+async function resolveImportedContact(companyId) {
+  const { data, error } = await adminClient
+    .from("qrm_contacts")
+    .select("id, first_name, last_name, metadata")
+    .eq("primary_company_id", companyId)
+    .eq("metadata->>source_system", "intellidealer")
+    .is("deleted_at", null)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new Error(`Could not resolve imported smoke contact: ${error?.message ?? "no imported contact"}`);
+  }
+
+  return {
+    id: data.id,
+    name: `${data.first_name ?? ""} ${data.last_name ?? ""}`.trim(),
+    source_customer_number: data.metadata?.source_customer_number ?? null,
+    source_contact_number: data.metadata?.source_contact_number ?? null,
+  };
 }
 
 async function resolveBrowserSession() {
@@ -298,6 +323,56 @@ async function smokeCompanyEditorProfile(context, company) {
   evidence.push({
     check: "browser.company_editor_intellidealer_profile",
     route: `/qrm/companies/${company.id}`,
+    screenshot,
+    bytes,
+    console_errors: consoleErrors.slice(0, 5),
+  });
+  await page.close();
+}
+
+async function smokeContactEditorProfile(context, contact) {
+  const page = await context.newPage();
+  const consoleErrors = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+
+  await page.goto(`${productionUrl}/qrm/contacts/${contact.id}`, {
+    waitUntil: "networkidle",
+    timeout: 45_000,
+  });
+  if (contact.name) {
+    await page.getByText(contact.name, { exact: false }).waitFor({ timeout: 20_000 });
+  }
+  await page.getByRole("button", { name: "Edit Contact" }).click();
+  await page.getByRole("heading", { name: "Edit contact" }).waitFor({ timeout: 20_000 });
+  await page.getByText("IntelliDealer contact profile", { exact: false }).waitFor({ timeout: 20_000 });
+  await page.getByText("Imported source", { exact: true }).waitFor({ timeout: 20_000 });
+  if (contact.source_customer_number) {
+    await page.getByText(contact.source_customer_number, { exact: true }).waitFor({ timeout: 20_000 });
+  }
+  if (contact.source_contact_number) {
+    await page.getByText(contact.source_contact_number, { exact: true }).waitFor({ timeout: 20_000 });
+  }
+  await page.locator("#crm-contact-cell").waitFor({ timeout: 20_000 });
+  await page.locator("#crm-contact-direct-phone").waitFor({ timeout: 20_000 });
+  await page.locator("#crm-contact-birth-date").waitFor({ timeout: 20_000 });
+  await page.locator("#crm-contact-sms-opt-in").waitFor({ timeout: 20_000 });
+
+  const bodyText = await page.locator("body").innerText();
+  if (/raw_row/i.test(bodyText)) {
+    throw new Error("Contact editor exposed raw imported row metadata.");
+  }
+
+  const screenshot = resolve(artifactDir, "contact-editor-intellidealer-profile.png");
+  await page.screenshot({ path: screenshot, fullPage: true });
+  const bytes = statSync(screenshot).size;
+  if (bytes < 10_000) throw new Error(`${screenshot} looked blank (${bytes} bytes).`);
+
+  evidence.push({
+    check: "browser.contact_editor_intellidealer_profile",
+    route: `/qrm/contacts/${contact.id}`,
+    contact: contact.name,
     screenshot,
     bytes,
     console_errors: consoleErrors.slice(0, 5),
