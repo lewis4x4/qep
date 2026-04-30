@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Wrench, Package, FileText, Receipt, AlertCircle, TrendingUp, Calendar, ArrowRight, Mail, Shield, Loader2,
-  Database,
+  Database, Users, CreditCard, BarChart3, Target,
 } from "lucide-react";
 import { StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
@@ -406,7 +406,7 @@ export function AccountIntelliDealerTab({ companyId }: { companyId: string }) {
     return <Card className="p-4"><p className="text-xs text-muted-foreground">No IntelliDealer import facts are linked to this account.</p></Card>;
   }
 
-  if (!data.company?.legacy_customer_number && data.arAgencies.length === 0 && data.profitability.length === 0) {
+  if (!data.company?.legacy_customer_number && data.contacts.length === 0 && data.arAgencies.length === 0 && data.profitability.length === 0) {
     return <Card className="p-4"><p className="text-xs text-muted-foreground">No IntelliDealer import facts are linked to this account.</p></Card>;
   }
 
@@ -417,6 +417,14 @@ export function AccountIntelliDealerTab({ companyId }: { companyId: string }) {
     textMeta(metadata, "source_division_code"),
     data.company?.legacy_customer_number,
   ].filter(Boolean).join(" / ");
+  const activeAgencies = data.arAgencies.filter((agency) => agency.active);
+  const defaultAgency = data.arAgencies.find((agency) => agency.is_default_agency) ?? null;
+  const creditLimitTotal = sumCents(activeAgencies.map((agency) => agency.credit_limit_cents));
+  const transactionLimitMax = maxCents(activeAgencies.map((agency) => agency.transaction_limit_cents));
+  const contactsWithEmail = data.contacts.filter((contact) => Boolean(contact.email)).length;
+  const contactsWithPhone = data.contacts.filter((contact) => Boolean(contact.cell ?? contact.direct_phone ?? contact.phone)).length;
+  const primaryContact = data.contacts[0] ?? null;
+  const nextAction = buildIntelliDealerNextAction(data, total, activeAgencies, defaultAgency);
 
   return (
     <div className="space-y-3">
@@ -444,7 +452,38 @@ export function AccountIntelliDealerTab({ companyId }: { companyId: string }) {
         </div>
       </Card>
 
-      <div className="grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <SignalCard
+          label="A/R exposure"
+          value={formatCents(creditLimitTotal)}
+          detail={`${activeAgencies.length.toLocaleString()} active agencies · max transaction ${formatCents(transactionLimitMax)}`}
+          icon={<CreditCard className="h-4 w-4" />}
+          tone={activeAgencies.length > 0 ? "sky" : "neutral"}
+        />
+        <SignalCard
+          label="Profitability posture"
+          value={formatPercent(total?.ytd_margin_pct)}
+          detail={`YTD margin ${formatCents(total?.ytd_margin_cents)} · current ${formatCents(total?.current_month_margin_cents)}`}
+          icon={<BarChart3 className="h-4 w-4" />}
+          tone={profitabilityTone(total?.ytd_margin_pct)}
+        />
+        <SignalCard
+          label="Contact coverage"
+          value={`${data.contacts.length.toLocaleString()} contacts`}
+          detail={`${contactsWithEmail.toLocaleString()} email · ${contactsWithPhone.toLocaleString()} phone/mobile`}
+          icon={<Users className="h-4 w-4" />}
+          tone={data.contacts.length > 0 ? "emerald" : "amber"}
+        />
+        <SignalCard
+          label="Next best action"
+          value={nextAction.title}
+          detail={nextAction.detail}
+          icon={<Target className="h-4 w-4" />}
+          tone={nextAction.tone}
+        />
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
         <Card className="p-4">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div>
@@ -482,6 +521,39 @@ export function AccountIntelliDealerTab({ companyId }: { companyId: string }) {
         </Card>
 
         <Card className="p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Contact coverage</p>
+              <p className="mt-1 text-sm font-semibold text-foreground">
+                {primaryContact ? contactDisplayName(primaryContact) : "No imported contacts"}
+              </p>
+            </div>
+            <Users className="h-4 w-4 text-muted-foreground" aria-hidden />
+          </div>
+          {data.contacts.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No imported contacts are linked to this account.</p>
+          ) : (
+            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+              {data.contacts.map((contact) => (
+                <div key={contact.id} className="rounded-md border border-border/70 bg-background/50 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold text-foreground">{contactDisplayName(contact)}</p>
+                      <p className="mt-1 truncate text-[11px] text-muted-foreground">{contact.title || "Title unavailable"}</p>
+                    </div>
+                    <div className="shrink-0 text-right text-[11px] text-muted-foreground">
+                      <p>{contact.email || "No email"}</p>
+                      <p>{contact.cell ?? contact.direct_phone ?? contact.phone ?? "No phone"}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <Card className="p-4">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Imported profitability</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             <Metric label="YTD sales" value={formatCents(total?.ytd_sales_last_month_end_cents)} />
@@ -500,15 +572,9 @@ export function AccountIntelliDealerTab({ companyId }: { companyId: string }) {
               </div>
             ))}
           </div>
-        </Card>
-      </div>
+      </Card>
     </div>
   );
-}
-
-function formatCurrency(value: number | null | undefined): string {
-  if (value == null) return "—";
-  return `$${Math.round(value).toLocaleString()}`;
 }
 
 function formatCents(value: number | null | undefined): string {
@@ -547,6 +613,43 @@ function marginTone(value: number | null | undefined): string {
   return "text-[11px] text-emerald-400 tabular-nums";
 }
 
+type SignalTone = "neutral" | "sky" | "emerald" | "amber" | "red";
+
+function SignalCard({
+  label,
+  value,
+  detail,
+  icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: React.ReactNode;
+  tone: SignalTone;
+}) {
+  const toneClass: Record<SignalTone, string> = {
+    neutral: "border-border/70 bg-background/50 text-muted-foreground",
+    sky: "border-sky-500/20 bg-sky-500/[0.04] text-sky-300",
+    emerald: "border-emerald-500/20 bg-emerald-500/[0.04] text-emerald-300",
+    amber: "border-amber-500/20 bg-amber-500/[0.04] text-amber-300",
+    red: "border-red-500/20 bg-red-500/[0.04] text-red-300",
+  };
+
+  return (
+    <Card className={`p-4 ${toneClass[tone]}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+          <p className="mt-1 truncate text-lg font-bold text-foreground tabular-nums">{value}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">{detail}</p>
+        </div>
+        <span className="shrink-0">{icon}</span>
+      </div>
+    </Card>
+  );
+}
+
 function Fact({ label, value }: { label: string; value: string | number | null | undefined }) {
   return (
     <div>
@@ -564,6 +667,79 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
       {detail ? <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">{detail}</p> : null}
     </div>
   );
+}
+
+function sumCents(values: Array<number | null | undefined>): number | null {
+  const present = values.filter((value): value is number => typeof value === "number");
+  if (present.length === 0) return null;
+  return present.reduce((sum, value) => sum + value, 0);
+}
+
+function maxCents(values: Array<number | null | undefined>): number | null {
+  const present = values.filter((value): value is number => typeof value === "number");
+  if (present.length === 0) return null;
+  return Math.max(...present);
+}
+
+function profitabilityTone(value: number | null | undefined): SignalTone {
+  if (value == null) return "neutral";
+  if (value < 0) return "red";
+  if (value < 10) return "amber";
+  return "emerald";
+}
+
+function contactDisplayName(contact: IntelliDealerAccountSummary["contacts"][number]): string {
+  return [contact.first_name, contact.last_name].filter(Boolean).join(" ") || contact.email || contact.cell || contact.direct_phone || contact.phone || "Unnamed contact";
+}
+
+function buildIntelliDealerNextAction(
+  data: IntelliDealerAccountSummary,
+  total: IntelliDealerAccountSummary["profitability"][number] | null,
+  activeAgencies: IntelliDealerAccountSummary["arAgencies"],
+  defaultAgency: IntelliDealerAccountSummary["arAgencies"][number] | null,
+): { title: string; detail: string; tone: SignalTone } {
+  if (data.company?.do_not_contact) {
+    return {
+      title: "Respect contact hold",
+      detail: "Source account is marked do not contact.",
+      tone: "red",
+    };
+  }
+
+  if (total?.ytd_margin_pct != null && total.ytd_margin_pct < 10) {
+    return {
+      title: "Review margin",
+      detail: "Margin is below the operating threshold before quote follow-up.",
+      tone: total.ytd_margin_pct < 0 ? "red" : "amber",
+    };
+  }
+
+  if (data.contacts.length === 0 || data.contacts.every((contact) => !contact.email && !contact.cell && !contact.direct_phone && !contact.phone)) {
+    return {
+      title: "Clean contact data",
+      detail: "Imported account has weak reachable-contact coverage.",
+      tone: "amber",
+    };
+  }
+
+  if (!defaultAgency || activeAgencies.length > 10) {
+    return {
+      title: "Validate A/R setup",
+      detail: "Confirm default agency and active agency count before account activity.",
+      tone: "sky",
+    };
+  }
+
+  return {
+    title: "Run account review",
+    detail: "Use imported profitability, contacts, and credit signals together.",
+    tone: "emerald",
+  };
+}
+
+function formatCurrency(value: number | null | undefined): string {
+  if (value == null) return "—";
+  return `$${Math.round(value).toLocaleString()}`;
 }
 
 function formatShortDate(value: string | null | undefined): string | null {

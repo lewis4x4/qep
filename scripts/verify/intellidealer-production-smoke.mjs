@@ -159,6 +159,9 @@ async function smokeAccountIntelliDealerTab(context, company, label) {
   });
   await page.getByRole("tab", { name: "IntelliDealer" }).click();
   await page.getByText("IntelliDealer source identity", { exact: false }).waitFor({ timeout: 20_000 });
+  await page.getByText("A/R exposure", { exact: false }).waitFor({ timeout: 20_000 });
+  await page.getByText("Next best action", { exact: false }).waitFor({ timeout: 20_000 });
+  await page.getByText("Contact coverage", { exact: false }).first().waitFor({ timeout: 20_000 });
   await page.getByText("A/R agency assignments", { exact: false }).waitFor({ timeout: 20_000 });
   await page.getByText("Imported profitability", { exact: false }).waitFor({ timeout: 20_000 });
   const redactedCardRows = page.getByText("Card redacted", { exact: false });
