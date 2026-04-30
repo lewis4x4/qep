@@ -52,6 +52,7 @@
     "intellidealer:customer:commit": "bun ./scripts/commit-intellidealer-customer-import.mjs",
     "intellidealer:customer:verify": "bun ./scripts/verify-intellidealer-customer-import.mjs",
     "intellidealer:customer:rerun-check": "bun ./scripts/verify-intellidealer-customer-rerun-safety.mjs",
+    "intellidealer:customer:commit-rehearsal": "bun ./scripts/verify/intellidealer-canonical-commit-rehearsal.mjs",
     "intellidealer:production:smoke": "bun ./scripts/verify/intellidealer-production-smoke.mjs"
   },
   "devDependencies": {

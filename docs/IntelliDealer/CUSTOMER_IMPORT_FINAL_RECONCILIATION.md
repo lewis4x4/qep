@@ -162,12 +162,15 @@ bun run migrations:check
 bun run audit:edges
 bun scripts/verify/intellidealer-browser-stage-flow.mjs
 bun run intellidealer:customer:rerun-check
+bun run intellidealer:customer:commit-rehearsal
 bun run intellidealer:customer:verify -- df74305e-d37a-4e4b-be5e-457633b2cd1d
 bun run intellidealer:production:smoke
 git diff --check
 ```
 
 Additional production guard check passed: a temporary audited run could not transition directly to `committing`; PostgreSQL raised `INTELLIDEALER_COMMIT_REQUIRES_STAGED_RUN`, and the temporary run was deleted.
+
+The canonical commit rehearsal command is intentionally a non-production gate. It refuses the production Supabase project by default, stages the workbook in 100-row batches, runs the canonical commit in the target clone, and verifies exact staged, mapped, canonical, memo, A/R redaction, and profitability counts.
 
 ## Rerun Safety Gate
 
@@ -181,9 +184,8 @@ The gate compares the current local workbook to the committed production import.
 
 ## Remaining Follow-Up
 
-The customer import, canonical data load, redaction, deployment, admin dashboard, protected browser staging, commit preflight token enforcement, database commit-transition guard, staged-run discard control, safe row-level export controls, Account 360 IntelliDealer drill-downs, rerun-safety gate, and UI smoke test are complete.
+The customer import, canonical data load, redaction, deployment, admin dashboard, protected browser staging, commit preflight token enforcement, database commit-transition guard, staged-run discard control, safe row-level export controls, Account 360 IntelliDealer drill-downs, rerun-safety gate, non-production canonical commit rehearsal gate, and UI smoke test are complete.
 
 Recommended next slice:
 
-- Run a controlled non-production canonical commit rehearsal for a browser-staged copy before using the browser commit gate on a future production import.
 - Migrate legacy Supabase call sites to the regenerated `Database` type slice-by-slice; the shared client remains broad until old JSON/nullability and stale select-shape debt is resolved.

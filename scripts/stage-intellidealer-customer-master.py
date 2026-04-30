@@ -27,6 +27,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIT_PATH = ROOT / "scripts" / "audit-intellidealer-customer-master.py"
+PRODUCTION_PROJECT_REF = "iciddijgonywtxoelous"
 
 
 def load_audit_module():
@@ -314,7 +315,7 @@ class SupabaseRest:
             method=method,
         )
         try:
-            with urllib.request.urlopen(req, timeout=120) as response:
+            with urllib.request.urlopen(req, timeout=1200) as response:
                 text = response.read().decode("utf-8")
                 return json.loads(text) if text else None
         except urllib.error.HTTPError as exc:
@@ -348,13 +349,18 @@ def insert_batches(client: SupabaseRest, table: str, rows: list[dict[str, Any]],
     return inserted
 
 
+def is_production_target(url: str) -> bool:
+    project_ref = os.environ.get("SUPABASE_PROJECT_REF", "").strip()
+    return project_ref == PRODUCTION_PROJECT_REF or f"{PRODUCTION_PROJECT_REF}.supabase.co" in url
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("workbook", nargs="?", default="docs/IntelliDealer/Customer Master.xlsx")
     parser.add_argument("--workspace", default="default")
     parser.add_argument("--commit", action="store_true", help="Write rows to Supabase staging tables.")
     parser.add_argument("--commit-canonical", action="store_true", help="After staging, call commit_intellidealer_customer_import.")
-    parser.add_argument("--batch-size", type=int, default=500)
+    parser.add_argument("--batch-size", type=int, default=100)
     args = parser.parse_args()
 
     load_local_env(ROOT)
@@ -385,6 +391,13 @@ def main() -> int:
     if not url or not key:
         print("Missing SUPABASE_URL/VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.", file=sys.stderr)
         return 2
+    if args.commit_canonical and is_production_target(url) and os.environ.get("INTELLIDEALER_CANONICAL_COMMIT_ALLOW_PRODUCTION") != "1":
+        print(
+            "Refusing direct canonical commit against production. Use the guarded admin UI, "
+            "or set INTELLIDEALER_CANONICAL_COMMIT_ALLOW_PRODUCTION=1 only for an intentional emergency.",
+            file=sys.stderr,
+        )
+        return 3
 
     client = SupabaseRest(url, key)
     run = client.insert("qrm_intellidealer_customer_import_runs", [{
