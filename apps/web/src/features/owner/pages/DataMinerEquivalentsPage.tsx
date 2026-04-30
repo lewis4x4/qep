@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
+import type { Database } from "@/lib/database.types";
 import {
   buildCreditExposureRows,
   buildProfitabilityRows,
@@ -23,39 +24,73 @@ import {
 
 type DataMinerTab = "profitability" | "credit" | "service";
 
+type OwnerProfitabilityRow = Database["public"]["Views"]["owner_data_miner_profitability"]["Row"];
+type OwnerCreditExposureRow = Database["public"]["Views"]["owner_data_miner_credit_exposure"]["Row"];
+type OwnerServiceLaborRow = Database["public"]["Views"]["owner_data_miner_service_labor"]["Row"];
+type OwnerProfitabilityPayload = Pick<
+  OwnerProfitabilityRow,
+  | "company_id"
+  | "customer_name"
+  | "closed_month"
+  | "won_deal_count"
+  | "sales_amount"
+  | "gross_margin_amount"
+  | "gross_margin_pct"
+  | "last_closed_at"
+>;
+type OwnerCreditExposurePayload = Pick<
+  OwnerCreditExposureRow,
+  | "company_id"
+  | "customer_name"
+  | "open_invoice_count"
+  | "overdue_invoice_count"
+  | "open_balance_due"
+  | "overdue_balance_due"
+  | "max_days_past_due"
+  | "oldest_due_date"
+  | "last_invoice_at"
+  | "block_status"
+  | "block_reason"
+  | "current_max_aging_days"
+  | "override_until"
+  | "blocked_at"
+  | "exposure_band"
+>;
+type OwnerServiceLaborPayload = Pick<
+  OwnerServiceLaborRow,
+  | "labor_date"
+  | "branch_id"
+  | "shop_or_field"
+  | "technician_id"
+  | "technician_name"
+  | "job_count"
+  | "hours_worked"
+  | "billed_value"
+  | "quoted_value"
+  | "closed_job_count"
+>;
+
 type DataMinerPayload = {
   profitability: ProfitabilityViewRow[];
   credit: CreditExposureViewRow[];
   service: ServiceLaborViewRow[];
 };
 
-type SupabaseViewClient = {
-  from: (table: string) => {
-    select: (columns: string) => {
-      order: (
-        column: string,
-        opts?: Record<string, boolean>,
-      ) => Promise<{ data: unknown[] | null; error: { message?: string } | null }>;
-    };
-  };
-};
-
 async function fetchDataMinerPayload(): Promise<DataMinerPayload> {
-  const db = supabase as unknown as SupabaseViewClient;
   const [profitabilityRes, creditRes, serviceRes] = await Promise.all([
-    db
+    supabase
       .from("owner_data_miner_profitability")
       .select(
         "company_id, customer_name, closed_month, won_deal_count, sales_amount, gross_margin_amount, gross_margin_pct, last_closed_at",
       )
       .order("sales_amount", { ascending: false }),
-    db
+    supabase
       .from("owner_data_miner_credit_exposure")
       .select(
         "company_id, customer_name, open_invoice_count, overdue_invoice_count, open_balance_due, overdue_balance_due, max_days_past_due, oldest_due_date, last_invoice_at, block_status, block_reason, current_max_aging_days, override_until, blocked_at, exposure_band",
       )
       .order("overdue_balance_due", { ascending: false }),
-    db
+    supabase
       .from("owner_data_miner_service_labor")
       .select(
         "labor_date, branch_id, shop_or_field, technician_id, technician_name, job_count, hours_worked, billed_value, quoted_value, closed_job_count",
@@ -74,9 +109,83 @@ async function fetchDataMinerPayload(): Promise<DataMinerPayload> {
   }
 
   return {
-    profitability: (profitabilityRes.data ?? []) as ProfitabilityViewRow[],
-    credit: (creditRes.data ?? []) as CreditExposureViewRow[],
-    service: (serviceRes.data ?? []) as ServiceLaborViewRow[],
+    profitability: (profitabilityRes.data ?? []).map(mapProfitabilityRow),
+    credit: (creditRes.data ?? []).map(mapCreditExposureRow),
+    service: (serviceRes.data ?? []).map(mapServiceLaborRow),
+  };
+}
+
+function numeric(value: number | null | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function label(value: string | null | undefined, fallback: string): string {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : fallback;
+}
+
+function normalizeCreditBlockStatus(
+  value: OwnerCreditExposurePayload["block_status"],
+): CreditExposureViewRow["block_status"] {
+  return value === "active" || value === "overridden" || value === "cleared" ? value : null;
+}
+
+function normalizeExposureBand(
+  value: OwnerCreditExposurePayload["exposure_band"],
+  maxDaysPastDue: number,
+): CreditExposureViewRow["exposure_band"] {
+  if (value === "critical" || value === "warning" || value === "healthy") return value;
+  if (maxDaysPastDue >= 90) return "critical";
+  if (maxDaysPastDue >= 30) return "warning";
+  return "healthy";
+}
+
+function mapProfitabilityRow(row: OwnerProfitabilityPayload): ProfitabilityViewRow {
+  return {
+    company_id: row.company_id,
+    customer_name: label(row.customer_name, "Unknown customer"),
+    closed_month: label(row.closed_month ?? row.last_closed_at, "1970-01-01"),
+    won_deal_count: numeric(row.won_deal_count),
+    sales_amount: numeric(row.sales_amount),
+    gross_margin_amount: numeric(row.gross_margin_amount),
+    gross_margin_pct: row.gross_margin_pct,
+    last_closed_at: row.last_closed_at,
+  };
+}
+
+function mapCreditExposureRow(row: OwnerCreditExposurePayload): CreditExposureViewRow {
+  const maxDaysPastDue = numeric(row.max_days_past_due);
+  return {
+    company_id: row.company_id,
+    customer_name: label(row.customer_name, "Unknown customer"),
+    open_invoice_count: numeric(row.open_invoice_count),
+    overdue_invoice_count: numeric(row.overdue_invoice_count),
+    open_balance_due: numeric(row.open_balance_due),
+    overdue_balance_due: numeric(row.overdue_balance_due),
+    max_days_past_due: maxDaysPastDue,
+    oldest_due_date: row.oldest_due_date,
+    last_invoice_at: row.last_invoice_at,
+    block_status: normalizeCreditBlockStatus(row.block_status),
+    block_reason: row.block_reason,
+    current_max_aging_days: row.current_max_aging_days,
+    override_until: row.override_until,
+    blocked_at: row.blocked_at,
+    exposure_band: normalizeExposureBand(row.exposure_band, maxDaysPastDue),
+  };
+}
+
+function mapServiceLaborRow(row: OwnerServiceLaborPayload): ServiceLaborViewRow {
+  return {
+    labor_date: label(row.labor_date, "1970-01-01"),
+    branch_id: row.branch_id,
+    shop_or_field: label(row.shop_or_field, "unknown"),
+    technician_id: row.technician_id,
+    technician_name: label(row.technician_name, "Unassigned technician"),
+    job_count: numeric(row.job_count),
+    hours_worked: numeric(row.hours_worked),
+    billed_value: numeric(row.billed_value),
+    quoted_value: numeric(row.quoted_value),
+    closed_job_count: numeric(row.closed_job_count),
   };
 }
 
