@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,7 +9,13 @@ import {
 } from "lucide-react";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
+import type { Database, Json } from "@/lib/database.types";
 import { resolveDataQualityPlaybook, resolveEntityAction } from "../lib/action-links";
+
+const db = supabase as SupabaseClient<Database>;
+
+type DataIssueRow = Database["public"]["Tables"]["admin_data_issues"]["Row"];
+type DataIssueUpdate = Database["public"]["Tables"]["admin_data_issues"]["Update"];
 
 interface DataIssue {
   id: string;
@@ -20,6 +27,32 @@ interface DataIssue {
   status: "open" | "resolved" | "ignored";
   first_seen: string;
   last_checked: string;
+}
+
+function toDetail(value: Json): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function toSeverity(value: string): DataIssue["severity"] {
+  return value === "error" || value === "warn" || value === "info" ? value : "info";
+}
+
+function toStatus(value: string): DataIssue["status"] {
+  return value === "resolved" || value === "ignored" ? value : "open";
+}
+
+function toDataIssue(row: DataIssueRow): DataIssue {
+  return {
+    id: row.id,
+    issue_class: row.issue_class,
+    severity: toSeverity(row.severity),
+    entity_table: row.entity_table,
+    entity_id: row.entity_id,
+    detail: toDetail(row.detail),
+    status: toStatus(row.status),
+    first_seen: row.first_seen,
+    last_checked: row.last_checked,
+  };
 }
 
 const ISSUE_LABELS: Record<string, string> = {
@@ -49,24 +82,21 @@ export function DataQualityPage() {
   const { data = [], isLoading } = useQuery({
     queryKey: ["admin", "data-quality"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { eq: (c: string, v: string) => { order: (c: string, o: Record<string, boolean>) => { limit: (n: number) => Promise<{ data: DataIssue[] | null; error: unknown }> } } } };
-      }).from("admin_data_issues")
+      const { data, error } = await db
+        .from("admin_data_issues")
         .select("*")
         .eq("status", "open")
         .order("severity", { ascending: false })
         .limit(500);
       if (error) throw new Error("Failed to load issues");
-      return data ?? [];
+      return (data ?? []).map(toDataIssue);
     },
     staleTime: 30_000,
   });
 
   const runAuditMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await (supabase as unknown as {
-        rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ error: unknown }>;
-      }).rpc("run_data_quality_audit");
+      const { error } = await db.rpc("run_data_quality_audit");
       if (error) throw new Error(String((error as { message?: string }).message ?? "Audit failed"));
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin", "data-quality"] }),
@@ -74,10 +104,13 @@ export function DataQualityPage() {
 
   const updateMutation = useMutation({
     mutationFn: async (input: { id: string; status: "resolved" | "ignored" }) => {
-      const { error } = await (supabase as unknown as {
-        from: (t: string) => { update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<{ error: unknown }> } };
-      }).from("admin_data_issues")
-        .update({ status: input.status, resolved_at: new Date().toISOString() })
+      const patch: DataIssueUpdate = {
+        status: input.status,
+        resolved_at: new Date().toISOString(),
+      };
+      const { error } = await db
+        .from("admin_data_issues")
+        .update(patch)
         .eq("id", input.id);
       if (error) throw new Error("Update failed");
     },
