@@ -30,7 +30,7 @@ mock.module("@/lib/supabase", () => {
       error: result.error,
     };
     const chain: Record<string, unknown> = {};
-    const METHODS = ["select", "insert", "update", "delete", "upsert", "eq", "neq", "in", "order", "gte", "lte", "limit", "filter", "match", "is", "not"] as const;
+    const METHODS = ["select", "insert", "update", "delete", "upsert", "eq", "neq", "in", "order", "gte", "lte", "limit", "filter", "match", "is", "not", "returns"] as const;
     for (const m of METHODS) chain[m] = () => chain;
     chain.single = () => Promise.resolve(singleResult);
     chain.maybeSingle = () => Promise.resolve(singleResult);

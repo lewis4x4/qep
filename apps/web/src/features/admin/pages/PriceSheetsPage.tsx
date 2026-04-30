@@ -27,6 +27,12 @@ interface WatchdogPendingSheet {
   source_label:  string | null;
 }
 
+type WatchdogPendingSheetJoinRow = {
+  id: string;
+  qb_brands?: Array<{ name: string }> | { name: string } | null;
+  qb_brand_sheet_sources?: Array<{ label: string }> | { label: string } | null;
+};
+
 export function PriceSheetsPage() {
   return (
     <RequireAdmin>
@@ -205,29 +211,21 @@ async function loadWatchdogPending(): Promise<WatchdogPendingSheet[]> {
     .eq("status", "pending_review")
     .not("source_id", "is", null)
     .order("created_at", { ascending: false })
-    .limit(10);
+    .limit(10)
+    .returns<WatchdogPendingSheetJoinRow[]>();
 
-  // The Supabase client types this join as `<table>: Array<{...}>`; in
-  // practice the FK is 1:1 so we receive a single-element array or null.
-  // Unwrap defensively to avoid runtime surprises.
-  type JoinedRow = {
-    id:                       string;
-    qb_brands?:               Array<{ name: string }> | { name: string } | null;
-    qb_brand_sheet_sources?:  Array<{ label: string }> | { label: string } | null;
-  };
-  const rows = (data ?? []) as unknown as JoinedRow[];
-  const pickName = (v: JoinedRow["qb_brands"]): string | null => {
+  const pickName = (v: WatchdogPendingSheetJoinRow["qb_brands"]): string | null => {
     if (!v) return null;
     if (Array.isArray(v)) return v[0]?.name ?? null;
     return v.name ?? null;
   };
-  const pickLabel = (v: JoinedRow["qb_brand_sheet_sources"]): string | null => {
+  const pickLabel = (v: WatchdogPendingSheetJoinRow["qb_brand_sheet_sources"]): string | null => {
     if (!v) return null;
     if (Array.isArray(v)) return v[0]?.label ?? null;
     return v.label ?? null;
   };
 
-  return rows.map((row) => ({
+  return (data ?? []).map((row) => ({
     id:           row.id,
     brand_name:   pickName(row.qb_brands),
     source_label: pickLabel(row.qb_brand_sheet_sources),
