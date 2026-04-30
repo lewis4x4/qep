@@ -1,22 +1,14 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database, Json } from "@/lib/database.types";
 import { supabase } from "@/lib/supabase";
 
-type QueryError = { message?: string };
+const accountSupabase = supabase as SupabaseClient<Database>;
 
-interface TableQuery<T> extends PromiseLike<{ data: T | null; error: QueryError | null }> {
-  eq(column: string, value: unknown): TableQuery<T>;
-  is(column: string, value: unknown): TableQuery<T>;
-  order(column: string, options?: { ascending?: boolean }): TableQuery<T>;
-  limit(count: number): TableQuery<T>;
-  maybeSingle(): Promise<{ data: T extends Array<infer Item> ? Item | null : T | null; error: QueryError | null }>;
-}
-
-interface UntypedSupabase {
-  from<T = unknown>(table: string): {
-    select(columns: string): TableQuery<T>;
-  };
-}
-
-const untypedSupabase = supabase as unknown as UntypedSupabase;
+type QrmCompanyRow = Database["public"]["Tables"]["qrm_companies"]["Row"];
+type QrmArAgencyRow = Database["public"]["Tables"]["qrm_customer_ar_agencies"]["Row"];
+type QrmProfitabilityFactRow = Database["public"]["Tables"]["qrm_customer_profitability_import_facts"]["Row"];
+type QrmCompanyMemoRow = Database["public"]["Tables"]["qrm_company_memos"]["Row"];
+type QrmContactRow = Database["public"]["Tables"]["qrm_contacts"]["Row"];
 
 export interface Account360Company {
   id: string;
@@ -165,77 +157,69 @@ export async function fetchFleetRadar(companyId: string): Promise<FleetRadarResp
   return data;
 }
 
-export interface IntelliDealerCompanySnapshot {
-  id: string;
-  legacy_customer_number: string | null;
-  status: string | null;
-  product_category: string | null;
-  ar_type: string | null;
-  payment_terms_code: string | null;
-  terms_code: string | null;
-  county: string | null;
-  territory_code: string | null;
-  pricing_level: number | null;
-  business_fax: string | null;
-  business_cell: string | null;
-  do_not_contact: boolean | null;
-  opt_out_sale_pi: boolean | null;
+export interface IntelliDealerCompanySnapshot extends Pick<
+  QrmCompanyRow,
+  | "id"
+  | "legacy_customer_number"
+  | "status"
+  | "product_category"
+  | "ar_type"
+  | "payment_terms_code"
+  | "terms_code"
+  | "county"
+  | "territory_code"
+  | "pricing_level"
+  | "business_fax"
+  | "business_cell"
+  | "do_not_contact"
+  | "opt_out_sale_pi"
+> {
   metadata: Record<string, unknown> | null;
 }
 
-export interface IntelliDealerArAgency {
-  id: string;
-  agency_code: string;
-  expiration_year_month: string | null;
-  active: boolean;
-  is_default_agency: boolean;
-  credit_rating: string | null;
-  default_promotion_code: string | null;
-  credit_limit_cents: number | null;
-  transaction_limit_cents: number | null;
-}
+export type IntelliDealerArAgency = Pick<
+  QrmArAgencyRow,
+  | "id"
+  | "agency_code"
+  | "expiration_year_month"
+  | "active"
+  | "is_default_agency"
+  | "credit_rating"
+  | "default_promotion_code"
+  | "credit_limit_cents"
+  | "transaction_limit_cents"
+>;
 
-export interface IntelliDealerProfitabilityFact {
-  id: string;
-  area_code: string;
-  area_label: string | null;
-  ytd_sales_last_month_end_cents: number | null;
-  ytd_costs_last_month_end_cents: number | null;
-  current_month_sales_cents: number | null;
-  current_month_costs_cents: number | null;
-  ytd_margin_cents: number | null;
-  ytd_margin_pct: number | null;
-  current_month_margin_cents: number | null;
-  current_month_margin_pct: number | null;
-  last_12_margin_cents: number | null;
-  last_12_margin_pct: number | null;
-  fiscal_last_year_sales_cents: number | null;
-  fiscal_last_year_margin_cents: number | null;
-  territory_code: string | null;
-  salesperson_code: string | null;
-  county_code: string | null;
-  business_class_code: string | null;
-  as_of_date: string | null;
-}
+export type IntelliDealerProfitabilityFact = Pick<
+  QrmProfitabilityFactRow,
+  | "id"
+  | "area_code"
+  | "area_label"
+  | "ytd_sales_last_month_end_cents"
+  | "ytd_costs_last_month_end_cents"
+  | "current_month_sales_cents"
+  | "current_month_costs_cents"
+  | "ytd_margin_cents"
+  | "ytd_margin_pct"
+  | "current_month_margin_cents"
+  | "current_month_margin_pct"
+  | "last_12_margin_cents"
+  | "last_12_margin_pct"
+  | "fiscal_last_year_sales_cents"
+  | "fiscal_last_year_margin_cents"
+  | "territory_code"
+  | "salesperson_code"
+  | "county_code"
+  | "business_class_code"
+  | "as_of_date"
+>;
 
-export interface IntelliDealerCompanyMemo {
-  id: string;
-  body: string;
-  pinned: boolean;
-  created_at: string | null;
-  updated_at: string | null;
-}
+export type IntelliDealerCompanyMemo = Pick<QrmCompanyMemoRow, "id" | "body" | "pinned" | "created_at" | "updated_at">;
 
-export interface IntelliDealerContactSignal {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-  title: string | null;
-  email: string | null;
-  phone: string | null;
-  cell: string | null;
-  direct_phone: string | null;
-}
+export type IntelliDealerContactSignal = Pick<
+  QrmContactRow,
+  "id" | "first_name" | "last_name" | "title" | "email" | "phone" | "cell" | "direct_phone"
+>;
 
 export interface IntelliDealerAccountSummary {
   company: IntelliDealerCompanySnapshot | null;
@@ -247,33 +231,33 @@ export interface IntelliDealerAccountSummary {
 
 export async function fetchIntelliDealerAccountSummary(companyId: string): Promise<IntelliDealerAccountSummary> {
   const [companyResult, contactResult, arResult, profitabilityResult, memoResult] = await Promise.all([
-    untypedSupabase
-      .from<IntelliDealerCompanySnapshot[]>("qrm_companies")
+    accountSupabase
+      .from("qrm_companies")
       .select("id, legacy_customer_number, status, product_category, ar_type, payment_terms_code, terms_code, county, territory_code, pricing_level, business_fax, business_cell, do_not_contact, opt_out_sale_pi, metadata")
       .eq("id", companyId)
       .maybeSingle(),
-    untypedSupabase
-      .from<IntelliDealerContactSignal[]>("qrm_contacts")
+    accountSupabase
+      .from("qrm_contacts")
       .select("id, first_name, last_name, title, email, phone, cell, direct_phone")
       .eq("primary_company_id", companyId)
       .is("deleted_at", null)
       .order("last_name", { ascending: true })
       .limit(8),
-    untypedSupabase
-      .from<IntelliDealerArAgency[]>("qrm_customer_ar_agencies")
+    accountSupabase
+      .from("qrm_customer_ar_agencies")
       .select("id, agency_code, expiration_year_month, active, is_default_agency, credit_rating, default_promotion_code, credit_limit_cents, transaction_limit_cents")
       .eq("company_id", companyId)
       .is("deleted_at", null)
       .order("is_default_agency", { ascending: false })
       .order("agency_code", { ascending: true }),
-    untypedSupabase
-      .from<IntelliDealerProfitabilityFact[]>("qrm_customer_profitability_import_facts")
+    accountSupabase
+      .from("qrm_customer_profitability_import_facts")
       .select("id, area_code, area_label, ytd_sales_last_month_end_cents, ytd_costs_last_month_end_cents, current_month_sales_cents, current_month_costs_cents, ytd_margin_cents, ytd_margin_pct, current_month_margin_cents, current_month_margin_pct, last_12_margin_cents, last_12_margin_pct, fiscal_last_year_sales_cents, fiscal_last_year_margin_cents, territory_code, salesperson_code, county_code, business_class_code, as_of_date")
       .eq("company_id", companyId)
       .is("deleted_at", null)
       .order("area_code", { ascending: true }),
-    untypedSupabase
-      .from<IntelliDealerCompanyMemo[]>("qrm_company_memos")
+    accountSupabase
+      .from("qrm_company_memos")
       .select("id, body, pinned, created_at, updated_at")
       .eq("company_id", companyId)
       .is("deleted_at", null)
@@ -289,10 +273,23 @@ export async function fetchIntelliDealerAccountSummary(companyId: string): Promi
   if (memoResult.error) throw new Error(memoResult.error.message ?? "Failed to load IntelliDealer memos");
 
   return {
-    company: companyResult.data,
+    company: companyResult.data ? toIntelliDealerCompanySnapshot(companyResult.data) : null,
     contacts: contactResult.data ?? [],
     arAgencies: arResult.data ?? [],
     profitability: profitabilityResult.data ?? [],
     memos: memoResult.data ?? [],
   };
+}
+
+function toIntelliDealerCompanySnapshot(
+  row: Omit<IntelliDealerCompanySnapshot, "metadata"> & { metadata: Json },
+): IntelliDealerCompanySnapshot {
+  return {
+    ...row,
+    metadata: isRecord(row.metadata) ? row.metadata : null,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
