@@ -71,8 +71,6 @@ try {
 
   const created = await waitForSequenceByName(createName);
   createdIds.add(created.id);
-  await page.reload({ waitUntil: "domcontentloaded", timeout: 45_000 });
-  await page.getByRole("heading", { name: "QRM Sequences", exact: true }).waitFor({ timeout: 20_000 });
   const createdCard = page.locator(".rounded-xl", { hasText: createName }).first();
   await createdCard.waitFor({ timeout: 60_000 });
   let steps = await loadSteps(created.id);

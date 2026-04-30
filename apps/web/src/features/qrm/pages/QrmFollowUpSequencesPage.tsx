@@ -62,6 +62,9 @@ const STEP_TYPE_OPTIONS: Array<{ value: QrmFollowUpStepType; label: string }> = 
   { value: "stalled_alert", label: "Stalled alert" },
 ];
 
+const FOLLOW_UP_SEQUENCES_QUERY_KEY = ["crm", "follow-up-sequences"] as const;
+const FOLLOW_UP_ENROLLMENTS_QUERY_KEY = ["crm", "follow-up-enrollments"] as const;
+
 function toEditorState(sequence: QrmFollowUpSequence): SequenceEditorState {
   return {
     id: sequence.id,
@@ -110,13 +113,13 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
   const [updatingEnrollmentId, setUpdatingEnrollmentId] = useState<string | null>(null);
 
   const sequencesQuery = useQuery({
-    queryKey: ["crm", "follow-up-sequences"],
+    queryKey: FOLLOW_UP_SEQUENCES_QUERY_KEY,
     queryFn: listCrmFollowUpSequences,
     staleTime: 30_000,
   });
 
   const enrollmentsQuery = useQuery({
-    queryKey: ["crm", "follow-up-enrollments"],
+    queryKey: FOLLOW_UP_ENROLLMENTS_QUERY_KEY,
     queryFn: listCrmSequenceEnrollments,
     staleTime: 15_000,
   });
@@ -159,9 +162,16 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
 
   async function refresh(): Promise<void> {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["crm", "follow-up-sequences"] }),
-      queryClient.invalidateQueries({ queryKey: ["crm", "follow-up-enrollments"] }),
+      queryClient.invalidateQueries({ queryKey: FOLLOW_UP_SEQUENCES_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: FOLLOW_UP_ENROLLMENTS_QUERY_KEY }),
     ]);
+  }
+
+  function cacheSavedSequence(sequence: QrmFollowUpSequence): void {
+    queryClient.setQueryData<QrmFollowUpSequence[]>(FOLLOW_UP_SEQUENCES_QUERY_KEY, (current) => {
+      const withoutSaved = (current ?? []).filter((item) => item.id !== sequence.id);
+      return [sequence, ...withoutSaved].sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
+    });
   }
 
   async function handleSave(): Promise<void> {
@@ -194,6 +204,7 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
       );
 
       await refresh();
+      cacheSavedSequence(saved);
       resetEditor(saved);
       toast({
         title: editor.id ? "Sequence updated" : "Sequence created",
