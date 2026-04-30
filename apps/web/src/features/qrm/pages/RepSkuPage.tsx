@@ -11,6 +11,7 @@ import { DeckSurface } from "../components/command-deck";
 import { buildRepSkuBoard } from "../lib/rep-sku";
 import type { PipelineDealRow, DealStageRow, RepProfileRow } from "@/features/dashboards/lib/pipeline-health";
 import type { TimeBankRow } from "../lib/time-bank";
+import { crmSupabase } from "../lib/qrm-supabase";
 
 function confidenceTone(confidence: "high" | "medium" | "low"): string {
   switch (confidence) {
@@ -58,9 +59,7 @@ export function RepSkuPage() {
           .select("created_by")
           .gte("occurred_at", new Date(Date.now() - 14 * 86_400_000).toISOString())
           .limit(2000),
-        (supabase as unknown as {
-          rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown[] | null; error: { message?: string } | null }>;
-        }).rpc("qrm_time_bank", {
+        crmSupabase.rpc("qrm_time_bank", {
           p_workspace_id: profile?.active_workspace_id ?? "default",
           p_default_budget_days: 14,
         }),
@@ -112,7 +111,7 @@ export function RepSkuPage() {
         deals: (dealsResult.data ?? []) as PipelineDealRow[],
         stages: (stagesResult.data ?? []) as DealStageRow[],
         repProfiles: (profilesResult.data ?? []) as RepProfileRow[],
-        timeBankRows: ((timeBankResult.data ?? []) as TimeBankRow[]),
+        timeBankRows: (timeBankResult.data ?? []) satisfies TimeBankRow[],
         kpis: [...kpiAgg.entries()].map(([repId, value]) => ({
           repId,
           positiveVisits: value.positiveVisits,

@@ -5,10 +5,10 @@ import { AlertTriangle, ArrowLeft, ArrowUpRight, Clock3, Sparkles } from "lucide
 import { Button } from "@/components/ui/button";
 import { DeckSurface } from "../components/command-deck";
 import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
-import { supabase } from "@/lib/supabase";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { fetchDealComposite } from "../lib/deal-composite-api";
 import { buildDealCoachBoard } from "../lib/deal-coach";
+import { crmSupabase } from "../lib/qrm-supabase";
 import { readVoiceCaptureTimelineSignals } from "../lib/voice-capture-activity-metadata";
 import { useQuoteVelocity } from "../command-center/hooks/useQuoteVelocity";
 import { computeQuoteVelocity } from "../command-center/lib/quoteVelocity";
@@ -43,12 +43,12 @@ export function DealCoachPage() {
     queryKey: ["deal-coach", dealId, "time-bank", workspaceId],
     enabled: Boolean(dealId) && Boolean(workspaceId),
     queryFn: async (): Promise<TimeBankRow | null> => {
-      const { data, error } = await supabase.rpc("qrm_time_bank", {
+      const { data, error } = await crmSupabase.rpc("qrm_time_bank", {
         p_workspace_id: workspaceId,
         p_default_budget_days: 14,
       });
       if (error) throw new Error(error.message ?? "Failed to load Time Bank.");
-      const rows = (data ?? []) as Array<TimeBankRow & { deal_id?: string }>;
+      const rows = (data ?? []) satisfies TimeBankRow[];
       return rows.find((row) => row.deal_id === dealId) ?? null;
     },
     staleTime: 60_000,

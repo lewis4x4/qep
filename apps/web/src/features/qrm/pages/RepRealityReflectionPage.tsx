@@ -10,6 +10,8 @@ import { supabase } from "@/lib/supabase";
 import { buildRepRealityBoard } from "../lib/rep-reality";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { crmSupabase } from "../lib/qrm-supabase";
+import type { TimeBankRow } from "../lib/time-bank";
 
 export function RepRealityReflectionPage() {
   const { profile } = useAuth();
@@ -25,7 +27,7 @@ export function RepRealityReflectionPage() {
           .eq("assigned_rep_id", profile!.id)
           .is("closed_at", null)
           .limit(300),
-        supabase.rpc("qrm_time_bank", {
+        crmSupabase.rpc("qrm_time_bank", {
           p_workspace_id: profile?.active_workspace_id ?? "default",
           p_default_budget_days: 14,
         }),
@@ -48,10 +50,11 @@ export function RepRealityReflectionPage() {
       ]);
 
       if (dealsResult.error) throw new Error(dealsResult.error.message);
+      if (timeBankResult.error) throw new Error(timeBankResult.error.message ?? "Failed to load Time Bank.");
       if (companiesResult.error) throw new Error(companiesResult.error.message);
 
       const companyNameById = new Map((companiesResult.data ?? []).map((row) => [row.id, row.name]));
-      const timeBankRows = (timeBankResult.data ?? []) as Array<{ deal_id: string; pct_used: number; is_over: boolean }>;
+      const timeBankRows = (timeBankResult.data ?? []) satisfies TimeBankRow[];
       const timeBankByDeal = new Map(timeBankRows.map((row) => [row.deal_id, row]));
 
       return {
