@@ -10,7 +10,7 @@ Production target:
 
 - Supabase project: `iciddijgonywtxoelous`
 - Netlify production URL: `https://qualityequipmentparts.netlify.app`
-- Production deploy ID: `69f3314f2be96fee7b220edc`
+- Production deploy ID: `69f335905ea252ff6035e662`
 - Import run ID: `df74305e-d37a-4e4b-be5e-457633b2cd1d`
 
 ## Production Reconciliation
@@ -87,6 +87,7 @@ The dashboard renders:
 - Source SHA-256 fingerprint and run id.
 - Source, staged, mapped, and delta counts.
 - Operational readiness checks for commit status, stage counts, errors, memo reconciliation, and card redaction.
+- Row-level CSV export controls for safe staged customer master, contacts, memos, A/R agency assignments, profitability, and import-error rows.
 - Recent run history and recent import errors.
 
 ## Production Browser Smoke
@@ -163,9 +164,9 @@ The gate compares the current local workbook to the committed production import.
 
 ## Remaining Follow-Up
 
-The customer import, canonical data load, redaction, deployment, admin dashboard, Account 360 IntelliDealer drill-downs, rerun-safety gate, and UI smoke test are complete.
+The customer import, canonical data load, redaction, deployment, admin dashboard, safe row-level export controls, Account 360 IntelliDealer drill-downs, rerun-safety gate, and UI smoke test are complete.
 
 Recommended next slice:
 
-- Add admin upload, preview, commit, rollback, and row-level export controls so import operations no longer depend on scripts for future runs.
+- Add admin upload, preview, commit, and rollback controls so import operations no longer depend on scripts for future runs.
 - Migrate legacy Supabase call sites to the regenerated `Database` type slice-by-slice; the shared client remains broad until old JSON/nullability and stale select-shape debt is resolved.

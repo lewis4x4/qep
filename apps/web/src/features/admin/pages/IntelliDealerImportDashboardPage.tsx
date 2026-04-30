@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle2, Clock3, Database, FileSpreadsheet, Fingerprint, Loader2, RefreshCcw, ShieldCheck } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock3, Database, Download, FileSpreadsheet, Fingerprint, Loader2, RefreshCcw, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ interface TableQuery<T> extends PromiseLike<{ data: T | null; error: QueryError 
   eq(column: string, value: unknown): TableQuery<T>;
   order(column: string, options?: { ascending?: boolean }): TableQuery<T>;
   limit(count: number): TableQuery<T>;
+  range(from: number, to: number): TableQuery<T>;
 }
 
 interface UntypedSupabase {
@@ -92,6 +93,27 @@ interface DashboardData {
   errors: ImportErrorRow[];
 }
 
+type ExportKey = "master" | "contacts" | "memos" | "arAgencies" | "profitability" | "errors";
+
+type ExportRow = Record<string, unknown>;
+
+interface ExportColumn {
+  header: string;
+  value: (row: ExportRow) => unknown;
+}
+
+interface ExportDefinition {
+  key: ExportKey;
+  label: string;
+  description: string;
+  table: string;
+  select: string;
+  filenameSuffix: string;
+  columns: ExportColumn[];
+}
+
+const EXPORT_BATCH_SIZE = 1_000;
+
 const EMPTY_COUNTS: CountSummary = {
   masterStage: 0,
   contactsStage: 0,
@@ -110,7 +132,168 @@ const EMPTY_COUNTS: CountSummary = {
   importErrors: 0,
 };
 
+const EXPORT_DEFINITIONS: ExportDefinition[] = [
+  {
+    key: "master",
+    label: "Customer master",
+    description: "Source keys, customer identity, address, status, sales ownership, canonical company mapping.",
+    table: "qrm_intellidealer_customer_master_stage",
+    select: "source_sheet, row_number, company_code, division_code, customer_number, customer_name, status_code, branch_code, city, state, postal_code, country, terms_code, territory_code, salesperson_code, canonical_company_id, validation_errors",
+    filenameSuffix: "customer-master",
+    columns: [
+      column("source_sheet"),
+      column("row_number"),
+      column("company_code"),
+      column("division_code"),
+      column("customer_number"),
+      column("customer_name"),
+      column("status_code"),
+      column("branch_code"),
+      column("city"),
+      column("state"),
+      column("postal_code"),
+      column("country"),
+      column("terms_code"),
+      column("territory_code"),
+      column("salesperson_code"),
+      column("canonical_company_id"),
+      column("validation_errors"),
+    ],
+  },
+  {
+    key: "contacts",
+    label: "Contacts",
+    description: "Safe contact profile fields, source contact numbers, canonical contact/company mappings.",
+    table: "qrm_intellidealer_customer_contacts_stage",
+    select: "source_sheet, row_number, company_code, division_code, customer_number, contact_number, first_name, last_name, job_title, business_email, business_phone, business_cell, status_code, canonical_contact_id, canonical_company_id, validation_errors",
+    filenameSuffix: "contacts",
+    columns: [
+      column("source_sheet"),
+      column("row_number"),
+      column("company_code"),
+      column("division_code"),
+      column("customer_number"),
+      column("contact_number"),
+      column("first_name"),
+      column("last_name"),
+      column("job_title"),
+      column("business_email"),
+      column("business_phone"),
+      column("business_cell"),
+      column("status_code"),
+      column("canonical_contact_id"),
+      column("canonical_company_id"),
+      column("validation_errors"),
+    ],
+  },
+  {
+    key: "memos",
+    label: "Contact memos",
+    description: "Memo row numbers, contact keys, memo text, and canonical company/memo mappings.",
+    table: "qrm_intellidealer_customer_contact_memos_stage",
+    select: "source_sheet, row_number, company_code, division_code, customer_number, contact_number, sequence_number, memo, canonical_memo_id, canonical_company_id, validation_errors",
+    filenameSuffix: "contact-memos",
+    columns: [
+      column("source_sheet"),
+      column("row_number"),
+      column("company_code"),
+      column("division_code"),
+      column("customer_number"),
+      column("contact_number"),
+      column("sequence_number"),
+      column("memo"),
+      column("canonical_memo_id"),
+      column("canonical_company_id"),
+      column("validation_errors"),
+    ],
+  },
+  {
+    key: "arAgencies",
+    label: "A/R agencies",
+    description: "Safe A/R assignment fields only. Raw card identifiers and raw source JSON are not selected.",
+    table: "qrm_intellidealer_customer_ar_agency_stage",
+    select: "source_sheet, row_number, company_code, division_code, customer_number, agency_code, expiration_date_raw, status_code, is_default_agency, credit_rating, default_promotion_code, credit_limit, transaction_limit, canonical_company_id, canonical_agency_id, validation_errors",
+    filenameSuffix: "ar-agencies-safe",
+    columns: [
+      column("source_sheet"),
+      column("row_number"),
+      column("company_code"),
+      column("division_code"),
+      column("customer_number"),
+      column("agency_code"),
+      column("expiration_date_raw"),
+      column("status_code"),
+      column("is_default_agency"),
+      column("credit_rating"),
+      column("default_promotion_code"),
+      column("credit_limit"),
+      column("transaction_limit"),
+      column("canonical_company_id"),
+      column("canonical_agency_id"),
+      column("validation_errors"),
+    ],
+  },
+  {
+    key: "profitability",
+    label: "Profitability",
+    description: "Area-level sales, cost, margin, territory, salesperson, and canonical company mapping.",
+    table: "qrm_intellidealer_customer_profitability_stage",
+    select: "source_sheet, row_number, company_code, division_code, customer_number, area_code, ytd_sales_last_month_end, ytd_costs_last_month_end, current_month_sales, current_month_costs, ytd_margin, ytd_margin_pct, current_month_margin, current_month_margin_pct, fiscal_last_year_sales, fiscal_last_year_costs, fiscal_last_year_margin, fiscal_last_year_margin_pct, territory_code, salesperson_code, county_code, business_class_code, canonical_company_id, validation_errors",
+    filenameSuffix: "profitability",
+    columns: [
+      column("source_sheet"),
+      column("row_number"),
+      column("company_code"),
+      column("division_code"),
+      column("customer_number"),
+      column("area_code"),
+      column("ytd_sales_last_month_end"),
+      column("ytd_costs_last_month_end"),
+      column("current_month_sales"),
+      column("current_month_costs"),
+      column("ytd_margin"),
+      column("ytd_margin_pct"),
+      column("current_month_margin"),
+      column("current_month_margin_pct"),
+      column("fiscal_last_year_sales"),
+      column("fiscal_last_year_costs"),
+      column("fiscal_last_year_margin"),
+      column("fiscal_last_year_margin_pct"),
+      column("territory_code"),
+      column("salesperson_code"),
+      column("county_code"),
+      column("business_class_code"),
+      column("canonical_company_id"),
+      column("validation_errors"),
+    ],
+  },
+  {
+    key: "errors",
+    label: "Import errors",
+    description: "Blocking and warning rows with source sheet, row number, reason code, and message.",
+    table: "qrm_intellidealer_customer_import_errors",
+    select: "source_sheet, row_number, company_code, division_code, customer_number, severity, reason_code, message, created_at",
+    filenameSuffix: "import-errors",
+    columns: [
+      column("source_sheet"),
+      column("row_number"),
+      column("company_code"),
+      column("division_code"),
+      column("customer_number"),
+      column("severity"),
+      column("reason_code"),
+      column("message"),
+      column("created_at"),
+    ],
+  },
+];
+
 export function IntelliDealerImportDashboardPage() {
+  const [exportState, setExportState] = useState<{
+    key: ExportKey;
+    status: "loading" | "success" | "error";
+    message: string;
+  } | null>(null);
   const dashboardQuery = useQuery({
     queryKey: ["admin", "intellidealer-import-dashboard"],
     queryFn: fetchDashboardData,
@@ -166,6 +349,27 @@ export function IntelliDealerImportDashboardPage() {
       },
     ];
   }, [counts, latest, stagePerfect]);
+
+  async function handleExport(definition: ExportDefinition) {
+    if (!latest) return;
+    setExportState({ key: definition.key, status: "loading", message: `Preparing ${definition.label.toLowerCase()} CSV...` });
+    try {
+      const rows = await fetchRowsForExport(definition, latest.id);
+      const csv = buildCsv(definition.columns, rows);
+      downloadCsv(csv, buildExportFilename(latest, definition));
+      setExportState({
+        key: definition.key,
+        status: "success",
+        message: `Exported ${rows.length.toLocaleString()} ${definition.label.toLowerCase()} row${rows.length === 1 ? "" : "s"}.`,
+      });
+    } catch (error) {
+      setExportState({
+        key: definition.key,
+        status: "error",
+        message: error instanceof Error ? error.message : "Export failed.",
+      });
+    }
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-4 sm:px-6 lg:px-8">
@@ -273,6 +477,55 @@ export function IntelliDealerImportDashboardPage() {
               </CardContent>
             </Card>
           </div>
+
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">Row-level export controls</h2>
+                  <p className="mt-1 max-w-3xl text-xs text-muted-foreground">
+                    Export safe staged rows and import errors for audit review. These browser exports intentionally exclude raw source JSON and A/R card numbers.
+                  </p>
+                </div>
+                {exportState ? (
+                  <Badge
+                    variant="outline"
+                    className={exportState.status === "error" ? "border-red-500/40 text-red-400" : exportState.status === "success" ? "border-emerald-500/40 text-emerald-400" : ""}
+                  >
+                    {exportState.status === "loading" ? "Exporting" : exportState.status}
+                  </Badge>
+                ) : null}
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {EXPORT_DEFINITIONS.map((definition) => {
+                  const busy = exportState?.status === "loading";
+                  const current = exportState?.key === definition.key;
+                  return (
+                    <div key={definition.key} className="rounded-md border border-border/70 bg-background/40 p-3">
+                      <p className="text-xs font-semibold text-foreground">{definition.label}</p>
+                      <p className="mt-1 min-h-8 text-[11px] text-muted-foreground">{definition.description}</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-3 h-8 w-full text-[11px]"
+                        disabled={busy}
+                        onClick={() => void handleExport(definition)}
+                      >
+                        {busy && current ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                        Export CSV
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+              {exportState ? (
+                <p className={`mt-3 text-xs ${exportState.status === "error" ? "text-red-400" : "text-muted-foreground"}`}>
+                  {exportState.message}
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
 
           <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
             <Card>
@@ -423,6 +676,73 @@ async function fetchDashboardData(): Promise<DashboardData> {
     },
     errors: errorsResult.data ?? [],
   };
+}
+
+async function fetchRowsForExport(definition: ExportDefinition, runId: string): Promise<ExportRow[]> {
+  const rows: ExportRow[] = [];
+  for (let from = 0; ; from += EXPORT_BATCH_SIZE) {
+    const to = from + EXPORT_BATCH_SIZE - 1;
+    const result = await db
+      .from<ExportRow[]>(definition.table)
+      .select(definition.select)
+      .eq("run_id", runId)
+      .order("row_number", { ascending: true })
+      .range(from, to);
+
+    if (result.error) {
+      throw new Error(result.error.message ?? `Failed to export ${definition.label}`);
+    }
+
+    const batch = result.data ?? [];
+    rows.push(...batch);
+    if (batch.length < EXPORT_BATCH_SIZE) break;
+  }
+  return rows;
+}
+
+function column(key: string, header = key): ExportColumn {
+  return {
+    header,
+    value: (row) => row[key],
+  };
+}
+
+function buildCsv(columns: ExportColumn[], rows: ExportRow[]): string {
+  const header = columns.map((col) => csvValue(col.header)).join(",");
+  const body = rows.map((row) => columns.map((col) => csvValue(col.value(row))).join(","));
+  return [header, ...body].join("\n");
+}
+
+function csvValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const text = typeof value === "object" ? JSON.stringify(value) : String(value);
+  if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+function downloadCsv(csv: string, filename: string): void {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function buildExportFilename(run: ImportRunRow, definition: ExportDefinition): string {
+  const source = sanitizeFilename(run.source_file_name?.replace(/\.[^.]+$/, "") ?? "unknown-source");
+  return `intellidealer-${definition.filenameSuffix}-${source}-${run.id.slice(0, 8)}.csv`;
+}
+
+function sanitizeFilename(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "export";
 }
 
 function CountRow({

@@ -181,7 +181,7 @@ async function smokeAccountIntelliDealerTab(context, company, label) {
   });
 
   await page.goto(`${productionUrl}/qrm/accounts/${company.id}/command`, {
-    waitUntil: "networkidle",
+    waitUntil: "domcontentloaded",
     timeout: 45_000,
   });
   await page.getByRole("tab", { name: "IntelliDealer" }).click();
@@ -227,7 +227,7 @@ async function smokeAdminDashboard(context) {
   });
 
   await page.goto(`${productionUrl}/admin/intellidealer-imports`, {
-    waitUntil: "networkidle",
+    waitUntil: "domcontentloaded",
     timeout: 45_000,
   });
   await page.getByText("IntelliDealer Customer Import", { exact: false }).waitFor({ timeout: 20_000 });
@@ -242,6 +242,8 @@ async function smokeAdminDashboard(context) {
   await page.getByText("A/R card redaction", { exact: false }).waitFor({ timeout: 20_000 });
   await page.getByText("Source fingerprint", { exact: true }).waitFor({ timeout: 20_000 });
   await page.getByText("Operational readiness", { exact: true }).waitFor({ timeout: 20_000 });
+  await page.getByText("Row-level export controls", { exact: true }).waitFor({ timeout: 20_000 });
+  await page.getByText("Raw card identifiers and raw source JSON are not selected", { exact: false }).waitFor({ timeout: 20_000 });
   await page.getByText("SHA-256 hash", { exact: true }).waitFor({ timeout: 20_000 });
   await page.getByRole("cell", { name: "Customer master", exact: true }).waitFor({ timeout: 20_000 });
   await page.getByRole("columnheader", { name: "Delta", exact: true }).waitFor({ timeout: 20_000 });
@@ -270,7 +272,7 @@ async function smokeCompanyLegacySearch(context, company) {
   });
 
   await page.goto(`${productionUrl}/qrm/companies`, {
-    waitUntil: "networkidle",
+    waitUntil: "domcontentloaded",
     timeout: 45_000,
   });
   await page.locator("#crm-companies-search").fill(company.legacy_customer_number);
@@ -301,7 +303,7 @@ async function smokeCompanyEditorProfile(context, company) {
   });
 
   await page.goto(`${productionUrl}/qrm/companies/${company.id}`, {
-    waitUntil: "networkidle",
+    waitUntil: "domcontentloaded",
     timeout: 45_000,
   });
   await page.getByRole("button", { name: "Edit Company" }).click();
@@ -342,7 +344,7 @@ async function smokeContactEditorProfile(context, contact) {
   });
 
   await page.goto(`${productionUrl}/qrm/contacts/${contact.id}`, {
-    waitUntil: "networkidle",
+    waitUntil: "domcontentloaded",
     timeout: 45_000,
   });
   if (contact.name) {

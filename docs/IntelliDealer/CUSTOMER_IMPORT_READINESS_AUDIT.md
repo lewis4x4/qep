@@ -113,8 +113,8 @@ Verified production results:
 - Profitability rows mapped: 9,894 / 9,894.
 - Import errors: 0.
 - Raw A/R card rows: 0.
-- Account 360 IntelliDealer tab with controlled memo/A/R/profitability drill-downs, Companies legacy search, company editor safe imported fields, contact editor safe imported fields, and admin import dashboard deployed to Netlify production deploy `69f3314f2be96fee7b220edc`.
-- Authenticated desktop, mobile, Account 360 drill-down, companies-search, company-editor, contact-editor, and admin-dashboard production smoke tests passed.
+- Account 360 IntelliDealer tab with controlled memo/A/R/profitability drill-downs, Companies legacy search, company editor safe imported fields, contact editor safe imported fields, and admin import dashboard with safe row-level exports deployed to Netlify production deploy `69f335905ea252ff6035e662`.
+- Authenticated desktop, mobile, Account 360 drill-down, companies-search, company-editor, contact-editor, admin-dashboard, and admin export-control production smoke tests passed.
 - Migration `513_refresh_crm_contacts_contact_profile.sql` refreshed the `crm_contacts` compatibility view so safe contact profile fields are available through legacy QRM call sites.
 - Rerun safety gate added with `bun run intellidealer:customer:rerun-check`.
 
@@ -164,13 +164,14 @@ Ready:
 - RLS policies are in place for the new import and fact tables.
 - Companies list/search now supports IntelliDealer legacy customer number lookup and displays imported source badges.
 - Account 360 now exposes source identity, contact coverage, A/R exposure, profitability posture, memo history, A/R agency detail, profitability period drill-downs, and next-best-action operating signals.
+- Admin import dashboard now provides safe row-level CSV exports for staged customer master, contacts, memos, A/R agency assignments, profitability, and import-error rows. Raw source JSON and A/R card numbers are intentionally excluded.
 - Company editor now maintains safe imported profile fields: status, product category, A/R type, payment terms, terms code, territory, pricing level, do-not-contact, and sale-PI opt-out. Legacy customer number is read-only, and card/credit/redaction values remain excluded.
 - Contact editor now maintains safe imported profile fields: cell phone, direct phone, birth date, and SMS opt-in. IntelliDealer customer/contact numbers are read-only, and raw imported row metadata remains excluded.
 
 Still to harden:
 
 - Supabase TypeScript types have been regenerated from production, but the shared browser client remains broadly typed until legacy JSON/nullability and stale select-shape debt is migrated slice-by-slice.
-- Admin import UI is read-only; it does not yet support upload, preview, commit, rollback, or row-level export.
+- Admin import UI is still non-mutating; it does not yet support upload, preview, commit, or rollback from the browser.
 - QRM contact editor intentionally exposes only safe maintenance fields; imported memo/raw-row details remain display/reporting work, not edit-form work.
 - Deferred non-parts seed support rows that protected parts data still references remain intentionally preserved until a remap/nulling policy is approved.
 
@@ -198,7 +199,7 @@ Still to harden:
 
 6. Extend import operations UI/API surfaces.
 
-   Remaining operational coverage: upload/preview/commit/rollback controls, row-level exports, and deeper admin run diagnostics. Account 360 now covers memo history plus controlled A/R agency/profitability drill-downs; company/contact edit covers safe imported profile fields and excludes sensitive card/credit/raw-row values.
+   Remaining operational coverage: upload/preview/commit/rollback controls and deeper admin run diagnostics. Account 360 now covers memo history plus controlled A/R agency/profitability drill-downs; company/contact edit covers safe imported profile fields and excludes sensitive card/credit/raw-row values. Admin row-level exports are live and intentionally exclude raw card/source JSON payloads.
 
 7. Keep Supabase types current after migration application.
 
