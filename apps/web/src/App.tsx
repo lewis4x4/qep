@@ -416,6 +416,9 @@ const FlowAdminPage = lazy(() =>
 const FlareAdminPage = lazy(() =>
   import("./features/admin/pages/FlareAdminPage").then((m) => ({ default: m.FlareAdminPage }))
 );
+const IntelliDealerImportDashboardPage = lazy(() =>
+  import("./features/admin/pages/IntelliDealerImportDashboardPage").then((m) => ({ default: m.IntelliDealerImportDashboardPage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -1621,6 +1624,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <CatalogImportPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/intellidealer-imports"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <IntelliDealerImportDashboardPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

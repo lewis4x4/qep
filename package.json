@@ -37,6 +37,7 @@
     "demo:reset": "bun ./scripts/demo/crm-demo-data.mjs reset",
     "demo:reseed": "bun ./scripts/demo/crm-demo-data.mjs reseed",
     "demo:baseline:local": "QEP_DEMO_PREFER_LOCAL=1 bun ./scripts/demo/crm-demo-data.mjs baseline-local",
+    "intellidealer:seed:purge": "bun ./scripts/purge-non-parts-seed-data.mjs",
     "design:review": "node ./scripts/design-review-runner.js",
     "stress:test": "bun ./.agents/stress-test/run.ts",
     "segment:gates": "bun ./scripts/agent-gates/run-segment-gates.mjs",
@@ -45,7 +46,12 @@
     "supabase:types": "supabase gen types typescript --local > apps/web/src/lib/database.types.ts",
     "supabase:types:remote": "sh -c 'supabase gen types typescript --project-id xbfzymdhlfhfhaqhawzs --schema public 2>/dev/null > apps/web/src/lib/database.types.ts && printf \"\\nexport type UserRole = Database[\\\"public\\\"][\\\"Enums\\\"][\\\"user_role\\\"]\\n\" >> apps/web/src/lib/database.types.ts'",
     "smoke:edge": "bun ./scripts/smoke-edge-functions.mjs",
-    "parts:hydrate": "bun ./scripts/hydrate-parts-intelligence.ts"
+    "parts:hydrate": "bun ./scripts/hydrate-parts-intelligence.ts",
+    "intellidealer:customer:audit": "python3 ./scripts/audit-intellidealer-customer-master.py",
+    "intellidealer:customer:stage": "python3 ./scripts/stage-intellidealer-customer-master.py",
+    "intellidealer:customer:commit": "bun ./scripts/commit-intellidealer-customer-import.mjs",
+    "intellidealer:customer:verify": "bun ./scripts/verify-intellidealer-customer-import.mjs",
+    "intellidealer:production:smoke": "bun ./scripts/verify/intellidealer-production-smoke.mjs"
   },
   "devDependencies": {
     "playwright": "^1.52.0",

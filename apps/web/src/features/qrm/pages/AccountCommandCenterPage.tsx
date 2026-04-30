@@ -23,6 +23,7 @@ import {
   AccountARTab,
   AccountCommercialTab,
   AccountFleetTab,
+  AccountIntelliDealerTab,
   AccountNextBestActions,
   AccountPartsTab,
   AccountQuotesTab,
@@ -37,7 +38,7 @@ import { DeckSurface } from "../components/command-deck";
 
 export function AccountCommandCenterPage() {
   const { accountId } = useParams<{ accountId: string }>();
-  const [tab, setTab] = useState<"commercial" | "fleet" | "quotes" | "service" | "parts" | "ar" | "lifecycle">("commercial");
+  const [tab, setTab] = useState<"commercial" | "fleet" | "quotes" | "service" | "parts" | "ar" | "intellidealer" | "lifecycle">("commercial");
   const [healthDrawerOpen, setHealthDrawerOpen] = useState(false);
 
   const account360Query = useQuery({
@@ -171,6 +172,7 @@ export function AccountCommandCenterPage() {
                   { key: "service", label: `Service (${data.service.length})` },
                   { key: "parts", label: "Parts" },
                   { key: "ar", label: `AR (${data.invoices.length})` },
+                  { key: "intellidealer", label: "IntelliDealer" },
                   { key: "lifecycle", label: "Lifecycle" },
                 ].map((item) => {
                   const isActive = item.key === tab;
@@ -201,6 +203,7 @@ export function AccountCommandCenterPage() {
               {tab === "service" && <AccountServiceTab service={data.service} />}
               {tab === "parts" && <AccountPartsTab parts={data.parts} />}
               {tab === "ar" && <AccountARTab invoices={data.invoices} arBlock={data.ar_block} />}
+              {tab === "intellidealer" && <AccountIntelliDealerTab companyId={accountId} />}
               {tab === "lifecycle" && (
                 <DeckSurface className="border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-4">
                   <div className="flex items-start justify-between gap-3">

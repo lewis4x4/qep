@@ -21,6 +21,7 @@ import {
   AccountNextBestActions,
   AccountCommercialTab,
   AccountFleetTab,
+  AccountIntelliDealerTab,
   AccountQuotesTab,
   AccountServiceTab,
   AccountPartsTab,
@@ -61,7 +62,7 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
   const [parentSearch, setParentSearch] = useState("");
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
-  const [account360Tab, setAccount360Tab] = useState<"commercial" | "fleet" | "quotes" | "service" | "parts" | "ar" | "lifecycle">("commercial");
+  const [account360Tab, setAccount360Tab] = useState<"commercial" | "fleet" | "quotes" | "service" | "parts" | "ar" | "intellidealer" | "lifecycle">("commercial");
   const [healthDrawerOpen, setHealthDrawerOpen] = useState(false);
 
   const account360Query = useQuery({
@@ -392,6 +393,7 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
                     { key: "service",   label: `Service (${account360Query.data.service.length})` },
                     { key: "parts",     label: `Parts ($${(account360Query.data.parts.lifetime_total ?? 0).toLocaleString()})` },
                     { key: "ar",        label: `Invoices / AR (${account360Query.data.invoices.length})` },
+                    { key: "intellidealer", label: "IntelliDealer" },
                     { key: "lifecycle", label: "Lifecycle" },
                   ].map((t) => {
                     const isActive = t.key === account360Tab;
@@ -421,6 +423,7 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
                 {account360Tab === "service" && <AccountServiceTab service={account360Query.data.service} />}
                 {account360Tab === "parts"   && <AccountPartsTab parts={account360Query.data.parts} />}
                 {account360Tab === "ar"      && <AccountARTab invoices={account360Query.data.invoices} arBlock={account360Query.data.ar_block} />}
+                {account360Tab === "intellidealer" && <AccountIntelliDealerTab companyId={companyId!} />}
                 {account360Tab === "lifecycle" && (
                   <DeckSurface className="border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-4">
                     <div className="flex items-start justify-between gap-3">

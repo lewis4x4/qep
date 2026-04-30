@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Upload, FileText, Trash2, ToggleLeft, ToggleRight, Cloud, RefreshCw, Search, X, MoreVertical, Loader2, NotebookPen, GitMerge, ChevronRight, Building2, Workflow } from "lucide-react";
+import { Upload, FileText, Trash2, ToggleLeft, ToggleRight, Cloud, RefreshCw, Search, X, MoreVertical, Loader2, NotebookPen, GitMerge, ChevronRight, Building2, Workflow, Database as DatabaseIcon } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { Database, UserRole } from "../lib/database.types";
 import { UsersTab } from "./UsersTab";
@@ -1317,10 +1317,11 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                   { label: "Sequences", description: "Automated follow-up sequences that keep deals moving.", href: "/admin/sequences", icon: NotebookPen },
                   { label: "Templates", description: "Activity and email templates for reps.", href: "/admin/templates", icon: NotebookPen },
                   { label: "Duplicates", description: "Find and merge duplicate contact records.", href: "/admin/duplicates", icon: GitMerge },
-                  { label: "Branches", description: "Store locations, contacts, managers, hours, and document branding.", href: "/admin/branches", icon: Building2 },
-                  { label: "Flow Builder", description: "Workflow definitions, approval routing, run history, and draft automation flows.", href: "/admin/flow", icon: Workflow },
-                  { label: "QuickBooks GL", description: "Configure QuickBooks credentials and sync invoice postings.", href: "/admin/quickbooks-gl", icon: Building2 },
-                ].map((tool) => (
+	                  { label: "Branches", description: "Store locations, contacts, managers, hours, and document branding.", href: "/admin/branches", icon: Building2 },
+	                  { label: "Flow Builder", description: "Workflow definitions, approval routing, run history, and draft automation flows.", href: "/admin/flow", icon: Workflow },
+	                  { label: "QuickBooks GL", description: "Configure QuickBooks credentials and sync invoice postings.", href: "/admin/quickbooks-gl", icon: Building2 },
+	                  { label: "IntelliDealer Imports", description: "Customer import run history, reconciliation counts, and redaction status.", href: "/admin/intellidealer-imports", icon: DatabaseIcon },
+	                ].map((tool) => (
                 <Link key={tool.href} to={tool.href} className="group">
                   <Card className="flex items-center gap-4 border-border px-5 py-4 transition-shadow duration-150 group-hover:shadow-md min-h-[72px]">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">

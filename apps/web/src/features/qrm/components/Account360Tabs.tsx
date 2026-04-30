@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Wrench, Package, FileText, Receipt, AlertCircle, TrendingUp, Calendar, ArrowRight, Mail, Shield, Loader2,
+  Database,
 } from "lucide-react";
 import { StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
@@ -14,8 +15,9 @@ import type {
   Account360ServiceJob,
   Account360Invoice,
   FleetRadarLensItem,
+  IntelliDealerAccountSummary,
 } from "../lib/account-360-api";
-import { fetchFleetRadar } from "../lib/account-360-api";
+import { fetchFleetRadar, fetchIntelliDealerAccountSummary } from "../lib/account-360-api";
 import { fetchCompanyEquipment } from "../lib/qrm-router-api";
 import type { QrmEquipment } from "../lib/types";
 
@@ -380,9 +382,188 @@ export function AccountARTab({ invoices, arBlock }: { invoices: Account360Invoic
   );
 }
 
+export function AccountIntelliDealerTab({ companyId }: { companyId: string }) {
+  const importQuery = useQuery({
+    queryKey: ["intellidealer-account-summary", companyId],
+    queryFn: () => fetchIntelliDealerAccountSummary(companyId),
+    staleTime: 60_000,
+  });
+
+  if (importQuery.isLoading) {
+    return <Card className="h-32 animate-pulse bg-muted/30" />;
+  }
+
+  if (importQuery.isError) {
+    return (
+      <Card className="border-red-500/30 bg-red-500/5 p-4">
+        <p className="text-xs text-red-400">Imported IntelliDealer data is unavailable right now.</p>
+      </Card>
+    );
+  }
+
+  const data = importQuery.data;
+  if (!data) {
+    return <Card className="p-4"><p className="text-xs text-muted-foreground">No IntelliDealer import facts are linked to this account.</p></Card>;
+  }
+
+  if (!data.company?.legacy_customer_number && data.arAgencies.length === 0 && data.profitability.length === 0) {
+    return <Card className="p-4"><p className="text-xs text-muted-foreground">No IntelliDealer import facts are linked to this account.</p></Card>;
+  }
+
+  const total = pickProfitabilityTotal(data);
+  const metadata = data.company?.metadata ?? {};
+  const sourceCode = [
+    textMeta(metadata, "source_company_code"),
+    textMeta(metadata, "source_division_code"),
+    data.company?.legacy_customer_number,
+  ].filter(Boolean).join(" / ");
+
+  return (
+    <div className="space-y-3">
+      <Card className="overflow-hidden border-sky-500/20 bg-sky-500/[0.04]">
+        <div className="flex items-start gap-3 border-b border-sky-500/15 p-4">
+          <div className="rounded-lg bg-sky-500/10 p-2 text-sky-300">
+            <Database className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-foreground">IntelliDealer source identity</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {sourceCode || "Source key unavailable"} · {data.company?.status ?? "unknown"} account
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-3 p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <Fact label="Legacy customer #" value={data.company?.legacy_customer_number} />
+          <Fact label="A/R type" value={formatCode(data.company?.ar_type)} />
+          <Fact label="Terms" value={data.company?.terms_code ?? data.company?.payment_terms_code} />
+          <Fact label="Pricing level" value={data.company?.pricing_level != null ? String(data.company.pricing_level) : null} />
+          <Fact label="Territory" value={data.company?.territory_code ?? textMeta(metadata, "territory_code")} />
+          <Fact label="Branch" value={textMeta(metadata, "branch_code")} />
+          <Fact label="Salesperson" value={textMeta(metadata, "salesperson_code")} />
+          <Fact label="Business class" value={textMeta(metadata, "business_class_code")} />
+        </div>
+      </Card>
+
+      <div className="grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
+        <Card className="p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">A/R agency assignments</p>
+              <p className="mt-1 text-sm font-semibold text-foreground">{data.arAgencies.length.toLocaleString()} imported rows</p>
+            </div>
+          </div>
+          {data.arAgencies.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No A/R agency assignments imported.</p>
+          ) : (
+            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+              {data.arAgencies.slice(0, 12).map((agency) => (
+                <div key={agency.id} className="rounded-md border border-border/70 bg-background/50 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">
+                        Agency {agency.agency_code}
+                        {agency.is_default_agency ? <span className="ml-2 rounded-full bg-qep-orange/10 px-1.5 py-0.5 text-[9px] uppercase text-qep-orange">default</span> : null}
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Card redacted · rating {agency.credit_rating || "—"}
+                      </p>
+                    </div>
+                    <p className="text-right text-xs font-semibold text-foreground">
+                      {formatCents(agency.credit_limit_cents)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {data.arAgencies.length > 12 ? (
+                <p className="text-[11px] text-muted-foreground">Showing 12 of {data.arAgencies.length.toLocaleString()} assignments.</p>
+              ) : null}
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-4">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Imported profitability</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <Metric label="YTD sales" value={formatCents(total?.ytd_sales_last_month_end_cents)} />
+            <Metric label="YTD margin" value={formatCents(total?.ytd_margin_cents)} detail={formatPercent(total?.ytd_margin_pct)} />
+            <Metric label="Current month" value={formatCents(total?.current_month_sales_cents)} detail={formatCents(total?.current_month_margin_cents)} />
+          </div>
+          <div className="mt-4 space-y-2">
+            {sortProfitability(data.profitability).map((fact) => (
+              <div key={fact.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 rounded-md border border-border/70 bg-background/50 px-3 py-2 text-xs">
+                <div className="min-w-0">
+                  <p className="font-semibold text-foreground">{fact.area_code} · {fact.area_label ?? "Unknown area"}</p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">YTD sales {formatCents(fact.ytd_sales_last_month_end_cents)}</p>
+                </div>
+                <span className="font-semibold tabular-nums text-foreground">{formatCents(fact.ytd_margin_cents)}</span>
+                <span className={marginTone(fact.ytd_margin_pct)}>{formatPercent(fact.ytd_margin_pct)}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 function formatCurrency(value: number | null | undefined): string {
   if (value == null) return "—";
   return `$${Math.round(value).toLocaleString()}`;
+}
+
+function formatCents(value: number | null | undefined): string {
+  if (value == null) return "—";
+  return `$${Math.round(value / 100).toLocaleString()}`;
+}
+
+function formatPercent(value: number | null | undefined): string {
+  if (value == null) return "—";
+  return `${Number(value).toFixed(1)}%`;
+}
+
+function formatCode(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value.replace(/_/g, " ");
+}
+
+function textMeta(metadata: Record<string, unknown>, key: string): string | null {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function sortProfitability(facts: IntelliDealerAccountSummary["profitability"]): IntelliDealerAccountSummary["profitability"] {
+  const priority = new Map([["T", 0], ["P", 1], ["S", 2], ["L", 3], ["E", 4], ["R", 5]]);
+  return [...facts].sort((a, b) => (priority.get(a.area_code) ?? 99) - (priority.get(b.area_code) ?? 99));
+}
+
+function pickProfitabilityTotal(data: IntelliDealerAccountSummary): IntelliDealerAccountSummary["profitability"][number] | null {
+  return data.profitability.find((fact) => fact.area_code === "T") ?? data.profitability[0] ?? null;
+}
+
+function marginTone(value: number | null | undefined): string {
+  if (value == null) return "text-[11px] text-muted-foreground tabular-nums";
+  if (value < 0) return "text-[11px] text-red-400 tabular-nums";
+  if (value < 10) return "text-[11px] text-amber-400 tabular-nums";
+  return "text-[11px] text-emerald-400 tabular-nums";
+}
+
+function Fact({ label, value }: { label: string; value: string | number | null | undefined }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-semibold capitalize text-foreground">{value ?? "—"}</p>
+    </div>
+  );
+}
+
+function Metric({ label, value, detail }: { label: string; value: string; detail?: string }) {
+  return (
+    <div className="rounded-md border border-border/70 bg-background/50 p-3">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-bold text-foreground tabular-nums">{value}</p>
+      {detail ? <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">{detail}</p> : null}
+    </div>
+  );
 }
 
 function formatShortDate(value: string | null | undefined): string | null {

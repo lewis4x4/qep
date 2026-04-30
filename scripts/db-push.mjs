@@ -64,8 +64,11 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
+import { loadLocalEnv } from "./_shared/local-env.mjs";
 
 const REPO_ROOT = process.cwd();
+loadLocalEnv(REPO_ROOT);
+
 const MIGRATIONS_DIR = join(REPO_ROOT, "supabase", "migrations");
 const CONFIG_TOML = join(REPO_ROOT, "supabase", "config.toml");
 const FILENAME_PATTERN = /^(\d{3})_[a-z0-9_]+\.sql$/;
