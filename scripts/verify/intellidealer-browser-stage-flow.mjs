@@ -82,8 +82,6 @@ try {
 
   const screenshot = resolve(artifactDir, "browser-stage-flow.png");
   await page.screenshot({ path: screenshot, fullPage: true });
-  await page.close();
-  await context.close();
 
   const run = await loadDashboardRun(runId);
   const checks = [
@@ -93,6 +91,22 @@ try {
     ...Object.entries(expectedCounts).map(([key, expected]) => check(key, run[key] === expected, `${run[key]} vs ${expected}`)),
     check("no import errors", run.import_errors_count === 0, String(run.import_errors_count)),
   ];
+
+  page.once("dialog", async (dialog) => {
+    await dialog.accept();
+  });
+  await page.getByRole("button", { name: "Discard staged", exact: true }).click();
+  await page.getByText("Discarded staged run", { exact: false }).waitFor({ timeout: 120_000 });
+  const discardedRun = await loadImportRun(runId);
+  const remainingStageRows = await countRemainingStageRows(runId);
+  checks.push(
+    check("discard control marked run cancelled", discardedRun.status === "cancelled", discardedRun.status),
+    check("discard control cleared staged rows", remainingStageRows === 0, String(remainingStageRows)),
+  );
+
+  await page.close();
+  await context.close();
+
   const failed = checks.filter((item) => !item.ok);
   if (failed.length > 0) {
     throw new Error(JSON.stringify({ verdict: "FAIL", run_id: runId, checks }, null, 2));
@@ -214,6 +228,29 @@ async function loadDashboardRun(id) {
     .maybeSingle();
   if (error || !data) throw new Error(`Could not load staged dashboard run: ${error?.message ?? "not found"}`);
   return data;
+}
+
+async function loadImportRun(id) {
+  const { data, error } = await adminClient
+    .from("qrm_intellidealer_customer_import_runs")
+    .select("id, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !data) throw new Error(`Could not load import run ${id}: ${error?.message ?? "not found"}`);
+  return data;
+}
+
+async function countRemainingStageRows(id) {
+  let total = 0;
+  for (const table of stageTables) {
+    const { count, error } = await adminClient
+      .from(table)
+      .select("id", { count: "exact", head: true })
+      .eq("run_id", id);
+    if (error) throw new Error(`Could not count ${table} for run ${id}: ${error.message}`);
+    total += count ?? 0;
+  }
+  return total;
 }
 
 async function cleanupRun(id) {

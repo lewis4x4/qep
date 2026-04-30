@@ -48,7 +48,7 @@ interface ImportRunRow {
   profitability_rows: number;
   error_count: number;
   warning_count: number;
-  metadata: { preview_only?: boolean } | null;
+  metadata: { preview_only?: boolean; audit_source?: string; staging_source?: string } | null;
   created_at: string;
   completed_at: string | null;
 }
@@ -168,6 +168,13 @@ interface StageResponse {
   status: string;
   workspace_id?: string;
   counts?: Record<StageTableKey, number>;
+}
+
+interface ImportActionResponse {
+  run_id: string;
+  status?: string;
+  result?: Record<string, unknown>;
+  discarded_counts?: Record<StageTableKey, number>;
 }
 
 type ExportKey = "master" | "contacts" | "memos" | "arAgencies" | "profitability" | "errors";
@@ -416,6 +423,12 @@ export function IntelliDealerImportDashboardPage() {
     status: "idle",
     message: "Staging is available after a passing upload preview.",
   });
+  const [runActionState, setRunActionState] = useState<{
+    runId: string;
+    action: "commit" | "discard";
+    status: "loading" | "success" | "error";
+    message: string;
+  } | null>(null);
   const dashboardQuery = useQuery({
     queryKey: ["admin", "intellidealer-import-dashboard"],
     queryFn: fetchDashboardData,
@@ -569,7 +582,7 @@ export function IntelliDealerImportDashboardPage() {
       const result = await completeIntelliDealerStage(runId);
       setStageState({
         status: "success",
-        message: `Staging complete. ${totalRows.toLocaleString()} source rows are loaded into staging. Canonical commit remains locked.`,
+        message: `Staging complete. ${totalRows.toLocaleString()} source rows are loaded into staging. Use the staged-run controls below to commit or discard this run.`,
         result,
       });
       await dashboardQuery.refetch();
@@ -577,6 +590,68 @@ export function IntelliDealerImportDashboardPage() {
       setStageState({
         status: "error",
         message: error instanceof Error ? error.message : "Staging failed.",
+      });
+    }
+  }
+
+  async function handleCommitRun(run: ImportRunRow) {
+    if (run.status !== "staged") return;
+    const typedRunId = window.prompt(
+      `This will commit staged IntelliDealer rows into canonical QRM tables for run ${run.id}.\n\nType the full run id to continue.`,
+    );
+    if (typedRunId !== run.id) {
+      setRunActionState({
+        runId: run.id,
+        action: "commit",
+        status: "error",
+        message: "Commit cancelled because the run id did not match.",
+      });
+      return;
+    }
+
+    setRunActionState({ runId: run.id, action: "commit", status: "loading", message: "Committing staged rows to canonical QRM tables..." });
+    try {
+      const result = await commitIntelliDealerRun(run.id);
+      setRunActionState({
+        runId: run.id,
+        action: "commit",
+        status: "success",
+        message: `Committed run ${result.run_id}. Refreshing reconciliation...`,
+      });
+      await dashboardQuery.refetch();
+    } catch (error) {
+      setRunActionState({
+        runId: run.id,
+        action: "commit",
+        status: "error",
+        message: error instanceof Error ? error.message : "Commit failed.",
+      });
+    }
+  }
+
+  async function handleDiscardRun(run: ImportRunRow) {
+    if (!isBrowserStagedRun(run)) return;
+    const confirmed = window.confirm(
+      `Discard staged IntelliDealer run ${run.id}?\n\nThis clears staging rows and marks the run cancelled. Canonical customer data is not changed.`,
+    );
+    if (!confirmed) return;
+
+    setRunActionState({ runId: run.id, action: "discard", status: "loading", message: "Discarding staged rows..." });
+    try {
+      const result = await discardIntelliDealerStage(run.id);
+      setRunActionState({
+        runId: run.id,
+        action: "discard",
+        status: "success",
+        message: `Discarded staged run ${result.run_id}. Canonical data was not changed.`,
+      });
+      await dashboardQuery.refetch();
+    } catch (error) {
+      setRunActionState({
+        runId: run.id,
+        action: "discard",
+        status: "error",
+        message: error instanceof Error ? error.message : "Discard failed.",
       });
     }
   }
@@ -639,8 +714,8 @@ export function IntelliDealerImportDashboardPage() {
                 {stageState.status === "staging" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
                 Stage rows
               </Button>
-              <Button type="button" variant="outline" disabled>
-                Commit locked
+              <Button type="button" variant="outline" disabled title="Commit appears on staged runs in Recent runs after protected staging completes.">
+                Commit gated
               </Button>
             </div>
           </div>
@@ -681,7 +756,7 @@ export function IntelliDealerImportDashboardPage() {
                   ))}
                 </div>
                 <p className="mt-3 text-[11px] text-muted-foreground">
-                  Staging writes only to import staging tables. Commit to canonical QRM tables stays disabled from the browser until the final commit gate is intentionally opened.
+                  Staging writes only to import staging tables. Canonical commit requires the staged-run gate in Recent runs and exact run-id confirmation.
                 </p>
               </div>
             </div>
@@ -902,6 +977,43 @@ export function IntelliDealerImportDashboardPage() {
                       <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
                         hash {formatHash(run.source_file_hash)}
                       </p>
+                      {run.status === "staged" ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-[11px]"
+                            disabled={runActionState?.status === "loading"}
+                            onClick={() => void handleCommitRun(run)}
+                          >
+                            {runActionState?.runId === run.id && runActionState.status === "loading" && runActionState.action === "commit"
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <ShieldCheck className="h-3.5 w-3.5" />}
+                            Commit staged
+                          </Button>
+                          {isBrowserStagedRun(run) ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-8 border-amber-500/40 text-[11px] text-amber-300 hover:text-amber-200"
+                              disabled={runActionState?.status === "loading"}
+                              onClick={() => void handleDiscardRun(run)}
+                            >
+                              {runActionState?.runId === run.id && runActionState.status === "loading" && runActionState.action === "discard"
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : <RefreshCcw className="h-3.5 w-3.5" />}
+                              Discard staged
+                            </Button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {runActionState?.runId === run.id ? (
+                        <p className={`mt-2 text-[11px] ${runActionState.status === "error" ? "text-red-400" : runActionState.status === "success" ? "text-emerald-400" : "text-muted-foreground"}`}>
+                          {runActionState.message}
+                        </p>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -1020,6 +1132,10 @@ async function fetchRowsForExport(definition: ExportDefinition, runId: string): 
 
 function isPreviewRun(run: Pick<ImportRunRow, "metadata">): boolean {
   return run.metadata?.preview_only === true;
+}
+
+function isBrowserStagedRun(run: Pick<ImportRunRow, "status" | "metadata">): boolean {
+  return run.status === "staged" && run.metadata?.audit_source === "browser_xlsx";
 }
 
 async function readIntelliDealerWorkbook(file: File): Promise<{
@@ -1402,6 +1518,14 @@ async function stageIntelliDealerChunk(runId: string, workspaceId: string, table
 
 async function completeIntelliDealerStage(runId: string): Promise<StageResponse> {
   return invokeIntelliDealerImport<StageResponse>({ action: "complete_stage", run_id: runId }, "IntelliDealer staging completion failed");
+}
+
+async function commitIntelliDealerRun(runId: string): Promise<ImportActionResponse> {
+  return invokeIntelliDealerImport<ImportActionResponse>({ action: "commit", run_id: runId }, "IntelliDealer commit failed");
+}
+
+async function discardIntelliDealerStage(runId: string): Promise<ImportActionResponse> {
+  return invokeIntelliDealerImport<ImportActionResponse>({ action: "discard_stage", run_id: runId }, "IntelliDealer staged discard failed");
 }
 
 async function invokeIntelliDealerImport<T>(body: Record<string, unknown>, fallbackMessage: string): Promise<T> {

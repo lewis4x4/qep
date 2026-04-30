@@ -8,8 +8,9 @@
  *   - init_stage: validates an audited preview run and clears retryable stage rows.
  *   - stage_chunk: inserts browser-mapped stage rows into a whitelisted stage table.
  *   - complete_stage: verifies stage counts and marks the run staged.
+ *   - discard_stage: clears browser-staged rows and cancels the staged run.
  *   - status:  returns a run scoped to the caller's workspace.
- *   - cancel:  marks an audited/failed preview run as cancelled.
+ *   - cancel:  marks an audited/staging/failed preview run as cancelled.
  *   - commit:  only accepts already staged runs, then delegates to the existing
  *              commit_intellidealer_customer_import RPC.
  *
@@ -21,7 +22,7 @@ import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 
-type Action = "preview" | "init_stage" | "stage_chunk" | "complete_stage" | "status" | "cancel" | "commit";
+type Action = "preview" | "init_stage" | "stage_chunk" | "complete_stage" | "discard_stage" | "status" | "cancel" | "commit";
 type StageTableKey = "master" | "contacts" | "memos" | "arAgencies" | "profitability";
 
 interface RequestBody {
@@ -96,6 +97,8 @@ Deno.serve(async (req) => {
         return await handleStageChunk(auth.supabase, auth.workspaceId, body, origin);
       case "complete_stage":
         return await handleCompleteStage(auth.supabase, auth.workspaceId, body, origin);
+      case "discard_stage":
+        return await handleDiscardStage(auth.supabase, auth.workspaceId, body, origin);
       case "status":
         return await handleStatus(auth.supabase, auth.workspaceId, body, origin);
       case "cancel":
@@ -395,6 +398,59 @@ async function handleCancel(
   return safeJsonOk({ run_id: body.run_id, status: "cancelled" }, origin);
 }
 
+async function handleDiscardStage(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  body: RequestBody,
+  origin: string | null,
+): Promise<Response> {
+  if (!body.run_id) return safeJsonError("run_id required", 400, origin);
+
+  const loaded = await loadRun(supabase, workspaceId, body.run_id);
+  if (loaded.error) return safeJsonError(loaded.error, loaded.status, origin);
+  const run = loaded.run;
+  if (!["staging", "staged", "failed"].includes(run.status)) {
+    return safeJsonError(`Only staging, staged, or failed browser runs can be discarded. Current status is ${run.status}.`, 409, origin);
+  }
+  if (!isRecord(run.metadata) || run.metadata.audit_source !== "browser_xlsx") {
+    return safeJsonError("Only browser-created IntelliDealer runs can be discarded through this action", 409, origin);
+  }
+
+  const counts = await countStageRows(supabase, workspaceId, body.run_id);
+  if (counts.error) return safeJsonError(counts.error, 500, origin);
+
+  for (const table of Object.values(STAGE_TABLES)) {
+    const { error } = await supabase.from(table).delete().eq("run_id", body.run_id).eq("workspace_id", workspaceId);
+    if (error) return safeJsonError(`failed to clear ${table}: ${error.message}`, 500, origin);
+  }
+  const { error: clearError } = await supabase
+    .from("qrm_intellidealer_customer_import_errors")
+    .delete()
+    .eq("run_id", body.run_id)
+    .eq("workspace_id", workspaceId);
+  if (clearError) return safeJsonError(`failed to clear import errors: ${clearError.message}`, 500, origin);
+
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("qrm_intellidealer_customer_import_runs")
+    .update({
+      status: "cancelled",
+      completed_at: now,
+      error_count: 0,
+      metadata: {
+        ...run.metadata,
+        discarded_at: now,
+        discarded_stage_counts: counts.counts,
+        discarded_by_action: "discard_stage",
+      },
+    })
+    .eq("id", body.run_id)
+    .eq("workspace_id", workspaceId);
+  if (error) return safeJsonError(`failed to discard staged import run: ${error.message}`, 500, origin);
+
+  return safeJsonOk({ run_id: body.run_id, status: "cancelled", discarded_counts: counts.counts }, origin);
+}
+
 async function handleCommit(
   supabase: SupabaseClient,
   workspaceId: string,
@@ -412,7 +468,7 @@ async function handleCommit(
   if (loadError) return safeJsonError(`failed to load import run: ${loadError.message}`, 500, origin);
   if (!run) return safeJsonError("import run not found", 404, origin);
   if (run.status !== "staged") {
-    return safeJsonError("Only staged runs can be committed. Uploaded previews are audit-only until browser staging is wired.", 409, origin);
+    return safeJsonError("Only staged runs can be committed.", 409, origin);
   }
 
   const { data, error } = await supabase.rpc("commit_intellidealer_customer_import", {

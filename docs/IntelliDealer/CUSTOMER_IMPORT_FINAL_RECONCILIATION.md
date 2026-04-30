@@ -10,7 +10,7 @@ Production target:
 
 - Supabase project: `iciddijgonywtxoelous`
 - Netlify production URL: `https://qualityequipmentparts.netlify.app`
-- Production deploy ID: `69f35778c10524580f6ae3d4`
+- Production deploy ID: `69f35b9c02a1997df0e10e04`
 - Import run ID: `df74305e-d37a-4e4b-be5e-457633b2cd1d`
 
 ## Production Reconciliation
@@ -93,12 +93,13 @@ The dashboard renders:
 - Row-level CSV export controls for safe staged customer master, contacts, memos, A/R agency assignments, profitability, and import-error rows.
 - Upload-preview controls for browser-auditing a new `.xlsx`, storing it in a private bucket, and recording an audit-only preview run.
 - Protected staging controls that reuse the browser-audited workbook rows, start staging through the `intellidealer-customer-import` edge gate, insert stage rows through Supabase RLS, and complete staging only after exact source/stage counts match.
-- Commit from uploaded preview remains locked until the final canonical commit/rollback gate is intentionally opened.
+- Commit from uploaded preview remains gated until a run reaches `staged`; staged runs expose exact-run-id confirmation before canonical commit.
+- Browser-staged runs can be discarded from the dashboard, which clears staging rows and marks the run cancelled without touching canonical customer data.
 - Recent run history and recent import errors.
 
 The dashboard count path uses `qrm_intellidealer_customer_import_run_counts`, a count-only elevated RPC, so the browser no longer depends on the RLS-heavy reconciliation view and does not receive sensitive A/R card row data.
 
-The browser staging production exercise recorded test run `3a77be82-c3b1-414f-a236-2a0bf091bff6`, loaded exact stage counts (`5,136` master, `4,657` contacts, `1,179` memos, `19,466` A/R agencies, `9,894` profitability), completed the run to `staged`, verified zero import errors, and recorded zero browser console or 5xx response errors. The test run and uploaded workbook object were deleted. The committed production run remains the operational baseline.
+The browser staging production exercise recorded test run `183a569d-41a4-4192-a5eb-570f69f49e76`, loaded exact stage counts (`5,136` master, `4,657` contacts, `1,179` memos, `19,466` A/R agencies, `9,894` profitability), completed the run to `staged`, verified zero import errors, exercised the dashboard discard control, verified the run changed to `cancelled`, verified `0` staged rows remained, and recorded zero browser console or 5xx response errors. The test run and uploaded workbook object were deleted. The committed production run remains the operational baseline.
 
 ## Production Browser Smoke
 
@@ -175,9 +176,9 @@ The gate compares the current local workbook to the committed production import.
 
 ## Remaining Follow-Up
 
-The customer import, canonical data load, redaction, deployment, admin dashboard, safe row-level export controls, Account 360 IntelliDealer drill-downs, rerun-safety gate, and UI smoke test are complete.
+The customer import, canonical data load, redaction, deployment, admin dashboard, protected browser staging, staged-run discard control, safe row-level export controls, Account 360 IntelliDealer drill-downs, rerun-safety gate, and UI smoke test are complete.
 
 Recommended next slice:
 
-- Add admin canonical commit and rollback controls for staged browser runs so future customer imports no longer depend on scripts after staging approval.
+- Run a controlled non-production canonical commit rehearsal for a browser-staged copy before using the browser commit gate on a future production import.
 - Migrate legacy Supabase call sites to the regenerated `Database` type slice-by-slice; the shared client remains broad until old JSON/nullability and stale select-shape debt is resolved.

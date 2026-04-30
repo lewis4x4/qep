@@ -246,7 +246,7 @@ async function smokeAdminDashboard(context) {
   await page.getByText("Canonical commit remains locked", { exact: false }).waitFor({ timeout: 20_000 });
   await page.getByRole("button", { name: "Choose workbook", exact: true }).waitFor({ timeout: 20_000 });
   await page.getByRole("button", { name: "Stage rows", exact: true }).waitFor({ timeout: 20_000 });
-  await page.getByRole("button", { name: "Commit locked", exact: true }).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: "Commit gated", exact: true }).waitFor({ timeout: 20_000 });
   await page.getByText("Row-level export controls", { exact: true }).waitFor({ timeout: 20_000 });
   await page.getByText("Raw card identifiers and raw source JSON are not selected", { exact: false }).waitFor({ timeout: 20_000 });
   await page.getByText("SHA-256 hash", { exact: true }).waitFor({ timeout: 20_000 });
