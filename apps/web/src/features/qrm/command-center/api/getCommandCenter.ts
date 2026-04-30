@@ -17,24 +17,10 @@ import type {
   CommandCenterScope,
 } from "./commandCenter.types";
 
-interface InvokeOptions {
-  body?: Record<string, unknown>;
-}
-
-interface InvokeResult<T> {
-  data: T | null;
-  error: { message?: string } | null;
-}
-
-interface FunctionsWithInvoke {
-  invoke: <T>(name: string, opts?: InvokeOptions) => Promise<InvokeResult<T>>;
-}
-
 export async function getCommandCenter(
   scope: CommandCenterScope,
 ): Promise<CommandCenterResponse> {
-  const functions = supabase.functions as unknown as FunctionsWithInvoke;
-  const { data, error } = await functions.invoke<CommandCenterResponse>(
+  const { data, error } = await supabase.functions.invoke<CommandCenterResponse>(
     "qrm-command-center",
     { body: { scope } },
   );
