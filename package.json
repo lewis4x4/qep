@@ -53,7 +53,8 @@
     "intellidealer:customer:verify": "bun ./scripts/verify-intellidealer-customer-import.mjs",
     "intellidealer:customer:rerun-check": "bun ./scripts/verify-intellidealer-customer-rerun-safety.mjs",
     "intellidealer:customer:commit-rehearsal": "bun ./scripts/verify/intellidealer-canonical-commit-rehearsal.mjs",
-    "intellidealer:production:smoke": "bun ./scripts/verify/intellidealer-production-smoke.mjs"
+    "intellidealer:production:smoke": "bun ./scripts/verify/intellidealer-production-smoke.mjs",
+    "qrm:sequences:production:smoke": "bun ./scripts/verify/qrm-follow-up-sequence-production-smoke.mjs"
   },
   "devDependencies": {
     "playwright": "^1.52.0",
