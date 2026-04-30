@@ -226,23 +226,6 @@ type QrmViews = BaseViews & {
     };
     Relationships: [];
   };
-  // Phase 0 P0.5 — currently-active role blend rows per profile.
-  // Source: supabase/migrations/210_profile_role_blend.sql.
-  // Until database.types.ts is regenerated against the post-210 schema,
-  // this typed-shim is the read surface for the blend hook.
-  v_profile_active_role_blend: {
-    Row: {
-      id: string;
-      profile_id: string;
-      iron_role: "iron_manager" | "iron_advisor" | "iron_woman" | "iron_man";
-      weight: number;
-      effective_from: string;
-      effective_to: string | null;
-      reason: string | null;
-      iron_role_display: string;
-    };
-    Relationships: [];
-  };
 };
 
 type QrmEnums = BaseEnums & {
