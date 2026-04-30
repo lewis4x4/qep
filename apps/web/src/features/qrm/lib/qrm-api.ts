@@ -26,6 +26,10 @@ type QrmContactRow = QrmDatabase["public"]["Tables"]["crm_contacts"]["Row"];
 type QrmCompanyRow = QrmDatabase["public"]["Tables"]["crm_companies"]["Row"];
 type QrmActivityRow = QrmDatabase["public"]["Tables"]["crm_activities"]["Row"];
 type QrmActivityTemplateRow = QrmDatabase["public"]["Tables"]["crm_activity_templates"]["Row"];
+type ListCrmContactRow =
+  | QrmDatabase["public"]["Functions"]["list_crm_contacts_page"]["Returns"][number]
+  | QrmDatabase["public"]["Functions"]["list_crm_contacts_for_company_subtree_page"]["Returns"][number];
+type ListCrmCompanyRow = QrmDatabase["public"]["Functions"]["list_crm_companies_page"]["Returns"][number];
 
 function metadataText(row: QrmContactRow, key: string): string | null {
   const metadata = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
@@ -73,6 +77,33 @@ function toContactSummary(row: QrmContactRow): QrmContactSummary {
   };
 }
 
+function toListContactSummary(row: ListCrmContactRow): QrmContactSummary {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    dgeCustomerProfileId: row.dge_customer_profile_id ?? null,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    email: row.email ?? null,
+    phone: row.phone ?? null,
+    cell: null,
+    directPhone: null,
+    birthDate: null,
+    smsOptIn: null,
+    title: row.title ?? null,
+    primaryCompanyId: row.primary_company_id ?? null,
+    assignedRepId: row.assigned_rep_id ?? null,
+    mergedIntoContactId: row.merged_into_contact_id ?? null,
+    sourceCustomerNumber: null,
+    sourceContactNumber: null,
+    sourceStatusCode: null,
+    sourceSalespersonCode: null,
+    myDealerUser: null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function toCompanySummary(row: QrmCompanyRow): QrmCompanySummary {
   return {
     id: row.id,
@@ -98,6 +129,36 @@ function toCompanySummary(row: QrmCompanyRow): QrmCompanySummary {
     state: row.state,
     postalCode: row.postal_code,
     country: row.country,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toListCompanySummary(row: ListCrmCompanyRow): QrmCompanySummary {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    name: row.name,
+    parentCompanyId: row.parent_company_id ?? null,
+    assignedRepId: row.assigned_rep_id ?? null,
+    legacyCustomerNumber: row.legacy_customer_number ?? null,
+    status: null,
+    productCategory: null,
+    arType: null,
+    paymentTermsCode: null,
+    termsCode: null,
+    territoryCode: null,
+    pricingLevel: null,
+    doNotContact: null,
+    optOutSalePi: null,
+    search1: row.search_1 ?? null,
+    search2: row.search_2 ?? null,
+    addressLine1: row.address_line_1 ?? null,
+    addressLine2: row.address_line_2 ?? null,
+    city: row.city ?? null,
+    state: row.state ?? null,
+    postalCode: row.postal_code ?? null,
+    country: row.country ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -266,28 +327,22 @@ export async function listCrmContacts(
 ): Promise<QrmPageResult<QrmContactSummary>> {
   const decodedCursor = decodeCursor<ContactListCursor>(cursor);
   const treeRoot = options?.treeRootCompanyId?.trim();
-
-  const rpcClient = crmSupabase as typeof crmSupabase & {
-    rpc: (
-      fn: "list_crm_contacts_page" | "list_crm_contacts_for_company_subtree_page",
-      args: Record<string, string | number | null>,
-    ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
-  };
+  const normalizedSearch = search.trim() || undefined;
 
   const { data, error } = treeRoot
-    ? await rpcClient.rpc("list_crm_contacts_for_company_subtree_page", {
+    ? await crmSupabase.rpc("list_crm_contacts_for_company_subtree_page", {
         p_company_id: treeRoot,
-        p_search: search.trim() || null,
-        p_after_last_name: decodedCursor?.lastName ?? null,
-        p_after_first_name: decodedCursor?.firstName ?? null,
-        p_after_id: decodedCursor?.id ?? null,
+        p_search: normalizedSearch,
+        p_after_last_name: decodedCursor?.lastName,
+        p_after_first_name: decodedCursor?.firstName,
+        p_after_id: decodedCursor?.id,
         p_limit: CONTACTS_PAGE_SIZE + 1,
       })
-    : await rpcClient.rpc("list_crm_contacts_page", {
-        p_search: search.trim() || null,
-        p_after_last_name: decodedCursor?.lastName ?? null,
-        p_after_first_name: decodedCursor?.firstName ?? null,
-        p_after_id: decodedCursor?.id ?? null,
+    : await crmSupabase.rpc("list_crm_contacts_page", {
+        p_search: normalizedSearch,
+        p_after_last_name: decodedCursor?.lastName,
+        p_after_first_name: decodedCursor?.firstName,
+        p_after_id: decodedCursor?.id,
         p_limit: CONTACTS_PAGE_SIZE + 1,
       });
 
@@ -295,11 +350,11 @@ export async function listCrmContacts(
     throw new Error(error.message);
   }
 
-  const rows = (data ?? []) as QrmContactRow[];
+  const rows = data ?? [];
   const visibleRows = rows.slice(0, CONTACTS_PAGE_SIZE);
   const nextRow = rows.length > CONTACTS_PAGE_SIZE ? visibleRows[visibleRows.length - 1] : null;
   return {
-    items: visibleRows.map(toContactSummary),
+    items: visibleRows.map(toListContactSummary),
     nextCursor: nextRow
       ? encodeCursor({
           lastName: nextRow.last_name,
@@ -348,31 +403,21 @@ export async function listCrmContactsByIds(contactIds: string[]): Promise<QrmCon
 
 export async function listCrmCompanies(search: string, cursor?: string | null): Promise<QrmPageResult<QrmCompanySummary>> {
   const decodedCursor = decodeCursor<CompanyListCursor>(cursor);
-  const { data, error } = await (crmSupabase as typeof crmSupabase & {
-    rpc: (
-      fn: "list_crm_companies_page",
-      args: {
-        p_search: string | null;
-        p_after_name: string | null;
-        p_after_id: string | null;
-        p_limit: number;
-      },
-    ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
-  }).rpc("list_crm_companies_page", {
-    p_search: search.trim() || null,
-    p_after_name: decodedCursor?.name ?? null,
-    p_after_id: decodedCursor?.id ?? null,
+  const { data, error } = await crmSupabase.rpc("list_crm_companies_page", {
+    p_search: search.trim() || undefined,
+    p_after_name: decodedCursor?.name,
+    p_after_id: decodedCursor?.id,
     p_limit: COMPANIES_PAGE_SIZE + 1,
   });
   if (error) {
     throw new Error(error.message);
   }
 
-  const rows = (data ?? []) as QrmCompanyRow[];
+  const rows = data ?? [];
   const visibleRows = rows.slice(0, COMPANIES_PAGE_SIZE);
   const nextRow = rows.length > COMPANIES_PAGE_SIZE ? visibleRows[visibleRows.length - 1] : null;
   return {
-    items: visibleRows.map(toCompanySummary),
+    items: visibleRows.map(toListCompanySummary),
     nextCursor: nextRow
       ? encodeCursor({
           name: nextRow.name,
