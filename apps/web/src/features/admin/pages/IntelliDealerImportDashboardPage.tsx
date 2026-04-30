@@ -120,6 +120,7 @@ interface PreviewResponse {
 
 type WorkbookRow = Record<string, string>;
 type StageTableKey = "master" | "contacts" | "memos" | "arAgencies" | "profitability";
+type StageCounts = Record<StageTableKey, number>;
 type StageRow = Record<string, unknown>;
 type StageInsertRows = {
   master: Tables["qrm_intellidealer_customer_master_stage"]["Insert"][];
@@ -149,14 +150,14 @@ interface StageResponse {
   run_id: string;
   status: string;
   workspace_id?: string;
-  counts?: Record<StageTableKey, number>;
+  counts?: StageCounts;
 }
 
 interface ImportActionResponse {
   run_id: string;
   status?: string;
   result?: Record<string, unknown>;
-  discarded_counts?: Record<StageTableKey, number>;
+  discarded_counts?: StageCounts;
 }
 
 interface ImportPreflightResponse {
@@ -167,8 +168,8 @@ interface ImportPreflightResponse {
   preflight_expires_in_seconds: number;
   checks: Array<{ name: string; ok: boolean; detail: string }>;
   warnings: string[];
-  expected_counts: Record<StageTableKey, number>;
-  staged_counts: Record<StageTableKey, number>;
+  expected_counts: StageCounts;
+  staged_counts: StageCounts;
 }
 
 type ExportKey = "master" | "contacts" | "memos" | "arAgencies" | "profitability" | "errors";
@@ -1621,11 +1622,17 @@ async function startIntelliDealerPreview(input: {
   file_size_bytes: number;
   audit: PreviewAudit;
 }): Promise<PreviewResponse> {
-  return invokeIntelliDealerImport<PreviewResponse>({ action: "preview", ...input }, "IntelliDealer preview failed");
+  return toPreviewResponse(
+    await invokeIntelliDealerImport({ action: "preview", ...input }, "IntelliDealer preview failed"),
+    "IntelliDealer preview returned an invalid response.",
+  );
 }
 
 async function startIntelliDealerStage(runId: string): Promise<StageResponse> {
-  return invokeIntelliDealerImport<StageResponse>({ action: "init_stage", run_id: runId }, "IntelliDealer staging start failed");
+  return toStageResponse(
+    await invokeIntelliDealerImport({ action: "init_stage", run_id: runId }, "IntelliDealer staging start failed"),
+    "IntelliDealer staging start returned an invalid response.",
+  );
 }
 
 async function stageIntelliDealerChunk(runId: string, workspaceId: string, tableKey: StageTableKey, rows: StageRow[]): Promise<void> {
@@ -1670,27 +1677,39 @@ async function insertStageRows(tableKey: StageTableKey, rows: StageRow[]): Promi
 }
 
 async function completeIntelliDealerStage(runId: string): Promise<StageResponse> {
-  return invokeIntelliDealerImport<StageResponse>({ action: "complete_stage", run_id: runId }, "IntelliDealer staging completion failed");
+  return toStageResponse(
+    await invokeIntelliDealerImport({ action: "complete_stage", run_id: runId }, "IntelliDealer staging completion failed"),
+    "IntelliDealer staging completion returned an invalid response.",
+  );
 }
 
 async function preflightIntelliDealerCommit(runId: string): Promise<ImportPreflightResponse> {
-  return invokeIntelliDealerImport<ImportPreflightResponse>({ action: "preflight_commit", run_id: runId }, "IntelliDealer commit preflight failed");
+  return toPreflightResponse(
+    await invokeIntelliDealerImport({ action: "preflight_commit", run_id: runId }, "IntelliDealer commit preflight failed"),
+    "IntelliDealer commit preflight returned an invalid response.",
+  );
 }
 
 async function commitIntelliDealerRun(runId: string, preflightToken: string): Promise<ImportActionResponse> {
-  return invokeIntelliDealerImport<ImportActionResponse>({ action: "commit", run_id: runId, preflight_token: preflightToken }, "IntelliDealer commit failed");
+  return toImportActionResponse(
+    await invokeIntelliDealerImport({ action: "commit", run_id: runId, preflight_token: preflightToken }, "IntelliDealer commit failed"),
+    "IntelliDealer commit returned an invalid response.",
+  );
 }
 
 async function discardIntelliDealerStage(runId: string): Promise<ImportActionResponse> {
-  return invokeIntelliDealerImport<ImportActionResponse>({ action: "discard_stage", run_id: runId }, "IntelliDealer staged discard failed");
+  return toImportActionResponse(
+    await invokeIntelliDealerImport({ action: "discard_stage", run_id: runId }, "IntelliDealer staged discard failed"),
+    "IntelliDealer staged discard returned an invalid response.",
+  );
 }
 
-async function invokeIntelliDealerImport<T>(body: Record<string, unknown>, fallbackMessage: string): Promise<T> {
+async function invokeIntelliDealerImport(body: Record<string, unknown>, fallbackMessage: string): Promise<unknown> {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
   if (!token) throw new Error("Not authenticated");
 
-  const { data, error } = await supabase.functions.invoke("intellidealer-customer-import", {
+  const { data, error } = await supabase.functions.invoke<unknown>("intellidealer-customer-import", {
     body,
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -1701,7 +1720,117 @@ async function invokeIntelliDealerImport<T>(body: Record<string, unknown>, fallb
         : error.message;
     throw new Error(message || fallbackMessage);
   }
-  return data as T;
+  return data;
+}
+
+function toPreviewResponse(payload: unknown, errorMessage: string): PreviewResponse {
+  if (!isRecord(payload) || typeof payload.run_id !== "string" || typeof payload.status !== "string") {
+    throw new Error(errorMessage);
+  }
+  if (typeof payload.source_file_hash !== "string" || typeof payload.file_size_bytes !== "number" || !isPreviewAudit(payload.audit)) {
+    throw new Error(errorMessage);
+  }
+  return {
+    run_id: payload.run_id,
+    status: payload.status,
+    source_file_hash: payload.source_file_hash,
+    file_size_bytes: payload.file_size_bytes,
+    audit: payload.audit,
+  };
+}
+
+function toStageResponse(payload: unknown, errorMessage: string): StageResponse {
+  if (!isRecord(payload) || typeof payload.run_id !== "string" || typeof payload.status !== "string") {
+    throw new Error(errorMessage);
+  }
+  return {
+    run_id: payload.run_id,
+    status: payload.status,
+    workspace_id: typeof payload.workspace_id === "string" ? payload.workspace_id : undefined,
+    counts: toOptionalStageCounts(payload.counts, errorMessage),
+  };
+}
+
+function toPreflightResponse(payload: unknown, errorMessage: string): ImportPreflightResponse {
+  if (
+    !isRecord(payload)
+    || typeof payload.run_id !== "string"
+    || typeof payload.status !== "string"
+    || typeof payload.ok !== "boolean"
+    || !(typeof payload.preflight_token === "string" || payload.preflight_token === null)
+    || typeof payload.preflight_expires_in_seconds !== "number"
+    || !Array.isArray(payload.checks)
+    || !Array.isArray(payload.warnings)
+  ) {
+    throw new Error(errorMessage);
+  }
+  const expectedCounts = toStageCounts(payload.expected_counts);
+  const stagedCounts = toStageCounts(payload.staged_counts);
+  if (!expectedCounts || !stagedCounts) throw new Error(errorMessage);
+  const checks = payload.checks.map((check) => {
+    if (!isRecord(check) || typeof check.name !== "string" || typeof check.ok !== "boolean" || typeof check.detail !== "string") {
+      throw new Error(errorMessage);
+    }
+    return { name: check.name, ok: check.ok, detail: check.detail };
+  });
+  const warnings = payload.warnings.map((warning) => {
+    if (typeof warning !== "string") throw new Error(errorMessage);
+    return warning;
+  });
+  return {
+    run_id: payload.run_id,
+    status: payload.status,
+    ok: payload.ok,
+    preflight_token: payload.preflight_token,
+    preflight_expires_in_seconds: payload.preflight_expires_in_seconds,
+    checks,
+    warnings,
+    expected_counts: expectedCounts,
+    staged_counts: stagedCounts,
+  };
+}
+
+function toImportActionResponse(payload: unknown, errorMessage: string): ImportActionResponse {
+  if (!isRecord(payload) || typeof payload.run_id !== "string") throw new Error(errorMessage);
+  if (payload.result !== undefined && !isRecord(payload.result)) throw new Error(errorMessage);
+  return {
+    run_id: payload.run_id,
+    status: typeof payload.status === "string" ? payload.status : undefined,
+    result: payload.result,
+    discarded_counts: toOptionalStageCounts(payload.discarded_counts, errorMessage),
+  };
+}
+
+function toOptionalStageCounts(value: unknown, errorMessage: string): StageCounts | undefined {
+  if (value === undefined) return undefined;
+  const counts = toStageCounts(value);
+  if (!counts) throw new Error(errorMessage);
+  return counts;
+}
+
+function toStageCounts(value: unknown): StageCounts | null {
+  if (!isRecord(value)) return null;
+  const counts = {
+    master: value.master,
+    contacts: value.contacts,
+    memos: value.memos,
+    arAgencies: value.arAgencies,
+    profitability: value.profitability,
+  };
+  if (!Object.values(counts).every((count) => typeof count === "number" && Number.isFinite(count))) return null;
+  return counts as StageCounts;
+}
+
+function isPreviewAudit(value: unknown): value is PreviewAudit {
+  if (!isRecord(value) || typeof value.ok !== "boolean" || !isRecord(value.counts)) return false;
+  if (!Array.isArray(value.sheets) || !Array.isArray(value.errors) || !Array.isArray(value.warnings)) return false;
+  return (
+    typeof value.counts.master_rows === "number"
+    && typeof value.counts.contact_rows === "number"
+    && typeof value.counts.contact_memo_rows === "number"
+    && typeof value.counts.ar_agency_rows === "number"
+    && typeof value.counts.profitability_rows === "number"
+  );
 }
 
 async function withRetry(operation: () => Promise<void>, label: string, attempts = 3): Promise<void> {
