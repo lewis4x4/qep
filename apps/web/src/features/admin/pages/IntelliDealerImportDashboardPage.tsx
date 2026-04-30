@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle2, Clock3, Database, Download, FileSpreadsheet, Fingerprint, Loader2, RefreshCcw, ShieldCheck } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock3, Database, Download, FileSpreadsheet, Fingerprint, Loader2, RefreshCcw, ShieldCheck, UploadCloud } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ interface ImportRunRow {
   profitability_rows: number;
   error_count: number;
   warning_count: number;
+  metadata: { preview_only?: boolean } | null;
   created_at: string;
   completed_at: string | null;
 }
@@ -93,6 +94,41 @@ interface DashboardData {
   errors: ImportErrorRow[];
 }
 
+interface PreviewAuditSheet {
+  name: string;
+  expected_rows: number;
+  actual_rows: number;
+  ok: boolean;
+}
+
+interface PreviewAuditIssue {
+  severity: "error" | "warning";
+  code: string;
+  message: string;
+}
+
+interface PreviewAudit {
+  ok: boolean;
+  sheets: PreviewAuditSheet[];
+  errors: PreviewAuditIssue[];
+  warnings: PreviewAuditIssue[];
+  counts: {
+    master_rows: number;
+    contact_rows: number;
+    contact_memo_rows: number;
+    ar_agency_rows: number;
+    profitability_rows: number;
+  };
+}
+
+interface PreviewResponse {
+  run_id: string;
+  status: string;
+  source_file_hash: string;
+  file_size_bytes: number;
+  audit: PreviewAudit;
+}
+
 type ExportKey = "master" | "contacts" | "memos" | "arAgencies" | "profitability" | "errors";
 
 type ExportRow = Record<string, unknown>;
@@ -131,6 +167,17 @@ const EMPTY_COUNTS: CountSummary = {
   redactedCardRows: 0,
   importErrors: 0,
 };
+
+const EXPECTED_PREVIEW_SHEETS = {
+  MAST: 5_136,
+  "Cust Contact Memos": 1_179,
+  "AR AGENCY": 19_466,
+  CONTACTS: 4_657,
+  PROFITABILITY: 9_894,
+} as const;
+
+const VALID_PROFITABILITY_AREAS = new Set(["L", "S", "P", "R", "E", "T"]);
+const YES_NO_VALUES = new Set(["", "Y", "N"]);
 
 const EXPORT_DEFINITIONS: ExportDefinition[] = [
   {
@@ -289,11 +336,20 @@ const EXPORT_DEFINITIONS: ExportDefinition[] = [
 ];
 
 export function IntelliDealerImportDashboardPage() {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [exportState, setExportState] = useState<{
     key: ExportKey;
     status: "loading" | "success" | "error";
     message: string;
   } | null>(null);
+  const [previewState, setPreviewState] = useState<{
+    status: "idle" | "uploading" | "success" | "error";
+    message: string;
+    result?: PreviewResponse;
+  }>({
+    status: "idle",
+    message: "Choose the IntelliDealer Customer Master workbook to audit it before staging.",
+  });
   const dashboardQuery = useQuery({
     queryKey: ["admin", "intellidealer-import-dashboard"],
     queryFn: fetchDashboardData,
@@ -371,6 +427,40 @@ export function IntelliDealerImportDashboardPage() {
     }
   }
 
+  async function handlePreviewFile(file: File) {
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      setPreviewState({ status: "error", message: "Only .xlsx IntelliDealer customer workbooks are supported." });
+      return;
+    }
+
+    setPreviewState({ status: "uploading", message: `Auditing and uploading ${file.name}...` });
+    try {
+      const audited = await auditIntelliDealerWorkbook(file);
+      const uploaded = await uploadIntelliDealerWorkbook(file);
+      const result = await startIntelliDealerPreview({
+        ...uploaded,
+        audit: audited.audit,
+        source_file_hash: audited.source_file_hash,
+        file_size_bytes: file.size,
+      });
+      setPreviewState({
+        status: "success",
+        message: result.audit.ok
+          ? "Preview audit passed. This run is audit-only and has not staged or committed rows."
+          : "Preview audit completed with blocking errors. No rows were staged or committed.",
+        result,
+      });
+      await dashboardQuery.refetch();
+    } catch (error) {
+      setPreviewState({
+        status: "error",
+        message: error instanceof Error ? error.message : "Preview upload failed.",
+      });
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-4 sm:px-6 lg:px-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -385,6 +475,85 @@ export function IntelliDealerImportDashboardPage() {
           <Link to="/admin">Back to admin</Link>
         </Button>
       </div>
+
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="rounded-md border border-amber-400/25 bg-amber-400/10 p-2 text-amber-300">
+                <UploadCloud className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Upload preview</h2>
+                <p className="mt-1 max-w-3xl text-xs text-muted-foreground">
+                  Preview audits the workbook and records an audited run only. It does not stage or commit canonical rows.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void handlePreviewFile(file);
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={previewState.status === "uploading"}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {previewState.status === "uploading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                Choose workbook
+              </Button>
+              <Button type="button" variant="outline" disabled>
+                Commit locked
+              </Button>
+            </div>
+          </div>
+          <div className={`mt-4 rounded-md border p-3 text-xs ${previewState.status === "error" ? "border-red-500/25 bg-red-500/5 text-red-300" : previewState.status === "success" ? "border-emerald-500/25 bg-emerald-500/5 text-emerald-300" : "border-border/70 bg-background/40 text-muted-foreground"}`}>
+            {previewState.message}
+          </div>
+          {previewState.result ? (
+            <div className="mt-4 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
+              <div className="rounded-md border border-border/70 bg-background/40 p-3">
+                <p className="text-xs font-semibold text-foreground">Preview result</p>
+                <div className="mt-3 grid gap-2">
+                  <DetailRow label="Run id" value={previewState.result.run_id} mono />
+                  <DetailRow label="Status" value={previewState.result.status} />
+                  <DetailRow label="SHA-256 hash" value={formatHash(previewState.result.source_file_hash)} mono />
+                  <DetailRow label="File size" value={`${previewState.result.file_size_bytes.toLocaleString()} bytes`} />
+                  <DetailRow label="Errors" value={previewState.result.audit.errors.length.toLocaleString()} />
+                  <DetailRow label="Warnings" value={previewState.result.audit.warnings.length.toLocaleString()} />
+                </div>
+              </div>
+              <div className="rounded-md border border-border/70 bg-background/40 p-3">
+                <p className="text-xs font-semibold text-foreground">Workbook audit counts</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {previewState.result.audit.sheets.map((sheet) => (
+                    <div key={sheet.name} className="rounded border border-border/60 bg-background/40 p-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold text-foreground">{sheet.name}</p>
+                        {sheet.ok ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> : <AlertCircle className="h-3.5 w-3.5 text-red-400" />}
+                      </div>
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        {sheet.actual_rows.toLocaleString()} of {sheet.expected_rows.toLocaleString()} expected rows
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-[11px] text-muted-foreground">
+                  Commit from uploaded preview is locked until browser staging is wired. Existing script-based staging remains the controlled path.
+                </p>
+              </div>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
       {dashboardQuery.isLoading ? (
         <Card className="p-8 text-center text-sm text-muted-foreground">
@@ -588,7 +757,9 @@ export function IntelliDealerImportDashboardPage() {
                     <div key={run.id} className="rounded-md border border-border/70 bg-background/40 p-3">
                       <div className="flex items-center justify-between gap-3">
                         <p className="truncate text-xs font-semibold text-foreground">{run.source_file_name ?? "Unknown source"}</p>
-                        <Badge variant="outline" className="capitalize">{run.status}</Badge>
+                        <Badge variant="outline" className="capitalize">
+                          {isPreviewRun(run) ? `${run.status} preview` : run.status}
+                        </Badge>
                       </div>
                       <p className="mt-1 font-mono text-[10px] text-muted-foreground">{run.id}</p>
                       <p className="mt-1 text-[10px] text-muted-foreground">
@@ -635,13 +806,13 @@ export function IntelliDealerImportDashboardPage() {
 async function fetchDashboardData(): Promise<DashboardData> {
   const runsResult = await db
     .from<DashboardRunRow[]>("qrm_intellidealer_customer_import_dashboard")
-    .select("id, status, source_file_name, source_file_hash, master_rows, contact_rows, contact_memo_rows, ar_agency_rows, profitability_rows, error_count, warning_count, created_at, completed_at, master_stage_count, contacts_stage_count, contact_memos_stage_count, contact_memos_nonblank_count, ar_agency_stage_count, profitability_stage_count, mapped_master_count, mapped_contacts_count, mapped_ar_agency_count, mapped_profitability_count, canonical_ar_agencies_count, canonical_profitability_facts_count, raw_card_rows_count, redacted_card_rows_count, import_errors_count")
+    .select("id, status, source_file_name, source_file_hash, master_rows, contact_rows, contact_memo_rows, ar_agency_rows, profitability_rows, error_count, warning_count, metadata, created_at, completed_at, master_stage_count, contacts_stage_count, contact_memos_stage_count, contact_memos_nonblank_count, ar_agency_stage_count, profitability_stage_count, mapped_master_count, mapped_contacts_count, mapped_ar_agency_count, mapped_profitability_count, canonical_ar_agencies_count, canonical_profitability_facts_count, raw_card_rows_count, redacted_card_rows_count, import_errors_count")
     .order("created_at", { ascending: false })
     .limit(10);
   if (runsResult.error) throw new Error(runsResult.error.message ?? "Failed to load import runs");
 
   const runs = runsResult.data ?? [];
-  const latestRun = runs[0] ?? null;
+  const latestRun = runs.find((run) => !isPreviewRun(run)) ?? null;
   if (!latestRun) return { runs, latestRun: null, counts: null, errors: [] };
 
   const errorsResult = await db
@@ -698,6 +869,204 @@ async function fetchRowsForExport(definition: ExportDefinition, runId: string): 
     if (batch.length < EXPORT_BATCH_SIZE) break;
   }
   return rows;
+}
+
+function isPreviewRun(run: Pick<ImportRunRow, "metadata">): boolean {
+  return run.metadata?.preview_only === true;
+}
+
+async function auditIntelliDealerWorkbook(file: File): Promise<{ audit: PreviewAudit; source_file_hash: string }> {
+  const buffer = await file.arrayBuffer();
+  const [xlsxModule, source_file_hash] = await Promise.all([
+    import("xlsx"),
+    sha256Hex(buffer),
+  ]);
+  const XLSX = xlsxModule as typeof import("xlsx");
+  const workbook = XLSX.read(new Uint8Array(buffer), { type: "array" });
+  const sheetMap = new Map(workbook.SheetNames.map((name) => [name.toLowerCase(), name]));
+  const readSheet = (name: string): Array<Record<string, string>> => {
+    const sheetName = sheetMap.get(name.toLowerCase());
+    const sheet = sheetName ? workbook.Sheets[sheetName] : null;
+    if (!sheet) return [];
+    return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false }).map((row) => {
+      const normalized: Record<string, string> = {};
+      for (const [key, value] of Object.entries(row)) normalized[String(key).trim()] = String(value ?? "").trim();
+      return normalized;
+    });
+  };
+
+  const rows = {
+    master: readSheet("MAST"),
+    contactMemos: readSheet("Cust Contact Memos"),
+    arAgencies: readSheet("AR AGENCY"),
+    contacts: readSheet("CONTACTS"),
+    profitability: readSheet("PROFITABILITY"),
+  };
+  const errors: PreviewAuditIssue[] = [];
+  const warnings: PreviewAuditIssue[] = [];
+  const sheets = [
+    previewSheetAudit("MAST", rows.master.length, sheetMap.has("mast")),
+    previewSheetAudit("Cust Contact Memos", rows.contactMemos.length, sheetMap.has("cust contact memos")),
+    previewSheetAudit("AR AGENCY", rows.arAgencies.length, sheetMap.has("ar agency")),
+    previewSheetAudit("CONTACTS", rows.contacts.length, sheetMap.has("contacts")),
+    previewSheetAudit("PROFITABILITY", rows.profitability.length, sheetMap.has("profitability")),
+  ];
+
+  for (const sheet of sheets) {
+    if (sheet.actual_rows === 0 && !sheet.ok) {
+      errors.push(previewIssue("error", "missing_or_empty_sheet", `${sheet.name} is missing, empty, or has an unexpected row count.`));
+    } else if (!sheet.ok) {
+      errors.push(previewIssue("error", "row_count_mismatch", `${sheet.name} expected ${sheet.expected_rows} rows but found ${sheet.actual_rows}.`));
+    }
+  }
+
+  const masterKeys = countPreviewKeys(rows.master, ["Company", "Division", "Customer Number:"]);
+  addPreviewDuplicateErrors(errors, masterKeys, "duplicate_master_key", "MAST duplicate Company/Division/Customer Number key");
+  const contactKeys = countPreviewKeys(rows.contacts, ["Company", "Division", "Customer #", "Contact #"]);
+  addPreviewDuplicateErrors(errors, contactKeys, "duplicate_contact_key", "CONTACTS duplicate Company/Division/Customer/Contact key");
+
+  const masterKeySet = new Set(masterKeys.keys());
+  checkPreviewForeignKeys(errors, rows.contacts, ["Company", "Division", "Customer #"], masterKeySet, "contacts_missing_master", "CONTACTS row does not match a MAST customer");
+  checkPreviewForeignKeys(errors, rows.contactMemos, ["Company", "Division", "Customer #"], masterKeySet, "memo_missing_master", "Cust Contact Memos row does not match a MAST customer");
+  checkPreviewForeignKeys(errors, rows.arAgencies, ["Co", "Div", "Cus#"], masterKeySet, "ar_agency_missing_master", "AR AGENCY row does not match a MAST customer");
+  checkPreviewForeignKeys(errors, rows.profitability, ["Company", "Division", "Customer Number"], masterKeySet, "profitability_missing_master", "PROFITABILITY row does not match a MAST customer");
+  checkPreviewForeignKeys(errors, rows.contactMemos, ["Company", "Division", "Customer #", "Contact #"], new Set(contactKeys.keys()), "memo_missing_contact", "Cust Contact Memos row does not match a CONTACTS row");
+
+  addPreviewDuplicateErrors(errors, countPreviewKeys(rows.arAgencies, ["Co", "Div", "Cus#", "Agency Code", "Card#"]), "duplicate_ar_agency_key", "AR AGENCY duplicate Co/Div/Cus#/Agency/Card key");
+  addPreviewDuplicateErrors(errors, countPreviewKeys(rows.profitability, ["Company", "Division", "Customer Number", "Area"]), "duplicate_profitability_key", "PROFITABILITY duplicate Company/Division/Customer/Area key");
+
+  for (const area of distinctPreview(rows.profitability.map((row) => previewCell(row, "Area")).filter((area) => area && !VALID_PROFITABILITY_AREAS.has(area)))) {
+    errors.push(previewIssue("error", "unknown_profitability_area", `PROFITABILITY contains unknown Area code ${area}.`));
+  }
+  for (const value of distinctPreview(rows.master.map((row) => previewCell(row, "MyDealer Allow Payments")).filter((value) => !YES_NO_VALUES.has(value)))) {
+    warnings.push(previewIssue("warning", "unexpected_mydealer_allow_payments", `Unexpected MyDealer Allow Payments value ${value}.`));
+  }
+  for (const value of distinctPreview(rows.master.map((row) => previewCell(row, "PO Number/Required")).filter((value) => !YES_NO_VALUES.has(value)))) {
+    warnings.push(previewIssue("warning", "unexpected_po_required", `Unexpected PO Number/Required value ${value}.`));
+  }
+
+  return {
+    source_file_hash,
+    audit: {
+      ok: errors.length === 0,
+      sheets,
+      errors,
+      warnings,
+      counts: {
+        master_rows: rows.master.length,
+        contact_rows: rows.contacts.length,
+        contact_memo_rows: rows.contactMemos.length,
+        ar_agency_rows: rows.arAgencies.length,
+        profitability_rows: rows.profitability.length,
+      },
+    },
+  };
+}
+
+function previewSheetAudit(name: keyof typeof EXPECTED_PREVIEW_SHEETS, actualRows: number, exists: boolean): PreviewAuditSheet {
+  const expectedRows = EXPECTED_PREVIEW_SHEETS[name];
+  return { name, expected_rows: expectedRows, actual_rows: exists ? actualRows : 0, ok: exists && actualRows === expectedRows };
+}
+
+function countPreviewKeys(rows: Array<Record<string, string>>, columns: string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = columns.map((columnName) => previewCell(row, columnName)).join("\u001f");
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function addPreviewDuplicateErrors(errors: PreviewAuditIssue[], counts: Map<string, number>, code: string, message: string): void {
+  for (const [key, count] of counts.entries()) {
+    if (count > 1) errors.push(previewIssue("error", code, `${message}: ${formatPreviewKey(key)} appears ${count} times.`));
+  }
+}
+
+function checkPreviewForeignKeys(
+  errors: PreviewAuditIssue[],
+  rows: Array<Record<string, string>>,
+  columns: string[],
+  parentKeys: Set<string>,
+  code: string,
+  message: string,
+): void {
+  const missing = new Map<string, number>();
+  for (const row of rows) {
+    const key = columns.map((columnName) => previewCell(row, columnName)).join("\u001f");
+    if (!parentKeys.has(key)) missing.set(key, (missing.get(key) ?? 0) + 1);
+  }
+  for (const [key, count] of missing.entries()) {
+    errors.push(previewIssue("error", code, `${message}: ${formatPreviewKey(key)} appears ${count} times.`));
+  }
+}
+
+function distinctPreview(values: string[]): string[] {
+  return [...new Set(values)].sort();
+}
+
+function previewCell(row: Record<string, string>, columnName: string): string {
+  return row[columnName] ?? "";
+}
+
+function previewIssue(severity: "error" | "warning", code: string, message: string): PreviewAuditIssue {
+  return { severity, code, message };
+}
+
+function formatPreviewKey(key: string): string {
+  return key.split("\u001f").map((part) => part || "(blank)").join(" / ");
+}
+
+async function sha256Hex(buffer: ArrayBuffer): Promise<string> {
+  const hash = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function uploadIntelliDealerWorkbook(file: File): Promise<{ storage_path: string; source_file_name: string }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const userId = session?.user.id;
+  if (!userId) throw new Error("Not authenticated");
+
+  const bucket = "intellidealer-customer-imports";
+  const uuid = crypto.randomUUID?.() ?? Math.random().toString(36).slice(2);
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const path = `${userId}/${Date.now()}-${uuid}-${safeName}`;
+
+  const { error } = await supabase.storage.from(bucket).upload(path, file, {
+    upsert: false,
+    contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  if (error) throw new Error(`upload failed: ${error.message}`);
+
+  return {
+    storage_path: `${bucket}/${path}`,
+    source_file_name: file.name,
+  };
+}
+
+async function startIntelliDealerPreview(input: {
+  storage_path: string;
+  source_file_name: string;
+  source_file_hash: string;
+  file_size_bytes: number;
+  audit: PreviewAudit;
+}): Promise<PreviewResponse> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("Not authenticated");
+
+  const { data, error } = await supabase.functions.invoke("intellidealer-customer-import", {
+    body: { action: "preview", ...input },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (error) {
+    const message =
+      error.context instanceof Response
+        ? await error.context.text().catch(() => error.message)
+        : error.message;
+    throw new Error(message || "IntelliDealer preview failed");
+  }
+  return data as PreviewResponse;
 }
 
 function column(key: string, header = key): ExportColumn {

@@ -47,7 +47,9 @@ if (!projectRef) {
   process.exit(2);
 }
 
-const runFilter = runId ? `where id = '${runId}'::uuid` : "";
+const runFilter = runId
+  ? `where id = '${runId}'::uuid`
+  : "where coalesce(metadata ->> 'preview_only', 'false') <> 'true'";
 const query = `
 select to_jsonb(run_row) as run
 from (

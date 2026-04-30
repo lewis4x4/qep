@@ -40325,6 +40325,7 @@ export type Database = {
           mapped_profitability_count: number | null
           master_rows: number | null
           master_stage_count: number | null
+          metadata: Json | null
           profitability_rows: number | null
           profitability_stage_count: number | null
           raw_card_rows_count: number | null
@@ -40356,6 +40357,7 @@ export type Database = {
           mapped_profitability_count?: never
           master_rows?: number | null
           master_stage_count?: never
+          metadata?: Json | null
           profitability_rows?: number | null
           profitability_stage_count?: never
           raw_card_rows_count?: never
@@ -40387,6 +40389,7 @@ export type Database = {
           mapped_profitability_count?: never
           master_rows?: number | null
           master_stage_count?: never
+          metadata?: Json | null
           profitability_rows?: number | null
           profitability_stage_count?: never
           raw_card_rows_count?: never

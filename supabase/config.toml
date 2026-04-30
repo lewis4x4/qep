@@ -129,6 +129,9 @@ verify_jwt = true
 [functions.parts-bulk-import]
 verify_jwt = false
 
+[functions.intellidealer-customer-import]
+verify_jwt = false
+
 [functions.parts-predictive-failure]
 verify_jwt = false
 

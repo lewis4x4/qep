@@ -10,7 +10,7 @@ Production target:
 
 - Supabase project: `iciddijgonywtxoelous`
 - Netlify production URL: `https://qualityequipmentparts.netlify.app`
-- Production deploy ID: `69f335905ea252ff6035e662`
+- Production deploy ID: `69f34392437b8c22bd557838`
 - Import run ID: `df74305e-d37a-4e4b-be5e-457633b2cd1d`
 
 ## Production Reconciliation
@@ -37,8 +37,8 @@ Read-only production verification returned:
 
 The latest local migration is applied remotely:
 
-- `512_intellidealer_company_legacy_search.sql`
-- `513_refresh_crm_contacts_contact_profile.sql`
+- `514_intellidealer_customer_import_storage.sql`
+- `515_intellidealer_import_dashboard_metadata.sql`
 
 ## UI Readiness
 
@@ -88,7 +88,11 @@ The dashboard renders:
 - Source, staged, mapped, and delta counts.
 - Operational readiness checks for commit status, stage counts, errors, memo reconciliation, and card redaction.
 - Row-level CSV export controls for safe staged customer master, contacts, memos, A/R agency assignments, profitability, and import-error rows.
+- Upload-preview controls for browser-auditing a new `.xlsx`, storing it in a private bucket, and recording an audit-only preview run.
+- Commit from uploaded preview remains locked until browser/job staging is wired; the existing script-based staging path remains the controlled import path.
 - Recent run history and recent import errors.
+
+The upload-preview production exercise recorded preview run `3794f69a-c78a-4b72-945e-47a234158bac`, verified exact workbook counts, then cancelled the preview run and removed the uploaded workbook object. Preview-only runs are excluded from operational readiness and rerun-safety baselines.
 
 ## Production Browser Smoke
 

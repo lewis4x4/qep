@@ -242,6 +242,10 @@ async function smokeAdminDashboard(context) {
   await page.getByText("A/R card redaction", { exact: false }).waitFor({ timeout: 20_000 });
   await page.getByText("Source fingerprint", { exact: true }).waitFor({ timeout: 20_000 });
   await page.getByText("Operational readiness", { exact: true }).waitFor({ timeout: 20_000 });
+  await page.getByText("Upload preview", { exact: true }).waitFor({ timeout: 20_000 });
+  await page.getByText("does not stage or commit canonical rows", { exact: false }).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: "Choose workbook", exact: true }).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: "Commit locked", exact: true }).waitFor({ timeout: 20_000 });
   await page.getByText("Row-level export controls", { exact: true }).waitFor({ timeout: 20_000 });
   await page.getByText("Raw card identifiers and raw source JSON are not selected", { exact: false }).waitFor({ timeout: 20_000 });
   await page.getByText("SHA-256 hash", { exact: true }).waitFor({ timeout: 20_000 });
