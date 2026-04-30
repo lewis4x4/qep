@@ -6,7 +6,7 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
 import { AlertOctagon, ShieldCheck, Loader2 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { crmSupabase } from "../lib/qrm-supabase";
 
 interface ARCreditBlockBannerProps {
   block: {
@@ -48,9 +48,8 @@ export function ARCreditBlockBanner({
   const { data: approvers = [] } = useQuery({
     queryKey: ["ar-override-approvers"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { in: (c: string, v: string[]) => Promise<{ data: Manager[] | null; error: unknown }> } };
-      }).from("profiles")
+      const { data, error } = await crmSupabase
+        .from("profiles")
         .select("id, full_name, role")
         .in("role", ["manager", "owner", "admin"]);
       if (error) return [] as Manager[];
@@ -64,9 +63,7 @@ export function ARCreditBlockBanner({
     mutationFn: async () => {
       if (reason.trim().length < 5) throw new Error("Reason must be at least 5 characters");
       if (!approverId) throw new Error("Approver required");
-      const { error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ error: unknown }>;
-      }).rpc("apply_ar_override", {
+      const { error } = await crmSupabase.rpc("apply_ar_override", {
         p_block_id: block.id,
         p_reason: reason.trim(),
         p_approver_id: approverId,
@@ -197,4 +194,3 @@ export function ARCreditBlockBanner({
     </>
   );
 }
-

@@ -8,9 +8,22 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { decideQuoteApprovalCase } from "@/features/quote-builder/lib/quote-api";
+import { crmSupabase } from "../../lib/qrm-supabase";
 import type { MarginRow, DepositRow, TradeRow, DemoRow, QuoteApprovalRow } from "../lib/approvalTypes";
 
 const QUERY_KEY = ["qrm", "approvals"];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeQuoteApprovalReasonSummary(value: unknown): QuoteApprovalRow["reason_summary_json"] {
+  if (!isRecord(value)) return null;
+  const reasons = Array.isArray(value.reasons)
+    ? value.reasons.filter((reason): reason is string => typeof reason === "string")
+    : null;
+  return { reasons };
+}
 
 // ─── Query hook ────────────────────────────────────────────────────────────
 
@@ -43,17 +56,7 @@ export function useApprovals() {
           .select("id, deal_id, status, equipment_category, scheduled_date, needs_assessment_complete, buying_intent_confirmed, created_at, crm_deals(name)")
           .eq("status", "requested")
           .limit(100),
-        (supabase as unknown as {
-          from: (table: "quote_approval_cases") => {
-            select: (columns: string) => {
-              in: (column: string, values: string[]) => {
-                order: (column: string, options: { ascending: boolean }) => {
-                  limit: (limit: number) => Promise<{ data: QuoteApprovalRow[] | null; error: { message: string } | null }>;
-                };
-              };
-            };
-          };
-        })
+        crmSupabase
           .from("quote_approval_cases")
           .select("id, quote_package_id, quote_package_version_id, version_number, deal_id, quote_number, branch_slug, branch_name, submitted_by_name, assigned_to_name, assigned_role, route_mode, policy_snapshot_json, reason_summary_json, decision_note, status, created_at, due_at, escalate_at, customer_name, customer_company, net_total, margin_pct")
           .in("status", ["pending", "escalated"])
@@ -85,8 +88,13 @@ export function useApprovals() {
         deposits: normalizeJoin(depositsRes.data) as DepositRow[],
         trades: normalizeJoin(tradesRes.data) as TradeRow[],
         demos: normalizeJoin(demosRes.data) as DemoRow[],
-        quotes: ((quotesRes.data ?? []) as QuoteApprovalRow[])
-          .map((row) => ({ ...row, requested_at: row.requested_at ?? (row as QuoteApprovalRow & { created_at?: string }).created_at ?? "" })),
+        quotes: (quotesRes.data ?? []).map((row): QuoteApprovalRow => ({
+          ...row,
+          route_mode: row.route_mode as QuoteApprovalRow["route_mode"],
+          policy_snapshot_json: isRecord(row.policy_snapshot_json) ? row.policy_snapshot_json : null,
+          reason_summary_json: normalizeQuoteApprovalReasonSummary(row.reason_summary_json),
+          requested_at: row.created_at,
+        })),
       };
     },
     staleTime: 30_000,
