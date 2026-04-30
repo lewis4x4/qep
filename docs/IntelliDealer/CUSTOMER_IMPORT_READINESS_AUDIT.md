@@ -164,7 +164,7 @@ Ready:
 
 Still to harden:
 
-- `database.types.ts` has not been regenerated from the final IntelliDealer migrations.
+- Supabase TypeScript types have been regenerated from production, but the shared browser client remains broadly typed until legacy JSON/nullability and stale select-shape debt is migrated slice-by-slice.
 - Admin import UI is read-only; it does not yet support upload, preview, commit, rollback, or row-level export.
 - QRM company/contact editor UI exposes only a subset of the imported fields.
 - Account 360 displays source identity, A/R agency assignments, and imported profitability facts, but deeper trend/risk/action cards are still future work.
@@ -196,9 +196,9 @@ Still to harden:
 
    Minimum required display/edit coverage: legacy customer number, status, category, business class, branch/division, tax/terms, credit limit/rating, pricing group/level, A/R agencies, imported profitability by area, contact cell/direct/birth date, and imported memo history.
 
-7. Regenerate Supabase types after migration application.
+7. Keep Supabase types current after migration application.
 
-   Run `bun run supabase:types` against local DB or `bun run supabase:types:remote` against the target project after the migration is applied.
+   Run `bun run supabase:types` against local DB or `bun run supabase:types:remote` against the target project after schema changes.
 
 ## End-to-End Slice Plan
 

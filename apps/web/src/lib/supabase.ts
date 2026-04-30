@@ -8,8 +8,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 /**
- * Narrow table merges (extensions + generated) still break PostgREST Insert inference for many tables.
- * Prefer `import type { ExtendedDatabase }` / row interfaces at call sites until `database.types.ts` is regenerated from the full schema.
+ * The generated schema is current, but the existing app still has legacy JSON casts,
+ * nullable view rows, and stale select shapes. Keep the shared client broad until
+ * those call sites are migrated slice-by-slice.
  */
 export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 

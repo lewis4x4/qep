@@ -139,5 +139,5 @@ The customer import, canonical data load, redaction, deployment, admin dashboard
 
 Recommended next slice:
 
-- Regenerate Supabase TypeScript types after the final IntelliDealer schema stabilizes.
 - Add deeper Account 360 operating cards for contact history, profitability trends, A/R exposure, and next-best-action signals.
+- Migrate legacy Supabase call sites to the regenerated `Database` type slice-by-slice; the shared client remains broad until old JSON/nullability and stale select-shape debt is resolved.
