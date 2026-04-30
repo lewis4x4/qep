@@ -42887,13 +42887,13 @@ export type Database = {
       }
       save_follow_up_sequence: {
         Args: {
-          p_actor_user_id: string
-          p_description: string
-          p_is_active: boolean
-          p_name: string
-          p_sequence_id: string
-          p_steps: Json
-          p_trigger_stage: string
+          p_actor_user_id?: string
+          p_description?: string
+          p_is_active?: boolean
+          p_name?: string
+          p_sequence_id?: string
+          p_steps?: Json
+          p_trigger_stage?: string
         }
         Returns: Json
       }

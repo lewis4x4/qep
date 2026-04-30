@@ -179,35 +179,18 @@ export async function saveCrmFollowUpSequence(
     taskPriority: step.taskPriority?.trim() || null,
   }));
 
-  const { data, error } = await (crmSupabase as typeof crmSupabase & {
-    rpc: (
-      fn: "save_follow_up_sequence",
-      args: {
-        p_sequence_id: string | null;
-        p_name: string;
-        p_description: string | null;
-        p_trigger_stage: string;
-        p_is_active: boolean;
-        p_actor_user_id: string;
-        p_steps: Array<{
-          stepNumber: number;
-          dayOffset: number;
-          stepType: QrmFollowUpStep["stepType"];
-          subject: string | null;
-          bodyTemplate: string | null;
-          taskPriority: string | null;
-        }>;
-      },
-    ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
-  }).rpc("save_follow_up_sequence", {
-    p_sequence_id: input.id ?? null,
+  const rpcArgs: QrmDatabase["public"]["Functions"]["save_follow_up_sequence"]["Args"] = {
     p_name: normalizedName,
-    p_description: input.description?.trim() || null,
     p_trigger_stage: normalizedTriggerStage,
     p_is_active: input.isActive,
     p_actor_user_id: userId,
     p_steps: normalizedSteps,
-  });
+  };
+  const normalizedDescription = input.description?.trim();
+  if (input.id) rpcArgs.p_sequence_id = input.id;
+  if (normalizedDescription) rpcArgs.p_description = normalizedDescription;
+
+  const { data, error } = await crmSupabase.rpc("save_follow_up_sequence", rpcArgs);
 
   if (error) {
     throw new Error(error.message);
