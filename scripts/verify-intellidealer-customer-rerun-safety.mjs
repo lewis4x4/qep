@@ -49,7 +49,7 @@ if (!projectRef) {
 
 const runFilter = runId
   ? `where id = '${runId}'::uuid`
-  : "where coalesce(metadata ->> 'preview_only', 'false') <> 'true'";
+  : "where status = 'committed' and coalesce(metadata ->> 'preview_only', 'false') <> 'true'";
 const query = `
 select to_jsonb(run_row) as run
 from (

@@ -16,13 +16,25 @@ interface TableQuery<T> extends PromiseLike<{ data: T | null; error: QueryError 
   range(from: number, to: number): TableQuery<T>;
 }
 
+interface RpcQuery<T> extends PromiseLike<{ data: T | null; error: QueryError | null }> {}
+
 interface UntypedSupabase {
   from<T = unknown>(table: string): {
     select(columns: string, options?: { count?: "exact"; head?: boolean }): TableQuery<T>;
   };
+  rpc<T = unknown>(functionName: string, args?: Record<string, unknown>): RpcQuery<T>;
+}
+
+interface WritableTable {
+  insert(rows: StageRow[]): PromiseLike<{ error: QueryError | null }>;
+}
+
+interface WritableSupabase {
+  from(table: string): WritableTable;
 }
 
 const db = supabase as unknown as UntypedSupabase;
+const writableDb = supabase as unknown as WritableSupabase;
 
 interface ImportRunRow {
   id: string;
@@ -59,6 +71,8 @@ interface DashboardRunRow extends ImportRunRow {
   import_errors_count: number;
 }
 
+type DashboardRunCountsRow = Omit<DashboardRunRow, keyof ImportRunRow>;
+
 interface ImportErrorRow {
   id: string;
   source_sheet: string | null;
@@ -89,7 +103,7 @@ interface CountSummary {
 
 interface DashboardData {
   runs: ImportRunRow[];
-  latestRun: ImportRunRow | null;
+  latestRun: DashboardRunRow | null;
   counts: CountSummary | null;
   errors: ImportErrorRow[];
 }
@@ -129,6 +143,33 @@ interface PreviewResponse {
   audit: PreviewAudit;
 }
 
+type WorkbookRow = Record<string, string>;
+type StageTableKey = "master" | "contacts" | "memos" | "arAgencies" | "profitability";
+type StageRow = Record<string, unknown>;
+
+interface IntelliDealerWorkbookRows {
+  master: WorkbookRow[];
+  contactMemos: WorkbookRow[];
+  arAgencies: WorkbookRow[];
+  contacts: WorkbookRow[];
+  profitability: WorkbookRow[];
+}
+
+interface IntelliDealerStageRows {
+  master: StageRow[];
+  contacts: StageRow[];
+  memos: StageRow[];
+  arAgencies: StageRow[];
+  profitability: StageRow[];
+}
+
+interface StageResponse {
+  run_id: string;
+  status: string;
+  workspace_id?: string;
+  counts?: Record<StageTableKey, number>;
+}
+
 type ExportKey = "master" | "contacts" | "memos" | "arAgencies" | "profitability" | "errors";
 
 type ExportRow = Record<string, unknown>;
@@ -149,6 +190,7 @@ interface ExportDefinition {
 }
 
 const EXPORT_BATCH_SIZE = 1_000;
+const STAGE_CHUNK_SIZE = 500;
 
 const EMPTY_COUNTS: CountSummary = {
   masterStage: 0,
@@ -178,6 +220,20 @@ const EXPECTED_PREVIEW_SHEETS = {
 
 const VALID_PROFITABILITY_AREAS = new Set(["L", "S", "P", "R", "E", "T"]);
 const YES_NO_VALUES = new Set(["", "Y", "N"]);
+const STAGE_TABLES_FOR_UPLOAD: Array<{ key: StageTableKey; label: string }> = [
+  { key: "master", label: "customer master" },
+  { key: "contacts", label: "contacts" },
+  { key: "memos", label: "contact memos" },
+  { key: "arAgencies", label: "A/R agencies" },
+  { key: "profitability", label: "profitability" },
+];
+const STAGE_TABLE_NAMES: Record<StageTableKey, string> = {
+  master: "qrm_intellidealer_customer_master_stage",
+  contacts: "qrm_intellidealer_customer_contacts_stage",
+  memos: "qrm_intellidealer_customer_contact_memos_stage",
+  arAgencies: "qrm_intellidealer_customer_ar_agency_stage",
+  profitability: "qrm_intellidealer_customer_profitability_stage",
+};
 
 const EXPORT_DEFINITIONS: ExportDefinition[] = [
   {
@@ -337,6 +393,7 @@ const EXPORT_DEFINITIONS: ExportDefinition[] = [
 
 export function IntelliDealerImportDashboardPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const previewWorkbookRowsRef = useRef<IntelliDealerWorkbookRows | null>(null);
   const [exportState, setExportState] = useState<{
     key: ExportKey;
     status: "loading" | "success" | "error";
@@ -349,6 +406,15 @@ export function IntelliDealerImportDashboardPage() {
   }>({
     status: "idle",
     message: "Choose the IntelliDealer Customer Master workbook to audit it before staging.",
+  });
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [stageState, setStageState] = useState<{
+    status: "idle" | "staging" | "success" | "error";
+    message: string;
+    result?: StageResponse;
+  }>({
+    status: "idle",
+    message: "Staging is available after a passing upload preview.",
   });
   const dashboardQuery = useQuery({
     queryKey: ["admin", "intellidealer-import-dashboard"],
@@ -375,6 +441,7 @@ export function IntelliDealerImportDashboardPage() {
       && latest.ar_agency_rows === counts.arAgencyStage
       && latest.profitability_rows === counts.profitabilityStage;
   }, [counts, latest]);
+  const canStagePreview = previewState.result?.audit.ok === true && previewFile !== null && stageState.status !== "staging";
   const operationalChecks = useMemo(() => {
     if (!latest || !counts) return [];
     return [
@@ -429,10 +496,15 @@ export function IntelliDealerImportDashboardPage() {
 
   async function handlePreviewFile(file: File) {
     if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      setPreviewFile(null);
+      previewWorkbookRowsRef.current = null;
       setPreviewState({ status: "error", message: "Only .xlsx IntelliDealer customer workbooks are supported." });
       return;
     }
 
+    setPreviewFile(null);
+    previewWorkbookRowsRef.current = null;
+    setStageState({ status: "idle", message: "Staging is available after a passing upload preview." });
     setPreviewState({ status: "uploading", message: `Auditing and uploading ${file.name}...` });
     try {
       const audited = await auditIntelliDealerWorkbook(file);
@@ -446,18 +518,66 @@ export function IntelliDealerImportDashboardPage() {
       setPreviewState({
         status: "success",
         message: result.audit.ok
-          ? "Preview audit passed. This run is audit-only and has not staged or committed rows."
+          ? "Preview audit passed. Rows are ready for protected staging; canonical commit remains locked."
           : "Preview audit completed with blocking errors. No rows were staged or committed.",
         result,
       });
+      setPreviewFile(file);
+      previewWorkbookRowsRef.current = audited.rows;
       await dashboardQuery.refetch();
     } catch (error) {
+      setPreviewFile(null);
+      previewWorkbookRowsRef.current = null;
       setPreviewState({
         status: "error",
         message: error instanceof Error ? error.message : "Preview upload failed.",
       });
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function handleStagePreview() {
+    const runId = previewState.result?.run_id;
+    if (!runId || !previewFile || previewState.result?.audit.ok !== true) {
+      setStageState({ status: "error", message: "A passing upload preview is required before staging." });
+      return;
+    }
+
+    setStageState({ status: "staging", message: "Preparing audited workbook rows for staging..." });
+    try {
+      const workbookRows = previewWorkbookRowsRef.current ?? (await readIntelliDealerWorkbook(previewFile)).rows;
+      const stageRows = mapIntelliDealerRowsToStageRows(workbookRows);
+      const totalRows = countStageRows(stageRows);
+      const started = await startIntelliDealerStage(runId);
+      if (!started.workspace_id) throw new Error("Staging start did not return a workspace id.");
+
+      let stagedRows = 0;
+      for (const table of STAGE_TABLES_FOR_UPLOAD) {
+        const rows = stageRows[table.key];
+        for (let index = 0; index < rows.length; index += STAGE_CHUNK_SIZE) {
+          const chunk = rows.slice(index, index + STAGE_CHUNK_SIZE);
+          setStageState({
+            status: "staging",
+            message: `Staging ${table.label}: ${(index + chunk.length).toLocaleString()} of ${rows.length.toLocaleString()} rows. Total ${stagedRows.toLocaleString()} of ${totalRows.toLocaleString()}.`,
+          });
+          await stageIntelliDealerChunk(runId, started.workspace_id, table.key, chunk);
+          stagedRows += chunk.length;
+        }
+      }
+
+      const result = await completeIntelliDealerStage(runId);
+      setStageState({
+        status: "success",
+        message: `Staging complete. ${totalRows.toLocaleString()} source rows are loaded into staging. Canonical commit remains locked.`,
+        result,
+      });
+      await dashboardQuery.refetch();
+    } catch (error) {
+      setStageState({
+        status: "error",
+        message: error instanceof Error ? error.message : "Staging failed.",
+      });
     }
   }
 
@@ -486,7 +606,7 @@ export function IntelliDealerImportDashboardPage() {
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Upload preview</h2>
                 <p className="mt-1 max-w-3xl text-xs text-muted-foreground">
-                  Preview audits the workbook and records an audited run only. It does not stage or commit canonical rows.
+                  Preview audits the workbook, then protected staging loads the exact audited rows. Canonical commit remains locked until final approval.
                 </p>
               </div>
             </div>
@@ -510,6 +630,15 @@ export function IntelliDealerImportDashboardPage() {
                 {previewState.status === "uploading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
                 Choose workbook
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!canStagePreview}
+                onClick={() => void handleStagePreview()}
+              >
+                {stageState.status === "staging" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
+                Stage rows
+              </Button>
               <Button type="button" variant="outline" disabled>
                 Commit locked
               </Button>
@@ -518,6 +647,11 @@ export function IntelliDealerImportDashboardPage() {
           <div className={`mt-4 rounded-md border p-3 text-xs ${previewState.status === "error" ? "border-red-500/25 bg-red-500/5 text-red-300" : previewState.status === "success" ? "border-emerald-500/25 bg-emerald-500/5 text-emerald-300" : "border-border/70 bg-background/40 text-muted-foreground"}`}>
             {previewState.message}
           </div>
+          {previewState.result ? (
+            <div className={`mt-3 rounded-md border p-3 text-xs ${stageState.status === "error" ? "border-red-500/25 bg-red-500/5 text-red-300" : stageState.status === "success" ? "border-emerald-500/25 bg-emerald-500/5 text-emerald-300" : "border-border/70 bg-background/40 text-muted-foreground"}`}>
+              {stageState.message}
+            </div>
+          ) : null}
           {previewState.result ? (
             <div className="mt-4 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
               <div className="rounded-md border border-border/70 bg-background/40 p-3">
@@ -547,7 +681,7 @@ export function IntelliDealerImportDashboardPage() {
                   ))}
                 </div>
                 <p className="mt-3 text-[11px] text-muted-foreground">
-                  Commit from uploaded preview is locked until browser staging is wired. Existing script-based staging remains the controlled path.
+                  Staging writes only to import staging tables. Commit to canonical QRM tables stays disabled from the browser until the final commit gate is intentionally opened.
                 </p>
               </div>
             </div>
@@ -805,15 +939,28 @@ export function IntelliDealerImportDashboardPage() {
 
 async function fetchDashboardData(): Promise<DashboardData> {
   const runsResult = await db
-    .from<DashboardRunRow[]>("qrm_intellidealer_customer_import_dashboard")
-    .select("id, status, source_file_name, source_file_hash, master_rows, contact_rows, contact_memo_rows, ar_agency_rows, profitability_rows, error_count, warning_count, metadata, created_at, completed_at, master_stage_count, contacts_stage_count, contact_memos_stage_count, contact_memos_nonblank_count, ar_agency_stage_count, profitability_stage_count, mapped_master_count, mapped_contacts_count, mapped_ar_agency_count, mapped_profitability_count, canonical_ar_agencies_count, canonical_profitability_facts_count, raw_card_rows_count, redacted_card_rows_count, import_errors_count")
+    .from<ImportRunRow[]>("qrm_intellidealer_customer_import_runs")
+    .select("id, status, source_file_name, source_file_hash, master_rows, contact_rows, contact_memo_rows, ar_agency_rows, profitability_rows, error_count, warning_count, metadata, created_at, completed_at")
     .order("created_at", { ascending: false })
     .limit(10);
   if (runsResult.error) throw new Error(runsResult.error.message ?? "Failed to load import runs");
 
   const runs = runsResult.data ?? [];
-  const latestRun = runs.find((run) => !isPreviewRun(run)) ?? null;
-  if (!latestRun) return { runs, latestRun: null, counts: null, errors: [] };
+  const latestRunBase = runs.find((run) => run.status === "committed" && !isPreviewRun(run))
+    ?? runs.find((run) => !isPreviewRun(run))
+    ?? null;
+  if (!latestRunBase) return { runs, latestRun: null, counts: null, errors: [] };
+
+  const countsResult = await db.rpc<DashboardRunCountsRow[]>("qrm_intellidealer_customer_import_run_counts", {
+    p_run_id: latestRunBase.id,
+  });
+  if (countsResult.error) throw new Error(countsResult.error.message ?? "Failed to load import reconciliation");
+  const runCounts = countsResult.data?.[0] ?? null;
+  if (!runCounts) return { runs, latestRun: null, counts: null, errors: [] };
+  const latestRun: DashboardRunRow = {
+    ...latestRunBase,
+    ...runCounts,
+  };
 
   const errorsResult = await db
     .from<ImportErrorRow[]>("qrm_intellidealer_customer_import_errors")
@@ -875,7 +1022,11 @@ function isPreviewRun(run: Pick<ImportRunRow, "metadata">): boolean {
   return run.metadata?.preview_only === true;
 }
 
-async function auditIntelliDealerWorkbook(file: File): Promise<{ audit: PreviewAudit; source_file_hash: string }> {
+async function readIntelliDealerWorkbook(file: File): Promise<{
+  rows: IntelliDealerWorkbookRows;
+  source_file_hash: string;
+  sheetMap: Map<string, string>;
+}> {
   const buffer = await file.arrayBuffer();
   const [xlsxModule, source_file_hash] = await Promise.all([
     import("xlsx"),
@@ -884,24 +1035,32 @@ async function auditIntelliDealerWorkbook(file: File): Promise<{ audit: PreviewA
   const XLSX = xlsxModule as typeof import("xlsx");
   const workbook = XLSX.read(new Uint8Array(buffer), { type: "array" });
   const sheetMap = new Map(workbook.SheetNames.map((name) => [name.toLowerCase(), name]));
-  const readSheet = (name: string): Array<Record<string, string>> => {
+  const readSheet = (name: string): WorkbookRow[] => {
     const sheetName = sheetMap.get(name.toLowerCase());
     const sheet = sheetName ? workbook.Sheets[sheetName] : null;
     if (!sheet) return [];
     return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false }).map((row) => {
-      const normalized: Record<string, string> = {};
+      const normalized: WorkbookRow = {};
       for (const [key, value] of Object.entries(row)) normalized[String(key).trim()] = String(value ?? "").trim();
       return normalized;
     });
   };
 
-  const rows = {
-    master: readSheet("MAST"),
-    contactMemos: readSheet("Cust Contact Memos"),
-    arAgencies: readSheet("AR AGENCY"),
-    contacts: readSheet("CONTACTS"),
-    profitability: readSheet("PROFITABILITY"),
+  return {
+    source_file_hash,
+    sheetMap,
+    rows: {
+      master: readSheet("MAST"),
+      contactMemos: readSheet("Cust Contact Memos"),
+      arAgencies: readSheet("AR AGENCY"),
+      contacts: readSheet("CONTACTS"),
+      profitability: readSheet("PROFITABILITY"),
+    },
   };
+}
+
+async function auditIntelliDealerWorkbook(file: File): Promise<{ audit: PreviewAudit; source_file_hash: string; rows: IntelliDealerWorkbookRows }> {
+  const { rows, source_file_hash, sheetMap } = await readIntelliDealerWorkbook(file);
   const errors: PreviewAuditIssue[] = [];
   const warnings: PreviewAuditIssue[] = [];
   const sheets = [
@@ -947,6 +1106,7 @@ async function auditIntelliDealerWorkbook(file: File): Promise<{ audit: PreviewA
 
   return {
     source_file_hash,
+    rows,
     audit: {
       ok: errors.length === 0,
       sheets,
@@ -961,6 +1121,178 @@ async function auditIntelliDealerWorkbook(file: File): Promise<{ audit: PreviewA
       },
     },
   };
+}
+
+function mapIntelliDealerRowsToStageRows(rows: IntelliDealerWorkbookRows): IntelliDealerStageRows {
+  return {
+    master: rows.master.map((row, index) => ({
+      source_sheet: "MAST",
+      row_number: index + 2,
+      company_code: cleanCell(row, "Company"),
+      division_code: cleanCell(row, "Division"),
+      customer_number: cleanCell(row, "Customer Number:"),
+      status_code: cleanCell(row, "Status"),
+      branch_code: cleanCell(row, "Branch"),
+      ar_type_code: cleanCell(row, "A/R Type"),
+      category_code: cleanCell(row, "Category"),
+      business_class_code: cleanCell(row, "Bus Cls"),
+      customer_name: cleanCell(row, "Sold To Customer Name") ?? "Unknown customer",
+      sold_to_address_1: cleanCell(row, "Sold To Address 1"),
+      sold_to_address_2: cleanCell(row, "Sold To Address 2"),
+      city: cleanCell(row, "City"),
+      state: cleanCell(row, "Prv/St"),
+      postal_code: cleanCell(row, "Sold To Postal/Zip Code"),
+      country: cleanCell(row, "Country"),
+      phone: cleanCell(row, "Phone #"),
+      fax: cleanCell(row, "Fax Number"),
+      cell: cleanCell(row, "Cell Phone Number"),
+      terms_code: cleanCell(row, "Terms Code"),
+      county_code: cleanCell(row, "County"),
+      territory_code: cleanCell(row, "Territory"),
+      salesperson_code: cleanCell(row, "Salesman"),
+      search_1: cleanCell(row, "Search 1"),
+      search_2: cleanCell(row, "Search 2"),
+      pricing_level: parseIntegerCell(row, "Pricing Level"),
+      pricing_group_code: cleanCell(row, "Pricing Group"),
+      opt_out_pi: parseBooleanCell(row, "Opt Out PI"),
+      do_not_call: parseBooleanCell(row, "Do Not Call"),
+      date_added_raw: cleanCell(row, "Date Added"),
+      date_last_modified_raw: cleanCell(row, "Date Last Modified"),
+      date_last_billed_raw: cleanCell(row, "Date Last Billed"),
+      last_payment_date_raw: cleanCell(row, "Last Payment Date"),
+      raw_row: row,
+    })),
+    contacts: rows.contacts.map((row, index) => ({
+      source_sheet: "CONTACTS",
+      row_number: index + 2,
+      company_code: cleanCell(row, "Company"),
+      division_code: cleanCell(row, "Division"),
+      customer_number: cleanCell(row, "Customer #"),
+      contact_number: cleanCell(row, "Contact #"),
+      job_title: cleanCell(row, "Job Title"),
+      first_name: cleanCell(row, "First Name") ?? "Unknown",
+      middle_initial: cleanCell(row, "Middle Initial"),
+      last_name: cleanCell(row, "Last Name") ?? "Contact",
+      comment: cleanCell(row, "Comment"),
+      business_address_1: cleanCell(row, "Business Address 1"),
+      business_address_2: cleanCell(row, "Business Address 2"),
+      business_address_3: cleanCell(row, "Business Address 3"),
+      business_postal_code: cleanCell(row, "Business Postal/ Zip Code"),
+      business_phone: cleanCell(row, "Business Phone #"),
+      business_phone_extension: cleanCell(row, "Business Phone Extension"),
+      business_fax: cleanCell(row, "Business Fax #"),
+      business_cell: cleanCell(row, "Business Cell Phone #"),
+      business_email: cleanCell(row, "Business Email Address"),
+      business_web_address: cleanCell(row, "Business Web Address"),
+      home_phone: cleanCell(row, "Home Phone #"),
+      home_cell: cleanCell(row, "Home Cell Phone #"),
+      home_email: cleanCell(row, "Home Email Address"),
+      user_id: cleanCell(row, "User ID"),
+      birth_date_raw: cleanCell(row, "Birth Date"),
+      status_code: cleanCell(row, "Status"),
+      salesperson_code: cleanCell(row, "Salesperson"),
+      mydealer_user: parseBooleanCell(row, "MyDealer User"),
+      raw_row: row,
+    })),
+    memos: rows.contactMemos.map((row, index) => ({
+      source_sheet: "Cust Contact Memos",
+      row_number: index + 2,
+      company_code: cleanCell(row, "Company"),
+      division_code: cleanCell(row, "Division"),
+      customer_number: cleanCell(row, "Customer #"),
+      contact_number: cleanCell(row, "Contact #"),
+      sequence_number: parseIntegerCell(row, "Sequence #") ?? 0,
+      memo: cleanCell(row, "Memo"),
+      raw_row: row,
+    })),
+    arAgencies: rows.arAgencies.map((row, index) => ({
+      source_sheet: "AR AGENCY",
+      row_number: index + 2,
+      company_code: cleanCell(row, "Co"),
+      division_code: cleanCell(row, "Div"),
+      customer_number: cleanCell(row, "Cus#"),
+      agency_code: cleanCell(row, "Agency Code"),
+      card_number: cleanCell(row, "Card#"),
+      expiration_date_raw: cleanCell(row, "Exp Date"),
+      status_code: cleanCell(row, "Sta"),
+      is_default_agency: parseBooleanCell(row, "Default Agency") === true,
+      credit_rating: cleanCell(row, "Credit Rating"),
+      default_promotion_code: cleanCell(row, "Default Promotion Code"),
+      credit_limit: parseDecimalCell(row, "Credit Limit"),
+      transaction_limit: parseDecimalCell(row, "Trans Limit"),
+      raw_row: row,
+    })),
+    profitability: rows.profitability.map((row, index) => ({
+      source_sheet: "PROFITABILITY",
+      row_number: index + 2,
+      company_code: cleanCell(row, "Company"),
+      division_code: cleanCell(row, "Division"),
+      customer_number: cleanCell(row, "Customer Number"),
+      area_code: cleanCell(row, "Area"),
+      ytd_sales_last_month_end: parseDecimalCell(row, "YTD Sales Last Month End"),
+      ytd_costs_last_month_end: parseDecimalCell(row, "YTD Costs Last Month End"),
+      current_month_sales: parseDecimalCell(row, "Current Month Sales"),
+      current_month_costs: parseDecimalCell(row, "Current Month Costs"),
+      ytd_margin: parseDecimalCell(row, "YTD Margin $"),
+      ytd_margin_pct: parseDecimalCell(row, "YTD Margin %"),
+      current_month_margin: parseDecimalCell(row, "Current Month Margin $"),
+      current_month_margin_pct: parseDecimalCell(row, "Current Month Margin %"),
+      last_11_sales_last_month_end: parseDecimalCell(row, "L11 Sales Last Month End"),
+      last_11_costs_last_month_end: parseDecimalCell(row, "L11 Costs Last Month End"),
+      last_12_margin: parseDecimalCell(row, "L12 Margin $"),
+      last_12_margin_pct: parseDecimalCell(row, "L12 Margin %"),
+      last_ytd_sales_last_month_end: parseDecimalCell(row, "LYTD Sales Last Month End"),
+      last_ytd_costs_last_month_end: parseDecimalCell(row, "LYTD Costs Last Month End"),
+      current_month_sales_last_year: parseDecimalCell(row, "Current Month Sales Last Year"),
+      current_month_costs_last_year: parseDecimalCell(row, "Current Month Costs Last Year"),
+      last_ytd_margin: parseDecimalCell(row, "LYTD Margin $"),
+      last_ytd_margin_pct: parseDecimalCell(row, "LYTD Margin %"),
+      fiscal_last_year_sales: parseDecimalCell(row, "Fiscal Last Year Sal es"),
+      fiscal_last_year_costs: parseDecimalCell(row, "Fiscal Last Year Cos ts"),
+      fiscal_last_year_margin: parseDecimalCell(row, "Fiscal Last Year Mar gin $"),
+      fiscal_last_year_margin_pct: parseDecimalCell(row, "Fiscal Last Year Mar gin %"),
+      territory_code: cleanCell(row, "Territory"),
+      salesperson_code: cleanCell(row, "Salesperson"),
+      county_code: cleanCell(row, "County"),
+      business_class_code: cleanCell(row, "Business Class"),
+      type_code: cleanCell(row, "Type"),
+      owner_code: cleanCell(row, "Owner"),
+      equipment_code: cleanCell(row, "Equipment"),
+      dunn_bradstreet: cleanCell(row, "Dunn & Bradstreet"),
+      location_code: cleanCell(row, "Location"),
+      country: cleanCell(row, "Country"),
+      raw_row: row,
+    })),
+  };
+}
+
+function countStageRows(rows: IntelliDealerStageRows): number {
+  return rows.master.length + rows.contacts.length + rows.memos.length + rows.arAgencies.length + rows.profitability.length;
+}
+
+function cleanCell(row: WorkbookRow, columnName: string): string | null {
+  const text = String(row[columnName] ?? "").trim();
+  return text || null;
+}
+
+function parseBooleanCell(row: WorkbookRow, columnName: string): boolean | null {
+  const text = cleanCell(row, columnName)?.toUpperCase();
+  if (!text) return null;
+  if (["Y", "YES", "TRUE", "1"].includes(text)) return true;
+  if (["N", "NO", "FALSE", "0"].includes(text)) return false;
+  return null;
+}
+
+function parseIntegerCell(row: WorkbookRow, columnName: string): number | null {
+  const text = cleanCell(row, columnName)?.replace(/,/g, "");
+  if (!text || !/^-?\d+(\.0+)?$/.test(text)) return null;
+  return Number.parseInt(text, 10);
+}
+
+function parseDecimalCell(row: WorkbookRow, columnName: string): string | null {
+  const text = cleanCell(row, columnName)?.replace(/\$/g, "").replace(/,/g, "");
+  if (!text || !/^-?\d+(\.\d+)?$/.test(text)) return null;
+  return text;
 }
 
 function previewSheetAudit(name: keyof typeof EXPECTED_PREVIEW_SHEETS, actualRows: number, exists: boolean): PreviewAuditSheet {
@@ -1051,12 +1383,34 @@ async function startIntelliDealerPreview(input: {
   file_size_bytes: number;
   audit: PreviewAudit;
 }): Promise<PreviewResponse> {
+  return invokeIntelliDealerImport<PreviewResponse>({ action: "preview", ...input }, "IntelliDealer preview failed");
+}
+
+async function startIntelliDealerStage(runId: string): Promise<StageResponse> {
+  return invokeIntelliDealerImport<StageResponse>({ action: "init_stage", run_id: runId }, "IntelliDealer staging start failed");
+}
+
+async function stageIntelliDealerChunk(runId: string, workspaceId: string, tableKey: StageTableKey, rows: StageRow[]): Promise<void> {
+  const safeRows = rows.map((row) => ({
+    ...row,
+    run_id: runId,
+    workspace_id: workspaceId,
+  }));
+  const result = await writableDb.from(STAGE_TABLE_NAMES[tableKey]).insert(safeRows);
+  if (result.error) throw new Error(result.error.message ?? `Failed to stage ${tableKey}`);
+}
+
+async function completeIntelliDealerStage(runId: string): Promise<StageResponse> {
+  return invokeIntelliDealerImport<StageResponse>({ action: "complete_stage", run_id: runId }, "IntelliDealer staging completion failed");
+}
+
+async function invokeIntelliDealerImport<T>(body: Record<string, unknown>, fallbackMessage: string): Promise<T> {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
   if (!token) throw new Error("Not authenticated");
 
   const { data, error } = await supabase.functions.invoke("intellidealer-customer-import", {
-    body: { action: "preview", ...input },
+    body,
     headers: { Authorization: `Bearer ${token}` },
   });
   if (error) {
@@ -1064,9 +1418,9 @@ async function startIntelliDealerPreview(input: {
       error.context instanceof Response
         ? await error.context.text().catch(() => error.message)
         : error.message;
-    throw new Error(message || "IntelliDealer preview failed");
+    throw new Error(message || fallbackMessage);
   }
-  return data as PreviewResponse;
+  return data as T;
 }
 
 function column(key: string, header = key): ExportColumn {

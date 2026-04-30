@@ -10,7 +10,7 @@ Production target:
 
 - Supabase project: `iciddijgonywtxoelous`
 - Netlify production URL: `https://qualityequipmentparts.netlify.app`
-- Production deploy ID: `69f34392437b8c22bd557838`
+- Production deploy ID: `69f35778c10524580f6ae3d4`
 - Import run ID: `df74305e-d37a-4e4b-be5e-457633b2cd1d`
 
 ## Production Reconciliation
@@ -39,6 +39,9 @@ The latest local migration is applied remotely:
 
 - `514_intellidealer_customer_import_storage.sql`
 - `515_intellidealer_import_dashboard_metadata.sql`
+- `516_intellidealer_import_staging_status.sql`
+- `517_intellidealer_dashboard_mapped_count_indexes.sql`
+- `518_intellidealer_dashboard_counts_rpc.sql`
 
 ## UI Readiness
 
@@ -89,10 +92,13 @@ The dashboard renders:
 - Operational readiness checks for commit status, stage counts, errors, memo reconciliation, and card redaction.
 - Row-level CSV export controls for safe staged customer master, contacts, memos, A/R agency assignments, profitability, and import-error rows.
 - Upload-preview controls for browser-auditing a new `.xlsx`, storing it in a private bucket, and recording an audit-only preview run.
-- Commit from uploaded preview remains locked until browser/job staging is wired; the existing script-based staging path remains the controlled import path.
+- Protected staging controls that reuse the browser-audited workbook rows, start staging through the `intellidealer-customer-import` edge gate, insert stage rows through Supabase RLS, and complete staging only after exact source/stage counts match.
+- Commit from uploaded preview remains locked until the final canonical commit/rollback gate is intentionally opened.
 - Recent run history and recent import errors.
 
-The upload-preview production exercise recorded preview run `3794f69a-c78a-4b72-945e-47a234158bac`, verified exact workbook counts, then cancelled the preview run and removed the uploaded workbook object. Preview-only runs are excluded from operational readiness and rerun-safety baselines.
+The dashboard count path uses `qrm_intellidealer_customer_import_run_counts`, a count-only elevated RPC, so the browser no longer depends on the RLS-heavy reconciliation view and does not receive sensitive A/R card row data.
+
+The browser staging production exercise recorded test run `3a77be82-c3b1-414f-a236-2a0bf091bff6`, loaded exact stage counts (`5,136` master, `4,657` contacts, `1,179` memos, `19,466` A/R agencies, `9,894` profitability), completed the run to `staged`, verified zero import errors, and recorded zero browser console or 5xx response errors. The test run and uploaded workbook object were deleted. The committed production run remains the operational baseline.
 
 ## Production Browser Smoke
 
@@ -149,7 +155,8 @@ Passing checks:
 ```bash
 bun run build:web
 bun run migrations:check
-bun run audit:rls-initplan
+bun run audit:edges
+bun scripts/verify/intellidealer-browser-stage-flow.mjs
 bun run intellidealer:customer:rerun-check
 bun run intellidealer:customer:verify -- df74305e-d37a-4e4b-be5e-457633b2cd1d
 bun run intellidealer:production:smoke
@@ -172,5 +179,5 @@ The customer import, canonical data load, redaction, deployment, admin dashboard
 
 Recommended next slice:
 
-- Add admin upload, preview, commit, and rollback controls so import operations no longer depend on scripts for future runs.
+- Add admin canonical commit and rollback controls for staged browser runs so future customer imports no longer depend on scripts after staging approval.
 - Migrate legacy Supabase call sites to the regenerated `Database` type slice-by-slice; the shared client remains broad until old JSON/nullability and stale select-shape debt is resolved.
