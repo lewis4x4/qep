@@ -16,7 +16,7 @@ import {
   type TimeBankAggregateRow,
   type TimeBankRow,
 } from "../lib/time-bank";
-import { supabase } from "@/lib/supabase";
+import { crmSupabase } from "../lib/qrm-supabase";
 
 export function TimeBankPage() {
   const workspaceQuery = useMyWorkspaceId();
@@ -26,14 +26,12 @@ export function TimeBankPage() {
     queryKey: ["qrm", "time-bank", workspaceId],
     enabled: Boolean(workspaceId),
     queryFn: async (): Promise<TimeBankRow[]> => {
-      const { data, error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: TimeBankRow[] | null; error: { message?: string } | null }>;
-      }).rpc("qrm_time_bank", {
+      const { data, error } = await crmSupabase.rpc("qrm_time_bank", {
         p_workspace_id: workspaceId,
         p_default_budget_days: 14,
       });
       if (error) throw new Error(error.message ?? "Failed to load Time Bank.");
-      return data ?? [];
+      return (data ?? []) satisfies TimeBankRow[];
     },
     staleTime: 60_000,
     refetchInterval: 120_000,

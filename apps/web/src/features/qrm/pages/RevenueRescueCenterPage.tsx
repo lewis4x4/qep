@@ -8,6 +8,7 @@ import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
 import { listCrmWeightedOpenDeals } from "../lib/qrm-deals-api";
 import { buildAccountCommandHref } from "../lib/account-command";
 import { buildRevenueRescueBoard } from "../lib/revenue-rescue";
+import type { TimeBankRow } from "../lib/time-bank";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
 import { DeckSurface, StatusDot, SignalChip } from "../components/command-deck";
@@ -15,7 +16,7 @@ import { useQuoteVelocity } from "../command-center/hooks/useQuoteVelocity";
 import { useBlockers } from "../command-center/hooks/useBlockers";
 import { computeQuoteVelocity } from "../command-center/lib/quoteVelocity";
 import { groupBlockedDeals } from "../command-center/lib/blockerTypes";
-import { supabase } from "@/lib/supabase";
+import { crmSupabase } from "../lib/qrm-supabase";
 
 function fmtMoney(v: number) {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
@@ -36,15 +37,13 @@ export function RevenueRescueCenterPage() {
   const timeBankQuery = useQuery({
     queryKey: ["revenue-rescue", "time-bank", workspaceId],
     enabled: Boolean(workspaceId),
-    queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown[] | null; error: { message?: string } | null }>;
-      }).rpc("qrm_time_bank", {
+    queryFn: async (): Promise<TimeBankRow[]> => {
+      const { data, error } = await crmSupabase.rpc("qrm_time_bank", {
         p_workspace_id: workspaceId,
         p_default_budget_days: 14,
       });
       if (error) throw new Error(error.message ?? "Failed to load time bank.");
-      return data ?? [];
+      return (data ?? []) satisfies TimeBankRow[];
     },
     staleTime: 60_000,
   });
@@ -58,7 +57,7 @@ export function RevenueRescueCenterPage() {
       : [];
     return buildRevenueRescueBoard({
       deals: dealsQuery.data ?? [],
-      timeBankRows: (timeBankQuery.data ?? []) as Parameters<typeof buildRevenueRescueBoard>[0]["timeBankRows"],
+      timeBankRows: timeBankQuery.data ?? [],
       quoteRows,
       blockedDeals: blockerRows,
     });
