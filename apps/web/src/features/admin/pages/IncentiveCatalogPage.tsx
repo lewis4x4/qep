@@ -1,9 +1,18 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Plus, Trash2, Lock, Check } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import type { Database } from "@/lib/database.types";
+
+const db = supabase as SupabaseClient<Database>;
+
+type IncentiveRow = Database["public"]["Tables"]["manufacturer_incentives"]["Row"];
+type IncentiveInsert = Database["public"]["Tables"]["manufacturer_incentives"]["Insert"];
+
+type DiscountType = "flat" | "pct" | "apr_buydown" | "cash_back";
 
 interface Incentive {
   id: string;
@@ -11,7 +20,7 @@ interface Incentive {
   program_name: string;
   program_code: string | null;
   description: string | null;
-  discount_type: "flat" | "pct" | "apr_buydown" | "cash_back";
+  discount_type: DiscountType;
   discount_value: number;
   effective_date: string;
   expiration_date: string | null;
@@ -48,6 +57,27 @@ const EMPTY_NEW: NewIncentive = {
   source_url: "",
 };
 
+function toDiscountType(value: string): DiscountType {
+  return value === "pct" || value === "apr_buydown" || value === "cash_back" ? value : "flat";
+}
+
+function toIncentive(row: IncentiveRow): Incentive {
+  return {
+    id: row.id,
+    manufacturer: row.manufacturer ?? row.oem_name,
+    program_name: row.program_name,
+    program_code: row.program_code,
+    description: row.description,
+    discount_type: toDiscountType(row.discount_type),
+    discount_value: row.discount_value,
+    effective_date: row.effective_date ?? row.start_date,
+    expiration_date: row.expiration_date ?? row.end_date,
+    stackable: row.stackable,
+    requires_approval: row.requires_approval,
+    source_url: row.source_url,
+  };
+}
+
 export function IncentiveCatalogPage() {
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
@@ -56,35 +86,37 @@ export function IncentiveCatalogPage() {
   const { data = [], isLoading } = useQuery({
     queryKey: ["admin", "incentives"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { order: (c: string, o: Record<string, boolean>) => Promise<{ data: Incentive[] | null; error: unknown }> } };
-      }).from("manufacturer_incentives")
+      const { data, error } = await db
+        .from("manufacturer_incentives")
         .select("*")
         .order("effective_date", { ascending: false });
       if (error) throw new Error("Failed to load incentives");
-      return data ?? [];
+      return (data ?? []).map(toIncentive);
     },
     staleTime: 30_000,
   });
 
   const createMutation = useMutation({
     mutationFn: async (input: NewIncentive) => {
-      const payload = {
-        manufacturer: input.manufacturer.trim(),
+      const manufacturer = input.manufacturer.trim();
+      const effectiveDate = input.effective_date;
+      const payload: IncentiveInsert = {
+        manufacturer,
+        oem_name: manufacturer,
         program_name: input.program_name.trim(),
         program_code: input.program_code.trim() || null,
         description: input.description.trim() || null,
         discount_type: input.discount_type,
         discount_value: parseFloat(input.discount_value),
-        effective_date: input.effective_date,
+        effective_date: effectiveDate,
+        start_date: effectiveDate,
         expiration_date: input.expiration_date || null,
+        end_date: input.expiration_date || null,
         stackable: input.stackable,
         requires_approval: input.requires_approval,
         source_url: input.source_url.trim() || null,
       };
-      const { error } = await (supabase as unknown as {
-        from: (t: string) => { insert: (v: Record<string, unknown>) => Promise<{ error: unknown }> };
-      }).from("manufacturer_incentives").insert(payload);
+      const { error } = await db.from("manufacturer_incentives").insert(payload);
       if (error) throw new Error(String((error as { message?: string }).message ?? "Insert failed"));
     },
     onSuccess: () => {
@@ -96,9 +128,7 @@ export function IncentiveCatalogPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await (supabase as unknown as {
-        from: (t: string) => { delete: () => { eq: (c: string, v: string) => Promise<{ error: unknown }> } };
-      }).from("manufacturer_incentives").delete().eq("id", id);
+      const { error } = await db.from("manufacturer_incentives").delete().eq("id", id);
       if (error) throw new Error("Delete failed");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin", "incentives"] }),
