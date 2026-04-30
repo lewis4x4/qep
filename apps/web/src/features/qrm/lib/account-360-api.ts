@@ -121,11 +121,9 @@ export interface Account360Response {
 
 /** Single round-trip composite for the Account 360 page. */
 export async function fetchAccount360(companyId: string): Promise<Account360Response | null> {
-  const { data, error } = await (supabase as unknown as {
-    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: Account360Response | null; error: unknown }>;
-  }).rpc("get_account_360", { p_company_id: companyId });
+  const { data, error } = await accountSupabase.rpc("get_account_360", { p_company_id: companyId });
   if (error) throw new Error(String((error as { message?: string }).message ?? "Failed to load Account 360"));
-  return data;
+  return coerceRpcJson<Account360Response>(data);
 }
 
 export interface FleetRadarLensItem {
@@ -150,11 +148,13 @@ export interface FleetRadarResponse {
 }
 
 export async function fetchFleetRadar(companyId: string): Promise<FleetRadarResponse | null> {
-  const { data, error } = await (supabase as unknown as {
-    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: FleetRadarResponse | null; error: unknown }>;
-  }).rpc("get_fleet_radar", { p_company_id: companyId });
+  const { data, error } = await accountSupabase.rpc("get_fleet_radar", { p_company_id: companyId });
   if (error) throw new Error(String((error as { message?: string }).message ?? "Failed to load Fleet Radar"));
-  return data;
+  return coerceRpcJson<FleetRadarResponse>(data);
+}
+
+function coerceRpcJson<T>(value: Json | null): T | null {
+  return value === null ? null : value as T;
 }
 
 export interface IntelliDealerCompanySnapshot extends Pick<
