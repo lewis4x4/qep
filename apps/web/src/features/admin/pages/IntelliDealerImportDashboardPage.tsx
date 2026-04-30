@@ -121,13 +121,16 @@ interface PreviewResponse {
 type WorkbookRow = Record<string, string>;
 type StageTableKey = "master" | "contacts" | "memos" | "arAgencies" | "profitability";
 type StageCounts = Record<StageTableKey, number>;
-type StageRow = Record<string, unknown>;
 type StageInsertRows = {
   master: Tables["qrm_intellidealer_customer_master_stage"]["Insert"][];
   contacts: Tables["qrm_intellidealer_customer_contacts_stage"]["Insert"][];
   memos: Tables["qrm_intellidealer_customer_contact_memos_stage"]["Insert"][];
   arAgencies: Tables["qrm_intellidealer_customer_ar_agency_stage"]["Insert"][];
   profitability: Tables["qrm_intellidealer_customer_profitability_stage"]["Insert"][];
+};
+type StageInsertRow = StageInsertRows[StageTableKey][number];
+type StagePreparedRows = {
+  [Key in StageTableKey]: Array<Omit<StageInsertRows[Key][number], "run_id" | "workspace_id">>;
 };
 
 interface IntelliDealerWorkbookRows {
@@ -138,13 +141,7 @@ interface IntelliDealerWorkbookRows {
   profitability: WorkbookRow[];
 }
 
-interface IntelliDealerStageRows {
-  master: StageRow[];
-  contacts: StageRow[];
-  memos: StageRow[];
-  arAgencies: StageRow[];
-  profitability: StageRow[];
-}
+type IntelliDealerStageRows = StagePreparedRows;
 
 interface StageResponse {
   run_id: string;
@@ -1373,9 +1370,9 @@ function mapIntelliDealerRowsToStageRows(rows: IntelliDealerWorkbookRows): Intel
     master: rows.master.map((row, index) => ({
       source_sheet: "MAST",
       row_number: index + 2,
-      company_code: cleanCell(row, "Company"),
-      division_code: cleanCell(row, "Division"),
-      customer_number: cleanCell(row, "Customer Number:"),
+      company_code: requiredCell(row, "Company"),
+      division_code: requiredCell(row, "Division"),
+      customer_number: requiredCell(row, "Customer Number:"),
       status_code: cleanCell(row, "Status"),
       branch_code: cleanCell(row, "Branch"),
       ar_type_code: cleanCell(row, "A/R Type"),
@@ -1410,10 +1407,10 @@ function mapIntelliDealerRowsToStageRows(rows: IntelliDealerWorkbookRows): Intel
     contacts: rows.contacts.map((row, index) => ({
       source_sheet: "CONTACTS",
       row_number: index + 2,
-      company_code: cleanCell(row, "Company"),
-      division_code: cleanCell(row, "Division"),
-      customer_number: cleanCell(row, "Customer #"),
-      contact_number: cleanCell(row, "Contact #"),
+      company_code: requiredCell(row, "Company"),
+      division_code: requiredCell(row, "Division"),
+      customer_number: requiredCell(row, "Customer #"),
+      contact_number: requiredCell(row, "Contact #"),
       job_title: cleanCell(row, "Job Title"),
       first_name: cleanCell(row, "First Name") ?? "Unknown",
       middle_initial: cleanCell(row, "Middle Initial"),
@@ -1442,10 +1439,10 @@ function mapIntelliDealerRowsToStageRows(rows: IntelliDealerWorkbookRows): Intel
     memos: rows.contactMemos.map((row, index) => ({
       source_sheet: "Cust Contact Memos",
       row_number: index + 2,
-      company_code: cleanCell(row, "Company"),
-      division_code: cleanCell(row, "Division"),
-      customer_number: cleanCell(row, "Customer #"),
-      contact_number: cleanCell(row, "Contact #"),
+      company_code: requiredCell(row, "Company"),
+      division_code: requiredCell(row, "Division"),
+      customer_number: requiredCell(row, "Customer #"),
+      contact_number: requiredCell(row, "Contact #"),
       sequence_number: parseIntegerCell(row, "Sequence #") ?? 0,
       memo: cleanCell(row, "Memo"),
       raw_row: row,
@@ -1453,11 +1450,11 @@ function mapIntelliDealerRowsToStageRows(rows: IntelliDealerWorkbookRows): Intel
     arAgencies: rows.arAgencies.map((row, index) => ({
       source_sheet: "AR AGENCY",
       row_number: index + 2,
-      company_code: cleanCell(row, "Co"),
-      division_code: cleanCell(row, "Div"),
-      customer_number: cleanCell(row, "Cus#"),
-      agency_code: cleanCell(row, "Agency Code"),
-      card_number: cleanCell(row, "Card#"),
+      company_code: requiredCell(row, "Co"),
+      division_code: requiredCell(row, "Div"),
+      customer_number: requiredCell(row, "Cus#"),
+      agency_code: requiredCell(row, "Agency Code"),
+      card_number: requiredCell(row, "Card#"),
       expiration_date_raw: cleanCell(row, "Exp Date"),
       status_code: cleanCell(row, "Sta"),
       is_default_agency: parseBooleanCell(row, "Default Agency") === true,
@@ -1470,10 +1467,10 @@ function mapIntelliDealerRowsToStageRows(rows: IntelliDealerWorkbookRows): Intel
     profitability: rows.profitability.map((row, index) => ({
       source_sheet: "PROFITABILITY",
       row_number: index + 2,
-      company_code: cleanCell(row, "Company"),
-      division_code: cleanCell(row, "Division"),
-      customer_number: cleanCell(row, "Customer Number"),
-      area_code: cleanCell(row, "Area"),
+      company_code: requiredCell(row, "Company"),
+      division_code: requiredCell(row, "Division"),
+      customer_number: requiredCell(row, "Customer Number"),
+      area_code: requiredCell(row, "Area"),
       ytd_sales_last_month_end: parseDecimalCell(row, "YTD Sales Last Month End"),
       ytd_costs_last_month_end: parseDecimalCell(row, "YTD Costs Last Month End"),
       current_month_sales: parseDecimalCell(row, "Current Month Sales"),
@@ -1554,6 +1551,10 @@ function cleanCell(row: WorkbookRow, columnName: string): string | null {
   return text || null;
 }
 
+function requiredCell(row: WorkbookRow, columnName: string): string {
+  return cleanCell(row, columnName) ?? "";
+}
+
 function parseBooleanCell(row: WorkbookRow, columnName: string): boolean | null {
   const text = cleanCell(row, columnName)?.toUpperCase();
   if (!text) return null;
@@ -1568,10 +1569,10 @@ function parseIntegerCell(row: WorkbookRow, columnName: string): number | null {
   return Number.parseInt(text, 10);
 }
 
-function parseDecimalCell(row: WorkbookRow, columnName: string): string | null {
+function parseDecimalCell(row: WorkbookRow, columnName: string): number | null {
   const text = cleanCell(row, columnName)?.replace(/\$/g, "").replace(/,/g, "");
   if (!text || !/^-?\d+(\.\d+)?$/.test(text)) return null;
-  return text;
+  return Number(text);
 }
 
 function previewSheetAudit(name: keyof typeof EXPECTED_PREVIEW_SHEETS, actualRows: number, exists: boolean): PreviewAuditSheet {
@@ -1675,8 +1676,13 @@ async function startIntelliDealerStage(runId: string): Promise<StageResponse> {
   );
 }
 
-async function stageIntelliDealerChunk(runId: string, workspaceId: string, tableKey: StageTableKey, rows: StageRow[]): Promise<void> {
-  const safeRows = rows.map((row) => ({
+async function stageIntelliDealerChunk(
+  runId: string,
+  workspaceId: string,
+  tableKey: StageTableKey,
+  rows: Array<StagePreparedRows[StageTableKey][number]>,
+): Promise<void> {
+  const safeRows: StageInsertRow[] = rows.map((row) => ({
     ...row,
     run_id: runId,
     workspace_id: workspaceId,
@@ -1686,34 +1692,59 @@ async function stageIntelliDealerChunk(runId: string, workspaceId: string, table
   }, `stage ${tableKey}`);
 }
 
-async function insertStageRows(tableKey: StageTableKey, rows: StageRow[]): Promise<void> {
+async function insertStageRows(tableKey: StageTableKey, rows: StageInsertRow[]): Promise<void> {
   switch (tableKey) {
     case "master": {
-      const result = await db.from(STAGE_TABLE_NAMES.master).insert(rows as StageInsertRows["master"]);
+      if (!isMasterStageRows(rows)) throw new Error("Prepared customer master rows did not match the staging table.");
+      const result = await db.from(STAGE_TABLE_NAMES.master).insert(rows);
       if (result.error) throw new Error(result.error.message ?? `Failed to stage ${tableKey}`);
       return;
     }
     case "contacts": {
-      const result = await db.from(STAGE_TABLE_NAMES.contacts).insert(rows as StageInsertRows["contacts"]);
+      if (!isContactStageRows(rows)) throw new Error("Prepared contact rows did not match the staging table.");
+      const result = await db.from(STAGE_TABLE_NAMES.contacts).insert(rows);
       if (result.error) throw new Error(result.error.message ?? `Failed to stage ${tableKey}`);
       return;
     }
     case "memos": {
-      const result = await db.from(STAGE_TABLE_NAMES.memos).insert(rows as StageInsertRows["memos"]);
+      if (!isMemoStageRows(rows)) throw new Error("Prepared contact memo rows did not match the staging table.");
+      const result = await db.from(STAGE_TABLE_NAMES.memos).insert(rows);
       if (result.error) throw new Error(result.error.message ?? `Failed to stage ${tableKey}`);
       return;
     }
     case "arAgencies": {
-      const result = await db.from(STAGE_TABLE_NAMES.arAgencies).insert(rows as StageInsertRows["arAgencies"]);
+      if (!isArAgencyStageRows(rows)) throw new Error("Prepared A/R agency rows did not match the staging table.");
+      const result = await db.from(STAGE_TABLE_NAMES.arAgencies).insert(rows);
       if (result.error) throw new Error(result.error.message ?? `Failed to stage ${tableKey}`);
       return;
     }
     case "profitability": {
-      const result = await db.from(STAGE_TABLE_NAMES.profitability).insert(rows as StageInsertRows["profitability"]);
+      if (!isProfitabilityStageRows(rows)) throw new Error("Prepared profitability rows did not match the staging table.");
+      const result = await db.from(STAGE_TABLE_NAMES.profitability).insert(rows);
       if (result.error) throw new Error(result.error.message ?? `Failed to stage ${tableKey}`);
       return;
     }
   }
+}
+
+function isMasterStageRows(rows: StageInsertRow[]): rows is StageInsertRows["master"] {
+  return rows.every((row) => row.source_sheet === "MAST");
+}
+
+function isContactStageRows(rows: StageInsertRow[]): rows is StageInsertRows["contacts"] {
+  return rows.every((row) => row.source_sheet === "CONTACTS");
+}
+
+function isMemoStageRows(rows: StageInsertRow[]): rows is StageInsertRows["memos"] {
+  return rows.every((row) => row.source_sheet === "Cust Contact Memos");
+}
+
+function isArAgencyStageRows(rows: StageInsertRow[]): rows is StageInsertRows["arAgencies"] {
+  return rows.every((row) => row.source_sheet === "AR AGENCY");
+}
+
+function isProfitabilityStageRows(rows: StageInsertRow[]): rows is StageInsertRows["profitability"] {
+  return rows.every((row) => row.source_sheet === "PROFITABILITY");
 }
 
 async function completeIntelliDealerStage(runId: string): Promise<StageResponse> {
