@@ -550,7 +550,10 @@ export function IntelliDealerImportDashboardPage() {
     try {
       const workbookRows = previewWorkbookRowsRef.current ?? (await readIntelliDealerWorkbook(previewFile)).rows;
       const stageRows = mapIntelliDealerRowsToStageRows(workbookRows);
-      const totalRows = countStageRows(stageRows);
+      const expectedCounts = stageCountsFromAudit(previewState.result.audit);
+      const actualCounts = countStageRowsByTable(stageRows);
+      assertStageCountsMatch(actualCounts, expectedCounts, "Prepared staging rows do not match the audited workbook preview");
+      const totalRows = sumStageCounts(expectedCounts);
       const started = await startIntelliDealerStage(runId);
       if (!started.workspace_id) throw new Error("Staging start did not return a workspace id.");
 
@@ -569,6 +572,9 @@ export function IntelliDealerImportDashboardPage() {
       }
 
       const result = await completeIntelliDealerStage(runId);
+      if (result.counts) {
+        assertStageCountsMatch(result.counts, expectedCounts, "Completed staging counts do not match the audited workbook preview");
+      }
       setStageState({
         status: "success",
         message: `Staging complete. ${totalRows.toLocaleString()} source rows are loaded into staging. Use the staged-run controls below to commit or discard this run.`,
@@ -1506,7 +1512,41 @@ function mapIntelliDealerRowsToStageRows(rows: IntelliDealerWorkbookRows): Intel
 }
 
 function countStageRows(rows: IntelliDealerStageRows): number {
-  return rows.master.length + rows.contacts.length + rows.memos.length + rows.arAgencies.length + rows.profitability.length;
+  return sumStageCounts(countStageRowsByTable(rows));
+}
+
+function countStageRowsByTable(rows: IntelliDealerStageRows): StageCounts {
+  return {
+    master: rows.master.length,
+    contacts: rows.contacts.length,
+    memos: rows.memos.length,
+    arAgencies: rows.arAgencies.length,
+    profitability: rows.profitability.length,
+  };
+}
+
+function stageCountsFromAudit(audit: PreviewAudit): StageCounts {
+  return {
+    master: audit.counts.master_rows,
+    contacts: audit.counts.contact_rows,
+    memos: audit.counts.contact_memo_rows,
+    arAgencies: audit.counts.ar_agency_rows,
+    profitability: audit.counts.profitability_rows,
+  };
+}
+
+function sumStageCounts(counts: StageCounts): number {
+  return counts.master + counts.contacts + counts.memos + counts.arAgencies + counts.profitability;
+}
+
+function assertStageCountsMatch(actual: StageCounts, expected: StageCounts, prefix: string): void {
+  const mismatches = STAGE_TABLES_FOR_UPLOAD
+    .map(({ key, label }) => ({ label, actual: actual[key], expected: expected[key] }))
+    .filter((entry) => entry.actual !== entry.expected);
+  if (mismatches.length === 0) return;
+  throw new Error(
+    `${prefix}: ${mismatches.map((entry) => `${entry.label} ${entry.actual.toLocaleString()} vs ${entry.expected.toLocaleString()}`).join("; ")}.`,
+  );
 }
 
 function cleanCell(row: WorkbookRow, columnName: string): string | null {
