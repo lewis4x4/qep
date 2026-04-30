@@ -1,10 +1,14 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Card } from "@/components/ui/card";
 import { Flame, AlertOctagon, Bug, Search, Lightbulb } from "lucide-react";
 import { ForwardForecastBar, FilterBar, StatusChipStack, type FilterDef } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
-import { FlareDetailDrawer, type FlareReportRow } from "../components/flare/FlareDetailDrawer";
+import type { Database } from "@/lib/database.types";
+import { FlareDetailDrawer, toFlareReportRow, type FlareReportRow } from "../components/flare/FlareDetailDrawer";
+
+const db = supabase as SupabaseClient<Database>;
 
 const SEVERITY_TONE: Record<string, "red" | "orange" | "yellow" | "blue" | "neutral"> = {
   blocker: "red",
@@ -52,14 +56,13 @@ export function FlareAdminPage() {
   const { data: reports = [], isLoading } = useQuery({
     queryKey: ["flare-admin-queue"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { order: (c: string, o: Record<string, boolean>) => { limit: (n: number) => Promise<{ data: FlareReportRow[] | null; error: unknown }> } } };
-      }).from("flare_reports")
+      const { data, error } = await db
+        .from("flare_reports")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(200);
       if (error) throw new Error("Failed to load flares");
-      return data ?? [];
+      return (data ?? []).map(toFlareReportRow);
     },
     staleTime: 30_000,
     refetchInterval: 60_000,

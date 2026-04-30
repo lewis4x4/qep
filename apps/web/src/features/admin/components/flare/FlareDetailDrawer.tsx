@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
@@ -10,7 +11,13 @@ import {
 } from "lucide-react";
 import { AskIronAdvisorButton, StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
+import type { Database, Json } from "@/lib/database.types";
 import { notifyFlareFixed } from "@/lib/flare/flareClient";
+
+const db = supabase as SupabaseClient<Database>;
+
+type FlareReportDbRow = Database["public"]["Tables"]["flare_reports"]["Row"];
+type FlareReportUpdate = Database["public"]["Tables"]["flare_reports"]["Update"];
 
 export interface FlareReportRow {
   id: string;
@@ -46,6 +53,149 @@ export interface FlareReportRow {
   fix_deploy_sha: string | null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringValue(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function numberValue(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function nullableNumberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function toSeverity(value: string): FlareReportRow["severity"] {
+  if (value === "blocker" || value === "bug" || value === "annoyance" || value === "idea" || value === "aha_moment") {
+    return value;
+  }
+  return "bug";
+}
+
+function toStatus(value: string): FlareReportRow["status"] {
+  if (value === "triaged" || value === "in_progress" || value === "fixed" || value === "wontfix" || value === "duplicate") {
+    return value;
+  }
+  return "new";
+}
+
+function toVisibleEntities(value: Json): FlareReportRow["visible_entities"] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    return [{ type: stringValue(item.type), id: stringValue(item.id) }];
+  }).filter((item) => item.type && item.id);
+}
+
+function toClickTrail(value: Json): FlareReportRow["click_trail"] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    return [{
+      ts: numberValue(item.ts),
+      selector: stringValue(item.selector),
+      text: typeof item.text === "string" ? item.text : null,
+      x: numberValue(item.x),
+      y: numberValue(item.y),
+    }];
+  });
+}
+
+function toNetworkTrail(value: Json): FlareReportRow["network_trail"] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    return [{
+      ts: numberValue(item.ts),
+      url: stringValue(item.url),
+      method: stringValue(item.method, "GET"),
+      status: nullableNumberValue(item.status),
+      duration_ms: nullableNumberValue(item.duration_ms),
+      error: typeof item.error === "string" ? item.error : null,
+    }];
+  });
+}
+
+function toConsoleErrors(value: Json): FlareReportRow["console_errors"] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    return [{
+      ts: numberValue(item.ts),
+      level: stringValue(item.level, "error"),
+      message: stringValue(item.message),
+      stack: typeof item.stack === "string" ? item.stack : null,
+    }];
+  }).filter((item) => item.message);
+}
+
+function toRouteTrail(value: Json): FlareReportRow["route_trail"] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    return [{
+      ts: numberValue(item.ts),
+      from: stringValue(item.from),
+      to: stringValue(item.to),
+    }];
+  });
+}
+
+function toDispatchErrors(value: Json): FlareReportRow["dispatch_errors"] {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, error]) => (typeof error === "string" ? [[key, error]] : [])),
+  );
+}
+
+function toViewport(value: Json | null): FlareReportRow["viewport"] {
+  if (!isRecord(value)) return null;
+  const width = numberValue(value.width);
+  const height = numberValue(value.height);
+  const dpr = numberValue(value.dpr, 1);
+  return width > 0 && height > 0 ? { width, height, dpr } : null;
+}
+
+export function toFlareReportRow(row: FlareReportDbRow): FlareReportRow {
+  return {
+    id: row.id,
+    workspace_id: row.workspace_id,
+    reporter_email: row.reporter_email,
+    reporter_role: row.reporter_role,
+    severity: toSeverity(row.severity),
+    screenshot_path: row.screenshot_path,
+    dom_snapshot_path: row.dom_snapshot_path,
+    status: toStatus(row.status),
+    user_description: row.user_description,
+    url: row.url,
+    route: row.route,
+    page_title: row.page_title,
+    visible_entities: toVisibleEntities(row.visible_entities),
+    click_trail: toClickTrail(row.click_trail),
+    network_trail: toNetworkTrail(row.network_trail),
+    console_errors: toConsoleErrors(row.console_errors),
+    route_trail: toRouteTrail(row.route_trail),
+    reproducer_steps: row.reproducer_steps,
+    ai_severity_recommendation: row.ai_severity_recommendation,
+    ai_severity_reasoning: row.ai_severity_reasoning,
+    hypothesis_pattern: row.hypothesis_pattern,
+    linear_issue_url: row.linear_issue_url,
+    paperclip_issue_url: row.paperclip_issue_url,
+    exception_queue_id: row.exception_queue_id,
+    dispatch_errors: toDispatchErrors(row.dispatch_errors),
+    browser: row.browser,
+    os: row.os,
+    viewport: toViewport(row.viewport),
+    created_at: row.created_at,
+    fixed_at: row.fixed_at,
+    fix_deploy_sha: row.fix_deploy_sha,
+  };
+}
+
 interface FlareDetailDrawerProps {
   report: FlareReportRow | null;
   onClose: () => void;
@@ -79,7 +229,7 @@ export function FlareDetailDrawer({ report, onClose }: FlareDetailDrawerProps) {
     queryKey: ["flare-artifacts", report?.id],
     queryFn: async () => {
       if (!report) return { screenshotUrl: null as string | null, domUrl: null as string | null };
-      const bucket = (supabase as unknown as { storage: { from: (b: string) => { createSignedUrl: (p: string, exp: number) => Promise<{ data: { signedUrl: string } | null }> } } }).storage.from("flare-artifacts");
+      const bucket = supabase.storage.from("flare-artifacts");
       const [shot, dom] = await Promise.all([
         report.screenshot_path ? bucket.createSignedUrl(report.screenshot_path, 3600) : Promise.resolve({ data: null }),
         report.dom_snapshot_path ? bucket.createSignedUrl(report.dom_snapshot_path, 3600) : Promise.resolve({ data: null }),
@@ -110,7 +260,7 @@ export function FlareDetailDrawer({ report, onClose }: FlareDetailDrawerProps) {
   const updateMutation = useMutation({
     mutationFn: async (input: { status: FlareReportRow["status"]; fix_deploy_sha?: string }) => {
       if (!report) throw new Error("no report");
-      const patch: Record<string, unknown> = {
+      const patch: FlareReportUpdate = {
         status: input.status,
         triaged_at: new Date().toISOString(),
       };
@@ -118,9 +268,7 @@ export function FlareDetailDrawer({ report, onClose }: FlareDetailDrawerProps) {
         patch.fixed_at = new Date().toISOString();
         if (input.fix_deploy_sha) patch.fix_deploy_sha = input.fix_deploy_sha;
       }
-      const { error } = await (supabase as unknown as {
-        from: (t: string) => { update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<{ error: unknown }> } };
-      }).from("flare_reports").update(patch).eq("id", report.id);
+      const { error } = await db.from("flare_reports").update(patch).eq("id", report.id);
       if (error) throw new Error(String((error as { message?: string }).message ?? "Update failed"));
       // Fire close-the-loop notify on transitions to fixed
       if (input.status === "fixed") {
