@@ -1,28 +1,76 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
+import type { Database } from "@/lib/database.types";
 import { formatCurrency } from "@/lib/format";
 
-interface RentalRateRuleRecord {
-  id: string;
-  customer_id: string | null;
-  equipment_id: string | null;
-  branch_id: string | null;
-  category: string | null;
-  make: string | null;
-  model: string | null;
-  season_start: string | null;
-  season_end: string | null;
-  daily_rate: number | null;
-  weekly_rate: number | null;
-  monthly_rate: number | null;
-  minimum_days: number | null;
-  is_active: boolean;
-  priority_rank: number;
-  notes: string | null;
+const db = supabase as SupabaseClient<Database>;
+
+type RentalRateRuleRow = Database["public"]["Tables"]["rental_rate_rules"]["Row"];
+type RentalRateRuleInsert = Database["public"]["Tables"]["rental_rate_rules"]["Insert"];
+type RentalRateRuleUpdate = Database["public"]["Tables"]["rental_rate_rules"]["Update"];
+type RentalRateRuleRecord = Pick<
+  RentalRateRuleRow,
+  | "id"
+  | "customer_id"
+  | "equipment_id"
+  | "branch_id"
+  | "category"
+  | "make"
+  | "model"
+  | "season_start"
+  | "season_end"
+  | "daily_rate"
+  | "weekly_rate"
+  | "monthly_rate"
+  | "minimum_days"
+  | "is_active"
+  | "priority_rank"
+  | "notes"
+>;
+type RentalEquipmentRow = Pick<
+  Database["public"]["Views"]["crm_equipment"]["Row"],
+  "id" | "make" | "model" | "year" | "category" | "daily_rental_rate" | "weekly_rental_rate" | "monthly_rental_rate"
+>;
+type RentalEquipmentOption = Omit<RentalEquipmentRow, "id"> & { id: string };
+type BranchOptionRow = Pick<Database["public"]["Tables"]["branches"]["Row"], "id" | "display_name">;
+type PortalCustomerOptionRow = Pick<Database["public"]["Tables"]["portal_customers"]["Row"], "id" | "first_name" | "last_name">;
+
+function toRentalRateRule(row: RentalRateRuleRow): RentalRateRuleRecord {
+  return {
+    id: row.id,
+    customer_id: row.customer_id,
+    equipment_id: row.equipment_id,
+    branch_id: row.branch_id,
+    category: row.category,
+    make: row.make,
+    model: row.model,
+    season_start: row.season_start,
+    season_end: row.season_end,
+    daily_rate: row.daily_rate,
+    weekly_rate: row.weekly_rate,
+    monthly_rate: row.monthly_rate,
+    minimum_days: row.minimum_days,
+    is_active: row.is_active,
+    priority_rank: row.priority_rank,
+    notes: row.notes,
+  };
+}
+
+function toEquipmentOption(row: RentalEquipmentRow): RentalEquipmentOption | null {
+  return row.id ? { ...row, id: row.id } : null;
+}
+
+function toBranchOption(row: BranchOptionRow): BranchOptionRow {
+  return row;
+}
+
+function toCustomerOption(row: PortalCustomerOptionRow): PortalCustomerOptionRow {
+  return row;
 }
 
 function emptyDraft() {
@@ -68,18 +116,12 @@ export function RentalPricingPage() {
   const rulesQuery = useQuery({
     queryKey: ["admin", "rental-rate-rules"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            order: (column: string, opts?: { ascending?: boolean }) => Promise<{ data: RentalRateRuleRecord[] | null; error: { message?: string } | null }>;
-          };
-        };
-      })
+      const { data, error } = await db
         .from("rental_rate_rules")
         .select("*")
         .order("priority_rank", { ascending: true });
       if (error) throw new Error(error.message ?? "Failed to load rental pricing rules.");
-      return data ?? [];
+      return (data ?? []).map(toRentalRateRule);
     },
     staleTime: 30_000,
   });
@@ -87,14 +129,14 @@ export function RentalPricingPage() {
   const equipmentQuery = useQuery({
     queryKey: ["admin", "rental-pricing-equipment"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("crm_equipment")
         .select("id, make, model, year, category, daily_rental_rate, weekly_rental_rate, monthly_rental_rate")
         .eq("ownership", "rental_fleet")
         .is("deleted_at", null)
         .limit(200);
       if (error) throw new Error(error.message);
-      return data ?? [];
+      return (data ?? []).map(toEquipmentOption).filter((row): row is RentalEquipmentOption => row !== null);
     },
     staleTime: 60_000,
   });
@@ -102,9 +144,9 @@ export function RentalPricingPage() {
   const branchesQuery = useQuery({
     queryKey: ["admin", "rental-pricing-branches"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("branches").select("id, display_name").eq("is_active", true);
+      const { data, error } = await db.from("branches").select("id, display_name").eq("is_active", true);
       if (error) throw new Error(error.message);
-      return data ?? [];
+      return (data ?? []).map(toBranchOption);
     },
     staleTime: 60_000,
   });
@@ -112,20 +154,16 @@ export function RentalPricingPage() {
   const customersQuery = useQuery({
     queryKey: ["admin", "rental-pricing-customers"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => Promise<{ data: Array<{ id: string; first_name: string; last_name: string }> | null; error: { message?: string } | null }>;
-        };
-      }).from("portal_customers").select("id, first_name, last_name");
+      const { data, error } = await db.from("portal_customers").select("id, first_name, last_name");
       if (error) throw new Error(error.message ?? "Failed to load portal customers.");
-      return data ?? [];
+      return (data ?? []).map(toCustomerOption);
     },
     staleTime: 60_000,
   });
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const payload = {
+      const payload: RentalRateRuleInsert & RentalRateRuleUpdate = {
         customer_id: draft.customerId || null,
         equipment_id: draft.equipmentId || null,
         branch_id: draft.branchId || null,
@@ -141,17 +179,9 @@ export function RentalPricingPage() {
         priority_rank: Number(draft.priorityRank) || 100,
         notes: draft.notes || null,
       };
-      const table = (supabase as unknown as {
-        from: (table: string) => {
-          insert: (value: Record<string, unknown>) => Promise<{ error: { message?: string } | null }>;
-          update: (value: Record<string, unknown>) => {
-            eq: (column: string, value: string) => Promise<{ error: { message?: string } | null }>;
-          };
-        };
-      }).from("rental_rate_rules");
       const result = editingRuleId
-        ? await table.update(payload).eq("id", editingRuleId)
-        : await table.insert(payload);
+        ? await db.from("rental_rate_rules").update(payload).eq("id", editingRuleId)
+        : await db.from("rental_rate_rules").insert(payload);
       const error = result.error;
       if (error) throw new Error(error.message ?? "Failed to save pricing rule.");
     },
@@ -164,13 +194,7 @@ export function RentalPricingPage() {
 
   const toggleRuleMutation = useMutation({
     mutationFn: async (payload: { id: string; isActive: boolean }) => {
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => {
-          update: (value: Record<string, unknown>) => {
-            eq: (column: string, value: string) => Promise<{ error: { message?: string } | null }>;
-          };
-        };
-      })
+      const { error } = await db
         .from("rental_rate_rules")
         .update({ is_active: payload.isActive })
         .eq("id", payload.id);
@@ -183,13 +207,7 @@ export function RentalPricingPage() {
 
   const deleteRuleMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => {
-          delete: () => {
-            eq: (column: string, value: string) => Promise<{ error: { message?: string } | null }>;
-          };
-        };
-      })
+      const { error } = await db
         .from("rental_rate_rules")
         .delete()
         .eq("id", id);
