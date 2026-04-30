@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle2, Database, FileSpreadsheet, Loader2, ShieldCheck } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock3, Database, FileSpreadsheet, Fingerprint, Loader2, RefreshCcw, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -119,6 +119,15 @@ export function IntelliDealerImportDashboardPage() {
 
   const latest = dashboardQuery.data?.latestRun ?? null;
   const counts = dashboardQuery.data?.counts ?? null;
+  const sourceTotal = latest
+    ? latest.master_rows + latest.contact_rows + latest.contact_memo_rows + latest.ar_agency_rows + latest.profitability_rows
+    : 0;
+  const stagedTotal = counts
+    ? counts.masterStage + counts.contactsStage + counts.contactMemosStage + counts.arAgencyStage + counts.profitabilityStage
+    : 0;
+  const mappedTotal = counts
+    ? counts.mappedMaster + counts.mappedContacts + counts.mappedArAgency + counts.mappedProfitability + counts.contactMemosNonblank
+    : 0;
   const stagePerfect = useMemo(() => {
     if (!latest || !counts) return false;
     return latest.master_rows === counts.masterStage
@@ -127,6 +136,36 @@ export function IntelliDealerImportDashboardPage() {
       && latest.ar_agency_rows === counts.arAgencyStage
       && latest.profitability_rows === counts.profitabilityStage;
   }, [counts, latest]);
+  const operationalChecks = useMemo(() => {
+    if (!latest || !counts) return [];
+    return [
+      {
+        label: "Run committed",
+        ok: latest.status === "committed",
+        detail: latest.status === "committed" ? "Canonical tables are populated" : `Current status is ${latest.status}`,
+      },
+      {
+        label: "Stage counts match source",
+        ok: stagePerfect,
+        detail: stagePerfect ? "All source row totals landed in staging" : "One or more source totals differ from staging",
+      },
+      {
+        label: "No import errors",
+        ok: counts.importErrors === 0,
+        detail: `${counts.importErrors.toLocaleString()} blocking import error${counts.importErrors === 1 ? "" : "s"}`,
+      },
+      {
+        label: "Card data redacted",
+        ok: counts.rawCardRows === 0,
+        detail: `${counts.rawCardRows.toLocaleString()} raw card row${counts.rawCardRows === 1 ? "" : "s"} remain`,
+      },
+      {
+        label: "Memo text reconciled",
+        ok: counts.contactMemosNonblank > 0,
+        detail: `${counts.contactMemosNonblank.toLocaleString()} nonblank memo row${counts.contactMemosNonblank === 1 ? "" : "s"} represented`,
+      },
+    ];
+  }, [counts, latest, stagePerfect]);
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-4 sm:px-6 lg:px-8">
@@ -189,6 +228,52 @@ export function IntelliDealerImportDashboardPage() {
             />
           </div>
 
+          <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+            <Card>
+              <CardContent className="p-5">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-md border border-sky-400/25 bg-sky-400/10 p-2 text-sky-300">
+                    <Fingerprint className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-sm font-semibold text-foreground">Source fingerprint</h2>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Exact file identity and run timing used for rerun comparison.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-2">
+                  <DetailRow label="Source file" value={latest.source_file_name ?? "Unknown source"} />
+                  <DetailRow label="SHA-256 hash" value={formatHash(latest.source_file_hash)} mono />
+                  <DetailRow label="Run id" value={latest.id} mono />
+                  <DetailRow label="Started" value={formatDate(latest.created_at)} />
+                  <DetailRow label="Completed" value={latest.completed_at ? formatDate(latest.completed_at) : "Not completed"} />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-5">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-md border border-emerald-400/25 bg-emerald-400/10 p-2 text-emerald-300">
+                    <RefreshCcw className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground">Operational readiness</h2>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      These checks should remain green before another import or customer-data release.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {operationalChecks.map((check) => (
+                    <OperationalCheck key={check.label} label={check.label} detail={check.detail} ok={check.ok} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
             <Card>
               <CardContent className="p-5">
@@ -207,6 +292,7 @@ export function IntelliDealerImportDashboardPage() {
                         <th className="py-2 pr-4 text-right">Source</th>
                         <th className="py-2 pr-4 text-right">Staged</th>
                         <th className="py-2 pr-4 text-right">Mapped</th>
+                        <th className="py-2 pr-4 text-right">Delta</th>
                         <th className="py-2 text-right">Status</th>
                       </tr>
                     </thead>
@@ -230,9 +316,11 @@ export function IntelliDealerImportDashboardPage() {
                   <Metric label="Profitability facts" value={counts.canonicalProfitabilityFacts} icon={Database} />
                   <Metric label="Nonblank staged memos" value={counts.contactMemosNonblank} icon={FileSpreadsheet} />
                   <Metric label="Raw card rows" value={counts.rawCardRows} icon={AlertCircle} danger={counts.rawCardRows > 0} />
+                  <Metric label="Source rows loaded" value={sourceTotal} icon={Clock3} />
+                  <Metric label="Staged rows loaded" value={stagedTotal} icon={Database} />
                 </div>
                 <p className="mt-4 text-xs text-muted-foreground">
-                  Memo note: all staged memo rows are retained. The mapped memo figure is intentionally the nonblank source text count, not the total blank-inclusive row count.
+                  Memo note: all staged memo rows are retained. The mapped memo figure is intentionally the nonblank source text count, not the total blank-inclusive row count. Total operationally mapped rows: {mappedTotal.toLocaleString()}.
                 </p>
               </CardContent>
             </Card>
@@ -252,6 +340,9 @@ export function IntelliDealerImportDashboardPage() {
                       <p className="mt-1 font-mono text-[10px] text-muted-foreground">{run.id}</p>
                       <p className="mt-1 text-[10px] text-muted-foreground">
                         {formatDate(run.created_at)} · errors {run.error_count.toLocaleString()} · warnings {run.warning_count.toLocaleString()}
+                      </p>
+                      <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
+                        hash {formatHash(run.source_file_hash)}
                       </p>
                     </div>
                   ))}
@@ -357,6 +448,9 @@ function CountRow({
       <td className="py-2 pr-4 text-right tabular-nums text-muted-foreground">
         {mapped.toLocaleString()} <span className="text-[10px]">{mappedLabel}</span>
       </td>
+      <td className={`py-2 pr-4 text-right tabular-nums ${sourceMatchesStage ? "text-muted-foreground" : "text-red-400"}`}>
+        {(staged - source).toLocaleString()}
+      </td>
       <td className="py-2 text-right">
         {sourceMatchesStage && mappedOk ? (
           <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-400" />
@@ -381,6 +475,28 @@ function StatusCard({ label, value, detail, tone }: { label: string; value: stri
   );
 }
 
+function DetailRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="grid gap-1 rounded-md border border-border/60 bg-background/40 p-3 sm:grid-cols-[120px_1fr]">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={`min-w-0 break-words text-xs text-foreground ${mono ? "font-mono" : ""}`}>{value}</p>
+    </div>
+  );
+}
+
+function OperationalCheck({ label, detail, ok }: { label: string; detail: string; ok: boolean }) {
+  const Icon = ok ? CheckCircle2 : AlertCircle;
+  return (
+    <div className={`rounded-md border p-3 ${ok ? "border-emerald-500/20 bg-emerald-500/5" : "border-red-500/20 bg-red-500/5"}`}>
+      <div className="flex items-center gap-2">
+        <Icon className={`h-4 w-4 ${ok ? "text-emerald-400" : "text-red-400"}`} />
+        <p className="text-xs font-semibold text-foreground">{label}</p>
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
 function Metric({ label, value, icon: Icon, danger = false }: { label: string; value: number; icon: typeof Database; danger?: boolean }) {
   return (
     <div className="rounded-md border border-border/70 bg-background/40 p-3">
@@ -399,4 +515,9 @@ function formatDate(value: string): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function formatHash(value: string | null): string {
+  if (!value) return "Not captured";
+  return value.length > 18 ? `${value.slice(0, 12)}...${value.slice(-8)}` : value;
 }

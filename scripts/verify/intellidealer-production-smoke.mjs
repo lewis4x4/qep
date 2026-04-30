@@ -206,7 +206,11 @@ async function smokeAdminDashboard(context) {
     throw new Error(`Admin dashboard did not render reconciliation cards. Screenshot: ${screenshot}. Body: ${bodyText}`);
   }
   await page.getByText("A/R card redaction", { exact: false }).waitFor({ timeout: 20_000 });
+  await page.getByText("Source fingerprint", { exact: true }).waitFor({ timeout: 20_000 });
+  await page.getByText("Operational readiness", { exact: true }).waitFor({ timeout: 20_000 });
+  await page.getByText("SHA-256 hash", { exact: true }).waitFor({ timeout: 20_000 });
   await page.getByRole("cell", { name: "Customer master", exact: true }).waitFor({ timeout: 20_000 });
+  await page.getByRole("columnheader", { name: "Delta", exact: true }).waitFor({ timeout: 20_000 });
   await page.getByText("No import errors recorded", { exact: false }).waitFor({ timeout: 20_000 });
 
   const screenshot = resolve(artifactDir, "admin-intellidealer-imports.png");
