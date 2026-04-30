@@ -10,7 +10,7 @@ Production target:
 
 - Supabase project: `iciddijgonywtxoelous`
 - Netlify production URL: `https://qualityequipmentparts.netlify.app`
-- Production deploy ID: `69f35b9c02a1997df0e10e04`
+- Production deploy ID: `69f35f3fda204f9461cd2f1e`
 - Import run ID: `df74305e-d37a-4e4b-be5e-457633b2cd1d`
 
 ## Production Reconciliation
@@ -42,6 +42,7 @@ The latest local migration is applied remotely:
 - `516_intellidealer_import_staging_status.sql`
 - `517_intellidealer_dashboard_mapped_count_indexes.sql`
 - `518_intellidealer_dashboard_counts_rpc.sql`
+- `519_intellidealer_commit_transition_guard.sql`
 
 ## UI Readiness
 
@@ -93,13 +94,14 @@ The dashboard renders:
 - Row-level CSV export controls for safe staged customer master, contacts, memos, A/R agency assignments, profitability, and import-error rows.
 - Upload-preview controls for browser-auditing a new `.xlsx`, storing it in a private bucket, and recording an audit-only preview run.
 - Protected staging controls that reuse the browser-audited workbook rows, start staging through the `intellidealer-customer-import` edge gate, insert stage rows through Supabase RLS, and complete staging only after exact source/stage counts match.
-- Commit from uploaded preview remains gated until a run reaches `staged`; staged runs expose exact-run-id confirmation before canonical commit.
+- Commit from uploaded preview remains gated until a run reaches `staged`; staged runs require a passing commit preflight and exact-run-id confirmation before canonical commit.
+- The database rejects any IntelliDealer run transition into `committing` unless the previous status was `staged`.
 - Browser-staged runs can be discarded from the dashboard, which clears staging rows and marks the run cancelled without touching canonical customer data.
 - Recent run history and recent import errors.
 
 The dashboard count path uses `qrm_intellidealer_customer_import_run_counts`, a count-only elevated RPC, so the browser no longer depends on the RLS-heavy reconciliation view and does not receive sensitive A/R card row data.
 
-The browser staging production exercise recorded test run `183a569d-41a4-4192-a5eb-570f69f49e76`, loaded exact stage counts (`5,136` master, `4,657` contacts, `1,179` memos, `19,466` A/R agencies, `9,894` profitability), completed the run to `staged`, verified zero import errors, exercised the dashboard discard control, verified the run changed to `cancelled`, verified `0` staged rows remained, and recorded zero browser console or 5xx response errors. The test run and uploaded workbook object were deleted. The committed production run remains the operational baseline.
+The browser staging production exercise recorded test run `84de19f4-bb9f-4857-a602-d67d356d3d15`, loaded exact stage counts (`5,136` master, `4,657` contacts, `1,179` memos, `19,466` A/R agencies, `9,894` profitability), completed the run to `staged`, ran the dashboard commit preflight, verified zero import errors, confirmed the duplicate committed source-hash warning for the same workbook, exercised the dashboard discard control, verified the run changed to `cancelled`, verified `0` staged rows remained, and recorded zero browser console or 5xx response errors. The test run and uploaded workbook object were deleted. The committed production run remains the operational baseline.
 
 ## Production Browser Smoke
 
@@ -164,6 +166,8 @@ bun run intellidealer:production:smoke
 git diff --check
 ```
 
+Additional production guard check passed: a temporary audited run could not transition directly to `committing`; PostgreSQL raised `INTELLIDEALER_COMMIT_REQUIRES_STAGED_RUN`, and the temporary run was deleted.
+
 ## Rerun Safety Gate
 
 Before staging or committing the same customer workbook again, run:
@@ -176,7 +180,7 @@ The gate compares the current local workbook to the committed production import.
 
 ## Remaining Follow-Up
 
-The customer import, canonical data load, redaction, deployment, admin dashboard, protected browser staging, staged-run discard control, safe row-level export controls, Account 360 IntelliDealer drill-downs, rerun-safety gate, and UI smoke test are complete.
+The customer import, canonical data load, redaction, deployment, admin dashboard, protected browser staging, commit preflight, database commit-transition guard, staged-run discard control, safe row-level export controls, Account 360 IntelliDealer drill-downs, rerun-safety gate, and UI smoke test are complete.
 
 Recommended next slice:
 

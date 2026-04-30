@@ -9,6 +9,7 @@
  *   - stage_chunk: inserts browser-mapped stage rows into a whitelisted stage table.
  *   - complete_stage: verifies stage counts and marks the run staged.
  *   - discard_stage: clears browser-staged rows and cancels the staged run.
+ *   - preflight_commit: validates staged counts and commit blockers without mutating data.
  *   - status:  returns a run scoped to the caller's workspace.
  *   - cancel:  marks an audited/staging/failed preview run as cancelled.
  *   - commit:  only accepts already staged runs, then delegates to the existing
@@ -22,7 +23,7 @@ import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 
-type Action = "preview" | "init_stage" | "stage_chunk" | "complete_stage" | "discard_stage" | "status" | "cancel" | "commit";
+type Action = "preview" | "init_stage" | "stage_chunk" | "complete_stage" | "discard_stage" | "preflight_commit" | "status" | "cancel" | "commit";
 type StageTableKey = "master" | "contacts" | "memos" | "arAgencies" | "profitability";
 
 interface RequestBody {
@@ -99,6 +100,8 @@ Deno.serve(async (req) => {
         return await handleCompleteStage(auth.supabase, auth.workspaceId, body, origin);
       case "discard_stage":
         return await handleDiscardStage(auth.supabase, auth.workspaceId, body, origin);
+      case "preflight_commit":
+        return await handlePreflightCommit(auth.supabase, auth.workspaceId, body, origin);
       case "status":
         return await handleStatus(auth.supabase, auth.workspaceId, body, origin);
       case "cancel":
@@ -451,6 +454,82 @@ async function handleDiscardStage(
   return safeJsonOk({ run_id: body.run_id, status: "cancelled", discarded_counts: counts.counts }, origin);
 }
 
+async function handlePreflightCommit(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  body: RequestBody,
+  origin: string | null,
+): Promise<Response> {
+  if (!body.run_id) return safeJsonError("run_id required", 400, origin);
+
+  const loaded = await loadRun(supabase, workspaceId, body.run_id);
+  if (loaded.error) return safeJsonError(loaded.error, loaded.status, origin);
+  const run = loaded.run;
+  const checks: Array<{ name: string; ok: boolean; detail: string }> = [];
+  const warnings: string[] = [];
+
+  checks.push({
+    name: "run is staged",
+    ok: run.status === "staged",
+    detail: run.status,
+  });
+
+  const counts = await countStageRows(supabase, workspaceId, body.run_id);
+  if (counts.error) return safeJsonError(counts.error, 500, origin);
+  const expected = {
+    master: Number(run.master_rows ?? 0),
+    contacts: Number(run.contact_rows ?? 0),
+    memos: Number(run.contact_memo_rows ?? 0),
+    arAgencies: Number(run.ar_agency_rows ?? 0),
+    profitability: Number(run.profitability_rows ?? 0),
+  };
+  for (const key of STAGE_TABLE_ORDER) {
+    checks.push({
+      name: `${key} count matches`,
+      ok: counts.counts[key] === expected[key],
+      detail: `${counts.counts[key]} vs ${expected[key]}`,
+    });
+  }
+
+  const { count: errorCount, error: errorCountError } = await supabase
+    .from("qrm_intellidealer_customer_import_errors")
+    .select("id", { count: "exact", head: true })
+    .eq("run_id", body.run_id)
+    .eq("workspace_id", workspaceId)
+    .eq("severity", "error");
+  if (errorCountError) return safeJsonError(`failed to count import errors: ${errorCountError.message}`, 500, origin);
+  checks.push({
+    name: "no blocking import errors",
+    ok: (errorCount ?? 0) === 0,
+    detail: String(errorCount ?? 0),
+  });
+
+  if (typeof run.source_file_hash === "string" && run.source_file_hash.length > 0) {
+    const { count: committedHashCount, error: committedHashError } = await supabase
+      .from("qrm_intellidealer_customer_import_runs")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .eq("source_file_hash", run.source_file_hash)
+      .eq("status", "committed")
+      .neq("id", body.run_id);
+    if (committedHashError) return safeJsonError(`failed to check committed hash: ${committedHashError.message}`, 500, origin);
+    if ((committedHashCount ?? 0) > 0) {
+      warnings.push(`${committedHashCount} committed run already uses this source file hash.`);
+    }
+  }
+
+  const ok = checks.every((check) => check.ok);
+  return safeJsonOk({
+    run_id: body.run_id,
+    status: run.status,
+    ok,
+    checks,
+    warnings,
+    expected_counts: expected,
+    staged_counts: counts.counts,
+  }, origin);
+}
+
 async function handleCommit(
   supabase: SupabaseClient,
   workspaceId: string,
@@ -488,6 +567,7 @@ async function loadRun(
       id: string;
       status: string;
       workspace_id: string;
+      source_file_hash: string | null;
       master_rows: number;
       contact_rows: number;
       contact_memo_rows: number;
@@ -502,7 +582,7 @@ async function loadRun(
 > {
   const { data, error } = await supabase
     .from("qrm_intellidealer_customer_import_runs")
-    .select("id, status, workspace_id, master_rows, contact_rows, contact_memo_rows, ar_agency_rows, profitability_rows, metadata")
+    .select("id, status, workspace_id, source_file_hash, master_rows, contact_rows, contact_memo_rows, ar_agency_rows, profitability_rows, metadata")
     .eq("id", runId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();

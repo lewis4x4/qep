@@ -177,6 +177,16 @@ interface ImportActionResponse {
   discarded_counts?: Record<StageTableKey, number>;
 }
 
+interface ImportPreflightResponse {
+  run_id: string;
+  status: string;
+  ok: boolean;
+  checks: Array<{ name: string; ok: boolean; detail: string }>;
+  warnings: string[];
+  expected_counts: Record<StageTableKey, number>;
+  staged_counts: Record<StageTableKey, number>;
+}
+
 type ExportKey = "master" | "contacts" | "memos" | "arAgencies" | "profitability" | "errors";
 
 type ExportRow = Record<string, unknown>;
@@ -425,10 +435,11 @@ export function IntelliDealerImportDashboardPage() {
   });
   const [runActionState, setRunActionState] = useState<{
     runId: string;
-    action: "commit" | "discard";
+    action: "preflight" | "commit" | "discard";
     status: "loading" | "success" | "error";
     message: string;
   } | null>(null);
+  const [commitPreflight, setCommitPreflight] = useState<ImportPreflightResponse | null>(null);
   const dashboardQuery = useQuery({
     queryKey: ["admin", "intellidealer-import-dashboard"],
     queryFn: fetchDashboardData,
@@ -594,8 +605,42 @@ export function IntelliDealerImportDashboardPage() {
     }
   }
 
+  async function handlePreflightRun(run: ImportRunRow) {
+    if (run.status !== "staged") return;
+    setRunActionState({ runId: run.id, action: "preflight", status: "loading", message: "Running commit preflight..." });
+    setCommitPreflight(null);
+    try {
+      const result = await preflightIntelliDealerCommit(run.id);
+      setCommitPreflight(result);
+      setRunActionState({
+        runId: run.id,
+        action: "preflight",
+        status: result.ok ? "success" : "error",
+        message: result.ok
+          ? `Preflight passed with ${result.warnings.length.toLocaleString()} warning${result.warnings.length === 1 ? "" : "s"}.`
+          : "Preflight found blockers. Commit remains disabled.",
+      });
+    } catch (error) {
+      setRunActionState({
+        runId: run.id,
+        action: "preflight",
+        status: "error",
+        message: error instanceof Error ? error.message : "Preflight failed.",
+      });
+    }
+  }
+
   async function handleCommitRun(run: ImportRunRow) {
     if (run.status !== "staged") return;
+    if (commitPreflight?.run_id !== run.id || commitPreflight.ok !== true) {
+      setRunActionState({
+        runId: run.id,
+        action: "commit",
+        status: "error",
+        message: "Run commit preflight successfully before committing.",
+      });
+      return;
+    }
     const typedRunId = window.prompt(
       `This will commit staged IntelliDealer rows into canonical QRM tables for run ${run.id}.\n\nType the full run id to continue.`,
     );
@@ -612,6 +657,7 @@ export function IntelliDealerImportDashboardPage() {
     setRunActionState({ runId: run.id, action: "commit", status: "loading", message: "Committing staged rows to canonical QRM tables..." });
     try {
       const result = await commitIntelliDealerRun(run.id);
+      setCommitPreflight(null);
       setRunActionState({
         runId: run.id,
         action: "commit",
@@ -639,6 +685,7 @@ export function IntelliDealerImportDashboardPage() {
     setRunActionState({ runId: run.id, action: "discard", status: "loading", message: "Discarding staged rows..." });
     try {
       const result = await discardIntelliDealerStage(run.id);
+      if (commitPreflight?.run_id === run.id) setCommitPreflight(null);
       setRunActionState({
         runId: run.id,
         action: "discard",
@@ -985,6 +1032,19 @@ export function IntelliDealerImportDashboardPage() {
                             variant="outline"
                             className="h-8 text-[11px]"
                             disabled={runActionState?.status === "loading"}
+                            onClick={() => void handlePreflightRun(run)}
+                          >
+                            {runActionState?.runId === run.id && runActionState.status === "loading" && runActionState.action === "preflight"
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <Clock3 className="h-3.5 w-3.5" />}
+                            Preflight commit
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-[11px]"
+                            disabled={runActionState?.status === "loading" || commitPreflight?.run_id !== run.id || commitPreflight.ok !== true}
                             onClick={() => void handleCommitRun(run)}
                           >
                             {runActionState?.runId === run.id && runActionState.status === "loading" && runActionState.action === "commit"
@@ -1013,6 +1073,24 @@ export function IntelliDealerImportDashboardPage() {
                         <p className={`mt-2 text-[11px] ${runActionState.status === "error" ? "text-red-400" : runActionState.status === "success" ? "text-emerald-400" : "text-muted-foreground"}`}>
                           {runActionState.message}
                         </p>
+                      ) : null}
+                      {commitPreflight?.run_id === run.id ? (
+                        <div className="mt-3 rounded-md border border-border/70 bg-background/40 p-2">
+                          <p className="text-[11px] font-semibold text-foreground">
+                            Commit preflight: {commitPreflight.ok ? "passed" : "blocked"}
+                          </p>
+                          <div className="mt-2 grid gap-1">
+                            {commitPreflight.checks.map((check) => (
+                              <div key={check.name} className="flex items-center justify-between gap-2 text-[10px]">
+                                <span className={check.ok ? "text-muted-foreground" : "text-red-400"}>{check.name}</span>
+                                <span className="font-mono text-muted-foreground">{check.detail}</span>
+                              </div>
+                            ))}
+                          </div>
+                          {commitPreflight.warnings.length > 0 ? (
+                            <p className="mt-2 text-[10px] text-amber-300">{commitPreflight.warnings.join(" ")}</p>
+                          ) : null}
+                        </div>
                       ) : null}
                     </div>
                   ))}
@@ -1518,6 +1596,10 @@ async function stageIntelliDealerChunk(runId: string, workspaceId: string, table
 
 async function completeIntelliDealerStage(runId: string): Promise<StageResponse> {
   return invokeIntelliDealerImport<StageResponse>({ action: "complete_stage", run_id: runId }, "IntelliDealer staging completion failed");
+}
+
+async function preflightIntelliDealerCommit(runId: string): Promise<ImportPreflightResponse> {
+  return invokeIntelliDealerImport<ImportPreflightResponse>({ action: "preflight_commit", run_id: runId }, "IntelliDealer commit preflight failed");
 }
 
 async function commitIntelliDealerRun(runId: string): Promise<ImportActionResponse> {

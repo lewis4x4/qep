@@ -92,6 +92,10 @@ try {
     check("no import errors", run.import_errors_count === 0, String(run.import_errors_count)),
   ];
 
+  await page.getByRole("button", { name: "Preflight commit", exact: true }).click();
+  await page.getByText("Commit preflight: passed", { exact: false }).waitFor({ timeout: 120_000 });
+  await page.getByText("committed run already uses this source file hash", { exact: false }).waitFor({ timeout: 20_000 });
+
   page.once("dialog", async (dialog) => {
     await dialog.accept();
   });
