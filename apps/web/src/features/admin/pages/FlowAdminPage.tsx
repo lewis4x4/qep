@@ -7,17 +7,29 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Workflow, Loader2, AlertOctagon, CheckCircle2, PlayCircle, Sparkles, Bot, Zap, Lightbulb, X, Activity } from "lucide-react";
 import { ForwardForecastBar, StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
+import type { Database, Json } from "@/lib/database.types";
 import { FlowRunHistoryDrawer, type FlowRunRow } from "../components/flow/FlowRunHistoryDrawer";
 import { FlowApprovalsPanel } from "../components/flow/FlowApprovalsPanel";
 import { SloSparkline } from "@/lib/iron/SloSparkline";
 import { getQuoteApprovalPolicy, saveQuoteApprovalPolicy } from "@/features/quote-builder/lib/quote-api";
 import type { QuoteApprovalConditionType, QuoteApprovalPolicy } from "../../../../../../shared/qep-moonshot-contracts";
+
+const db = supabase as SupabaseClient<Database>;
+
+type FlowWorkflowDefinitionRow = Database["public"]["Tables"]["flow_workflow_definitions"]["Row"];
+type FlowWorkflowRunRow = Database["public"]["Tables"]["flow_workflow_runs"]["Row"];
+type ExceptionQueueRow = Database["public"]["Tables"]["exception_queue"]["Row"];
+type ExceptionQueueUpdate = Database["public"]["Tables"]["exception_queue"]["Update"];
+type IronFlowSuggestionDbRow = Database["public"]["Tables"]["iron_flow_suggestions"]["Row"];
+type IronFlowSuggestionUpdate = Database["public"]["Tables"]["iron_flow_suggestions"]["Update"];
+type IronSloHistoryRow = Pick<Database["public"]["Tables"]["iron_slo_history"]["Row"], "snapshot">;
 
 interface WorkflowDef {
   id: string;
@@ -75,6 +87,184 @@ interface IronSloSnapshot {
   cost_pass: boolean;
 }
 
+type FlowRunnerResponse = unknown;
+type FlowSynthesizeResponse = { ok: boolean; definition_id: string | null; missing?: string[]; error?: string };
+type IronPatternMiningResponse = { ok: boolean; suggestions_upserted?: number; error?: string };
+type JsonRecord = { [key: string]: Json | undefined };
+type WorkflowDefSelectedRow = Pick<
+  FlowWorkflowDefinitionRow,
+  | "id"
+  | "slug"
+  | "name"
+  | "description"
+  | "owner_role"
+  | "enabled"
+  | "trigger_event_pattern"
+  | "affects_modules"
+  | "dry_run"
+  | "version"
+  | "updated_at"
+  | "surface"
+  | "iron_metadata"
+  | "feature_flag"
+>;
+type FlowRunSelectedRow = Pick<
+  FlowWorkflowRunRow,
+  | "id"
+  | "workflow_slug"
+  | "status"
+  | "started_at"
+  | "finished_at"
+  | "duration_ms"
+  | "error_text"
+  | "resolved_context"
+  | "metadata"
+  | "dead_letter_id"
+  | "event_id"
+>;
+type IronFlowSuggestionSelectedRow = Pick<
+  IronFlowSuggestionDbRow,
+  | "id"
+  | "pattern_signature"
+  | "short_label"
+  | "intent_examples"
+  | "occurrence_count"
+  | "unique_users"
+  | "first_seen_at"
+  | "last_seen_at"
+  | "status"
+  | "promoted_flow_id"
+>;
+
+function toRecord(value: Json | null): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+
+function toStringArray(value: Json): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function toIronMetadata(value: Json | null): WorkflowDef["iron_metadata"] {
+  const record = toRecord(value);
+  if (!record) return null;
+  return {
+    short_label: typeof record.short_label === "string" ? record.short_label : undefined,
+    iron_role: typeof record.iron_role === "string" ? record.iron_role : undefined,
+  };
+}
+
+function toWorkflowDef(row: WorkflowDefSelectedRow): WorkflowDef {
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    description: row.description,
+    owner_role: row.owner_role,
+    enabled: row.enabled,
+    trigger_event_pattern: row.trigger_event_pattern,
+    affects_modules: toStringArray(row.affects_modules),
+    dry_run: row.dry_run,
+    version: row.version,
+    updated_at: row.updated_at,
+    surface: row.surface,
+    iron_metadata: toIronMetadata(row.iron_metadata),
+    feature_flag: row.feature_flag,
+  };
+}
+
+function toFlowRunRow(row: FlowRunSelectedRow): FlowRunRow {
+  return {
+    id: row.id,
+    workflow_slug: row.workflow_slug,
+    status: row.status,
+    started_at: row.started_at,
+    finished_at: row.finished_at,
+    duration_ms: row.duration_ms,
+    error_text: row.error_text,
+    resolved_context: toRecord(row.resolved_context),
+    metadata: toRecord(row.metadata),
+    dead_letter_id: row.dead_letter_id,
+    event_id: row.event_id,
+  };
+}
+
+function toDeadLetterRow(row: Pick<ExceptionQueueRow, "id" | "title" | "payload" | "created_at">) {
+  return {
+    id: row.id,
+    title: row.title,
+    payload: toRecord(row.payload) ?? {},
+    created_at: row.created_at,
+  };
+}
+
+function toIntentExamples(value: Json): IronSuggestionRow["intent_examples"] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is JsonRecord => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    .map((item) => ({
+      message: typeof item.message === "string" ? item.message : "",
+      conversation_id: typeof item.conversation_id === "string" ? item.conversation_id : "",
+      occurred_at: typeof item.occurred_at === "string" ? item.occurred_at : "",
+    }))
+    .filter((item) => item.message.length > 0);
+}
+
+function toIronSuggestionRow(row: IronFlowSuggestionSelectedRow): IronSuggestionRow {
+  return {
+    id: row.id,
+    pattern_signature: row.pattern_signature,
+    short_label: row.short_label,
+    intent_examples: toIntentExamples(row.intent_examples),
+    occurrence_count: row.occurrence_count,
+    unique_users: row.unique_users,
+    first_seen_at: row.first_seen_at ?? new Date(0).toISOString(),
+    last_seen_at: row.last_seen_at ?? row.first_seen_at ?? new Date(0).toISOString(),
+    status: row.status,
+    promoted_flow_id: row.promoted_flow_id,
+  };
+}
+
+function numberFromRecord(record: Record<string, unknown>, key: keyof IronSloSnapshot, fallback = 0): number {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function nullableNumberFromRecord(record: Record<string, unknown>, key: keyof IronSloSnapshot): number | null {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function booleanFromRecord(record: Record<string, unknown>, key: keyof IronSloSnapshot): boolean {
+  return record[key] === true;
+}
+
+function toIronSloSnapshot(value: Json | null): IronSloSnapshot | null {
+  const record = toRecord(value);
+  if (!record) return null;
+  return {
+    computed_at: typeof record.computed_at === "string" ? record.computed_at : new Date(0).toISOString(),
+    workspace_id: typeof record.workspace_id === "string" ? record.workspace_id : "default",
+    classify_p95_ms: nullableNumberFromRecord(record, "classify_p95_ms"),
+    classify_target_ms: numberFromRecord(record, "classify_target_ms"),
+    classify_pass: booleanFromRecord(record, "classify_pass"),
+    execute_p95_ms: nullableNumberFromRecord(record, "execute_p95_ms"),
+    execute_target_ms: numberFromRecord(record, "execute_target_ms"),
+    execute_pass: booleanFromRecord(record, "execute_pass"),
+    undo_success_rate: nullableNumberFromRecord(record, "undo_success_rate"),
+    undo_target_rate: numberFromRecord(record, "undo_target_rate"),
+    undo_attempts: numberFromRecord(record, "undo_attempts"),
+    undo_pass: booleanFromRecord(record, "undo_pass"),
+    dead_letter_rate: nullableNumberFromRecord(record, "dead_letter_rate"),
+    dead_letter_target_rate: numberFromRecord(record, "dead_letter_target_rate"),
+    iron_runs_total: numberFromRecord(record, "iron_runs_total"),
+    dead_letter_pass: booleanFromRecord(record, "dead_letter_pass"),
+    cost_escalation_pct: nullableNumberFromRecord(record, "cost_escalation_pct"),
+    cost_target_pct: numberFromRecord(record, "cost_target_pct"),
+    active_users_24h: numberFromRecord(record, "active_users_24h"),
+    cost_pass: booleanFromRecord(record, "cost_pass"),
+  };
+}
+
 const STATUS_TONE: Record<string, "blue" | "purple" | "orange" | "green" | "red" | "neutral"> = {
   pending: "neutral",
   running: "blue",
@@ -98,13 +288,12 @@ export function FlowAdminPage() {
   const { data: workflows = [], isLoading: workflowsLoading } = useQuery({
     queryKey: ["flow-admin-workflows"],
     queryFn: async (): Promise<WorkflowDef[]> => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { order: (c: string, o: { ascending: boolean }) => Promise<{ data: WorkflowDef[] | null; error: unknown }> } };
-      }).from("flow_workflow_definitions")
+      const { data, error } = await db
+        .from("flow_workflow_definitions")
         .select("id, slug, name, description, owner_role, enabled, trigger_event_pattern, affects_modules, dry_run, version, updated_at, surface, iron_metadata, feature_flag")
         .order("updated_at", { ascending: false });
       if (error) throw new Error("workflows load failed");
-      return data ?? [];
+      return (data ?? []).map(toWorkflowDef);
     },
     staleTime: 30_000,
   });
@@ -138,14 +327,13 @@ export function FlowAdminPage() {
   const { data: recentRuns = [] } = useQuery({
     queryKey: ["flow-admin-recent-runs"],
     queryFn: async (): Promise<FlowRunRow[]> => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: FlowRunRow[] | null; error: unknown }> } } };
-      }).from("flow_workflow_runs")
+      const { data, error } = await db
+        .from("flow_workflow_runs")
         .select("id, workflow_slug, status, started_at, finished_at, duration_ms, error_text, resolved_context, metadata, dead_letter_id, event_id")
         .order("started_at", { ascending: false })
         .limit(50);
       if (error) throw new Error("runs load failed");
-      return data ?? [];
+      return (data ?? []).map(toFlowRunRow);
     },
     staleTime: 15_000,
     refetchInterval: 30_000,
@@ -154,24 +342,21 @@ export function FlowAdminPage() {
   const { data: deadLetters = [] } = useQuery({
     queryKey: ["flow-admin-dead-letters"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { eq: (c: string, v: string) => { order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: { id: string; title: string; payload: Record<string, unknown>; created_at: string }[] | null; error: unknown }> } } } };
-      }).from("exception_queue")
+      const { data, error } = await db
+        .from("exception_queue")
         .select("id, title, payload, created_at")
         .eq("source", "workflow_dead_letter")
         .order("created_at", { ascending: false })
         .limit(20);
       if (error) return [];
-      return data ?? [];
+      return (data ?? []).map(toDeadLetterRow);
     },
     staleTime: 60_000,
   });
 
   const runNow = useMutation({
     mutationFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        functions: { invoke: (name: string, opts: { body: Record<string, unknown> }) => Promise<{ data: unknown; error: { message?: string } | null }> };
-      }).functions.invoke("flow-runner", { body: {} });
+      const { data, error } = await supabase.functions.invoke<FlowRunnerResponse>("flow-runner", { body: {} });
       if (error) throw new Error(error.message ?? "runner invoke failed");
       return data;
     },
@@ -186,19 +371,16 @@ export function FlowAdminPage() {
       // Re-emit the original event by calling flow_resume_run, which copies
       // the originating event with parent_event_id set so the runner picks
       // it up next tick. Idempotency keys prevent duplicate side effects.
-      const { error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
-      }).rpc("flow_resume_run", { p_run_id: input.runId });
+      const { error } = await db.rpc("flow_resume_run", { p_run_id: input.runId });
       if (error) throw new Error(error.message ?? "replay failed");
       // Mark the exception_queue row as resolved so it disappears from the
       // dead-letter card after a successful replay.
-      await (supabase as unknown as {
-        from: (t: string) => { update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> } };
-      }).from("exception_queue").update({
+      const patch: ExceptionQueueUpdate = {
         status: "resolved",
         resolved_at: new Date().toISOString(),
         resolution_reason: "replayed via flow_resume_run",
-      }).eq("id", input.exceptionId);
+      };
+      await db.from("exception_queue").update(patch).eq("id", input.exceptionId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["flow-admin-recent-runs"] });
@@ -208,9 +390,7 @@ export function FlowAdminPage() {
 
   const synthesize = useMutation({
     mutationFn: async (brief: string) => {
-      const { data, error } = await (supabase as unknown as {
-        functions: { invoke: (name: string, opts: { body: Record<string, unknown> }) => Promise<{ data: { ok: boolean; definition_id: string | null; missing: string[]; error?: string } | null; error: { message?: string } | null }> };
-      }).functions.invoke("flow-synthesize", { body: { brief } });
+      const { data, error } = await supabase.functions.invoke<FlowSynthesizeResponse>("flow-synthesize", { body: { brief } });
       if (error) throw new Error(error.message ?? "synth failed");
       if (!data?.ok) throw new Error(data?.error ?? "synth failed");
       return data;
@@ -224,9 +404,7 @@ export function FlowAdminPage() {
 
   const toggleEnabled = useMutation({
     mutationFn: async (input: { id: string; enabled: boolean }) => {
-      const { error } = await (supabase as unknown as {
-        from: (t: string) => { update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<{ error: unknown }> } };
-      }).from("flow_workflow_definitions").update({ enabled: input.enabled }).eq("id", input.id);
+      const { error } = await db.from("flow_workflow_definitions").update({ enabled: input.enabled }).eq("id", input.id);
       if (error) throw new Error("toggle failed");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["flow-admin-workflows"] }),
@@ -247,32 +425,21 @@ export function FlowAdminPage() {
   const { data: suggestions = [] } = useQuery({
     queryKey: ["iron-flow-suggestions"],
     queryFn: async (): Promise<IronSuggestionRow[]> => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            eq: (col: string, val: string) => {
-              order: (col: string, opts: { ascending: boolean }) => {
-                limit: (n: number) => Promise<{ data: IronSuggestionRow[] | null; error: unknown }>;
-              };
-            };
-          };
-        };
-      }).from("iron_flow_suggestions")
+      const { data, error } = await db
+        .from("iron_flow_suggestions")
         .select("id, pattern_signature, short_label, intent_examples, occurrence_count, unique_users, first_seen_at, last_seen_at, status, promoted_flow_id")
         .eq("status", "open")
         .order("occurrence_count", { ascending: false })
         .limit(20);
       if (error) return [];
-      return data ?? [];
+      return (data ?? []).map(toIronSuggestionRow);
     },
     staleTime: 60_000,
   });
 
   const runPatternMining = useMutation({
     mutationFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        functions: { invoke: (name: string, opts: { body: Record<string, unknown> }) => Promise<{ data: { ok: boolean; suggestions_upserted?: number; error?: string } | null; error: { message?: string } | null }> };
-      }).functions.invoke("iron-pattern-mining", { body: {} });
+      const { data, error } = await supabase.functions.invoke<IronPatternMiningResponse>("iron-pattern-mining", { body: {} });
       if (error) throw new Error(error.message ?? "pattern mining failed");
       if (!data?.ok) throw new Error(data?.error ?? "pattern mining failed");
       return data;
@@ -288,22 +455,19 @@ export function FlowAdminPage() {
       const exemplar = suggestion.intent_examples?.[0]?.message ?? suggestion.short_label ?? suggestion.pattern_signature;
       const brief = `Pattern observed ${suggestion.occurrence_count} times across ${suggestion.unique_users} user(s): "${exemplar}". Build an Iron-conversational flow that handles this intent.`;
 
-      const { data: synthData, error: synthErr } = await (supabase as unknown as {
-        functions: { invoke: (name: string, opts: { body: Record<string, unknown> }) => Promise<{ data: { ok: boolean; definition_id: string | null; error?: string } | null; error: { message?: string } | null }> };
-      }).functions.invoke("flow-synthesize", { body: { brief } });
+      const { data: synthData, error: synthErr } = await supabase.functions.invoke<FlowSynthesizeResponse>("flow-synthesize", { body: { brief } });
       if (synthErr) throw new Error(synthErr.message ?? "synth failed");
       if (!synthData?.ok || !synthData.definition_id) {
         throw new Error(synthData?.error ?? "synth failed");
       }
 
       // Link the new draft back to the suggestion
-      const { error: updateErr } = await (supabase as unknown as {
-        from: (t: string) => { update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<{ error: { message?: string } | null }> } };
-      }).from("iron_flow_suggestions").update({
+      const patch: IronFlowSuggestionUpdate = {
         status: "promoted",
         promoted_flow_id: synthData.definition_id,
         promoted_at: new Date().toISOString(),
-      }).eq("id", suggestion.id);
+      };
+      const { error: updateErr } = await db.from("iron_flow_suggestions").update(patch).eq("id", suggestion.id);
       if (updateErr) throw new Error(updateErr.message ?? "link failed");
 
       return synthData.definition_id;
@@ -316,13 +480,12 @@ export function FlowAdminPage() {
 
   const dismissSuggestion = useMutation({
     mutationFn: async (suggestionId: string) => {
-      const { error } = await (supabase as unknown as {
-        from: (t: string) => { update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<{ error: { message?: string } | null }> } };
-      }).from("iron_flow_suggestions").update({
+      const patch: IronFlowSuggestionUpdate = {
         status: "dismissed",
         dismissed_at: new Date().toISOString(),
         dismissed_reason: "manager declined from admin UI",
-      }).eq("id", suggestionId);
+      };
+      const { error } = await db.from("iron_flow_suggestions").update(patch).eq("id", suggestionId);
       if (error) throw new Error(error.message ?? "dismiss failed");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["iron-flow-suggestions"] }),
@@ -332,11 +495,9 @@ export function FlowAdminPage() {
   const { data: ironSlos } = useQuery({
     queryKey: ["iron-slo-snapshot"],
     queryFn: async (): Promise<IronSloSnapshot | null> => {
-      const { data, error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: IronSloSnapshot | null; error: { message?: string } | null }>;
-      }).rpc("iron_compute_slos", { p_workspace_id: "default" });
+      const { data, error } = await db.rpc("iron_compute_slos", { p_workspace_id: "default" });
       if (error) return null;
-      return data;
+      return toIronSloSnapshot(data);
     },
     staleTime: 60_000,
     refetchInterval: 5 * 60_000,
@@ -346,17 +507,8 @@ export function FlowAdminPage() {
   const { data: ironSloHistory = [] } = useQuery({
     queryKey: ["iron-slo-history"],
     queryFn: async (): Promise<IronSloSnapshot[]> => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            eq: (col: string, val: string) => {
-              order: (col: string, opts: { ascending: boolean }) => {
-                limit: (n: number) => Promise<{ data: Array<{ snapshot: IronSloSnapshot }> | null; error: unknown }>;
-              };
-            };
-          };
-        };
-      }).from("iron_slo_history")
+      const { data, error } = await db
+        .from("iron_slo_history")
         .select("snapshot")
         .eq("workspace_id", "default")
         .order("computed_at", { ascending: false })
@@ -364,7 +516,10 @@ export function FlowAdminPage() {
       if (error) return [];
       // Snapshots come back newest-first; reverse so the sparkline reads
       // left=oldest → right=newest, which is the convention humans expect.
-      return (data ?? []).map((r) => r.snapshot).reverse();
+      return ((data ?? []) as IronSloHistoryRow[])
+        .map((r) => toIronSloSnapshot(r.snapshot))
+        .filter((snapshot): snapshot is IronSloSnapshot => snapshot !== null)
+        .reverse();
     },
     staleTime: 60_000,
     refetchInterval: 5 * 60_000,
