@@ -22,36 +22,8 @@ mock.module("@/lib/supabase", () => ({
             error: null,
           }),
         }),
-        order: async () => {
-          if (table === "customer_invoices") {
-            return {
-              data: [
-                { id: "inv-1", invoice_number: "INV-1001", total: 2400, quickbooks_gl_status: "queued" },
-              ],
-              error: null,
-            };
-          }
-          if (table === "quickbooks_gl_sync_jobs") {
-            return {
-              data: [
-                {
-                  id: "job-1",
-                  invoice_id: "inv-1",
-                  status: "queued",
-                  quickbooks_txn_id: null,
-                  error_message: null,
-                  last_attempt_at: null,
-                  customer_invoices: { invoice_number: "INV-1001", total: 2400, quickbooks_gl_status: "queued" },
-                },
-              ],
-              error: null,
-            };
-          }
-          if (table === "integration_status") {
-            return { data: [], error: null };
-          }
-          return { data: [{ id: "branch-1", branch_id: "OCALA", default_labor_rate: 150 }], error: null };
-        },
+        in: () => ({ order: () => ({ returns: async () => tableRows(table) }) }),
+        order: () => ({ returns: async () => tableRows(table) }),
       }),
     }),
     functions: {
@@ -115,6 +87,37 @@ mock.module("@/lib/supabase", () => ({
     },
   },
 }));
+
+function tableRows(table: string) {
+  if (table === "customer_invoices") {
+    return {
+      data: [
+        { id: "inv-1", invoice_number: "INV-1001", total: 2400, quickbooks_gl_status: "queued" },
+      ],
+      error: null,
+    };
+  }
+  if (table === "quickbooks_gl_sync_jobs") {
+    return {
+      data: [
+        {
+          id: "job-1",
+          invoice_id: "inv-1",
+          status: "queued",
+          quickbooks_txn_id: null,
+          error_message: null,
+          last_attempt_at: null,
+          customer_invoices: { invoice_number: "INV-1001", total: 2400, quickbooks_gl_status: "queued" },
+        },
+      ],
+      error: null,
+    };
+  }
+  if (table === "integration_status") {
+    return { data: [], error: null };
+  }
+  return { data: [{ id: "branch-1", branch_id: "OCALA", default_labor_rate: 150 }], error: null };
+}
 
 const { QuickBooksGlSyncPage } = await import("../QuickBooksGlSyncPage");
 

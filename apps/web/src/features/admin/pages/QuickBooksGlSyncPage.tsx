@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
@@ -15,6 +16,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/lib/supabase";
+import type { Database } from "@/lib/database.types";
 import {
   buildDraftFromSummary,
   countMissingMappings,
@@ -25,29 +27,36 @@ import {
   type QuickBooksConfigSummary,
 } from "../lib/quickbooks-config-utils";
 
-type SyncJobRow = {
-  id: string;
-  invoice_id: string;
-  status: string;
-  quickbooks_txn_id: string | null;
-  error_message: string | null;
-  last_attempt_at: string | null;
-  customer_invoices?: {
-    invoice_number?: string | null;
-    total?: number | null;
-    quickbooks_gl_status?: string | null;
-  } | {
-    invoice_number?: string | null;
-    total?: number | null;
-    quickbooks_gl_status?: string | null;
-  }[] | null;
+type CustomerInvoiceTable = Database["public"]["Tables"]["customer_invoices"];
+type CustomerInvoiceQuickBooksFields = {
+  quickbooks_gl_status: string;
+  quickbooks_gl_txn_id: string | null;
+  quickbooks_gl_synced_at: string | null;
+  quickbooks_gl_last_error: string | null;
+};
+type CustomerInvoiceWithQuickBooksRow = CustomerInvoiceTable["Row"] & CustomerInvoiceQuickBooksFields;
+type CustomerInvoiceWithQuickBooksTable = Omit<CustomerInvoiceTable, "Row" | "Insert" | "Update"> & {
+  Row: CustomerInvoiceWithQuickBooksRow;
+  Insert: CustomerInvoiceTable["Insert"] & Partial<CustomerInvoiceQuickBooksFields>;
+  Update: CustomerInvoiceTable["Update"] & Partial<CustomerInvoiceQuickBooksFields>;
+};
+type QuickBooksDatabase = Omit<Database, "public"> & {
+  public: Omit<Database["public"], "Tables"> & {
+    Tables: Omit<Database["public"]["Tables"], "customer_invoices"> & {
+      customer_invoices: CustomerInvoiceWithQuickBooksTable;
+    };
+  };
 };
 
-type PendingInvoiceRow = {
-  id: string;
-  invoice_number: string;
-  total: number;
-  quickbooks_gl_status: string | null;
+const db = supabase as SupabaseClient<QuickBooksDatabase>;
+
+type PendingInvoiceRow = Pick<CustomerInvoiceWithQuickBooksRow, "id" | "invoice_number" | "total" | "quickbooks_gl_status">;
+type JobInvoiceRow = Pick<CustomerInvoiceWithQuickBooksRow, "invoice_number" | "total" | "quickbooks_gl_status">;
+type SyncJobRow = Pick<
+  Database["public"]["Tables"]["quickbooks_gl_sync_jobs"]["Row"],
+  "id" | "invoice_id" | "status" | "quickbooks_txn_id" | "error_message" | "last_attempt_at"
+> & {
+  customer_invoices?: JobInvoiceRow | JobInvoiceRow[] | null;
 };
 
 type ConfigSummaryResponse = {
@@ -130,19 +139,12 @@ export function QuickBooksGlSyncPage() {
   const invoiceQuery = useQuery({
     queryKey: ["quickbooks-gl-sync", "invoices"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            in: (column: string, values: string[]) => {
-              order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: PendingInvoiceRow[] | null; error: unknown }>;
-            };
-          };
-        };
-      })
+      const { data, error } = await db
         .from("customer_invoices")
         .select("id, invoice_number, total, quickbooks_gl_status")
         .in("quickbooks_gl_status", ["not_synced", "queued", "failed"])
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .returns<PendingInvoiceRow[]>();
       if (error) throw error;
       return data ?? [];
     },
@@ -151,16 +153,11 @@ export function QuickBooksGlSyncPage() {
   const jobsQuery = useQuery({
     queryKey: ["quickbooks-gl-sync", "jobs"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: SyncJobRow[] | null; error: unknown }>;
-          };
-        };
-      })
+      const { data, error } = await db
         .from("quickbooks_gl_sync_jobs")
         .select("id, invoice_id, status, quickbooks_txn_id, error_message, last_attempt_at, customer_invoices(invoice_number, total, quickbooks_gl_status)")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .returns<SyncJobRow[]>();
       if (error) throw error;
       return data ?? [];
     },
