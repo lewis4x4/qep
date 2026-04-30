@@ -1,11 +1,44 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RequireAdmin } from "@/components/RequireAdmin";
 import { supabase } from "@/lib/supabase";
+import type { Database } from "@/lib/database.types";
+
+const db = supabase as SupabaseClient<Database>;
+
+type ApBillRow = Database["public"]["Tables"]["ap_bills"]["Row"];
+type ApBillUpdate = Database["public"]["Tables"]["ap_bills"]["Update"];
+type ApBillLineRow = Database["public"]["Tables"]["ap_bill_lines"]["Row"];
+type ApBillLineInsert = Database["public"]["Tables"]["ap_bill_lines"]["Insert"];
+type ApBillSelectedRow = Pick<
+  ApBillRow,
+  | "id"
+  | "vendor_id"
+  | "vendor_name"
+  | "invoice_number"
+  | "invoice_date"
+  | "due_date"
+  | "payable_account_code"
+  | "payable_account_name"
+  | "description"
+  | "status"
+  | "approval_status"
+  | "subtotal_amount"
+  | "tax_amount"
+  | "total_amount"
+  | "amount_paid"
+  | "balance_due"
+  | "notes"
+>;
+type ApBillLineSelectedRow = Pick<
+  ApBillLineRow,
+  "id" | "line_number" | "description" | "quantity" | "unit_cost" | "line_total" | "gl_code" | "gl_name" | "notes"
+>;
 
 type BillRow = {
   id: string;
@@ -39,6 +72,42 @@ type LineRow = {
   notes: string | null;
 };
 
+function toBillRow(row: ApBillSelectedRow): BillRow {
+  return {
+    id: row.id,
+    vendor_id: row.vendor_id,
+    vendor_name: row.vendor_name,
+    invoice_number: row.invoice_number,
+    invoice_date: row.invoice_date,
+    due_date: row.due_date,
+    payable_account_code: row.payable_account_code,
+    payable_account_name: row.payable_account_name,
+    description: row.description,
+    status: row.status,
+    approval_status: row.approval_status,
+    subtotal_amount: row.subtotal_amount,
+    tax_amount: row.tax_amount,
+    total_amount: row.total_amount,
+    amount_paid: row.amount_paid,
+    balance_due: Number(row.balance_due ?? 0),
+    notes: row.notes,
+  };
+}
+
+function toLineRow(row: ApBillLineSelectedRow): LineRow {
+  return {
+    id: row.id,
+    line_number: row.line_number,
+    description: row.description,
+    quantity: row.quantity,
+    unit_cost: row.unit_cost,
+    line_total: Number(row.line_total ?? 0),
+    gl_code: row.gl_code,
+    gl_name: row.gl_name,
+    notes: row.notes,
+  };
+}
+
 function currency(value: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -68,17 +137,13 @@ function AccountsPayableDetailPageInner() {
     queryKey: ["ap-bill", billId],
     enabled: billId.length > 0,
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { eq: (column: string, value: string) => { maybeSingle: () => Promise<{ data: BillRow | null; error: unknown }> } };
-        };
-      })
+      const { data, error } = await db
         .from("ap_bills")
         .select("id, vendor_id, vendor_name, invoice_number, invoice_date, due_date, payable_account_code, payable_account_name, description, status, approval_status, subtotal_amount, tax_amount, total_amount, amount_paid, balance_due, notes")
         .eq("id", billId)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      return data ? toBillRow(data) : null;
     },
   });
 
@@ -86,27 +151,19 @@ function AccountsPayableDetailPageInner() {
     queryKey: ["ap-bill-lines", billId],
     enabled: billId.length > 0,
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { eq: (column: string, value: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: LineRow[] | null; error: unknown }> } };
-        };
-      })
+      const { data, error } = await db
         .from("ap_bill_lines")
         .select("id, line_number, description, quantity, unit_cost, line_total, gl_code, gl_name, notes")
         .eq("bill_id", billId)
         .order("line_number", { ascending: true });
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []).map(toLineRow);
     },
   });
 
   const updateBill = useMutation({
-    mutationFn: async (payload: Record<string, unknown>) => {
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => {
-          update: (value: Record<string, unknown>) => { eq: (column: string, value: string) => Promise<{ error: unknown }> };
-        };
-      })
+    mutationFn: async (payload: ApBillUpdate) => {
+      const { error } = await db
         .from("ap_bills")
         .update(payload)
         .eq("id", billId);
@@ -118,19 +175,18 @@ function AccountsPayableDetailPageInner() {
   const addLine = useMutation({
     mutationFn: async () => {
       const nextLine = (linesQuery.data?.length ?? 0) + 1;
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => { insert: (value: Record<string, unknown>) => Promise<{ error: unknown }> };
-      })
+      const payload: ApBillLineInsert = {
+        bill_id: billId,
+        line_number: nextLine,
+        description: newLineDescription,
+        quantity: Number(newLineQuantity || "1"),
+        unit_cost: Number(newLineUnitCost || "0"),
+        gl_code: newLineGlCode || null,
+        gl_name: newLineGlName || null,
+      };
+      const { error } = await db
         .from("ap_bill_lines")
-        .insert({
-          bill_id: billId,
-          line_number: nextLine,
-          description: newLineDescription,
-          quantity: Number(newLineQuantity || "1"),
-          unit_cost: Number(newLineUnitCost || "0"),
-          gl_code: newLineGlCode || null,
-          gl_name: newLineGlName || null,
-        });
+        .insert(payload);
       if (error) throw error;
     },
     onSuccess: () => {

@@ -1,12 +1,20 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Link } from "react-router-dom";
 import { ArrowRight, FileStack, Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RequireAdmin } from "@/components/RequireAdmin";
 import { supabase } from "@/lib/supabase";
+import type { Database } from "@/lib/database.types";
 import { labelAgeBucket, sumApAmounts, type ApAgingBucket } from "../lib/ap-aging-utils";
+
+const db = supabase as SupabaseClient<Database>;
+
+type ApAgingViewRow = Database["public"]["Views"]["ap_aging_view"]["Row"];
+type ApBillInsert = Database["public"]["Tables"]["ap_bills"]["Insert"];
+type VendorProfileRow = Database["public"]["Tables"]["vendor_profiles"]["Row"];
 
 type AgingRow = {
   id: string;
@@ -33,6 +41,38 @@ type VendorRow = {
   id: string;
   name: string;
 };
+
+function toAgingBucket(value: string | null): ApAgingBucket {
+  if (value === "31_60" || value === "61_90" || value === "91_120" || value === "over_120") return value;
+  return "current";
+}
+
+function toAgingRow(row: ApAgingViewRow): AgingRow {
+  return {
+    id: row.id ?? "",
+    vendor_id: row.vendor_id,
+    vendor_name: row.vendor_name ?? "Vendor",
+    invoice_number: row.invoice_number ?? "",
+    invoice_date: row.invoice_date ?? "",
+    due_date: row.due_date ?? "",
+    payable_account_code: row.payable_account_code,
+    payable_account_name: row.payable_account_name,
+    description: row.description,
+    status: row.status ?? "draft",
+    approval_status: row.approval_status ?? "pending",
+    total_amount: Number(row.total_amount ?? 0),
+    amount_paid: Number(row.amount_paid ?? 0),
+    balance_due: Number(row.balance_due ?? 0),
+    due_age_bucket: toAgingBucket(row.due_age_bucket),
+    invoice_age_bucket: toAgingBucket(row.invoice_age_bucket),
+    days_overdue: Number(row.days_overdue ?? 0),
+    days_from_invoice: Number(row.days_from_invoice ?? 0),
+  };
+}
+
+function toVendorRow(row: Pick<VendorProfileRow, "id" | "name">): VendorRow {
+  return { id: row.id, name: row.name };
+}
 
 function currency(value: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -69,54 +109,45 @@ function AccountsPayablePageInner() {
   const vendorsQuery = useQuery({
     queryKey: ["ap-vendors"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: VendorRow[] | null; error: unknown }> };
-        };
-      })
+      const { data, error } = await db
         .from("vendor_profiles")
         .select("id, name")
         .order("name");
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []).map(toVendorRow);
     },
   });
 
   const agingQuery = useQuery({
     queryKey: ["accounts-payable-aging"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: AgingRow[] | null; error: unknown }> };
-        };
-      })
+      const { data, error } = await db
         .from("ap_aging_view")
         .select("*")
         .order("balance_due", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []).map(toAgingRow).filter((row) => row.id);
     },
   });
 
   const createBill = useMutation({
     mutationFn: async () => {
       const vendor = (vendorsQuery.data ?? []).find((row) => row.id === newVendorId);
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => { insert: (value: Record<string, unknown>) => Promise<{ error: unknown }> };
-      })
+      const payload: ApBillInsert = {
+        vendor_id: newVendorId || null,
+        vendor_name: vendor?.name ?? null,
+        invoice_number: invoiceNumber.trim(),
+        invoice_date: invoiceDate,
+        due_date: dueDate,
+        payable_account_code: payableAccountCode.trim() || null,
+        payable_account_name: payableAccountName.trim() || null,
+        description: description.trim() || null,
+        status: "pending_approval",
+        approval_status: "pending",
+      };
+      const { error } = await db
         .from("ap_bills")
-        .insert({
-          vendor_id: newVendorId || null,
-          vendor_name: vendor?.name ?? null,
-          invoice_number: invoiceNumber.trim(),
-          invoice_date: invoiceDate,
-          due_date: dueDate,
-          payable_account_code: payableAccountCode.trim() || null,
-          payable_account_name: payableAccountName.trim() || null,
-          description: description.trim() || null,
-          status: "pending_approval",
-          approval_status: "pending",
-        });
+        .insert(payload);
       if (error) throw error;
     },
     onSuccess: () => {
