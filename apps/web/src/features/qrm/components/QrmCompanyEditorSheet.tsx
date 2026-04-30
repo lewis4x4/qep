@@ -8,6 +8,22 @@ import { useToast } from "@/hooks/use-toast";
 import { createCrmCompanyViaRouter, patchCrmCompanyViaRouter } from "../lib/qrm-router-api";
 import type { QrmCompanySummary } from "../lib/types";
 
+const PRODUCT_CATEGORY_OPTIONS = [
+  { value: "", label: "Unspecified" },
+  { value: "business", label: "Business" },
+  { value: "individual", label: "Individual" },
+  { value: "government", label: "Government" },
+  { value: "non_profit", label: "Non-profit" },
+  { value: "internal", label: "Internal" },
+] as const;
+
+const AR_TYPE_OPTIONS = [
+  { value: "", label: "Unspecified" },
+  { value: "open_item", label: "Open item" },
+  { value: "balance_forward", label: "Balance forward" },
+  { value: "true_balance_forward", label: "True balance forward" },
+] as const;
+
 interface QrmCompanyEditorSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -37,6 +53,15 @@ export function QrmCompanyEditorSheet({
   const [postalCode, setPostalCode] = useState("");
   const [country, setCountry] = useState("");
   const [ein, setEin] = useState("");
+  const [status, setStatus] = useState("");
+  const [productCategory, setProductCategory] = useState("");
+  const [arType, setArType] = useState("");
+  const [paymentTermsCode, setPaymentTermsCode] = useState("");
+  const [termsCode, setTermsCode] = useState("");
+  const [territoryCode, setTerritoryCode] = useState("");
+  const [pricingLevel, setPricingLevel] = useState("");
+  const [doNotContact, setDoNotContact] = useState(false);
+  const [optOutSalePi, setOptOutSalePi] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const einCanBeSubmitted = canManageEin && (!company || company.ein !== undefined);
 
@@ -52,6 +77,15 @@ export function QrmCompanyEditorSheet({
     setPostalCode(company?.postalCode ?? "");
     setCountry(company?.country ?? "");
     setEin(company?.ein && !company.einMasked ? company.ein : "");
+    setStatus(company?.status ?? "");
+    setProductCategory(company?.productCategory ?? "");
+    setArType(company?.arType ?? "");
+    setPaymentTermsCode(company?.paymentTermsCode ?? "");
+    setTermsCode(company?.termsCode ?? "");
+    setTerritoryCode(company?.territoryCode ?? "");
+    setPricingLevel(company?.pricingLevel == null ? "" : String(company.pricingLevel));
+    setDoNotContact(company?.doNotContact ?? false);
+    setOptOutSalePi(company?.optOutSalePi ?? false);
     setFormError(null);
   }, [company, open]);
 
@@ -64,6 +98,11 @@ export function QrmCompanyEditorSheet({
         return patchCrmCompanyViaRouter(company.id, { archive: true });
       }
 
+      const parsedPricingLevel = pricingLevel.trim() ? Number(pricingLevel) : null;
+      if (parsedPricingLevel != null && !Number.isFinite(parsedPricingLevel)) {
+        throw new Error("Pricing level must be a number.");
+      }
+
       const payload = {
         name,
         search1: search1.trim() || null,
@@ -74,6 +113,15 @@ export function QrmCompanyEditorSheet({
         state: state.trim() || null,
         postalCode: postalCode.trim() || null,
         country: country.trim() || null,
+        status: status.trim() || null,
+        productCategory: (productCategory || null) as QrmCompanySummary["productCategory"],
+        arType: (arType || null) as QrmCompanySummary["arType"],
+        paymentTermsCode: paymentTermsCode.trim() || null,
+        termsCode: termsCode.trim() || null,
+        territoryCode: territoryCode.trim() || null,
+        pricingLevel: parsedPricingLevel,
+        doNotContact,
+        optOutSalePi,
         ...(einCanBeSubmitted ? { ein: ein.trim() || null } : {}),
       };
 
@@ -267,6 +315,142 @@ export function QrmCompanyEditorSheet({
               ) : null}
             </div>
           ) : null}
+
+          {company?.legacyCustomerNumber ? (
+            <div className="rounded-md border border-sky-500/20 bg-sky-500/[0.04] p-3 text-sm">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Imported source</p>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">IntelliDealer customer #</span>
+                <span className="font-medium text-foreground">{company.legacyCustomerNumber}</span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Legacy IDs stay read-only so imported records remain traceable.
+              </p>
+            </div>
+          ) : null}
+
+          <div className="rounded-md border border-qep-deck-rule/70 bg-muted/20 p-3">
+            <div className="mb-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">IntelliDealer operating profile</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Safe imported fields used for routing, terms, and account handling. Card and credit details are not editable here.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="crm-company-status">Status</Label>
+                <Input
+                  id="crm-company-status"
+                  value={status}
+                  onChange={(event) => setStatus(event.target.value)}
+                  placeholder="Active"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="crm-company-product-category">Product category</Label>
+                <select
+                  id="crm-company-product-category"
+                  value={productCategory}
+                  onChange={(event) => setProductCategory(event.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {PRODUCT_CATEGORY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="crm-company-ar-type">A/R type</Label>
+                <select
+                  id="crm-company-ar-type"
+                  value={arType}
+                  onChange={(event) => setArType(event.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {AR_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="crm-company-payment-terms">Payment terms</Label>
+                <Input
+                  id="crm-company-payment-terms"
+                  value={paymentTermsCode}
+                  onChange={(event) => setPaymentTermsCode(event.target.value)}
+                  placeholder="NET30"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="crm-company-terms-code">Terms code</Label>
+                <Input
+                  id="crm-company-terms-code"
+                  value={termsCode}
+                  onChange={(event) => setTermsCode(event.target.value)}
+                  placeholder="COD"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="crm-company-territory">Territory</Label>
+                <Input
+                  id="crm-company-territory"
+                  value={territoryCode}
+                  onChange={(event) => setTerritoryCode(event.target.value)}
+                  placeholder="SE"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="crm-company-pricing-level">Pricing level</Label>
+                <Input
+                  id="crm-company-pricing-level"
+                  value={pricingLevel}
+                  onChange={(event) => setPricingLevel(event.target.value)}
+                  placeholder="1"
+                  inputMode="numeric"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              <label
+                htmlFor="crm-company-do-not-contact"
+                className="flex items-start gap-3 rounded-md border border-qep-deck-rule/60 bg-background/60 p-3 text-sm"
+              >
+                <input
+                  id="crm-company-do-not-contact"
+                  type="checkbox"
+                  checked={doNotContact}
+                  onChange={(event) => setDoNotContact(event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-input"
+                />
+                <span>
+                  <span className="block font-medium text-foreground">Do not contact</span>
+                  <span className="text-xs text-muted-foreground">Suppress outreach when IntelliDealer marks the customer restricted.</span>
+                </span>
+              </label>
+              <label
+                htmlFor="crm-company-opt-out-sale-pi"
+                className="flex items-start gap-3 rounded-md border border-qep-deck-rule/60 bg-background/60 p-3 text-sm"
+              >
+                <input
+                  id="crm-company-opt-out-sale-pi"
+                  type="checkbox"
+                  checked={optOutSalePi}
+                  onChange={(event) => setOptOutSalePi(event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-input"
+                />
+                <span>
+                  <span className="block font-medium text-foreground">Opt out sale PI</span>
+                  <span className="text-xs text-muted-foreground">Respect imported privacy and sales-personal-information preferences.</span>
+                </span>
+              </label>
+            </div>
+          </div>
 
           {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
 

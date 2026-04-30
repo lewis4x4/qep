@@ -10,7 +10,7 @@ Production target:
 
 - Supabase project: `iciddijgonywtxoelous`
 - Netlify production URL: `https://qualityequipmentparts.netlify.app`
-- Production deploy ID: `69f2b8e2be107d80333f8a82`
+- Production deploy ID: `69f2bbb8f211b68204e90e3f`
 - Import run ID: `df74305e-d37a-4e4b-be5e-457633b2cd1d`
 
 ## Production Reconciliation
@@ -61,6 +61,14 @@ The deployed Companies surface at `/qrm/companies` now supports imported Intelli
 - Visible `IntelliDealer <legacy #>` source badge on imported company rows.
 - Company CSV export includes `IntelliDealer #`.
 
+The deployed company editor now supports safe post-cutover maintenance of imported profile fields:
+
+- Read-only IntelliDealer legacy customer number for traceability.
+- Editable status, product category, A/R type, payment terms, terms code, territory code, pricing level, do-not-contact, and sale-PI opt-out.
+- Sensitive card, credit, and redaction-token values remain excluded from the editor.
+
+The updated `qrm-router` edge function is deployed so those editor fields persist through the production router API.
+
 The admin import dashboard is deployed at:
 
 - `/admin/intellidealer-imports`
@@ -93,6 +101,7 @@ Evidence:
 | --- | --- |
 | Desktop Account 360 IntelliDealer tab | PASS |
 | Companies legacy-number search | PASS |
+| Company editor IntelliDealer profile | PASS |
 | Admin IntelliDealer import dashboard | PASS |
 | Mobile Account 360 IntelliDealer tab | PASS |
 | Visible redacted card rows | `4` |
@@ -102,6 +111,7 @@ Screenshots:
 
 - `test-results/intellidealer-production-smoke/account-intellidealer-desktop.png`
 - `test-results/intellidealer-production-smoke/companies-legacy-search.png`
+- `test-results/intellidealer-production-smoke/company-editor-intellidealer-profile.png`
 - `test-results/intellidealer-production-smoke/admin-intellidealer-imports.png`
 - `test-results/intellidealer-production-smoke/account-intellidealer-mobile.png`
 
@@ -147,5 +157,6 @@ The customer import, canonical data load, redaction, deployment, admin dashboard
 
 Recommended next slice:
 
-- Extend imported customer fields into company/contact edit flows where operators maintain customer profile data after cutover.
+- Extend imported contact fields into contact edit flows where operators maintain customer profile data after cutover.
+- Add controlled memo history, A/R agency, and profitability drill-down actions beyond the Account 360 summary view.
 - Migrate legacy Supabase call sites to the regenerated `Database` type slice-by-slice; the shared client remains broad until old JSON/nullability and stale select-shape debt is resolved.

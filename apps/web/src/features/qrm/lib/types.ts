@@ -47,6 +47,15 @@ export interface QrmCompanySummary {
   parentCompanyId: string | null;
   assignedRepId: string | null;
   legacyCustomerNumber: string | null;
+  status: string | null;
+  productCategory: "business" | "individual" | "government" | "non_profit" | "internal" | null;
+  arType: "open_item" | "balance_forward" | "true_balance_forward" | null;
+  paymentTermsCode: string | null;
+  termsCode: string | null;
+  territoryCode: string | null;
+  pricingLevel: number | null;
+  doNotContact: boolean | null;
+  optOutSalePi: boolean | null;
   search1: string | null;
   search2: string | null;
   addressLine1: string | null;
@@ -293,6 +302,15 @@ export interface QrmContactUpsertInput {
 
 export interface QrmCompanyUpsertInput {
   name: string;
+  status?: string | null;
+  productCategory?: QrmCompanySummary["productCategory"];
+  arType?: QrmCompanySummary["arType"];
+  paymentTermsCode?: string | null;
+  termsCode?: string | null;
+  territoryCode?: string | null;
+  pricingLevel?: number | null;
+  doNotContact?: boolean | null;
+  optOutSalePi?: boolean | null;
   search1?: string | null;
   search2?: string | null;
   addressLine1?: string | null;

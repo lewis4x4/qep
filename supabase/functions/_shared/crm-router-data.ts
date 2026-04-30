@@ -164,6 +164,15 @@ export interface ContactUpsertPayload {
 
 export interface CompanyUpsertPayload {
   name?: string;
+  status?: string | null;
+  productCategory?: "business" | "individual" | "government" | "non_profit" | "internal" | null;
+  arType?: "open_item" | "balance_forward" | "true_balance_forward" | null;
+  paymentTermsCode?: string | null;
+  termsCode?: string | null;
+  territoryCode?: string | null;
+  pricingLevel?: number | null;
+  doNotContact?: boolean | null;
+  optOutSalePi?: boolean | null;
   search1?: string | null;
   search2?: string | null;
   addressLine1?: string | null;
@@ -1122,6 +1131,15 @@ export async function createCompany(
     workspace_id: ctx.workspaceId,
     name,
     assigned_rep_id: ctx.caller.userId,
+    status: cleanText(payload.status ?? null),
+    product_category: cleanText(payload.productCategory ?? null),
+    ar_type: cleanText(payload.arType ?? null),
+    payment_terms_code: cleanText(payload.paymentTermsCode ?? null),
+    terms_code: cleanText(payload.termsCode ?? null),
+    territory_code: cleanText(payload.territoryCode ?? null),
+    pricing_level: cleanInteger(payload.pricingLevel),
+    ...(payload.doNotContact !== undefined && payload.doNotContact !== null ? { do_not_contact: payload.doNotContact } : {}),
+    ...(payload.optOutSalePi !== undefined && payload.optOutSalePi !== null ? { opt_out_sale_pi: payload.optOutSalePi } : {}),
     search_1: cleanText(payload.search1 ?? null),
     search_2: cleanText(payload.search2 ?? null),
     address_line_1: cleanText(payload.addressLine1 ?? null),
@@ -1137,7 +1155,7 @@ export async function createCompany(
     .from(hasEin ? "qrm_companies" : "crm_companies")
     .insert(insertValues)
     .select(
-      "id, workspace_id, name, parent_company_id, assigned_rep_id, search_1, search_2, address_line_1, address_line_2, city, state, postal_code, country, created_at, updated_at",
+      "id, workspace_id, name, parent_company_id, assigned_rep_id, legacy_customer_number, status, product_category, ar_type, payment_terms_code, terms_code, territory_code, pricing_level, do_not_contact, opt_out_sale_pi, search_1, search_2, address_line_1, address_line_2, city, state, postal_code, country, created_at, updated_at",
     )
     .single();
 
@@ -1149,6 +1167,16 @@ export async function createCompany(
     name: data.name,
     parentCompanyId: data.parent_company_id,
     assignedRepId: data.assigned_rep_id,
+    legacyCustomerNumber: data.legacy_customer_number ?? null,
+    status: data.status ?? null,
+    productCategory: data.product_category ?? null,
+    arType: data.ar_type ?? null,
+    paymentTermsCode: data.payment_terms_code ?? null,
+    termsCode: data.terms_code ?? null,
+    territoryCode: data.territory_code ?? null,
+    pricingLevel: data.pricing_level ?? null,
+    doNotContact: data.do_not_contact ?? null,
+    optOutSalePi: data.opt_out_sale_pi ?? null,
     search1: data.search_1,
     search2: data.search_2,
     addressLine1: data.address_line_1,
@@ -1180,6 +1208,33 @@ export async function patchCompany(
     const name = cleanText(payload.name);
     if (!name) throw new Error("VALIDATION_NAME_REQUIRED");
     updates.name = name;
+  }
+  if (payload.status !== undefined) {
+    updates.status = cleanText(payload.status ?? null);
+  }
+  if (payload.productCategory !== undefined) {
+    updates.product_category = cleanText(payload.productCategory ?? null);
+  }
+  if (payload.arType !== undefined) {
+    updates.ar_type = cleanText(payload.arType ?? null);
+  }
+  if (payload.paymentTermsCode !== undefined) {
+    updates.payment_terms_code = cleanText(payload.paymentTermsCode ?? null);
+  }
+  if (payload.termsCode !== undefined) {
+    updates.terms_code = cleanText(payload.termsCode ?? null);
+  }
+  if (payload.territoryCode !== undefined) {
+    updates.territory_code = cleanText(payload.territoryCode ?? null);
+  }
+  if (payload.pricingLevel !== undefined) {
+    updates.pricing_level = cleanInteger(payload.pricingLevel);
+  }
+  if (payload.doNotContact !== undefined) {
+    updates.do_not_contact = payload.doNotContact ?? false;
+  }
+  if (payload.optOutSalePi !== undefined) {
+    updates.opt_out_sale_pi = payload.optOutSalePi ?? false;
   }
 
   if (payload.addressLine1 !== undefined) {
@@ -1230,7 +1285,7 @@ export async function patchCompany(
     .eq("id", companyId)
     .is("deleted_at", null)
     .select(
-      "id, workspace_id, name, parent_company_id, assigned_rep_id, search_1, search_2, address_line_1, address_line_2, city, state, postal_code, country, created_at, updated_at",
+      "id, workspace_id, name, parent_company_id, assigned_rep_id, legacy_customer_number, status, product_category, ar_type, payment_terms_code, terms_code, territory_code, pricing_level, do_not_contact, opt_out_sale_pi, search_1, search_2, address_line_1, address_line_2, city, state, postal_code, country, created_at, updated_at",
     )
     .maybeSingle();
 
@@ -1242,6 +1297,16 @@ export async function patchCompany(
     name: data.name,
     parentCompanyId: data.parent_company_id,
     assignedRepId: data.assigned_rep_id,
+    legacyCustomerNumber: data.legacy_customer_number ?? null,
+    status: data.status ?? null,
+    productCategory: data.product_category ?? null,
+    arType: data.ar_type ?? null,
+    paymentTermsCode: data.payment_terms_code ?? null,
+    termsCode: data.terms_code ?? null,
+    territoryCode: data.territory_code ?? null,
+    pricingLevel: data.pricing_level ?? null,
+    doNotContact: data.do_not_contact ?? null,
+    optOutSalePi: data.opt_out_sale_pi ?? null,
     search1: data.search_1,
     search2: data.search_2,
     addressLine1: data.address_line_1,

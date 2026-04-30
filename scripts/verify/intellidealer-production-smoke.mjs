@@ -38,6 +38,7 @@ try {
   await injectAuth(desktop, session);
   await smokeAccountIntelliDealerTab(desktop, company, "desktop");
   await smokeCompanyLegacySearch(desktop, company);
+  await smokeCompanyEditorProfile(desktop, company);
   await smokeAdminDashboard(desktop);
   await desktop.close();
 
@@ -256,6 +257,47 @@ async function smokeCompanyLegacySearch(context, company) {
     check: "browser.companies_legacy_search",
     route: "/qrm/companies",
     search: company.legacy_customer_number,
+    screenshot,
+    bytes,
+    console_errors: consoleErrors.slice(0, 5),
+  });
+  await page.close();
+}
+
+async function smokeCompanyEditorProfile(context, company) {
+  const page = await context.newPage();
+  const consoleErrors = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+
+  await page.goto(`${productionUrl}/qrm/companies/${company.id}`, {
+    waitUntil: "networkidle",
+    timeout: 45_000,
+  });
+  await page.getByRole("button", { name: "Edit Company" }).click();
+  await page.getByRole("heading", { name: "Edit company" }).waitFor({ timeout: 20_000 });
+  await page.getByText("IntelliDealer operating profile", { exact: false }).waitFor({ timeout: 20_000 });
+  await page.getByText("Imported source", { exact: true }).waitFor({ timeout: 20_000 });
+  await page.getByText(company.legacy_customer_number, { exact: true }).waitFor({ timeout: 20_000 });
+  await page.locator("#crm-company-product-category").waitFor({ timeout: 20_000 });
+  await page.locator("#crm-company-ar-type").waitFor({ timeout: 20_000 });
+  await page.locator("#crm-company-do-not-contact").waitFor({ timeout: 20_000 });
+  await page.locator("#crm-company-opt-out-sale-pi").waitFor({ timeout: 20_000 });
+
+  const bodyText = await page.locator("body").innerText();
+  if (/REDACTED:[a-f0-9]{64}/i.test(bodyText)) {
+    throw new Error("Company editor leaked a stored card redaction token.");
+  }
+
+  const screenshot = resolve(artifactDir, "company-editor-intellidealer-profile.png");
+  await page.screenshot({ path: screenshot, fullPage: true });
+  const bytes = statSync(screenshot).size;
+  if (bytes < 10_000) throw new Error(`${screenshot} looked blank (${bytes} bytes).`);
+
+  evidence.push({
+    check: "browser.company_editor_intellidealer_profile",
+    route: `/qrm/companies/${company.id}`,
     screenshot,
     bytes,
     console_errors: consoleErrors.slice(0, 5),

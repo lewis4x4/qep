@@ -72,6 +72,15 @@ type QrmTables = BaseTables & {
     assigned_rep_id: string | null;
     hubspot_company_id: string | null;
     legacy_customer_number: string | null;
+    status: string | null;
+    product_category: "business" | "individual" | "government" | "non_profit" | "internal" | null;
+    ar_type: "open_item" | "balance_forward" | "true_balance_forward" | null;
+    payment_terms_code: string | null;
+    terms_code: string | null;
+    territory_code: string | null;
+    pricing_level: number | null;
+    do_not_contact: boolean | null;
+    opt_out_sale_pi: boolean | null;
     search_1: string | null;
     search_2: string | null;
     address_line_1: string | null;

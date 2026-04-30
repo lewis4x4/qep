@@ -113,8 +113,8 @@ Verified production results:
 - Profitability rows mapped: 9,894 / 9,894.
 - Import errors: 0.
 - Raw A/R card rows: 0.
-- Account 360 IntelliDealer tab, Companies legacy search, and admin import dashboard deployed to Netlify production deploy `69f2b8e2be107d80333f8a82`.
-- Authenticated desktop, mobile, companies-search, and admin-dashboard production smoke tests passed.
+- Account 360 IntelliDealer tab, Companies legacy search, company editor safe imported fields, and admin import dashboard deployed to Netlify production deploy `69f2bbb8f211b68204e90e3f`.
+- Authenticated desktop, mobile, companies-search, company-editor, and admin-dashboard production smoke tests passed.
 - Rerun safety gate added with `bun run intellidealer:customer:rerun-check`.
 
 Memo reconciliation:
@@ -163,12 +163,14 @@ Ready:
 - RLS policies are in place for the new import and fact tables.
 - Companies list/search now supports IntelliDealer legacy customer number lookup and displays imported source badges.
 - Account 360 now exposes source identity, contact coverage, A/R exposure, profitability posture, and next-best-action operating signals.
+- Company editor now maintains safe imported profile fields: status, product category, A/R type, payment terms, terms code, territory, pricing level, do-not-contact, and sale-PI opt-out. Legacy customer number is read-only, and card/credit/redaction values remain excluded.
 
 Still to harden:
 
 - Supabase TypeScript types have been regenerated from production, but the shared browser client remains broadly typed until legacy JSON/nullability and stale select-shape debt is migrated slice-by-slice.
 - Admin import UI is read-only; it does not yet support upload, preview, commit, rollback, or row-level export.
-- QRM company/contact editor UI exposes only a subset of the imported fields.
+- QRM contact editor UI exposes only a subset of imported contact fields.
+- Memo history, A/R agency, and profitability views are summary-focused; controlled drill-down actions remain future work.
 - Deferred non-parts seed support rows that protected parts data still references remain intentionally preserved until a remap/nulling policy is approved.
 
 ## Required Next Work
@@ -193,9 +195,9 @@ Still to harden:
 
    Minimum required views: run summary, row counts, warnings, duplicate/conflict list, sample rows, commit button, failed-row export, and rollback/cancel state.
 
-6. Extend customer UI/API surfaces.
+6. Extend remaining customer UI/API surfaces.
 
-   Remaining display/edit coverage: company/contact edit forms, tax/terms maintenance, pricing group/level editability, memo history surfacing, and controlled A/R agency/profitability drill-down beyond Account 360.
+   Remaining display/edit coverage: contact edit forms, memo history surfacing, and controlled A/R agency/profitability drill-down beyond Account 360. Company edit now covers safe imported operating-profile fields and excludes sensitive card/credit values.
 
 7. Keep Supabase types current after migration application.
 

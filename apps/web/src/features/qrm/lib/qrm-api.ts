@@ -63,7 +63,16 @@ function toCompanySummary(row: QrmCompanyRow): QrmCompanySummary {
     name: row.name,
     parentCompanyId: row.parent_company_id,
     assignedRepId: row.assigned_rep_id,
-    legacyCustomerNumber: row.legacy_customer_number,
+    legacyCustomerNumber: row.legacy_customer_number ?? null,
+    status: row.status ?? null,
+    productCategory: row.product_category ?? null,
+    arType: row.ar_type ?? null,
+    paymentTermsCode: row.payment_terms_code ?? null,
+    termsCode: row.terms_code ?? null,
+    territoryCode: row.territory_code ?? null,
+    pricingLevel: row.pricing_level ?? null,
+    doNotContact: row.do_not_contact ?? null,
+    optOutSalePi: row.opt_out_sale_pi ?? null,
     search1: row.search_1,
     search2: row.search_2,
     addressLine1: row.address_line_1,
@@ -359,7 +368,7 @@ export async function listCrmCompanies(search: string, cursor?: string | null): 
 export async function getCrmCompany(companyId: string): Promise<QrmCompanySummary | null> {
   const { data, error } = await crmSupabase
     .from("crm_companies")
-    .select("id, workspace_id, name, parent_company_id, assigned_rep_id, legacy_customer_number, search_1, search_2, address_line_1, address_line_2, city, state, postal_code, country, created_at, updated_at")
+    .select("id, workspace_id, name, parent_company_id, assigned_rep_id, legacy_customer_number, status, product_category, ar_type, payment_terms_code, terms_code, territory_code, pricing_level, do_not_contact, opt_out_sale_pi, search_1, search_2, address_line_1, address_line_2, city, state, postal_code, country, created_at, updated_at")
     .eq("id", companyId)
     .is("deleted_at", null)
     .maybeSingle();
