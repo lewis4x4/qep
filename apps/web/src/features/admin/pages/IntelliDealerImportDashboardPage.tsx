@@ -181,6 +181,8 @@ interface ImportPreflightResponse {
   run_id: string;
   status: string;
   ok: boolean;
+  preflight_token: string | null;
+  preflight_expires_in_seconds: number;
   checks: Array<{ name: string; ok: boolean; detail: string }>;
   warnings: string[];
   expected_counts: Record<StageTableKey, number>;
@@ -207,7 +209,7 @@ interface ExportDefinition {
 }
 
 const EXPORT_BATCH_SIZE = 1_000;
-const STAGE_CHUNK_SIZE = 500;
+const STAGE_CHUNK_SIZE = 100;
 
 const EMPTY_COUNTS: CountSummary = {
   masterStage: 0,
@@ -632,7 +634,7 @@ export function IntelliDealerImportDashboardPage() {
 
   async function handleCommitRun(run: ImportRunRow) {
     if (run.status !== "staged") return;
-    if (commitPreflight?.run_id !== run.id || commitPreflight.ok !== true) {
+    if (commitPreflight?.run_id !== run.id || commitPreflight.ok !== true || !commitPreflight.preflight_token) {
       setRunActionState({
         runId: run.id,
         action: "commit",
@@ -656,7 +658,7 @@ export function IntelliDealerImportDashboardPage() {
 
     setRunActionState({ runId: run.id, action: "commit", status: "loading", message: "Committing staged rows to canonical QRM tables..." });
     try {
-      const result = await commitIntelliDealerRun(run.id);
+      const result = await commitIntelliDealerRun(run.id, commitPreflight.preflight_token);
       setCommitPreflight(null);
       setRunActionState({
         runId: run.id,
@@ -1044,7 +1046,7 @@ export function IntelliDealerImportDashboardPage() {
                             size="sm"
                             variant="outline"
                             className="h-8 text-[11px]"
-                            disabled={runActionState?.status === "loading" || commitPreflight?.run_id !== run.id || commitPreflight.ok !== true}
+                            disabled={runActionState?.status === "loading" || commitPreflight?.run_id !== run.id || commitPreflight.ok !== true || !commitPreflight.preflight_token}
                             onClick={() => void handleCommitRun(run)}
                           >
                             {runActionState?.runId === run.id && runActionState.status === "loading" && runActionState.action === "commit"
@@ -1079,6 +1081,11 @@ export function IntelliDealerImportDashboardPage() {
                           <p className="text-[11px] font-semibold text-foreground">
                             Commit preflight: {commitPreflight.ok ? "passed" : "blocked"}
                           </p>
+                          {commitPreflight.ok ? (
+                            <p className="mt-1 text-[10px] text-muted-foreground">
+                              Token expires in {Math.round(commitPreflight.preflight_expires_in_seconds / 60).toLocaleString()} minutes.
+                            </p>
+                          ) : null}
                           <div className="mt-2 grid gap-1">
                             {commitPreflight.checks.map((check) => (
                               <div key={check.name} className="flex items-center justify-between gap-2 text-[10px]">
@@ -1590,8 +1597,10 @@ async function stageIntelliDealerChunk(runId: string, workspaceId: string, table
     run_id: runId,
     workspace_id: workspaceId,
   }));
-  const result = await writableDb.from(STAGE_TABLE_NAMES[tableKey]).insert(safeRows);
-  if (result.error) throw new Error(result.error.message ?? `Failed to stage ${tableKey}`);
+  await withRetry(async () => {
+    const result = await writableDb.from(STAGE_TABLE_NAMES[tableKey]).insert(safeRows);
+    if (result.error) throw new Error(result.error.message ?? `Failed to stage ${tableKey}`);
+  }, `stage ${tableKey}`);
 }
 
 async function completeIntelliDealerStage(runId: string): Promise<StageResponse> {
@@ -1602,8 +1611,8 @@ async function preflightIntelliDealerCommit(runId: string): Promise<ImportPrefli
   return invokeIntelliDealerImport<ImportPreflightResponse>({ action: "preflight_commit", run_id: runId }, "IntelliDealer commit preflight failed");
 }
 
-async function commitIntelliDealerRun(runId: string): Promise<ImportActionResponse> {
-  return invokeIntelliDealerImport<ImportActionResponse>({ action: "commit", run_id: runId }, "IntelliDealer commit failed");
+async function commitIntelliDealerRun(runId: string, preflightToken: string): Promise<ImportActionResponse> {
+  return invokeIntelliDealerImport<ImportActionResponse>({ action: "commit", run_id: runId, preflight_token: preflightToken }, "IntelliDealer commit failed");
 }
 
 async function discardIntelliDealerStage(runId: string): Promise<ImportActionResponse> {
@@ -1627,6 +1636,24 @@ async function invokeIntelliDealerImport<T>(body: Record<string, unknown>, fallb
     throw new Error(message || fallbackMessage);
   }
   return data as T;
+}
+
+async function withRetry(operation: () => Promise<void>, label: string, attempts = 3): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await operation();
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) await sleep(1_000 * attempt);
+    }
+  }
+  throw new Error(`Failed to ${label}: ${lastError instanceof Error ? lastError.message : "unknown error"}`);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolveSleep) => window.setTimeout(resolveSleep, ms));
 }
 
 function column(key: string, header = key): ExportColumn {

@@ -78,7 +78,7 @@ try {
   storagePath = previewRun.metadata?.source_storage_path ?? null;
 
   await page.getByRole("button", { name: "Stage rows", exact: true }).click();
-  await page.getByText("Staging complete", { exact: false }).waitFor({ timeout: 420_000 });
+  await page.getByText("Staging complete", { exact: false }).waitFor({ timeout: 900_000 });
 
   const screenshot = resolve(artifactDir, "browser-stage-flow.png");
   await page.screenshot({ path: screenshot, fullPage: true });
@@ -92,9 +92,17 @@ try {
     check("no import errors", run.import_errors_count === 0, String(run.import_errors_count)),
   ];
 
+  const unguardedCommit = await invokeImportAction({ action: "commit", run_id: runId });
+  checks.push(check(
+    "commit without preflight token rejected",
+    unguardedCommit.status === 409 && unguardedCommit.body.includes("preflight token"),
+    `${unguardedCommit.status}: ${unguardedCommit.body.slice(0, 160)}`,
+  ));
+
   await page.getByRole("button", { name: "Preflight commit", exact: true }).click();
   await page.getByText("Commit preflight: passed", { exact: false }).waitFor({ timeout: 120_000 });
   await page.getByText("committed run already uses this source file hash", { exact: false }).waitFor({ timeout: 20_000 });
+  await page.getByText("Token expires in", { exact: false }).waitFor({ timeout: 20_000 });
 
   page.once("dialog", async (dialog) => {
     await dialog.accept();
@@ -247,39 +255,62 @@ async function loadImportRun(id) {
 async function countRemainingStageRows(id) {
   let total = 0;
   for (const table of stageTables) {
-    const { count, error } = await adminClient
-      .from(table)
-      .select("id", { count: "exact", head: true })
-      .eq("run_id", id);
-    if (error) throw new Error(`Could not count ${table} for run ${id}: ${error.message}`);
+    const { count } = await withRetry(
+      () => adminClient
+        .from(table)
+        .select("id", { count: "exact", head: true })
+        .eq("run_id", id),
+      `count ${table} for run ${id}`,
+    );
     total += count ?? 0;
   }
   return total;
 }
 
+async function invokeImportAction(body) {
+  const response = await fetch(`${supabaseUrl}/functions/v1/intellidealer-customer-import`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${session.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  return {
+    status: response.status,
+    body: await response.text(),
+  };
+}
+
 async function cleanupRun(id) {
   for (const table of ["qrm_intellidealer_customer_import_errors", ...stageTables]) {
-    const { error } = await adminClient
-      .from(table)
-      .delete()
-      .eq("run_id", id);
-    if (error) throw new Error(`Could not cleanup ${table} for run ${id}: ${error.message}`);
+    await withRetry(
+      () => adminClient
+        .from(table)
+        .delete()
+        .eq("run_id", id),
+      `cleanup ${table} for run ${id}`,
+    );
   }
 
   for (const table of stageTables) {
-    const { count, error: countError } = await adminClient
-      .from(table)
-      .select("id", { count: "exact", head: true })
-      .eq("run_id", id);
-    if (countError) throw new Error(`Could not verify cleanup for ${table}: ${countError.message}`);
+    const { count } = await withRetry(
+      () => adminClient
+        .from(table)
+        .select("id", { count: "exact", head: true })
+        .eq("run_id", id),
+      `verify cleanup for ${table}`,
+    );
     if (count !== 0) throw new Error(`Cleanup left ${count} rows in ${table} for run ${id}`);
   }
 
-  const { error } = await adminClient
-    .from("qrm_intellidealer_customer_import_runs")
-    .delete()
-    .eq("id", id);
-  if (error) throw new Error(`Could not cleanup import run ${id}: ${error.message}`);
+  await withRetry(
+    () => adminClient
+      .from("qrm_intellidealer_customer_import_runs")
+      .delete()
+      .eq("id", id),
+    `cleanup import run ${id}`,
+  );
 }
 
 async function cleanupStorage(fullPath) {
@@ -291,6 +322,32 @@ async function cleanupStorage(fullPath) {
 
 function check(name, ok, detail) {
   return { name, ok, detail };
+}
+
+async function withRetry(operation, label, attempts = 4) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const result = await operation();
+      if (!result?.error) return result;
+      lastError = result.error;
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < attempts) await sleep(750 * attempt);
+  }
+  throw new Error(`Could not ${label}: ${formatError(lastError)}`);
+}
+
+function formatError(error) {
+  if (!error) return "unknown error";
+  if (typeof error === "string") return error;
+  if (error.message) return error.message;
+  return JSON.stringify(error);
+}
+
+function sleep(ms) {
+  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 }
 
 function trimTrailingSlash(value) {

@@ -36,6 +36,7 @@ interface RequestBody {
   run_id?: string;
   table_key?: StageTableKey;
   rows?: Record<string, unknown>[];
+  preflight_token?: string;
 }
 
 interface SheetAudit {
@@ -76,6 +77,7 @@ const STAGE_TABLES: Record<StageTableKey, string> = {
   profitability: "qrm_intellidealer_customer_profitability_stage",
 };
 const STAGE_TABLE_ORDER: StageTableKey[] = ["master", "contacts", "memos", "arAgencies", "profitability"];
+const COMMIT_PREFLIGHT_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
@@ -519,10 +521,38 @@ async function handlePreflightCommit(
   }
 
   const ok = checks.every((check) => check.ok);
+  let preflightToken: string | null = null;
+  if (ok) {
+    preflightToken = `${crypto.randomUUID()}.${crypto.randomUUID()}`;
+    const now = new Date();
+    const tokenHash = await sha256Hex(preflightToken);
+    const metadata = isRecord(run.metadata) ? run.metadata : {};
+    const { error: updateError } = await supabase
+      .from("qrm_intellidealer_customer_import_runs")
+      .update({
+        metadata: {
+          ...metadata,
+          commit_preflight: {
+            token_hash: tokenHash,
+            checked_at: now.toISOString(),
+            expires_at: new Date(now.getTime() + COMMIT_PREFLIGHT_TOKEN_TTL_MS).toISOString(),
+            check_count: checks.length,
+            warning_count: warnings.length,
+          },
+        },
+      })
+      .eq("id", body.run_id)
+      .eq("workspace_id", workspaceId)
+      .eq("status", "staged");
+    if (updateError) return safeJsonError(`failed to record commit preflight: ${updateError.message}`, 500, origin);
+  }
+
   return safeJsonOk({
     run_id: body.run_id,
     status: run.status,
     ok,
+    preflight_token: preflightToken,
+    preflight_expires_in_seconds: ok ? Math.floor(COMMIT_PREFLIGHT_TOKEN_TTL_MS / 1000) : 0,
     checks,
     warnings,
     expected_counts: expected,
@@ -540,7 +570,7 @@ async function handleCommit(
 
   const { data: run, error: loadError } = await supabase
     .from("qrm_intellidealer_customer_import_runs")
-    .select("id, status")
+    .select("id, status, metadata")
     .eq("id", body.run_id)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
@@ -549,6 +579,8 @@ async function handleCommit(
   if (run.status !== "staged") {
     return safeJsonError("Only staged runs can be committed.", 409, origin);
   }
+  const tokenError = await validateCommitPreflightToken(run.metadata, body.preflight_token);
+  if (tokenError) return safeJsonError(tokenError, 409, origin);
 
   const { data, error } = await supabase.rpc("commit_intellidealer_customer_import", {
     p_run_id: body.run_id,
@@ -611,4 +643,30 @@ async function countStageRows(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function validateCommitPreflightToken(metadata: unknown, token: unknown): Promise<string | null> {
+  if (typeof token !== "string" || token.length < 32) {
+    return "Fresh commit preflight token required.";
+  }
+  const preflight = isRecord(metadata) && isRecord(metadata.commit_preflight)
+    ? metadata.commit_preflight
+    : null;
+  const tokenHash = typeof preflight?.token_hash === "string" ? preflight.token_hash : null;
+  const expiresAt = typeof preflight?.expires_at === "string" ? Date.parse(preflight.expires_at) : Number.NaN;
+  if (!tokenHash || !Number.isFinite(expiresAt)) {
+    return "Fresh commit preflight token required.";
+  }
+  if (expiresAt <= Date.now()) {
+    return "Commit preflight token expired. Run preflight again.";
+  }
+  if (await sha256Hex(token) !== tokenHash) {
+    return "Commit preflight token did not match.";
+  }
+  return null;
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
