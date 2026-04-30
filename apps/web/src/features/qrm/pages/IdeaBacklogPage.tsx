@@ -7,38 +7,68 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DeckSurface } from "../components/command-deck";
-import { supabase } from "@/lib/supabase";
+import { crmSupabase, type QrmDatabase } from "../lib/qrm-supabase";
+
+type IdeaRow = QrmDatabase["public"]["Tables"]["qrm_idea_backlog"]["Row"];
+type IdeaStatus = "new" | "triaged" | "in_progress" | "shipped" | "declined";
+type IdeaPriority = "low" | "medium" | "high" | "critical";
+type IdeaSource = "voice" | "text" | "meeting" | "email";
+
+const IDEA_STATUSES = new Set<IdeaStatus>(["new", "triaged", "in_progress", "shipped", "declined"]);
+const IDEA_PRIORITIES = new Set<IdeaPriority>(["low", "medium", "high", "critical"]);
+const IDEA_SOURCES = new Set<IdeaSource>(["voice", "text", "meeting", "email"]);
 
 interface Idea {
   id: string;
   title: string;
   body: string | null;
-  source: "voice" | "text" | "meeting" | "email";
-  status: "new" | "triaged" | "in_progress" | "shipped" | "declined";
-  priority: "low" | "medium" | "high" | "critical";
+  source: IdeaSource;
+  status: IdeaStatus;
+  priority: IdeaPriority;
   tags: string[];
   captured_by: string | null;
   captured_at: string;
   ai_confidence: number | null;
 }
 
+function normalizeIdea(row: IdeaRow): Idea {
+  const source = IDEA_SOURCES.has(row.source as IdeaSource) ? (row.source as IdeaSource) : "text";
+  const status = IDEA_STATUSES.has(row.status as IdeaStatus) ? (row.status as IdeaStatus) : "new";
+  const priority = IDEA_PRIORITIES.has(row.priority as IdeaPriority) ? (row.priority as IdeaPriority) : "medium";
+  const tags = Array.isArray(row.tags)
+    ? row.tags.filter((tag): tag is string => typeof tag === "string")
+    : [];
+
+  return {
+    id: row.id,
+    title: row.title,
+    body: row.body,
+    source,
+    status,
+    priority,
+    tags,
+    captured_by: row.captured_by,
+    captured_at: row.captured_at,
+    ai_confidence: row.ai_confidence,
+  };
+}
+
 export function IdeaBacklogPage() {
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
-  const [draft, setDraft] = useState({ title: "", body: "", priority: "medium" });
+  const [draft, setDraft] = useState<{ title: string; body: string; priority: IdeaPriority }>({ title: "", body: "", priority: "medium" });
   const [statusFilter, setStatusFilter] = useState<Idea["status"] | "all">("all");
 
   const { data: ideas = [], isLoading } = useQuery({
     queryKey: ["idea-backlog"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { order: (c: string, o: Record<string, boolean>) => { limit: (n: number) => Promise<{ data: Idea[] | null; error: unknown }> } } };
-      }).from("qrm_idea_backlog")
+      const { data, error } = await crmSupabase
+        .from("qrm_idea_backlog")
         .select("*")
         .order("captured_at", { ascending: false })
         .limit(200);
-      if (error) throw new Error("Failed to load idea backlog");
-      return data ?? [];
+      if (error) throw new Error(error.message ?? "Failed to load idea backlog");
+      return (data ?? []).map(normalizeIdea);
     },
     staleTime: 30_000,
   });
@@ -46,7 +76,7 @@ export function IdeaBacklogPage() {
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!draft.title.trim()) throw new Error("Title required");
-      const { error } = await supabase.from("qrm_idea_backlog").insert({
+      const { error } = await crmSupabase.from("qrm_idea_backlog").insert({
         title: draft.title.trim(),
         body: draft.body.trim() || null,
         priority: draft.priority,
@@ -67,7 +97,7 @@ export function IdeaBacklogPage() {
       const patch: Record<string, unknown> = { status: input.status };
       if (input.status === "shipped") patch.shipped_at = new Date().toISOString();
       if (input.status === "triaged") patch.triaged_at = new Date().toISOString();
-      const { error } = await supabase.from("qrm_idea_backlog").update(patch).eq("id", input.id);
+      const { error } = await crmSupabase.from("qrm_idea_backlog").update(patch).eq("id", input.id);
       if (error) throw new Error(error.message ?? "Update failed");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["idea-backlog"] }),

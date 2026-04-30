@@ -245,18 +245,12 @@ export async function patchCrmDeal(dealId: string, input: QrmDealPatchInput): Pr
 export async function reorderPipelineDeals(stageId: string, orderedDealIds: string[]): Promise<void> {
   if (orderedDealIds.length === 0) return;
 
-  // The RPC is not in the generated types shim yet; cast at the call site.
-  const { error } = await (crmSupabase as unknown as {
-    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ error: unknown }>;
-  }).rpc("crm_reorder_pipeline_deals", {
+  const { error } = await crmSupabase.rpc("crm_reorder_pipeline_deals", {
     p_stage_id: stageId,
     p_ordered_deal_ids: orderedDealIds,
   });
 
   if (error) {
-    const message = error && typeof error === "object" && "message" in error && typeof (error as { message: unknown }).message === "string"
-      ? (error as { message: string }).message
-      : "Reorder failed.";
-    throw new Error(message);
+    throw new Error(error.message ?? "Reorder failed.");
   }
 }
