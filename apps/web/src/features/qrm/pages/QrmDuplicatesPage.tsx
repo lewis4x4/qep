@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, GitMerge, XCircle } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 import { CompanyMergeDialog } from "../components/CompanyMergeDialog";
 import { accountCommandUrl } from "../lib/account-links";
+import { crmSupabase } from "../lib/qrm-supabase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -268,11 +268,9 @@ function DuplicateCompaniesSection() {
   const { data: dupes = [], isLoading, isError } = useQuery({
     queryKey: ["duplicate-companies"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: CompanyDupRow[] | null; error: unknown }>;
-      }).rpc("find_duplicate_companies", { p_threshold: 0.6 });
-      if (error) throw new Error(String((error as { message?: string }).message ?? "Failed to scan"));
-      return data ?? [];
+      const { data, error } = await crmSupabase.rpc("find_duplicate_companies", { p_threshold: 0.6 });
+      if (error) throw new Error(error.message ?? "Failed to scan");
+      return (data ?? []) satisfies CompanyDupRow[];
     },
     staleTime: 5 * 60_000,
   });
@@ -336,4 +334,3 @@ function DuplicateCompaniesSection() {
     </Card>
   );
 }
-

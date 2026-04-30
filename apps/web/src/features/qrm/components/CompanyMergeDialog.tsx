@@ -6,7 +6,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { GitMerge, Loader2, AlertTriangle, RotateCcw } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { crmSupabase } from "../lib/qrm-supabase";
 
 interface CompanyPair {
   company_a_id: string;
@@ -31,6 +31,40 @@ interface MergeResponse {
   discarded_company_id: string;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function parseMergeResponse(value: unknown): MergeResponse {
+  if (!isRecord(value)) throw new Error("Merge returned an invalid response");
+  if (
+    typeof value.ok !== "boolean" ||
+    typeof value.audit_id !== "string" ||
+    typeof value.dry_run !== "boolean" ||
+    typeof value.total_rows_affected !== "number" ||
+    !isRecord(value.table_row_counts) ||
+    typeof value.kept_company_id !== "string" ||
+    typeof value.discarded_company_id !== "string"
+  ) {
+    throw new Error("Merge returned an incomplete response");
+  }
+
+  const tableRowCounts: Record<string, number> = {};
+  for (const [table, count] of Object.entries(value.table_row_counts)) {
+    if (typeof count === "number") tableRowCounts[table] = count;
+  }
+
+  return {
+    ok: value.ok,
+    audit_id: value.audit_id,
+    dry_run: value.dry_run,
+    total_rows_affected: value.total_rows_affected,
+    table_row_counts: tableRowCounts,
+    kept_company_id: value.kept_company_id,
+    discarded_company_id: value.discarded_company_id,
+  };
+}
+
 export function CompanyMergeDialog({ pair, onClose }: CompanyMergeDialogProps) {
   const queryClient = useQueryClient();
   const [keepSide, setKeepSide] = useState<"a" | "b">("a");
@@ -44,16 +78,14 @@ export function CompanyMergeDialog({ pair, onClose }: CompanyMergeDialogProps) {
       if (!pair) throw new Error("No pair selected");
       const keepId = keepSide === "a" ? pair.company_a_id : pair.company_b_id;
       const discardId = keepSide === "a" ? pair.company_b_id : pair.company_a_id;
-      const { data, error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: MergeResponse | null; error: unknown }>;
-      }).rpc("merge_companies", {
+      const { data, error } = await crmSupabase.rpc("merge_companies", {
         p_keep_id: keepId,
         p_discard_id: discardId,
         p_dry_run: opts.dryRun,
-        p_caller_notes: notes || null,
+        p_caller_notes: notes.trim() || undefined,
       });
-      if (error) throw new Error(String((error as { message?: string }).message ?? "Merge failed"));
-      return data!;
+      if (error) throw new Error(error.message ?? "Merge failed");
+      return parseMergeResponse(data);
     },
     onSuccess: (data) => {
       if (data.dry_run) {
@@ -85,10 +117,8 @@ export function CompanyMergeDialog({ pair, onClose }: CompanyMergeDialogProps) {
 
   const undoMutation = useMutation({
     mutationFn: async (auditId: string) => {
-      const { data, error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
-      }).rpc("qrm_undo_company_merge", { p_audit_id: auditId });
-      if (error) throw new Error(String((error as { message?: string }).message ?? "Undo failed"));
+      const { data, error } = await crmSupabase.rpc("qrm_undo_company_merge", { p_audit_id: auditId });
+      if (error) throw new Error(error.message ?? "Undo failed");
       return data;
     },
     onSuccess: () => {
