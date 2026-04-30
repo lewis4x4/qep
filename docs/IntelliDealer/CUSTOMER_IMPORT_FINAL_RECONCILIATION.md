@@ -10,7 +10,7 @@ Production target:
 
 - Supabase project: `iciddijgonywtxoelous`
 - Netlify production URL: `https://qualityequipmentparts.netlify.app`
-- Production deploy ID: `69f2c85260f36ba5e206684b`
+- Production deploy ID: `69f3314f2be96fee7b220edc`
 - Import run ID: `df74305e-d37a-4e4b-be5e-457633b2cd1d`
 
 ## Production Reconciliation
@@ -53,6 +53,7 @@ The tab renders:
 - A/R type, terms, pricing level, territory, branch, salesperson, and business class.
 - Imported A/R agency assignments with card values shown only as `Card redacted`.
 - Imported profitability totals and area breakdowns.
+- Controlled drill-downs for memo history, full A/R agency assignment detail, and profitability period metrics.
 
 The browser query intentionally does not select `card_number`.
 
@@ -106,7 +107,7 @@ Evidence:
 
 | Check | Result |
 | --- | --- |
-| Desktop Account 360 IntelliDealer tab | PASS |
+| Desktop Account 360 IntelliDealer tab and drill-downs | PASS |
 | Companies legacy-number search | PASS |
 | Company editor IntelliDealer profile | PASS |
 | Contact editor IntelliDealer profile | PASS |
@@ -162,9 +163,9 @@ The gate compares the current local workbook to the committed production import.
 
 ## Remaining Follow-Up
 
-The customer import, canonical data load, redaction, deployment, admin dashboard, rerun-safety gate, and UI smoke test are complete.
+The customer import, canonical data load, redaction, deployment, admin dashboard, Account 360 IntelliDealer drill-downs, rerun-safety gate, and UI smoke test are complete.
 
 Recommended next slice:
 
-- Add controlled memo history, A/R agency, and profitability drill-down actions beyond the Account 360 summary view.
+- Add admin upload, preview, commit, rollback, and row-level export controls so import operations no longer depend on scripts for future runs.
 - Migrate legacy Supabase call sites to the regenerated `Database` type slice-by-slice; the shared client remains broad until old JSON/nullability and stale select-shape debt is resolved.

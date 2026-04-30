@@ -191,6 +191,10 @@ async function smokeAccountIntelliDealerTab(context, company, label) {
   await page.getByText("Contact coverage", { exact: false }).first().waitFor({ timeout: 20_000 });
   await page.getByText("A/R agency assignments", { exact: false }).waitFor({ timeout: 20_000 });
   await page.getByText("Imported profitability", { exact: false }).waitFor({ timeout: 20_000 });
+  await page.getByText("Memo history", { exact: true }).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: "Show period detail" }).click({ force: true });
+  await page.getByText("Current month sales", { exact: false }).first().waitFor({ timeout: 20_000 });
+  await page.getByText("Fiscal LY sales", { exact: false }).first().waitFor({ timeout: 20_000 });
   const redactedCardRows = page.getByText("Card redacted", { exact: false });
   await redactedCardRows.first().waitFor({ timeout: 20_000 });
 

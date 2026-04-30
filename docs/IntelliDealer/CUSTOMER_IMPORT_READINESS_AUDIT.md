@@ -113,8 +113,8 @@ Verified production results:
 - Profitability rows mapped: 9,894 / 9,894.
 - Import errors: 0.
 - Raw A/R card rows: 0.
-- Account 360 IntelliDealer tab, Companies legacy search, company editor safe imported fields, contact editor safe imported fields, and admin import dashboard deployed to Netlify production deploy `69f2c85260f36ba5e206684b`.
-- Authenticated desktop, mobile, companies-search, company-editor, contact-editor, and admin-dashboard production smoke tests passed.
+- Account 360 IntelliDealer tab with controlled memo/A/R/profitability drill-downs, Companies legacy search, company editor safe imported fields, contact editor safe imported fields, and admin import dashboard deployed to Netlify production deploy `69f3314f2be96fee7b220edc`.
+- Authenticated desktop, mobile, Account 360 drill-down, companies-search, company-editor, contact-editor, and admin-dashboard production smoke tests passed.
 - Migration `513_refresh_crm_contacts_contact_profile.sql` refreshed the `crm_contacts` compatibility view so safe contact profile fields are available through legacy QRM call sites.
 - Rerun safety gate added with `bun run intellidealer:customer:rerun-check`.
 
@@ -163,7 +163,7 @@ Ready:
 - Database now has canonical imported profitability facts separate from QEP-computed profitability.
 - RLS policies are in place for the new import and fact tables.
 - Companies list/search now supports IntelliDealer legacy customer number lookup and displays imported source badges.
-- Account 360 now exposes source identity, contact coverage, A/R exposure, profitability posture, and next-best-action operating signals.
+- Account 360 now exposes source identity, contact coverage, A/R exposure, profitability posture, memo history, A/R agency detail, profitability period drill-downs, and next-best-action operating signals.
 - Company editor now maintains safe imported profile fields: status, product category, A/R type, payment terms, terms code, territory, pricing level, do-not-contact, and sale-PI opt-out. Legacy customer number is read-only, and card/credit/redaction values remain excluded.
 - Contact editor now maintains safe imported profile fields: cell phone, direct phone, birth date, and SMS opt-in. IntelliDealer customer/contact numbers are read-only, and raw imported row metadata remains excluded.
 
@@ -172,7 +172,6 @@ Still to harden:
 - Supabase TypeScript types have been regenerated from production, but the shared browser client remains broadly typed until legacy JSON/nullability and stale select-shape debt is migrated slice-by-slice.
 - Admin import UI is read-only; it does not yet support upload, preview, commit, rollback, or row-level export.
 - QRM contact editor intentionally exposes only safe maintenance fields; imported memo/raw-row details remain display/reporting work, not edit-form work.
-- Memo history, A/R agency, and profitability views are summary-focused; controlled drill-down actions remain future work.
 - Deferred non-parts seed support rows that protected parts data still references remain intentionally preserved until a remap/nulling policy is approved.
 
 ## Required Next Work
@@ -197,9 +196,9 @@ Still to harden:
 
    Minimum required views: run summary, row counts, warnings, duplicate/conflict list, sample rows, commit button, failed-row export, and rollback/cancel state.
 
-6. Extend remaining customer UI/API surfaces.
+6. Extend import operations UI/API surfaces.
 
-   Remaining display/edit coverage: memo history surfacing and controlled A/R agency/profitability drill-down beyond Account 360. Company/contact edit now covers safe imported profile fields and excludes sensitive card/credit/raw-row values.
+   Remaining operational coverage: upload/preview/commit/rollback controls, row-level exports, and deeper admin run diagnostics. Account 360 now covers memo history plus controlled A/R agency/profitability drill-downs; company/contact edit covers safe imported profile fields and excludes sensitive card/credit/raw-row values.
 
 7. Keep Supabase types current after migration application.
 
@@ -237,7 +236,7 @@ Still to harden:
 
 8. Customer operator UI
 
-   Extend customer list/search, Account 360, company edit, contact edit, A/R agency display, profitability display, and memo history so imported data is visible and operational.
+   Extend customer list/search, Account 360, company edit, contact edit, A/R agency display, profitability display, and memo history so imported data is visible and operational. Current production coverage includes the customer list, Account 360 IntelliDealer drill-downs, company safe-profile edit, and contact safe-profile edit.
 
 9. Parts remap and deferred seed cleanup
 

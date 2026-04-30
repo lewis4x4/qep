@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -383,6 +384,9 @@ export function AccountARTab({ invoices, arBlock }: { invoices: Account360Invoic
 }
 
 export function AccountIntelliDealerTab({ companyId }: { companyId: string }) {
+  const [showAllAgencies, setShowAllAgencies] = useState(false);
+  const [showProfitabilityDetail, setShowProfitabilityDetail] = useState(false);
+  const [showAllMemos, setShowAllMemos] = useState(false);
   const importQuery = useQuery({
     queryKey: ["intellidealer-account-summary", companyId],
     queryFn: () => fetchIntelliDealerAccountSummary(companyId),
@@ -406,7 +410,7 @@ export function AccountIntelliDealerTab({ companyId }: { companyId: string }) {
     return <Card className="p-4"><p className="text-xs text-muted-foreground">No IntelliDealer import facts are linked to this account.</p></Card>;
   }
 
-  if (!data.company?.legacy_customer_number && data.contacts.length === 0 && data.arAgencies.length === 0 && data.profitability.length === 0) {
+  if (!data.company?.legacy_customer_number && data.contacts.length === 0 && data.arAgencies.length === 0 && data.profitability.length === 0 && data.memos.length === 0) {
     return <Card className="p-4"><p className="text-xs text-muted-foreground">No IntelliDealer import facts are linked to this account.</p></Card>;
   }
 
@@ -425,6 +429,9 @@ export function AccountIntelliDealerTab({ companyId }: { companyId: string }) {
   const contactsWithPhone = data.contacts.filter((contact) => Boolean(contact.cell ?? contact.direct_phone ?? contact.phone)).length;
   const primaryContact = data.contacts[0] ?? null;
   const nextAction = buildIntelliDealerNextAction(data, total, activeAgencies, defaultAgency);
+  const visibleAgencies = showAllAgencies ? data.arAgencies : data.arAgencies.slice(0, 12);
+  const sortedProfitability = sortProfitability(data.profitability);
+  const visibleMemos = showAllMemos ? data.memos : data.memos.slice(0, 5);
 
   return (
     <div className="space-y-3">
@@ -490,12 +497,23 @@ export function AccountIntelliDealerTab({ companyId }: { companyId: string }) {
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground">A/R agency assignments</p>
               <p className="mt-1 text-sm font-semibold text-foreground">{data.arAgencies.length.toLocaleString()} imported rows</p>
             </div>
+            {data.arAgencies.length > 12 ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-[11px]"
+                onClick={() => setShowAllAgencies((value) => !value)}
+              >
+                {showAllAgencies ? "Show summary" : "Show all"}
+              </Button>
+            ) : null}
           </div>
           {data.arAgencies.length === 0 ? (
             <p className="text-xs text-muted-foreground">No A/R agency assignments imported.</p>
           ) : (
             <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-              {data.arAgencies.slice(0, 12).map((agency) => (
+              {visibleAgencies.map((agency) => (
                 <div key={agency.id} className="rounded-md border border-border/70 bg-background/50 p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -506,14 +524,18 @@ export function AccountIntelliDealerTab({ companyId }: { companyId: string }) {
                       <p className="mt-1 text-[11px] text-muted-foreground">
                         Card redacted · rating {agency.credit_rating || "—"}
                       </p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        {agency.active ? "Active" : "Inactive"} · expires {formatYearMonth(agency.expiration_year_month)} · promo {agency.default_promotion_code || "—"}
+                      </p>
                     </div>
-                    <p className="text-right text-xs font-semibold text-foreground">
-                      {formatCents(agency.credit_limit_cents)}
-                    </p>
+                    <div className="text-right text-xs">
+                      <p className="font-semibold text-foreground">{formatCents(agency.credit_limit_cents)}</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">Txn {formatCents(agency.transaction_limit_cents)}</p>
+                    </div>
                   </div>
                 </div>
               ))}
-              {data.arAgencies.length > 12 ? (
+              {data.arAgencies.length > 12 && !showAllAgencies ? (
                 <p className="text-[11px] text-muted-foreground">Showing 12 of {data.arAgencies.length.toLocaleString()} assignments.</p>
               ) : null}
             </div>
@@ -554,21 +576,86 @@ export function AccountIntelliDealerTab({ companyId }: { companyId: string }) {
       </div>
 
       <Card className="p-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Memo history</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">{data.memos.length.toLocaleString()} imported memos</p>
+          </div>
+          {data.memos.length > 5 ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-[11px]"
+              onClick={() => setShowAllMemos((value) => !value)}
+            >
+              {showAllMemos ? "Show summary" : "Show all"}
+            </Button>
+          ) : null}
+        </div>
+        {data.memos.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No imported memo history is linked to this account.</p>
+        ) : (
+          <div className="space-y-2">
+            {visibleMemos.map((memo) => (
+              <div key={memo.id} className="rounded-md border border-border/70 bg-background/50 p-3">
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    {memo.pinned ? "Pinned memo" : "Imported memo"}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">{formatDate(memo.updated_at ?? memo.created_at)}</p>
+                </div>
+                <p className="whitespace-pre-wrap text-xs leading-5 text-foreground">{memo.body}</p>
+              </div>
+            ))}
+            {data.memos.length > 5 && !showAllMemos ? (
+              <p className="text-[11px] text-muted-foreground">Showing 5 of {data.memos.length.toLocaleString()} memos.</p>
+            ) : null}
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-4">
+        <div className="flex items-center justify-between gap-2">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Imported profitability</p>
+          {data.profitability.length > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-[11px]"
+              onClick={() => setShowProfitabilityDetail((value) => !value)}
+            >
+              {showProfitabilityDetail ? "Hide detail" : "Show period detail"}
+            </Button>
+          ) : null}
+        </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             <Metric label="YTD sales" value={formatCents(total?.ytd_sales_last_month_end_cents)} />
             <Metric label="YTD margin" value={formatCents(total?.ytd_margin_cents)} detail={formatPercent(total?.ytd_margin_pct)} />
             <Metric label="Current month" value={formatCents(total?.current_month_sales_cents)} detail={formatCents(total?.current_month_margin_cents)} />
           </div>
           <div className="mt-4 space-y-2">
-            {sortProfitability(data.profitability).map((fact) => (
-              <div key={fact.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 rounded-md border border-border/70 bg-background/50 px-3 py-2 text-xs">
-                <div className="min-w-0">
-                  <p className="font-semibold text-foreground">{fact.area_code} · {fact.area_label ?? "Unknown area"}</p>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">YTD sales {formatCents(fact.ytd_sales_last_month_end_cents)}</p>
+            {sortedProfitability.map((fact) => (
+              <div key={fact.id} className="rounded-md border border-border/70 bg-background/50 px-3 py-2 text-xs">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-foreground">{fact.area_code} · {fact.area_label ?? "Unknown area"}</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">YTD sales {formatCents(fact.ytd_sales_last_month_end_cents)}</p>
+                  </div>
+                  <span className="font-semibold tabular-nums text-foreground">{formatCents(fact.ytd_margin_cents)}</span>
+                  <span className={marginTone(fact.ytd_margin_pct)}>{formatPercent(fact.ytd_margin_pct)}</span>
                 </div>
-                <span className="font-semibold tabular-nums text-foreground">{formatCents(fact.ytd_margin_cents)}</span>
-                <span className={marginTone(fact.ytd_margin_pct)}>{formatPercent(fact.ytd_margin_pct)}</span>
+                {showProfitabilityDetail ? (
+                  <div className="mt-3 grid gap-2 border-t border-border/60 pt-3 text-[11px] sm:grid-cols-3">
+                    <MiniMetric label="Current month sales" value={formatCents(fact.current_month_sales_cents)} detail={`Margin ${formatCents(fact.current_month_margin_cents)} · ${formatPercent(fact.current_month_margin_pct)}`} />
+                    <MiniMetric label="Last 12 margin" value={formatCents(fact.last_12_margin_cents)} detail={formatPercent(fact.last_12_margin_pct)} />
+                    <MiniMetric label="Fiscal LY sales" value={formatCents(fact.fiscal_last_year_sales_cents)} detail={`Margin ${formatCents(fact.fiscal_last_year_margin_cents)}`} />
+                    <MiniMetric label="Territory" value={fact.territory_code || "—"} detail={`Salesperson ${fact.salesperson_code || "—"}`} />
+                    <MiniMetric label="County / class" value={fact.county_code || "—"} detail={fact.business_class_code || "No class"} />
+                    <MiniMetric label="As of" value={formatDate(fact.as_of_date)} />
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
@@ -590,6 +677,18 @@ function formatPercent(value: number | null | undefined): string {
 function formatCode(value: string | null | undefined): string | null {
   if (!value) return null;
   return value.replace(/_/g, " ");
+}
+
+function formatYearMonth(value: string | null | undefined): string {
+  if (!value || value.length !== 6) return "—";
+  return `${value.slice(0, 4)}-${value.slice(4)}`;
+}
+
+function formatDate(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 function textMeta(metadata: Record<string, unknown>, key: string): string | null {
@@ -665,6 +764,16 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className="mt-1 text-lg font-bold text-foreground tabular-nums">{value}</p>
       {detail ? <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">{detail}</p> : null}
+    </div>
+  );
+}
+
+function MiniMetric({ label, value, detail }: { label: string; value: string; detail?: string }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-0.5 font-semibold text-foreground tabular-nums">{value}</p>
+      {detail ? <p className="mt-0.5 text-[10px] text-muted-foreground tabular-nums">{detail}</p> : null}
     </div>
   );
 }

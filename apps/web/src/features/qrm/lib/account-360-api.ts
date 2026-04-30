@@ -218,6 +218,14 @@ export interface IntelliDealerProfitabilityFact {
   as_of_date: string | null;
 }
 
+export interface IntelliDealerCompanyMemo {
+  id: string;
+  body: string;
+  pinned: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 export interface IntelliDealerContactSignal {
   id: string;
   first_name: string | null;
@@ -234,10 +242,11 @@ export interface IntelliDealerAccountSummary {
   contacts: IntelliDealerContactSignal[];
   arAgencies: IntelliDealerArAgency[];
   profitability: IntelliDealerProfitabilityFact[];
+  memos: IntelliDealerCompanyMemo[];
 }
 
 export async function fetchIntelliDealerAccountSummary(companyId: string): Promise<IntelliDealerAccountSummary> {
-  const [companyResult, contactResult, arResult, profitabilityResult] = await Promise.all([
+  const [companyResult, contactResult, arResult, profitabilityResult, memoResult] = await Promise.all([
     untypedSupabase
       .from<IntelliDealerCompanySnapshot[]>("qrm_companies")
       .select("id, legacy_customer_number, status, product_category, ar_type, payment_terms_code, terms_code, county, territory_code, pricing_level, business_fax, business_cell, do_not_contact, opt_out_sale_pi, metadata")
@@ -263,17 +272,27 @@ export async function fetchIntelliDealerAccountSummary(companyId: string): Promi
       .eq("company_id", companyId)
       .is("deleted_at", null)
       .order("area_code", { ascending: true }),
+    untypedSupabase
+      .from<IntelliDealerCompanyMemo[]>("qrm_company_memos")
+      .select("id, body, pinned, created_at, updated_at")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .order("pinned", { ascending: false })
+      .order("updated_at", { ascending: false })
+      .limit(25),
   ]);
 
   if (companyResult.error) throw new Error(companyResult.error.message ?? "Failed to load IntelliDealer company snapshot");
   if (contactResult.error) throw new Error(contactResult.error.message ?? "Failed to load IntelliDealer contacts");
   if (arResult.error) throw new Error(arResult.error.message ?? "Failed to load IntelliDealer A/R agencies");
   if (profitabilityResult.error) throw new Error(profitabilityResult.error.message ?? "Failed to load IntelliDealer profitability");
+  if (memoResult.error) throw new Error(memoResult.error.message ?? "Failed to load IntelliDealer memos");
 
   return {
     company: companyResult.data,
     contacts: contactResult.data ?? [],
     arAgencies: arResult.data ?? [],
     profitability: profitabilityResult.data ?? [],
+    memos: memoResult.data ?? [],
   };
 }
