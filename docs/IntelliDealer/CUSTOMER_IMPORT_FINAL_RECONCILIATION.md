@@ -10,7 +10,7 @@ Production target:
 
 - Supabase project: `iciddijgonywtxoelous`
 - Netlify production URL: `https://qualityequipmentparts.netlify.app`
-- Production deploy ID: `69f2b249da204f6946cd2c82`
+- Production deploy ID: `69f2b8e2be107d80333f8a82`
 - Import run ID: `df74305e-d37a-4e4b-be5e-457633b2cd1d`
 
 ## Production Reconciliation
@@ -37,7 +37,7 @@ Read-only production verification returned:
 
 The latest local migration is applied remotely:
 
-- `511_intellidealer_customer_import_dashboard.sql`
+- `512_intellidealer_company_legacy_search.sql`
 
 ## UI Readiness
 
@@ -54,6 +54,12 @@ The tab renders:
 - Imported profitability totals and area breakdowns.
 
 The browser query intentionally does not select `card_number`.
+
+The deployed Companies surface at `/qrm/companies` now supports imported IntelliDealer lookup:
+
+- Search by legacy customer number, including `TIGER001`.
+- Visible `IntelliDealer <legacy #>` source badge on imported company rows.
+- Company CSV export includes `IntelliDealer #`.
 
 The admin import dashboard is deployed at:
 
@@ -86,6 +92,7 @@ Evidence:
 | Check | Result |
 | --- | --- |
 | Desktop Account 360 IntelliDealer tab | PASS |
+| Companies legacy-number search | PASS |
 | Admin IntelliDealer import dashboard | PASS |
 | Mobile Account 360 IntelliDealer tab | PASS |
 | Visible redacted card rows | `4` |
@@ -94,6 +101,7 @@ Evidence:
 Screenshots:
 
 - `test-results/intellidealer-production-smoke/account-intellidealer-desktop.png`
+- `test-results/intellidealer-production-smoke/companies-legacy-search.png`
 - `test-results/intellidealer-production-smoke/admin-intellidealer-imports.png`
 - `test-results/intellidealer-production-smoke/account-intellidealer-mobile.png`
 
@@ -139,5 +147,5 @@ The customer import, canonical data load, redaction, deployment, admin dashboard
 
 Recommended next slice:
 
-- Add deeper Account 360 operating cards for contact history, profitability trends, A/R exposure, and next-best-action signals.
+- Extend imported customer fields into company/contact edit flows where operators maintain customer profile data after cutover.
 - Migrate legacy Supabase call sites to the regenerated `Database` type slice-by-slice; the shared client remains broad until old JSON/nullability and stale select-shape debt is resolved.

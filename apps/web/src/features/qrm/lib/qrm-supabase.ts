@@ -71,6 +71,7 @@ type QrmTables = BaseTables & {
     parent_company_id: string | null;
     assigned_rep_id: string | null;
     hubspot_company_id: string | null;
+    legacy_customer_number: string | null;
     search_1: string | null;
     search_2: string | null;
     address_line_1: string | null;

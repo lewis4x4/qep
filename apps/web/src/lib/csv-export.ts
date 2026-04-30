@@ -98,6 +98,7 @@ export function exportContacts(contacts: ContactExportInput[]): void {
 interface CompanyExportInput {
   id: string;
   name: string;
+  legacyCustomerNumber?: string | null;
   addressLine1: string | null;
   city: string | null;
   state: string | null;
@@ -109,6 +110,7 @@ interface CompanyExportInput {
 export function exportCompanies(companies: CompanyExportInput[]): void {
   const rows = companies.map((c) => ({
     "Company Name": c.name,
+    "IntelliDealer #": c.legacyCustomerNumber ?? "",
     "Address": c.addressLine1 ?? "",
     "City": c.city ?? "",
     "State": c.state ?? "",

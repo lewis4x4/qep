@@ -36194,6 +36194,7 @@ export type Database = {
           last_invoice_date: string | null
           last_payment_date: string | null
           latitude: number | null
+          legacy_customer_number: string | null
           legal_name: string | null
           longitude: number | null
           lot: string | null
@@ -36321,6 +36322,7 @@ export type Database = {
           last_invoice_date?: string | null
           last_payment_date?: string | null
           latitude?: number | null
+          legacy_customer_number?: string | null
           legal_name?: string | null
           longitude?: number | null
           lot?: string | null
@@ -36448,6 +36450,7 @@ export type Database = {
           last_invoice_date?: string | null
           last_payment_date?: string | null
           latitude?: number | null
+          legacy_customer_number?: string | null
           legal_name?: string | null
           longitude?: number | null
           lot?: string | null
@@ -42213,6 +42216,7 @@ export type Database = {
           country: string
           created_at: string
           id: string
+          legacy_customer_number: string
           name: string
           parent_company_id: string
           postal_code: string

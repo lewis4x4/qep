@@ -37,6 +37,7 @@ try {
   const desktop = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
   await injectAuth(desktop, session);
   await smokeAccountIntelliDealerTab(desktop, company, "desktop");
+  await smokeCompanyLegacySearch(desktop, company);
   await smokeAdminDashboard(desktop);
   await desktop.close();
 
@@ -224,6 +225,37 @@ async function smokeAdminDashboard(context) {
   evidence.push({
     check: "browser.admin_intellidealer_imports",
     route: "/admin/intellidealer-imports",
+    screenshot,
+    bytes,
+    console_errors: consoleErrors.slice(0, 5),
+  });
+  await page.close();
+}
+
+async function smokeCompanyLegacySearch(context, company) {
+  const page = await context.newPage();
+  const consoleErrors = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+
+  await page.goto(`${productionUrl}/qrm/companies`, {
+    waitUntil: "networkidle",
+    timeout: 45_000,
+  });
+  await page.locator("#crm-companies-search").fill(company.legacy_customer_number);
+  await page.getByText(company.name, { exact: false }).waitFor({ timeout: 20_000 });
+  await page.getByText(`IntelliDealer ${company.legacy_customer_number}`, { exact: false }).waitFor({ timeout: 20_000 });
+
+  const screenshot = resolve(artifactDir, "companies-legacy-search.png");
+  await page.screenshot({ path: screenshot, fullPage: true });
+  const bytes = statSync(screenshot).size;
+  if (bytes < 10_000) throw new Error(`${screenshot} looked blank (${bytes} bytes).`);
+
+  evidence.push({
+    check: "browser.companies_legacy_search",
+    route: "/qrm/companies",
+    search: company.legacy_customer_number,
     screenshot,
     bytes,
     console_errors: consoleErrors.slice(0, 5),

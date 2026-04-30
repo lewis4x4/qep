@@ -46,6 +46,7 @@ export interface QrmCompanySummary {
   name: string;
   parentCompanyId: string | null;
   assignedRepId: string | null;
+  legacyCustomerNumber: string | null;
   search1: string | null;
   search2: string | null;
   addressLine1: string | null;

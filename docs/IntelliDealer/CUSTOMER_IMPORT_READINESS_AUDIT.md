@@ -113,8 +113,8 @@ Verified production results:
 - Profitability rows mapped: 9,894 / 9,894.
 - Import errors: 0.
 - Raw A/R card rows: 0.
-- Account 360 IntelliDealer tab and admin import dashboard deployed to Netlify production deploy `69f2b249da204f6946cd2c82`.
-- Authenticated desktop, mobile, and admin-dashboard production smoke tests passed.
+- Account 360 IntelliDealer tab, Companies legacy search, and admin import dashboard deployed to Netlify production deploy `69f2b8e2be107d80333f8a82`.
+- Authenticated desktop, mobile, companies-search, and admin-dashboard production smoke tests passed.
 - Rerun safety gate added with `bun run intellidealer:customer:rerun-check`.
 
 Memo reconciliation:
@@ -161,13 +161,14 @@ Ready:
 - Database now has canonical one-to-many customer A/R agency assignments.
 - Database now has canonical imported profitability facts separate from QEP-computed profitability.
 - RLS policies are in place for the new import and fact tables.
+- Companies list/search now supports IntelliDealer legacy customer number lookup and displays imported source badges.
+- Account 360 now exposes source identity, contact coverage, A/R exposure, profitability posture, and next-best-action operating signals.
 
 Still to harden:
 
 - Supabase TypeScript types have been regenerated from production, but the shared browser client remains broadly typed until legacy JSON/nullability and stale select-shape debt is migrated slice-by-slice.
 - Admin import UI is read-only; it does not yet support upload, preview, commit, rollback, or row-level export.
 - QRM company/contact editor UI exposes only a subset of the imported fields.
-- Account 360 displays source identity, A/R agency assignments, and imported profitability facts, but deeper trend/risk/action cards are still future work.
 - Deferred non-parts seed support rows that protected parts data still references remain intentionally preserved until a remap/nulling policy is approved.
 
 ## Required Next Work
@@ -194,7 +195,7 @@ Still to harden:
 
 6. Extend customer UI/API surfaces.
 
-   Minimum required display/edit coverage: legacy customer number, status, category, business class, branch/division, tax/terms, credit limit/rating, pricing group/level, A/R agencies, imported profitability by area, contact cell/direct/birth date, and imported memo history.
+   Remaining display/edit coverage: company/contact edit forms, tax/terms maintenance, pricing group/level editability, memo history surfacing, and controlled A/R agency/profitability drill-down beyond Account 360.
 
 7. Keep Supabase types current after migration application.
 

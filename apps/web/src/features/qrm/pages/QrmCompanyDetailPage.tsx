@@ -230,6 +230,7 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
         name: currentParentNode.name,
         parentCompanyId: null,
         assignedRepId: null,
+        legacyCustomerNumber: null,
         search1: null,
         search2: null,
         addressLine1: null,

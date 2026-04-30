@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Building2, ChevronRight, Download, MapPin, Plus, Search } from "lucide-react";
+import { Building2, ChevronRight, Database, Download, MapPin, Plus, Search } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
@@ -164,7 +164,7 @@ export function QrmCompaniesPage() {
           ref={searchRef}
           value={searchInput}
           onChange={(event) => setSearchInput(event.target.value)}
-          placeholder="Search company · Search 1/2 · city · state"
+          placeholder="Search company · IntelliDealer # · Search 1/2 · city · state"
           className="h-10 w-full rounded-sm border border-qep-deck-rule bg-qep-deck-elevated/60 pl-9 pr-3 font-mono text-[13px] text-foreground placeholder:text-muted-foreground/80 focus:border-qep-orange focus:outline-none focus:ring-1 focus:ring-qep-orange/50"
         />
       </div>
@@ -235,6 +235,12 @@ export function QrmCompaniesPage() {
                       {(company.search1 || company.search2) && (
                         <p className="truncate font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70">
                           {[company.search1, company.search2].filter(Boolean).join(" · ")}
+                        </p>
+                      )}
+                      {company.legacyCustomerNumber && (
+                        <p className="mt-0.5 inline-flex max-w-full items-center gap-1 rounded-sm border border-sky-500/20 bg-sky-500/[0.05] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-sky-300">
+                          <Database className="h-2.5 w-2.5 shrink-0" aria-hidden />
+                          <span className="truncate">IntelliDealer {company.legacyCustomerNumber}</span>
                         </p>
                       )}
                       <p className="truncate text-[11px] text-muted-foreground sm:hidden">
