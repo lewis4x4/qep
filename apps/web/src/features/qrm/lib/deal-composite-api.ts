@@ -20,6 +20,27 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
+function toRecordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" ? value : null;
+}
+
+function booleanOrNull(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function stringArrayOrNull(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((item): item is string => typeof item === "string");
+}
+
 function mapDealFromCompositeJson(d: Record<string, unknown>): QrmRepSafeDeal {
   return {
     id: d.id as string,
@@ -144,8 +165,54 @@ function normalizeCadence(raw: Record<string, unknown>): Cadence {
 }
 
 function normalizeDemo(raw: Record<string, unknown>): QrmDealDemoSummary {
-  const { inspections: _i, ...rest } = raw;
-  return rest as unknown as QrmDealDemoSummary;
+  return {
+    id: raw.id as string,
+    status: raw.status as string,
+    equipment_category: stringOrNull(raw.equipment_category),
+    max_hours: typeof raw.max_hours === "number" ? raw.max_hours : 0,
+    starting_hours: numberOrNull(raw.starting_hours),
+    ending_hours: numberOrNull(raw.ending_hours),
+    hours_used: numberOrNull(raw.hours_used),
+    total_demo_cost: numberOrNull(raw.total_demo_cost),
+    scheduled_date: stringOrNull(raw.scheduled_date),
+    followup_due_at: stringOrNull(raw.followup_due_at),
+    followup_completed: typeof raw.followup_completed === "boolean" ? raw.followup_completed : false,
+    customer_decision: stringOrNull(raw.customer_decision),
+    needs_assessment_complete: typeof raw.needs_assessment_complete === "boolean" ? raw.needs_assessment_complete : false,
+    quote_presented: typeof raw.quote_presented === "boolean" ? raw.quote_presented : false,
+    buying_intent_confirmed: typeof raw.buying_intent_confirmed === "boolean" ? raw.buying_intent_confirmed : false,
+    created_at: typeof raw.created_at === "string" ? raw.created_at : "",
+  };
+}
+
+function normalizeNeedsAssessment(raw: Record<string, unknown>): NeedsAssessment {
+  return {
+    id: raw.id as string,
+    application: stringOrNull(raw.application),
+    work_type: stringOrNull(raw.work_type),
+    terrain_material: stringOrNull(raw.terrain_material),
+    current_equipment: stringOrNull(raw.current_equipment),
+    current_equipment_issues: stringOrNull(raw.current_equipment_issues),
+    machine_interest: stringOrNull(raw.machine_interest),
+    attachments_needed: stringArrayOrNull(raw.attachments_needed),
+    brand_preference: stringOrNull(raw.brand_preference),
+    timeline_description: stringOrNull(raw.timeline_description),
+    timeline_urgency: stringOrNull(raw.timeline_urgency),
+    budget_type: stringOrNull(raw.budget_type),
+    budget_amount: numberOrNull(raw.budget_amount),
+    monthly_payment_target: numberOrNull(raw.monthly_payment_target),
+    financing_preference: stringOrNull(raw.financing_preference),
+    has_trade_in: typeof raw.has_trade_in === "boolean" ? raw.has_trade_in : false,
+    trade_in_details: stringOrNull(raw.trade_in_details),
+    is_decision_maker: booleanOrNull(raw.is_decision_maker),
+    decision_maker_name: stringOrNull(raw.decision_maker_name),
+    next_step: stringOrNull(raw.next_step),
+    entry_method: typeof raw.entry_method === "string" ? raw.entry_method : "unknown",
+    qrm_narrative: stringOrNull(raw.qrm_narrative),
+    completeness_pct: numberOrNull(raw.completeness_pct),
+    fields_populated: typeof raw.fields_populated === "number" ? raw.fields_populated : 0,
+    fields_total: typeof raw.fields_total === "number" ? raw.fields_total : 0,
+  };
 }
 
 /**
@@ -153,14 +220,7 @@ function normalizeDemo(raw: Record<string, unknown>): QrmDealDemoSummary {
  * activities/loss + card queries). Equipment linking still uses crm-router-api separately.
  */
 export async function fetchDealComposite(dealId: string): Promise<DealCompositeBundle | null> {
-  const { data, error } = await (
-    crmSupabase as unknown as {
-      rpc(
-        fn: "get_deal_composite",
-        args: { p_deal_id: string },
-      ): Promise<{ data: unknown; error: { message: string } | null }>;
-    }
-  ).rpc("get_deal_composite", { p_deal_id: dealId });
+  const { data, error } = await crmSupabase.rpc("get_deal_composite", { p_deal_id: dealId });
 
   if (error) {
     throw new Error(error.message);
@@ -194,23 +254,17 @@ export async function fetchDealComposite(dealId: string): Promise<DealCompositeB
       }
     : { lossReason: null, competitor: null };
 
-  const cadences: Cadence[] = Array.isArray(cadencesJson)
-    ? cadencesJson.filter(isRecord).map((c) => normalizeCadence(c))
-    : [];
+  const cadences: Cadence[] = toRecordArray(cadencesJson).map((c) => normalizeCadence(c));
 
-  const demos: QrmDealDemoSummary[] = Array.isArray(demosJson)
-    ? demosJson.filter(isRecord).map((d) => normalizeDemo(d))
-    : [];
+  const demos: QrmDealDemoSummary[] = toRecordArray(demosJson).map((d) => normalizeDemo(d));
 
-  const activities: QrmActivityItem[] = Array.isArray(activitiesJson)
-    ? activitiesJson.filter(isRecord).map((a) => mapActivityFromJson(a))
-    : [];
+  const activities: QrmActivityItem[] = toRecordArray(activitiesJson).map((a) => mapActivityFromJson(a));
 
   return {
     deal: mapDealFromCompositeJson(dealJson),
     contact: isRecord(contactJson) ? mapContactFromJson(contactJson) : null,
     company: isRecord(companyJson) ? mapCompanyFromJson(companyJson) : null,
-    needsAssessment: isRecord(assessmentJson) ? (assessmentJson as unknown as NeedsAssessment) : null,
+    needsAssessment: isRecord(assessmentJson) ? normalizeNeedsAssessment(assessmentJson) : null,
     cadences,
     demos,
     activities,
