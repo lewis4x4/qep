@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { Upload, FileText, Trash2, ToggleLeft, ToggleRight, Cloud, RefreshCw, Search, X, MoreVertical, Loader2, NotebookPen, GitMerge, ChevronRight, Building2, Workflow, Database as DatabaseIcon } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import type { Database, UserRole } from "../lib/database.types";
+import type { Database, Json, UserRole } from "../lib/database.types";
 import { UsersTab } from "./UsersTab";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -234,6 +234,82 @@ interface KbHealthSnapshot {
   retrieval_events_last_24h: number;
 }
 
+type JsonRecord = { [key: string]: Json | undefined };
+
+function isJsonRecord(value: Json | null): value is JsonRecord {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function asJsonRecord(value: Json | null | undefined): JsonRecord {
+  return isJsonRecord(value ?? null) ? value as JsonRecord : {};
+}
+
+function readNumber(value: Json | undefined): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function readString(value: Json | undefined): string {
+  return typeof value === "string" ? value : "";
+}
+
+function readNullableString(value: Json | undefined): string | null {
+  const text = readString(value);
+  return text ? text : null;
+}
+
+function parseKbHealthSnapshot(value: Json | null): KbHealthSnapshot | null {
+  if (!isJsonRecord(value)) return null;
+
+  const documents = asJsonRecord(value.documents);
+  const embeddings = asJsonRecord(value.embeddings);
+  const lastRun = isJsonRecord(value.last_embed_crm_run ?? null) ? value.last_embed_crm_run as JsonRecord : null;
+  const gaps = Array.isArray(value.top_knowledge_gaps) ? value.top_knowledge_gaps : [];
+
+  return {
+    documents: {
+      published: readNumber(documents.published),
+      pending_review: readNumber(documents.pending_review),
+      draft: readNumber(documents.draft),
+      archived: readNumber(documents.archived),
+      ingest_failed: readNumber(documents.ingest_failed),
+      overdue_review: readNumber(documents.overdue_review),
+    },
+    top_knowledge_gaps: gaps.flatMap((gap): KbHealthSnapshot["top_knowledge_gaps"] => {
+      if (!isJsonRecord(gap)) return [];
+      const id = readString(gap.id);
+      const question = readString(gap.question);
+      const lastAskedAt = readString(gap.last_asked_at);
+      if (!id || !question || !lastAskedAt) return [];
+      return [{
+        id,
+        question,
+        frequency: readNumber(gap.frequency),
+        last_asked_at: lastAskedAt,
+      }];
+    }),
+    embeddings: {
+      total: readNumber(embeddings.total),
+      fresh_last_24h: readNumber(embeddings.fresh_last_24h),
+      fresh_pct: readNumber(embeddings.fresh_pct),
+    },
+    last_embed_crm_run: lastRun
+      ? {
+          status: readString(lastRun.status),
+          processed_count: readNumber(lastRun.processed_count),
+          error_count: readNumber(lastRun.error_count),
+          finished_at: readNullableString(lastRun.finished_at),
+          created_at: readString(lastRun.created_at),
+        }
+      : null,
+    retrieval_events_last_24h: readNumber(value.retrieval_events_last_24h),
+  };
+}
+
 function KnowledgeBaseHealthPanel() {
   const [snapshot, setSnapshot] = useState<KbHealthSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -241,11 +317,8 @@ function KnowledgeBaseHealthPanel() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const db = supabase as unknown as {
-        rpc: (fn: string, args?: Record<string, never>) => Promise<{ data: KbHealthSnapshot | null; error: { message: string } | null }>;
-      };
-      const { data, error } = await db.rpc("kb_health_snapshot");
-      if (!error) setSnapshot(data);
+      const { data, error } = await supabase.rpc("kb_health_snapshot");
+      if (!error) setSnapshot(parseKbHealthSnapshot(data));
       setLoading(false);
     }
 
