@@ -15,15 +15,14 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Building2, Loader2, Phone, Search, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import type { Database } from "@/lib/database.types";
 
-interface CompanyHit {
-  id: string;
-  name: string | null;
-  dba: string | null;
-  phone: string | null;
-  city: string | null;
-  state: string | null;
-}
+type CompanyHitRow = Pick<
+  Database["public"]["Tables"]["qrm_companies"]["Row"],
+  "id" | "name" | "dba" | "legacy_customer_number" | "phone" | "city" | "state"
+>;
+
+type CompanyHit = CompanyHitRow;
 
 const RESULT_LIMIT = 5;
 const MIN_QUERY_LEN = 2;
@@ -31,20 +30,19 @@ const DEBOUNCE_MS = 180;
 
 async function searchCompanies(query: string): Promise<CompanyHit[]> {
   if (query.trim().length < MIN_QUERY_LEN) return [];
-  // Supabase `or()` with ilike on the three most-searchable fields.
-  // `name` + `dba` cover the business-name reflex; `phone` handles the
-  // counter case where the rep has the number on screen and just
-  // wants to attach a quote.
+  // Supabase `or()` with ilike on the most-searchable customer fields.
+  // `legacy_customer_number` keeps migrated IntelliDealer customers
+  // findable by the number users already know from the old system.
   const pattern = `%${query.trim().replace(/[()%,*]/g, "")}%`;
   const { data, error } = await supabase
     .from("qrm_companies")
-    .select("id, name, dba, phone, city, state")
+    .select("id, name, dba, legacy_customer_number, phone, city, state")
     .is("deleted_at", null)
-    .or(`name.ilike.${pattern},dba.ilike.${pattern},phone.ilike.${pattern}`)
+    .or(`name.ilike.${pattern},dba.ilike.${pattern},legacy_customer_number.ilike.${pattern},phone.ilike.${pattern}`)
     .order("name", { ascending: true })
     .limit(RESULT_LIMIT);
   if (error) throw new Error(error.message);
-  return (data ?? []) as CompanyHit[];
+  return data ?? [];
 }
 
 export function CrmCustomerSearchWidget() {
@@ -162,15 +160,21 @@ export function CrmCustomerSearchWidget() {
                     <p className="truncate text-sm font-medium text-foreground">
                       {hit.dba || hit.name || "Unnamed company"}
                     </p>
-                    {(hit.city || hit.state || hit.phone) && (
+                    {(hit.city || hit.state || hit.phone || hit.legacy_customer_number) && (
                       <p className="flex items-center gap-1 truncate text-[11px] text-muted-foreground">
+                        {hit.legacy_customer_number && (
+                          <span className="font-semibold text-muted-foreground">
+                            IntelliDealer {hit.legacy_customer_number}
+                          </span>
+                        )}
+                        {hit.legacy_customer_number && hit.phone && <span>·</span>}
                         {hit.phone && (
                           <>
                             <Phone className="h-2.5 w-2.5" aria-hidden="true" />
                             {hit.phone}
                           </>
                         )}
-                        {hit.phone && (hit.city || hit.state) && <span>·</span>}
+                        {(hit.legacy_customer_number || hit.phone) && (hit.city || hit.state) && <span>·</span>}
                         {[hit.city, hit.state].filter(Boolean).join(", ")}
                       </p>
                     )}
