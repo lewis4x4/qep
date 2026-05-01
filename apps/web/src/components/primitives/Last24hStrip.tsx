@@ -4,6 +4,9 @@ import {
   Activity, FileText, Wrench, Phone, Mic, Eye, AlertCircle,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import type { Database } from "@/lib/database.types";
+
+type Asset24hRpcRow = Database["public"]["Functions"]["get_asset_24h_activity"]["Returns"][number];
 
 interface Last24hRow {
   category: "mechanical" | "commercial";
@@ -29,6 +32,20 @@ const ICON: Record<string, React.ReactNode> = {
   portal_login:    <Eye className="h-3 w-3" />,
 };
 
+function normalizeCategory(value: string): Last24hRow["category"] {
+  return value === "mechanical" ? "mechanical" : "commercial";
+}
+
+function mapLast24hRow(row: Asset24hRpcRow): Last24hRow {
+  return {
+    category: normalizeCategory(row.category),
+    event_type: row.event_type,
+    count: row.count,
+    last_at: row.last_at,
+    detail: row.detail,
+  };
+}
+
 /**
  * Mechanical activity (run/idle/coolant/voltage from telematics_readings)
  * AND commercial activity (quotes touched, parts ordered, calls logged,
@@ -38,14 +55,12 @@ const ICON: Record<string, React.ReactNode> = {
  * Backed by get_asset_24h_activity(p_equipment_id) RPC (mig 161).
  */
 export function Last24hStrip({ equipmentId, className = "" }: Last24hStripProps) {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError } = useQuery<Last24hRow[]>({
     queryKey: ["asset", "24h", equipmentId],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: Last24hRow[] | null; error: unknown }>;
-      }).rpc("get_asset_24h_activity", { p_equipment_id: equipmentId });
+      const { data, error } = await supabase.rpc("get_asset_24h_activity", { p_equipment_id: equipmentId });
       if (error) return [] as Last24hRow[]; // graceful empty until 161 ships
-      return data ?? [];
+      return (data ?? []).map(mapLast24hRow);
     },
     staleTime: 60_000,
   });

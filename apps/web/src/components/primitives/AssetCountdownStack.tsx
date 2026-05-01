@@ -2,6 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { CountdownBar, type CountdownTone } from "./CountdownBar";
 import { supabase } from "@/lib/supabase";
+import type { Database } from "@/lib/database.types";
+
+type AssetCountdownRpcRow = Database["public"]["Functions"]["get_asset_countdowns"]["Returns"][number];
 
 interface CountdownRow {
   label: string;
@@ -17,6 +20,28 @@ interface AssetCountdownStackProps {
   className?: string;
 }
 
+function normalizeTone(value: string): CountdownTone {
+  return value === "blue"
+    || value === "green"
+    || value === "yellow"
+    || value === "orange"
+    || value === "red"
+    || value === "neutral"
+    ? value
+    : "neutral";
+}
+
+function mapCountdownRow(row: AssetCountdownRpcRow): CountdownRow {
+  return {
+    label: row.label,
+    current: row.current,
+    target: row.target,
+    unit: row.unit,
+    tone: normalizeTone(row.tone),
+    sort_order: row.sort_order,
+  };
+}
+
 /**
  * Composite stack of every "time-until" or "hours-until" countdown for a
  * single piece of equipment: service intervals, warranty expiration,
@@ -27,14 +52,12 @@ interface AssetCountdownStackProps {
  * migration 161.
  */
 export function AssetCountdownStack({ equipmentId, className = "" }: AssetCountdownStackProps) {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError } = useQuery<CountdownRow[]>({
     queryKey: ["asset", "countdowns", equipmentId],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: CountdownRow[] | null; error: unknown }>;
-      }).rpc("get_asset_countdowns", { p_equipment_id: equipmentId });
+      const { data, error } = await supabase.rpc("get_asset_countdowns", { p_equipment_id: equipmentId });
       if (error) throw new Error(String((error as { message?: string }).message ?? "RPC failed"));
-      return data ?? [];
+      return (data ?? []).map(mapCountdownRow);
     },
     staleTime: 60_000,
   });

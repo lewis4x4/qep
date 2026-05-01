@@ -4,19 +4,11 @@ import {
   Wrench, FileText, Package, AlertTriangle, TrendingUp, DollarSign,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { EMPTY_ASSET_BADGES, parseAssetBadges, type AssetBadgeData } from "@/lib/asset-rpc";
 
 interface AssetBadgeRowProps {
   equipmentId: string;
   className?: string;
-}
-
-interface BadgeData {
-  open_work_orders: number;
-  open_quotes: number;
-  pending_parts_orders: number;
-  overdue_intervals: number;
-  trade_up_score: number;
-  lifetime_parts_spend: number;
 }
 
 /**
@@ -25,14 +17,12 @@ interface BadgeData {
  * (mig 161). Falls back to a quiet empty state until the RPC ships.
  */
 export function AssetBadgeRow({ equipmentId, className = "" }: AssetBadgeRowProps) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<AssetBadgeData | null>({
     queryKey: ["asset", "badges", equipmentId],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: BadgeData | null; error: unknown }>;
-      }).rpc("get_asset_badges", { p_equipment_id: equipmentId });
+      const { data, error } = await supabase.rpc("get_asset_badges", { p_equipment_id: equipmentId });
       if (error) return null;
-      return data;
+      return parseAssetBadges(data);
     },
     staleTime: 60_000,
   });
@@ -41,14 +31,7 @@ export function AssetBadgeRow({ equipmentId, className = "" }: AssetBadgeRowProp
     return <div className={`h-12 animate-pulse rounded-md bg-muted/20 ${className}`} />;
   }
 
-  const d = data ?? {
-    open_work_orders: 0,
-    open_quotes: 0,
-    pending_parts_orders: 0,
-    overdue_intervals: 0,
-    trade_up_score: 0,
-    lifetime_parts_spend: 0,
-  };
+  const d = data ?? EMPTY_ASSET_BADGES;
 
   return (
     <div className={`grid grid-cols-3 gap-2 sm:grid-cols-6 ${className}`}>

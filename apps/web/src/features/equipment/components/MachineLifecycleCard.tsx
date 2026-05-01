@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabase";
+import { EMPTY_ASSET_BADGES, parseAssetBadges, type AssetBadgeData } from "@/lib/asset-rpc";
 import { deriveMachineLifecycleState } from "../lib/machine-lifecycle";
 
 interface MachineLifecycleCardProps {
@@ -9,15 +10,6 @@ interface MachineLifecycleCardProps {
   serialNumber: string | null | undefined;
   ownership: "owned" | "leased" | "customer_owned" | "rental_fleet" | "consignment";
   availability: "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned";
-}
-
-interface BadgeData {
-  open_work_orders: number;
-  open_quotes: number;
-  pending_parts_orders: number;
-  overdue_intervals: number;
-  trade_up_score: number;
-  lifetime_parts_spend: number;
 }
 
 interface LifecycleSummaryRow {
@@ -66,14 +58,12 @@ export function MachineLifecycleCard({
   ownership,
   availability,
 }: MachineLifecycleCardProps) {
-  const badgesQuery = useQuery({
+  const badgesQuery = useQuery<AssetBadgeData>({
     queryKey: ["machine-lifecycle", "badges", equipmentId],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: BadgeData | null; error: { message?: string } | null }>;
-      }).rpc("get_asset_badges", { p_equipment_id: equipmentId });
+      const { data, error } = await supabase.rpc("get_asset_badges", { p_equipment_id: equipmentId });
       if (error) throw new Error(error.message ?? "Failed to load lifecycle badges.");
-      return data;
+      return parseAssetBadges(data);
     },
     staleTime: 60_000,
   });
@@ -94,14 +84,7 @@ export function MachineLifecycleCard({
     staleTime: 60_000,
   });
 
-  const badges = badgesQuery.data ?? {
-    open_work_orders: 0,
-    open_quotes: 0,
-    pending_parts_orders: 0,
-    overdue_intervals: 0,
-    trade_up_score: 0,
-    lifetime_parts_spend: 0,
-  };
+  const badges = badgesQuery.data ?? EMPTY_ASSET_BADGES;
 
   const lifecycle = deriveMachineLifecycleState({
     ownership,
