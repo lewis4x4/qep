@@ -8,6 +8,7 @@ export const DEFAULT_FLOOR_LAYOUTS: Record<IronRole, FloorLayout> = {
       { id: "exec.revenue-pace", order: 1 },
       { id: "exec.bu-pulse", order: 2 },
       { id: "iron.owner-large-deals", order: 3 },
+      { id: "crm.customer-search", order: 4 },
     ],
     quickActions: [
       { id: "ask_iron", label: "Ask Iron", route: "/chat", icon: "sparkles" },
@@ -39,6 +40,7 @@ export const DEFAULT_FLOOR_LAYOUTS: Record<IronRole, FloorLayout> = {
       { id: "sales.action-items", order: 2 },
       { id: "sales.recent-activity", order: 3 },
       { id: "qrm.follow-up-queue", order: 4 },
+      { id: "crm.customer-search", order: 5 },
     ],
     quickActions: [
       { id: "new_quote", label: "NEW QUOTE", route: "/quote-v2", icon: "quote" },
@@ -54,6 +56,7 @@ export const DEFAULT_FLOOR_LAYOUTS: Record<IronRole, FloorLayout> = {
       { id: "iron-woman.sla-performance", order: 2 },
       { id: "iron.order-processing", order: 3 },
       { id: "iron-woman.recent-decisions", order: 4 },
+      { id: "crm.customer-search", order: 5 },
     ],
     quickActions: [
       { id: "approval_queue", label: "APPROVAL QUEUE", route: "/qrm/approvals?role=deal_desk", icon: "approve" },
@@ -69,6 +72,7 @@ export const DEFAULT_FLOOR_LAYOUTS: Record<IronRole, FloorLayout> = {
       { id: "iron.demo-schedule", order: 2 },
       { id: "service.parts-hub-strip", order: 3 },
       { id: "service.delivery-schedule", order: 4 },
+      { id: "crm.customer-search", order: 5 },
     ],
     quickActions: [
       { id: "next_job", label: "NEXT JOB", route: "/service/wip", icon: "wrench" },
@@ -84,6 +88,7 @@ export const DEFAULT_FLOOR_LAYOUTS: Record<IronRole, FloorLayout> = {
       { id: "parts.customer-intel", order: 2 },
       { id: "parts.quote-drafts", order: 3 },
       { id: "parts.counter-inquiries", order: 4 },
+      { id: "crm.customer-search", order: 5 },
     ],
     quickActions: [
       { id: "new_parts_quote", label: "NEW PARTS QUOTE", route: "/parts/orders/new", icon: "parts" },

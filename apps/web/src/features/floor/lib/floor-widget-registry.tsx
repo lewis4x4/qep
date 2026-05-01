@@ -459,7 +459,7 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
   "crm.customer-search": {
     id: "crm.customer-search",
     title: "Customer search",
-    purpose: "Find any customer by name, DBA, or phone — deep-links to their record.",
+    purpose: "Find any customer by name, DBA, legacy customer number, or phone; deep-links to their record.",
     allowedRoles: [
       "iron_manager",
       "iron_advisor",
