@@ -59,19 +59,102 @@ interface NudgeStats {
   repsAffected: number;
 }
 
+type PendingDemoRow = {
+  id: string;
+  created_at: string | null;
+};
+
+type PendingTradeRow = {
+  id: string;
+  preliminary_value: number | null;
+};
+
+type MarginFlagRow = {
+  id: string;
+};
+
+type NudgeDealRow = {
+  assigned_rep_id: string | null;
+  amount: number | string | null;
+  last_activity_at: string | null;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizePendingDemos(rows: unknown): PendingDemoRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map(normalizePendingDemo).filter((row): row is PendingDemoRow => row !== null);
+}
+
+function normalizePendingDemo(value: unknown): PendingDemoRow | null {
+  if (!isRecord(value) || typeof value.id !== "string") return null;
+  return {
+    id: value.id,
+    created_at: nullableString(value.created_at),
+  };
+}
+
+function normalizePendingTrades(rows: unknown): PendingTradeRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map(normalizePendingTrade).filter((row): row is PendingTradeRow => row !== null);
+}
+
+function normalizePendingTrade(value: unknown): PendingTradeRow | null {
+  if (!isRecord(value) || typeof value.id !== "string") return null;
+  return {
+    id: value.id,
+    preliminary_value: numberValue(value.preliminary_value),
+  };
+}
+
+function normalizeMarginFlags(rows: unknown): MarginFlagRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map(normalizeMarginFlag).filter((row): row is MarginFlagRow => row !== null);
+}
+
+function normalizeMarginFlag(value: unknown): MarginFlagRow | null {
+  return isRecord(value) && typeof value.id === "string" ? { id: value.id } : null;
+}
+
+function normalizeNudgeDeals(rows: unknown): NudgeDealRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map(normalizeNudgeDeal).filter((row): row is NudgeDealRow => row !== null);
+}
+
+function normalizeNudgeDeal(value: unknown): NudgeDealRow | null {
+  if (!isRecord(value)) return null;
+  return {
+    assigned_rep_id: nullableString(value.assigned_rep_id),
+    amount:
+      typeof value.amount === "string"
+        ? value.amount
+        : numberValue(value.amount),
+    last_activity_at: nullableString(value.last_activity_at),
+  };
+}
+
 export function ManagerActionCards() {
   const { data, isLoading, isError } = useIronManagerData();
 
   const approvalStats: ApprovalStats = useMemo(() => {
-    const demos = (data?.pendingDemos ?? []) as Array<{
-      id: string;
-      created_at: string | null;
-    }>;
-    const trades = (data?.pendingTrades ?? []) as Array<{
-      id: string;
-      preliminary_value: number | null;
-    }>;
-    const margins = (data?.marginFlags ?? []) as Array<{ id: string }>;
+    const demos = normalizePendingDemos(data?.pendingDemos ?? []);
+    const trades = normalizePendingTrades(data?.pendingTrades ?? []);
+    const margins = normalizeMarginFlags(data?.marginFlags ?? []);
 
     const count = demos.length + trades.length + margins.length;
 
@@ -95,11 +178,7 @@ export function ManagerActionCards() {
   }, [data]);
 
   const nudgeStats: NudgeStats = useMemo(() => {
-    const deals = (data?.pipelineDeals ?? []) as Array<{
-      assigned_rep_id: string | null;
-      amount: number | string | null;
-      last_activity_at: string | null;
-    }>;
+    const deals = normalizeNudgeDeals(data?.pipelineDeals ?? []);
     const cutoff = Date.now() - STALE_DAY_THRESHOLD * 86_400_000;
     let stalledCount = 0;
     let atRiskCents = 0;

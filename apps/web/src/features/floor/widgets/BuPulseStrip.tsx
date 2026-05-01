@@ -44,6 +44,66 @@ interface BuPulseData {
   rentals_monthly_rate: number;
 }
 
+type ServiceTatRow = {
+  target_duration_hours: number | null;
+  actual_duration_hours: number | null;
+};
+
+type ActiveRentalRow = {
+  agreed_monthly_rate: number | null;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function firstRecord(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return value.find(isRecord) ?? null;
+  return isRecord(value) ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function isStockoutInventoryRow(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const catalog = firstRecord(value.catalog);
+  const qtyOnHand = numberValue(value.qty_on_hand) ?? 0;
+  const reorderPoint = numberValue(catalog?.reorder_point) ?? 0;
+  return qtyOnHand < reorderPoint;
+}
+
+function normalizeServiceTatRows(rows: unknown): ServiceTatRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map(normalizeServiceTatRow).filter((row): row is ServiceTatRow => row !== null);
+}
+
+function normalizeServiceTatRow(value: unknown): ServiceTatRow | null {
+  if (!isRecord(value)) return null;
+  return {
+    target_duration_hours: numberValue(value.target_duration_hours),
+    actual_duration_hours: numberValue(value.actual_duration_hours),
+  };
+}
+
+function normalizeActiveRentalRows(rows: unknown): ActiveRentalRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map(normalizeActiveRentalRow).filter((row): row is ActiveRentalRow => row !== null);
+}
+
+function normalizeActiveRentalRow(value: unknown): ActiveRentalRow | null {
+  if (!isRecord(value)) return null;
+  return {
+    agreed_monthly_rate: numberValue(value.agreed_monthly_rate),
+  };
+}
+
 async function fetchBuPulse(): Promise<BuPulseData> {
   const monthStart = new Date();
   monthStart.setDate(1);
@@ -124,18 +184,7 @@ async function fetchBuPulse(): Promise<BuPulseData> {
 
   // Parts stockouts — client-side filter on the joined inventory rows
   if (partsInventoryRes.error) throw new Error(partsInventoryRes.error.message);
-  const parts_stockouts = (partsInventoryRes.data ?? []).filter((row: unknown) => {
-    const r = row as {
-      qty_on_hand: number;
-      catalog:
-        | { reorder_point: number | null }
-        | { reorder_point: number | null }[]
-        | null;
-    };
-    const cat = Array.isArray(r.catalog) ? r.catalog[0] : r.catalog;
-    const reorder = Number(cat?.reorder_point ?? 0);
-    return Number(r.qty_on_hand) < reorder;
-  }).length;
+  const parts_stockouts = (partsInventoryRes.data ?? []).filter(isStockoutInventoryRow).length;
 
   // Service MTD
   if (serviceMtdRes.error) throw new Error(serviceMtdRes.error.message);
@@ -146,10 +195,7 @@ async function fetchBuPulse(): Promise<BuPulseData> {
 
   // Service SLA percentage
   if (serviceTatRes.error) throw new Error(serviceTatRes.error.message);
-  const tatRows = (serviceTatRes.data ?? []) as Array<{
-    target_duration_hours: number | null;
-    actual_duration_hours: number | null;
-  }>;
+  const tatRows = normalizeServiceTatRows(serviceTatRes.data ?? []);
   const service_sla_pct =
     tatRows.length === 0
       ? 0
@@ -164,7 +210,7 @@ async function fetchBuPulse(): Promise<BuPulseData> {
 
   // Rentals
   if (rentalsRes.error) throw new Error(rentalsRes.error.message);
-  const activeRentals = (rentalsRes.data ?? []) as Array<{ agreed_monthly_rate: number | null }>;
+  const activeRentals = normalizeActiveRentalRows(rentalsRes.data ?? []);
   const rentals_active = activeRentals.length;
   const rentals_monthly_rate = activeRentals.reduce(
     (sum, row) => sum + Number(row.agreed_monthly_rate ?? 0),

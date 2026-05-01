@@ -34,6 +34,74 @@ interface StalledRow {
   lastActivityAt: string | null;
 }
 
+type StalledPipelineDealRow = PipelineDealRow & { name?: string | null };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizePipelineDeals(rows: unknown): StalledPipelineDealRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map(normalizePipelineDeal).filter((row): row is StalledPipelineDealRow => row !== null);
+}
+
+function normalizePipelineDeal(value: unknown): StalledPipelineDealRow | null {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.stage_id !== "string") {
+    return null;
+  }
+  return {
+    id: value.id,
+    stage_id: value.stage_id,
+    amount: numberValue(value.amount),
+    assigned_rep_id: nullableString(value.assigned_rep_id),
+    last_activity_at: nullableString(value.last_activity_at),
+    name: nullableString(value.name),
+  };
+}
+
+function normalizeDealStages(rows: unknown): DealStageRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map(normalizeDealStage).filter((row): row is DealStageRow => row !== null);
+}
+
+function normalizeDealStage(value: unknown): DealStageRow | null {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string") {
+    return null;
+  }
+  return {
+    id: value.id,
+    name: value.name,
+    sort_order: numberValue(value.sort_order) ?? 0,
+  };
+}
+
+function normalizeRepProfiles(rows: unknown): RepProfileRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map(normalizeRepProfile).filter((row): row is RepProfileRow => row !== null);
+}
+
+function normalizeRepProfile(value: unknown): RepProfileRow | null {
+  if (!isRecord(value) || typeof value.id !== "string") return null;
+  return {
+    id: value.id,
+    full_name: nullableString(value.full_name),
+    email: nullableString(value.email),
+  };
+}
+
 function formatUsd(value: number | null | undefined): string {
   const n = Number(value ?? 0);
   if (!Number.isFinite(n) || n === 0) return "$0";
@@ -91,11 +159,9 @@ export function StalledDealsTable() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const rows = useMemo<StalledRow[]>(() => {
-    const deals = (data?.pipelineDeals ?? []) as Array<
-      PipelineDealRow & { name?: string | null }
-    >;
-    const stages = (data?.dealStages ?? []) as DealStageRow[];
-    const profiles = (data?.repProfiles ?? []) as RepProfileRow[];
+    const deals = normalizePipelineDeals(data?.pipelineDeals ?? []);
+    const stages = normalizeDealStages(data?.dealStages ?? []);
+    const profiles = normalizeRepProfiles(data?.repProfiles ?? []);
 
     const stageMap = new Map<string, string>();
     for (const s of stages) stageMap.set(s.id, s.name);
