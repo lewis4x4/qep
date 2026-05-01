@@ -355,6 +355,7 @@ function OwnerFloorGrid({
   const revenuePace = find("exec.revenue-pace");
   const buPulse = find("exec.bu-pulse");
   const largeDeals = find("iron.owner-large-deals");
+  const customerSearch = find("crm.customer-search");
 
   if (isLoading) {
     return (
@@ -388,6 +389,7 @@ function OwnerFloorGrid({
       {buPulse ? <div>{renderWidget(buPulse)}</div> : null}
       {/* Row 3: Deals table full width */}
       {largeDeals ? <div>{renderWidget(largeDeals)}</div> : null}
+      {customerSearch ? <div>{renderWidget(customerSearch)}</div> : null}
     </div>
   );
 }
@@ -404,6 +406,7 @@ function AdvisorFloorGrid({
   const actionItems = find("sales.action-items");
   const recentActivity = find("sales.recent-activity");
   const followUpQueue = find("qrm.follow-up-queue");
+  const customerSearch = find("crm.customer-search");
   // sales.ai-briefing intentionally omitted — it now renders as the
   // collapsible AdvisorBriefingBanner at the very top of FloorPage.
 
@@ -442,6 +445,7 @@ function AdvisorFloorGrid({
       </div>
       {/* Row 2: Pipeline below-fold full width */}
       {followUpQueue ? <div className="min-w-0">{renderWidget(followUpQueue)}</div> : null}
+      {customerSearch ? <div className="min-w-0">{renderWidget(customerSearch)}</div> : null}
     </div>
   );
 }
