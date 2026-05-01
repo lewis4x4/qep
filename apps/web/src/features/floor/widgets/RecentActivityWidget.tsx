@@ -124,31 +124,6 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-type ActivityRow = {
-  id: string;
-  activity_type: string | null;
-  body: string | null;
-  occurred_at: string;
-  deal_id: string | null;
-  company_id: string | null;
-  company?: { name: string | null; dba: string | null } | { name: string | null; dba: string | null }[] | null;
-  deal?: { name: string | null } | { name: string | null }[] | null;
-};
-
-type QuoteViewedRow = {
-  id: string;
-  deal_id: string | null;
-  quote_number: string | null;
-  customer_company: string | null;
-  customer_name: string | null;
-  viewed_at: string | null;
-};
-
-function one<T>(value: T | T[] | null | undefined): T | null {
-  if (value == null) return null;
-  return Array.isArray(value) ? (value[0] ?? null) : value;
-}
-
 export function RecentActivityWidget() {
   const { user } = useAuth();
   const userId = user?.id ?? "";
@@ -184,46 +159,8 @@ export function RecentActivityWidget() {
       if (activityRes.error) throw new Error(activityRes.error.message);
       if (viewedRes.error) throw new Error(viewedRes.error.message);
 
-      const activityItems: ActivityItem[] = (activityRes.data ?? []).map(
-        (raw) => {
-          const row = raw as unknown as ActivityRow;
-          const company = one(row.company);
-          const deal = one(row.deal);
-          const customer = company?.dba ?? company?.name ?? null;
-          const kindKey = (row.activity_type ?? "other").toLowerCase();
-          const kind: ActivityKind = ACTIVITY_KIND_MAP[kindKey] ?? "other";
-          const labelCustomer = customer ?? deal?.name ?? "Internal";
-          const body = row.body ? row.body.trim() : null;
-          return {
-            id: `activity-${row.id}`,
-            kind,
-            occurredAt: row.occurred_at,
-            label: `${kindLabel(kind)} · ${labelCustomer}`,
-            detail: body && body.length > 0 ? body.slice(0, 120) : null,
-            href: row.deal_id ? `/qrm/deals/${row.deal_id}` : null,
-            tone: "default",
-          };
-        },
-      );
-
-      const viewedItems: ActivityItem[] = (viewedRes.data ?? [])
-        .filter((row) => Boolean((row as QuoteViewedRow).viewed_at))
-        .map((raw) => {
-          const row = raw as unknown as QuoteViewedRow;
-          const customer = row.customer_company ?? row.customer_name ?? "Customer";
-          const label = row.quote_number
-            ? `Quote ${row.quote_number} opened`
-            : "Quote opened";
-          return {
-            id: `viewed-${row.id}`,
-            kind: "quote_viewed",
-            occurredAt: row.viewed_at as string,
-            label: `${label} · ${customer}`,
-            detail: "Buying signal — follow up now",
-            href: `/quote-v2?package_id=${encodeURIComponent(row.id)}${row.deal_id ? `&crm_deal_id=${encodeURIComponent(row.deal_id)}` : ""}`,
-            tone: "buying_signal",
-          };
-        });
+      const activityItems = normalizeActivityRows(activityRes.data ?? []);
+      const viewedItems = normalizeQuoteViewedRows(viewedRes.data ?? []);
 
       return [...activityItems, ...viewedItems]
         .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
@@ -310,4 +247,70 @@ export function RecentActivityWidget() {
       ) : null}
     </FloorWidgetShell>
   );
+}
+
+function normalizeActivityRows(rows: unknown[]): ActivityItem[] {
+  return rows.map(normalizeActivityRow).filter((row): row is ActivityItem => row !== null);
+}
+
+function normalizeActivityRow(row: unknown): ActivityItem | null {
+  if (!isRecord(row)) return null;
+  const id = nullableString(row.id);
+  const occurredAt = nullableString(row.occurred_at);
+  if (!id || !occurredAt) return null;
+  const company = firstRecord(row.company);
+  const deal = firstRecord(row.deal);
+  const customer = nullableString(company?.dba) ?? nullableString(company?.name);
+  const dealName = nullableString(deal?.name);
+  const kindKey = (nullableString(row.activity_type) ?? "other").toLowerCase();
+  const kind: ActivityKind = ACTIVITY_KIND_MAP[kindKey] ?? "other";
+  const labelCustomer = customer ?? dealName ?? "Internal";
+  const body = nullableString(row.body)?.trim() ?? null;
+  const dealId = nullableString(row.deal_id);
+  return {
+    id: `activity-${id}`,
+    kind,
+    occurredAt,
+    label: `${kindLabel(kind)} · ${labelCustomer}`,
+    detail: body && body.length > 0 ? body.slice(0, 120) : null,
+    href: dealId ? `/qrm/deals/${dealId}` : null,
+    tone: "default",
+  };
+}
+
+function normalizeQuoteViewedRows(rows: unknown[]): ActivityItem[] {
+  return rows.map(normalizeQuoteViewedRow).filter((row): row is ActivityItem => row !== null);
+}
+
+function normalizeQuoteViewedRow(row: unknown): ActivityItem | null {
+  if (!isRecord(row)) return null;
+  const id = nullableString(row.id);
+  const viewedAt = nullableString(row.viewed_at);
+  if (!id || !viewedAt) return null;
+  const dealId = nullableString(row.deal_id);
+  const customer = nullableString(row.customer_company) ?? nullableString(row.customer_name) ?? "Customer";
+  const quoteNumber = nullableString(row.quote_number);
+  const label = quoteNumber ? `Quote ${quoteNumber} opened` : "Quote opened";
+  return {
+    id: `viewed-${id}`,
+    kind: "quote_viewed",
+    occurredAt: viewedAt,
+    label: `${label} · ${customer}`,
+    detail: "Buying signal — follow up now",
+    href: `/quote-v2?package_id=${encodeURIComponent(id)}${dealId ? `&crm_deal_id=${encodeURIComponent(dealId)}` : ""}`,
+    tone: "buying_signal",
+  };
+}
+
+function firstRecord(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return value.find(isRecord) ?? null;
+  return isRecord(value) ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
