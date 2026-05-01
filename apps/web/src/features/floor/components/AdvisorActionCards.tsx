@@ -50,11 +50,6 @@ function formatUsd(cents: number): string {
   return `$${Math.round(dollars).toLocaleString()}`;
 }
 
-function pickOne<T>(value: T | T[] | null | undefined): T | null {
-  if (value == null) return null;
-  return Array.isArray(value) ? (value[0] ?? null) : value;
-}
-
 async function fetchFollowUpStats(userId: string): Promise<FollowUpStats> {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -87,42 +82,17 @@ async function fetchFollowUpStats(userId: string): Promise<FollowUpStats> {
   let tiedUp = 0;
   let stalest: FollowUpStats["stalest"] = null;
 
-  type RawRow = {
-    scheduled_date: string | null;
-    cadence: {
-      deal:
-        | {
-            name?: string | null;
-            amount?: number | string | null;
-            company?: { name?: string | null; dba?: string | null } | null;
-          }
-        | null;
-    } | null;
-  };
-
-  for (const raw of (data ?? []) as unknown as RawRow[]) {
-    const cadence = pickOne(raw.cadence);
-    const deal = pickOne(cadence?.deal ?? null);
-    const company = pickOne(deal?.company ?? null);
-    const amountCents = deal?.amount
-      ? Math.round(Number(deal.amount) * 100)
-      : 0;
-    const scheduledMs = raw.scheduled_date
-      ? new Date(raw.scheduled_date).getTime()
-      : null;
-    if (scheduledMs == null || !Number.isFinite(scheduledMs)) continue;
+  for (const row of normalizeFollowUpRows(data ?? [])) {
+    const scheduledMs = new Date(row.scheduledDate).getTime();
 
     if (scheduledMs < todayStart.getTime()) {
       overdue += 1;
       const daysStale = Math.floor((now - scheduledMs) / 86_400_000);
-      const customer = company?.dba ?? company?.name ?? deal?.name ?? "Customer";
-      if (!stalest || daysStale > stalest.daysStale) {
-        stalest = { customer, daysStale };
-      }
+      if (!stalest || daysStale > stalest.daysStale) stalest = { customer: row.customer, daysStale };
     } else if (scheduledMs < tomorrowStart.getTime()) {
       dueToday += 1;
     }
-    tiedUp += amountCents;
+    tiedUp += row.amountCents;
   }
 
   return {
@@ -131,6 +101,50 @@ async function fetchFollowUpStats(userId: string): Promise<FollowUpStats> {
     tiedUpValueCents: tiedUp,
     stalest,
   };
+}
+
+interface NormalizedFollowUpRow {
+  scheduledDate: string;
+  amountCents: number;
+  customer: string;
+}
+
+function normalizeFollowUpRows(rows: unknown[]): NormalizedFollowUpRow[] {
+  return rows.map(normalizeFollowUpRow).filter((row): row is NormalizedFollowUpRow => row !== null);
+}
+
+function normalizeFollowUpRow(row: unknown): NormalizedFollowUpRow | null {
+  if (!isRecord(row)) return null;
+  const scheduledDate = nullableString(row.scheduled_date);
+  if (!scheduledDate || !Number.isFinite(new Date(scheduledDate).getTime())) return null;
+  const cadence = firstRecord(row.cadence);
+  const deal = firstRecord(cadence?.deal);
+  const company = firstRecord(deal?.company);
+  const customer = nullableString(company?.dba) ?? nullableString(company?.name) ?? nullableString(deal?.name) ?? "Customer";
+  return {
+    scheduledDate,
+    amountCents: parseAmountCents(deal?.amount),
+    customer,
+  };
+}
+
+function parseAmountCents(value: unknown): number {
+  if (value == null) return 0;
+  const amount = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+}
+
+function firstRecord(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return value.find(isRecord) ?? null;
+  return isRecord(value) ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 const DECISION_STAGE_PATTERN = /(decision|negotiat|proposal|quote)/i;
@@ -152,14 +166,15 @@ async function fetchPipelineStats(userId: string): Promise<PipelineStats> {
   const decisionStageIds = new Set(
     (stagesRes.data ?? [])
       .filter((stage) => DECISION_STAGE_PATTERN.test(String(stage.name ?? "")))
-      .map((stage) => stage.id as string),
+      .map((stage) => stage.id)
+      .filter((stageId): stageId is string => typeof stageId === "string"),
   );
 
   let totalCents = 0;
   let decisionCount = 0;
   for (const row of dealsRes.data ?? []) {
     totalCents += Math.round(Number(row.amount ?? 0) * 100);
-    if (row.stage_id && decisionStageIds.has(row.stage_id as string)) {
+    if (typeof row.stage_id === "string" && decisionStageIds.has(row.stage_id)) {
       decisionCount += 1;
     }
   }
