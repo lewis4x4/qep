@@ -126,7 +126,7 @@ async function searchBySerial(raw: string): Promise<EquipmentHit[]> {
   const { data, error } = await supabase
     .from("qrm_equipment")
     .select(
-      "id, serial_number, name, make, model, year, condition, engine_hours, last_inspection_at, next_service_due_at, location_description, company:qrm_companies!qrm_equipment_company_id_fkey ( id, name, dba, phone )",
+      "id, serial_number, name, make, model, year, condition, engine_hours, last_inspection_at, next_service_due_at, location_description, company:qrm_companies!crm_equipment_company_id_fkey ( id, name, dba, phone )",
     )
     .is("deleted_at", null)
     .ilike("serial_number", pattern)
