@@ -80,112 +80,7 @@ async function fetchActions(userId: string): Promise<ActionRow[]> {
 
   if (error) throw new Error(error.message);
 
-  type RawRow = {
-    id: string;
-    touchpoint_type: string;
-    scheduled_date: string | null;
-    purpose: string | null;
-    status: string;
-    cadence:
-      | {
-          deal_id: string | null;
-          assigned_to: string | null;
-          started_at: string | null;
-          contact_id: string | null;
-          deal:
-            | {
-                id: string | null;
-                name: string | null;
-                amount: number | string | null;
-                company:
-                  | {
-                      id: string | null;
-                      name: string | null;
-                      dba: string | null;
-                      phone: string | null;
-                    }
-                  | Array<{
-                      id: string | null;
-                      name: string | null;
-                      dba: string | null;
-                      phone: string | null;
-                    }>
-                  | null;
-              }
-            | Array<{
-                id: string | null;
-                name: string | null;
-                amount: number | string | null;
-                company:
-                  | {
-                      id: string | null;
-                      name: string | null;
-                      dba: string | null;
-                      phone: string | null;
-                    }
-                  | Array<{
-                      id: string | null;
-                      name: string | null;
-                      dba: string | null;
-                      phone: string | null;
-                    }>
-                  | null;
-              }>
-            | null;
-          contact: { email: string | null } | Array<{ email: string | null }> | null;
-        }
-      | Array<{
-          deal_id: string | null;
-          assigned_to: string | null;
-          started_at: string | null;
-          contact_id: string | null;
-          deal: unknown;
-          contact: unknown;
-        }>
-      | null;
-  };
-
-  const rows = (data ?? []) as unknown as RawRow[];
-  const mapped: ActionRow[] = rows.map((r) => {
-    // PostgREST embeds can be array or single — flatten defensively.
-    const cadence = Array.isArray(r.cadence) ? r.cadence[0] : r.cadence;
-    const deal = cadence?.deal
-      ? Array.isArray(cadence.deal)
-        ? (cadence.deal as { name?: string | null; amount?: number | string | null; company?: unknown }[])[0]
-        : (cadence.deal as { name?: string | null; amount?: number | string | null; company?: unknown })
-      : null;
-    const company = deal?.company
-      ? Array.isArray(deal.company)
-        ? (deal.company as { name?: string | null; dba?: string | null; phone?: string | null }[])[0]
-        : (deal.company as { name?: string | null; dba?: string | null; phone?: string | null })
-      : null;
-    const contact = cadence?.contact
-      ? Array.isArray(cadence.contact)
-        ? (cadence.contact as { email?: string | null }[])[0]
-        : (cadence.contact as { email?: string | null })
-      : null;
-    const amountRaw = deal?.amount;
-    const amountCents =
-      amountRaw == null
-        ? null
-        : typeof amountRaw === "number"
-          ? Math.round(amountRaw * 100)
-          : Math.round(Number(amountRaw) * 100);
-    return {
-      touchpointId: r.id,
-      dealId: cadence?.deal_id ?? null,
-      dealName: deal?.name ?? "—",
-      dealAmountCents: Number.isFinite(amountCents) ? amountCents : null,
-      companyName: company?.dba ?? company?.name ?? null,
-      companyPhone: company?.phone ?? null,
-      contactEmail: contact?.email ?? null,
-      touchpointType: r.touchpoint_type ?? "follow_up",
-      scheduledDate: r.scheduled_date,
-      cadenceStartedAt: cadence?.started_at ?? null,
-      purpose: r.purpose,
-      status: r.status,
-    };
-  });
+  const mapped = normalizeActionRows(data ?? []);
 
   // Deal-impact ordering: biggest deal value first; NULLS LAST so a
   // touchpoint without a linked deal goes below every dealed touchpoint.
@@ -200,6 +95,54 @@ async function fetchActions(userId: string): Promise<ActionRow[]> {
       return aDate - bDate;
     })
     .slice(0, RESULT_LIMIT);
+}
+
+function normalizeActionRows(rows: unknown[]): ActionRow[] {
+  return rows.map(normalizeActionRow).filter((row): row is ActionRow => row !== null);
+}
+
+function normalizeActionRow(row: unknown): ActionRow | null {
+  if (!isRecord(row) || typeof row.id !== "string") return null;
+  // PostgREST embeds can be array or single — flatten defensively.
+  const cadence = firstRecord(row.cadence);
+  const deal = firstRecord(cadence?.deal);
+  const company = firstRecord(deal?.company);
+  const contact = firstRecord(cadence?.contact);
+  const amountCents = parseAmountCents(deal?.amount);
+  return {
+    touchpointId: row.id,
+    dealId: nullableString(cadence?.deal_id),
+    dealName: nullableString(deal?.name) ?? "—",
+    dealAmountCents: amountCents,
+    companyName: nullableString(company?.dba) ?? nullableString(company?.name),
+    companyPhone: nullableString(company?.phone),
+    contactEmail: nullableString(contact?.email),
+    touchpointType: nullableString(row.touchpoint_type) ?? "follow_up",
+    scheduledDate: nullableString(row.scheduled_date),
+    cadenceStartedAt: nullableString(cadence?.started_at),
+    purpose: nullableString(row.purpose),
+    status: nullableString(row.status) ?? "pending",
+  };
+}
+
+function parseAmountCents(value: unknown): number | null {
+  if (value == null) return null;
+  const amount = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  if (!Number.isFinite(amount)) return null;
+  return Math.round(amount * 100);
+}
+
+function firstRecord(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return value.find(isRecord) ?? null;
+  return isRecord(value) ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function cadenceDay(scheduled: string | null, started: string | null): string {

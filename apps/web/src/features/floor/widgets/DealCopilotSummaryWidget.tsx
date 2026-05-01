@@ -73,53 +73,34 @@ async function fetchRecentTurns(userId: string): Promise<TurnRow[]> {
 
   if (error) throw new Error(error.message);
 
-  type Raw = {
-    id: string;
-    quote_package_id: string;
-    turn_index: number;
-    raw_input: string;
-    score_before: number | null;
-    score_after: number | null;
-    extracted_signals: Record<string, unknown> | null;
-    copilot_reply: string | null;
-    created_at: string;
-    input_source: string;
-    quote:
-      | {
-          id?: string | null;
-          customer_name?: string | null;
-          customer_company?: string | null;
-          quote_number?: string | null;
-        }
-      | Array<{
-          customer_name?: string | null;
-          customer_company?: string | null;
-          quote_number?: string | null;
-        }>
-      | null;
-  };
+  return normalizeTurnRows(data ?? []);
+}
 
-  return ((data ?? []) as unknown as Raw[]).map((r) => {
-    const quote = Array.isArray(r.quote) ? r.quote[0] : r.quote;
-    const customerLabel =
-      quote?.customer_company ||
-      quote?.customer_name ||
-      quote?.quote_number ||
-      "Quote";
-    return {
-      id: r.id,
-      quotePackageId: r.quote_package_id,
-      customerLabel,
-      turnIndex: r.turn_index,
-      rawInput: r.raw_input,
-      scoreBefore: r.score_before,
-      scoreAfter: r.score_after,
-      extractedSignals: r.extracted_signals,
-      copilotReply: r.copilot_reply,
-      createdAt: r.created_at,
-      inputSource: r.input_source,
-    };
-  });
+function normalizeTurnRows(rows: unknown[]): TurnRow[] {
+  return rows.map(normalizeTurnRow).filter((row): row is TurnRow => row !== null);
+}
+
+function normalizeTurnRow(row: unknown): TurnRow | null {
+  if (!isRecord(row) || typeof row.id !== "string" || typeof row.quote_package_id !== "string") return null;
+  const quote = firstRecord(row.quote);
+  const customerLabel =
+    nullableString(quote?.customer_company) ||
+    nullableString(quote?.customer_name) ||
+    nullableString(quote?.quote_number) ||
+    "Quote";
+  return {
+    id: row.id,
+    quotePackageId: row.quote_package_id,
+    customerLabel,
+    turnIndex: numberValue(row.turn_index) ?? 0,
+    rawInput: nullableString(row.raw_input) ?? "",
+    scoreBefore: numberValue(row.score_before),
+    scoreAfter: numberValue(row.score_after),
+    extractedSignals: isRecord(row.extracted_signals) ? row.extracted_signals : null,
+    copilotReply: nullableString(row.copilot_reply),
+    createdAt: nullableString(row.created_at) ?? new Date(0).toISOString(),
+    inputSource: nullableString(row.input_source) ?? "unknown",
+  };
 }
 
 function formatRelative(iso: string): string {
@@ -146,9 +127,8 @@ function extractChips(signals: TurnRow["extractedSignals"]): Array<{
     label: string;
     tone: "objection" | "financing" | "timeline" | "competitor" | "warmth";
   }> = [];
-  const s = signals as Record<string, unknown>;
-  const cs = s.customerSignals as Record<string, unknown> | undefined;
-  if (cs && typeof cs === "object") {
+  const cs = isRecord(signals.customerSignals) ? signals.customerSignals : null;
+  if (cs) {
     const objections = cs.objections;
     if (Array.isArray(objections) && objections.length > 0) {
       chips.push({
@@ -167,20 +147,38 @@ function extractChips(signals: TurnRow["extractedSignals"]): Array<{
     }
     const competitors = cs.competitorMentions;
     if (Array.isArray(competitors) && competitors.length > 0) {
+      const firstCompetitor = competitors.find((competitor) => typeof competitor === "string");
       chips.push({
         key: "competitors",
-        label: `vs ${(competitors[0] as string) ?? "competitor"}`,
+        label: `vs ${firstCompetitor ?? "competitor"}`,
         tone: "competitor",
       });
     }
   }
-  if (typeof s.financingPref === "string") {
-    chips.push({ key: "financingPref", label: `Financing: ${s.financingPref}`, tone: "financing" });
+  if (typeof signals.financingPref === "string") {
+    chips.push({ key: "financingPref", label: `Financing: ${signals.financingPref}`, tone: "financing" });
   }
-  if (typeof s.customerWarmth === "string") {
-    chips.push({ key: "warmth", label: `Warmth: ${s.customerWarmth}`, tone: "warmth" });
+  if (typeof signals.customerWarmth === "string") {
+    chips.push({ key: "warmth", label: `Warmth: ${signals.customerWarmth}`, tone: "warmth" });
   }
   return chips;
+}
+
+function firstRecord(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return value.find(isRecord) ?? null;
+  return isRecord(value) ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 const CHIP_CLASSES: Record<string, string> = {
