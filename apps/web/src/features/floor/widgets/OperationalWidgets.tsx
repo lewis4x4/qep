@@ -104,6 +104,169 @@ function one<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? (value[0] ?? null) : value;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function firstRecord(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return value.find(isRecord) ?? null;
+  return isRecord(value) ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function booleanValue(value: unknown): boolean {
+  return value === true;
+}
+
+function normalizeQuotePackageRows(rows: unknown[]): QuotePackageRow[] {
+  return rows.map(normalizeQuotePackageRow).filter((row): row is QuotePackageRow => row !== null);
+}
+
+function normalizeQuotePackageRow(row: unknown): QuotePackageRow | null {
+  if (!isRecord(row)) return null;
+  const id = nullableString(row.id);
+  const status = nullableString(row.status);
+  const createdAt = nullableString(row.created_at);
+  const updatedAt = nullableString(row.updated_at);
+  if (!id || !status || !createdAt || !updatedAt) return null;
+  return {
+    id,
+    customer_company: nullableString(row.customer_company),
+    net_total: numberValue(row.net_total),
+    status,
+    created_at: createdAt,
+    updated_at: updatedAt,
+    created_by: nullableString(row.created_by),
+  };
+}
+
+function normalizeCustomerPartsIntelRows(rows: unknown[]): CustomerPartsIntelRow[] {
+  return rows.map(normalizeCustomerPartsIntelRow).filter((row): row is CustomerPartsIntelRow => row !== null);
+}
+
+function normalizeCustomerPartsIntelRow(row: unknown): CustomerPartsIntelRow | null {
+  if (!isRecord(row)) return null;
+  const id = nullableString(row.id);
+  const crmCompanyId = nullableString(row.crm_company_id);
+  const computedAt = nullableString(row.computed_at);
+  if (!id || !crmCompanyId || !computedAt) return null;
+  const company = firstRecord(row.crm_companies);
+  const companyId = nullableString(company?.id);
+  const companyName = nullableString(company?.name);
+  return {
+    id,
+    crm_company_id: crmCompanyId,
+    churn_risk: nullableString(row.churn_risk) ?? "unknown",
+    spend_trend: nullableString(row.spend_trend) ?? "unknown",
+    order_count_12m: numberValue(row.order_count_12m) ?? 0,
+    total_spend_12m: numberValue(row.total_spend_12m) ?? 0,
+    predicted_next_quarter_spend: numberValue(row.predicted_next_quarter_spend) ?? 0,
+    opportunity_value: numberValue(row.opportunity_value) ?? 0,
+    days_since_last_order: numberValue(row.days_since_last_order),
+    recommended_outreach: nullableString(row.recommended_outreach),
+    computed_at: computedAt,
+    crm_companies: companyId && companyName ? { id: companyId, name: companyName } : null,
+  };
+}
+
+function normalizeDealRows(rows: unknown[]): DealRow[] {
+  return rows.map(normalizeDealRow).filter((row): row is DealRow => row !== null);
+}
+
+function normalizeDealRow(row: unknown): DealRow | null {
+  if (!isRecord(row)) return null;
+  const id = nullableString(row.id);
+  const name = nullableString(row.name);
+  const createdAt = nullableString(row.created_at);
+  const updatedAt = nullableString(row.updated_at);
+  const stageId = nullableString(row.stage_id);
+  if (!id || !name || !createdAt || !updatedAt || !stageId) return null;
+  return {
+    id,
+    name,
+    amount: numberValue(row.amount),
+    created_at: createdAt,
+    updated_at: updatedAt,
+    closed_at: nullableString(row.closed_at),
+    stage_id: stageId,
+  };
+}
+
+function normalizeDealStageRows(rows: unknown[]): DealStageRow[] {
+  return rows.map(normalizeDealStageRow).filter((row): row is DealStageRow => row !== null);
+}
+
+function normalizeDealStageRow(row: unknown): DealStageRow | null {
+  if (!isRecord(row)) return null;
+  const id = nullableString(row.id);
+  const name = nullableString(row.name);
+  if (!id || !name) return null;
+  return {
+    id,
+    name,
+    is_closed_won: booleanValue(row.is_closed_won),
+    is_closed_lost: booleanValue(row.is_closed_lost),
+  };
+}
+
+function normalizeInvoiceRows(rows: unknown[]): InvoiceRow[] {
+  return rows.map(normalizeInvoiceRow).filter((row): row is InvoiceRow => row !== null);
+}
+
+function normalizeInvoiceRow(row: unknown): InvoiceRow | null {
+  if (!isRecord(row)) return null;
+  const id = nullableString(row.id);
+  const invoiceNumber = nullableString(row.invoice_number);
+  const status = nullableString(row.status);
+  const dueDate = nullableString(row.due_date);
+  const createdAt = nullableString(row.created_at);
+  if (!id || !invoiceNumber || !status || !dueDate || !createdAt) return null;
+  const company = firstRecord(row.crm_companies);
+  const companyName = nullableString(company?.name);
+  return {
+    id,
+    invoice_number: invoiceNumber,
+    status,
+    total: numberValue(row.total) ?? 0,
+    balance_due: numberValue(row.balance_due),
+    due_date: dueDate,
+    created_at: createdAt,
+    crm_companies: companyName ? { name: companyName } : null,
+  };
+}
+
+function normalizeVendorRows(rows: unknown[]): VendorRow[] {
+  return rows.map(normalizeVendorRow).filter((row): row is VendorRow => row !== null);
+}
+
+function normalizeVendorRow(row: unknown): VendorRow | null {
+  if (!isRecord(row)) return null;
+  const id = nullableString(row.id);
+  const name = nullableString(row.name);
+  if (!id || !name) return null;
+  return {
+    id,
+    name,
+    avg_lead_time_hours: numberValue(row.avg_lead_time_hours),
+    responsiveness_score: numberValue(row.responsiveness_score),
+    fill_rate: numberValue(row.fill_rate),
+    composite_score: numberValue(row.composite_score),
+    machine_down_priority: booleanValue(row.machine_down_priority),
+  };
+}
+
 function currency(value: number | null | undefined): string {
   const n = Number(value ?? 0);
   if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
@@ -276,7 +439,7 @@ export function SalesCommissionSourceFloorWidget() {
       if (user?.id) builder = builder.eq("created_by", user.id);
       const { data, error } = await builder;
       if (error) throw error;
-      const rows = (data ?? []) as QuotePackageRow[];
+      const rows = normalizeQuotePackageRows(data ?? []);
       return {
         rows,
         bookedValue: rows.reduce((sum, row) => sum + Number(row.net_total ?? 0), 0),
@@ -429,7 +592,7 @@ export function PartsCustomerIntelFloorWidget() {
         .order("computed_at", { ascending: false })
         .limit(6);
       if (error) throw error;
-      return (data ?? []) as CustomerPartsIntelRow[];
+      return normalizeCustomerPartsIntelRows(data ?? []);
     },
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -683,8 +846,8 @@ export function ExecDealVelocityFloorWidget() {
         ]);
       if (dealsError) throw dealsError;
       if (stagesError) throw stagesError;
-      const stageMap = new Map((stages ?? []).map((stage) => [stage.id, stage as DealStageRow]));
-      const openDeals = ((deals ?? []) as DealRow[]).filter((deal) => {
+      const stageMap = new Map(normalizeDealStageRows(stages ?? []).map((stage) => [stage.id, stage]));
+      const openDeals = normalizeDealRows(deals ?? []).filter((deal) => {
         const stage = stageMap.get(deal.stage_id);
         return !deal.closed_at && !stage?.is_closed_won && !stage?.is_closed_lost;
       });
@@ -756,7 +919,7 @@ export function PendingInvoicesFloorWidget() {
         .order("due_date", { ascending: true })
         .limit(25);
       if (error) throw error;
-      const rows = (data ?? []) as InvoiceRow[];
+      const rows = normalizeInvoiceRows(data ?? []);
       return {
         rows,
         totalDue: rows.reduce((sum, row) => sum + Number(row.balance_due ?? row.total ?? 0), 0),
@@ -913,7 +1076,7 @@ export function PartsSupplierHealthFloorWidget() {
         .order("machine_down_priority", { ascending: false })
         .limit(40);
       if (error) throw error;
-      const rows = (data ?? []) as VendorRow[];
+      const rows = normalizeVendorRows(data ?? []);
       const avg = (values: number[]) =>
         values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
       return {
