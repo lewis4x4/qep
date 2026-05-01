@@ -19,6 +19,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { transitionServiceJob } from "@/features/service/lib/api";
+import type { Database } from "@/lib/database.types";
 import type { ServiceStage } from "@/features/service/lib/constants";
 import { STAGE_LABELS } from "@/features/service/lib/constants";
 import {
@@ -96,6 +97,20 @@ type DealRow = {
   stage?: { name: string | null } | { name: string | null }[] | null;
   assigned_rep?: { full_name: string | null } | { full_name: string | null }[] | null;
 };
+type DealBaseRow = Pick<
+  Database["public"]["Tables"]["qrm_deals"]["Row"],
+  "id" | "name" | "amount" | "margin_pct" | "expected_close_on" | "updated_at"
+> & {
+  stage_changed_at?: string | null;
+};
+type DealCompanyRow = Pick<Database["public"]["Tables"]["qrm_companies"]["Row"], "name">;
+type DealStageRow = Pick<Database["public"]["Tables"]["qrm_deal_stages"]["Row"], "name">;
+type DealRepRow = Pick<Database["public"]["Tables"]["profiles"]["Row"], "full_name">;
+type JoinedDealRow = DealBaseRow & {
+  company?: DealCompanyRow | DealCompanyRow[] | null;
+  stage?: DealStageRow | DealStageRow[] | null;
+  assigned_rep?: DealRepRow | DealRepRow[] | null;
+};
 
 type ApprovalDecisionRow = {
   id: string;
@@ -157,6 +172,24 @@ const QUOTE_SELECT = `
 function one<T>(value: T | T[] | null | undefined): T | null {
   if (value == null) return null;
   return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+function normalizeJoinedDeal(row: JoinedDealRow): DealRow {
+  const company = one(row.company);
+  const stage = one(row.stage);
+  const assignedRep = one(row.assigned_rep);
+  return {
+    id: row.id,
+    name: row.name,
+    amount: row.amount,
+    margin_pct: row.margin_pct,
+    stage_changed_at: row.stage_changed_at,
+    expected_close_on: row.expected_close_on,
+    updated_at: row.updated_at,
+    company: company ? { name: company.name } : null,
+    stage: stage ? { name: stage.name } : null,
+    assigned_rep: assignedRep ? { full_name: assignedRep.full_name } : null,
+  };
 }
 
 function currency(value: number | null | undefined): string {
@@ -691,7 +724,7 @@ export function AgingDealsTeamWidget() {
         .order("updated_at", { ascending: true })
         .limit(8);
       if (error) throw new Error(error.message);
-      return (data ?? []) as unknown as DealRow[];
+      return (data ?? []).map(normalizeJoinedDeal);
     },
     staleTime: 60_000,
     refetchOnWindowFocus: false,
@@ -806,7 +839,7 @@ export function OwnerLargeDealsWidget() {
         .order("amount", { ascending: false })
         .limit(8);
       if (error) throw new Error(error.message);
-      return (data ?? []) as unknown as DealRow[];
+      return (data ?? []).map(normalizeJoinedDeal);
     },
     staleTime: 2 * 60_000,
     refetchOnWindowFocus: false,
