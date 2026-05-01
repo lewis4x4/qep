@@ -38,6 +38,7 @@ import {
   X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import type { Database } from "@/lib/database.types";
 
 interface EquipmentHit {
   id: string;
@@ -62,12 +63,61 @@ interface EquipmentHit {
 const MIN_QUERY_LEN = 3;
 const DEBOUNCE_MS = 200;
 const RESULT_LIMIT = 3;
+type EquipmentRow = Pick<
+  Database["public"]["Tables"]["qrm_equipment"]["Row"],
+  | "id"
+  | "serial_number"
+  | "name"
+  | "make"
+  | "model"
+  | "year"
+  | "condition"
+  | "engine_hours"
+  | "last_inspection_at"
+  | "next_service_due_at"
+  | "location_description"
+>;
+type CompanyRow = Pick<
+  Database["public"]["Tables"]["qrm_companies"]["Row"],
+  "id" | "name" | "dba" | "phone"
+>;
+type EquipmentSearchRow = EquipmentRow & {
+  company: CompanyRow | CompanyRow[] | null;
+};
 
 /** Normalize a user-provided serial: trim, drop non-alphanumeric.
  *  Used ONLY to decide when to issue a query — the query itself uses
  *  raw ILIKE so customers' hyphenated serials still match their DB rows. */
 function normalizeSerial(raw: string): string {
   return raw.trim().replace(/[^a-z0-9]/gi, "");
+}
+
+function normalizeCompany(company: EquipmentSearchRow["company"]): EquipmentHit["company"] {
+  const row = Array.isArray(company) ? company[0] : company;
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    dba: row.dba,
+    phone: row.phone,
+  };
+}
+
+function normalizeEquipmentHit(row: EquipmentSearchRow): EquipmentHit {
+  return {
+    id: row.id,
+    serial_number: row.serial_number,
+    name: row.name,
+    make: row.make,
+    model: row.model,
+    year: row.year,
+    condition: row.condition,
+    engine_hours: row.engine_hours,
+    last_inspection_at: row.last_inspection_at,
+    next_service_due_at: row.next_service_due_at,
+    location_description: row.location_description,
+    company: normalizeCompany(row.company),
+  };
 }
 
 async function searchBySerial(raw: string): Promise<EquipmentHit[]> {
@@ -83,7 +133,7 @@ async function searchBySerial(raw: string): Promise<EquipmentHit[]> {
     .order("updated_at", { ascending: false })
     .limit(RESULT_LIMIT);
   if (error) throw new Error(error.message);
-  return (data ?? []) as unknown as EquipmentHit[];
+  return (data ?? []).map(normalizeEquipmentHit);
 }
 
 function formatRelative(iso: string | null): string {
