@@ -2,6 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { BookOpen, Check } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import type { Database, Json } from "@/lib/database.types";
+
+type ServiceKnowledgeRpcRow = Database["public"]["Functions"]["match_service_knowledge"]["Returns"][number];
 
 interface KbEntry {
   id: string;
@@ -14,6 +17,38 @@ interface KbEntry {
   verified: boolean;
   use_count: number;
   updated_at: string;
+}
+
+function parsePartsUsed(value: Json): KbEntry["parts_used"] {
+  if (!Array.isArray(value)) return null;
+
+  const parts = value.flatMap((item): NonNullable<KbEntry["parts_used"]> => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const partNumber = typeof item.part_number === "string" ? item.part_number.trim() : "";
+    const description = typeof item.description === "string" ? item.description.trim() : "";
+    if (!partNumber && !description) return [];
+    return [{
+      ...(partNumber ? { part_number: partNumber } : {}),
+      ...(description ? { description } : {}),
+    }];
+  });
+
+  return parts.length > 0 ? parts : null;
+}
+
+function mapKbEntry(row: ServiceKnowledgeRpcRow): KbEntry {
+  return {
+    id: row.id,
+    make: row.make,
+    model: row.model,
+    fault_code: row.fault_code,
+    symptom: row.symptom,
+    solution: row.solution,
+    parts_used: parsePartsUsed(row.parts_used),
+    verified: row.verified,
+    use_count: row.use_count,
+    updated_at: row.updated_at,
+  };
 }
 
 interface KbMatchPanelProps {
@@ -29,19 +64,17 @@ interface KbMatchPanelProps {
  * Commercial Action tab to replace the placeholder card.
  */
 export function KbMatchPanel({ make, model, faultCode, className = "" }: KbMatchPanelProps) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<KbEntry[]>({
     queryKey: ["kb-match", make, model, faultCode],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: KbEntry[] | null; error: unknown }>;
-      }).rpc("match_service_knowledge", {
+      const { data, error } = await supabase.rpc("match_service_knowledge", {
         p_make: make,
         p_model: model,
         p_fault_code: faultCode ?? null,
         p_limit: 5,
       });
       if (error) return [] as KbEntry[];
-      return data ?? [];
+      return (data ?? []).map(mapKbEntry);
     },
     enabled: !!(make || model || faultCode),
     staleTime: 5 * 60_000,
