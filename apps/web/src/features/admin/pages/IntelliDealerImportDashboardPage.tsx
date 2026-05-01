@@ -174,6 +174,7 @@ type ExportKey = "master" | "contacts" | "memos" | "arAgencies" | "profitability
 type ExportRow = Record<string, unknown>;
 
 interface ExportColumn {
+  key: string;
   header: string;
   value: (row: ExportRow) => unknown;
 }
@@ -1225,15 +1226,30 @@ async function fetchExportBatch(
   }
 }
 
-async function queryExportRows<T>(
-  query: PromiseLike<{ data: T[] | null; error: { message?: string } | null }>,
+async function queryExportRows(
+  query: PromiseLike<{ data: unknown[] | null; error: { message?: string } | null }>,
   definition: ExportDefinition,
 ): Promise<ExportRow[]> {
   const result = await query;
   if (result.error) {
     throw new Error(result.error.message ?? `Failed to export ${definition.label}`);
   }
-  return (result.data ?? []) as ExportRow[];
+  return normalizeExportRows(result.data, definition);
+}
+
+function normalizeExportRows(rows: unknown[] | null, definition: ExportDefinition): ExportRow[] {
+  return (rows ?? []).map((row, index) => normalizeExportRow(row, definition, index));
+}
+
+function normalizeExportRow(row: unknown, definition: ExportDefinition, index: number): ExportRow {
+  if (!isRecord(row)) {
+    throw new Error(`Export ${definition.label} returned a non-object row at offset ${index}.`);
+  }
+  const normalized: ExportRow = {};
+  for (const column of definition.columns) {
+    normalized[column.key] = row[column.key] ?? null;
+  }
+  return normalized;
 }
 
 function toImportRunRow(row: Omit<ImportRunRow, "metadata"> & { metadata: Json }): ImportRunRow {
@@ -1924,6 +1940,7 @@ function sleep(ms: number): Promise<void> {
 
 function column(key: string, header = key): ExportColumn {
   return {
+    key,
     header,
     value: (row) => row[key],
   };
