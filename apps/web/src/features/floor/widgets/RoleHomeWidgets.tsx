@@ -146,6 +146,14 @@ type ServiceJobRow = {
   }[] | null;
 };
 
+type SlaApprovalRow = {
+  id: string;
+  status: string;
+  requested_at: string;
+  decided_at: string | null;
+  due_at: string | null;
+};
+
 type BlockerType =
   | "parts_shortage"
   | "waiting_customer"
@@ -172,6 +180,200 @@ const QUOTE_SELECT = `
 function one<T>(value: T | T[] | null | undefined): T | null {
   if (value == null) return null;
   return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function firstRecord(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return value.find(isRecord) ?? null;
+  return isRecord(value) ? value : null;
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function stringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const strings = value.filter((item): item is string => typeof item === "string");
+  return strings.length > 0 ? strings : null;
+}
+
+function serviceStageValue(value: unknown): ServiceStage | null {
+  const stage = nonEmptyString(value);
+  return stage && Object.prototype.hasOwnProperty.call(STAGE_LABELS, stage)
+    ? (stage as ServiceStage)
+    : null;
+}
+
+function normalizeQuoteRows(rows: unknown): QuoteRow[] {
+  return Array.isArray(rows)
+    ? rows.map(normalizeQuoteRow).filter((row): row is QuoteRow => row !== null)
+    : [];
+}
+
+function normalizeQuoteRow(value: unknown): QuoteRow | null {
+  if (!isRecord(value)) return null;
+  const id = nonEmptyString(value.id);
+  const updatedAt = nonEmptyString(value.updated_at);
+  if (!id || !updatedAt) return null;
+  const deal = firstRecord(value.deal);
+  return {
+    id,
+    deal_id: nullableString(value.deal_id),
+    quote_number: nullableString(value.quote_number),
+    customer_company: nullableString(value.customer_company),
+    customer_name: nullableString(value.customer_name),
+    equipment: value.equipment,
+    net_total: numberValue(value.net_total),
+    status: nonEmptyString(value.status) ?? "draft",
+    sent_at: nullableString(value.sent_at),
+    viewed_at: nullableString(value.viewed_at),
+    updated_at: updatedAt,
+    created_by: nullableString(value.created_by),
+    deal: deal
+      ? {
+          id: nonEmptyString(deal.id) ?? "",
+          assigned_rep_id: nullableString(deal.assigned_rep_id),
+          name: nullableString(deal.name),
+        }
+      : null,
+  };
+}
+
+function normalizeCounterInquiryRows(rows: unknown): CounterInquiryRow[] {
+  return Array.isArray(rows)
+    ? rows.map(normalizeCounterInquiryRow).filter((row): row is CounterInquiryRow => row !== null)
+    : [];
+}
+
+function normalizeCounterInquiryRow(value: unknown): CounterInquiryRow | null {
+  if (!isRecord(value)) return null;
+  const id = nonEmptyString(value.id);
+  const createdAt = nonEmptyString(value.created_at);
+  if (!id || !createdAt) return null;
+  return {
+    id,
+    inquiry_type: nonEmptyString(value.inquiry_type) ?? "unknown",
+    query_text: nonEmptyString(value.query_text) ?? "Untitled inquiry",
+    outcome: nonEmptyString(value.outcome) ?? "pending",
+    result_parts: stringArray(value.result_parts),
+    match_type: nullableString(value.match_type),
+    machine_description: nullableString(value.machine_description),
+    created_at: createdAt,
+  };
+}
+
+function normalizeMarginRows(rows: unknown): MarginRow[] {
+  return Array.isArray(rows)
+    ? rows.map(normalizeMarginRow).filter((row): row is MarginRow => row !== null)
+    : [];
+}
+
+function normalizeMarginRow(value: unknown): MarginRow | null {
+  if (!isRecord(value)) return null;
+  return {
+    month_bucket: nullableString(value.month_bucket),
+    avg_margin_pct: numberValue(value.avg_margin_pct),
+    flagged_deal_count: numberValue(value.flagged_deal_count),
+    deal_count: numberValue(value.deal_count),
+    total_pipeline: numberValue(value.total_pipeline),
+    equipment_category: nullableString(value.equipment_category),
+  };
+}
+
+function normalizeSlaApprovalRows(rows: unknown): SlaApprovalRow[] {
+  return Array.isArray(rows)
+    ? rows.map(normalizeSlaApprovalRow).filter((row): row is SlaApprovalRow => row !== null)
+    : [];
+}
+
+function normalizeSlaApprovalRow(value: unknown): SlaApprovalRow | null {
+  if (!isRecord(value)) return null;
+  const id = nonEmptyString(value.id);
+  const requestedAt = nonEmptyString(value.requested_at);
+  if (!id || !requestedAt) return null;
+  return {
+    id,
+    status: nonEmptyString(value.status) ?? "pending",
+    requested_at: requestedAt,
+    decided_at: nullableString(value.decided_at),
+    due_at: nullableString(value.due_at),
+  };
+}
+
+function normalizeApprovalDecisionRows(rows: unknown): ApprovalDecisionRow[] {
+  return Array.isArray(rows)
+    ? rows.map(normalizeApprovalDecisionRow).filter((row): row is ApprovalDecisionRow => row !== null)
+    : [];
+}
+
+function normalizeApprovalDecisionRow(value: unknown): ApprovalDecisionRow | null {
+  if (!isRecord(value)) return null;
+  const id = nonEmptyString(value.id);
+  const subject = nonEmptyString(value.subject);
+  if (!id || !subject) return null;
+  const decidedBy = firstRecord(value.decided_by_profile);
+  return {
+    id,
+    subject,
+    status: nonEmptyString(value.status) ?? "pending",
+    decided_at: nullableString(value.decided_at),
+    decision_reason: nullableString(value.decision_reason),
+    workflow_slug: nonEmptyString(value.workflow_slug) ?? "approval",
+    decided_by_profile: decidedBy ? { full_name: nullableString(decidedBy.full_name) } : null,
+  };
+}
+
+function normalizeServiceJobRows(rows: unknown): ServiceJobRow[] {
+  return Array.isArray(rows)
+    ? rows.map(normalizeServiceJobRow).filter((row): row is ServiceJobRow => row !== null)
+    : [];
+}
+
+function normalizeServiceJobRow(value: unknown): ServiceJobRow | null {
+  if (!isRecord(value)) return null;
+  const id = nonEmptyString(value.id);
+  const workspaceId = nonEmptyString(value.workspace_id);
+  const currentStage = serviceStageValue(value.current_stage);
+  if (!id || !workspaceId || !currentStage) return null;
+  const customer = firstRecord(value.customer);
+  const machine = firstRecord(value.machine);
+  return {
+    id,
+    current_stage: currentStage,
+    priority: nonEmptyString(value.priority) ?? "normal",
+    status_flags: stringArray(value.status_flags),
+    customer_problem_summary: nullableString(value.customer_problem_summary),
+    scheduled_start_at: nullableString(value.scheduled_start_at),
+    scheduled_end_at: nullableString(value.scheduled_end_at),
+    current_stage_entered_at: nullableString(value.current_stage_entered_at),
+    workspace_id: workspaceId,
+    customer: customer ? { name: nullableString(customer.name) } : null,
+    machine: machine
+      ? {
+          make: nullableString(machine.make),
+          model: nullableString(machine.model),
+          serial_number: nullableString(machine.serial_number),
+          year: numberValue(machine.year),
+        }
+      : null,
+  };
 }
 
 function normalizeJoinedDeal(row: JoinedDealRow): DealRow {
@@ -388,7 +590,10 @@ export function MyQuotesByStatusWidget() {
       if (assignedResult.error) throw new Error(assignedResult.error.message);
 
       const byId = new Map<string, QuoteRow>();
-      for (const row of [...(createdResult.data ?? []), ...(assignedResult.data ?? [])] as unknown as QuoteRow[]) {
+      for (const row of [
+        ...normalizeQuoteRows(createdResult.data ?? []),
+        ...normalizeQuoteRows(assignedResult.data ?? []),
+      ]) {
         byId.set(row.id, row);
       }
       return [...byId.values()].sort(
@@ -578,7 +783,7 @@ export function CounterInquiriesWidget() {
         .order("created_at", { ascending: false })
         .limit(20);
       if (error) throw new Error(error.message);
-      return (data ?? []) as CounterInquiryRow[];
+      return normalizeCounterInquiryRows(data ?? []);
     },
     staleTime: 60_000,
     refetchOnWindowFocus: false,
@@ -638,7 +843,7 @@ export function MarginTrendWidget() {
         .order("month_bucket", { ascending: false })
         .limit(12);
       if (error) throw new Error(error.message);
-      return (data ?? []) as MarginRow[];
+      return normalizeMarginRows(data ?? []);
     },
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -973,13 +1178,7 @@ export function SlaPerformanceWidget() {
         .order("requested_at", { ascending: false })
         .limit(50);
       if (error) throw new Error(error.message);
-      return (data ?? []) as Array<{
-        id: string;
-        status: string;
-        requested_at: string;
-        decided_at: string | null;
-        due_at: string | null;
-      }>;
+      return normalizeSlaApprovalRows(data ?? []);
     },
     staleTime: 60_000,
     refetchOnWindowFocus: false,
@@ -991,7 +1190,7 @@ export function SlaPerformanceWidget() {
     decided.length > 0
       ? decided.reduce(
           (sum, row) =>
-            sum + (new Date(row.decided_at as string).getTime() - new Date(row.requested_at).getTime()) / 3_600_000,
+            sum + (new Date(row.decided_at ?? row.requested_at).getTime() - new Date(row.requested_at).getTime()) / 3_600_000,
           0,
         ) / decided.length
       : null;
@@ -1045,7 +1244,7 @@ export function RecentDecisionsWidget() {
         .order("decided_at", { ascending: false })
         .limit(10);
       if (error) throw new Error(error.message);
-      return (data ?? []) as unknown as ApprovalDecisionRow[];
+      return normalizeApprovalDecisionRows(data ?? []);
     },
     staleTime: 60_000,
     refetchOnWindowFocus: false,
@@ -1138,7 +1337,7 @@ export function EditablePrepQueueWidget() {
         .order("created_at", { ascending: true })
         .limit(8);
       if (error) throw new Error(error.message);
-      return (data ?? []) as unknown as ServiceJobRow[];
+      return normalizeServiceJobRows(data ?? []);
     },
     staleTime: 30_000,
     refetchOnWindowFocus: false,
@@ -1337,7 +1536,7 @@ export function ServiceDeliveryScheduleWidget() {
         .order("scheduled_end_at", { ascending: true })
         .limit(8);
       if (error) throw new Error(error.message);
-      return (data ?? []) as unknown as ServiceJobRow[];
+      return normalizeServiceJobRows(data ?? []);
     },
     staleTime: 60_000,
     refetchOnWindowFocus: false,
