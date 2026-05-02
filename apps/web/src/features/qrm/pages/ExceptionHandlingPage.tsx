@@ -7,50 +7,123 @@ import { supabase } from "@/lib/supabase";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
 import { DeckSurface, StatusDot, type StatusTone } from "../components/command-deck";
-import { buildExceptionHandlingBoard } from "../lib/exception-handling";
+import {
+  buildExceptionHandlingBoard,
+  type DamagedDemo,
+  type FailedDelivery,
+  type PaymentException,
+  type RentalDispute,
+  type RevivalCandidate,
+} from "../lib/exception-handling";
 
-interface RevivalRow {
-  id: string;
-  name: string;
-  amount: number | null;
-  closed_at: string | null;
-  loss_reason: string | null;
-  competitor: string | null;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
-interface FailedDeliveryRow {
-  id: string;
-  stock_number: string;
-  status: string;
-  promised_delivery_at: string | null;
-  problems_reported: string | null;
-  to_location: string;
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
 }
 
-interface DamagedDemoRow {
-  id: string;
-  demo_id: string;
-  damage_description: string | null;
-  completed_at: string | null;
-  demos: { deal_id: string | null } | { deal_id: string | null }[] | null;
+function requiredString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
 }
 
-interface RentalDisputeRow {
-  id: string;
-  equipment_id: string | null;
-  status: string;
-  refund_status: string | null;
-  charge_amount: number | null;
-  damage_description: string | null;
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-interface PaymentExceptionRow {
-  id: string;
-  amount: number;
-  attempt_outcome: string | null;
-  exception_reason: string | null;
-  override_reason: string | null;
-  invoice_reference: string | null;
+function requiredNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function nestedDealId(value: unknown): string {
+  const demo = Array.isArray(value) ? value[0] : value;
+  if (!isRecord(demo)) return "";
+  return requiredString(demo.deal_id, "");
+}
+
+function normalizeRevivals(rows: unknown): RevivalCandidate[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      name: requiredString(row.name, "Unnamed deal"),
+      amount: nullableNumber(row.amount),
+      closedAt: nullableString(row.closed_at),
+      lossReason: nullableString(row.loss_reason),
+      competitor: nullableString(row.competitor),
+    }];
+  });
+}
+
+function normalizeFailedDeliveries(rows: unknown): FailedDelivery[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      stockNumber: requiredString(row.stock_number, "Unknown stock"),
+      status: requiredString(row.status, "unknown"),
+      promisedDeliveryAt: nullableString(row.promised_delivery_at),
+      problemsReported: nullableString(row.problems_reported),
+      toLocation: requiredString(row.to_location, "Unknown destination"),
+    }];
+  });
+}
+
+function normalizeDamagedDemos(rows: unknown): DamagedDemo[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      demoId: requiredString(row.demo_id, row.id),
+      dealId: nestedDealId(row.demos),
+      damageDescription: nullableString(row.damage_description),
+      completedAt: nullableString(row.completed_at),
+    }];
+  });
+}
+
+function normalizeRentalDisputes(rows: unknown): RentalDispute[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      equipmentId: nullableString(row.equipment_id),
+      status: requiredString(row.status, "unknown"),
+      refundStatus: nullableString(row.refund_status),
+      chargeAmount: nullableNumber(row.charge_amount),
+      damageDescription: nullableString(row.damage_description),
+    }];
+  });
+}
+
+function normalizePaymentExceptions(rows: unknown): PaymentException[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      amount: requiredNumber(row.amount, 0),
+      attemptOutcome: nullableString(row.attempt_outcome),
+      exceptionReason: nullableString(row.exception_reason),
+      overrideReason: nullableString(row.override_reason),
+      invoiceReference: nullableString(row.invoice_reference),
+    }];
+  });
 }
 
 export function ExceptionHandlingPage() {
@@ -97,45 +170,11 @@ export function ExceptionHandlingPage() {
       if (paymentResult.error) throw new Error(paymentResult.error.message);
 
       return buildExceptionHandlingBoard({
-        revivals: ((revivalsResult.data ?? []) as RevivalRow[]).map((row) => ({
-          id: row.id,
-          name: row.name,
-          amount: row.amount,
-          closedAt: row.closed_at,
-          lossReason: row.loss_reason,
-          competitor: row.competitor,
-        })),
-        failedDeliveries: ((trafficResult.data ?? []) as FailedDeliveryRow[]).map((row) => ({
-          id: row.id,
-          stockNumber: row.stock_number,
-          status: row.status,
-          promisedDeliveryAt: row.promised_delivery_at,
-          problemsReported: row.problems_reported,
-          toLocation: row.to_location,
-        })),
-        damagedDemos: ((demoResult.data ?? []) as DamagedDemoRow[]).map((row) => ({
-          id: row.id,
-          demoId: row.demo_id,
-          dealId: Array.isArray(row.demos) ? (row.demos[0]?.deal_id ?? "") : (row.demos?.deal_id ?? ""),
-          damageDescription: row.damage_description,
-          completedAt: row.completed_at,
-        })),
-        rentalDisputes: ((rentalResult.data ?? []) as RentalDisputeRow[]).map((row) => ({
-          id: row.id,
-          equipmentId: row.equipment_id,
-          status: row.status,
-          refundStatus: row.refund_status,
-          chargeAmount: row.charge_amount,
-          damageDescription: row.damage_description,
-        })),
-        paymentExceptions: ((paymentResult.data ?? []) as PaymentExceptionRow[]).map((row) => ({
-          id: row.id,
-          amount: row.amount,
-          attemptOutcome: row.attempt_outcome,
-          exceptionReason: row.exception_reason,
-          overrideReason: row.override_reason,
-          invoiceReference: row.invoice_reference,
-        })),
+        revivals: normalizeRevivals(revivalsResult.data),
+        failedDeliveries: normalizeFailedDeliveries(trafficResult.data),
+        damagedDemos: normalizeDamagedDemos(demoResult.data),
+        rentalDisputes: normalizeRentalDisputes(rentalResult.data),
+        paymentExceptions: normalizePaymentExceptions(paymentResult.data),
       });
     },
     staleTime: 60_000,
