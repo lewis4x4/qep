@@ -27,20 +27,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
-interface EquipmentRow {
-  id: string;
-  name: string;
-  make: string | null;
-  model: string | null;
-  year: number | null;
-  ownership: InventoryPressureAsset["ownership"];
-  availability: InventoryPressureAsset["availability"];
-  condition: InventoryPressureAsset["condition"];
-  created_at: string;
-  current_market_value: number | null;
-  replacement_cost: number | null;
-  photo_urls: string[] | null;
-}
+type EquipmentSeed = Omit<InventoryPressureAsset, "openQuotes" | "latestEstimatedFmv">;
 
 interface QuoteRow {
   equipment_id: string;
@@ -128,12 +115,136 @@ function ageDays(createdAt: string | null | undefined): number | null {
   return Number.isFinite(d) ? d : null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function requiredString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function normalizeOwnership(value: unknown): InventoryPressureAsset["ownership"] | null {
+  switch (value) {
+    case "owned":
+    case "leased":
+    case "customer_owned":
+    case "rental_fleet":
+    case "consignment":
+      return value;
+    default:
+      return null;
+  }
+}
+
+function normalizeAvailability(value: unknown): InventoryPressureAsset["availability"] | null {
+  switch (value) {
+    case "available":
+    case "rented":
+    case "sold":
+    case "in_service":
+    case "in_transit":
+    case "reserved":
+    case "decommissioned":
+      return value;
+    default:
+      return null;
+  }
+}
+
+function normalizeCondition(value: unknown): InventoryPressureAsset["condition"] {
+  switch (value) {
+    case "new":
+    case "excellent":
+    case "good":
+    case "fair":
+    case "poor":
+    case "salvage":
+      return value;
+    default:
+      return null;
+  }
+}
+
+function normalizePhotoUrls(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function normalizeEquipmentRows(rows: unknown): EquipmentSeed[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    const ownership = normalizeOwnership(row.ownership);
+    const availability = normalizeAvailability(row.availability);
+    if (!ownership || !availability) return [];
+
+    return [{
+      id: row.id,
+      name: requiredString(row.name, "Unnamed equipment"),
+      make: nullableString(row.make),
+      model: nullableString(row.model),
+      year: nullableNumber(row.year),
+      ownership,
+      availability,
+      condition: normalizeCondition(row.condition),
+      createdAt: requiredString(row.created_at, new Date(0).toISOString()),
+      currentMarketValue: nullableNumber(row.current_market_value),
+      replacementCost: nullableNumber(row.replacement_cost),
+      photoUrls: normalizePhotoUrls(row.photo_urls),
+    }];
+  });
+}
+
+function normalizeDealIds(rows: unknown): string[] {
+  if (!Array.isArray(rows)) return [];
+  return [...new Set(rows.flatMap((row) => (
+    isRecord(row) && typeof row.deal_id === "string" ? [row.deal_id] : []
+  )))];
+}
+
+function normalizeLinkedEquipmentIds(rows: unknown): string[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((row) => (
+    isRecord(row) && typeof row.equipment_id === "string" ? [row.equipment_id] : []
+  ));
+}
+
+function normalizeValuationRows(rows: unknown): ValuationRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.make !== "string" || typeof row.model !== "string") return [];
+    if (typeof row.year !== "number" || !Number.isFinite(row.year)) return [];
+
+    return [{
+      make: row.make,
+      model: row.model,
+      year: row.year,
+      estimated_fmv: nullableNumber(row.estimated_fmv),
+      created_at: requiredString(row.created_at, new Date(0).toISOString()),
+    }];
+  });
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "unknown error";
+}
+
 export function InventoryPressureBoardPage() {
   const [equipmentQuery, quoteQuery, valuationQuery] = useQueries({
     queries: [
       {
         queryKey: ["inventory-pressure", "equipment"],
-        queryFn: async (): Promise<EquipmentRow[]> => {
+        queryFn: async (): Promise<EquipmentSeed[]> => {
           const { data, error } = await supabase
             .from("crm_equipment")
             .select(
@@ -142,7 +253,7 @@ export function InventoryPressureBoardPage() {
             .is("deleted_at", null)
             .limit(500);
           if (error) throw new Error(error.message);
-          return (data ?? []) as EquipmentRow[];
+          return normalizeEquipmentRows(data);
         },
         staleTime: 60_000,
       },
@@ -161,13 +272,7 @@ export function InventoryPressureBoardPage() {
             .limit(1000);
           if (qpErr) throw new Error(qpErr.message);
 
-          const dealIds = [
-            ...new Set(
-              (openQuotes ?? [])
-                .map((row) => (row as { deal_id: string | null }).deal_id)
-                .filter((id): id is string => typeof id === "string"),
-            ),
-          ];
+          const dealIds = normalizeDealIds(openQuotes);
           if (dealIds.length === 0) return [];
 
           const { data: links, error: linkErr } = await supabase
@@ -178,9 +283,7 @@ export function InventoryPressureBoardPage() {
           if (linkErr) throw new Error(linkErr.message);
 
           const counts = new Map<string, number>();
-          for (const row of links ?? []) {
-            const equipmentId = (row as { equipment_id?: string | null }).equipment_id;
-            if (!equipmentId) continue;
+          for (const equipmentId of normalizeLinkedEquipmentIds(links)) {
             counts.set(equipmentId, (counts.get(equipmentId) ?? 0) + 1);
           }
           return [...counts.entries()].map(([equipment_id, open_quotes]) => ({
@@ -199,7 +302,7 @@ export function InventoryPressureBoardPage() {
             .order("created_at", { ascending: false })
             .limit(500);
           if (error) throw new Error(error.message);
-          return (data ?? []) as ValuationRow[];
+          return normalizeValuationRows(data);
         },
         staleTime: 60_000,
       },
@@ -218,23 +321,12 @@ export function InventoryPressureBoardPage() {
       }
     }
 
-    const assets: InventoryPressureAsset[] = (equipmentQuery.data ?? []).map((row) => ({
-      id: row.id,
-      name: row.name,
-      make: row.make,
-      model: row.model,
-      year: row.year,
-      ownership: row.ownership,
-      availability: row.availability,
-      condition: row.condition,
-      createdAt: row.created_at,
-      currentMarketValue: row.current_market_value,
-      replacementCost: row.replacement_cost,
-      photoUrls: row.photo_urls ?? [],
-      openQuotes: openQuotesByEquipment.get(row.id) ?? 0,
+    const assets: InventoryPressureAsset[] = (equipmentQuery.data ?? []).map((asset) => ({
+      ...asset,
+      openQuotes: openQuotesByEquipment.get(asset.id) ?? 0,
       latestEstimatedFmv:
-        row.make && row.model && row.year
-          ? latestValuationByKey.get(`${row.make}:${row.model}:${row.year}`) ?? null
+        asset.make && asset.model && asset.year
+          ? latestValuationByKey.get(`${asset.make}:${asset.model}:${asset.year}`) ?? null
           : null,
     }));
 
@@ -327,19 +419,19 @@ export function InventoryPressureBoardPage() {
               {equipmentQuery.isError && (
                 <p>
                   <span className="text-qep-hot">equipment</span> →{" "}
-                  {(equipmentQuery.error as Error | null)?.message ?? "unknown error"}
+                  {errorMessage(equipmentQuery.error)}
                 </p>
               )}
               {quoteQuery.isError && (
                 <p>
                   <span className="text-qep-hot">quotes</span> →{" "}
-                  {(quoteQuery.error as Error | null)?.message ?? "unknown error"}
+                  {errorMessage(quoteQuery.error)}
                 </p>
               )}
               {valuationQuery.isError && (
                 <p>
                   <span className="text-qep-hot">valuations</span> →{" "}
-                  {(valuationQuery.error as Error | null)?.message ?? "unknown error"}
+                  {errorMessage(valuationQuery.error)}
                 </p>
               )}
             </div>
