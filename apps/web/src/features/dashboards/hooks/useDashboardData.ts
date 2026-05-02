@@ -71,6 +71,79 @@ export interface IronManagerData {
   resolvedPredictions: PredictionLedgerRow[];
 }
 
+export interface AdvisorDealRow {
+  id: string;
+  name: string | null;
+  stage_id?: string | null;
+  amount?: number | null;
+  sla_deadline_at: string | null;
+  next_follow_up_at?: string | null;
+}
+
+export interface AdvisorNewLeadRow {
+  id: string;
+  name: string | null;
+  created_at: string;
+}
+
+export type AdvisorKpiRow = Pick<
+  TableRow<"prospecting_kpis">,
+  "positive_visits" | "target" | "target_met" | "consecutive_days_met"
+>;
+
+export type DueTouchpointRow = Pick<
+  TableRow<"follow_up_touchpoints">,
+  "id" | "touchpoint_type" | "scheduled_date" | "purpose" | "suggested_message" | "status"
+> & {
+  follow_up_cadences?:
+    | { deal_id: string | null; assigned_to?: string | null }
+    | Array<{ deal_id: string | null; assigned_to?: string | null }>
+    | null;
+};
+
+export interface IronAdvisorData {
+  myDeals: AdvisorDealRow[];
+  dueTouchpoints: DueTouchpointRow[];
+  newLeads: AdvisorNewLeadRow[];
+  kpi: AdvisorKpiRow;
+  todayStr: string;
+}
+
+export interface JoinedDealStage {
+  sort_order: number | null;
+  name: string | null;
+}
+
+export interface IronWomanDealRow {
+  id: string;
+  name: string | null;
+  amount: number | null;
+  stage_id?: string | null;
+  crm_deal_stages?: JoinedDealStage | JoinedDealStage[] | null;
+}
+
+export type PendingDepositRow = Pick<TableRow<"deposits">, "id" | "deal_id" | "required_amount" | "status" | "created_at">;
+export type IntakeItemRow = Pick<TableRow<"equipment_intake">, "id" | "stock_number" | "current_stage" | "created_at">;
+
+export interface IronWomanData {
+  orderProcessing: IronWomanDealRow[];
+  pendingDeposits: PendingDepositRow[];
+  intakeItems: IntakeItemRow[];
+  creditApps: IronWomanDealRow[];
+}
+
+export type PrepQueueRow = Pick<TableRow<"equipment_intake">, "id" | "stock_number" | "current_stage" | "created_at">;
+export type PdiItemRow = Pick<TableRow<"equipment_intake">, "id" | "stock_number" | "pdi_checklist" | "pdi_completed">;
+export type UpcomingDemoRow = Pick<TableRow<"demos">, "id" | "deal_id" | "scheduled_date" | "equipment_category" | "max_hours" | "status">;
+export type ReturnInspectionRow = Pick<TableRow<"rental_returns">, "id" | "equipment_id" | "status" | "inspection_date">;
+
+export interface IronManData {
+  prepQueue: PrepQueueRow[];
+  pdiItems: PdiItemRow[];
+  upcomingDemos: UpcomingDemoRow[];
+  returnInspections: ReturnInspectionRow[];
+}
+
 function rowsOrEmpty<Row>(rows: Row[] | null | undefined): Row[] {
   return rows ?? [];
 }
@@ -130,6 +203,72 @@ function normalizeJoinedCompany(value: unknown): AgingEquipmentRow["crm_companie
       .filter((item): item is { name: string | null } => item !== null);
   }
   return isRecord(value) ? { name: nullableString(value.name) } : null;
+}
+
+function normalizeAdvisorDeals(rows: unknown): AdvisorDealRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row): AdvisorDealRow | null => {
+      if (!isRecord(row) || typeof row.id !== "string") return null;
+      return {
+        id: row.id,
+        name: nullableString(row.name),
+        stage_id: nullableString(row.stage_id),
+        amount: nullableNumber(row.amount),
+        sla_deadline_at: nullableString(row.sla_deadline_at),
+        next_follow_up_at: nullableString(row.next_follow_up_at),
+      };
+    })
+    .filter((row): row is AdvisorDealRow => row !== null);
+}
+
+function normalizeAdvisorNewLeads(rows: unknown): AdvisorNewLeadRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row): AdvisorNewLeadRow | null => {
+      if (!isRecord(row) || typeof row.id !== "string" || typeof row.created_at !== "string") return null;
+      return {
+        id: row.id,
+        name: nullableString(row.name),
+        created_at: row.created_at,
+      };
+    })
+    .filter((row): row is AdvisorNewLeadRow => row !== null);
+}
+
+function normalizeIronWomanDeals(rows: unknown): IronWomanDealRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row): IronWomanDealRow | null => {
+      if (!isRecord(row) || typeof row.id !== "string") return null;
+      return {
+        id: row.id,
+        name: nullableString(row.name),
+        amount: nullableNumber(row.amount),
+        stage_id: nullableString(row.stage_id),
+        crm_deal_stages: normalizeJoinedDealStage(row.crm_deal_stages),
+      };
+    })
+    .filter((row): row is IronWomanDealRow => row !== null);
+}
+
+function normalizeJoinedDealStage(value: unknown): IronWomanDealRow["crm_deal_stages"] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) =>
+        isRecord(item)
+          ? { name: nullableString(item.name), sort_order: nullableNumber(item.sort_order) }
+          : null,
+      )
+      .filter((item): item is JoinedDealStage => item !== null);
+  }
+  return isRecord(value)
+    ? { name: nullableString(value.name), sort_order: nullableNumber(value.sort_order) }
+    : null;
+}
+
+function defaultAdvisorKpi(): AdvisorKpiRow {
+  return { positive_visits: 0, target: 10, target_met: false, consecutive_days_met: 0 };
 }
 
 export function useIronManagerData() {
@@ -250,9 +389,9 @@ export function useIronManagerData() {
 }
 
 export function useIronAdvisorData(userId: string) {
-  return useQuery({
+  return useQuery<IronAdvisorData>({
     queryKey: ["dashboard", "iron-advisor", userId],
-    queryFn: async () => {
+    queryFn: async (): Promise<IronAdvisorData> => {
       const sb = supabase;
       const today = new Date();
       const todayStr = today.toISOString().split("T")[0];
@@ -298,10 +437,10 @@ export function useIronAdvisorData(userId: string) {
       ]);
 
       return {
-        myDeals: myDeals ?? [],
-        dueTouchpoints: dueTouchpoints ?? [],
-        newLeads: newLeads ?? [],
-        kpi: kpi ?? { positive_visits: 0, target: 10, target_met: false, consecutive_days_met: 0 },
+        myDeals: normalizeAdvisorDeals(myDeals),
+        dueTouchpoints: rowsOrEmpty(dueTouchpoints),
+        newLeads: normalizeAdvisorNewLeads(newLeads),
+        kpi: kpi ?? defaultAdvisorKpi(),
         todayStr,
       };
     },
@@ -311,9 +450,9 @@ export function useIronAdvisorData(userId: string) {
 }
 
 export function useIronWomanData() {
-  return useQuery({
+  return useQuery<IronWomanData>({
     queryKey: ["dashboard", "iron-woman"],
-    queryFn: async () => {
+    queryFn: async (): Promise<IronWomanData> => {
       const sb = supabase;
 
       const [
@@ -333,10 +472,10 @@ export function useIronWomanData() {
       ]);
 
       return {
-        orderProcessing: orderProcessing ?? [],
-        pendingDeposits: pendingDeposits ?? [],
-        intakeItems: intakeItems ?? [],
-        creditApps: creditApps ?? [],
+        orderProcessing: normalizeIronWomanDeals(orderProcessing),
+        pendingDeposits: rowsOrEmpty(pendingDeposits),
+        intakeItems: rowsOrEmpty(intakeItems),
+        creditApps: normalizeIronWomanDeals(creditApps),
       };
     },
     staleTime: 30_000,
@@ -344,9 +483,9 @@ export function useIronWomanData() {
 }
 
 export function useIronManData() {
-  return useQuery({
+  return useQuery<IronManData>({
     queryKey: ["dashboard", "iron-man"],
-    queryFn: async () => {
+    queryFn: async (): Promise<IronManData> => {
       const sb = supabase;
 
       const [
@@ -362,10 +501,10 @@ export function useIronManData() {
       ]);
 
       return {
-        prepQueue: prepQueue ?? [],
-        pdiItems: pdiItems ?? [],
-        upcomingDemos: upcomingDemos ?? [],
-        returnInspections: returnInspections ?? [],
+        prepQueue: rowsOrEmpty(prepQueue),
+        pdiItems: rowsOrEmpty(pdiItems),
+        upcomingDemos: rowsOrEmpty(upcomingDemos),
+        returnInspections: rowsOrEmpty(returnInspections),
       };
     },
     staleTime: 30_000,

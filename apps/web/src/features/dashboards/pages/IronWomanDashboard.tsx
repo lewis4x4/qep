@@ -12,7 +12,7 @@ export function IronWomanDashboard() {
   useDashboardRealtime("iron_woman", ["dashboard", "iron-woman"]);
 
   const pendingDepositTotal = (data?.pendingDeposits ?? []).reduce(
-    (sum: number, d: any) => sum + (d.required_amount ?? 0),
+    (sum, deposit) => sum + (deposit.required_amount ?? 0),
     0,
   );
 

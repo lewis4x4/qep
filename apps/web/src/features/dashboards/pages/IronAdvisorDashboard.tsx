@@ -15,7 +15,7 @@ export function IronAdvisorDashboard({ userId }: IronAdvisorDashboardProps) {
   useDashboardRealtime("iron_advisor", ["dashboard", "iron-advisor", userId], userId);
 
   const slaDeals = (data?.myDeals ?? []).filter(
-    (d: any) => d.sla_deadline_at && new Date(d.sla_deadline_at) < new Date(),
+    (deal) => deal.sla_deadline_at && new Date(deal.sla_deadline_at) < new Date(),
   );
   const todayStr = data?.todayStr ?? new Date().toISOString().split("T")[0];
   const dueOrOverdueCount = (data?.dueTouchpoints ?? []).filter(

@@ -12,17 +12,15 @@ import { useAuth } from "@/hooks/useAuth";
 import { Widget } from "../Widget";
 import { AdvisorMorningBriefingCard } from "../../components/AdvisorMorningBriefingCard";
 import { ProspectingKpiCounter } from "../../../qrm/components/ProspectingKpiCounter";
-import { useIronAdvisorData } from "../../hooks/useDashboardData";
+import { useIronAdvisorData, type DueTouchpointRow } from "../../hooks/useDashboardData";
 import { calendarDaysFromToday, followUpDueBadge } from "../../lib/advisor-dates";
 import { Sunrise, CalendarDays, Target } from "lucide-react";
 
-function touchpointDealId(tp: {
-  follow_up_cadences?: { deal_id?: string } | Array<{ deal_id?: string }> | null;
-}): string | undefined {
+function touchpointDealId(tp: DueTouchpointRow): string | undefined {
   const c = tp.follow_up_cadences;
   if (!c) return undefined;
-  if (Array.isArray(c)) return c[0]?.deal_id;
-  return c.deal_id;
+  if (Array.isArray(c)) return c[0]?.deal_id ?? undefined;
+  return c.deal_id ?? undefined;
 }
 
 export function AdvisorBriefWidget() {
@@ -30,7 +28,7 @@ export function AdvisorBriefWidget() {
   const userId = user?.id ?? "";
   const { data, isLoading, isError } = useIronAdvisorData(userId);
   const slaDeals = (data?.myDeals ?? []).filter(
-    (d: any) => d.sla_deadline_at && new Date(d.sla_deadline_at) < new Date(),
+    (deal) => deal.sla_deadline_at && new Date(deal.sla_deadline_at) < new Date(),
   );
   return (
     <Widget
@@ -41,15 +39,15 @@ export function AdvisorBriefWidget() {
       error={isError ? "Failed to load SLA brief." : null}
     >
       <AdvisorMorningBriefingCard
-        slaDeals={slaDeals.map((d: any) => ({
-          id: d.id,
-          name: d.name,
-          sla_deadline_at: d.sla_deadline_at,
+        slaDeals={slaDeals.map((deal) => ({
+          id: deal.id,
+          name: deal.name ?? "Unnamed deal",
+          sla_deadline_at: deal.sla_deadline_at,
         }))}
-        newLeads={(data?.newLeads ?? []).map((d: any) => ({
-          id: d.id,
-          name: d.name,
-          created_at: d.created_at,
+        newLeads={(data?.newLeads ?? []).map((deal) => ({
+          id: deal.id,
+          name: deal.name ?? "Unnamed lead",
+          created_at: deal.created_at,
         }))}
       />
     </Widget>
@@ -75,7 +73,7 @@ export function FollowUpQueueWidget() {
         <p className="text-sm text-muted-foreground">No follow-ups in the current window.</p>
       ) : (
         <div className="space-y-2">
-          {touchpoints.map((tp: any) => {
+          {touchpoints.map((tp) => {
             const dealId = touchpointDealId(tp);
             const dayDelta = calendarDaysFromToday(tp.scheduled_date ?? todayStr);
             const due = followUpDueBadge(dayDelta);

@@ -5,12 +5,10 @@
  */
 import { Link } from "react-router-dom";
 import { Widget } from "../Widget";
-import { useIronWomanData } from "../../hooks/useDashboardData";
+import { useIronWomanData, type IronWomanDealRow } from "../../hooks/useDashboardData";
 import { Package, DollarSign, Boxes, CreditCard } from "lucide-react";
 
-function dealStageName(deal: {
-  crm_deal_stages?: { name?: string | null } | { name?: string | null }[] | null;
-}): string {
+function dealStageName(deal: IronWomanDealRow): string {
   const s = deal.crm_deal_stages;
   if (!s) return "—";
   if (Array.isArray(s)) return s[0]?.name?.trim() || "—";
@@ -32,14 +30,14 @@ export function OrderProcessingWidget() {
         <p className="text-sm text-muted-foreground">No deals in this stage band.</p>
       ) : (
         <div className="space-y-2">
-          {items.map((deal: any) => (
+          {items.map((deal) => (
             <Link
               key={deal.id}
               to={`/crm/deals/${deal.id}`}
               className="flex items-center justify-between gap-2 rounded-lg border border-border p-2.5 transition hover:border-foreground/20"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">{deal.name}</p>
+                <p className="truncate text-sm font-medium text-foreground">{deal.name ?? "Unnamed deal"}</p>
                 <p className="text-[10px] text-muted-foreground">{dealStageName(deal)}</p>
               </div>
               <span className="shrink-0 text-sm font-semibold tabular-nums">
@@ -68,7 +66,7 @@ export function DepositTrackerWidget() {
         <p className="text-sm text-muted-foreground">No pending deposits.</p>
       ) : (
         <div className="space-y-2">
-          {items.map((dep: any) => (
+          {items.map((dep) => (
             <Link
               key={dep.id}
               to={`/crm/deals/${dep.deal_id}`}
@@ -113,7 +111,7 @@ export function IntakeProgressWidget() {
         <p className="text-sm text-muted-foreground">No equipment in intake pipeline.</p>
       ) : (
         <div className="space-y-2">
-          {items.map((item: any) => (
+          {items.map((item) => (
             <Link
               key={item.id}
               to="/ops/intake"
@@ -158,14 +156,14 @@ export function CreditAppsWidget() {
         <p className="text-sm text-muted-foreground">No deals in credit review.</p>
       ) : (
         <div className="space-y-2">
-          {items.map((deal: any) => (
+          {items.map((deal) => (
             <Link
               key={deal.id}
               to={`/crm/deals/${deal.id}`}
               className="flex items-center justify-between gap-2 rounded-lg border border-border p-2.5 transition hover:border-foreground/20"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">{deal.name}</p>
+                <p className="truncate text-sm font-medium text-foreground">{deal.name ?? "Unnamed deal"}</p>
                 <p className="text-[10px] text-muted-foreground">{dealStageName(deal)}</p>
               </div>
               <span className="shrink-0 text-sm font-semibold tabular-nums">

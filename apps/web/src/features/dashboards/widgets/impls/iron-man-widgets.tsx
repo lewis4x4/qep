@@ -19,6 +19,17 @@ const INTAKE_STAGE_LABEL: Record<number, string> = {
   8: "Sale Ready",
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function pdiChecklistEntries(value: unknown): Array<{ completed: boolean }> {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => ({
+    completed: isRecord(entry) && entry.completed === true,
+  }));
+}
+
 export function PrepQueueWidget() {
   const { data, isLoading, isError } = useIronManData();
   const items = data?.prepQueue ?? [];
@@ -34,23 +45,21 @@ export function PrepQueueWidget() {
         <p className="text-sm text-muted-foreground">Nothing in prep right now.</p>
       ) : (
         <div className="space-y-2">
-          {items.map(
-            (item: { id: string; stock_number?: string | null; current_stage?: number | null }) => (
-              <Link
-                key={item.id}
-                to="/ops/intake"
-                className="flex items-center justify-between rounded-lg border border-border p-2.5 transition hover:border-foreground/20"
-              >
-                <span className="text-sm font-medium text-foreground">
-                  {item.stock_number || "No stock #"}
-                </span>
-                <span className="text-[10px] font-medium text-muted-foreground">
-                  Stage {item.current_stage ?? "?"} ·{" "}
-                  {INTAKE_STAGE_LABEL[item.current_stage ?? 0] ?? "Intake"}
-                </span>
-              </Link>
-            ),
-          )}
+          {items.map((item) => (
+            <Link
+              key={item.id}
+              to="/ops/intake"
+              className="flex items-center justify-between rounded-lg border border-border p-2.5 transition hover:border-foreground/20"
+            >
+              <span className="text-sm font-medium text-foreground">
+                {item.stock_number || "No stock #"}
+              </span>
+              <span className="text-[10px] font-medium text-muted-foreground">
+                Stage {item.current_stage ?? "?"} ·{" "}
+                {INTAKE_STAGE_LABEL[item.current_stage ?? 0] ?? "Intake"}
+              </span>
+            </Link>
+          ))}
         </div>
       )}
     </Widget>
@@ -72,9 +81,9 @@ export function PdiChecklistsWidget() {
         <p className="text-sm text-muted-foreground">No PDI items pending.</p>
       ) : (
         <div className="space-y-2">
-          {items.map((item: any) => {
-            const checklist = Array.isArray(item.pdi_checklist) ? item.pdi_checklist : [];
-            const completed = checklist.filter((c: any) => c.completed).length;
+          {items.map((item) => {
+            const checklist = pdiChecklistEntries(item.pdi_checklist);
+            const completed = checklist.filter((entry) => entry.completed).length;
             const total = checklist.length || 1;
             const pct = Math.round((completed / total) * 100);
 
@@ -122,7 +131,7 @@ export function DemoScheduleWidget() {
         <p className="text-sm text-muted-foreground">No demos scheduled.</p>
       ) : (
         <div className="space-y-2">
-          {items.map((demo: any) => {
+          {items.map((demo) => {
             const shell = (
               <div className="flex items-center justify-between rounded-lg border border-border p-2.5">
                 <div>
@@ -136,7 +145,7 @@ export function DemoScheduleWidget() {
                     {demo.status}
                   </span>
                   <span className="ml-2 text-sm text-muted-foreground">
-                    {demo.equipment_category} • {demo.max_hours}hr max
+                    {demo.equipment_category ?? "Equipment"} • {demo.max_hours}hr max
                   </span>
                 </div>
                 <span className="text-xs text-muted-foreground">
@@ -177,7 +186,7 @@ export function ReturnInspectionsWidget() {
         <p className="text-sm text-muted-foreground">No return inspections pending.</p>
       ) : (
         <div className="space-y-2">
-          {items.map((ret: any) => (
+          {items.map((ret) => (
             <Link
               key={ret.id}
               to="/ops/returns"
