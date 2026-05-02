@@ -29,27 +29,6 @@ interface EquipmentRow {
   current_market_value: number | null;
 }
 
-interface ReturnRow {
-  id: string;
-  equipment_id: string | null;
-  status: string;
-  charge_amount: number | null;
-  has_charges: boolean | null;
-  aging_bucket: string | null;
-  work_order_number: string | null;
-  created_at: string;
-}
-
-interface TrafficRow {
-  id: string;
-  equipment_id: string | null;
-  status: RentalTrafficTicket["status"];
-  ticket_type: string;
-  to_location: string;
-  promised_delivery_at: string | null;
-  created_at: string;
-}
-
 interface PortalCustomerRow {
   id: string;
   first_name: string;
@@ -92,6 +71,214 @@ interface BranchOptionRow {
   display_name: string;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function requiredString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function nullableBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function normalizeAvailability(value: unknown): RentalFleetUnit["availability"] | null {
+  switch (value) {
+    case "available":
+    case "rented":
+    case "sold":
+    case "in_service":
+    case "in_transit":
+    case "reserved":
+    case "decommissioned":
+      return value;
+    default:
+      return null;
+  }
+}
+
+function normalizeTrafficStatus(value: unknown): RentalTrafficTicket["status"] | null {
+  switch (value) {
+    case "haul_pending":
+    case "scheduled":
+    case "being_shipped":
+    case "completed":
+      return value;
+    default:
+      return null;
+  }
+}
+
+function normalizeAssignmentStatus(value: unknown): RentalContractApprovalRow["assignment_status"] {
+  switch (value) {
+    case "pending_assignment":
+    case "assigned":
+      return value;
+    default:
+      return null;
+  }
+}
+
+function normalizeEquipmentOptions(rows: unknown): EquipmentRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    const availability = normalizeAvailability(row.availability);
+    if (!availability) return [];
+
+    return [{
+      id: row.id,
+      name: requiredString(row.name, "Unnamed rental unit"),
+      make: nullableString(row.make),
+      model: nullableString(row.model),
+      year: nullableNumber(row.year),
+      availability,
+      location_description: nullableString(row.location_description),
+      daily_rental_rate: nullableNumber(row.daily_rental_rate),
+      current_market_value: nullableNumber(row.current_market_value),
+    }];
+  });
+}
+
+function normalizeFleetUnits(rows: unknown): RentalFleetUnit[] {
+  return normalizeEquipmentOptions(rows).map((row) => ({
+    id: row.id,
+    name: row.name,
+    make: row.make,
+    model: row.model,
+    year: row.year,
+    availability: row.availability,
+    locationDescription: row.location_description,
+    dailyRentalRate: row.daily_rental_rate,
+    currentMarketValue: row.current_market_value,
+  }));
+}
+
+function normalizeReturnCases(rows: unknown): RentalReturnCase[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      equipmentId: nullableString(row.equipment_id),
+      status: requiredString(row.status, "unknown"),
+      chargeAmount: nullableNumber(row.charge_amount),
+      hasCharges: nullableBoolean(row.has_charges),
+      agingBucket: nullableString(row.aging_bucket),
+      workOrderNumber: nullableString(row.work_order_number),
+      createdAt: requiredString(row.created_at, new Date(0).toISOString()),
+    }];
+  });
+}
+
+function normalizeTrafficTickets(rows: unknown): RentalTrafficTicket[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    const status = normalizeTrafficStatus(row.status);
+    if (!status) return [];
+
+    return [{
+      id: row.id,
+      equipmentId: nullableString(row.equipment_id),
+      status,
+      ticketType: requiredString(row.ticket_type, "rental"),
+      toLocation: requiredString(row.to_location, "Unknown destination"),
+      promisedDeliveryAt: nullableString(row.promised_delivery_at),
+      createdAt: requiredString(row.created_at, new Date(0).toISOString()),
+    }];
+  });
+}
+
+function normalizePortalCustomers(rows: unknown): PortalCustomerRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      first_name: requiredString(row.first_name, ""),
+      last_name: requiredString(row.last_name, ""),
+    }];
+  });
+}
+
+function normalizeRentalContracts(rows: unknown): RentalContractApprovalRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string" || typeof row.portal_customer_id !== "string") return [];
+
+    return [{
+      id: row.id,
+      portal_customer_id: row.portal_customer_id,
+      equipment_id: nullableString(row.equipment_id),
+      assignment_status: normalizeAssignmentStatus(row.assignment_status),
+      requested_category: nullableString(row.requested_category),
+      requested_make: nullableString(row.requested_make),
+      requested_model: nullableString(row.requested_model),
+      branch_id: nullableString(row.branch_id),
+      requested_start_date: requiredString(row.requested_start_date, "Unscheduled"),
+      requested_end_date: requiredString(row.requested_end_date, "Unscheduled"),
+      status: requiredString(row.status, "submitted"),
+      estimate_daily_rate: nullableNumber(row.estimate_daily_rate),
+      estimate_weekly_rate: nullableNumber(row.estimate_weekly_rate),
+      estimate_monthly_rate: nullableNumber(row.estimate_monthly_rate),
+      customer_notes: nullableString(row.customer_notes),
+      dealer_response: nullableString(row.dealer_response),
+    }];
+  });
+}
+
+function normalizeRentalExtensions(rows: unknown): RentalExtensionApprovalRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string" || typeof row.rental_contract_id !== "string") return [];
+
+    return [{
+      id: row.id,
+      rental_contract_id: row.rental_contract_id,
+      requested_end_date: requiredString(row.requested_end_date, "Unscheduled"),
+      approved_end_date: nullableString(row.approved_end_date),
+      status: requiredString(row.status, "submitted"),
+      customer_reason: nullableString(row.customer_reason),
+      dealer_response: nullableString(row.dealer_response),
+      additional_charge: nullableNumber(row.additional_charge),
+      payment_status: nullableString(row.payment_status),
+    }];
+  });
+}
+
+function normalizeBranches(rows: unknown): BranchOptionRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      display_name: requiredString(row.display_name, "Unnamed branch"),
+    }];
+  });
+}
+
 export function RentalCommandCenterPage() {
   const queryClient = useQueryClient();
   const [dealerResponses, setDealerResponses] = useState<Record<string, string>>({});
@@ -129,36 +316,9 @@ export function RentalCommandCenterPage() {
       if (trafficResult.error) throw new Error(trafficResult.error.message);
 
       return buildRentalCommandCenter(
-        ((equipmentResult.data ?? []) as EquipmentRow[]).map((row) => ({
-          id: row.id,
-          name: row.name,
-          make: row.make,
-          model: row.model,
-          year: row.year,
-          availability: row.availability,
-          locationDescription: row.location_description,
-          dailyRentalRate: row.daily_rental_rate,
-          currentMarketValue: row.current_market_value,
-        })),
-        ((returnsResult.data ?? []) as ReturnRow[]).map((row) => ({
-          id: row.id,
-          equipmentId: row.equipment_id,
-          status: row.status,
-          chargeAmount: row.charge_amount,
-          hasCharges: row.has_charges,
-          agingBucket: row.aging_bucket,
-          workOrderNumber: row.work_order_number,
-          createdAt: row.created_at,
-        })),
-        ((trafficResult.data ?? []) as TrafficRow[]).map((row) => ({
-          id: row.id,
-          equipmentId: row.equipment_id,
-          status: row.status,
-          ticketType: row.ticket_type,
-          toLocation: row.to_location,
-          promisedDeliveryAt: row.promised_delivery_at,
-          createdAt: row.created_at,
-        })),
+        normalizeFleetUnits(equipmentResult.data),
+        normalizeReturnCases(returnsResult.data),
+        normalizeTrafficTickets(trafficResult.data),
       );
     },
     staleTime: 60_000,
@@ -203,11 +363,11 @@ export function RentalCommandCenterPage() {
       if (branchResult.error) throw new Error(branchResult.error.message);
 
       return {
-        contracts: (contractsResult.data ?? []) as RentalContractApprovalRow[],
-        extensions: (extensionsResult.data ?? []) as RentalExtensionApprovalRow[],
-        customers: (portalCustomersResult.data ?? []) as PortalCustomerRow[],
-        equipment: (equipmentResult.data ?? []) as EquipmentRow[],
-        branches: (branchResult.data ?? []) as BranchOptionRow[],
+        contracts: normalizeRentalContracts(contractsResult.data),
+        extensions: normalizeRentalExtensions(extensionsResult.data),
+        customers: normalizePortalCustomers(portalCustomersResult.data),
+        equipment: normalizeEquipmentOptions(equipmentResult.data),
+        branches: normalizeBranches(branchResult.data),
       };
     },
     staleTime: 60_000,
@@ -413,7 +573,7 @@ export function RentalCommandCenterPage() {
             <DeckSurface className="p-4">
               <h2 className="text-sm font-semibold text-foreground">Pending extension approvals</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Approve or decline extension requests and collect any additional extension charge when needed.
+                Approve or decline extension requests and collect the additional extension charge when needed.
               </p>
               <div className="mt-4 space-y-3">
                 {(contractQueueQuery.data?.extensions ?? []).filter((extension) => ["submitted", "reviewing", "approved"].includes(extension.status)).map((extension) => (
