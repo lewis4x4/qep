@@ -6,7 +6,19 @@ import { Button } from "@/components/ui/button";
 import { useBranchBySlug } from "@/hooks/useBranches";
 import { DeckSurface } from "../components/command-deck";
 import { QrmPageHeader } from "../components/QrmPageHeader";
-import { summarizeBranchCommand, type BranchInvoiceRow, type BranchIntakeRow, type BranchOpenDealRow, type BranchServiceJobRow, type BranchTrafficRow } from "../lib/branch-command";
+import {
+  normalizeBranchIntakeRows,
+  normalizeBranchInvoiceRows,
+  normalizeBranchOpenDealRows,
+  normalizeBranchServiceJobRows,
+  normalizeBranchTrafficRows,
+  summarizeBranchCommand,
+  type BranchInvoiceRow,
+  type BranchIntakeRow,
+  type BranchOpenDealRow,
+  type BranchServiceJobRow,
+  type BranchTrafficRow,
+} from "../lib/branch-command";
 import { supabase } from "@/lib/supabase";
 import { buildAccountCommandHref } from "../lib/account-command";
 
@@ -26,7 +38,7 @@ export function BranchCommandCenterPage() {
             .order("shipping_date", { ascending: false })
             .limit(200);
           if (error) throw new Error(error.message);
-          return (data ?? []) as BranchTrafficRow[];
+          return normalizeBranchTrafficRows(data);
         },
         staleTime: 60_000,
       },
@@ -39,7 +51,7 @@ export function BranchCommandCenterPage() {
             .select("id, current_stage, pdi_completed, photo_ready, ship_to_branch")
             .limit(200);
           if (error) throw new Error(error.message);
-          return (data ?? []) as BranchIntakeRow[];
+          return normalizeBranchIntakeRows(data);
         },
         staleTime: 60_000,
       },
@@ -54,7 +66,7 @@ export function BranchCommandCenterPage() {
             .is("deleted_at", null)
             .limit(200);
           if (error) throw new Error(error.message);
-          return (data ?? []) as BranchServiceJobRow[];
+          return normalizeBranchServiceJobRows(data);
         },
         staleTime: 60_000,
       },
@@ -68,7 +80,7 @@ export function BranchCommandCenterPage() {
             .eq("branch_id", branchId!)
             .limit(200);
           if (error) throw new Error(error.message);
-          return (data ?? []) as BranchInvoiceRow[];
+          return normalizeBranchInvoiceRows(data);
         },
         staleTime: 60_000,
       },
@@ -83,7 +95,7 @@ export function BranchCommandCenterPage() {
             .is("closed_at", null)
             .limit(400);
           if (error) throw new Error(error.message);
-          return (data ?? []) as BranchOpenDealRow[];
+          return normalizeBranchOpenDealRows(data);
         },
         staleTime: 60_000,
       },

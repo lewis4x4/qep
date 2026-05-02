@@ -8,6 +8,11 @@ import { DeckSurface } from "../components/command-deck";
 import { supabase } from "@/lib/supabase";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import {
+  normalizeBranchIntakeRows,
+  normalizeBranchInvoiceRows,
+  normalizeBranchOpenDealRows,
+  normalizeBranchServiceJobRows,
+  normalizeBranchTrafficRows,
   summarizeBranchCommand,
   type BranchInvoiceRow,
   type BranchIntakeRow,
@@ -33,7 +38,7 @@ export function BranchChiefPage() {
             .order("shipping_date", { ascending: false })
             .limit(200);
           if (error) throw new Error(error.message);
-          return (data ?? []) as BranchTrafficRow[];
+          return normalizeBranchTrafficRows(data);
         },
         staleTime: 60_000,
       },
@@ -46,7 +51,7 @@ export function BranchChiefPage() {
             .select("id, current_stage, pdi_completed, photo_ready, ship_to_branch")
             .limit(200);
           if (error) throw new Error(error.message);
-          return (data ?? []) as BranchIntakeRow[];
+          return normalizeBranchIntakeRows(data);
         },
         staleTime: 60_000,
       },
@@ -61,7 +66,7 @@ export function BranchChiefPage() {
             .is("deleted_at", null)
             .limit(200);
           if (error) throw new Error(error.message);
-          return (data ?? []) as BranchServiceJobRow[];
+          return normalizeBranchServiceJobRows(data);
         },
         staleTime: 60_000,
       },
@@ -75,7 +80,7 @@ export function BranchChiefPage() {
             .eq("branch_id", branchId!)
             .limit(200);
           if (error) throw new Error(error.message);
-          return (data ?? []) as BranchInvoiceRow[];
+          return normalizeBranchInvoiceRows(data);
         },
         staleTime: 60_000,
       },
@@ -90,7 +95,7 @@ export function BranchChiefPage() {
             .is("closed_at", null)
             .limit(400);
           if (error) throw new Error(error.message);
-          return (data ?? []) as BranchOpenDealRow[];
+          return normalizeBranchOpenDealRows(data);
         },
         staleTime: 60_000,
       },

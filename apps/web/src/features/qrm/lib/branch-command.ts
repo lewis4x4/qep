@@ -36,6 +36,108 @@ export interface BranchOpenDealRow {
   amount: number | null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function requiredString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function requiredNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function nullableBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+export function normalizeBranchTrafficRows(rows: unknown): BranchTrafficRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      ticket_type: requiredString(row.ticket_type, "unknown"),
+      status: requiredString(row.status, "unknown"),
+      from_location: requiredString(row.from_location, ""),
+      to_location: requiredString(row.to_location, ""),
+    }];
+  });
+}
+
+export function normalizeBranchIntakeRows(rows: unknown): BranchIntakeRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      current_stage: requiredNumber(row.current_stage, 0),
+      pdi_completed: nullableBoolean(row.pdi_completed),
+      photo_ready: nullableBoolean(row.photo_ready),
+      ship_to_branch: nullableString(row.ship_to_branch),
+    }];
+  });
+}
+
+export function normalizeBranchServiceJobRows(rows: unknown): BranchServiceJobRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      customer_id: nullableString(row.customer_id),
+      current_stage: requiredString(row.current_stage, "unknown"),
+      invoice_total: nullableNumber(row.invoice_total),
+    }];
+  });
+}
+
+export function normalizeBranchInvoiceRows(rows: unknown): BranchInvoiceRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      total: requiredNumber(row.total, 0),
+      amount_paid: requiredNumber(row.amount_paid, 0),
+      balance_due: requiredNumber(row.balance_due, 0),
+      status: requiredString(row.status, "unknown"),
+    }];
+  });
+}
+
+export function normalizeBranchOpenDealRows(rows: unknown): BranchOpenDealRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      company_id: nullableString(row.company_id),
+      name: requiredString(row.name, "Unnamed deal"),
+      amount: nullableNumber(row.amount),
+    }];
+  });
+}
+
 export interface BranchCommandSummary {
   logisticsOpen: number;
   rentalMoves: number;
