@@ -28,7 +28,6 @@ import { useDemandForecast } from "@/features/parts/hooks/useDemandForecast";
 import { useInventoryHealth } from "@/features/parts/hooks/useInventoryHealth";
 import { usePartsOrders, type PartsOrderListRow } from "@/features/parts/hooks/usePartsOrders";
 import { useServiceJobList } from "@/features/service/hooks/useServiceJobs";
-import type { ServiceJobWithRelations } from "@/features/service/lib/types";
 import {
   EmptyState,
   ErrorLine,
@@ -99,6 +98,27 @@ type QuotePackageRow = {
   created_by: string | null;
 };
 
+type MorningBriefEvent = {
+  type: string;
+  summary: string;
+  at: string;
+};
+
+type MorningBriefData = {
+  count: number;
+  events: MorningBriefEvent[];
+};
+
+type OpenServiceJobRow = {
+  id: string;
+  priority: string;
+  current_stage: string;
+  status_flags: string[];
+  requested_by_name: string | null;
+  customer_problem_summary: string | null;
+  customer?: { name: string | null } | null;
+};
+
 function one<T>(value: T | T[] | null | undefined): T | null {
   if (value == null) return null;
   return Array.isArray(value) ? (value[0] ?? null) : value;
@@ -128,6 +148,33 @@ function numberValue(value: unknown): number | null {
 
 function booleanValue(value: unknown): boolean {
   return value === true;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function normalizeMorningBriefData(value: unknown): MorningBriefData {
+  if (!isRecord(value)) return { count: 0, events: [] };
+  const events = Array.isArray(value.events)
+    ? value.events.map(normalizeMorningBriefEvent).filter((event): event is MorningBriefEvent => event !== null)
+    : [];
+  return {
+    count: numberValue(value.count) ?? events.length,
+    events,
+  };
+}
+
+function normalizeMorningBriefEvent(value: unknown): MorningBriefEvent | null {
+  if (!isRecord(value)) return null;
+  const summary = nullableString(value.summary);
+  const at = nullableString(value.at);
+  if (!summary || !at) return null;
+  return {
+    type: nullableString(value.type) ?? "event",
+    summary,
+    at,
+  };
 }
 
 function normalizeQuotePackageRows(rows: unknown[]): QuotePackageRow[] {
@@ -267,6 +314,27 @@ function normalizeVendorRow(row: unknown): VendorRow | null {
   };
 }
 
+function normalizeOpenServiceJobRows(rows: unknown): OpenServiceJobRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map(normalizeOpenServiceJobRow).filter((row): row is OpenServiceJobRow => row !== null);
+}
+
+function normalizeOpenServiceJobRow(row: unknown): OpenServiceJobRow | null {
+  if (!isRecord(row)) return null;
+  const id = nullableString(row.id);
+  if (!id) return null;
+  const customer = firstRecord(row.customer);
+  return {
+    id,
+    priority: nullableString(row.priority) ?? "normal",
+    current_stage: nullableString(row.current_stage) ?? "request_received",
+    status_flags: stringArray(row.status_flags),
+    requested_by_name: nullableString(row.requested_by_name),
+    customer_problem_summary: nullableString(row.customer_problem_summary),
+    customer: customer ? { name: nullableString(customer.name) } : null,
+  };
+}
+
 function currency(value: number | null | undefined): string {
   const n = Number(value ?? 0);
   if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
@@ -306,8 +374,8 @@ function statusLabel(status: string): string {
 function lineItemCount(order: PartsOrderListRow): number {
   const lineItems = order.line_items;
   if (Array.isArray(lineItems)) return lineItems.length;
-  if (lineItems && typeof lineItems === "object" && Array.isArray((lineItems as { items?: unknown[] }).items)) {
-    return (lineItems as { items: unknown[] }).items.length;
+  if (isRecord(lineItems) && Array.isArray(lineItems.items)) {
+    return lineItems.items.length;
   }
   return 0;
 }
@@ -367,7 +435,7 @@ export function MorningBriefFloorWidget() {
         p_hours_back: 24,
       });
       if (error) throw error;
-      return data as { count: number; events: { type: string; summary: string; at: string }[] };
+      return normalizeMorningBriefData(data);
     },
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -969,7 +1037,7 @@ export function OpenServiceTicketsFloorWidget() {
     include_closed: false,
   });
 
-  const jobs = (data?.jobs ?? []) as ServiceJobWithRelations[];
+  const jobs = normalizeOpenServiceJobRows(data?.jobs ?? []);
   const waiting = jobs.filter((job) =>
     (job.status_flags ?? []).some((flag) => String(flag).startsWith("waiting_")),
   );
