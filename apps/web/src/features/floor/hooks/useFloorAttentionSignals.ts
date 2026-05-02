@@ -3,19 +3,10 @@ import type { IronRole } from "@/features/qrm/lib/iron-roles";
 import { supabase } from "@/lib/supabase";
 import type { FloorAttentionSignals } from "../lib/attention";
 
-type QueryBuilder = {
-  select: (columns: string, options?: { count?: "exact"; head?: boolean }) => QueryBuilder;
-  eq: (column: string, value: unknown) => QueryBuilder;
-  in: (column: string, values: unknown[]) => QueryBuilder;
-  is: (column: string, value: unknown) => QueryBuilder;
-  lt: (column: string, value: string) => QueryBuilder;
+type CountResponse = {
+  count: number | null;
+  error: { message: string } | null;
 };
-
-type SupabaseLoose = {
-  from: (table: string) => QueryBuilder;
-};
-
-const db = supabase as unknown as SupabaseLoose;
 
 export function useFloorAttentionSignals(role: IronRole, userId: string) {
   return useQuery({
@@ -40,18 +31,54 @@ async function fetchFloorAttentionSignals(userId: string): Promise<FloorAttentio
     quoteFollowups,
     counterInquiries,
   ] = await Promise.all([
-    countRows("demos", (q) => q.eq("status", "requested")),
-    countRows("trade_valuations", (q) => q.eq("status", "manager_review")),
-    countRows("crm_deals", (q) => q.eq("margin_check_status", "flagged")),
-    countRows("crm_deals", (q) =>
-      q.is("deleted_at", null).lt("last_activity_at", staleCutoff.toISOString()),
+    readCount(
+      supabase.from("demos").select("id", { count: "exact", head: true }).eq("status", "requested"),
     ),
-    countRows("customer_invoices", (q) => q.in("status", ["draft", "pending", "open"])),
-    countRows("service_jobs", (q) => q.in("status", ["open", "in_progress", "blocked"])),
-    countRows("quote_packages", (q) =>
-      q.eq("created_by", userId).in("status", ["draft", "sent", "viewed", "changes_requested"]),
+    readCount(
+      supabase
+        .from("trade_valuations")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "manager_review"),
     ),
-    countRows("parts_inquiries", (q) => q.in("outcome", ["needs_quote", "unquoted"])),
+    readCount(
+      supabase
+        .from("crm_deals")
+        .select("id", { count: "exact", head: true })
+        .eq("margin_check_status", "flagged"),
+    ),
+    readCount(
+      supabase
+        .from("crm_deals")
+        .select("id", { count: "exact", head: true })
+        .is("deleted_at", null)
+        .lt("last_activity_at", staleCutoff.toISOString()),
+    ),
+    readCount(
+      supabase
+        .from("customer_invoices")
+        .select("id", { count: "exact", head: true })
+        .in("status", ["draft", "pending", "open"]),
+    ),
+    readCount(
+      supabase
+        .from("service_jobs")
+        .select("id", { count: "exact", head: true })
+        .is("deleted_at", null)
+        .is("closed_at", null),
+    ),
+    readCount(
+      supabase
+        .from("quote_packages")
+        .select("id", { count: "exact", head: true })
+        .eq("created_by", userId)
+        .in("status", ["draft", "sent", "viewed", "changes_requested"]),
+    ),
+    readCount(
+      supabase
+        .from("counter_inquiries")
+        .select("id", { count: "exact", head: true })
+        .in("outcome", ["needs_quote", "unquoted"]),
+    ),
   ]);
 
   return {
@@ -66,14 +93,9 @@ async function fetchFloorAttentionSignals(userId: string): Promise<FloorAttentio
   };
 }
 
-async function countRows(
-  table: string,
-  apply: (query: QueryBuilder) => QueryBuilder,
-): Promise<number> {
+async function readCount(request: PromiseLike<CountResponse>): Promise<number> {
   try {
-    const { count, error } = (await apply(
-      db.from(table).select("id", { count: "exact", head: true }),
-    )) as unknown as { count: number | null; error: Error | null };
+    const { count, error } = await request;
     if (error) return 0;
     return count ?? 0;
   } catch {
