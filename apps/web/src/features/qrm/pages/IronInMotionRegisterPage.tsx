@@ -16,34 +16,6 @@ import {
   type IronInMotionTicket,
 } from "../lib/iron-in-motion";
 
-interface EquipmentRow {
-  id: string;
-  name: string;
-  make: string | null;
-  model: string | null;
-  year: number | null;
-  availability: IronInMotionAsset["availability"];
-  ownership: IronInMotionAsset["ownership"];
-  location_description: string | null;
-  created_at: string;
-  purchase_price: number | null;
-  current_market_value: number | null;
-  replacement_cost: number | null;
-}
-
-interface TrafficRow {
-  id: string;
-  equipment_id: string | null;
-  status: IronInMotionTicket["status"];
-  ticket_type: string;
-  from_location: string;
-  to_location: string;
-  shipping_date: string | null;
-  promised_delivery_at: string | null;
-  blocker_reason: string | null;
-  created_at: string;
-}
-
 function fmtMoney(v: number) {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `$${Math.round(v / 1_000)}k`;
@@ -54,6 +26,118 @@ function riskTone(level: "high" | "medium" | "low"): StatusTone {
   if (level === "high") return "hot";
   if (level === "medium") return "warm";
   return "ok";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function requiredString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function normalizeAvailability(value: unknown): IronInMotionAsset["availability"] | null {
+  switch (value) {
+    case "available":
+    case "rented":
+    case "sold":
+    case "in_service":
+    case "in_transit":
+    case "reserved":
+    case "decommissioned":
+      return value;
+    default:
+      return null;
+  }
+}
+
+function normalizeOwnership(value: unknown): IronInMotionAsset["ownership"] | null {
+  switch (value) {
+    case "owned":
+    case "leased":
+    case "customer_owned":
+    case "rental_fleet":
+    case "consignment":
+      return value;
+    default:
+      return null;
+  }
+}
+
+function normalizeTicketStatus(value: unknown): IronInMotionTicket["status"] | null {
+  switch (value) {
+    case "haul_pending":
+    case "scheduled":
+    case "being_shipped":
+    case "completed":
+      return value;
+    default:
+      return null;
+  }
+}
+
+function normalizeTicketsByEquipment(rows: unknown): Map<string, IronInMotionTicket[]> {
+  const ticketsByEquipment = new Map<string, IronInMotionTicket[]>();
+  if (!Array.isArray(rows)) return ticketsByEquipment;
+
+  for (const row of rows) {
+    if (!isRecord(row) || typeof row.id !== "string" || typeof row.equipment_id !== "string") continue;
+
+    const status = normalizeTicketStatus(row.status);
+    if (!status) continue;
+
+    const list = ticketsByEquipment.get(row.equipment_id) ?? [];
+    list.push({
+      id: row.id,
+      status,
+      ticketType: requiredString(row.ticket_type, "unknown"),
+      fromLocation: requiredString(row.from_location, "Unknown origin"),
+      toLocation: requiredString(row.to_location, "Unknown destination"),
+      shippingDate: nullableString(row.shipping_date),
+      promisedDeliveryAt: nullableString(row.promised_delivery_at),
+      blockerReason: nullableString(row.blocker_reason),
+      createdAt: requiredString(row.created_at, new Date(0).toISOString()),
+    });
+    ticketsByEquipment.set(row.equipment_id, list);
+  }
+
+  return ticketsByEquipment;
+}
+
+function normalizeAssets(rows: unknown, ticketsByEquipment: Map<string, IronInMotionTicket[]>): IronInMotionAsset[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    const availability = normalizeAvailability(row.availability);
+    const ownership = normalizeOwnership(row.ownership);
+    if (!availability || !ownership) return [];
+
+    return [{
+      id: row.id,
+      name: requiredString(row.name, "Unnamed machine"),
+      make: nullableString(row.make),
+      model: nullableString(row.model),
+      year: nullableNumber(row.year),
+      availability,
+      ownership,
+      locationDescription: nullableString(row.location_description),
+      createdAt: requiredString(row.created_at, new Date(0).toISOString()),
+      purchasePrice: nullableNumber(row.purchase_price),
+      currentMarketValue: nullableNumber(row.current_market_value),
+      replacementCost: nullableNumber(row.replacement_cost),
+      tickets: ticketsByEquipment.get(row.id) ?? [],
+    }];
+  });
 }
 
 export function IronInMotionRegisterPage() {
@@ -76,39 +160,8 @@ export function IronInMotionRegisterPage() {
       if (equipmentResult.error) throw new Error(equipmentResult.error.message);
       if (trafficResult.error) throw new Error(trafficResult.error.message);
 
-      const ticketsByEquipment = new Map<string, IronInMotionTicket[]>();
-      for (const row of (trafficResult.data ?? []) as TrafficRow[]) {
-        if (!row.equipment_id) continue;
-        const list = ticketsByEquipment.get(row.equipment_id) ?? [];
-        list.push({
-          id: row.id,
-          status: row.status,
-          ticketType: row.ticket_type,
-          fromLocation: row.from_location,
-          toLocation: row.to_location,
-          shippingDate: row.shipping_date,
-          promisedDeliveryAt: row.promised_delivery_at,
-          blockerReason: row.blocker_reason,
-          createdAt: row.created_at,
-        });
-        ticketsByEquipment.set(row.equipment_id, list);
-      }
-
-      const assets: IronInMotionAsset[] = ((equipmentResult.data ?? []) as EquipmentRow[]).map((row) => ({
-        id: row.id,
-        name: row.name,
-        make: row.make,
-        model: row.model,
-        year: row.year,
-        availability: row.availability,
-        ownership: row.ownership,
-        locationDescription: row.location_description,
-        createdAt: row.created_at,
-        purchasePrice: row.purchase_price,
-        currentMarketValue: row.current_market_value,
-        replacementCost: row.replacement_cost,
-        tickets: ticketsByEquipment.get(row.id) ?? [],
-      }));
+      const ticketsByEquipment = normalizeTicketsByEquipment(trafficResult.data);
+      const assets = normalizeAssets(equipmentResult.data, ticketsByEquipment);
 
       return buildIronInMotionRegister(assets);
     },
