@@ -17,41 +17,6 @@ import { DeckSurface, SignalChip, StatusDot, type StatusTone } from "../componen
 
 const DRAFT_EMAIL_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/draft-email`;
 
-interface ServiceJobRow {
-  id: string;
-  customer_id: string | null;
-  machine_id: string | null;
-  current_stage: string;
-  scheduled_end_at: string | null;
-  created_at: string;
-  customer_problem_summary: string | null;
-  invoice_total: number | null;
-}
-
-interface MachineRow {
-  id: string;
-  company_id: string;
-  name: string;
-  make: string | null;
-  model: string | null;
-  year: number | null;
-  ownership: ServiceToSalesMachine["ownership"];
-  engine_hours: number | null;
-  current_market_value: number | null;
-  replacement_cost: number | null;
-}
-
-interface FleetSignalRow {
-  make: string;
-  model: string;
-  year: number | null;
-  predicted_replacement_date: string | null;
-  replacement_confidence: number | null;
-  outreach_status: string | null;
-  outreach_deal_value: number | null;
-  equipment_serial: string | null;
-}
-
 function fmtMoney(v: number) {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `$${Math.round(v / 1_000)}k`;
@@ -62,6 +27,97 @@ function pressureTone(level: "high" | "medium" | "low"): StatusTone {
   if (level === "high") return "hot";
   if (level === "medium") return "warm";
   return "cool";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function nullableNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeServiceJobs(rows: unknown): ServiceToSalesJob[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row): ServiceToSalesJob | null => {
+      if (!isRecord(row) || typeof row.id !== "string" || typeof row.current_stage !== "string" || typeof row.created_at !== "string") {
+        return null;
+      }
+      return {
+        id: row.id,
+        customerId: nullableString(row.customer_id),
+        machineId: nullableString(row.machine_id),
+        currentStage: row.current_stage,
+        scheduledEndAt: nullableString(row.scheduled_end_at),
+        createdAt: row.created_at,
+        customerProblemSummary: nullableString(row.customer_problem_summary),
+        invoiceTotal: nullableNumber(row.invoice_total),
+      };
+    })
+    .filter((row): row is ServiceToSalesJob => row !== null);
+}
+
+function normalizeMachineOwnership(value: unknown): ServiceToSalesMachine["ownership"] | null {
+  return value === "owned" ||
+    value === "leased" ||
+    value === "customer_owned" ||
+    value === "rental_fleet" ||
+    value === "consignment"
+    ? value
+    : null;
+}
+
+function normalizeMachines(rows: unknown): ServiceToSalesMachine[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row): ServiceToSalesMachine | null => {
+      if (!isRecord(row) || typeof row.id !== "string") return null;
+      const companyId = nullableString(row.company_id);
+      const ownership = normalizeMachineOwnership(row.ownership);
+      if (!companyId || !ownership) return null;
+      return {
+        id: row.id,
+        companyId,
+        name: nullableString(row.name) ?? "Unnamed machine",
+        make: nullableString(row.make),
+        model: nullableString(row.model),
+        year: nullableNumber(row.year),
+        ownership,
+        engineHours: nullableNumber(row.engine_hours),
+        currentMarketValue: nullableNumber(row.current_market_value),
+        replacementCost: nullableNumber(row.replacement_cost),
+      };
+    })
+    .filter((row): row is ServiceToSalesMachine => row !== null);
+}
+
+function normalizeFleetSignals(rows: unknown): ServiceToSalesFleetSignal[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row): ServiceToSalesFleetSignal | null => {
+      if (!isRecord(row) || typeof row.make !== "string" || typeof row.model !== "string") return null;
+      return {
+        make: row.make,
+        model: row.model,
+        year: nullableNumber(row.year),
+        predictedReplacementDate: nullableString(row.predicted_replacement_date),
+        replacementConfidence: nullableNumber(row.replacement_confidence),
+        outreachStatus: nullableString(row.outreach_status),
+        outreachDealValue: nullableNumber(row.outreach_deal_value),
+        equipmentSerial: nullableString(row.equipment_serial),
+      };
+    })
+    .filter((row): row is ServiceToSalesFleetSignal => row !== null);
 }
 
 export function ServiceToSalesPage() {
@@ -91,38 +147,9 @@ export function ServiceToSalesPage() {
       if (signalsResult.error) throw new Error(signalsResult.error.message);
 
       return buildServiceToSalesBoard(
-        ((jobsResult.data ?? []) as ServiceJobRow[]).map((row) => ({
-          id: row.id,
-          customerId: row.customer_id,
-          machineId: row.machine_id,
-          currentStage: row.current_stage,
-          scheduledEndAt: row.scheduled_end_at,
-          createdAt: row.created_at,
-          customerProblemSummary: row.customer_problem_summary,
-          invoiceTotal: row.invoice_total,
-        })),
-        ((machinesResult.data ?? []) as MachineRow[]).map((row) => ({
-          id: row.id,
-          companyId: row.company_id,
-          name: row.name,
-          make: row.make,
-          model: row.model,
-          year: row.year,
-          ownership: row.ownership,
-          engineHours: row.engine_hours,
-          currentMarketValue: row.current_market_value,
-          replacementCost: row.replacement_cost,
-        })),
-        ((signalsResult.data ?? []) as FleetSignalRow[]).map((row) => ({
-          make: row.make,
-          model: row.model,
-          year: row.year,
-          predictedReplacementDate: row.predicted_replacement_date,
-          replacementConfidence: row.replacement_confidence,
-          outreachStatus: row.outreach_status,
-          outreachDealValue: row.outreach_deal_value,
-          equipmentSerial: row.equipment_serial,
-        })),
+        normalizeServiceJobs(jobsResult.data),
+        normalizeMachines(machinesResult.data),
+        normalizeFleetSignals(signalsResult.data),
       );
     },
     staleTime: 60_000,
