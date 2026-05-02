@@ -7,44 +7,24 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DeckSurface } from "../components/command-deck";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
-import { computeTerritoryVisitPriorities } from "../lib/territory-command";
+import {
+  computeTerritoryVisitPriorities,
+  extractTerritoryCompanyIds,
+  normalizeTerritoryActivityRows,
+  normalizeTerritoryCompanyRows,
+  normalizeTerritoryContactRows,
+  normalizeTerritoryDealRows,
+  normalizeTerritoryLinkRows,
+  normalizeTerritoryRow,
+  type TerritoryActivityRow,
+  type TerritoryCompanyRow,
+  type TerritoryContactRow,
+  type TerritoryDealRow,
+  type TerritoryLinkRow,
+  type TerritoryRow,
+} from "../lib/territory-command";
 import { buildAccountCommandHref } from "../lib/account-command";
 import { supabase } from "@/lib/supabase";
-
-interface TerritoryRow {
-  id: string;
-  name: string;
-  description: string | null;
-  assigned_rep_id: string | null;
-}
-
-interface ContactRow {
-  id: string;
-  first_name: string;
-  last_name: string;
-  primary_company_id: string | null;
-}
-
-interface CompanyRow {
-  id: string;
-  name: string;
-}
-
-interface DealRow {
-  id: string;
-  name: string;
-  company_id: string | null;
-  primary_contact_id: string | null;
-  amount: number | null;
-  expected_close_on: string | null;
-  next_follow_up_at: string | null;
-}
-
-interface ActivityRow {
-  occurred_at: string;
-  company_id: string | null;
-  contact_id: string | null;
-}
 
 export function TerritoryCommandCenterPage() {
   const { territoryId } = useParams<{ territoryId: string }>();
@@ -59,7 +39,7 @@ export function TerritoryCommandCenterPage() {
         .is("deleted_at", null)
         .maybeSingle();
       if (error) throw new Error(error.message);
-      return (data as TerritoryRow | null) ?? null;
+      return normalizeTerritoryRow(data);
     },
     enabled: Boolean(territoryId),
     staleTime: 60_000,
@@ -67,14 +47,14 @@ export function TerritoryCommandCenterPage() {
 
   const linksQuery = useQuery({
     queryKey: ["territory-command", territoryId, "links"],
-    queryFn: async (): Promise<Array<{ contact_id: string }>> => {
+    queryFn: async (): Promise<TerritoryLinkRow[]> => {
       const { data, error } = await supabase
         .from("crm_contact_territories")
         .select("contact_id")
         .eq("territory_id", territoryId!)
         .limit(500);
       if (error) throw new Error(error.message);
-      return (data ?? []) as Array<{ contact_id: string }>;
+      return normalizeTerritoryLinkRows(data);
     },
     enabled: Boolean(territoryId),
     staleTime: 60_000,
@@ -90,27 +70,27 @@ export function TerritoryCommandCenterPage() {
       {
         queryKey: ["territory-command", territoryId, "contacts", contactIds.join(",")],
         enabled: contactIds.length > 0,
-        queryFn: async (): Promise<ContactRow[]> => {
+        queryFn: async (): Promise<TerritoryContactRow[]> => {
           const { data, error } = await supabase
             .from("crm_contacts")
             .select("id, first_name, last_name, primary_company_id")
             .in("id", contactIds)
             .is("deleted_at", null);
           if (error) throw new Error(error.message);
-          return (data ?? []) as ContactRow[];
+          return normalizeTerritoryContactRows(data);
         },
         staleTime: 60_000,
       },
       {
         queryKey: ["territory-command", territoryId, "companies", contactIds.join(",")],
         enabled: contactIds.length > 0,
-        queryFn: async (): Promise<CompanyRow[]> => {
+        queryFn: async (): Promise<TerritoryCompanyRow[]> => {
           const { data: contacts } = await supabase
             .from("crm_contacts")
             .select("primary_company_id")
             .in("id", contactIds)
             .is("deleted_at", null);
-          const companyIds = [...new Set((contacts ?? []).map((row) => row.primary_company_id).filter(Boolean))] as string[];
+          const companyIds = extractTerritoryCompanyIds(contacts);
           if (companyIds.length === 0) return [];
           const { data, error } = await supabase
             .from("crm_companies")
@@ -118,20 +98,20 @@ export function TerritoryCommandCenterPage() {
             .in("id", companyIds)
             .is("deleted_at", null);
           if (error) throw new Error(error.message);
-          return (data ?? []) as CompanyRow[];
+          return normalizeTerritoryCompanyRows(data);
         },
         staleTime: 60_000,
       },
       {
         queryKey: ["territory-command", territoryId, "deals", contactIds.join(",")],
         enabled: contactIds.length > 0,
-        queryFn: async (): Promise<DealRow[]> => {
+        queryFn: async (): Promise<TerritoryDealRow[]> => {
           const { data: contacts } = await supabase
             .from("crm_contacts")
             .select("primary_company_id")
             .in("id", contactIds)
             .is("deleted_at", null);
-          const companyIds = [...new Set((contacts ?? []).map((row) => row.primary_company_id).filter(Boolean))] as string[];
+          const companyIds = extractTerritoryCompanyIds(contacts);
           const { data, error } = await supabase
             .from("crm_deals")
             .select("id, name, company_id, primary_contact_id, amount, expected_close_on, next_follow_up_at")
@@ -143,20 +123,20 @@ export function TerritoryCommandCenterPage() {
             .is("closed_at", null)
             .limit(500);
           if (error) throw new Error(error.message);
-          return (data ?? []) as DealRow[];
+          return normalizeTerritoryDealRows(data);
         },
         staleTime: 60_000,
       },
       {
         queryKey: ["territory-command", territoryId, "activities", contactIds.join(",")],
         enabled: contactIds.length > 0,
-        queryFn: async (): Promise<ActivityRow[]> => {
+        queryFn: async (): Promise<TerritoryActivityRow[]> => {
           const { data: contacts } = await supabase
             .from("crm_contacts")
             .select("primary_company_id")
             .in("id", contactIds)
             .is("deleted_at", null);
-          const companyIds = [...new Set((contacts ?? []).map((row) => row.primary_company_id).filter(Boolean))] as string[];
+          const companyIds = extractTerritoryCompanyIds(contacts);
           const { data, error } = await supabase
             .from("crm_activities")
             .select("occurred_at, company_id, contact_id")
@@ -167,7 +147,7 @@ export function TerritoryCommandCenterPage() {
             .is("deleted_at", null)
             .limit(1000);
           if (error) throw new Error(error.message);
-          return (data ?? []) as ActivityRow[];
+          return normalizeTerritoryActivityRows(data);
         },
         staleTime: 60_000,
       },

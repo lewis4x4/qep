@@ -26,6 +26,17 @@ export interface TerritoryActivityRow {
   contact_id: string | null;
 }
 
+export interface TerritoryRow {
+  id: string;
+  name: string;
+  description: string | null;
+  assigned_rep_id: string | null;
+}
+
+export interface TerritoryLinkRow {
+  contact_id: string;
+}
+
 export interface TerritoryPriorityRow {
   key: string;
   companyId: string | null;
@@ -56,8 +67,113 @@ function daysBetween(from: string | null | undefined, nowTime: number): number |
   return Math.floor((nowTime - parsed) / 86_400_000);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function requiredString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function stringIdsFromRows(rows: unknown, key: string): string[] {
+  if (!Array.isArray(rows)) return [];
+
+  return [...new Set(rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const value = row[key];
+    return typeof value === "string" && value.trim().length > 0 ? [value] : [];
+  }))];
+}
+
 export function buildTerritoryCommandHref(territoryId: string): string {
   return `/qrm/territories/${territoryId}/command`;
+}
+
+export function normalizeTerritoryRow(row: unknown): TerritoryRow | null {
+  if (!isRecord(row) || typeof row.id !== "string") return null;
+
+  return {
+    id: row.id,
+    name: requiredString(row.name, "Unnamed territory"),
+    description: nullableString(row.description),
+    assigned_rep_id: nullableString(row.assigned_rep_id),
+  };
+}
+
+export function normalizeTerritoryLinkRows(rows: unknown): TerritoryLinkRow[] {
+  return stringIdsFromRows(rows, "contact_id").map((contact_id) => ({ contact_id }));
+}
+
+export function extractTerritoryCompanyIds(rows: unknown): string[] {
+  return stringIdsFromRows(rows, "primary_company_id");
+}
+
+export function normalizeTerritoryContactRows(rows: unknown): TerritoryContactRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      first_name: requiredString(row.first_name, ""),
+      last_name: requiredString(row.last_name, ""),
+      primary_company_id: nullableString(row.primary_company_id),
+    }];
+  });
+}
+
+export function normalizeTerritoryCompanyRows(rows: unknown): TerritoryCompanyRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      name: requiredString(row.name, "Unnamed account"),
+    }];
+  });
+}
+
+export function normalizeTerritoryDealRows(rows: unknown): TerritoryDealRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      name: requiredString(row.name, "Unnamed deal"),
+      company_id: nullableString(row.company_id),
+      primary_contact_id: nullableString(row.primary_contact_id),
+      amount: nullableNumber(row.amount),
+      expected_close_on: nullableString(row.expected_close_on),
+      next_follow_up_at: nullableString(row.next_follow_up_at),
+    }];
+  });
+}
+
+export function normalizeTerritoryActivityRows(rows: unknown): TerritoryActivityRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.occurred_at !== "string") return [];
+
+    return [{
+      occurred_at: row.occurred_at,
+      company_id: nullableString(row.company_id),
+      contact_id: nullableString(row.contact_id),
+    }];
+  });
 }
 
 export function computeTerritoryVisitPriorities(input: {
