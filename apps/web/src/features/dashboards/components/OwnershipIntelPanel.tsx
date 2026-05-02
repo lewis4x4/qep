@@ -14,38 +14,7 @@ import {
   buildIncentiveEligibleDeals,
   computePredictionLedgerAccuracy,
   summarizeIncentiveExposure,
-  type DealEquipmentLinkRow,
-  type ExpiringIncentiveRow,
-  type ForecastDealRow,
 } from "../lib/ownership-intel";
-
-interface MarginAnalyticsRow {
-  rep_id: string | null;
-  rep_name: string | null;
-  equipment_category: string | null;
-  month_bucket: string | null;
-  deal_count: number | null;
-  total_pipeline: number | null;
-  avg_margin_pct: number | null;
-  flagged_deal_count: number | null;
-}
-
-interface PipelineVelocityRow {
-  stage_id: string | null;
-  stage_name: string | null;
-  sort_order: number | null;
-  open_deal_count: number | null;
-  raw_pipeline: number | null;
-  weighted_pipeline: number | null;
-  avg_days_in_stage: number | null;
-  max_days_in_stage: number | null;
-  threshold_days: number | null;
-  is_bottleneck: boolean | null;
-}
-
-interface PredictionLedgerRow {
-  outcome: string | null;
-}
 
 function canSeeOwnershipIntel(role: string | null | undefined): boolean {
   return role === "admin" || role === "manager" || role === "owner";
@@ -106,14 +75,14 @@ export function OwnershipIntelPanel() {
     return null;
   }
 
-  const marginRows = ((data?.marginAnalytics ?? []) as MarginAnalyticsRow[]).slice(0, 12);
-  const velocityRows = ((data?.pipelineVelocity ?? []) as PipelineVelocityRow[])
+  const marginRows = (data?.marginAnalytics ?? []).slice(0, 12);
+  const velocityRows = (data?.pipelineVelocity ?? [])
     .filter((row) => (row.open_deal_count ?? 0) > 0)
     .sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999));
-  const forecastDeals = (data?.forecastDeals ?? []) as ForecastDealRow[];
-  const equipmentLinks = (data?.dealEquipmentLinks ?? []) as DealEquipmentLinkRow[];
-  const expiringIncentives = (data?.expiringIncentives ?? []) as ExpiringIncentiveRow[];
-  const resolvedPredictions = (data?.resolvedPredictions ?? []) as PredictionLedgerRow[];
+  const forecastDeals = data?.forecastDeals ?? [];
+  const equipmentLinks = data?.dealEquipmentLinks ?? [];
+  const expiringIncentives = data?.expiringIncentives ?? [];
+  const resolvedPredictions = data?.resolvedPredictions ?? [];
 
   const forecastBuckets = buildForecastBuckets(forecastDeals);
   const eligibleDeals = buildIncentiveEligibleDeals(forecastDeals, equipmentLinks);

@@ -12,10 +12,10 @@ export function IronManagerDashboard() {
   useDashboardRealtime("iron_manager", ["dashboard", "iron-manager"]);
 
   const totalPipeline = (data?.pipelineDeals ?? []).reduce(
-    (sum: number, d: any) => sum + (d.amount ?? 0),
+    (sum, deal) => sum + (deal.amount ?? 0),
     0,
   );
-  const targetsMet = (data?.kpis ?? []).filter((k: any) => k.target_met).length;
+  const targetsMet = (data?.kpis ?? []).filter((kpi) => kpi.target_met).length;
   const totalAdvisors = (data?.kpis ?? []).length;
   const agingCount = data?.agingEquipment?.length ?? 0;
 

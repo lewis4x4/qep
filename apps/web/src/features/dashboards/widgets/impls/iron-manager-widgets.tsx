@@ -38,26 +38,26 @@ export function PipelineByRepWidget() {
 export function ApprovalQueueWidget() {
   const { data, isLoading, isError } = useIronManagerData();
   const items = [
-    ...(data?.pendingDemos ?? []).map((d: any) => ({
-      id: d.id,
-      deal_id: d.deal_id,
+    ...(data?.pendingDemos ?? []).map((demo) => ({
+      id: demo.id,
+      deal_id: demo.deal_id ?? undefined,
       type: "demo" as const,
       label: "Demo Request",
-      detail: `${d.equipment_category} demo`,
+      detail: `${demo.equipment_category ?? "Equipment"} demo`,
     })),
-    ...(data?.pendingTrades ?? []).map((t: any) => ({
-      id: t.id,
-      deal_id: t.deal_id,
+    ...(data?.pendingTrades ?? []).map((trade) => ({
+      id: trade.id,
+      deal_id: trade.deal_id ?? undefined,
       type: "trade" as const,
-      label: `${t.make} ${t.model}`,
-      detail: `Preliminary: $${t.preliminary_value?.toLocaleString() ?? "N/A"}`,
+      label: `${trade.make ?? "Unknown"} ${trade.model ?? "trade"}`,
+      detail: `Preliminary: $${trade.preliminary_value?.toLocaleString() ?? "N/A"}`,
     })),
-    ...(data?.marginFlags ?? []).map((m: any) => ({
-      id: m.id,
-      deal_id: m.id,
+    ...(data?.marginFlags ?? []).map((margin) => ({
+      id: margin.id,
+      deal_id: margin.id,
       type: "margin" as const,
-      label: m.name,
-      detail: `Margin: ${formatPercentLabel(m.margin_pct)}%`,
+      label: margin.name ?? "Margin review",
+      detail: `Margin: ${formatPercentLabel(margin.margin_pct)}%`,
     })),
   ];
   return (

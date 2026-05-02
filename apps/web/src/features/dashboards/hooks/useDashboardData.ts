@@ -1,6 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { buildPipelineHealthByRep, type PipelineDealRow, type DealStageRow, type RepProfileRow } from "../lib/pipeline-health";
+import type { Database } from "@/lib/database.types";
+import {
+  buildPipelineHealthByRep,
+  type DealStageRow,
+  type PipelineDealRow,
+  type PipelineHealthRow,
+  type RepProfileRow,
+} from "../lib/pipeline-health";
+import type {
+  DealEquipmentLinkRow,
+  ExpiringIncentiveRow,
+  ForecastDealRow,
+  PredictionLedgerRow,
+} from "../lib/ownership-intel";
 
 /** Fleet / registry rows older than this many days surface as aging inventory (punch list: Iron Manager). */
 const INVENTORY_AGING_DAYS = 90;
@@ -8,10 +21,121 @@ const INVENTORY_AGING_DAYS = 90;
 /** Open deals sampled for manager pipeline health (per-rep swim lanes). */
 const PIPELINE_DEALS_SAMPLE = 250;
 
+type PublicSchema = Database["public"];
+type TableRow<TableName extends keyof PublicSchema["Tables"]> = PublicSchema["Tables"][TableName]["Row"];
+type ViewRow<ViewName extends keyof PublicSchema["Views"]> = PublicSchema["Views"][ViewName]["Row"];
+type FunctionRows<FunctionName extends keyof PublicSchema["Functions"]> =
+  PublicSchema["Functions"][FunctionName]["Returns"] extends Array<infer Row> ? Row : never;
+
+export type PendingDemoRow = Pick<TableRow<"demos">, "id" | "deal_id" | "status" | "equipment_category" | "created_at">;
+export type PendingTradeRow = Pick<TableRow<"trade_valuations">, "id" | "deal_id" | "make" | "model" | "status" | "preliminary_value">;
+export type ProspectingKpiRow = Pick<TableRow<"prospecting_kpis">, "rep_id" | "positive_visits" | "target" | "target_met" | "kpi_date">;
+
+export interface MarginFlagRow {
+  id: string;
+  name: string | null;
+  margin_pct: number | null;
+  margin_check_status: string | null;
+}
+
+export interface AgingEquipmentRow {
+  id: string;
+  name: string;
+  created_at: string;
+  company_id: string;
+  crm_companies?: { name: string | null } | { name: string | null }[] | null;
+}
+
+export type MarginAnalyticsRow = Pick<
+  ViewRow<"margin_analytics_view">,
+  "rep_id" | "rep_name" | "equipment_category" | "month_bucket" | "deal_count" | "total_pipeline" | "avg_margin_pct" | "flagged_deal_count"
+>;
+export type PipelineVelocityRow = FunctionRows<"pipeline_velocity_rpc">;
+
+export interface IronManagerData {
+  pendingDemos: PendingDemoRow[];
+  pendingTrades: PendingTradeRow[];
+  marginFlags: MarginFlagRow[];
+  kpis: ProspectingKpiRow[];
+  pipelineDeals: PipelineDealRow[];
+  dealStages: DealStageRow[];
+  pipelineHealthByRep: PipelineHealthRow[];
+  repProfiles: RepProfileRow[];
+  agingEquipment: AgingEquipmentRow[];
+  approvalCount: number;
+  marginAnalytics: MarginAnalyticsRow[];
+  pipelineVelocity: PipelineVelocityRow[];
+  forecastDeals: ForecastDealRow[];
+  expiringIncentives: ExpiringIncentiveRow[];
+  dealEquipmentLinks: DealEquipmentLinkRow[];
+  resolvedPredictions: PredictionLedgerRow[];
+}
+
+function rowsOrEmpty<Row>(rows: Row[] | null | undefined): Row[] {
+  return rows ?? [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function nullableNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeMarginFlags(rows: unknown): MarginFlagRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row): MarginFlagRow | null => {
+      if (!isRecord(row) || typeof row.id !== "string") return null;
+      return {
+        id: row.id,
+        name: nullableString(row.name),
+        margin_pct: nullableNumber(row.margin_pct),
+        margin_check_status: nullableString(row.margin_check_status),
+      };
+    })
+    .filter((row): row is MarginFlagRow => row !== null);
+}
+
+function normalizeAgingEquipment(rows: unknown): AgingEquipmentRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row): AgingEquipmentRow | null => {
+      if (!isRecord(row) || typeof row.id !== "string" || typeof row.created_at !== "string") return null;
+      return {
+        id: row.id,
+        name: nullableString(row.name) ?? "Unnamed equipment",
+        created_at: row.created_at,
+        company_id: nullableString(row.company_id) ?? "",
+        crm_companies: normalizeJoinedCompany(row.crm_companies),
+      };
+    })
+    .filter((row): row is AgingEquipmentRow => row !== null);
+}
+
+function normalizeJoinedCompany(value: unknown): AgingEquipmentRow["crm_companies"] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (isRecord(item) ? { name: nullableString(item.name) } : null))
+      .filter((item): item is { name: string | null } => item !== null);
+  }
+  return isRecord(value) ? { name: nullableString(value.name) } : null;
+}
+
 export function useIronManagerData() {
-  return useQuery({
+  return useQuery<IronManagerData>({
     queryKey: ["dashboard", "iron-manager"],
-    queryFn: async () => {
+    queryFn: async (): Promise<IronManagerData> => {
       const sb = supabase;
       const today = new Date();
       const todayStr = today.toISOString().split("T")[0];
@@ -87,35 +211,37 @@ export function useIronManagerData() {
           .limit(200),
       ]);
 
-      const deals = (pipelineDeals ?? []) as PipelineDealRow[];
-      const stages = (dealStages ?? []) as DealStageRow[];
+      const deals: PipelineDealRow[] = rowsOrEmpty(pipelineDeals);
+      const stages: DealStageRow[] = rowsOrEmpty(dealStages);
       const repIds = [...new Set(deals.map((d) => d.assigned_rep_id).filter((id): id is string => Boolean(id)))];
 
       let repProfiles: RepProfileRow[] = [];
       if (repIds.length > 0) {
         const { data: profiles } = await sb.from("profiles").select("id, full_name, email").in("id", repIds);
-        repProfiles = (profiles ?? []) as RepProfileRow[];
+        repProfiles = rowsOrEmpty(profiles);
       }
 
+      const normalizedMarginFlags = normalizeMarginFlags(marginFlags);
+      const normalizedAgingEquipment = normalizeAgingEquipment(agingEquipment);
       const pipelineHealthByRep = buildPipelineHealthByRep(deals, stages, repProfiles);
 
       return {
-        pendingDemos: pendingDemos ?? [],
-        pendingTrades: pendingTrades ?? [],
-        marginFlags: marginFlags ?? [],
-        kpis: kpis ?? [],
-        pipelineDeals: pipelineDeals ?? [],
+        pendingDemos: rowsOrEmpty(pendingDemos),
+        pendingTrades: rowsOrEmpty(pendingTrades),
+        marginFlags: normalizedMarginFlags,
+        kpis: rowsOrEmpty(kpis),
+        pipelineDeals: deals,
         dealStages: stages,
         pipelineHealthByRep,
         repProfiles,
-        agingEquipment: agingEquipment ?? [],
-        approvalCount: (pendingDemos?.length ?? 0) + (pendingTrades?.length ?? 0) + (marginFlags?.length ?? 0),
-        marginAnalytics: marginAnalytics ?? [],
-        pipelineVelocity: pipelineVelocity ?? [],
-        forecastDeals: forecastDeals ?? [],
-        expiringIncentives: expiringIncentives ?? [],
-        dealEquipmentLinks: dealEquipmentLinks ?? [],
-        resolvedPredictions: resolvedPredictions ?? [],
+        agingEquipment: normalizedAgingEquipment,
+        approvalCount: (pendingDemos?.length ?? 0) + (pendingTrades?.length ?? 0) + normalizedMarginFlags.length,
+        marginAnalytics: rowsOrEmpty(marginAnalytics),
+        pipelineVelocity: rowsOrEmpty(pipelineVelocity),
+        forecastDeals: rowsOrEmpty(forecastDeals),
+        expiringIncentives: rowsOrEmpty(expiringIncentives),
+        dealEquipmentLinks: rowsOrEmpty(dealEquipmentLinks),
+        resolvedPredictions: rowsOrEmpty(resolvedPredictions),
       };
     },
     staleTime: 30_000,
