@@ -20,6 +20,40 @@ interface IncentiveRow {
   discount_value: number | null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeIncentives(rows: unknown): IncentiveRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map(normalizeIncentive).filter((row): row is IncentiveRow => row !== null);
+}
+
+function normalizeIncentive(value: unknown): IncentiveRow | null {
+  if (!isRecord(value) || typeof value.id !== "string") return null;
+  return {
+    id: value.id,
+    manufacturer: nullableString(value.manufacturer),
+    program_name: nullableString(value.program_name),
+    expiration_date: nullableString(value.expiration_date),
+    discount_type: nullableString(value.discount_type),
+    discount_value: numberValue(value.discount_value),
+  };
+}
+
 function dateShort(iso: string | null): string {
   if (!iso) return "today";
   return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
@@ -27,7 +61,7 @@ function dateShort(iso: string | null): string {
 
 export function ExpiringIncentivesStrip() {
   const { data } = useIronManagerData();
-  const incentives = (data?.expiringIncentives ?? []) as IncentiveRow[];
+  const incentives = normalizeIncentives(data?.expiringIncentives ?? []);
 
   if (incentives.length === 0) return null;
 

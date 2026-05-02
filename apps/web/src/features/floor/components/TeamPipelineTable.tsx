@@ -15,6 +15,44 @@ import { Loader2, Users } from "lucide-react";
 import { useIronManagerData } from "@/features/dashboards/hooks/useDashboardData";
 import type { PipelineHealthRow } from "@/features/dashboards/lib/pipeline-health";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizePipelineHealthRows(rows: unknown): PipelineHealthRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map(normalizePipelineHealthRow).filter((row): row is PipelineHealthRow => row !== null);
+}
+
+function normalizePipelineHealthRow(value: unknown): PipelineHealthRow | null {
+  if (!isRecord(value)) return null;
+  const repKey = nonEmptyString(value.repKey);
+  if (!repKey) return null;
+  return {
+    repKey,
+    displayName: nonEmptyString(value.displayName) ?? "Unassigned",
+    preSale: numberValue(value.preSale) ?? 0,
+    close: numberValue(value.close) ?? 0,
+    postSale: numberValue(value.postSale) ?? 0,
+    dealCount: numberValue(value.dealCount) ?? 0,
+    totalValue: numberValue(value.totalValue) ?? 0,
+    avgDaysIdle: numberValue(value.avgDaysIdle),
+  };
+}
+
 function formatUsd(value: number | null | undefined): string {
   const n = Number(value ?? 0);
   if (!Number.isFinite(n) || n === 0) return "$0";
@@ -67,7 +105,7 @@ export function TeamPipelineTable() {
   const { data, isLoading, isError } = useIronManagerData();
 
   const rows = useMemo<PipelineHealthRow[]>(() => {
-    const source = (data?.pipelineHealthByRep ?? []) as PipelineHealthRow[];
+    const source = normalizePipelineHealthRows(data?.pipelineHealthByRep ?? []);
     return [...source].sort((a, b) => {
       const aIdle = a.avgDaysIdle ?? -1;
       const bIdle = b.avgDaysIdle ?? -1;

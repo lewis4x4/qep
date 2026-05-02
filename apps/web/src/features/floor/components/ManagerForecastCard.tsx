@@ -21,6 +21,40 @@ interface ForecastDealRow {
   stage_name: string | null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeForecastDeals(rows: unknown): ForecastDealRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map(normalizeForecastDeal).filter((row): row is ForecastDealRow => row !== null);
+}
+
+function normalizeForecastDeal(value: unknown): ForecastDealRow | null {
+  if (!isRecord(value) || typeof value.id !== "string") return null;
+  return {
+    id: value.id,
+    name: nullableString(value.name),
+    amount: numberValue(value.amount),
+    weighted_amount: numberValue(value.weighted_amount),
+    expected_close_on: nullableString(value.expected_close_on),
+    stage_name: nullableString(value.stage_name),
+  };
+}
+
 function formatUsd(value: number | null | undefined): string {
   const n = Number(value ?? 0);
   if (!Number.isFinite(n) || n === 0) return "$0";
@@ -37,7 +71,7 @@ export function ManagerForecastCard() {
   const { data, isLoading, isError } = useIronManagerData();
 
   const stats = useMemo(() => {
-    const deals = (data?.forecastDeals ?? []) as ForecastDealRow[];
+    const deals = normalizeForecastDeals(data?.forecastDeals ?? []);
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
