@@ -8,9 +8,13 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { DeckSurface } from "../components/command-deck";
-import { buildRepSkuBoard } from "../lib/rep-sku";
-import type { PipelineDealRow, DealStageRow, RepProfileRow } from "@/features/dashboards/lib/pipeline-health";
-import type { TimeBankRow } from "../lib/time-bank";
+import {
+  buildRepSkuBoard,
+  normalizeRepSkuDealRows,
+  normalizeRepSkuProfileRows,
+  normalizeRepSkuStageRows,
+  normalizeRepSkuTimeBankRows,
+} from "../lib/rep-sku";
 import { crmSupabase } from "../lib/qrm-supabase";
 
 function confidenceTone(confidence: "high" | "medium" | "low"): string {
@@ -108,10 +112,10 @@ export function RepSkuPage() {
       }
 
       return buildRepSkuBoard({
-        deals: (dealsResult.data ?? []) as PipelineDealRow[],
-        stages: (stagesResult.data ?? []) as DealStageRow[],
-        repProfiles: (profilesResult.data ?? []) as RepProfileRow[],
-        timeBankRows: (timeBankResult.data ?? []) satisfies TimeBankRow[],
+        deals: normalizeRepSkuDealRows(dealsResult.data),
+        stages: normalizeRepSkuStageRows(stagesResult.data),
+        repProfiles: normalizeRepSkuProfileRows(profilesResult.data),
+        timeBankRows: normalizeRepSkuTimeBankRows(timeBankResult.data),
         kpis: [...kpiAgg.entries()].map(([repId, value]) => ({
           repId,
           positiveVisits: value.positiveVisits,

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { buildRepSkuBoard } from "./rep-sku";
+import {
+  buildRepSkuBoard,
+  normalizeRepSkuDealRows,
+  normalizeRepSkuProfileRows,
+  normalizeRepSkuStageRows,
+  normalizeRepSkuTimeBankRows,
+} from "./rep-sku";
 import type { PipelineDealRow, DealStageRow, RepProfileRow } from "@/features/dashboards/lib/pipeline-health";
 import type { TimeBankRow } from "./time-bank";
 
@@ -93,5 +99,68 @@ describe("buildRepSkuBoard", () => {
 
     expect(board.summary.reps).toBe(0);
     expect(board.reps).toHaveLength(0);
+  });
+});
+
+describe("rep sku row normalizers", () => {
+  it("normalizes pipeline rows before rep packaging", () => {
+    expect(normalizeRepSkuDealRows([
+      { id: "deal-1", stage_id: "", amount: Number.NaN, assigned_rep_id: "rep-1", last_activity_at: 42 },
+      { stage_id: "lead" },
+    ])).toEqual([
+      {
+        id: "deal-1",
+        stage_id: "__missing_stage__",
+        amount: null,
+        assigned_rep_id: "rep-1",
+        last_activity_at: null,
+      },
+    ]);
+
+    expect(normalizeRepSkuStageRows([
+      { id: "stage-1", sort_order: "bad", name: "" },
+      null,
+    ])).toEqual([
+      { id: "stage-1", sort_order: 0, name: "Unnamed stage" },
+    ]);
+
+    expect(normalizeRepSkuProfileRows([
+      { id: "rep-1", full_name: "Alex Stone", email: 17 },
+      { full_name: "No id" },
+    ])).toEqual([
+      { id: "rep-1", full_name: "Alex Stone", email: null },
+    ]);
+  });
+
+  it("normalizes time-bank RPC rows before overload scoring", () => {
+    expect(normalizeRepSkuTimeBankRows([
+      {
+        deal_id: "deal-1",
+        deal_name: "",
+        assigned_rep_id: "rep-1",
+        stage_id: null,
+        pct_used: 1.4,
+        is_over: true,
+      },
+      { deal_name: "Missing id" },
+    ])).toEqual([
+      {
+        deal_id: "deal-1",
+        deal_name: "Unnamed deal",
+        company_id: null,
+        company_name: null,
+        assigned_rep_id: "rep-1",
+        assigned_rep_name: null,
+        stage_id: "__missing_stage__",
+        stage_name: "Unnamed stage",
+        days_in_stage: 0,
+        stage_age_days: 0,
+        budget_days: 0,
+        has_explicit_budget: false,
+        remaining_days: 0,
+        pct_used: 1.4,
+        is_over: true,
+      },
+    ]);
   });
 });

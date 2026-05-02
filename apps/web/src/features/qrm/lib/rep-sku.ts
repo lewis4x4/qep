@@ -38,6 +38,100 @@ interface RepSkuInternalRow extends RepSkuBoardRow {
   hasFieldSignal: boolean;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function requiredString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function requiredNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function requiredBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+export function normalizeRepSkuDealRows(rows: unknown): PipelineDealRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      stage_id: requiredString(row.stage_id, "__missing_stage__"),
+      amount: nullableNumber(row.amount),
+      assigned_rep_id: nullableString(row.assigned_rep_id),
+      last_activity_at: nullableString(row.last_activity_at),
+    }];
+  });
+}
+
+export function normalizeRepSkuStageRows(rows: unknown): DealStageRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      sort_order: requiredNumber(row.sort_order, 0),
+      name: requiredString(row.name, "Unnamed stage"),
+    }];
+  });
+}
+
+export function normalizeRepSkuProfileRows(rows: unknown): RepProfileRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      full_name: nullableString(row.full_name),
+      email: nullableString(row.email),
+    }];
+  });
+}
+
+export function normalizeRepSkuTimeBankRows(rows: unknown): TimeBankRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.deal_id !== "string") return [];
+
+    return [{
+      deal_id: row.deal_id,
+      deal_name: requiredString(row.deal_name, "Unnamed deal"),
+      company_id: nullableString(row.company_id),
+      company_name: nullableString(row.company_name),
+      assigned_rep_id: nullableString(row.assigned_rep_id),
+      assigned_rep_name: nullableString(row.assigned_rep_name),
+      stage_id: requiredString(row.stage_id, "__missing_stage__"),
+      stage_name: requiredString(row.stage_name, "Unnamed stage"),
+      days_in_stage: requiredNumber(row.days_in_stage, 0),
+      stage_age_days: requiredNumber(row.stage_age_days, 0),
+      budget_days: requiredNumber(row.budget_days, 0),
+      has_explicit_budget: requiredBoolean(row.has_explicit_budget, false),
+      remaining_days: requiredNumber(row.remaining_days, 0),
+      pct_used: requiredNumber(row.pct_used, 0),
+      is_over: requiredBoolean(row.is_over, false),
+    }];
+  });
+}
+
 function average(values: number[]): number | null {
   if (values.length === 0) return null;
   return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
