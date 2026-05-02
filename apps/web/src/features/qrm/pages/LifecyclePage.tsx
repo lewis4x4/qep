@@ -9,27 +9,16 @@ import { supabase } from "@/lib/supabase";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { fetchAccount360 } from "../lib/account-360-api";
 import { buildAccountCommandHref } from "../lib/account-command";
-import { eventLabel, summarizeCustomerTimeline, type CustomerTimelineEvent } from "../lib/customer-timeline";
+import {
+  eventLabel,
+  normalizeCustomerLifecycleEventRows,
+  summarizeCustomerTimeline,
+  toCustomerTimelineEvent,
+  type CustomerLifecycleEventRow,
+} from "../lib/customer-timeline";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 
-interface LifecycleEvent extends CustomerTimelineEvent {
-  id: string;
-  company_id: string;
-  event_type:
-    | "first_contact"
-    | "first_quote"
-    | "first_purchase"
-    | "first_service"
-    | "first_warranty_claim"
-    | "nps_response"
-    | "churn_risk_flag"
-    | "won_back"
-    | "lost";
-  event_at: string;
-  source_table: string | null;
-}
-
-const EVENT_META: Record<LifecycleEvent["event_type"], { icon: React.ReactNode; tone: string }> = {
+const EVENT_META: Record<CustomerLifecycleEventRow["event_type"], { icon: React.ReactNode; tone: string }> = {
   first_contact:        { icon: <Phone className="h-3 w-3" />,         tone: "text-blue-400 border-blue-500/30" },
   first_quote:          { icon: <FileText className="h-3 w-3" />,      tone: "text-violet-400 border-violet-500/30" },
   first_purchase:       { icon: <ShoppingBag className="h-3 w-3" />,   tone: "text-emerald-400 border-emerald-500/30" },
@@ -62,7 +51,7 @@ export function LifecyclePage() {
         .order("event_at", { ascending: true })
         .limit(500);
       if (error) throw new Error("Failed to load lifecycle");
-      return (data ?? []) as LifecycleEvent[];
+      return normalizeCustomerLifecycleEventRows(data);
     },
     enabled: Boolean(resolvedCompanyId),
     staleTime: 60_000,
@@ -92,13 +81,7 @@ export function LifecyclePage() {
   }
 
   const timelineRows = timelineData ?? [];
-  const summary = summarizeCustomerTimeline(timelineRows.map((event) => ({
-    id: event.id,
-    eventType: event.event_type,
-    eventAt: event.event_at,
-    sourceTable: event.source_table,
-    metadata: (event.metadata ?? {}) as Record<string, unknown>,
-  })));
+  const summary = summarizeCustomerTimeline(timelineRows.map(toCustomerTimelineEvent));
   const counts = useMemo(() => ({
     firstContactCount: timelineRows.filter((event) => event.event_type === "first_contact").length,
     firstQuoteCount: timelineRows.filter((event) => event.event_type === "first_quote").length,
