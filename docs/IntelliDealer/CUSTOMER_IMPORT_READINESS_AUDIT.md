@@ -151,6 +151,8 @@ The purge script has a hard guard against `parts_*`, `_parts_`, `vendor_part_cat
 
 ## Current Readiness
 
+Current status note, 2026-05-03: this readiness audit is historical. The authoritative current closeout state is `INTELLIDEALER_HANDOFF_CLOSEOUT_CONTROL.md`; the production-proven import evidence is `CUSTOMER_IMPORT_FINAL_RECONCILIATION.md` and `FRESH_PRODUCTION_VERIFICATION_2026-05-03.md`. Wave 5 external integrations are tracked separately in `WAVE_5_DEFERRED_INTEGRATION_REGISTER_2026-05-03.md`.
+
 Ready:
 
 - Source workbook can be parsed locally without third-party spreadsheet libraries.

@@ -1,5 +1,7 @@
 # Builder Handoff — Execute the IntelliDealer → QEP Migration
 
+Current status note, 2026-05-03: this document is historical build-planning context. The current closeout authority is `docs/IntelliDealer/INTELLIDEALER_HANDOFF_CLOSEOUT_CONTROL.md`. Waves 0-4 are implemented and Wave 5 external integrations are deferred in `docs/IntelliDealer/WAVE_5_DEFERRED_INTEGRATION_REGISTER_2026-05-03.md`; do not use this handoff as an instruction to restart Waves 0-5.
+
 This document is the **single brief** you give to the implementer (human engineer or agent) to execute the audit. The implementer does **not** need to read the conversation that produced the audit bundle — everything they need is below or referenced from here.
 
 ---

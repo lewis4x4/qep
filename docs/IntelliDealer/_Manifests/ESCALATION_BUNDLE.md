@@ -1,5 +1,7 @@
 # Escalation Bundle
 
+Current status note, 2026-05-03: this bundle is historical escalation context. The current IntelliDealer handoff closeout authority is `docs/IntelliDealer/INTELLIDEALER_HANDOFF_CLOSEOUT_CONTROL.md`. The core customer import is production-proven; Wave 5 external integrations are registered separately in `docs/IntelliDealer/WAVE_5_DEFERRED_INTEGRATION_REGISTER_2026-05-03.md`.
+
 ## 2026-04-22 — Phase-4 Service — Technician field UAT
 
 - What I was doing: closing workbook row `5` for service mobile technician validation.

@@ -74,6 +74,8 @@ Each phase folder has its own `INDEX.md` listing every file with its IntelliDeal
 
 ## Critical blockers (P0)
 
+Current status note, 2026-05-03: this section is historical and has been superseded by `INTELLIDEALER_HANDOFF_CLOSEOUT_CONTROL.md`. The core customer import no longer depends on VitalEdge/IntelliDealer API access or HubSpot API access. Wave 5 external integrations remain deferred separately in `WAVE_5_DEFERRED_INTEGRATION_REGISTER_2026-05-03.md`.
+
 - **VitalEdge/IntelliDealer API access** — blocks all data migration. Escalate with QEP for account rep intro.
 - **HubSpot API key** — blocks Phase 1 CRM migration. Request from Rylee.
 

@@ -21,7 +21,7 @@ If another document conflicts with this one, treat this document as the current 
 | Gap-audit Waves 0-4 | Implemented and remote-push verified through `506_*` by the 2026-04-27 cutover gate | `docs/intellidealer-gap-audit/_migration_order.md` | Core schema, reporting views, sensitive-field hardening, and computed/reporting surfaces were shipped for the gap-audit waves. |
 | Customer import migrations `508_*`-`519_*` | Applied remotely per the final reconciliation | `CUSTOMER_IMPORT_FINAL_RECONCILIATION.md` | Customer import staging, dashboard, storage, redaction, counts RPC, and commit transition guard are part of the production baseline. |
 | Latest local migration range | Present locally through `521_floor_customer_legacy_search_layouts.sql` | `supabase/migrations/` | Migrations after `519_*` must be treated by their own feature gates; they are not required to prove the core customer import. |
-| Wave 5 external integrations | Deferred, not complete | `_migration_order.md` Wave 5 status | AvaTax live wiring, VESign, UPS WorldShip, OEM imports, and Tethr are intentionally not marked complete. |
+| Wave 5 external integrations | Registered deferred, not implemented | `WAVE_5_DEFERRED_INTEGRATION_REGISTER_2026-05-03.md`, `_migration_order.md` Wave 5 status | AvaTax live wiring, VESign, UPS WorldShip, JD Quote II, OEM imports, and Tethr are intentionally parked with prerequisites and are not marked complete. |
 | Audit manifest / YAML inventory | Regenerated 2026-05-03 | `docs/intellidealer-gap-audit/manifest.yaml`, `_blockers.csv`, phase YAMLs | The inventory now reflects the current `Database` type under a conservative table/column-exists rule. Remaining blocker count is `91` must-fix rows. |
 | Raw source file custody | Manifested 2026-05-03 | `SOURCE_FILE_CUSTODY_MANIFEST.md` | The raw files remain untracked, but filename, size, SHA-256, page counts, workbook row counts, and import run binding are now committed and script-verifiable. |
 | Fresh production verification | Passed 2026-05-03 | `FRESH_PRODUCTION_VERIFICATION_2026-05-03.md` | Rerun safety, production reconciliation, production browser smoke, storage cleanup, and active-run checks passed against the current production bundle. |
@@ -295,16 +295,24 @@ Current result:
 
 ### Slice 7: Wave 5 Deferred Integration Register
 
+Status: complete 2026-05-03.
+
 Goal: make deferred external dependencies explicit.
 
 Deliverables:
 
 - One register row each for AvaTax, VESign, UPS WorldShip, JD Quote II, OEM base/options imports, and Tethr.
 - For each row: credentials needed, owner, target UI, schema status, API dependency, test plan, and cutover impact.
+- Correct stale Wave 5 migration-order language so `507_post_build_security_audit_fixes.sql` is not misread as Wave 5 integration work.
 
 Gate:
 
-- Deferred work is intentionally parked with owners and prerequisites, not lost.
+- PASS. Deferred work is intentionally parked with owners and prerequisites, not lost.
+
+Result:
+
+- `WAVE_5_DEFERRED_INTEGRATION_REGISTER_2026-05-03.md` records current repo evidence, blockers, prerequisites, target UI, test plan, and cutover impact for all six deferred integrations.
+- Slice 7 is documentation-only. It registers Wave 5 deferred integrations and does not claim implementation, deployment, credentials, migrations, edge functions, or production connectivity.
 
 ### Slice 8: Final Signoff Pack
 
