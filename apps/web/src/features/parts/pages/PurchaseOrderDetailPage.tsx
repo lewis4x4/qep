@@ -10,86 +10,14 @@ import {
   formatVendorPurchaseOrderStatus,
   formatVendorPurchaseOrderType,
   nextVendorPurchaseOrderStatuses,
+  normalizePurchaseOrderAttachments,
+  normalizePurchaseOrderEquipmentModels,
+  normalizePurchaseOrderHeader,
+  normalizePurchaseOrderLines,
+  normalizePurchaseOrderTouchpoints,
   sumVendorPurchaseOrderLines,
-  type VendorPurchaseOrderStatus,
-  type VendorPurchaseOrderType,
+  type PurchaseOrderHeaderUpdate,
 } from "../lib/purchase-order-utils";
-
-type PurchaseOrderHeader = {
-  id: string;
-  po_number: string;
-  vendor_id: string;
-  order_type: VendorPurchaseOrderType;
-  status: VendorPurchaseOrderStatus;
-  location_code: string | null;
-  description: string | null;
-  crm_company_id: string | null;
-  order_comments: string | null;
-  shipping_contact_name: string | null;
-  shipping_address_line_1: string | null;
-  shipping_address_line_2: string | null;
-  shipping_city: string | null;
-  shipping_state: string | null;
-  shipping_postal_code: string | null;
-  shipping_country: string | null;
-  shipping_method: string | null;
-  shipping_charge_cents: number;
-  delivery_notes: string | null;
-  terms_and_conditions: string | null;
-  long_description: string | null;
-  authorized_at: string | null;
-  ordered_at: string | null;
-  completed_at: string | null;
-  created_at: string;
-  vendor_profiles?: { name?: string } | { name?: string }[] | null;
-  crm_companies?: { name?: string } | { name?: string }[] | null;
-};
-
-type PurchaseOrderLine = {
-  id: string;
-  purchase_order_id: string;
-  line_number: number;
-  line_type: "miscellaneous" | "equipment_base" | "option";
-  item_code: string | null;
-  description: string;
-  quantity: number;
-  unit_cost_cents: number;
-};
-
-type Touchpoint = {
-  id: string;
-  purchase_order_id: string;
-  contact_name: string | null;
-  note: string;
-  occurred_at: string;
-};
-
-type VendorRow = {
-  id: string;
-  name: string;
-};
-
-type EquipmentModel = {
-  id: string;
-  brand_id: string;
-  model_code: string;
-  name_display: string;
-  list_price_cents: number;
-};
-
-type AttachmentRow = {
-  id: string;
-  brand_id: string | null;
-  name: string;
-  list_price_cents: number;
-  compatible_model_ids: string[] | null;
-  universal: boolean;
-};
-
-function one<T>(value: T | T[] | null | undefined): T | null {
-  if (value == null) return null;
-  return Array.isArray(value) ? (value[0] ?? null) : value;
-}
 
 export function PurchaseOrderDetailPage() {
   const { id = "" } = useParams<{ id: string }>();
@@ -106,17 +34,13 @@ export function PurchaseOrderDetailPage() {
     queryKey: ["vendor-purchase-order", id],
     enabled: id.length > 0,
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { eq: (column: string, value: string) => { maybeSingle: () => Promise<{ data: PurchaseOrderHeader | null; error: unknown }> } };
-        };
-      })
+      const { data, error } = await supabase
         .from("vendor_purchase_orders")
         .select("*, vendor_profiles(name), crm_companies(name)")
         .eq("id", id)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      return normalizePurchaseOrderHeader(data);
     },
   });
 
@@ -124,17 +48,13 @@ export function PurchaseOrderDetailPage() {
     queryKey: ["vendor-purchase-order-lines", id],
     enabled: id.length > 0,
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { eq: (column: string, value: string) => { order: (column: string, options?: Record<string, boolean>) => Promise<{ data: PurchaseOrderLine[] | null; error: unknown }> } };
-        };
-      })
+      const { data, error } = await supabase
         .from("vendor_purchase_order_lines")
         .select("*")
         .eq("purchase_order_id", id)
         .order("line_number");
       if (error) throw error;
-      return data ?? [];
+      return normalizePurchaseOrderLines(data);
     },
   });
 
@@ -142,34 +62,26 @@ export function PurchaseOrderDetailPage() {
     queryKey: ["vendor-purchase-order-touchpoints", id],
     enabled: id.length > 0,
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { eq: (column: string, value: string) => { order: (column: string, options?: Record<string, boolean>) => Promise<{ data: Touchpoint[] | null; error: unknown }> } };
-        };
-      })
+      const { data, error } = await supabase
         .from("vendor_purchase_order_touchpoints")
         .select("id, purchase_order_id, contact_name, note, occurred_at")
         .eq("purchase_order_id", id)
         .order("occurred_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return normalizePurchaseOrderTouchpoints(data);
     },
   });
 
   const equipmentQuery = useQuery({
     queryKey: ["vendor-purchase-order-equipment-catalog"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { eq: (column: string, value: boolean) => { limit: (count: number) => Promise<{ data: EquipmentModel[] | null; error: unknown }> } };
-        };
-      })
+      const { data, error } = await supabase
         .from("qb_equipment_models")
         .select("id, brand_id, model_code, name_display, list_price_cents")
         .eq("active", true)
         .limit(200);
       if (error) throw error;
-      return data ?? [];
+      return normalizePurchaseOrderEquipmentModels(data);
     },
   });
 
@@ -179,17 +91,13 @@ export function PurchaseOrderDetailPage() {
     queryFn: async () => {
       const model = (equipmentQuery.data ?? []).find((row) => row.id === selectedModelId);
       if (!model) return [];
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { eq: (column: string, value: boolean) => { limit: (count: number) => Promise<{ data: AttachmentRow[] | null; error: unknown }> } };
-        };
-      })
+      const { data, error } = await supabase
         .from("qb_attachments")
         .select("id, brand_id, name, list_price_cents, compatible_model_ids, universal")
         .eq("active", true)
         .limit(500);
       if (error) throw error;
-      return (data ?? []).filter((attachment) => {
+      return normalizePurchaseOrderAttachments(data).filter((attachment) => {
         const compatibleIds = Array.isArray(attachment.compatible_model_ids) ? attachment.compatible_model_ids : [];
         return attachment.brand_id === model.brand_id && (attachment.universal || compatibleIds.includes(model.id));
       });
@@ -197,12 +105,8 @@ export function PurchaseOrderDetailPage() {
   });
 
   const saveHeaderMutation = useMutation({
-    mutationFn: async (payload: Partial<PurchaseOrderHeader>) => {
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => {
-          update: (value: Record<string, unknown>) => { eq: (column: string, value: string) => Promise<{ error: unknown }> };
-        };
-      })
+    mutationFn: async (payload: PurchaseOrderHeaderUpdate) => {
+      const { error } = await supabase
         .from("vendor_purchase_orders")
         .update(payload)
         .eq("id", id);
@@ -221,9 +125,7 @@ export function PurchaseOrderDetailPage() {
       if (!miscDescription.trim() || !Number.isFinite(quantity) || !Number.isFinite(cost)) {
         throw new Error("Description, quantity, and cost are required.");
       }
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => { insert: (value: Record<string, unknown>) => Promise<{ error: unknown }> };
-      })
+      const { error } = await supabase
         .from("vendor_purchase_order_lines")
         .insert({
           purchase_order_id: id,
@@ -278,9 +180,7 @@ export function PurchaseOrderDetailPage() {
         });
       });
 
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => { insert: (value: Array<Record<string, unknown>>) => Promise<{ error: unknown }> };
-      })
+      const { error } = await supabase
         .from("vendor_purchase_order_lines")
         .insert(inserts);
       if (error) throw error;
@@ -295,9 +195,7 @@ export function PurchaseOrderDetailPage() {
   const addTouchpointMutation = useMutation({
     mutationFn: async () => {
       if (!touchpointNote.trim()) throw new Error("Call tracking note is required.");
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => { insert: (value: Record<string, unknown>) => Promise<{ error: unknown }> };
-      })
+      const { error } = await supabase
         .from("vendor_purchase_order_touchpoints")
         .insert({
           purchase_order_id: id,
@@ -347,7 +245,7 @@ export function PurchaseOrderDetailPage() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">{header.po_number}</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {one(header.vendor_profiles)?.name ?? "Vendor"} · {formatVendorPurchaseOrderType(header.order_type)}
+              {header.vendor_profiles?.name ?? "Vendor"} · {formatVendorPurchaseOrderType(header.order_type)}
             </p>
           </div>
 

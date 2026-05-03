@@ -9,31 +9,11 @@ import { PartsSubNav } from "../components/PartsSubNav";
 import {
   formatVendorPurchaseOrderStatus,
   formatVendorPurchaseOrderType,
+  normalizePurchaseOrderRows,
+  normalizeVendorOptionRows,
   type VendorPurchaseOrderStatus,
   type VendorPurchaseOrderType,
 } from "../lib/purchase-order-utils";
-
-type PurchaseOrderRow = {
-  id: string;
-  po_number: string;
-  order_type: VendorPurchaseOrderType;
-  status: VendorPurchaseOrderStatus;
-  description: string | null;
-  location_code: string | null;
-  vendor_id: string;
-  created_at: string;
-  vendor_profiles?: { name?: string } | { name?: string }[] | null;
-};
-
-type VendorRow = {
-  id: string;
-  name: string;
-};
-
-function one<T>(value: T | T[] | null | undefined): T | null {
-  if (value == null) return null;
-  return Array.isArray(value) ? (value[0] ?? null) : value;
-}
 
 function makeDraftPoNumber(): string {
   return `PO-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
@@ -52,32 +32,24 @@ export function PurchaseOrdersPage() {
   const vendorsQuery = useQuery({
     queryKey: ["vendor-profiles", "po-picker"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { order: (column: string, options?: Record<string, boolean>) => Promise<{ data: VendorRow[] | null; error: unknown }> };
-        };
-      })
+      const { data, error } = await supabase
         .from("vendor_profiles")
         .select("id, name")
         .order("name");
       if (error) throw error;
-      return data ?? [];
+      return normalizeVendorOptionRows(data);
     },
   });
 
   const ordersQuery = useQuery({
     queryKey: ["vendor-purchase-orders"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { order: (column: string, options?: Record<string, boolean>) => Promise<{ data: PurchaseOrderRow[] | null; error: unknown }> };
-        };
-      })
+      const { data, error } = await supabase
         .from("vendor_purchase_orders")
         .select("id, po_number, order_type, status, description, location_code, vendor_id, created_at, vendor_profiles(name)")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return normalizePurchaseOrderRows(data);
     },
   });
 
@@ -85,11 +57,7 @@ export function PurchaseOrdersPage() {
     mutationFn: async () => {
       if (!vendorId) throw new Error("Vendor is required.");
 
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          insert: (value: Record<string, unknown>) => { select: (columns: string) => { single: () => Promise<{ data: { id: string } | null; error: unknown }> } };
-        };
-      })
+      const { data, error } = await supabase
         .from("vendor_purchase_orders")
         .insert({
           po_number: makeDraftPoNumber(),
@@ -102,6 +70,9 @@ export function PurchaseOrdersPage() {
         .select("id")
         .single();
       if (error || !data) throw error ?? new Error("Failed to create purchase order.");
+      if (typeof data.id !== "string" || data.id.length === 0) {
+        throw new Error("Failed to create purchase order.");
+      }
       return data.id;
     },
     onSuccess: async (id) => {
@@ -116,7 +87,7 @@ export function PurchaseOrdersPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return orders.filter((row) => {
-      const vendorName = one(row.vendor_profiles)?.name ?? "";
+      const vendorName = row.vendor_profiles?.name ?? "";
       if (statusFilter !== "all" && row.status !== statusFilter) return false;
       if (!q) return true;
       return (
@@ -210,7 +181,7 @@ export function PurchaseOrdersPage() {
         ) : (
           <div className="space-y-2">
             {filtered.map((row) => {
-              const vendorName = one(row.vendor_profiles)?.name ?? "Vendor";
+              const vendorName = row.vendor_profiles?.name ?? "Vendor";
               return (
                 <Link
                   key={row.id}
