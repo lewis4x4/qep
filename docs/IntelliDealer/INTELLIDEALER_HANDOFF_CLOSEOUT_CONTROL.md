@@ -26,7 +26,7 @@ If another document conflicts with this one, treat this document as the current 
 | Raw source file custody | Manifested 2026-05-03 | `SOURCE_FILE_CUSTODY_MANIFEST.md` | The raw files remain untracked, but filename, size, SHA-256, page counts, workbook row counts, and import run binding are now committed and script-verifiable. |
 | Fresh production verification | Passed 2026-05-03 | `FRESH_PRODUCTION_VERIFICATION_2026-05-03.md` | Rerun safety, production reconciliation, production browser smoke, storage cleanup, and active-run checks passed against the current production bundle. |
 | UI completion review | Passed 2026-05-03 | `UI_COMPLETION_REVIEW_2026-05-03.md` | Account 360, Companies search, company/contact editors, admin dashboard, safe export download, browser stage, preflight rejection, discard, and cleanup are verified. |
-| Non-core API type hardening | In progress 2026-05-03 | `NON_CORE_API_TYPE_HARDENING_2026-05-03.md` | Hardened ops payment validation, service labor pricing, QRM approval-center, and service agreement Supabase row shapes with targeted tests and web typecheck. |
+| Non-core API type hardening | In progress 2026-05-03 | `NON_CORE_API_TYPE_HARDENING_2026-05-03.md` | Hardened ops payment validation, service labor pricing, QRM approval-center, service agreement, and vendor profile Supabase row shapes with targeted tests and web typecheck. |
 
 ## Production Customer Import Baseline
 
@@ -199,7 +199,8 @@ Current result:
 - Service labor pricing branch config, company options, and pricing rule rows now use exported normalizers.
 - QRM approval center margin, deposit, trade, demo, and quote approval rows now use exported normalizers.
 - Service agreement list/detail rows, company/equipment options, and maintenance schedule rows now use exported normalizers.
-- Targeted tests passed: `20 pass`, `0 fail`.
+- Vendor profiles, escalation policies, portal keys, vendor submissions, and active vendor price rows now use exported normalizers.
+- Targeted tests passed: `26 pass`, `0 fail`.
 - Web typecheck passed.
 
 ### Slice 7: Wave 5 Deferred Integration Register

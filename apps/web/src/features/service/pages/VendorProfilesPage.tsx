@@ -18,68 +18,18 @@ import {
   makeVendorAccessKey,
   sha256Hex,
 } from "../lib/vendor-pricing-portal-utils";
-
-const SUPPLIER_TYPES = ["oem", "aftermarket", "general", "specialty", "internal"] as const;
-
-type VendorRow = {
-  id: string;
-  name: string;
-  supplier_type: string;
-  avg_lead_time_hours: number | null;
-  responsiveness_score: number | null;
-  notes: string | null;
-};
-
-type PolicyRow = {
-  id: string;
-  name: string;
-  steps: unknown;
-  is_machine_down: boolean;
-};
-
-type VendorPriceRow = {
-  id: string;
-  vendor_id: string;
-  part_number: string;
-  description: string | null;
-  list_price: number | null;
-  currency: string;
-  effective_date: string;
-};
-
-type VendorSubmissionRow = {
-  id: string;
-  vendor_id: string;
-  part_number: string;
-  description: string | null;
-  proposed_list_price: number;
-  currency: string;
-  effective_date: string;
-  submission_notes: string | null;
-  submitted_by_name: string | null;
-  submitted_by_email: string | null;
-  status: "pending" | "approved" | "rejected" | "withdrawn";
-  review_notes: string | null;
-  reviewed_at: string | null;
-  vendor_profiles?: { name?: string } | { name?: string }[] | null;
-};
-
-type VendorAccessKeyRow = {
-  id: string;
-  vendor_id: string;
-  label: string | null;
-  contact_name: string | null;
-  contact_email: string | null;
-  expires_at: string | null;
-  revoked_at: string | null;
-  created_at: string;
-  vendor_profiles?: { name?: string } | { name?: string }[] | null;
-};
-
-function joinedVendorName(value: VendorSubmissionRow["vendor_profiles"] | VendorAccessKeyRow["vendor_profiles"]): string {
-  const row = Array.isArray(value) ? value[0] : value;
-  return row?.name ?? "Vendor";
-}
+import {
+  joinedVendorName,
+  normalizeVendorAccessKeyRows,
+  normalizeVendorPolicyRows,
+  normalizeVendorPriceRows,
+  normalizeVendorRows,
+  normalizeVendorSubmissionRows,
+  VENDOR_SUPPLIER_TYPES,
+  type VendorPriceRow,
+  type VendorRow,
+  type VendorSubmissionRow,
+} from "../lib/vendor-profile-utils";
 
 export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" | "parts" }) {
   const { profile } = useAuth();
@@ -116,7 +66,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
         .select("id, name, supplier_type, avg_lead_time_hours, responsiveness_score, notes")
         .order("name");
       if (error) throw error;
-      return (data ?? []) as VendorRow[];
+      return normalizeVendorRows(data);
     },
   });
 
@@ -128,7 +78,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
         .select("id, name, steps, is_machine_down")
         .order("name");
       if (error) throw error;
-      return (data ?? []) as PolicyRow[];
+      return normalizeVendorPolicyRows(data);
     },
     enabled: canManage,
   });
@@ -139,7 +89,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
       const { data, error } = await (supabase as unknown as {
         from: (table: string) => {
           select: (columns: string) => {
-            order: (column: string, opts: { ascending: boolean }) => Promise<{ data: VendorAccessKeyRow[] | null; error: unknown }>;
+            order: (column: string, opts: { ascending: boolean }) => Promise<{ data: unknown[] | null; error: unknown }>;
           };
         };
       })
@@ -147,7 +97,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
         .select("id, vendor_id, label, contact_name, contact_email, expires_at, revoked_at, created_at, vendor_profiles(name)")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return normalizeVendorAccessKeyRows(data);
     },
     enabled: canManage,
   });
@@ -158,7 +108,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
       const { data, error } = await (supabase as unknown as {
         from: (table: string) => {
           select: (columns: string) => {
-            order: (column: string, opts: { ascending: boolean }) => Promise<{ data: VendorSubmissionRow[] | null; error: unknown }>;
+            order: (column: string, opts: { ascending: boolean }) => Promise<{ data: unknown[] | null; error: unknown }>;
           };
         };
       })
@@ -166,7 +116,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
         .select("id, vendor_id, part_number, description, proposed_list_price, currency, effective_date, submission_notes, submitted_by_name, submitted_by_email, status, review_notes, reviewed_at, vendor_profiles(name)")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return normalizeVendorSubmissionRows(data);
     },
     enabled: canManage,
   });
@@ -177,7 +127,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
       const { data, error } = await (supabase as unknown as {
         from: (table: string) => {
           select: (columns: string) => {
-            order: (column: string, opts: { ascending: boolean }) => Promise<{ data: VendorPriceRow[] | null; error: unknown }>;
+            order: (column: string, opts: { ascending: boolean }) => Promise<{ data: unknown[] | null; error: unknown }>;
           };
         };
       })
@@ -185,7 +135,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
         .select("id, vendor_id, part_number, description, list_price, currency, effective_date")
         .order("effective_date", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return normalizeVendorPriceRows(data);
     },
     enabled: canManage,
   });
@@ -414,7 +364,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
               onChange={(e) => setSupplierType(e.target.value)}
               className="rounded border border-input bg-card px-3 py-2 text-sm"
             >
-              {SUPPLIER_TYPES.map((t) => (
+              {VENDOR_SUPPLIER_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>
@@ -718,7 +668,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
               onChange={(e) => setEditSupplierType(e.target.value)}
               className="rounded border border-input px-3 py-2 text-sm"
             >
-              {SUPPLIER_TYPES.map((t) => (
+              {VENDOR_SUPPLIER_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>
