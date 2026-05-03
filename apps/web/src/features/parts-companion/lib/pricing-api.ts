@@ -3,6 +3,17 @@
 // ============================================================
 
 import { supabase } from "../../../lib/supabase";
+import {
+  normalizeAppliedSuggestionsResult,
+  normalizeDismissedSuggestionsResult,
+  normalizeGeneratePricingSuggestionsResult,
+  normalizePricingRule,
+  normalizePricingRuleRows,
+  normalizePricingSuggestionRows,
+  normalizePricingSummary,
+  normalizeRulePreview,
+  type GeneratePricingSuggestionsResult,
+} from "./pricing-api-normalizers";
 
 export type PricingScope = "global" | "vendor" | "class" | "category" | "machine_code" | "part";
 export type PricingRuleType = "min_margin_pct" | "target_margin_pct" | "markup_multiplier" | "markup_with_floor";
@@ -83,7 +94,7 @@ export interface RulePreview {
 export async function fetchPricingSummary(): Promise<PricingSummary> {
   const { data, error } = await supabase.rpc("pricing_rules_summary");
   if (error) throw error;
-  return data as PricingSummary;
+  return normalizePricingSummary(data);
 }
 
 export async function fetchActiveRules(): Promise<PricingRule[]> {
@@ -93,7 +104,7 @@ export async function fetchActiveRules(): Promise<PricingRule[]> {
     .eq("is_active", true)
     .order("priority", { ascending: false });
   if (error) throw error;
-  return (data ?? []) as PricingRule[];
+  return normalizePricingRuleRows(data);
 }
 
 export async function fetchPendingSuggestions(limit = 100): Promise<PricingSuggestion[]> {
@@ -104,13 +115,13 @@ export async function fetchPendingSuggestions(limit = 100): Promise<PricingSugge
     .order("delta_dollars", { ascending: false, nullsFirst: false })
     .limit(limit);
   if (error) throw error;
-  return (data ?? []) as PricingSuggestion[];
+  return normalizePricingSuggestionRows(data);
 }
 
 export async function previewRule(ruleId: string): Promise<RulePreview> {
   const { data, error } = await supabase.rpc("pricing_rules_preview", { p_rule_id: ruleId });
   if (error) throw error;
-  return data as RulePreview;
+  return normalizeRulePreview(data);
 }
 
 // ── Mutations ──────────────────────────────────────────────
@@ -122,7 +133,9 @@ export async function createRule(rule: Omit<PricingRule, "id">): Promise<Pricing
     .select()
     .single();
   if (error) throw error;
-  return data as PricingRule;
+  const normalized = normalizePricingRule(data);
+  if (!normalized) throw new Error("parts_pricing_rules: malformed create response");
+  return normalized;
 }
 
 export async function toggleRule(id: string, isActive: boolean): Promise<void> {
@@ -133,22 +146,12 @@ export async function toggleRule(id: string, isActive: boolean): Promise<void> {
   if (error) throw error;
 }
 
-export async function regenerateSuggestions(ruleId?: string): Promise<{
-  ok: boolean;
-  suggestions_written: number;
-  batch_id: string;
-  elapsed_ms: number;
-}> {
+export async function regenerateSuggestions(ruleId?: string): Promise<GeneratePricingSuggestionsResult> {
   const { data, error } = await supabase.rpc("pricing_suggestions_generate", {
     p_rule_id: ruleId ?? null,
   });
   if (error) throw error;
-  return data as {
-    ok: boolean;
-    suggestions_written: number;
-    batch_id: string;
-    elapsed_ms: number;
-  };
+  return normalizeGeneratePricingSuggestionsResult(data);
 }
 
 export async function applySuggestions(ids: string[], note?: string): Promise<{ applied_count: number }> {
@@ -157,7 +160,7 @@ export async function applySuggestions(ids: string[], note?: string): Promise<{ 
     p_note: note ?? null,
   });
   if (error) throw error;
-  return data as { applied_count: number };
+  return normalizeAppliedSuggestionsResult(data);
 }
 
 export async function dismissSuggestions(ids: string[], note?: string): Promise<{ dismissed_count: number }> {
@@ -166,5 +169,5 @@ export async function dismissSuggestions(ids: string[], note?: string): Promise<
     p_note: note ?? null,
   });
   if (error) throw error;
-  return data as { dismissed_count: number };
+  return normalizeDismissedSuggestionsResult(data);
 }
