@@ -51,14 +51,12 @@ export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
     queryKey: ["exec", "drill", "definition", metricKey],
     queryFn: async (): Promise<MetricDefinition | null> => {
       if (!metricKey) return null;
-      const supa = supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            eq: (c: string, v: string) => { maybeSingle: () => Promise<{ data: unknown | null; error: unknown }> };
-          };
-        };
-      };
-      const res = await supa.from("analytics_metric_definitions").select("*").eq("metric_key", metricKey).maybeSingle();
+      const res = await supabase
+        .from("analytics_metric_definitions")
+        .select("*")
+        .eq("metric_key", metricKey)
+        .maybeSingle();
+      if (res.error) throw res.error;
       return normalizeMetricDefinitions(res.data ? [res.data] : [])[0] ?? null;
     },
   });
@@ -70,18 +68,14 @@ export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
       if (!metricKey) return [];
       // P1-2 fix: explicit workspace filter so we never pull cross-workspace
       // rows. RLS still backstops it.
-      const res = await (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            eq: (c: string, v: string) => { eq: (c: string, v: string) => { order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: unknown[] | null; error: unknown }> } } };
-          };
-        };
-      }).from("analytics_kpi_snapshots")
+      const res = await supabase
+        .from("analytics_kpi_snapshots")
         .select("metric_value, period_end, calculated_at, refresh_state")
         .eq("metric_key", metricKey)
         .eq("workspace_id", workspaceId)
         .order("calculated_at", { ascending: false })
         .limit(20);
+      if (res.error) throw res.error;
       return normalizeSnapshotHistoryRows(res.data);
     },
   });
@@ -91,18 +85,14 @@ export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
     queryKey: ["exec", "drill", "alerts", metricKey, workspaceId],
     queryFn: async (): Promise<AnalyticsAlertRow[]> => {
       if (!metricKey) return [];
-      const res = await (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            eq: (c: string, v: string) => { eq: (c: string, v: string) => { order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: unknown[] | null; error: unknown }> } } };
-          };
-        };
-      }).from("analytics_alerts")
+      const res = await supabase
+        .from("analytics_alerts")
         .select("*")
         .eq("metric_key", metricKey)
         .eq("workspace_id", workspaceId)
         .order("created_at", { ascending: false })
         .limit(10);
+      if (res.error) throw res.error;
       return normalizeAnalyticsAlertRows(res.data);
     },
   });
@@ -110,7 +100,7 @@ export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
   // Audit log writes (open = drill_open) — best effort, no UI feedback
   useEffect(() => {
     if (!open || !metricKey) return;
-    void (supabase as unknown as { rpc: (fn: string, args: Record<string, unknown>) => Promise<unknown> }).rpc("log_analytics_action", {
+    void supabase.rpc("log_analytics_action", {
       p_action_type: "restricted_drill_open",
       p_source_widget: "metric_drill_drawer",
       p_metric_key: metricKey,

@@ -13,28 +13,17 @@ import { supabase } from "@/lib/supabase";
 import type { KpiSnapshot, MetricDefinition, AnalyticsAlertRow } from "./types";
 import { normalizeAnalyticsAlertRows, normalizeKpiSnapshots, normalizeMetricDefinitions } from "./exec-row-normalizers";
 
-const supa = supabase as unknown as {
-  rpc: <T>(fn: string, args?: Record<string, unknown>) => Promise<{ data: T | null; error: { message?: string } | null }>;
-  from: (t: string) => {
-    select: (c: string) => {
-      eq: (col: string, val: string | number) => {
-        order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: unknown[] | null; error: unknown }> };
-      };
-      order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: unknown[] | null; error: unknown }> };
-      gte?: (col: string, val: string) => Promise<{ data: unknown[] | null; error: unknown }>;
-    };
-  };
-};
-
 /** Fetch all enabled metric definitions for a role tab. */
 export function useMetricDefinitions(role: "ceo" | "cfo" | "coo") {
   return useQuery({
     queryKey: ["exec", "metric-definitions", role],
     queryFn: async (): Promise<MetricDefinition[]> => {
-      const { data, error } = await (supa.from("analytics_metric_definitions").select("*") as unknown as {
-        eq: (c: string, v: string) => { order: (c: string, o: { ascending: boolean }) => Promise<{ data: unknown[] | null; error: unknown }> };
-      }).eq("owner_role", role).order("metric_key", { ascending: true });
-      if (error) throw new Error(String((error as { message?: string }).message ?? "metric definitions load failed"));
+      const { data, error } = await supabase
+        .from("analytics_metric_definitions")
+        .select("*")
+        .eq("owner_role", role)
+        .order("metric_key", { ascending: true });
+      if (error) throw new Error(error.message ?? "metric definitions load failed");
       return normalizeMetricDefinitions(data);
     },
     staleTime: 5 * 60_000,
@@ -47,7 +36,7 @@ export function useLatestSnapshots(metricKeys: string[] | undefined) {
     enabled: !!metricKeys && metricKeys.length > 0,
     queryKey: ["exec", "latest-snapshots", metricKeys?.join(",")],
     queryFn: async (): Promise<KpiSnapshot[]> => {
-      const { data, error } = await supa.rpc<unknown[]>("analytics_latest_snapshots", {
+      const { data, error } = await supabase.rpc("analytics_latest_snapshots", {
         p_metric_keys: metricKeys ?? null,
         p_role_scope: null,
       });
@@ -64,11 +53,12 @@ export function useExecAlerts(role: "ceo" | "cfo" | "coo") {
   return useQuery({
     queryKey: ["exec", "alerts", role],
     queryFn: async (): Promise<AnalyticsAlertRow[]> => {
-      const res = await (supa.from("analytics_alerts").select("*") as unknown as {
-        eq: (c: string, v: string) => {
-          order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: unknown[] | null; error: unknown }> };
-        };
-      }).eq("role_target", role).order("created_at", { ascending: false }).limit(50);
+      const res = await supabase
+        .from("analytics_alerts")
+        .select("*")
+        .eq("role_target", role)
+        .order("created_at", { ascending: false })
+        .limit(50);
       if (res.error) throw new Error("alerts load failed");
       return normalizeAnalyticsAlertRows(res.data).filter((r) => r.status !== "resolved" && r.status !== "dismissed");
     },
@@ -102,7 +92,7 @@ export function useFallbackKpis(role: "ceo" | "cfo" | "coo") {
       const results = await Promise.all(
         FALLBACK_KEYS.map(async (key) => {
           try {
-            const { data } = await supa.rpc<number>("analytics_quick_kpi", { p_metric_key: key });
+            const { data } = await supabase.rpc("analytics_quick_kpi", { p_metric_key: key });
             const numeric = typeof data === "number" ? data : Number(data ?? 0);
             return [key, { value: numeric, label: "Live (server agg)", source: "analytics_quick_kpi" }] as const;
           } catch {

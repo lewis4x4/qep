@@ -212,7 +212,7 @@ Current result:
 - Service field-note speech typing and job-detail stage fallback no longer use local/browser casts.
 - Shared service API helpers now normalize service router, portal order search, fulfillment link, billing, resync, reassign, and calendar-slot payloads instead of using generic casts.
 - Service InspectionPlus list/detail reads and create/update paths now use exported normalizers plus generated Supabase client calls.
-- Exec metric definitions, KPI snapshots, metric drill snapshot history, and analytics alert rows now use exported normalizers.
+- Exec metric definitions, KPI snapshots, metric drill snapshot history, and analytics alert rows now use exported normalizers with generated Supabase client calls and no local shared-data/metric-drill shims.
 - Exec handoff event and seam-score rows now use exported normalizers and direct generated Supabase client calls in the ledger and panel.
 - Floor customer search, serial-first lookup, and customer-health profile rows now use exported normalizers.
 - Floor morning brief, customer parts intel, pending invoice, and supplier health rows now use exported normalizers.
