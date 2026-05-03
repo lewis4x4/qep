@@ -521,6 +521,140 @@ export function normalizeQuoteApprovalPolicy(value: unknown): QuoteApprovalPolic
   };
 }
 
+function normalizePortalRevisionDraftStatus(value: unknown): PortalQuoteRevisionDraft["status"] {
+  return value === "awaiting_approval"
+    || value === "published"
+    || value === "superseded"
+    ? value
+    : "draft";
+}
+
+function normalizePortalPublicationStatus(value: unknown): PortalQuoteRevisionPublishState["publicationStatus"] {
+  return value === "draft_revision"
+    || value === "awaiting_approval"
+    || value === "published"
+    ? value
+    : "none";
+}
+
+export function normalizePortalQuoteRevisionCompare(value: unknown): PortalQuoteRevisionCompare | null {
+  if (!isRecord(value)) return null;
+  return {
+    hasChanges: value.hasChanges === true || value.has_changes === true,
+    priceChanges: normalizeStringArray(value.priceChanges ?? value.price_changes),
+    equipmentChanges: normalizeStringArray(value.equipmentChanges ?? value.equipment_changes),
+    financingChanges: normalizeStringArray(value.financingChanges ?? value.financing_changes),
+    termsChanges: normalizeStringArray(value.termsChanges ?? value.terms_changes),
+    dealerMessageChange: nullableString(value.dealerMessageChange ?? value.dealer_message_change),
+  };
+}
+
+export function normalizePortalQuoteRevisionDraft(value: unknown): PortalQuoteRevisionDraft | null {
+  if (!isRecord(value)) return null;
+  const id = firstString(value.id);
+  const portalQuoteReviewId = firstString(value.portalQuoteReviewId, value.portal_quote_review_id);
+  const quotePackageId = firstString(value.quotePackageId, value.quote_package_id);
+  const dealId = firstString(value.dealId, value.deal_id);
+  if (!id || !portalQuoteReviewId || !quotePackageId || !dealId) return null;
+  return {
+    id,
+    portalQuoteReviewId,
+    quotePackageId,
+    dealId,
+    preparedBy: nullableString(value.preparedBy ?? value.prepared_by),
+    approvedBy: nullableString(value.approvedBy ?? value.approved_by),
+    status: normalizePortalRevisionDraftStatus(value.status),
+    quoteData: isRecord(value.quoteData ?? value.quote_data)
+      ? normalizeRecord(value.quoteData ?? value.quote_data)
+      : null,
+    quotePdfUrl: nullableString(value.quotePdfUrl ?? value.quote_pdf_url),
+    dealerMessage: nullableString(value.dealerMessage ?? value.dealer_message),
+    revisionSummary: nullableString(value.revisionSummary ?? value.revision_summary),
+    customerRequestSnapshot: nullableString(value.customerRequestSnapshot ?? value.customer_request_snapshot),
+    compareSnapshot: normalizePortalQuoteRevisionCompare(value.compareSnapshot ?? value.compare_snapshot),
+    createdAt: firstString(value.createdAt, value.created_at) ?? "",
+    updatedAt: firstString(value.updatedAt, value.updated_at) ?? "",
+    publishedAt: nullableString(value.publishedAt ?? value.published_at),
+  };
+}
+
+export function normalizePortalRevisionPublishState(value: unknown): PortalQuoteRevisionPublishState | null {
+  if (!isRecord(value)) return null;
+  const portalQuoteReviewId = firstString(value.portalQuoteReviewId, value.portal_quote_review_id);
+  if (!portalQuoteReviewId) return null;
+  return {
+    portalQuoteReviewId,
+    currentPublishedVersionNumber: numOrNull(
+      value.currentPublishedVersionNumber ?? value.current_published_version_number,
+    ),
+    currentPublishedDealerMessage: nullableString(
+      value.currentPublishedDealerMessage ?? value.current_published_dealer_message,
+    ),
+    currentPublishedRevisionSummary: nullableString(
+      value.currentPublishedRevisionSummary ?? value.current_published_revision_summary,
+    ),
+    latestCustomerRequestSnapshot: nullableString(
+      value.latestCustomerRequestSnapshot ?? value.latest_customer_request_snapshot,
+    ),
+    publicationStatus: normalizePortalPublicationStatus(value.publicationStatus ?? value.publication_status),
+  };
+}
+
+export function normalizePortalRevisionEnvelope(value: unknown): PortalRevisionEnvelope {
+  const record = recordOrEmpty(value);
+  const reviewRecord = isRecord(record.review) ? record.review : null;
+  const currentVersionRecord = isRecord(reviewRecord?.current_version) ? reviewRecord.current_version : null;
+  const review = reviewRecord && firstString(reviewRecord.id)
+    ? {
+        id: firstString(reviewRecord.id) ?? "",
+        status: firstString(reviewRecord.status) ?? "",
+        counter_notes: nullableString(reviewRecord.counter_notes),
+        current_version: currentVersionRecord
+          ? {
+              version_number: numOrNull(currentVersionRecord.version_number),
+              dealer_message: nullableString(currentVersionRecord.dealer_message),
+              revision_summary: nullableString(currentVersionRecord.revision_summary),
+            }
+          : null,
+      }
+    : null;
+  return {
+    review,
+    draft: normalizePortalQuoteRevisionDraft(record.draft),
+    publishState: normalizePortalRevisionPublishState(record.publishState ?? record.publish_state),
+  };
+}
+
+export function normalizePortalRevisionMutationResponse(value: unknown): {
+  draft: PortalQuoteRevisionDraft;
+  publishState: PortalQuoteRevisionPublishState;
+} {
+  const record = recordOrEmpty(value);
+  const draft = normalizePortalQuoteRevisionDraft(record.draft);
+  const publishState = normalizePortalRevisionPublishState(record.publishState ?? record.publish_state);
+  if (!draft || !publishState) {
+    throw new Error("Portal revision response was malformed.");
+  }
+  return { draft, publishState };
+}
+
+export function normalizePortalRevisionPublishResponse(value: unknown): {
+  draft: PortalQuoteRevisionDraft | null;
+  publishState: PortalQuoteRevisionPublishState;
+} {
+  const record = recordOrEmpty(value);
+  const draft = normalizePortalQuoteRevisionDraft(record.draft);
+  const publishState = normalizePortalRevisionPublishState(record.publishState ?? record.publish_state);
+  if (!publishState) {
+    throw new Error("Portal revision publish response was malformed.");
+  }
+  return { draft, publishState };
+}
+
+export function normalizeQuoteSignatureResponse(value: unknown): Record<string, unknown> {
+  return normalizeRecord(value);
+}
+
 export async function performQuoteListAction(input: {
   quotePackageId: string;
   action: Exclude<QuoteListAction, "resume" | "resend">;
@@ -919,25 +1053,25 @@ export async function saveQuoteSignature(data: {
   signer_name: string;
   signer_email?: string | null;
   signature_png_base64?: string | null;
-}) {
+}): Promise<Record<string, unknown>> {
   const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/sign`, {
     method: "POST",
     body: JSON.stringify(data),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Failed to save signature" }));
-    throw new Error((err as { error?: string }).error ?? "Failed to save signature");
+    const err = await readJsonRecord(res);
+    throw new Error(errorDetail(err) || "Failed to save signature");
   }
-  return res.json();
+  return normalizeQuoteSignatureResponse(await res.json().catch(() => ({})));
 }
 
 export async function getPortalRevision(dealId: string): Promise<PortalRevisionEnvelope> {
   const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/portal-revision?deal_id=${encodeURIComponent(dealId)}`);
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Failed to load portal revision" }));
-    throw new Error((err as { error?: string }).error ?? "Failed to load portal revision");
+    const err = await readJsonRecord(res);
+    throw new Error(errorDetail(err) || "Failed to load portal revision");
   }
-  return res.json();
+  return normalizePortalRevisionEnvelope(await res.json().catch(() => ({})));
 }
 
 export async function savePortalRevisionDraft(data: {
@@ -953,10 +1087,10 @@ export async function savePortalRevisionDraft(data: {
     body: JSON.stringify(data),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Failed to save portal revision draft" }));
-    throw new Error((err as { error?: string }).error ?? "Failed to save portal revision draft");
+    const err = await readJsonRecord(res);
+    throw new Error(errorDetail(err) || "Failed to save portal revision draft");
   }
-  return res.json();
+  return normalizePortalRevisionMutationResponse(await res.json().catch(() => ({})));
 }
 
 export async function submitPortalRevision(data: {
@@ -967,10 +1101,10 @@ export async function submitPortalRevision(data: {
     body: JSON.stringify(data),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Failed to submit portal revision" }));
-    throw new Error((err as { error?: string }).error ?? "Failed to submit portal revision");
+    const err = await readJsonRecord(res);
+    throw new Error(errorDetail(err) || "Failed to submit portal revision");
   }
-  return res.json();
+  return normalizePortalRevisionMutationResponse(await res.json().catch(() => ({})));
 }
 
 export async function returnPortalRevisionToDraft(data: {
@@ -981,10 +1115,10 @@ export async function returnPortalRevisionToDraft(data: {
     body: JSON.stringify(data),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Failed to return revision to draft" }));
-    throw new Error((err as { error?: string }).error ?? "Failed to return revision to draft");
+    const err = await readJsonRecord(res);
+    throw new Error(errorDetail(err) || "Failed to return revision to draft");
   }
-  return res.json();
+  return normalizePortalRevisionMutationResponse(await res.json().catch(() => ({})));
 }
 
 export async function publishPortalRevision(data: {
@@ -995,10 +1129,10 @@ export async function publishPortalRevision(data: {
     body: JSON.stringify(data),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Failed to publish portal revision" }));
-    throw new Error((err as { error?: string }).error ?? "Failed to publish portal revision");
+    const err = await readJsonRecord(res);
+    throw new Error(errorDetail(err) || "Failed to publish portal revision");
   }
-  return res.json();
+  return normalizePortalRevisionPublishResponse(await res.json().catch(() => ({})));
 }
 
 export function buildQuoteSavePayload(

@@ -5,6 +5,12 @@ import {
   normalizeClosedDealsAudit,
   normalizeFactorAttributionDeals,
   normalizeFactorVerdicts,
+  normalizePortalQuoteRevisionCompare,
+  normalizePortalQuoteRevisionDraft,
+  normalizePortalRevisionEnvelope,
+  normalizePortalRevisionMutationResponse,
+  normalizePortalRevisionPublishResponse,
+  normalizePortalRevisionPublishState,
   normalizeQuoteApprovalCaseSummary,
   normalizeQuoteApprovalPolicy,
   normalizeQuoteApprovalSubmitResult,
@@ -13,6 +19,7 @@ import {
   normalizeQuoteListActionResponse,
   normalizeQuoteListResponse,
   normalizeQuoteRecommendation,
+  normalizeQuoteSignatureResponse,
   normalizeScorerCalibrationObservations,
   normalizeSendQuotePackageResponse,
 } from "../quote-api";
@@ -385,5 +392,116 @@ describe("quote approval normalizers", () => {
       "expiry_hours",
     ]);
     expect(policy.updatedBy).toBe("admin-1");
+  });
+});
+
+describe("quote portal revision normalizers", () => {
+  const draftPayload = {
+    id: "draft-1",
+    portal_quote_review_id: "review-1",
+    quote_package_id: "quote-1",
+    deal_id: "deal-1",
+    prepared_by: "rep-1",
+    approved_by: null,
+    status: "awaiting_approval",
+    quote_data: { subtotal: 100000 },
+    quote_pdf_url: "https://example.com/quote.pdf",
+    dealer_message: "Updated attachment package.",
+    revision_summary: "Attachment revision",
+    customer_request_snapshot: "Customer asked for alternate loader.",
+    compare_snapshot: {
+      has_changes: true,
+      price_changes: ["Subtotal changed", "", 12],
+      equipment_changes: ["Loader added"],
+      financing_changes: null,
+      terms_changes: ["Subject to approval"],
+      dealer_message_change: "Message updated",
+    },
+    created_at: "2026-05-03T12:00:00Z",
+    updated_at: "2026-05-03T13:00:00Z",
+    published_at: null,
+  };
+
+  const publishStatePayload = {
+    portal_quote_review_id: "review-1",
+    current_published_version_number: "4",
+    current_published_dealer_message: "Current dealer message",
+    current_published_revision_summary: "Current summary",
+    latest_customer_request_snapshot: "Customer request",
+    publication_status: "awaiting_approval",
+  };
+
+  test("normalizes compare snapshots with safe arrays", () => {
+    expect(normalizePortalQuoteRevisionCompare(draftPayload.compare_snapshot)).toEqual({
+      hasChanges: true,
+      priceChanges: ["Subtotal changed"],
+      equipmentChanges: ["Loader added"],
+      financingChanges: [],
+      termsChanges: ["Subject to approval"],
+      dealerMessageChange: "Message updated",
+    });
+  });
+
+  test("normalizes portal revision drafts and publish state from snake case payloads", () => {
+    const draft = normalizePortalQuoteRevisionDraft(draftPayload);
+    const publishState = normalizePortalRevisionPublishState(publishStatePayload);
+
+    expect(draft?.portalQuoteReviewId).toBe("review-1");
+    expect(draft?.quoteData).toEqual({ subtotal: 100000 });
+    expect(draft?.status).toBe("awaiting_approval");
+    expect(draft?.compareSnapshot?.priceChanges).toEqual(["Subtotal changed"]);
+    expect(publishState?.currentPublishedVersionNumber).toBe(4);
+    expect(publishState?.publicationStatus).toBe("awaiting_approval");
+  });
+
+  test("normalizes portal revision envelopes and preserves legacy review casing", () => {
+    const envelope = normalizePortalRevisionEnvelope({
+      review: {
+        id: "review-1",
+        status: "open",
+        counter_notes: "Need revision",
+        current_version: {
+          version_number: "3",
+          dealer_message: "Published message",
+          revision_summary: "Published summary",
+        },
+      },
+      draft: draftPayload,
+      publishState: publishStatePayload,
+    });
+
+    expect(envelope.review?.current_version?.version_number).toBe(3);
+    expect(envelope.review?.current_version?.dealer_message).toBe("Published message");
+    expect(envelope.draft?.id).toBe("draft-1");
+    expect(envelope.publishState?.portalQuoteReviewId).toBe("review-1");
+  });
+
+  test("fails fast on malformed portal mutation responses", () => {
+    expect(() => normalizePortalRevisionMutationResponse({ draft: draftPayload })).toThrow(
+      "Portal revision response was malformed.",
+    );
+    expect(() => normalizePortalRevisionPublishResponse({ draft: draftPayload })).toThrow(
+      "Portal revision publish response was malformed.",
+    );
+  });
+
+  test("normalizes portal mutation and publish responses", () => {
+    expect(normalizePortalRevisionMutationResponse({
+      draft: draftPayload,
+      publishState: publishStatePayload,
+    }).draft.id).toBe("draft-1");
+
+    expect(normalizePortalRevisionPublishResponse({
+      draft: null,
+      publishState: publishStatePayload,
+    }).draft).toBeNull();
+  });
+
+  test("normalizes signature responses to records only", () => {
+    expect(normalizeQuoteSignatureResponse({ ok: true, id: "signature-1" })).toEqual({
+      ok: true,
+      id: "signature-1",
+    });
+    expect(normalizeQuoteSignatureResponse(null)).toEqual({});
   });
 });
