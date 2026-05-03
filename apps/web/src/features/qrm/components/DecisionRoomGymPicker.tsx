@@ -14,21 +14,16 @@ import { Link } from "react-router-dom";
 import { Dumbbell, ExternalLink, Trophy } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { DeckSurface } from "./command-deck";
+import {
+  normalizeDecisionRoomRecentLossRows,
+  type DecisionRoomRecentLossRow,
+} from "../lib/decision-room-deal-rows";
 
 interface Props {
   currentDealId: string;
 }
 
-interface LostDealRow {
-  id: string;
-  name: string | null;
-  amount: number | null;
-  loss_reason: string | null;
-  competitor: string | null;
-  updated_at: string | null;
-}
-
-async function fetchRecentLosses(excludeDealId: string): Promise<LostDealRow[]> {
+async function fetchRecentLosses(excludeDealId: string): Promise<DecisionRoomRecentLossRow[]> {
   const { data, error } = await supabase
     .from("crm_deals")
     .select("id, name, amount, loss_reason, competitor, updated_at")
@@ -38,7 +33,7 @@ async function fetchRecentLosses(excludeDealId: string): Promise<LostDealRow[]> 
     .order("updated_at", { ascending: false })
     .limit(6);
   if (error || !data) return [];
-  return data as LostDealRow[];
+  return normalizeDecisionRoomRecentLossRows(data);
 }
 
 function formatAmount(value: number | null): string {

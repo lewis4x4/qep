@@ -13,6 +13,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Trophy } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { DeckSurface } from "./command-deck";
+import {
+  normalizeDecisionRoomStageRows,
+  normalizeDecisionRoomWonDealRows,
+  type DecisionRoomWonDealRow,
+} from "../lib/decision-room-deal-rows";
 
 interface Props {
   dealId: string;
@@ -21,34 +26,18 @@ interface Props {
   dealAmount: number | null;
 }
 
-interface WonDealRow {
-  id: string;
-  name: string | null;
-  amount: number | null;
-  company_id: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-  expected_close_on: string | null;
-  stage_id: string | null;
-}
-
-interface StageRow {
-  id: string;
-  is_closed_won: boolean | null;
-}
-
 async function fetchWonDeals(
   companyId: string | null,
   dealAmount: number | null,
   excludeDealId: string,
-): Promise<WonDealRow[]> {
+): Promise<DecisionRoomWonDealRow[]> {
   // Step 1: stages that are won.
   const { data: stages, error: stageErr } = await supabase
     .from("crm_deal_stages")
     .select("id, is_closed_won")
     .eq("is_closed_won", true);
   if (stageErr || !stages) return [];
-  const wonStageIds = (stages as StageRow[]).map((s) => s.id);
+  const wonStageIds = normalizeDecisionRoomStageRows(stages).map((s) => s.id);
   if (wonStageIds.length === 0) return [];
 
   // Step 2: deals at those stages, scoped to this company first.
@@ -62,7 +51,8 @@ async function fetchWonDeals(
       .is("deleted_at", null)
       .order("updated_at", { ascending: false })
       .limit(10);
-    if (!error && data && data.length > 0) return data as WonDealRow[];
+    const rows = normalizeDecisionRoomWonDealRows(data);
+    if (!error && rows.length > 0) return rows;
   }
 
   // Fallback: workspace-wide wins at similar deal size ±40%.
@@ -79,7 +69,7 @@ async function fetchWonDeals(
       .is("deleted_at", null)
       .order("updated_at", { ascending: false })
       .limit(10);
-    if (!error && data) return data as WonDealRow[];
+    if (!error) return normalizeDecisionRoomWonDealRows(data);
   }
   return [];
 }

@@ -15,6 +15,10 @@ import { supabase } from "@/lib/supabase";
 import { DeckSurface } from "./command-deck";
 import { cn } from "@/lib/utils";
 import { DecisionRoomCompetitorCounter } from "./DecisionRoomCompetitorCounter";
+import {
+  normalizeDecisionRoomLostDealRows,
+  type DecisionRoomLostDealRow,
+} from "../lib/decision-room-deal-rows";
 
 interface Props {
   dealId: string;
@@ -23,22 +27,11 @@ interface Props {
   dealAmount: number | null;
 }
 
-interface LostDealRow {
-  id: string;
-  name: string | null;
-  amount: number | null;
-  loss_reason: string | null;
-  competitor: string | null;
-  company_id: string | null;
-  expected_close_on: string | null;
-  updated_at: string | null;
-}
-
 async function fetchLostDeals(
   companyId: string | null,
   dealAmount: number | null,
   excludeDealId: string,
-): Promise<LostDealRow[]> {
+): Promise<DecisionRoomLostDealRow[]> {
   // Prefer losses at the same company. Fall back to recent losses at
   // similar deal size (± 40%) if the company has no history.
   if (companyId) {
@@ -51,8 +44,9 @@ async function fetchLostDeals(
       .is("deleted_at", null)
       .order("updated_at", { ascending: false })
       .limit(10);
-    if (!error && data && data.length > 0) {
-      return data as LostDealRow[];
+    const rows = normalizeDecisionRoomLostDealRows(data);
+    if (!error && rows.length > 0) {
+      return rows;
     }
   }
 
@@ -69,8 +63,8 @@ async function fetchLostDeals(
       .is("deleted_at", null)
       .order("updated_at", { ascending: false })
       .limit(10);
-    if (!error && data) {
-      return data as LostDealRow[];
+    if (!error) {
+      return normalizeDecisionRoomLostDealRows(data);
     }
   }
 
