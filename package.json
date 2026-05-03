@@ -54,6 +54,7 @@
     "intellidealer:customer:rerun-check": "bun ./scripts/verify-intellidealer-customer-rerun-safety.mjs",
     "intellidealer:customer:commit-rehearsal": "bun ./scripts/verify/intellidealer-canonical-commit-rehearsal.mjs",
     "intellidealer:production:smoke": "bun ./scripts/verify/intellidealer-production-smoke.mjs",
+    "intellidealer:gap-audit:regen": "bun ./scripts/regenerate-intellidealer-gap-audit.mjs",
     "qrm:sequences:production:smoke": "bun ./scripts/verify/qrm-follow-up-sequence-production-smoke.mjs"
   },
   "devDependencies": {

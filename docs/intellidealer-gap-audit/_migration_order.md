@@ -1,6 +1,6 @@
 # Migration Order — IntelliDealer → QEP Cutover
 
-This document sequences the 234 must-fix migrations (and the higher-priority shoulds) in **dependency-respecting waves**. Within each wave, migrations are independent and can land in any order or in parallel branches. Across waves, you must complete wave N before starting wave N+1 (FK references break otherwise).
+This document sequences the original must-fix migrations (and the higher-priority shoulds) in **dependency-respecting waves**. Within each wave, migrations are independent and can land in any order or in parallel branches. Across waves, you must complete wave N before starting wave N+1 (FK references break otherwise). The current regenerated blocker count lives in `manifest.yaml` and `_blockers.csv`.
 
 **Convention:** every wave file follows the canonical `NNN_snake_case.sql` naming required by the QEP repo (`qep/CLAUDE.md` → Backend Conventions). The numeric range suggested per wave below leaves room for in-wave splitting and re-ordering.
 

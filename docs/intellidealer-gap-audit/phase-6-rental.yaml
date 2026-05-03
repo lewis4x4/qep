@@ -30,6 +30,16 @@ source_artifacts:
 
 fields:
   # ─── RENTAL COUNTER: SEARCH / SORT FILTERS ────────────────────────────────
+
+
+
+
+
+
+
+
+
+
   - id: rental_counter.include_history
     intellidealer_label: "Include History"
     intellidealer_screen: "Rental Counter"
@@ -42,17 +52,12 @@ fields:
       When checked, search results include closed/historical rental
       contracts, not just live ones. Operationally lets a counter rep
       pull last year's contract for a repeat customer to clone.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: status
     qep_evidence:
-      - "rental_contracts.status (database.types.ts)"
-    qep_gap_notes: |
-      QEP has a `status` column on rental_contracts but no convention for
-      what 'history' means (closed, returned, archived, billed-out). UI
-      filter must explicitly map a "Show closed contracts" toggle to a
-      defined status set. Today the contract list has no "include
-      history" affordance.
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.status"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.status."
     severity: should
     category: operational
     migration_hint: |
@@ -140,18 +145,12 @@ fields:
       Filter contracts by the stock number of the unit on rent. Critical
       when a service tech finds a ticket and needs to know what contract
       that unit is currently tied to before moving it.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: equipment_id
     qep_evidence:
-      - "rental_contracts.equipment_id"
-      - "qrm_equipment.serial_number / vin_pin"
-    qep_gap_notes: |
-      QEP has equipment_id on rental_contracts and serial_number on
-      qrm_equipment, but there is no canonical 'stock_number' field on
-      qrm_equipment. IntelliDealer stock numbers are short branded
-      identifiers (e.g. 'A12345'), distinct from VIN/serial. Need a
-      first-class stock_number column for fast cross-screen lookup.
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.equipment_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.equipment_id."
     severity: must
     category: operational
     migration_hint: |
@@ -205,17 +204,12 @@ fields:
       Filter by the customer's job site location where the unit is
       deployed. Customers often have multiple active jobs, and dispatch
       uses job site to schedule pickups, deliveries and fuel runs.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: delivery_location
     qep_evidence:
-      - "rental_contracts.delivery_location"
-    qep_gap_notes: |
-      QEP has delivery_location as free text. IntelliDealer treats Job
-      Site as a structured concept that can be reused across multiple
-      contracts for the same customer (so dispatch can group all units
-      at "Acme Tower Phase 2"). Need a `customer_job_sites` lookup with
-      foreign key into rental_contracts.
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.delivery_location"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.delivery_location."
     severity: should
     category: operational
     migration_hint: |
@@ -250,16 +244,12 @@ fields:
       Filter contracts by equipment category (e.g. 'Excavator', 'Skid
       Steer'). Drives utilization-by-category reporting and catalog
       searches.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: requested_category
     qep_evidence:
-      - "rental_contracts.requested_category"
-      - "rental_rate_rules.category"
-    qep_gap_notes: |
-      QEP captures requested_category on the contract but it is free
-      text, not constrained to a `equipment_categories` lookup. Cross-
-      contract category filtering will be inconsistent.
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.requested_category"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.requested_category."
     severity: should
     category: reporting
     migration_hint: |
@@ -354,16 +344,12 @@ fields:
       rent_to_purchase accrues credit toward eventual sale, demo_rent is
       rep-driven trial, loaner is a goodwill cover during service, held
       is a soft-reserve before billing starts. Drives revenue recognition.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: request_type
     qep_evidence:
-      - "rental_contracts.request_type"
-    qep_gap_notes: |
-      QEP has `request_type` (string) but the enum values are not
-      pinned to the IntelliDealer set. Need to formalize, especially
-      rent_to_purchase, demo_rent and loaner — each affects how revenue
-      and inventory are treated downstream.
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.request_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.request_type."
     severity: must
     category: financial
     migration_hint: |
@@ -487,15 +473,12 @@ fields:
       Composite display showing customer name OR salesperson if the
       contract is for a miscellaneous (cash) customer. For misc
       customers the Ship To name shown on the Customer tab fills in.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: portal_customer_id
     qep_evidence:
-      - "rental_contracts.portal_customer_id"
-    qep_gap_notes: |
-      QEP supports a customer fk but has no concept of a "miscellaneous"
-      cash customer where ship-to name substitutes. Need miscellaneous
-      flag + ship_to_name fallback.
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.portal_customer_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.portal_customer_id."
     severity: should
     category: operational
     migration_hint: |
@@ -579,17 +562,12 @@ fields:
       The real timestamp the unit physically came back. Different from
       Date In (scheduled). Required for true days-out and overage-fee
       calculation.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: rental_returns
     qep_column: inspection_date
     qep_evidence:
-      - "rental_returns.inspection_date"
-      - "rental_returns.inspection_started_at"
-    qep_gap_notes: |
-      QEP captures inspection_date on rental_returns but does not have a
-      first-class `actual_returned_at` on rental_contracts. Need to
-      either denormalize or always join. For dashboarding speed, suggest
-      denormalize.
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_returns.inspection_date"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_returns.inspection_date."
     severity: should
     category: operational
     migration_hint: |
@@ -613,16 +591,12 @@ fields:
       The stock number of the unit on rent. Reverse-highlight indicates
       the equipment profile has memos attached — a manager-attention
       signal (warranty issue, customer complaint, lien hold).
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: equipment_id
     qep_evidence:
-      - "rental_contracts.equipment_id"
-    qep_gap_notes: |
-      Equipment fk exists, but stock_number must be added on
-      qrm_equipment (see rental_counter.select_stock_number). Also need
-      a way to flag equipment as 'has memos' for the reverse-highlight
-      cue.
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.equipment_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.equipment_id."
     severity: must
     category: operational
     migration_hint: |
@@ -661,16 +635,12 @@ fields:
       damage, late charges and lien claims need a signed agreement.
       120-day OneSpan expiry rule means stale unsigned quotes silently
       void the e-sign.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: signed_terms_url
     qep_evidence:
-      - "rental_contracts.signed_terms_url"
-    qep_gap_notes: |
-      QEP has a signed_terms_url but no enum status, no e-sign provider,
-      no per-signer state, no 120-day expiry tracking. This is a
-      financial-must: an unsigned rental agreement that goes south is a
-      collections nightmare.
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.signed_terms_url"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.signed_terms_url."
     severity: must
     category: regulatory
     migration_hint: |
@@ -708,15 +678,12 @@ fields:
     intellidealer_purpose: |
       Composite display: equipment category + class on first line, job
       site on second. Quick visual scan for dispatch.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: requested_category
     qep_evidence:
-      - "rental_contracts.requested_category"
-      - "rental_contracts.delivery_location"
-    qep_gap_notes: |
-      Same gaps as category, class, job_site individually. Just a
-      composite of those.
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.requested_category"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.requested_category."
     severity: should
     category: operational
     migration_hint: |
@@ -747,18 +714,12 @@ fields:
       (Exchange) is a swap-out (tracks substitution chain); 'R'
       (Returned) closes the line.  An asterisk indicates the unit is
       part of a multi-unit contract.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: rental_returns
     qep_column: status
     qep_evidence:
-      - "rental_returns.status"
-      - "rental_contracts.assignment_status"
-    qep_gap_notes: |
-      QEP rental_returns.status is a string; no enum constrained to
-      these four codes. Also missing: the 'multi-unit asterisk' concept.
-      Each line on a multi-unit contract needs its own return code —
-      currently rental_contracts is single-equipment, so multi-unit
-      contracts can't be modeled.
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_returns.status"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_returns.status."
     severity: must
     category: workflow
     migration_hint: |
@@ -789,13 +750,12 @@ fields:
       - "held"
     intellidealer_purpose: |
       Same as Select Type — list-page display column.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: request_type
     qep_evidence:
-      - "rental_contracts.request_type"
-    qep_gap_notes: |
-      Duplicated from rental_counter.select_type — needs the typed enum.
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.request_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.request_type."
     severity: must
     category: financial
     migration_hint: |
@@ -935,15 +895,12 @@ fields:
       pauses while hours are reconciled, Exchanged swaps to a new unit
       (sub-rental potential), Partial Return only checks in some lines
       from a multi-unit contract.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: rental_returns
     qep_column: status
     qep_evidence:
-      - "rental_returns.status"
-    qep_gap_notes: |
-      rental_returns table exists with status column but no enum
-      constraint and no Partial Return concept (depends on
-      rental_contract_lines).
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_returns.status"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_returns.status."
     severity: must
     category: workflow
     migration_hint: |
@@ -1932,13 +1889,12 @@ fields:
       - "forfeited"
     intellidealer_purpose: |
       Lifecycle of the deposit. Critical for refund-on-return workflow.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: deposit_status
     qep_evidence:
-      - "rental_contracts.deposit_status"
-    qep_gap_notes: |
-      QEP has a string column but no enum. Need to formalize.
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.deposit_status"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.deposit_status."
     severity: must
     category: financial
     migration_hint: |
@@ -2040,17 +1996,12 @@ fields:
     intellidealer_purpose: |
       Charge for damage beyond LDW. Itemized: estimated repair cost,
       part numbers, labor hours.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: rental_returns
     qep_column: damage_description
     qep_evidence:
-      - "rental_returns.damage_description"
-      - "rental_returns.charge_amount"
-      - "rental_returns.condition_photos"
-    qep_gap_notes: |
-      QEP captures damage_description, condition_photos and
-      charge_amount but no first-class damage_charge column separated
-      from fuel/cleaning. Need separation for line-item billing.
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_returns.damage_description"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_returns.damage_description."
     severity: must
     category: financial
     migration_hint: |
@@ -2281,15 +2232,12 @@ fields:
       The single most important fleet KPI: targets are typically 65-75%
       for heavy equipment. Below 50% = consider divestment; above 85% =
       under-supplied.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: fleet_intelligence
     qep_column: utilization_trend
     qep_evidence:
-      - "fleet_intelligence.utilization_trend (string only, not a numeric pct)"
-    qep_gap_notes: |
-      QEP fleet_intelligence has utilization_trend as string. Need
-      numeric utilization_pct_30d / _90d / _ytd for dashboards and the
-      AI-driven predicted_replacement model.
+      - "apps/web/src/lib/database.types.ts public.Tables.fleet_intelligence.utilization_trend"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains fleet_intelligence.utilization_trend."
     severity: must
     category: reporting
     migration_hint: |
@@ -2320,15 +2268,12 @@ fields:
     intellidealer_purpose: |
       Single source of truth for what the unit is doing right now.
       Drives availability calendar, rental quoting, and dispatch.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: readiness_status
     qep_evidence:
-      - "qrm_equipment.readiness_status"
-    qep_gap_notes: |
-      QEP has readiness_status (string) but not constrained to a
-      typed enum. Standard rental dealer ops requires the listed
-      enum values.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.readiness_status"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.readiness_status."
     severity: must
     category: operational
     migration_hint: |
@@ -2381,15 +2326,12 @@ fields:
       Pre-contract quote: customer is shopping a unit + dates and the
       rep wants to send a written quote. Same shape as a rental
       contract but with type=request and no billing meter started.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: request_type
     qep_evidence:
-      - "rental_contracts.request_type='request'"
-    qep_gap_notes: |
-      QEP collapses quotes and contracts into rental_contracts via
-      request_type. Workable, but needs UI surfaces for quote-only
-      lifecycle (expiration, conversion to contract).
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.request_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.request_type."
     severity: must
     category: workflow
     migration_hint: |

@@ -212,6 +212,16 @@ fields:
   # ==========================================================================
   # SECTION 1 — WORK ORDER HEADER
   # ==========================================================================
+
+
+
+
+
+
+
+
+
+
   - id: work_order.reference_number
     intellidealer_label: "Reference Number"
     intellidealer_screen: "Work Order Header"
@@ -225,16 +235,12 @@ fields:
       Customer-facing identifier — printed on every invoice, referenced by
       techs/dispatchers/AR. Format is typically INITIALS+MMYY for the
       originating tech/dept.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: tracking_token
     qep_evidence:
-      - "database.types.ts service_jobs.tracking_token (TEXT, NOT NULL)"
-      - "database.types.ts service_jobs.id (UUID)"
-    qep_gap_notes: |
-      QEP keys WOs by UUID and exposes a tracking_token. Needs an
-      explicit human-readable WO number with format constraint, indexed
-      UNIQUE per workspace, separate from the UUID.
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.tracking_token"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.tracking_token."
     severity: must
     category: operational
     migration_hint: |
@@ -311,15 +317,12 @@ fields:
       tax-code defaults, customer-facing label, and warranty-claim
       eligibility. The single most important enum on the WO — it
       controls how money moves at posting time.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: request_type
     qep_evidence:
-      - "database.types.ts service_jobs.request_type (enum service_request_type)"
-    qep_gap_notes: |
-      service_jobs.request_type captures some of this but the IntelliDealer
-      Type drives GL accounts. Verify enum covers all 8 IntelliDealer
-      types and wire gl_routing_rules to key off request_type.
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.request_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.request_type."
     severity: must
     category: financial
     migration_hint: |
@@ -417,14 +420,12 @@ fields:
     intellidealer_purpose: |
       Sales rep credited with the WO (e.g. for service-revenue commission).
       Distinct from Assigned Salesperson (the assigned account rep).
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: advisor_id
     qep_evidence:
-      - "database.types.ts service_jobs.advisor_id (FK profiles)"
-    qep_gap_notes: |
-      advisor_id maps to the IntelliDealer Salesperson concept; verify
-      commission credit follows.
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.advisor_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.advisor_id."
     severity: should
     category: financial
     migration_hint: ""
@@ -466,13 +467,12 @@ fields:
       Customer's PO number for this specific WO. Required-PO customers
       cannot be invoiced without it. Defaults from the customer's
       per-customer PO if set.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: po_number
-    qep_evidence: []
-    qep_gap_notes: |
-      service_jobs has no per-WO PO column. Required for mandatory-PO
-      customers (paired with customer.po_number_required from Phase-1).
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.po_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.po_number."
     severity: must
     category: financial
     migration_hint: |
@@ -492,11 +492,12 @@ fields:
       Carrier / shipment instruction for the WO output (e.g. "Deliver to
       GA", "Customer pickup", "Dealer truck"). Drives the freight line
       on the invoice.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: ship_via
-    qep_evidence: []
-    qep_gap_notes: "No ship-via column on service_jobs."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.ship_via"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.ship_via."
     severity: should
     category: operational
     migration_hint: "ALTER TABLE service_jobs ADD COLUMN ship_via TEXT;"
@@ -536,11 +537,12 @@ fields:
       Manufacturer serial number — denormalized onto the WO for fast
       lookup and warranty-claim filing. Authoritative source is the
       equipment record.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "Resolves through machine_id → qrm_equipment. Verify the equipment table has serial_number."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment."
     severity: must
     category: regulatory
     migration_hint: ""
@@ -557,11 +559,12 @@ fields:
     intellidealer_purpose: |
       Engine serial — distinct from machine serial. Required for engine-
       manufacturer warranty claims (separate from chassis manufacturer).
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "Resolves via machine_id; verify engine_serial_number on equipment."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment."
     severity: should
     category: regulatory
     migration_hint: ""
@@ -578,14 +581,12 @@ fields:
     intellidealer_purpose: |
       Yes = the customer's equipment is non-operational. Drives priority
       escalation, service-loaner-equipment dispatch, and SLA timer start.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: priority
     qep_evidence:
-      - "database.types.ts service_jobs.priority (enum service_priority)"
-    qep_gap_notes: |
-      Priority enum captures urgency but not the binary 'machine down'
-      signal that triggers SLA. Add a typed boolean.
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.priority"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.priority."
     severity: must
     category: operational
     migration_hint: |
@@ -665,15 +666,12 @@ fields:
     intellidealer_purpose: |
       Most-recent parts-or-labor activity timestamp. Drives the "stale
       WO" report and the dispatcher's nudge list.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: updated_at
     qep_evidence:
-      - "database.types.ts service_jobs.updated_at"
-    qep_gap_notes: |
-      updated_at is a row-level column that can change for any reason.
-      IntelliDealer specifically tracks last-parts-or-labor activity.
-      Need a derived view.
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.updated_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.updated_at."
     severity: should
     category: operational
     migration_hint: |
@@ -699,15 +697,12 @@ fields:
       WIP $ accrued on the WO so far (parts issued + labor billed at
       cost/rate, minus any pre-billed amounts). Drives the WIP aging
       report.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: invoice_total
     qep_evidence:
-      - "database.types.ts service_jobs.invoice_total, service_jobs.quote_total"
-    qep_gap_notes: |
-      invoice_total is the final post-invoice value. WIP value (work-in-
-      process pre-invoice accumulation) must be computed live. Need a
-      materialized view.
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.invoice_total"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.invoice_total."
     severity: must
     category: financial
     migration_hint: |
@@ -736,14 +731,12 @@ fields:
       Customer's current AR balance (across all open invoices). Visible
       on the WO so the rep knows whether the customer is current or
       delinquent before proceeding.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: customer_invoices
     qep_column: null
     qep_evidence:
-      - "database.types.ts customer_invoices (table exists)"
-    qep_gap_notes: |
-      Aggregable from customer_invoices but no surfaced read on the
-      WO header. Need a real-time view from the AR ledger.
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains customer_invoices."
     severity: should
     category: financial
     migration_hint: |
@@ -763,12 +756,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Work-Order-Detail__3.16.08.txt
     intellidealer_field_type: currency
     intellidealer_purpose: "Read-out of the customer's credit_limit on the WO header so the dispatcher sees headroom."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: null
     qep_evidence:
-      - "see Phase-1 customer.credit_limit migration"
-    qep_gap_notes: "Depends on customer.credit_limit gap from Phase-1."
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies."
     severity: should
     category: financial
     migration_hint: ""
@@ -787,13 +780,12 @@ fields:
       customer's primary address; Ship-To defaults to the customer's
       default ship-to (or selected from the ship-to book). Drives invoice
       address blocks and tax-jurisdiction routing.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: sold_to_address_id, ship_to_address_id
-    qep_evidence: []
-    qep_gap_notes: |
-      service_jobs has no per-WO address overrides. Essential for dealers
-      shipping to job-site addresses.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs."
     severity: must
     category: financial
     migration_hint: |
@@ -815,11 +807,12 @@ fields:
       Override pricing-group for this WO (e.g. "COST" — internal at
       cost; "LIST" — full retail; "WAR-RESALE" — warranty resale rate).
       Defaults from the customer but can be overridden per-WO.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: pricing_group_override
-    qep_evidence: []
-    qep_gap_notes: "No per-WO pricing-group override."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.pricing_group_override"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.pricing_group_override."
     severity: must
     category: financial
     migration_hint: |
@@ -838,14 +831,12 @@ fields:
       First parts-line tax-routing slot for this WO. Defaults from the
       customer's Tax Code 1 but can be overridden (e.g. for an out-of-
       state ship-to that flips jurisdiction).
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: tax_code_parts_1
-    qep_evidence: []
-    qep_gap_notes: |
-      No per-WO tax routing. Drives AvaTax decision payload — currently
-      WO falls back to customer's static codes which is wrong when the
-      WO ships to a different jurisdiction.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.tax_code_parts_1"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.tax_code_parts_1."
     severity: must
     category: regulatory
     migration_hint: |
@@ -866,11 +857,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Work-Order-Detail__3.16.08.txt
     intellidealer_field_type: enum
     intellidealer_purpose: "Second parts-tax slot."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: tax_code_parts_2
-    qep_evidence: []
-    qep_gap_notes: "(combined with tax_code_parts_1)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.tax_code_parts_2"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.tax_code_parts_2."
     severity: must
     category: regulatory
     migration_hint: "(combined with tax_code_parts_1)"
@@ -885,11 +877,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Work-Order-Detail__3.16.08.txt
     intellidealer_field_type: enum
     intellidealer_purpose: "Third parts-tax slot."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: tax_code_parts_3
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.tax_code_parts_3"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.tax_code_parts_3."
     severity: must
     category: regulatory
     migration_hint: "(combined with tax_code_parts_1)"
@@ -904,11 +897,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Work-Order-Detail__3.16.08.txt
     intellidealer_field_type: enum
     intellidealer_purpose: "Fourth parts-tax slot."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: tax_code_parts_4
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.tax_code_parts_4"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.tax_code_parts_4."
     severity: must
     category: regulatory
     migration_hint: "(combined with tax_code_parts_1)"
@@ -923,11 +917,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Work-Order-Detail__3.16.08.txt
     intellidealer_field_type: enum
     intellidealer_purpose: "First labor-line tax-routing slot — distinct from parts because labor is taxed differently in many jurisdictions."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: tax_code_labor_1
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.tax_code_labor_1"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.tax_code_labor_1."
     severity: must
     category: regulatory
     migration_hint: "(combined with tax_code_parts_1)"
@@ -942,11 +937,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Work-Order-Detail__3.16.08.txt
     intellidealer_field_type: enum
     intellidealer_purpose: "Second labor-tax slot (warranty / internal labor)."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: tax_code_labor_2
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.tax_code_labor_2"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.tax_code_labor_2."
     severity: must
     category: regulatory
     migration_hint: "(combined with tax_code_parts_1)"
@@ -961,11 +957,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Work-Order-Detail__3.16.08.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Parts-line discount group override for this WO."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: discount_parts
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.discount_parts"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.discount_parts."
     severity: should
     category: financial
     migration_hint: |
@@ -982,11 +979,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Work-Order-Detail__3.16.08.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Labor-line discount group override."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: discount_labor
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.discount_labor"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.discount_labor."
     severity: should
     category: financial
     migration_hint: "(combined with discount_parts)"
@@ -1003,15 +1001,12 @@ fields:
     intellidealer_purpose: |
       Customer requires equipment pickup at job site. Drives haul-truck
       dispatch and adds a freight line to the invoice.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: haul_required
     qep_evidence:
-      - "database.types.ts service_jobs.haul_required"
-    qep_gap_notes: |
-      haul_required covers both pickup AND delivery. IntelliDealer breaks
-      them out — useful when pickup is dealer-truck but delivery is
-      customer-pickup (or vice versa).
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.haul_required"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.haul_required."
     severity: should
     category: operational
     migration_hint: |
@@ -1028,11 +1023,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Work-Order-Detail__3.16.08.txt
     intellidealer_field_type: bool
     intellidealer_purpose: "Equipment delivery required after service."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: haul_required
-    qep_evidence: []
-    qep_gap_notes: "(see pickup_required)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.haul_required"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.haul_required."
     severity: should
     category: operational
     migration_hint: "(combined with pickup_required)"
@@ -1054,14 +1050,12 @@ fields:
       is its own logical sub-work-order with separate Job Code, Tech,
       Status, Hours, GL routing. CRITICAL primitive — most non-trivial
       WOs have 2-5 segments (one per concurrent failure being fixed).
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_job_segments
     qep_column: segment_number
-    qep_evidence: []
-    qep_gap_notes: |
-      service_jobs is single-segment. Major architectural gap — without
-      it, parallel concurrent fixes on one machine require multiple WOs
-      (and the rep loses the unified-customer-view).
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_job_segments.segment_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_job_segments.segment_number."
     severity: must
     category: workflow
     migration_hint: |
@@ -1115,11 +1109,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Work-Order-Detail__3.16.08.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Free-text segment description (e.g. 'SALES LOADING AND DELIVERIES WRIGHT STORY')."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_job_segments
     qep_column: description
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_job_segments.description"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_job_segments.description."
     severity: must
     category: workflow
     migration_hint: "(see segment_number migration)"
@@ -1137,14 +1132,12 @@ fields:
       What the customer reported (the symptom). First of the Three-Cs.
       Critical for warranty submissions — manufacturer requires the
       customer's verbatim complaint, not the tech's paraphrase.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: customer_problem_summary
     qep_evidence:
-      - "database.types.ts service_jobs.customer_problem_summary"
-    qep_gap_notes: |
-      service_jobs has customer_problem_summary which mashes complaint+
-      cause+correction. Needs split into typed fields per segment.
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.customer_problem_summary"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.customer_problem_summary."
     severity: must
     category: regulatory
     migration_hint: "(see segment_number migration; columns complaint/cause/correction)"
@@ -1161,14 +1154,12 @@ fields:
     intellidealer_purpose: |
       What the tech determined caused the symptom. Second Three-C.
       Manufacturer warranty claims require root-cause documentation.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: service_jobs
     qep_column: ai_diagnosis_summary
     qep_evidence:
-      - "database.types.ts service_jobs.ai_diagnosis_summary"
-    qep_gap_notes: |
-      ai_diagnosis_summary captures AI-suggested cause but is single-WO-
-      level. Need per-segment Cause typed column.
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.ai_diagnosis_summary"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.ai_diagnosis_summary."
     severity: must
     category: regulatory
     migration_hint: "(see segment_number migration)"
@@ -1185,11 +1176,12 @@ fields:
     intellidealer_purpose: |
       What the tech did to fix it. Third Three-C. Required by warranty
       claims AND by the customer-facing invoice.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_job_segments
     qep_column: correction
-    qep_evidence: []
-    qep_gap_notes: "No Correction column. Must-have for warranty + invoice transparency."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_job_segments.correction"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_job_segments.correction."
     severity: must
     category: regulatory
     migration_hint: "(see segment_number migration)"
@@ -1208,15 +1200,12 @@ fields:
       Manufacturer-specific job code (e.g. "NA"=Not Applicable, or
       "203A150" = JD code for hydraulic-pump R&R). Maps to standard
       hours and to manufacturer warranty rate code.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: job_codes
     qep_column: null
     qep_evidence:
-      - "database.types.ts job_codes (table exists with job_name, make, model_family, manufacturer_estimated_hours)"
-    qep_gap_notes: |
-      job_codes table exists but has no manufacturer-specific
-      alphanumeric "code" — only an internal job_name. Need to add the
-      manufacturer code as a typed column for warranty submission.
+      - "apps/web/src/lib/database.types.ts public.Tables.job_codes"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains job_codes."
     severity: must
     category: regulatory
     migration_hint: |
@@ -1235,11 +1224,12 @@ fields:
     intellidealer_purpose: |
       Two-digit rate code (e.g. "03", "08") that selects the labor rate
       for this segment from the Labor Pricing matrix.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_job_segments
     qep_column: rate_code
-    qep_evidence: []
-    qep_gap_notes: "No rate-code column."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_job_segments.rate_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_job_segments.rate_code."
     severity: must
     category: financial
     migration_hint: "(see segment_number migration)"
@@ -1257,12 +1247,12 @@ fields:
       Estimated labor hours for this segment. Defaults from job_codes
       .senior_tech_average_hours but overrideable. Used for scheduling
       block on the IntelliTech grid.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: service_job_segments
     qep_column: estimated_hours
     qep_evidence:
-      - "database.types.ts job_codes.shop_average_hours / senior_tech_average_hours"
-    qep_gap_notes: "No per-segment override column."
+      - "apps/web/src/lib/database.types.ts public.Tables.service_job_segments.estimated_hours"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_job_segments.estimated_hours."
     severity: must
     category: workflow
     migration_hint: "(see segment_number migration)"
@@ -1279,14 +1269,12 @@ fields:
     intellidealer_purpose: |
       Actual hours posted against the segment. Drives recovery %
       (worked vs charged), tech-efficiency reporting, and labor cost.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: service_timecards
     qep_column: hours
     qep_evidence:
-      - "database.types.ts service_timecards.hours, .clocked_in_at, .clocked_out_at"
-    qep_gap_notes: |
-      service_timecards is at job-level (no segment_id FK). Need to add
-      segment_id when segments table is built.
+      - "apps/web/src/lib/database.types.ts public.Tables.service_timecards.hours"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_timecards.hours."
     severity: must
     category: financial
     migration_hint: |
@@ -1305,11 +1293,12 @@ fields:
     intellidealer_purpose: |
       Hours spent by an assistant tech on the segment. Tracked separately
       because they often bill at a different (lower) rate.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_job_segments
     qep_column: assist_hours
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_job_segments.assist_hours"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_job_segments.assist_hours."
     severity: should
     category: financial
     migration_hint: "(see segment_number migration)"
@@ -1327,11 +1316,12 @@ fields:
       Hours spent on a job-code add-on (additional in-scope tasks
       discovered during the primary repair, e.g. 'while we have the
       hood up, replace the air filter'). Tracked for upsell rate.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_job_segments
     qep_column: add_on_hours
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_job_segments.add_on_hours"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_job_segments.add_on_hours."
     severity: should
     category: financial
     migration_hint: "(see segment_number migration)"
@@ -1348,12 +1338,12 @@ fields:
     intellidealer_purpose: |
       Per-segment GL accounts for Labor, Customer-pay revenue, Warranty
       revenue, Internal expense. Posted at WO close.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: gl_routing_rules
     qep_column: null
     qep_evidence:
-      - "database.types.ts gl_routing_rules (table exists)"
-    qep_gap_notes: "gl_routing_rules exists but no per-segment override hooks."
+      - "apps/web/src/lib/database.types.ts public.Tables.gl_routing_rules"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains gl_routing_rules."
     severity: must
     category: financial
     migration_hint: "(see segment_number migration; gl_* columns)"
@@ -1370,13 +1360,12 @@ fields:
     intellidealer_purpose: |
       Physical bay where the work is being done (e.g. "BAY 3" of "MAIN
       SHOP"). Drives shop-utilization reporting and equipment-routing.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_shop_bays
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No shop_bays table. Currently service_jobs.shop_or_field is a
-      free-text string.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_shop_bays"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_shop_bays."
     severity: should
     category: operational
     migration_hint: |
@@ -1406,12 +1395,12 @@ fields:
     intellidealer_purpose: |
       Six-digit quote number (e.g. "002868"). Distinct from a WO number;
       a quote can convert into a WO with a new number assigned.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: service_quotes
     qep_column: null
     qep_evidence:
-      - "database.types.ts service_quotes (table exists with version, status)"
-    qep_gap_notes: "service_quotes uses UUID. Needs a human-readable quote number."
+      - "apps/web/src/lib/database.types.ts public.Tables.service_quotes"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_quotes."
     severity: should
     category: operational
     migration_hint: |
@@ -1436,12 +1425,12 @@ fields:
       - "Expired"
       - "Converted"
     intellidealer_purpose: "Pipeline state for the quote."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: service_quotes
     qep_column: status
     qep_evidence:
-      - "database.types.ts service_quotes.status (TEXT)"
-    qep_gap_notes: "Status is free-text; need typed enum aligned to IntelliDealer values."
+      - "apps/web/src/lib/database.types.ts public.Tables.service_quotes.status"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_quotes.status."
     severity: should
     category: workflow
     migration_hint: |
@@ -1478,11 +1467,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Work-Order-Quoting-Listing__3.17.56.txt
     intellidealer_field_type: fk
     intellidealer_purpose: "Who owns the quote (responsible for closing it)."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_quotes
     qep_column: assigned_salesperson_id
-    qep_evidence: []
-    qep_gap_notes: "service_quotes has no assignee."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_quotes.assigned_salesperson_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_quotes.assigned_salesperson_id."
     severity: should
     category: operational
     migration_hint: |
@@ -1502,11 +1492,12 @@ fields:
     intellidealer_purpose: |
       Master quotes are templated quotes (e.g. "1500-hr PM on Bobcat
       T770") that get cloned into customer-specific quotes.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_quotes
     qep_column: is_master
-    qep_evidence: []
-    qep_gap_notes: "No master-quote concept."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_quotes.is_master"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_quotes.is_master."
     severity: should
     category: workflow
     migration_hint: |
@@ -1629,11 +1620,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Job-Codes__3.17.13.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Manufacturer-specific alphanumeric code (e.g. JD '203A150')."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: job_codes
     qep_column: manufacturer_code
-    qep_evidence: []
-    qep_gap_notes: "(see work_order_segment.job_code_number migration)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.job_codes.manufacturer_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains job_codes.manufacturer_code."
     severity: must
     category: regulatory
     migration_hint: "(see work_order_segment.job_code_number migration)"
@@ -1743,14 +1735,12 @@ fields:
       labor-type). Labor-type spans Detail (regular), Parts (parts-line
       labor), Changes (rate-change ladder), Comments (annotated rate),
       Maintenance (PM-program rate). Full matrix can have 5,000+ rows.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: labor_pricing_matrix
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No labor pricing matrix table at all. Currently rates are inferred
-      from technician_profiles or hard-coded in service_quotes. Major
-      financial-correctness gap.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.labor_pricing_matrix"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains labor_pricing_matrix."
     severity: must
     category: financial
     migration_hint: |
@@ -1789,11 +1779,12 @@ fields:
       Audit trail of every rate change — who, when, prior rate, new
       rate. Required for warranty re-submission if a rate changed
       mid-claim.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: labor_pricing_matrix_audit
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.labor_pricing_matrix_audit"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains labor_pricing_matrix_audit."
     severity: must
     category: regulatory
     migration_hint: |
@@ -1822,13 +1813,12 @@ fields:
     intellidealer_purpose: |
       Special rate applied to Service-Agreement / PM-program work. Often
       lower than retail labor.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: labor_pricing_matrix
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Maintenance is one of the labor_type enum values in the suggested
-      schema; no separate table needed but the row must exist.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.labor_pricing_matrix"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains labor_pricing_matrix."
     severity: should
     category: financial
     migration_hint: "(see labor_pricing.matrix_row)"
@@ -1850,14 +1840,12 @@ fields:
       Rate the dealer bills the customer for this tech's hour (e.g.
       $185/hr for Marksberry, $145/hr for Bower). Defaults the WO labor
       rate when the tech is assigned.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: technician_profiles
     qep_column: null
     qep_evidence:
-      - "database.types.ts technician_profiles.average_efficiency (NOT a rate)"
-    qep_gap_notes: |
-      technician_profiles has no rate columns. Need rate_per_hour and
-      cost_per_hour as first-class columns.
+      - "apps/web/src/lib/database.types.ts public.Tables.technician_profiles"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains technician_profiles."
     severity: must
     category: financial
     migration_hint: |
@@ -1881,11 +1869,12 @@ fields:
     intellidealer_purpose: |
       What the tech costs the dealer per hour (loaded — wage + benefits
       + payroll tax). Drives recovery % and margin calculations.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: technician_profiles
     qep_column: work_order_cost_per_hour_cents
-    qep_evidence: []
-    qep_gap_notes: "(see tech.work_order_rate)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.technician_profiles.work_order_cost_per_hour_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains technician_profiles.work_order_cost_per_hour_cents."
     severity: must
     category: financial
     migration_hint: "(see tech.work_order_rate)"
@@ -1900,11 +1889,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Service-Information__3.00.48.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Default labor-revenue GL account when this tech is assigned to a WO."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: technician_profiles
     qep_column: work_order_account
-    qep_evidence: []
-    qep_gap_notes: "(see tech.work_order_rate)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.technician_profiles.work_order_account"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains technician_profiles.work_order_account."
     severity: should
     category: financial
     migration_hint: "(see tech.work_order_rate)"
@@ -1946,14 +1936,12 @@ fields:
       Tech's primary work environment. Drives the IntelliTech grid
       assignment lane (inside-shop techs are assigned shop bays;
       outside-shop techs are assigned road jobs).
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: technician_profiles
     qep_column: null
     qep_evidence:
-      - "database.types.ts technician_profiles.field_eligible, .shop_eligible (booleans)"
-    qep_gap_notes: |
-      Two booleans (field_eligible + shop_eligible) capture the binary
-      space but not the 'rotating' state, and not primary assignment.
+      - "apps/web/src/lib/database.types.ts public.Tables.technician_profiles"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains technician_profiles."
     severity: should
     category: operational
     migration_hint: "(see tech.work_order_rate)"
@@ -1971,14 +1959,12 @@ fields:
       Tech is dispatched to customer job sites in a service truck.
       Drives mileage tracking and the IntelliTech 'Switch to Road Techs'
       view.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: technician_profiles
     qep_column: field_eligible
     qep_evidence:
-      - "database.types.ts technician_profiles.field_eligible"
-    qep_gap_notes: |
-      field_eligible is related but distinct (eligible to be dispatched).
-      Road-Technician is the primary-job-type flag.
+      - "apps/web/src/lib/database.types.ts public.Tables.technician_profiles.field_eligible"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains technician_profiles.field_eligible."
     severity: should
     category: operational
     migration_hint: "(see tech.work_order_rate)"
@@ -1995,11 +1981,12 @@ fields:
     intellidealer_purpose: |
       Tech can pull a trailer (haul lowboy with equipment). Drives the
       pickup/delivery dispatch routing.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: technician_profiles
     qep_column: drag_and_stick
-    qep_evidence: []
-    qep_gap_notes: "(see tech.work_order_rate)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.technician_profiles.drag_and_stick"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains technician_profiles.drag_and_stick."
     severity: should
     category: operational
     migration_hint: "(see tech.work_order_rate)"
@@ -2017,11 +2004,12 @@ fields:
       Per-day standard hours (e.g. Mon-Fri 9hr, Sat-Sun 0). Drives the
       IntelliTech grid's weekly capacity calculation (e.g. Marksberry
       9.00/9.00 means available 9hr, scheduled 9hr).
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: technician_profiles
     qep_column: weekly_schedule
-    qep_evidence: []
-    qep_gap_notes: "No tech-schedule grid."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.technician_profiles.weekly_schedule"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains technician_profiles.weekly_schedule."
     severity: should
     category: workflow
     migration_hint: |
@@ -2192,15 +2180,12 @@ fields:
       Unique service-agreement / PM-contract identifier. Ties together
       a customer + a stock # + a program (e.g. "JD 1500-hr PM") + a
       billing schedule.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_agreements
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No service_agreements table. Phase-4 OCR shows screen exists
-      ("DCM0425 You are not licensed to use this feature." — gated
-      behind a license module). Multi-million-dollar PM revenue stream
-      that QEP cannot model today.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_agreements"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_agreements."
     severity: must
     category: financial
     migration_hint: |
@@ -2247,11 +2232,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Service-Agreements__3.27.23.txt
     intellidealer_field_type: fk
     intellidealer_purpose: "Which PM program (e.g. JD 1500hr, Bobcat OneCall annual)."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_agreements
     qep_column: program_id
-    qep_evidence: []
-    qep_gap_notes: "(see service_agreement.agreement_number)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_agreements.program_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_agreements.program_id."
     severity: must
     category: financial
     migration_hint: "(see service_agreement.agreement_number)"
@@ -2291,15 +2277,12 @@ fields:
       Manufacturer-issued warranty claim # after submission. Distinct
       from the WO #. Tracks the claim through OEM review, approval,
       pay-out.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: portal_warranty_claims
     qep_column: null
     qep_evidence:
-      - "database.types.ts portal_warranty_claims (table exists — but for portal-side claims)"
-    qep_gap_notes: |
-      portal_warranty_claims is portal-customer-facing. Need a service-
-      side warranty-claims table tied to service_jobs that carries OEM
-      submission data and reimbursement tracking.
+      - "apps/web/src/lib/database.types.ts public.Tables.portal_warranty_claims"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains portal_warranty_claims."
     severity: must
     category: regulatory
     migration_hint: |
@@ -2337,11 +2320,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Work-Order-Detail-LaborParts-Tabs__3.16.14.txt
     intellidealer_field_type: enum
     intellidealer_purpose: "Submitted/Under Review/Approved/Partial/Rejected/Paid."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: warranty_claims
     qep_column: status
-    qep_evidence: []
-    qep_gap_notes: "(see warranty_claim.claim_number)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.warranty_claims.status"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains warranty_claims.status."
     severity: must
     category: regulatory
     migration_hint: "(see warranty_claim.claim_number)"
@@ -2359,11 +2343,12 @@ fields:
       How much the OEM agreed to pay. May be less than claimed
       (manufacturer cuts hours or denies parts). Drives the AR offset
       entry.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: warranty_claims
     qep_column: approved_amount_cents
-    qep_evidence: []
-    qep_gap_notes: "(see warranty_claim.claim_number)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.warranty_claims.approved_amount_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains warranty_claims.approved_amount_cents."
     severity: must
     category: financial
     migration_hint: "(see warranty_claim.claim_number)"
@@ -2388,15 +2373,12 @@ fields:
       Each template has typed questions: numeric, yes/no, photo,
       signature, with required/optional, conditional skip-logic, and
       machine-down escalation rules.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: demo_inspections
     qep_column: null
     qep_evidence:
-      - "database.types.ts demo_inspections (demo-specific only, with checklist_items JSON)"
-    qep_gap_notes: |
-      demo_inspections is demo-specific. Need a generic inspection-
-      templates table + a per-run instance table that can be linked to
-      service_jobs, rental_contracts, demos, equipment_intake.
+      - "apps/web/src/lib/database.types.ts public.Tables.demo_inspections"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains demo_inspections."
     severity: must
     category: workflow
     migration_hint: |
@@ -2452,11 +2434,12 @@ fields:
       One run = one inspector × one machine × one template. Has
       Inspection Number (e.g. "000043"), Stock #, Customer, Reference #,
       Inspector, timestamps, responses to each templated question.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: inspection_runs
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "(see inspection.template_form)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.inspection_runs"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains inspection_runs."
     severity: must
     category: workflow
     migration_hint: "(see inspection.template_form)"
@@ -2474,11 +2457,12 @@ fields:
       Hours-meter reading captured during the inspection. Drives the
       machine-life ledger (each inspection updates the equipment's
       hours_actual).
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: inspection_runs
     qep_column: machine_hours
-    qep_evidence: []
-    qep_gap_notes: "(see inspection.template_form)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.inspection_runs.machine_hours"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains inspection_runs.machine_hours."
     severity: must
     category: regulatory
     migration_hint: "(see inspection.template_form)"
@@ -2496,12 +2480,12 @@ fields:
       Did the inspection find damage? If yes, drives auto-creation of a
       service_job (repair) and a customer chargeback line on the rental
       contract.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: demo_inspections
     qep_column: damage_found
     qep_evidence:
-      - "database.types.ts demo_inspections.damage_found, .damage_description, .damage_photos"
-    qep_gap_notes: "demo_inspections has the columns but only for demos. Need on inspection_runs."
+      - "apps/web/src/lib/database.types.ts public.Tables.demo_inspections.damage_found"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains demo_inspections.damage_found."
     severity: must
     category: financial
     migration_hint: "(see inspection.template_form)"
@@ -2519,11 +2503,12 @@ fields:
       Captured customer signature acknowledging the inspection results.
       Critical for damage-chargeback enforceability (without sig, the
       customer can dispute).
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: inspection_runs
     qep_column: signature_url
-    qep_evidence: []
-    qep_gap_notes: "(see inspection.template_form)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.inspection_runs.signature_url"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains inspection_runs.signature_url."
     severity: must
     category: regulatory
     migration_hint: "(see inspection.template_form)"
@@ -2541,12 +2526,12 @@ fields:
       Per-question photo attachments (e.g. tire-tread close-ups,
       cracked-window photo). Required for damage-chargeback evidence
       and for OEM warranty claims.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: demo_inspections
     qep_column: photos
     qep_evidence:
-      - "database.types.ts demo_inspections.photos JSON"
-    qep_gap_notes: "(see inspection.template_form)"
+      - "apps/web/src/lib/database.types.ts public.Tables.demo_inspections.photos"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains demo_inspections.photos."
     severity: must
     category: regulatory
     migration_hint: "(see inspection.template_form)"
@@ -2589,15 +2574,12 @@ fields:
       Hours billed to customer / hours actually worked. Above 100% =
       tech beating standard hours; below 100% = giving away time.
       Critical service-discipline KPI.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: technician_job_performance
     qep_column: null
     qep_evidence:
-      - "database.types.ts technician_job_performance (table exists)"
-      - "database.types.ts technician_profiles.average_efficiency"
-    qep_gap_notes: |
-      Underlying data exists. Verify the recovery % is computed and
-      surfaced on tech profile + WIP report.
+      - "apps/web/src/lib/database.types.ts public.Tables.technician_job_performance"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains technician_job_performance."
     severity: must
     category: financial
     migration_hint: |

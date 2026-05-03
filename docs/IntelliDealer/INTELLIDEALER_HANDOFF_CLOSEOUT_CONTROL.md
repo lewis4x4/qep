@@ -22,7 +22,7 @@ If another document conflicts with this one, treat this document as the current 
 | Customer import migrations `508_*`-`519_*` | Applied remotely per the final reconciliation | `CUSTOMER_IMPORT_FINAL_RECONCILIATION.md` | Customer import staging, dashboard, storage, redaction, counts RPC, and commit transition guard are part of the production baseline. |
 | Latest local migration range | Present locally through `521_floor_customer_legacy_search_layouts.sql` | `supabase/migrations/` | Migrations after `519_*` must be treated by their own feature gates; they are not required to prove the core customer import. |
 | Wave 5 external integrations | Deferred, not complete | `_migration_order.md` Wave 5 status | AvaTax live wiring, VESign, UPS WorldShip, OEM imports, and Tethr are intentionally not marked complete. |
-| Audit manifest / YAML inventory | Stale | `docs/intellidealer-gap-audit/manifest.yaml`, phase YAMLs | The inventory still has old `MISSING`/`PARTIAL` statuses and must be regenerated before it can be used as the remaining-gap dashboard. |
+| Audit manifest / YAML inventory | Regenerated 2026-05-03 | `docs/intellidealer-gap-audit/manifest.yaml`, `_blockers.csv`, phase YAMLs | The inventory now reflects the current `Database` type under a conservative table/column-exists rule. Remaining blocker count is `91` must-fix rows. |
 | Raw source file custody | Not closed | Untracked files under `docs/IntelliDealer/` | The files are available locally, but there is no committed manifest proving filename, size, SHA-256, row counts, and import run binding. |
 
 ## Production Customer Import Baseline
@@ -73,8 +73,6 @@ Baseline counts:
 
 These are not customer-import blockers, but they must not be represented as done:
 
-- Audit phase YAMLs and `manifest.yaml` have not been regenerated after the wave implementations.
-- `_blockers.csv` still reflects the original audit state, not the current shipped schema state.
 - Raw IntelliDealer source files are untracked and lack a committed custody manifest.
 - Wave 5 integrations are deferred until credentials and dealer-specific scope are available.
 - Remaining non-core raw Supabase row casts still need slice-by-slice normalization if the goal is broader API hardening.
@@ -85,19 +83,43 @@ These are not customer-import blockers, but they must not be represented as done
 
 ### Slice 2: Regenerate Audit Inventory
 
+Status: complete 2026-05-03.
+
 Goal: turn the gap-audit bundle back into a live dashboard.
 
 Deliverables:
 
-- Reconcile migrations `397_*`-`506_*` against the phase YAML entries.
-- Mark completed fields `BUILT` with current schema evidence.
+- Reconcile phase YAML entries against `apps/web/src/lib/database.types.ts`.
+- Mark completed fields `BUILT` with current schema evidence where the declared table/view and column now exist.
 - Regenerate `manifest.yaml`.
 - Regenerate `_blockers.csv`.
 - Produce remaining blocker counts by phase.
 
 Gate:
 
-- The remaining `must`, `should`, and `could` counts reflect the current schema, not the original audit.
+- PASS. The remaining counts now reflect the current generated `Database` type under the conservative reconciliation rule.
+
+Result:
+
+- Total fields: `847`.
+- Built fields: `678`.
+- Partial fields: `18`.
+- Missing fields: `151`.
+- Remaining must-fix blockers: `91`.
+
+Remaining must-fix blockers by phase:
+
+| Phase | Must Missing |
+| --- | ---: |
+| Phase-1 CRM | `1` |
+| Phase-2 Sales Intelligence | `0` |
+| Phase-3 Parts | `3` |
+| Phase-4 Service | `3` |
+| Phase-5 Deal Genome | `39` |
+| Phase-6 Rental | `35` |
+| Phase-8 Financial Operations | `6` |
+| Phase-9 Advanced Intelligence | `3` |
+| Cross-Cutting | `1` |
 
 ### Slice 3: Source File Custody
 

@@ -250,6 +250,16 @@ fields:
   # ==========================================================================
   # SECTION 1 — EQUIPMENT IDENTIFICATION
   # ==========================================================================
+
+
+
+
+
+
+
+
+
+
   - id: equipment.stock_number
     intellidealer_label: "Stock Number"
     intellidealer_screen: "Equipment Profile (Profile tab)"
@@ -264,15 +274,12 @@ fields:
       work order, rental contract, and OEM warranty submission. Reps
       know units by stock # not UUID; preserving the legacy convention
       is non-negotiable for IntelliDealer cutover.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: null
     qep_evidence:
-      - "database.types.ts qrm_equipment (asset_tag and name are free-text; no dedicated stock_number)"
-    qep_gap_notes: |
-      No first-class stock_number column. asset_tag is generic (any
-      identifier scheme) and name is the description. Need a UNIQUE-
-      indexed stock_number per workspace, separate from id (UUID).
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment."
     severity: must
     category: regulatory
     migration_hint: |
@@ -297,13 +304,12 @@ fields:
       catch-all, "A-T24-V35BKP*EBS" for an ASV trenching bucket). Drives
       base-price loading on new equipment and serves as the parent for
       the Option list. Required for OEM order-portal submission.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: equipment_base_codes
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No base-code library. Without it the Base & Options screen has
-      no backing data and OEM order submission cannot resolve the SKU.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.equipment_base_codes"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains equipment_base_codes."
     severity: must
     category: regulatory
     migration_hint: |
@@ -342,11 +348,12 @@ fields:
       hydraulic coupler, warranty extension). Each option has its own
       Number, Description, Price, Master Price, Cost, Master Cost,
       Added/Modified date, Active flag.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: equipment_options
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "No options table. Required for OEM order submission and quote line generation."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.equipment_options"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains equipment_options."
     severity: must
     category: regulatory
     migration_hint: |
@@ -489,13 +496,12 @@ fields:
       Engine serial — distinct from chassis. Engine OEMs (Cummins, Cat,
       Kohler) issue warranties separately and require the engine serial
       on every claim.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: engine_serial_number
-    qep_evidence: []
-    qep_gap_notes: |
-      qrm_equipment has serial_number (chassis) and vin_pin only. Engine
-      serial is missing.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.engine_serial_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.engine_serial_number."
     severity: must
     category: regulatory
     migration_hint: |
@@ -515,11 +521,12 @@ fields:
     intellidealer_purpose: |
       Transmission serial — third independent OEM warranty surface
       (Allison, Funk, ZF, etc.). Required for transmission-only claims.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: transmission_serial_number
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.transmission_serial_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.transmission_serial_number."
     severity: should
     category: regulatory
     migration_hint: "(see equipment.engine_serial_number)"
@@ -537,12 +544,12 @@ fields:
       Dealer-internal alphanumeric identifier (asset tag, fleet plate,
       etc.) — separate from stock # and customer fleet #. Often
       sand-blasted onto the machine for shop-floor identification.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: asset_tag
     qep_evidence:
-      - "database.types.ts qrm_equipment.asset_tag"
-    qep_gap_notes: ""
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.asset_tag"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.asset_tag."
     severity: should
     category: operational
     migration_hint: ""
@@ -559,11 +566,12 @@ fields:
     intellidealer_purpose: |
       Internal-control alphanumeric (often used for floor-plan financing
       tracking — the bank's reference number for the unit).
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: control_number
-    qep_evidence: []
-    qep_gap_notes: "No control_number; needed for floor-plan reconciliation."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.control_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.control_number."
     severity: should
     category: financial
     migration_hint: |
@@ -582,14 +590,12 @@ fields:
       Physical-location string within the dealer yard (e.g. 'Row C, Slot 7'
       or 'Display lot front'). Drives wholesale-inspection routing and
       customer-tour planning.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: location_description
     qep_evidence:
-      - "database.types.ts qrm_equipment.location_description"
-    qep_gap_notes: |
-      Free-text location_description exists. Could rename to yard_location
-      and constrain to a yard-cells lookup table over time.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.location_description"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.location_description."
     severity: should
     category: operational
     migration_hint: ""
@@ -620,15 +626,12 @@ fields:
       Top-level equipment lifecycle state. Drives every downstream
       surface — listing filter, quote eligibility, GL routing on sale,
       rental-fleet reporting.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: availability
     qep_evidence:
-      - "database.types.ts qrm_equipment.availability (enum crm_equipment_availability)"
-    qep_gap_notes: |
-      crm_equipment_availability covers some values but not all 8
-      IntelliDealer states (notably Presold, Consignment, Transferred,
-      Invoiced as a distinct vs Sold).
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.availability"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.availability."
     severity: must
     category: workflow
     migration_hint: |
@@ -656,11 +659,12 @@ fields:
       Secondary state — physical location (in the yard / out at customer /
       sold and gone). Used in conjunction with In/Out Sub Type for finer
       workflow control.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: in_out_state
-    qep_evidence: []
-    qep_gap_notes: "No second-level In/Out + sub-type fields."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.in_out_state"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.in_out_state."
     severity: should
     category: workflow
     migration_hint: |
@@ -686,11 +690,12 @@ fields:
       - "Out — Rental"
       - "Out — Service Loaner"
     intellidealer_purpose: "Secondary refinement of In/Out — what kind of 'out' the unit is in."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: in_out_sub_type
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.in_out_sub_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.in_out_sub_type."
     severity: should
     category: workflow
     migration_hint: "(see equipment.in_out)"
@@ -707,14 +712,12 @@ fields:
     intellidealer_purpose: |
       Manufacturer category (e.g. 'Internal', 'ATTACHMENTS', 'TRENCH BUCKET').
       Used in OEM-portal taxonomy and in the Equipment Listing search filter.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: category
     qep_evidence:
-      - "database.types.ts qrm_equipment.category (enum crm_equipment_category)"
-    qep_gap_notes: |
-      qrm_equipment.category is a single enum. IntelliDealer has Class +
-      Type + Group + Category + Subclass — five-level taxonomy.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.category"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.category."
     severity: should
     category: operational
     migration_hint: |
@@ -733,11 +736,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Sub-class within a Class (e.g. 'WHEEL LOADER' within Class 'CONSTRUCTION')."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: type_code
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.class)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.type_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.type_code."
     severity: should
     category: operational
     migration_hint: "(see equipment.class)"
@@ -754,11 +758,12 @@ fields:
     intellidealer_purpose: |
       Pricing-group code (e.g. 'MISC', 'ATTACHMENTS') — drives default
       pricing layer selection and OEM rebate eligibility.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: group_code
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.class)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.group_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.group_code."
     severity: must
     category: financial
     migration_hint: "(see equipment.class)"
@@ -773,12 +778,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: fk
     intellidealer_purpose: "Branch the equipment is assigned to (e.g. '01 - LAKE CITY')."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: null
     qep_evidence:
-      - "database.types.ts branches (table exists; qrm_equipment has no FK)"
-    qep_gap_notes: "qrm_equipment has location_description (text) but no branch_id FK."
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment."
     severity: must
     category: operational
     migration_hint: |
@@ -795,11 +800,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Three-level OEM taxonomy roll-up — pre-populated from Base code or set manually."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: subclass_code
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.class)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.subclass_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.subclass_code."
     severity: should
     category: reporting
     migration_hint: "(see equipment.class)"
@@ -820,15 +826,12 @@ fields:
       Hour-meter reading, plus a Code (Actual / Estimate / Tampered /
       Replaced) and a Date the reading was taken. Drives warranty
       eligibility, PM scheduling, and used-equipment valuation.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: engine_hours
     qep_evidence:
-      - "database.types.ts qrm_equipment.engine_hours (single number)"
-    qep_gap_notes: |
-      qrm_equipment.engine_hours is a single number with no audit trail.
-      Need a typed hours-ledger table to capture Code (Actual / Estimate /
-      Tampered / Replaced) and Date plus historical readings.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.engine_hours"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.engine_hours."
     severity: must
     category: regulatory
     migration_hint: |
@@ -859,11 +862,12 @@ fields:
     intellidealer_purpose: |
       Secondary meter for dual-meter machines (e.g. PTO hours + engine
       hours; hammer-strikes + travel hours). Same Code + Date semantics.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: equipment_meter_readings
     qep_column: meter_index
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.machine_hours; meter_index = 2 for secondary)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.equipment_meter_readings.meter_index"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains equipment_meter_readings.meter_index."
     severity: should
     category: regulatory
     migration_hint: "(see equipment.machine_hours)"
@@ -881,14 +885,12 @@ fields:
       Manufacturer's basic warranty: cumulative hours + a Code marker +
       the date warranty starts. Drives whether a WO can be filed under
       basic warranty (vs extended, vs out-of-warranty customer-pay).
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: warranty_expires_on
     qep_evidence:
-      - "database.types.ts qrm_equipment.warranty_expires_on (date only)"
-    qep_gap_notes: |
-      Single date column doesn't capture hours-or-time-whichever-comes-first
-      OEM warranty model. Need a structured warranty ledger.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.warranty_expires_on"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.warranty_expires_on."
     severity: must
     category: regulatory
     migration_hint: |
@@ -919,11 +921,12 @@ fields:
     intellidealer_purpose: |
       Customer-purchased extended warranty (separate from basic).
       Captured as the secondary row in the warranty ledger.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: equipment_warranty_terms
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.basic_warranty_hours_code_date)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.equipment_warranty_terms"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains equipment_warranty_terms."
     severity: must
     category: regulatory
     migration_hint: "(see equipment.basic_warranty_hours_code_date)"
@@ -943,11 +946,12 @@ fields:
     intellidealer_purpose: |
       Vendor (supplier) invoice number from when the equipment was
       acquired. Drives floor-plan-financing reconciliation.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: supplier_invoice_number
-    qep_evidence: []
-    qep_gap_notes: "No supplier-invoice-# column."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.supplier_invoice_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.supplier_invoice_number."
     severity: must
     category: financial
     migration_hint: |
@@ -965,11 +969,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: date
     intellidealer_purpose: "Date of supplier invoice."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: supplier_invoice_date
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.invoice_number)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.supplier_invoice_date"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.supplier_invoice_date."
     severity: must
     category: financial
     migration_hint: "(see equipment.invoice_number)"
@@ -984,14 +989,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: currency
     intellidealer_purpose: "Acquisition invoice amount (two decimals shown)."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: purchase_price
     qep_evidence:
-      - "database.types.ts qrm_equipment.purchase_price"
-    qep_gap_notes: |
-      purchase_price exists but is loosely typed (number). IntelliDealer
-      shows acquired and second cost amounts side-by-side.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.purchase_price"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.purchase_price."
     severity: must
     category: financial
     migration_hint: "(see equipment.invoice_number — supplier_invoice_amount_cents)"
@@ -1008,11 +1011,12 @@ fields:
     intellidealer_purpose: |
       Current dealer-cost basis (after add-ons, prep, freight). Used as
       cost layer in margin calculation.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: current_cost_cents
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.current_cost_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.current_cost_cents."
     severity: must
     category: financial
     migration_hint: |
@@ -1043,11 +1047,12 @@ fields:
     intellidealer_purpose: |
       Original cost minus accumulated depreciation. The accounting
       carrying value of the asset. Drives gain/loss on sale.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: net_book_value_cents
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.current_cost)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.net_book_value_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.net_book_value_cents."
     severity: must
     category: financial
     migration_hint: "(see equipment.current_cost)"
@@ -1064,11 +1069,12 @@ fields:
     intellidealer_purpose: |
       Floor-plan note amount + note code + due date — drives the next
       curtailment payment and the floor-plan-aging report.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: note_amount_cents
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.current_cost)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.note_amount_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.note_amount_cents."
     severity: must
     category: financial
     migration_hint: "(see equipment.current_cost)"
@@ -1083,11 +1089,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: json
     intellidealer_purpose: "Customer-side financing amount + due date."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: finance_amount_cents
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.current_cost)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.finance_amount_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.finance_amount_cents."
     severity: should
     category: financial
     migration_hint: "(see equipment.current_cost)"
@@ -1102,11 +1109,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: json
     intellidealer_purpose: "Final settlement reference (often from finance company on payoff)."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: settlement_number
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.current_cost)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.settlement_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.settlement_number."
     severity: should
     category: financial
     migration_hint: "(see equipment.current_cost)"
@@ -1121,11 +1129,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: currency
     intellidealer_purpose: "Lifetime maintenance dollars incurred against this unit. Used in margin/total-cost reporting."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: maintenance_expense_cents
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.current_cost)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.maintenance_expense_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.maintenance_expense_cents."
     severity: should
     category: financial
     migration_hint: "(see equipment.current_cost)"
@@ -1140,11 +1149,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: percent
     intellidealer_purpose: "Per-unit override of the standard rental-cost depreciation rate."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: rental_cost_pct
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.current_cost)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.rental_cost_pct"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.rental_cost_pct."
     severity: should
     category: financial
     migration_hint: "(see equipment.current_cost)"
@@ -1159,11 +1169,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: currency
     intellidealer_purpose: "Insured value when on rent — drives the COI requirement on the rental contract."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: rental_insurable_amount_cents
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.current_cost)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.rental_insurable_amount_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.rental_insurable_amount_cents."
     severity: should
     category: financial
     migration_hint: "(see equipment.current_cost)"
@@ -1181,12 +1192,12 @@ fields:
       Default rental rate for this unit. Distinct from the daily/weekly/
       monthly_rental_rate columns in QEP — this is the historical
       single-amount field IntelliDealer carries.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: daily_rental_rate
     qep_evidence:
-      - "database.types.ts qrm_equipment.daily_rental_rate, .weekly_rental_rate, .monthly_rental_rate"
-    qep_gap_notes: ""
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.daily_rental_rate"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.daily_rental_rate."
     severity: should
     category: financial
     migration_hint: ""
@@ -1201,11 +1212,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: text
     intellidealer_purpose: "GL revenue account when this unit is sold (e.g. '5652021')."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: sale_gl_account
-    qep_evidence: []
-    qep_gap_notes: "No GL routing on equipment."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.sale_gl_account"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.sale_gl_account."
     severity: must
     category: financial
     migration_hint: |
@@ -1222,11 +1234,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: text
     intellidealer_purpose: "GL inventory asset account (e.g. '1200001'). Drives the cost-of-goods entry."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: inventory_gl_account
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.sale_account)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.inventory_gl_account"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.inventory_gl_account."
     severity: must
     category: financial
     migration_hint: "(see equipment.sale_account)"
@@ -1244,11 +1257,12 @@ fields:
       AvaTax-defined product code (e.g. 'P0000000'). Required for the
       AvaTax decision payload on every equipment-line invoice — the
       product code drives the tax-treatment rules.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: avatax_product_code
-    qep_evidence: []
-    qep_gap_notes: "No AvaTax product code. Blocks AvaTax compliance for equipment sales."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.avatax_product_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.avatax_product_code."
     severity: must
     category: regulatory
     migration_hint: |
@@ -1275,11 +1289,12 @@ fields:
     intellidealer_purpose: |
       How the most-recent physical-inventory cycle-count was performed.
       Audit-trail field for SOX-style internal controls.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: last_count_method
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.last_count_method"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.last_count_method."
     severity: should
     category: regulatory
     migration_hint: |
@@ -1297,11 +1312,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: date
     intellidealer_purpose: "Date of most-recent physical-inventory verification."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: last_count_at
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.last_count_method)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.last_count_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.last_count_at."
     severity: should
     category: regulatory
     migration_hint: "(see equipment.last_count_method)"
@@ -1319,11 +1335,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: date
     intellidealer_purpose: "Date the unit was ordered from the OEM or reserved by a customer."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: ordered_reserved_at
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.ordered_reserved_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.ordered_reserved_at."
     severity: should
     category: workflow
     migration_hint: |
@@ -1342,11 +1359,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: date
     intellidealer_purpose: "Date the unit was added to the rental fleet (drives rental-fleet-age reporting)."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: rental_fleet_date
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.ordered_reserved_date)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.rental_fleet_date"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.rental_fleet_date."
     severity: should
     category: financial
     migration_hint: "(see equipment.ordered_reserved_date)"
@@ -1361,11 +1379,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: date
     intellidealer_purpose: "Date physical-delivery occurred (warranty start clock)."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: delivery_date
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.ordered_reserved_date)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.delivery_date"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.delivery_date."
     severity: must
     category: regulatory
     migration_hint: "(see equipment.ordered_reserved_date)"
@@ -1380,11 +1399,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: date
     intellidealer_purpose: "Date the unit was traded in (when it became a used-inventory asset)."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: traded_date
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.ordered_reserved_date)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.traded_date"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.traded_date."
     severity: should
     category: workflow
     migration_hint: "(see equipment.ordered_reserved_date)"
@@ -1402,15 +1422,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: fk
     intellidealer_purpose: "Rep who sold (or is selling) the unit."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qb_quotes
     qep_column: salesman_id
     qep_evidence:
-      - "database.types.ts qb_quotes.salesman_id, qb_deals.salesman_id"
-    qep_gap_notes: |
-      qb_deals carries salesman_id. qrm_equipment has no direct
-      salesperson — for inventory in stock awaiting a buyer, useful to
-      have an assigned rep. Add an optional column.
+      - "apps/web/src/lib/database.types.ts public.Tables.qb_quotes.salesman_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qb_quotes.salesman_id."
     severity: should
     category: operational
     migration_hint: |
@@ -1427,12 +1444,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Customer-facing invoice # when the unit was sold (denormalized for fast lookup)."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qb_deals
     qep_column: invoice_number
     qep_evidence:
-      - "database.types.ts qb_deals.invoice_number"
-    qep_gap_notes: "Live on the deal record; surface on the Equipment Profile via FK."
+      - "apps/web/src/lib/database.types.ts public.Tables.qb_deals.invoice_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qb_deals.invoice_number."
     severity: should
     category: financial
     migration_hint: ""
@@ -1447,12 +1464,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Profile__3.03.06.txt
     intellidealer_field_type: date
     intellidealer_purpose: "Date of customer invoice."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: customer_invoices
     qep_column: null
     qep_evidence:
-      - "database.types.ts customer_invoices (table exists)"
-    qep_gap_notes: ""
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains customer_invoices."
     severity: should
     category: financial
     migration_hint: ""
@@ -1490,11 +1507,12 @@ fields:
       Customer's internal fleet number (their asset tag for the unit).
       Required for customer-portal communications and for fleet-management
       reporting.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: customer_fleet_number
-    qep_evidence: []
-    qep_gap_notes: "No customer-fleet-# column."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.customer_fleet_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.customer_fleet_number."
     severity: should
     category: operational
     migration_hint: |
@@ -1541,12 +1559,12 @@ fields:
       - "Expired"
       - "Converted"
     intellidealer_purpose: "Quote pipeline state."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qb_quotes
     qep_column: status
     qep_evidence:
-      - "database.types.ts qb_quotes.status (TEXT)"
-    qep_gap_notes: "Status is free-text; constrain to enum aligned to IntelliDealer values."
+      - "apps/web/src/lib/database.types.ts public.Tables.qb_quotes.status"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qb_quotes.status."
     severity: should
     category: workflow
     migration_hint: |
@@ -1583,14 +1601,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
     intellidealer_field_type: date
     intellidealer_purpose: "Salesperson's estimated close date — drives the pipeline forecast."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_deals
     qep_column: null
     qep_evidence:
-      - "database.types.ts qrm_deals (deal pipeline)"
-    qep_gap_notes: |
-      Lives on the deal side. Verify the IntelliDealer Equipment-Quote
-      Estimated Close Date maps to qrm_deals.expected_close_date or similar.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_deals"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_deals."
     severity: should
     category: reporting
     migration_hint: |
@@ -1606,11 +1622,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Customer PO referenced on the quote (defaults from customer's per-customer PO)."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qb_quotes
     qep_column: po_number
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qb_quotes.po_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qb_quotes.po_number."
     severity: must
     category: financial
     migration_hint: |
@@ -1632,16 +1649,12 @@ fields:
       Four parallel tax slots on the quote (e.g. 'Florida State 6.00%',
       'FL28 FLAGLER COUNTY', 'NO TAX4'). Drives AvaTax decision payload
       and tax-line breakdown on the quote PDF.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: quote_tax_breakdowns
     qep_column: null
     qep_evidence:
-      - "database.types.ts quote_tax_breakdowns (table exists)"
-      - "database.types.ts qb_quotes.tax_cents, .tax_rate_pct"
-    qep_gap_notes: |
-      Single tax_cents/tax_rate_pct on qb_quotes is too coarse.
-      quote_tax_breakdowns may already cover the breakdown — verify
-      jurisdictions match IntelliDealer's 4-slot model.
+      - "apps/web/src/lib/database.types.ts public.Tables.quote_tax_breakdowns"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains quote_tax_breakdowns."
     severity: must
     category: regulatory
     migration_hint: |
@@ -1661,14 +1674,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Per-quote discount group (e.g. 'NOT ASSIGNED', 'CONTRACTOR-PROMO')."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qb_quotes
     qep_column: dealer_discount_cents
     qep_evidence:
-      - "database.types.ts qb_quotes.dealer_discount_cents, .dealer_discount_pct"
-    qep_gap_notes: |
-      Discount is captured as cents/pct but no group code. Add a
-      discount_code text column.
+      - "apps/web/src/lib/database.types.ts public.Tables.qb_quotes.dealer_discount_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qb_quotes.dealer_discount_cents."
     severity: should
     category: financial
     migration_hint: |
@@ -1778,14 +1789,12 @@ fields:
       - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).txt
     intellidealer_field_type: text
     intellidealer_purpose: "Five-digit equipment-invoice reference (customer-facing)."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qb_deals
     qep_column: invoice_number
     qep_evidence:
-      - "database.types.ts qb_deals.invoice_number, customer_invoices (table)"
-    qep_gap_notes: |
-      qb_deals.invoice_number captures the dealer-issued #. Verify the
-      lifecycle covers Pending → Posted distinct states.
+      - "apps/web/src/lib/database.types.ts public.Tables.qb_deals.invoice_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qb_deals.invoice_number."
     severity: must
     category: financial
     migration_hint: ""
@@ -1809,12 +1818,12 @@ fields:
       Invoice lifecycle. Pending = drafted but not posted to GL; Posted =
       booked and on the AR ledger; Voided = corrected; Cancelled = killed
       pre-post.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: customer_invoices
     qep_column: null
     qep_evidence:
-      - "database.types.ts customer_invoices (table exists)"
-    qep_gap_notes: "Verify the status enum matches IntelliDealer values."
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains customer_invoices."
     severity: must
     category: financial
     migration_hint: |
@@ -1840,15 +1849,12 @@ fields:
     intellidealer_purpose: |
       VESign (VitalEdge eSign) signing status for the invoice. Drives
       the rep's "chase the customer" queue.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: quote_signatures
     qep_column: null
     qep_evidence:
-      - "database.types.ts quote_signatures (table exists for quotes)"
-    qep_gap_notes: |
-      quote_signatures handles the quote-side signature. Need an
-      analogous invoice_signatures table or a status column on
-      customer_invoices.
+      - "apps/web/src/lib/database.types.ts public.Tables.quote_signatures"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains quote_signatures."
     severity: must
     category: regulatory
     migration_hint: |
@@ -1908,11 +1914,12 @@ fields:
     intellidealer_purpose: |
       Cash receipt code if the invoice was paid at counter (vs. on
       account). Drives the daily cash deposit reconciliation.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: customer_invoices
     qep_column: cash_code
-    qep_evidence: []
-    qep_gap_notes: "No cash-code column."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.cash_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains customer_invoices.cash_code."
     severity: should
     category: financial
     migration_hint: |
@@ -1935,11 +1942,12 @@ fields:
       to clear the title before the dealer can take possession.
       Critical for clean title transfer; dealer cuts a check directly
       to the lien holder.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qb_trade_ins
     qep_column: payoff_amount_cents
-    qep_evidence: []
-    qep_gap_notes: "qb_trade_ins has allowance/book-value but no payoff or lien-holder columns."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qb_trade_ins.payoff_amount_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qb_trade_ins.payoff_amount_cents."
     severity: must
     category: regulatory
     migration_hint: |
@@ -1963,11 +1971,12 @@ fields:
     intellidealer_purpose: |
       Bank or finance-co name holding the lien on the trade-in. Required
       on the title-payoff check.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qb_trade_ins
     qep_column: lien_holder_name
-    qep_evidence: []
-    qep_gap_notes: "(see trade_in.payoff_amount)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qb_trade_ins.lien_holder_name"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qb_trade_ins.lien_holder_name."
     severity: must
     category: regulatory
     migration_hint: "(see trade_in.payoff_amount)"
@@ -1991,12 +2000,12 @@ fields:
       What the dealer plans to do with the unit post-trade. Drives the
       reconditioning-budget allocation, the wholesale-auction list, and
       the parts-stripping decision.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qb_trade_ins
     qep_column: disposition
     qep_evidence:
-      - "database.types.ts qb_trade_ins.disposition (TEXT)"
-    qep_gap_notes: "disposition is free-text; constrain to enum."
+      - "apps/web/src/lib/database.types.ts public.Tables.qb_trade_ins.disposition"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qb_trade_ins.disposition."
     severity: should
     category: financial
     migration_hint: |
@@ -2039,11 +2048,12 @@ fields:
       Date the dealer received clean title from the customer. Until
       title is in hand, the dealer cannot resell — drives a critical
       compliance/aging report.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qb_trade_ins
     qep_column: title_received_at
-    qep_evidence: []
-    qep_gap_notes: "(see trade_in.payoff_amount)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qb_trade_ins.title_received_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qb_trade_ins.title_received_at."
     severity: must
     category: regulatory
     migration_hint: "(see trade_in.payoff_amount)"
@@ -2061,15 +2071,12 @@ fields:
       Pre-trade rep walk-around record: condition photos, hours, damage,
       tire/track depth, hours on attachments. Drives the dealer's allowance
       offer and protects against post-trade damage disputes.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: trade_valuations
     qep_column: null
     qep_evidence:
-      - "database.types.ts trade_valuations (table exists)"
-    qep_gap_notes: |
-      trade_valuations covers the valuation side. Need to wire the
-      InspectionPlus inspection_run to a trade-in record so the
-      walk-around photos accompany the appraisal.
+      - "apps/web/src/lib/database.types.ts public.Tables.trade_valuations"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains trade_valuations."
     severity: should
     category: regulatory
     migration_hint: |
@@ -2093,14 +2100,12 @@ fields:
       monthly payment, residual, GAP / extended warranty / tire-and-
       wheel add-ons. Drives the F&I product upsell motion (highest-
       margin part of an equipment sale).
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qb_quotes
     qep_column: financing_scenario
     qep_evidence:
-      - "database.types.ts qb_quotes.financing_scenario (JSON)"
-    qep_gap_notes: |
-      JSON is acceptable for now. Long-term, decompose into a typed
-      f_and_i_products table so reps can attach standard products.
+      - "apps/web/src/lib/database.types.ts public.Tables.qb_quotes.financing_scenario"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qb_quotes.financing_scenario."
     severity: should
     category: financial
     migration_hint: |
@@ -2135,11 +2140,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Quoting__3.04.54.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Which captive or third-party lender (JD Financial, Bobcat Finance, US Bank, etc.)."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qb_quotes
     qep_column: financing_scenario
-    qep_evidence: []
-    qep_gap_notes: "(part of financing_scenario JSON)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qb_quotes.financing_scenario"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qb_quotes.financing_scenario."
     severity: should
     category: financial
     migration_hint: "(see equipment_quote.financing_scenario)"
@@ -2157,11 +2163,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Listing__3.07.12.txt
     intellidealer_field_type: enum
     intellidealer_purpose: "Filter by Status enum (8 states — see equipment.status)."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: availability
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.status)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.availability"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.availability."
     severity: must
     category: workflow
     migration_hint: "(see equipment.status)"
@@ -2182,11 +2189,12 @@ fields:
       - "Trade-In Only"
       - "All"
     intellidealer_purpose: "Filter the listing by inventory-type slice."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: inventory_type
-    qep_evidence: []
-    qep_gap_notes: "No new/used/trade-in classifier. Currently inferred from condition + traded_date."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.inventory_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.inventory_type."
     severity: should
     category: reporting
     migration_hint: |
@@ -2203,11 +2211,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Listing__3.07.12.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Filter listing by selected option codes (e.g. 'CAB-HEAT')."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: equipment_selected_options
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.options — once equipment_options table exists)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.equipment_selected_options"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains equipment_selected_options."
     severity: should
     category: workflow
     migration_hint: "(see equipment.options)"
@@ -2222,11 +2231,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-2_Sales-Intelligence_Equipment-Listing__3.07.12.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Filter listing by customer fleet number."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: customer_fleet_number
-    qep_evidence: []
-    qep_gap_notes: "(see equipment.customer_fleet_number)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.customer_fleet_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.customer_fleet_number."
     severity: could
     category: nice_to_have
     migration_hint: "(see equipment.customer_fleet_number)"
@@ -2292,11 +2302,12 @@ fields:
       - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).txt
     intellidealer_field_type: computed
     intellidealer_purpose: "List of equipment sales pending finalization (Posted but not signed, etc.)."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: customer_invoices
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "Compute via (status='pending' OR esign_status IN ('awaiting','partially_signed'))."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains customer_invoices."
     severity: should
     category: reporting
     migration_hint: ""

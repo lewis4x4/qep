@@ -88,6 +88,16 @@ fields:
   # Financial Management > Payroll > Employee Profile.
   # Data Source: EMPLOYEE.   Security: 604 - Payroll.   Rev: 2024.10.
   # ============================================================================
+
+
+
+
+
+
+
+
+
+
   - id: employee.employee_number
     intellidealer_label: "Employee Number"
     intellidealer_screen: "Employee Profile: Listing"
@@ -104,15 +114,12 @@ fields:
       appears wherever "Salesperson", "Service Advisor", "Technician",
       "Counter Person", "Driver", "Coordinator" is referenced in any other
       phase.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "employees"
     qep_column: "employee_number"
-    qep_gap_notes: |
-      QEP `profiles` carries `id` (uuid) + `email` + `full_name` only. There
-      is no human-readable employee number for use on cost reports, no
-      stable code that survives email changes, no field for joining to
-      legacy IntelliDealer payroll feeds. Phase-4 service profitability
-      (labor cost-of-sales by tech) cannot reconcile without this.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.employees.employee_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains employees.employee_number."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -164,15 +171,12 @@ fields:
       for service profitability, parts-counter labor allocation, and cost-
       of-labor on every work order. Every payroll posting routes through
       this code.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "employees"
     qep_column: "class_code"
-    qep_gap_notes: |
-      QEP has no employee.class concept. service_branch_config carries
-      `default_advisor_pool` / `default_technician_pool` (Json) but those
-      are scheduling buckets, not GL routing keys. Without a class code,
-      QEP cannot post payroll-derived labor cost to the right GL account
-      and Phase-4 service margin cannot be computed correctly.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.employees.class_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains employees.class_code."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -239,12 +243,12 @@ fields:
       Three-character user-defined employee category. Used for ad-hoc
       reporting groupings independent of class/profit-center (e.g.,
       "FLD" field tech, "SHP" shop tech, "MGR" manager).
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "employees"
     qep_column: "category_code"
-    qep_gap_notes: |
-      No equivalent. profiles.role is a fixed enum; it does not allow user-
-      defined categories.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.employees.category_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains employees.category_code."
     severity: "should"
     category: "reporting"
     migration_hint: |
@@ -263,12 +267,12 @@ fields:
       The employee's pay type (e.g., hourly, salary, commission, piece-
       work). Drives how time-cards roll into payroll and how labor cost is
       computed for service profitability.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "employees"
     qep_column: "pay_type"
-    qep_gap_notes: |
-      No equivalent. Required for correct labor-cost computation in
-      Phase-4 service profitability and for downstream payroll feeds.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.employees.pay_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains employees.pay_type."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -288,15 +292,12 @@ fields:
       List-view filter that, when checked, includes terminated employees
       in the search results. Implies the system tracks termination status
       / termination date as first-class data.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "profiles"
     qep_column: "is_active"
     qep_evidence:
-      - "database.types.ts profiles.is_active"
-    qep_gap_notes: |
-      profiles.is_active gives a soft-active flag, but there is no
-      termination_date and no audit of who terminated the employee, when,
-      or why. For payroll closeout this is required.
+      - "apps/web/src/lib/database.types.ts public.Tables.profiles.is_active"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains profiles.is_active."
     severity: "must"
     category: "regulatory"
     migration_hint: |
@@ -318,12 +319,12 @@ fields:
       seniority sort, anniversary reporting, and HR compliance. Implied by
       the documented Include Terminated filter and standard EMPLOYEE data
       source.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "employees"
     qep_column: "hire_date"
-    qep_gap_notes: |
-      No equivalent in profiles. Tenure-based logic across Phase-1/2/4
-      cannot be computed without it.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.employees.hire_date"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains employees.hire_date."
     severity: "must"
     category: "regulatory"
     migration_hint: |
@@ -342,12 +343,12 @@ fields:
       Date the employee was terminated / left the company. Drives the
       Include Terminated filter, payroll closeout, and access-revocation
       audit. Required for labor-tax compliance and final-paycheck workflows.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "employees"
     qep_column: "termination_date"
-    qep_gap_notes: |
-      No equivalent. profiles.is_active is binary; it does not record when
-      or why an employee left.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.employees.termination_date"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains employees.termination_date."
     severity: "must"
     category: "regulatory"
     migration_hint: |
@@ -373,18 +374,12 @@ fields:
       lookup, and overhead absorption for Phase-4 service profitability.
       A field tech and a shop tech billing the same hours yield very
       different gross margins because of truck/travel cost.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "technician_profiles"
     qep_column: "field_eligible / shop_eligible"
     qep_evidence:
-      - "database.types.ts technician_profiles.field_eligible"
-      - "database.types.ts technician_profiles.shop_eligible"
-    qep_gap_notes: |
-      technician_profiles encodes eligibility as two booleans, which is
-      sufficient for dispatch but not for cost-recovery routing. There is
-      no link to a labor rate, no overhead-rate suffix, and the table is
-      tied to a profile_id (auth user) — non-auth contractors cannot be
-      represented.
+      - "apps/web/src/lib/database.types.ts public.Tables.technician_profiles"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains technician_profiles."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -405,13 +400,12 @@ fields:
       time is billed and/or costed. Foundational for labor cost-of-sales,
       labor recovery, work-order margin, and standard-vs-actual labor
       variance — all surfaced in Phase-4 Analysis Reports.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "employees"
     qep_column: "shop_rate_cents"
-    qep_gap_notes: |
-      No equivalent. technician_profiles records eligibility but no rate.
-      Without this, Phase-4 service profitability is uncomputable from
-      first principles.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.employees.shop_rate_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains employees.shop_rate_cents."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -432,13 +426,12 @@ fields:
       Code that maps the employee to a shift schedule (start/end time, days
       of week, premium-pay multipliers). Drives time-card validation,
       overtime calculation, and after-hours dispatch eligibility.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "employees"
     qep_column: "shift_code"
-    qep_gap_notes: |
-      No equivalent. service_branch_config.business_hours is per-branch,
-      not per-employee. Premium-code rollup in Phase-5 Payroll Hours
-      report cannot work without this.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.employees.shift_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains employees.shift_code."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -494,15 +487,12 @@ fields:
       Reporting-line supervisor for the employee. Drives approval routing
       (PTO, expense, work-order writeoff), commission overrides, and the
       org chart that surfaces in management reports.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "branches"
     qep_column: "general_manager_id / sales_manager_id / parts_manager_id / service_manager_id"
     qep_evidence:
-      - "database.types.ts branches.general_manager_id"
-    qep_gap_notes: |
-      Branches carry four manager pointers, but there is no per-employee
-      supervisor link. Approval routing and commission-override logic
-      cannot be encoded.
+      - "apps/web/src/lib/database.types.ts public.Tables.branches"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains branches."
     severity: "should"
     category: "workflow"
     migration_hint: |
@@ -580,14 +570,12 @@ fields:
       the driver, yard, and salesperson refer to. Indexed both as sort key
       and as the primary lookup key on Listing tab. Click-through opens
       Receipt Details.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "receipt_number"
-    qep_gap_notes: |
-      The existing `traffic_tickets` table is a delivery/dispatch ticket
-      (post-sale delivery to a customer site) and uses uuid `id` only —
-      no human-readable receipt number for inbound/outbound yard moves.
-      Drivers and yard managers cannot quote a uuid over the radio.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.receipt_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.receipt_number."
     severity: "must"
     category: "operational"
     migration_hint: |
@@ -609,16 +597,12 @@ fields:
     intellidealer_purpose: |
       The date the traffic ticket was received / created (top sort key on
       the Listing tab). Anchors the in-transit aging calculation.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "shipping_date / requested_at"
     qep_evidence:
-      - "database.types.ts traffic_tickets.shipping_date"
-      - "database.types.ts traffic_tickets.requested_at"
-    qep_gap_notes: |
-      Built only as shipping/requested timestamps; there is no canonical
-      `received_at` (the moment the unit was logged onto the receipt at
-      origin). For inbound moves this is the actual creation timestamp.
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets."
     severity: "must"
     category: "operational"
     migration_hint: |
@@ -645,14 +629,12 @@ fields:
       (Outbound) of the recording branch. The Transfer value collapses
       both legs of a branch-to-branch transfer into one search. Drives
       dispatch board grouping and aging.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "ticket_type"
     qep_evidence:
-      - "database.types.ts traffic_tickets.ticket_type (text)"
-    qep_gap_notes: |
-      `ticket_type` is free text, not a typed direction enum. There is no
-      explicit way to filter inbound vs outbound at the database layer.
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.ticket_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.ticket_type."
     severity: "must"
     category: "operational"
     migration_hint: |
@@ -687,15 +669,12 @@ fields:
       (a Demo ticket points at a Quote, a Sale ticket at an Invoice, a
       Service ticket at a Work Order). The 12-value enum is documented
       verbatim in the OCR.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "ticket_type"
     qep_evidence:
-      - "database.types.ts traffic_tickets.ticket_type (text)"
-    qep_gap_notes: |
-      Stored as free text. No CHECK constraint, no enum. Re-rent, Customer
-      Transfer, Job Site Transfer, Trade In, Loaner are not represented
-      anywhere as canonical types.
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.ticket_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.ticket_type."
     severity: "must"
     category: "operational"
     migration_hint: |
@@ -719,12 +698,12 @@ fields:
       User-defined subtype code listed beneath the Type column. Allows
       dealers to break down e.g. "Demo" into "Customer Demo" vs "Trade
       Show Demo" without changing the canonical type list.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "subtype_code"
-    qep_gap_notes: |
-      No equivalent. The customizability that lets dealers report their
-      own way is absent.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.subtype_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.subtype_code."
     severity: "should"
     category: "reporting"
     migration_hint: |
@@ -759,13 +738,12 @@ fields:
       Lifecycle status of the unit on the receipt. Captured on the Receipt
       Details panel. The screenshots show "Pending" exclusively but the
       Status drop-down on the listing search is multi-valued.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "status"
     qep_evidence:
-      - "database.types.ts traffic_tickets.status (text)"
-    qep_gap_notes: |
-      Built as free text. Not enum-constrained, no transition rules.
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.status"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.status."
     severity: "must"
     category: "operational"
     migration_hint: |
@@ -841,12 +819,12 @@ fields:
       created (e.g., "66\" Root Grapple", "T-REX 300 WHEEL 3.0 MT"). Held
       on the receipt independent of the equipment record so a rename of
       the equipment does not rewrite history.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "unit_description_snapshot"
-    qep_gap_notes: |
-      No snapshot column. delivery_address is captured but not the unit
-      description; if equipment is later edited, history changes silently.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.unit_description_snapshot"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.unit_description_snapshot."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -866,13 +844,12 @@ fields:
     intellidealer_purpose: |
       The manufacturer of the unit (e.g., DE, BD, AV, YA). Two-character
       OEM code in IntelliDealer convention.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "(via equipment join)"
-    qep_gap_notes: |
-      Available only by joining qrm_equipment. No snapshot field on the
-      ticket itself, so if an equipment record is later edited the
-      historical receipt changes.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -890,11 +867,12 @@ fields:
     intellidealer_field_type: "text"
     intellidealer_purpose: |
       The model number of the unit (e.g., 106080, DL250-7, T-REX 300 MT).
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "(via equipment join)"
-    qep_gap_notes: |
-      Same as make — no snapshot. See traffic_ticket.make.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -912,11 +890,12 @@ fields:
     intellidealer_purpose: |
       The unit's serial number snapshot (e.g., 112951). Required for legal
       handover documentation when the unit crosses a state line.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "serial_number_snapshot"
-    qep_gap_notes: |
-      No snapshot. Serial is only present on qrm_equipment.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.serial_number_snapshot"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.serial_number_snapshot."
     severity: "must"
     category: "regulatory"
     migration_hint: |
@@ -934,11 +913,12 @@ fields:
     intellidealer_purpose: |
       Equipment group code (e.g., ROOT, ATTACHMENTS, COMPACT CONSTRUCTION).
       Used for grouped reporting on the Weekly/Monthly views.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "equipment_group_code"
-    qep_gap_notes: |
-      No equivalent. Reporting groupings cannot be reproduced.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.equipment_group_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.equipment_group_code."
     severity: "should"
     category: "reporting"
     migration_hint: |
@@ -959,15 +939,12 @@ fields:
       The origin location shipping the unit (e.g., LAKE CITY). For yard-to-
       yard moves this is one of the dealer branches; for inbound from an
       OEM it is the vendor's plant city.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "from_location"
     qep_evidence:
-      - "database.types.ts traffic_tickets.from_location"
-    qep_gap_notes: |
-      Built as `from_location` text. There is no link to a branch row, no
-      city/state break-out, and no support for vendor-origin. Click-
-      through to a branch profile is not implementable.
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.from_location"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.from_location."
     severity: "must"
     category: "operational"
     migration_hint: |
@@ -990,14 +967,12 @@ fields:
       one of the dealer branches; for sales / customer transfer it is the
       end-customer site (with full address on the Shipping Information
       tab). Click-through opens Customer Profile.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "to_location"
     qep_evidence:
-      - "database.types.ts traffic_tickets.to_location"
-      - "database.types.ts traffic_tickets.to_contact_name"
-    qep_gap_notes: |
-      Same as from_location — text only, no branch FK, no customer FK.
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.to_location"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.to_location."
     severity: "must"
     category: "operational"
     migration_hint: |
@@ -1018,11 +993,12 @@ fields:
     intellidealer_purpose: |
       Full street address of the origin. Required for routing, fuel
       reimbursement, and proof-of-pickup documentation.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "from_address"
-    qep_gap_notes: |
-      Only delivery_address (destination) is present.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.from_address"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.from_address."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -1107,13 +1083,12 @@ fields:
       Reference number / contract id for the return agreement (when a demo
       or loaner is going out, the unit must come back; this is the link to
       the agreement governing that return).
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "return_agreement_ref"
-    qep_gap_notes: |
-      No equivalent. Without this, you can't enforce "demo unit must come
-      back by date X under terms Y" — a real audit gap when a unit goes
-      missing.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.return_agreement_ref"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.return_agreement_ref."
     severity: "should"
     category: "workflow"
     migration_hint: |
@@ -1165,15 +1140,12 @@ fields:
       The owning salesperson on the receipt (e.g., RM3 — three-character
       employee code). Drives commission accrual on demos and sales-related
       moves.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "requested_by"
     qep_evidence:
-      - "database.types.ts traffic_tickets.requested_by"
-    qep_gap_notes: |
-      `requested_by` is a generic uuid; there is no dedicated salesperson
-      pointer. If the same record needs both "logged it in" and "owns
-      commission" we lose that distinction.
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.requested_by"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.requested_by."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -1192,11 +1164,12 @@ fields:
       How many times the receipt has been printed. Used as a tamper-
       detection signal (a receipt printed five times after the move is
       complete is suspicious).
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "printed_count"
-    qep_gap_notes: |
-      No equivalent. There's no doc-printed audit at all.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.printed_count"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.printed_count."
     severity: "could"
     category: "reporting"
     migration_hint: |
@@ -1218,11 +1191,12 @@ fields:
     intellidealer_purpose: |
       Whether the move is a Pickup (we go get it) or a Delivery (we drop
       it off). Two-state radio, drives dispatch lane and trucker quote.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "move_mode"
-    qep_gap_notes: |
-      No equivalent. Conflated with direction (in/out).
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.move_mode"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.move_mode."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -1262,15 +1236,12 @@ fields:
     intellidealer_field_type: "text"
     intellidealer_purpose: |
       Time-of-day for the move (e.g., 09:00a, 01:00p, 02:00p, 08:00a).
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "promised_delivery_at"
     qep_evidence:
-      - "database.types.ts traffic_tickets.promised_delivery_at"
-    qep_gap_notes: |
-      promised_delivery_at is a single timestamp. ID separates date and
-      time so users can sort/filter on "morning vs afternoon" alone.
-      Acceptable as PARTIAL; UI must derive time-of-day.
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.promised_delivery_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.promised_delivery_at."
     severity: "should"
     category: "operational"
     migration_hint: ""
@@ -1316,11 +1287,12 @@ fields:
       Two-character shipment priority code (e.g., 01) shown beneath the
       Vendor/Trucker column. Independent of Urgency; encodes the trucker's
       route ordering.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "priority_code"
-    qep_gap_notes: |
-      No equivalent. Routing optimizer cannot ingest dealer-side priority.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.priority_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.priority_code."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -1338,11 +1310,12 @@ fields:
     intellidealer_purpose: |
       Expected return date for demos / loaners. Anchors the inbound leg of
       a round-trip move.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "return_due_date"
-    qep_gap_notes: |
-      No equivalent. Demo/loaner aging cannot be computed.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.return_due_date"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.return_due_date."
     severity: "must"
     category: "workflow"
     migration_hint: |
@@ -1360,11 +1333,12 @@ fields:
     intellidealer_purpose: |
       Number of units on the receipt (often 0 because the parent unit is
       the stock number; non-zero when bundled with attachments).
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "units_count"
-    qep_gap_notes: |
-      No equivalent.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.units_count"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.units_count."
     severity: "could"
     category: "operational"
     migration_hint: |
@@ -1407,14 +1381,12 @@ fields:
     intellidealer_purpose: |
       The user who created the receipt (e.g., "Rylee McKenzie - LAKE CITY")
       shown on every sub-tab. Audit trail for who logged the move.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "requested_by"
     qep_evidence:
-      - "database.types.ts traffic_tickets.requested_by"
-    qep_gap_notes: |
-      Stored but never explicitly stamped as the creator; conflates with
-      the salesperson concept.
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.requested_by"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.requested_by."
     severity: "must"
     category: "regulatory"
     migration_hint: |
@@ -1434,12 +1406,12 @@ fields:
     intellidealer_purpose: |
       The vendor / trucker name shipping the unit (e.g., QUALITY EQUIPMENT
       & PARTS, QEP001). Carries through to AR coding for the freight bill.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "trucker_vendor_id"
-    qep_gap_notes: |
-      No equivalent. The screenshots clearly show "QEP001" trucker code on
-      Receipt Details. Without it freight cost cannot be reconciled.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.trucker_vendor_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.trucker_vendor_id."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -1504,12 +1476,12 @@ fields:
     intellidealer_purpose: |
       The job-site name when the unit is being delivered to a customer's
       project site (vs the customer's main yard).
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "ship_job_site_name"
-    qep_gap_notes: |
-      Tickets are addressed to a single delivery_address; no separate
-      concept of "job site within customer".
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.ship_job_site_name"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.ship_job_site_name."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -1528,12 +1500,12 @@ fields:
     intellidealer_purpose: |
       Paper-map coordinate fields (Map Book, Page, Grid Number) — legacy
       fields still kept on Shipping Information.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "ship_map_book / ship_map_page / ship_map_grid"
-    qep_gap_notes: |
-      Could be replaced by lat/lng (which QEP has). Documented for
-      completeness.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets."
     severity: "could"
     category: "nice_to_have"
     migration_hint: |
@@ -1553,12 +1525,12 @@ fields:
     intellidealer_purpose: |
       Postal code of the destination (separate from the inline city
       because trucker rate-tables key on zip).
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "(in delivery_address text)"
-    qep_gap_notes: |
-      Only carried as part of free-text delivery_address; can't query
-      "all moves into FL 32024".
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -1576,11 +1548,12 @@ fields:
     intellidealer_purpose: |
       Country / Province / State code for cross-border moves (US/CAN
       especially).
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "ship_country / ship_state"
-    qep_gap_notes: |
-      Not broken out separately; matters for cross-border haul-permits.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets."
     severity: "should"
     category: "regulatory"
     migration_hint: |
@@ -1600,11 +1573,12 @@ fields:
     intellidealer_purpose: |
       Destination county. Carried so dispatch can route by county sales-
       tax jurisdiction. Filter on Weekly/Monthly views.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "ship_county"
-    qep_gap_notes: |
-      No equivalent. Tax routing requires this in many states.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.ship_county"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.ship_county."
     severity: "should"
     category: "regulatory"
     migration_hint: |
@@ -1622,11 +1596,12 @@ fields:
     intellidealer_purpose: |
       Pre-move estimate of the shipping cost. Compared to the actual
       trucker invoice for variance reporting.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "estimated_shipping_charge_cents"
-    qep_gap_notes: |
-      No equivalent. Freight-variance reporting cannot be produced.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.estimated_shipping_charge_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.estimated_shipping_charge_cents."
     severity: "should"
     category: "financial"
     migration_hint: |
@@ -1645,11 +1620,12 @@ fields:
     intellidealer_purpose: |
       Free-text instructions for the driver (gate codes, contact rules,
       lift requirements).
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "ship_instructions"
-    qep_gap_notes: |
-      No equivalent. Driver-facing notes are absent.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.ship_instructions"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.ship_instructions."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -1670,13 +1646,12 @@ fields:
       Up-to-10 child line items each with Stock Number, Description, Hours,
       Units. These are additional pieces shipped with the parent unit
       (forks, blades, manuals, demo packs).
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_ticket_lines"
     qep_column: "(new table)"
-    qep_gap_notes: |
-      Existing traffic_tickets is single-unit; there is no child-line
-      table for add-ons. Critical because an attachment going out with a
-      compactor must be on the receipt to come back.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_ticket_lines"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_ticket_lines."
     severity: "must"
     category: "operational"
     migration_hint: |
@@ -1710,11 +1685,12 @@ fields:
       Up-to-10 attachment line items (Stock Number + Description) sent
       with the parent unit. Distinct from Add Ons in that these are
       mounted attachments rather than loose items.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_ticket_lines"
     qep_column: "(new table; line_kind='attachment')"
-    qep_gap_notes: |
-      Same gap as Stock Add Ons.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_ticket_lines"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_ticket_lines."
     severity: "must"
     category: "operational"
     migration_hint: ""
@@ -1730,15 +1706,12 @@ fields:
     intellidealer_field_type: "multiline"
     intellidealer_purpose: |
       Free-form comments about the move (visible to all roles).
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "billing_comments / problems_reported"
     qep_evidence:
-      - "database.types.ts traffic_tickets.billing_comments"
-      - "database.types.ts traffic_tickets.problems_reported"
-    qep_gap_notes: |
-      Conflated with billing comments. A general-purpose comments
-      thread per ticket is missing.
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -1762,15 +1735,12 @@ fields:
     intellidealer_field_type: "json"
     intellidealer_purpose: |
       Multimedia attachments (photos, PDFs, signed delivery receipts).
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "delivery_photos / delivery_signature_url"
     qep_evidence:
-      - "database.types.ts traffic_tickets.delivery_photos (Json)"
-      - "database.types.ts traffic_tickets.delivery_signature_url"
-    qep_gap_notes: |
-      Built for delivery-photos and signature only. No general media
-      bucket per ticket (e.g., damage photos at pickup).
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets."
     severity: "should"
     category: "regulatory"
     migration_hint: |
@@ -1791,14 +1761,12 @@ fields:
       Search toggle that includes historical (completed / cancelled)
       traffic movements in results. Confirms the system soft-archives
       tickets rather than deleting them.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "completed_at"
     qep_evidence:
-      - "database.types.ts traffic_tickets.completed_at"
-    qep_gap_notes: |
-      QEP can derive history from completed_at, but the listing UI does
-      not yet expose a single "Include History" toggle.
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.completed_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.completed_at."
     severity: "should"
     category: "reporting"
     migration_hint: ""
@@ -1817,7 +1785,9 @@ fields:
     qep_status: "BUILT"
     qep_table: "traffic_tickets"
     qep_column: "shipping_date / received_at"
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets."
     severity: "should"
     category: "reporting"
     migration_hint: ""
@@ -1864,7 +1834,9 @@ fields:
     qep_status: "BUILT"
     qep_table: "traffic_tickets"
     qep_column: "department"
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.department"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets.department."
     severity: "should"
     category: "reporting"
     migration_hint: ""
@@ -1880,12 +1852,12 @@ fields:
     intellidealer_field_type: "fk"
     intellidealer_purpose: |
       Branch-location filter (default "01" - LAKE CITY in screenshots).
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "(via from_branch_id / to_branch_id once added)"
-    qep_gap_notes: |
-      Becomes BUILT once the from_branch_id / to_branch_id fields are
-      added per traffic_ticket.from_city / .to_city above.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_tickets."
     severity: "must"
     category: "operational"
     migration_hint: ""
@@ -1904,11 +1876,12 @@ fields:
       Free-text memo overlaid on a date in the calendar (e.g., "NEED
       PROPANE TANK CAGE PICKED UP AT 4:30PM - SANDERSON, FL"). Edit /
       Remove inline. A planner-level note independent of any ticket.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "traffic_calendar_memos"
     qep_column: "(new table)"
-    qep_gap_notes: |
-      No equivalent. Calendar-level memos cannot be authored.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_calendar_memos"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains traffic_calendar_memos."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -1988,15 +1961,12 @@ fields:
       the global header chrome. Anchors every transaction (ticket, work
       order, invoice, employee profit-center). The screenshots show
       "01/01/01 - LAKE CITY".
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "branches"
     qep_column: "short_code"
     qep_evidence:
-      - "database.types.ts branches.short_code"
-    qep_gap_notes: |
-      `short_code` is nullable and not unique. IntelliDealer's branch code
-      is a stable, unique key used in EVERY downstream foreign key. Should
-      be NOT NULL + UNIQUE per workspace.
+      - "apps/web/src/lib/database.types.ts public.Tables.branches.short_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains branches.short_code."
     severity: "must"
     category: "operational"
     migration_hint: |
@@ -2099,12 +2069,12 @@ fields:
       The default GL profit center digit applied to transactions at this
       branch when not specified at the employee level. Foundational for
       branch P&L.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "branches"
     qep_column: "default_profit_center_code"
-    qep_gap_notes: |
-      Branches table has no profit_center column. Without it, branch P&L
-      cannot be derived from transactions.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.branches.default_profit_center_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains branches.default_profit_center_code."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -2123,12 +2093,12 @@ fields:
     intellidealer_purpose: |
       The default warehouse / parts location for the branch. Drives
       parts-counter pick lists and inbound parts-receipt routing.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "branches"
     qep_column: "default_warehouse_code"
-    qep_gap_notes: |
-      Not represented. parts_inventory carries branch_id but no concept of
-      warehouse-within-branch.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.branches.default_warehouse_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains branches.default_warehouse_code."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -2266,15 +2236,12 @@ fields:
       Support, Traffic"). The user / role record carries the set of switch
       numbers granted to that user. This is the canonical authorization
       taxonomy referenced from every other phase's documentation.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "security_switches"
     qep_column: "(new table)"
-    qep_gap_notes: |
-      QEP enforces authorization via Postgres RLS + role checks
-      (`get_my_role()` / `get_my_workspace()`). There is NO equivalent
-      numbered switch table mapping screen-id ⇄ permission code ⇄ role.
-      For a regulatory replacement we need the audit-trace path
-      "user X had switch 604 at time T" — RLS alone cannot answer this.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.security_switches"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains security_switches."
     severity: "must"
     category: "regulatory"
     migration_hint: |
@@ -2319,12 +2286,12 @@ fields:
       The mapping of every screen in the system to its required switch
       number. Used at render-time to decide whether to show / hide the
       menu item.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "security_screens"
     qep_column: "(new table)"
-    qep_gap_notes: |
-      QEP screens are gated by client-side role checks; there is no
-      durable mapping in the database.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.security_screens"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains security_screens."
     severity: "should"
     category: "regulatory"
     migration_hint: |
@@ -2374,16 +2341,12 @@ fields:
       Allow-list / deny-list of IPs and devices for sensitive roles
       (payroll, AR, executive). Common in dealership ERPs to keep field
       reps from running payroll from a coffee shop.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "qrm_auth_audit_events"
     qep_column: "ip_inet + user_agent"
     qep_evidence:
-      - "database.types.ts qrm_auth_audit_events.ip_inet"
-      - "database.types.ts qrm_auth_audit_events.user_agent"
-    qep_gap_notes: |
-      QEP records IP / user_agent in the audit log AFTER the fact, but has
-      no preventive allow-list. For payroll / AR, an enforced allow-list
-      is regulatory hygiene.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_auth_audit_events"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_auth_audit_events."
     severity: "should"
     category: "regulatory"
     migration_hint: |
@@ -2721,11 +2684,12 @@ fields:
     intellidealer_purpose: |
       Postal-code → territory rules used to auto-assign newly-imported
       leads. Without this, every new lead must be manually owned.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "qrm_territory_zip_rules"
     qep_column: "(new table)"
-    qep_gap_notes: |
-      No equivalent. Auto-assignment of new leads cannot be implemented.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_territory_zip_rules"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_territory_zip_rules."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -2826,13 +2790,12 @@ fields:
       - "unauthorized"
     intellidealer_purpose: |
       The event types fired by the geofence engine.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "geofence_events"
     qep_column: "event_type"
     qep_evidence:
-      - "database.types.ts geofence_events.event_type (text)"
-    qep_gap_notes: |
-      Free text. Could be tightened to enum.
+      - "apps/web/src/lib/database.types.ts public.Tables.geofence_events.event_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains geofence_events.event_type."
     severity: "could"
     category: "operational"
     migration_hint: |

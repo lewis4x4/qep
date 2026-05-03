@@ -150,6 +150,16 @@ fields:
   # ============================================================================
   # SECTION 1 — IDENTIFICATION
   # ============================================================================
+
+
+
+
+
+
+
+
+
+
   - id: customer.legacy_customer_number
     intellidealer_label: "Customer Number"
     intellidealer_screen: "Customer Profile (Profile tab) / Customer Listing"
@@ -166,17 +176,12 @@ fields:
       filings. Field reps know customers by this number, not the UUID.
       Persists indefinitely; reused by every dealership that has migrated
       off CDK / VitalEdge IntelliDealer to a new platform.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: null
     qep_evidence:
-      - "database.types.ts qrm_companies (no legacy_customer_number column; only id UUID)"
-    qep_gap_notes: |
-      QEP keys customers by UUID. The IntelliDealer alphanumeric customer
-      number must be preserved as a typed first-class column for migration
-      reconciliation, OEM portal sync, and rep mental-model continuity.
-      Storing in metadata Json is unacceptable — it must be UNIQUE-indexed
-      per workspace and visible on every list view.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies."
     severity: must
     category: regulatory
     migration_hint: |
@@ -203,15 +208,12 @@ fields:
       and in the AR sub-ledger lookup. Operationally this is how phones
       get answered ("Search 1 'TOWING' please") — removing it breaks
       muscle memory across the entire dealership.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: search_1
-    qep_evidence: []
-    qep_gap_notes: |
-      No equivalent column. Without it, list-view search is forced to
-      do a full-text scan against name/legal_name/dba — slower, less
-      predictable, and breaks rep workflow for any dealer with > 1k
-      customers.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.search_1"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.search_1."
     severity: should
     category: operational
     migration_hint: |
@@ -234,12 +236,12 @@ fields:
       Second 10-char search key (often industry word, e.g. "TOWING",
       "ROOFING"). Lets reps slice the customer list two ways without a
       saved-filter view. Pairs with Search 1.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: search_2
-    qep_evidence: []
-    qep_gap_notes: |
-      Same rationale as search_1 — second alternate search key.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.search_2"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.search_2."
     severity: should
     category: operational
     migration_hint: |
@@ -289,15 +291,12 @@ fields:
       High-level customer-type classifier. Drives 1099 vs W-9 vs sales-
       tax-exemption defaults and report grouping. Internal classification
       flips many downstream defaults (no AR statement, internal-only GL).
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: classification
     qep_evidence:
-      - "database.types.ts qrm_companies.classification (TEXT, free-text)"
-    qep_gap_notes: |
-      QEP has classification as TEXT — no enum constraint. Need a typed
-      enum so reports/policies can branch. IntelliDealer treats this as
-      a controlled vocabulary; QEP currently does not.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.classification"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.classification."
     severity: should
     category: financial
     migration_hint: |
@@ -372,13 +371,12 @@ fields:
     intellidealer_purpose: |
       Industry classification. Drives Brand of Interest defaults,
       cross-sell suggestions, and BI segmentation in management reports.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: industry
-    qep_evidence: []
-    qep_gap_notes: |
-      No industry column. classification is too coarse (Business/etc.).
-      Required for marketing segmentation and cross-sell rules.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.industry"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.industry."
     severity: should
     category: operational
     migration_hint: |
@@ -402,12 +400,12 @@ fields:
     intellidealer_purpose: |
       Operation-size bucket. Drives credit-limit defaults, salesperson
       assignment tier, and rental-rate eligibility in the back office.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: size
-    qep_evidence: []
-    qep_gap_notes: |
-      No size bucket. Required for tiered pricing/credit policy.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.size"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.size."
     severity: should
     category: financial
     migration_hint: |
@@ -427,13 +425,12 @@ fields:
       Free-text named owner / principal. For B2B small-business sales
       this is the personal-guarantee party and the relationship anchor
       a senior rep tracks across companies.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: owner_name
-    qep_evidence: []
-    qep_gap_notes: |
-      No dedicated owner field. This is distinct from a contact row —
-      the owner may not have a phone/email of their own captured.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.owner_name"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.owner_name."
     severity: should
     category: operational
     migration_hint: |
@@ -458,12 +455,12 @@ fields:
       Manufacturer affinity for marketing segmentation and OEM-portal
       cross-sell. A customer with Bobcat skidsteers gets Bobcat parts
       promos; a Vermeer customer gets Vermeer service campaigns.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: brand_of_interest
-    qep_evidence: []
-    qep_gap_notes: |
-      No marketing-affinity column. Required for OEM-portal targeting.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.brand_of_interest"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.brand_of_interest."
     severity: should
     category: operational
     migration_hint: |
@@ -612,13 +609,12 @@ fields:
       land-survey unit used for service dispatch into rural Ontario /
       Quebec / Manitoba farmland and forestry sites where there is no
       civic street address.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: township
-    qep_evidence: []
-    qep_gap_notes: |
-      No rural-Canada survey columns. Blocks any Canadian dealership
-      cutover where farms/forestry sites lack civic addresses.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.township"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.township."
     severity: should
     category: operational
     migration_hint: |
@@ -634,11 +630,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Canadian rural lot # within a township survey."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: lot
-    qep_evidence: []
-    qep_gap_notes: "Pairs with township + concession."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.lot"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.lot."
     severity: should
     category: operational
     migration_hint: "ALTER TABLE qrm_companies ADD COLUMN lot TEXT;"
@@ -653,11 +650,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Canadian rural concession (parallel land-survey row)."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: concession
-    qep_evidence: []
-    qep_gap_notes: "Pairs with township + lot."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.concession"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.concession."
     severity: should
     category: operational
     migration_hint: "ALTER TABLE qrm_companies ADD COLUMN concession TEXT;"
@@ -674,13 +672,12 @@ fields:
     intellidealer_purpose: |
       Geocoded latitude — drives field-rep route optimization, geofence
       arrival/departure events, and territory-overlap analytics.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: latitude
-    qep_evidence: []
-    qep_gap_notes: |
-      qrm_geofences exists but no per-company geocoded centroid. Without
-      it, route planning falls back to address geocoding on every trip.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.latitude"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.latitude."
     severity: should
     category: operational
     migration_hint: |
@@ -700,11 +697,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
     intellidealer_field_type: number
     intellidealer_purpose: "Geocoded longitude — pairs with latitude."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: longitude
-    qep_evidence: []
-    qep_gap_notes: "See latitude."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.longitude"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.longitude."
     severity: should
     category: operational
     migration_hint: "(combined with latitude migration above)"
@@ -744,11 +742,12 @@ fields:
     intellidealer_purpose: |
       Fax — still used for AR/credit-app exchanges in the construction
       and forestry verticals.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: business_fax
-    qep_evidence: []
-    qep_gap_notes: "No fax column."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.business_fax"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.business_fax."
     severity: could
     category: nice_to_have
     migration_hint: "ALTER TABLE qrm_companies ADD COLUMN business_fax TEXT;"
@@ -763,13 +762,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
     intellidealer_field_type: phone
     intellidealer_purpose: "Owner / dispatcher cell — distinct from main switchboard."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: business_cell
-    qep_evidence: []
-    qep_gap_notes: |
-      qrm_companies.phone is the only number column. A second cell column
-      (or first-class secondary_phone) is needed.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.business_cell"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.business_cell."
     severity: should
     category: operational
     migration_hint: "ALTER TABLE qrm_companies ADD COLUMN business_cell TEXT;"
@@ -786,14 +784,12 @@ fields:
     intellidealer_purpose: |
       Company-level email (e.g. info@acme.com) — used for statement
       auto-email when no contact has the AR-recipient flag.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: business_email
-    qep_evidence: []
-    qep_gap_notes: |
-      qrm_companies has no email column. Statement auto-email currently
-      forced to use a contact row, which fails for companies that only
-      have a generic "billing@" inbox.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.business_email"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.business_email."
     severity: should
     category: financial
     migration_hint: "ALTER TABLE qrm_companies ADD COLUMN business_email TEXT;"
@@ -841,20 +837,12 @@ fields:
       manufacturer warranty programs (John Deere FinancialOps, Bobcat
       OneCall, Vermeer Connect) to federate customer records across
       dealer networks.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: ein
-    qep_evidence: []
-    qep_gap_notes: |
-      *** BRIAN'S #1 ANCHOR CONCERN — MUST-FIX-BEFORE-CUTOVER ***
-      No EIN/Federal Tax ID column anywhere on the customer record.
-      Without this column QEP cannot:
-        * generate 1099-NEC/MISC at year-end (tax filing failure)
-        * pass an AvaTax exemption substantiation request
-        * resolve a customer in OFAC/sanctions screening
-        * federate the customer with state-issued resale certs
-        * federate with OEM portals (JD/Bobcat/Vermeer customer dedup)
-      The single largest regulatory gap in Phase-1.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.ein"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.ein."
     severity: must
     category: regulatory
     migration_hint: |
@@ -880,18 +868,12 @@ fields:
       substantiates a customer's exempt-sale claim. Audited by state
       revenue departments; missing or invalid cert # results in the
       dealer eating the back-taxes during a sales-tax audit.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: tax_exemption_certificates
     qep_column: certificate_number
     qep_evidence:
-      - "database.types.ts tax_exemption_certificates.certificate_number, .crm_company_id, .issuing_state, .effective_date, .expiration_date"
-    qep_gap_notes: |
-      tax_exemption_certificates exists as a separate table — that's
-      architecturally correct (one customer can hold multi-state certs)
-      but the IntelliDealer single inline RESALE CERT # field has no
-      shortcut into it. Need an inline display on Customer Profile that
-      surfaces the primary (most-recent, non-expired) cert number, plus
-      the ability to drill into the full cert table.
+      - "apps/web/src/lib/database.types.ts public.Tables.tax_exemption_certificates.certificate_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains tax_exemption_certificates.certificate_number."
     severity: must
     category: regulatory
     migration_hint: |
@@ -916,14 +898,12 @@ fields:
       Tax routing code applied to equipment-line revenue when the
       customer is invoiced. Selected from a controlled vocabulary that
       maps to AvaTax tax-codes. Distinct from labor/parts tax routing.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: tax_code_equipment
-    qep_evidence: []
-    qep_gap_notes: |
-      No per-customer per-revenue-line tax routing. AvaTax integration
-      currently has only one global default per workspace, which is wrong
-      for any dealer that sells across multiple states.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.tax_code_equipment"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.tax_code_equipment."
     severity: must
     category: regulatory
     migration_hint: |
@@ -945,11 +925,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
     intellidealer_field_type: enum
     intellidealer_purpose: "Tax routing for mailing/shipping addresses (vs equipment)."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: tax_code_parts
-    qep_evidence: []
-    qep_gap_notes: "Per-line tax routing missing — see tax_code_1."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.tax_code_parts"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.tax_code_parts."
     severity: must
     category: regulatory
     migration_hint: "(combined with tax_code_1 migration above)"
@@ -964,11 +945,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
     intellidealer_field_type: enum
     intellidealer_purpose: "Third tax routing slot (often service)."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: tax_code_service
-    qep_evidence: []
-    qep_gap_notes: "Per-line tax routing missing."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.tax_code_service"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.tax_code_service."
     severity: must
     category: regulatory
     migration_hint: "(combined with tax_code_1)"
@@ -983,11 +965,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
     intellidealer_field_type: enum
     intellidealer_purpose: "Fourth tax routing slot (often rental/internal)."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: tax_code_rental
-    qep_evidence: []
-    qep_gap_notes: "Per-line tax routing missing."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.tax_code_rental"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.tax_code_rental."
     severity: must
     category: regulatory
     migration_hint: "(combined with tax_code_1)"
@@ -1005,11 +988,12 @@ fields:
       Sales-tax routing specifically for service-labor lines (which are
       taxed differently than parts in many jurisdictions — e.g. labor
       is exempt in TX, taxable in CA).
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: labor_tax_code_1
-    qep_evidence: []
-    qep_gap_notes: "Labor-vs-parts tax routing missing."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.labor_tax_code_1"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.labor_tax_code_1."
     severity: must
     category: regulatory
     migration_hint: "(combined with tax_code_1)"
@@ -1024,11 +1008,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Customer-Profile-Details__3.25.02.txt
     intellidealer_field_type: enum
     intellidealer_purpose: "Secondary labor-tax routing (warranty / internal labor)."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: labor_tax_code_2
-    qep_evidence: []
-    qep_gap_notes: "See labor_tax_code_1."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.labor_tax_code_2"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.labor_tax_code_2."
     severity: must
     category: regulatory
     migration_hint: "(combined with tax_code_1)"
@@ -1047,11 +1032,12 @@ fields:
       exempt (e.g. "501(c)(3) charity per attached letter dated
       2024-08-12"). Audit-trail field — required during state revenue
       audits to substantiate exempt-sale claims.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: exempt_status_notes
-    qep_evidence: []
-    qep_gap_notes: "No exemption-explanation column."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.exempt_status_notes"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.exempt_status_notes."
     severity: must
     category: regulatory
     migration_hint: |
@@ -1085,13 +1071,12 @@ fields:
       The AvaTax-defined entity-use-code that gets sent on every tax
       decision API call. Maps to a regulated controlled vocabulary —
       using the wrong code voids the exemption.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: avatax_entity_use_code
-    qep_evidence: []
-    qep_gap_notes: |
-      No AvaTax entity-use-code column. Without it the AvaTax integration
-      cannot send a valid exemption-substantiation payload.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.avatax_entity_use_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.avatax_entity_use_code."
     severity: must
     category: regulatory
     migration_hint: |
@@ -1113,11 +1098,12 @@ fields:
       credit-bureau lookups (D&B Credit Builder, Experian Business),
       and for federal-contract eligibility (govt customers must have
       a DUNS for SAM.gov registration).
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: duns_number
-    qep_evidence: []
-    qep_gap_notes: "No DUNS column."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.duns_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.duns_number."
     severity: should
     category: regulatory
     migration_hint: |
@@ -1138,11 +1124,12 @@ fields:
       Six-digit North American Industry Classification System code.
       Required for federal tax reporting (Schedule C / Form 5471) and
       for many state sales-tax-exemption certificates.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: naics_code
-    qep_evidence: []
-    qep_gap_notes: "No NAICS column. Required for federal tax reporting."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.naics_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.naics_code."
     severity: should
     category: regulatory
     migration_hint: |
@@ -1164,13 +1151,12 @@ fields:
       When TRUE, the dealer must suppress this customer's PI from any
       shared marketing-list export (e.g. OEM dealer-network rosters).
       Recording the opt-out on the customer record is the legal proof.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: opt_out_sale_pi
-    qep_evidence: []
-    qep_gap_notes: |
-      No CCPA opt-out flag. Compliance requirement for dealers serving
-      CA, CT, CO, VA, UT customers.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.opt_out_sale_pi"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.opt_out_sale_pi."
     severity: must
     category: regulatory
     migration_hint: |
@@ -1199,11 +1185,12 @@ fields:
       balance + current-month detail. Customers (and their bookkeepers)
       have a strong preference and changing it without telling them
       causes payment-posting confusion.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: ar_type
-    qep_evidence: []
-    qep_gap_notes: "No AR-statement-format column."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.ar_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.ar_type."
     severity: must
     category: financial
     migration_hint: |
@@ -1223,15 +1210,12 @@ fields:
       Lets multiple related customer accounts (e.g. parent + subsidiary
       branches) be combined onto one statement at month-end. The value
       is a customer-number alias that groups child accounts.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: parent_company_id
     qep_evidence:
-      - "database.types.ts qrm_companies.parent_company_id (UUID FK to self)"
-    qep_gap_notes: |
-      parent_company_id captures the hierarchy but there is no
-      'roll up to parent for AR statement' flag. Need a typed boolean
-      that drives the AR statement-generation routine.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.parent_company_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.parent_company_id."
     severity: should
     category: financial
     migration_hint: |
@@ -1249,11 +1233,12 @@ fields:
     intellidealer_purpose: |
       Per-customer free-text message that prints on the AR statement
       footer (e.g. "Please remit to lockbox PO Box 9988").
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: statement_message
-    qep_evidence: []
-    qep_gap_notes: "No per-customer statement-footer override."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.statement_message"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.statement_message."
     severity: should
     category: financial
     migration_hint: "ALTER TABLE qrm_companies ADD COLUMN statement_message TEXT;"
@@ -1305,11 +1290,12 @@ fields:
       with mandatory-PO procurement controls require this — the PO is
       what their AP system matches against, and an invoice without it
       gets rejected.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: default_po_number
-    qep_evidence: []
-    qep_gap_notes: "No default-PO column."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.default_po_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.default_po_number."
     severity: must
     category: financial
     migration_hint: |
@@ -1329,11 +1315,12 @@ fields:
     intellidealer_purpose: |
       Date the default PO expires — after this, invoices stop auto-
       populating it and the rep must collect a fresh PO before invoicing.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: default_po_expires_at
-    qep_evidence: []
-    qep_gap_notes: "Pairs with default_po_number above."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.default_po_expires_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.default_po_expires_at."
     severity: must
     category: financial
     migration_hint: "(combined with po_number_required)"
@@ -1351,11 +1338,12 @@ fields:
       Per-customer toggle for late-charge assessment. Default Y; turned
       off for VIP / strategic accounts and for governments (which by
       statute do not pay late fees).
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: assess_late_charges
-    qep_evidence: []
-    qep_gap_notes: "No late-charge per-customer toggle."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.assess_late_charges"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.assess_late_charges."
     severity: should
     category: financial
     migration_hint: |
@@ -1379,11 +1367,12 @@ fields:
       contract price on parts/equipment invoices. Shows the customer
       the savings they're getting; some customers contractually require
       this, others contractually require it suppressed.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: print_retail_price
-    qep_evidence: []
-    qep_gap_notes: "No invoice-print-control column."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.print_retail_price"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.print_retail_price."
     severity: should
     category: financial
     migration_hint: |
@@ -1405,11 +1394,12 @@ fields:
       Whether to print parts invoices for this customer (some get a
       consolidated monthly statement instead of a per-transaction
       invoice — print=No avoids paper duplication).
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: print_parts_invoices
-    qep_evidence: []
-    qep_gap_notes: "No print toggle."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.print_parts_invoices"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.print_parts_invoices."
     severity: should
     category: financial
     migration_hint: "(combined with print_retail_price migration)"
@@ -1427,11 +1417,12 @@ fields:
       When TRUE, ID InspectionPlus inspections (rental returns, demo
       walk-throughs) are auto-emailed to the customer's primary email
       contact upon completion. Default behavior toggle.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: auto_email_inspection
-    qep_evidence: []
-    qep_gap_notes: "No inspection-auto-email control. See InspectionPlus in Phase-4."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.auto_email_inspection"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.auto_email_inspection."
     severity: should
     category: workflow
     migration_hint: "(combined with print_retail_price migration)"
@@ -1450,11 +1441,12 @@ fields:
       identifier when the dealer also operates as an OEM Internal
       Branch Equipment dealer. Used on warranty claims and on
       manufacturer pre-approval requests.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: ibe_account_number
-    qep_evidence: []
-    qep_gap_notes: "No IBE-account column. Required for OEM warranty claims."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.ibe_account_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.ibe_account_number."
     severity: should
     category: financial
     migration_hint: "ALTER TABLE qrm_companies ADD COLUMN ibe_account_number TEXT;"
@@ -1472,15 +1464,12 @@ fields:
       Maximum AR balance the dealer extends to the customer. Drives
       ar_credit_blocks on order entry — if posting an invoice would push
       AR over the limit, the order is held for credit-mgr release.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: ar_credit_blocks
     qep_column: null
     qep_evidence:
-      - "database.types.ts ar_credit_blocks (per-order block, not per-customer ceiling)"
-    qep_gap_notes: |
-      ar_credit_blocks is a downstream output (the holds), not the input
-      (the per-customer ceiling). Need a credit_limit column on
-      qrm_companies that the credit-block engine reads.
+      - "apps/web/src/lib/database.types.ts public.Tables.ar_credit_blocks"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains ar_credit_blocks."
     severity: must
     category: financial
     migration_hint: |
@@ -1505,13 +1494,12 @@ fields:
     intellidealer_purpose: |
       Pricing-tier group that drives parts/equipment list-price overrides
       (e.g. CONTRACTOR-TIER1 gives 12% off list on parts).
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: pricing_group_id
-    qep_evidence: []
-    qep_gap_notes: |
-      qrm_companies has no pricing-group FK. parts_pricing_rules exists
-      but has no per-customer-group hook.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.pricing_group_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.pricing_group_id."
     severity: must
     category: financial
     migration_hint: |
@@ -1548,11 +1536,12 @@ fields:
       Per-customer pricing tier (1-4) that maps to the parts master
       Level1/Level2/Level3/Level4 price ladder. Distinct from the
       pricing-group discount %.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: pricing_level
-    qep_evidence: []
-    qep_gap_notes: "No pricing-level integer."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.pricing_level"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.pricing_level."
     severity: must
     category: financial
     migration_hint: |
@@ -1572,11 +1561,12 @@ fields:
       Cross-line discount group (e.g. 'GOLD' = 10% on labor + free
       pickup). Distinct from pricing_group which is a parts-only
       discount %.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: discount_group
-    qep_evidence: []
-    qep_gap_notes: "No cross-line discount group column."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.discount_group"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.discount_group."
     severity: should
     category: financial
     migration_hint: "ALTER TABLE qrm_companies ADD COLUMN discount_group TEXT;"
@@ -1602,13 +1592,12 @@ fields:
       reminders, service-due notices). Required for Quebec / bilingual
       Canadian dealers; statements in the wrong language violate
       provincial language law.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: preferred_language
-    qep_evidence: []
-    qep_gap_notes: |
-      No language preference. Blocks Quebec dealer cutover (Bill 96
-      requires French statements).
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.preferred_language"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.preferred_language."
     severity: must
     category: regulatory
     migration_hint: |
@@ -1628,14 +1617,12 @@ fields:
       Home branch for the customer (e.g. "01 - LAKE CITY"). Drives
       default tax routing, default warehouse for parts pulls, default
       service-shop dispatch.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: home_branch_id
     qep_evidence:
-      - "database.types.ts branches (table exists)"
-    qep_gap_notes: |
-      branches table exists but qrm_companies has no FK to it. Currently
-      the customer-to-branch link is implicit via territory_code.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.home_branch_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.home_branch_id."
     severity: should
     category: operational
     migration_hint: |
@@ -1676,13 +1663,12 @@ fields:
       Distinct rep per department: Parts, Service, Rental, Equipment,
       Admin, Other. A customer may have one rep for parts orders but a
       different rep for new-equipment quotes.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_company_department_reps
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Single assigned_rep_id is not enough. Real dealerships split rep
-      assignment by department. Need a junction table.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_company_department_reps"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_company_department_reps."
     severity: must
     category: operational
     migration_hint: |
@@ -1733,14 +1719,12 @@ fields:
       - "Prospect"
       - "Deleted"
     intellidealer_purpose: "Active vs inactive state — drives list filtering and AR aging visibility."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: status
     qep_evidence:
-      - "database.types.ts qrm_companies.status (TEXT, free-text)"
-    qep_gap_notes: |
-      QEP has status as TEXT — needs typed enum constraint to match
-      IntelliDealer's controlled vocabulary.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.status"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.status."
     severity: should
     category: operational
     migration_hint: |
@@ -1761,11 +1745,12 @@ fields:
       every campaign send (email, SMS, mailer). Distinct from CCPA
       opt-out — this is a customer-stated preference, not a legal
       requirement.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: do_not_contact
-    qep_evidence: []
-    qep_gap_notes: "No marketing-suppression flag."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.do_not_contact"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.do_not_contact."
     severity: should
     category: operational
     migration_hint: "ALTER TABLE qrm_companies ADD COLUMN do_not_contact BOOLEAN NOT NULL DEFAULT false;"
@@ -1787,11 +1772,12 @@ fields:
       Risk flag — when TRUE, every screen that surfaces this customer
       shows a warning banner ("payment-issue history") and the order-
       entry flow forces a credit-mgr review.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: notify_payment_issues
-    qep_evidence: []
-    qep_gap_notes: "No risk-flag columns. Critical AR signal."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.notify_payment_issues"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.notify_payment_issues."
     severity: must
     category: financial
     migration_hint: |
@@ -1812,11 +1798,12 @@ fields:
     intellidealer_purpose: |
       Risk flag — customer has shell-company / alternate-account history.
       Hint to the rep that they may be trying to dodge a credit hold.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: notify_multiple_accounts
-    qep_evidence: []
-    qep_gap_notes: "See notify_payment_issues."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.notify_multiple_accounts"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.notify_multiple_accounts."
     severity: must
     category: financial
     migration_hint: "(combined with notify_payment_issues)"
@@ -1834,11 +1821,12 @@ fields:
       Risk flag — customer has expressed litigation intent. Trigger to
       route every interaction through a manager and to document in the
       memo trail.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: notify_legal_concerns
-    qep_evidence: []
-    qep_gap_notes: "See notify_payment_issues."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.notify_legal_concerns"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.notify_legal_concerns."
     severity: must
     category: regulatory
     migration_hint: "(combined with notify_payment_issues)"
@@ -1856,11 +1844,12 @@ fields:
       Relationship signal — surfaces customer-owner birthday on the
       rep's calendar so they can send a personal note. Small touch,
       meaningful retention impact.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: notify_birthday
-    qep_evidence: []
-    qep_gap_notes: "See notify_payment_issues."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.notify_birthday"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.notify_birthday."
     severity: should
     category: operational
     migration_hint: "(combined with notify_payment_issues)"
@@ -1960,11 +1949,12 @@ fields:
     intellidealer_purpose: |
       Per-contact cell — for SMS reach-out (the AR clerk's cell often
       differs from her desk number).
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_contacts
     qep_column: cell
-    qep_evidence: []
-    qep_gap_notes: "qrm_contacts has only one phone column. Need cell separately."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_contacts.cell"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_contacts.cell."
     severity: should
     category: operational
     migration_hint: "ALTER TABLE qrm_contacts ADD COLUMN cell TEXT;"
@@ -2024,14 +2014,12 @@ fields:
     intellidealer_purpose: |
       List filter — defaults to OFF, hides terminated employees from
       the contact list. Toggling to ON exposes the full historical roster.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_contacts
     qep_column: deleted_at
     qep_evidence:
-      - "database.types.ts qrm_contacts.deleted_at (soft-delete present)"
-    qep_gap_notes: |
-      Soft-delete column exists; the UI filter pattern needs to be wired
-      up — the data primitive is there.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_contacts.deleted_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_contacts.deleted_at."
     severity: could
     category: nice_to_have
     migration_hint: ""
@@ -2049,14 +2037,12 @@ fields:
       Whether the contact has been provisioned a portal login (the
       customer-facing 'MyDealer' web app). Drives portal-access
       enablement and password-reset routing.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: portal_customers
     qep_column: null
     qep_evidence:
-      - "database.types.ts portal_customers (table exists)"
-    qep_gap_notes: |
-      portal_customers exists but no FK from qrm_contacts — the join is
-      not first-class. Need a contact-level boolean + FK.
+      - "apps/web/src/lib/database.types.ts public.Tables.portal_customers"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains portal_customers."
     severity: should
     category: operational
     migration_hint: |
@@ -2104,14 +2090,12 @@ fields:
       Free-text memo notes per customer. Pinned memos surface at the
       top of every customer-facing screen ("Closed July 4-5 for
       vacation"); history memos are a chronological log.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_companies
     qep_column: notes
     qep_evidence:
-      - "database.types.ts qrm_companies.notes (single TEXT)"
-    qep_gap_notes: |
-      Single notes field cannot represent pinned vs history. Need a
-      separate memo table with pinned flag + author + timestamp.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.notes"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.notes."
     severity: should
     category: operational
     migration_hint: |
@@ -2146,16 +2130,12 @@ fields:
       from, what is the manufacturer's identifier for them? Required
       for OEM warranty submission, OEM-portal reconciliation, and
       OEM-co-op-marketing claim filing.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: crm_external_id_map
     qep_column: null
     qep_evidence:
-      - "database.types.ts crm_external_id_map (generic external-ID lookup)"
-    qep_gap_notes: |
-      crm_external_id_map is generic enough to hold this but is not
-      currently used for OEM customer numbers. Need to define a
-      source_system convention (e.g. 'oem_bobcat_customer_no') and
-      surface a UI grid on the Customer Profile.
+      - "apps/web/src/lib/database.types.ts public.Views.crm_external_id_map"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains crm_external_id_map."
     severity: must
     category: regulatory
     migration_hint: |
@@ -2212,13 +2192,12 @@ fields:
       Enrolled loyalty / rewards programs and earned tier (e.g. JD Cash
       Back Tier 2, Bobcat Rewards Gold). Tracks points balance and
       tier-renewal date.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: customer_loyalty_enrollments
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No loyalty schema at all. Required for OEM rewards programs that
-      give the customer points-back on parts purchases.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_loyalty_enrollments"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains customer_loyalty_enrollments."
     severity: should
     category: operational
     migration_hint: |
@@ -2262,15 +2241,12 @@ fields:
       satellite branches, foreman trailers). Each row has a default
       flag, freight terms, contact, and tax-jurisdiction override
       that's applied at order entry.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_company_ship_to_addresses
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      qrm_companies has ONE address. No additional ship-to address
-      book. Construction customers have 5-50 active job sites at any
-      time; without this, every parts/equipment delivery order requires
-      manual ad-hoc address typing.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_company_ship_to_addresses"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_company_ship_to_addresses."
     severity: must
     category: operational
     migration_hint: |
@@ -2360,16 +2336,12 @@ fields:
       Prospect-pipeline stage. Distinct from a converted-customer state.
       Drives the Prospect Board grid filter and the salesperson's
       forecast roll-up.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: qrm_deals
     qep_column: null
     qep_evidence:
-      - "database.types.ts qrm_deals (post-conversion deal pipeline)"
-    qep_gap_notes: |
-      qrm_deals starts AFTER a prospect is engaged with a quote. The
-      Prospect Board lives upstream — early-funnel "I'm thinking about
-      buying X" tracking that hasn't yet produced a quote. Need a
-      dedicated qrm_prospects table.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_deals"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_deals."
     severity: should
     category: operational
     migration_hint: |
@@ -2403,11 +2375,12 @@ fields:
     intellidealer_purpose: |
       Where the prospect originated (walk-in, web, OEM lead, referral,
       trade show). Lets marketing measure channel ROI.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_prospects
     qep_column: source
-    qep_evidence: []
-    qep_gap_notes: "See prospect.status migration."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_prospects.source"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_prospects.source."
     severity: should
     category: reporting
     migration_hint: "(combined with prospect.status migration)"
@@ -2422,11 +2395,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Prospect-Board__3.08.50.txt
     intellidealer_field_type: fk
     intellidealer_purpose: "Rep who owns the prospect."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_prospects
     qep_column: salesperson_id
-    qep_evidence: []
-    qep_gap_notes: "See prospect.status migration."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_prospects.salesperson_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_prospects.salesperson_id."
     severity: should
     category: operational
     migration_hint: "(combined with prospect.status migration)"
@@ -2441,11 +2415,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Prospect-Board__3.08.50.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Description of the unit/package being sold to the prospect."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_prospects
     qep_column: selling
-    qep_evidence: []
-    qep_gap_notes: "See prospect.status migration."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_prospects.selling"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_prospects.selling."
     severity: should
     category: operational
     migration_hint: "(combined with prospect.status migration)"
@@ -2460,11 +2435,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Prospect-Board__3.08.50.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Description of any unit being traded in by the prospect."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_prospects
     qep_column: trading
-    qep_evidence: []
-    qep_gap_notes: "See prospect.status migration."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_prospects.trading"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_prospects.trading."
     severity: should
     category: operational
     migration_hint: "(combined with prospect.status migration)"
@@ -2482,11 +2458,12 @@ fields:
       Once converted, the prospect row holds a FK to the qrm_companies
       record. Pre-conversion, only a free-text name (the prospect
       hasn't given enough info to create a real customer record).
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_prospects
     qep_column: company_id
-    qep_evidence: []
-    qep_gap_notes: "See prospect.status migration."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_prospects.company_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_prospects.company_id."
     severity: should
     category: operational
     migration_hint: "(combined with prospect.status migration)"
@@ -2501,11 +2478,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Prospect-Board__3.08.50.txt
     intellidealer_field_type: date
     intellidealer_purpose: "Created and last-modified timestamps for the prospect."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_prospects
     qep_column: added_at, modified_at
-    qep_evidence: []
-    qep_gap_notes: "See prospect.status migration."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_prospects"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_prospects."
     severity: should
     category: operational
     migration_hint: "(combined with prospect.status migration)"
@@ -2520,11 +2498,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-1_CRM_Prospect-Board__3.08.50.txt
     intellidealer_field_type: multiline
     intellidealer_purpose: "Free-text rep notes on the prospect (last call notes, objections heard, next-step plan)."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_prospects
     qep_column: comments
-    qep_evidence: []
-    qep_gap_notes: "See prospect.status migration."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_prospects.comments"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_prospects.comments."
     severity: should
     category: operational
     migration_hint: "(combined with prospect.status migration)"

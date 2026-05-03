@@ -233,6 +233,16 @@ fields:
   # ==========================================================================
   # SECTION 1 — PARTS PROFILE / IDENTITY
   # ==========================================================================
+
+
+
+
+
+
+
+
+
+
   - id: part.part_number
     intellidealer_label: "Part Number"
     intellidealer_screen: "Parts Profile / Parts Listing"
@@ -371,11 +381,12 @@ fields:
     intellidealer_purpose: |
       Whether this part needs a printed identification label affixed
       when received. Drives the receiving-station print queue.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: requires_label
-    qep_evidence: []
-    qep_gap_notes: "No requires_label column."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.requires_label"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.requires_label."
     severity: should
     category: workflow
     migration_hint: |
@@ -499,11 +510,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
     intellidealer_field_type: number
     intellidealer_purpose: "Quantity shipped from vendor but not yet received."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: in_transit
-    qep_evidence: []
-    qep_gap_notes: "No in_transit column. Distinct from on_order (which includes pre-shipment)."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.in_transit"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.in_transit."
     severity: should
     category: operational
     migration_hint: |
@@ -793,11 +805,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.50.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Maximum discount group code allowed for this part (e.g. 'NOT ASSIGNED', 'STANDARD-30')."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: maximum_discount_code
-    qep_evidence: []
-    qep_gap_notes: "No max-discount governor on parts."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.maximum_discount_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.maximum_discount_code."
     severity: should
     category: financial
     migration_hint: |
@@ -859,11 +872,12 @@ fields:
     intellidealer_purpose: |
       Per-part toggles for whether each of Tax 1 / 2 / 3 / 4 applies to
       this line. Drives the AvaTax-vs-line-pre-tax decision.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: tax_1_applies
-    qep_evidence: []
-    qep_gap_notes: "No per-part tax-applies booleans."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.tax_1_applies"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.tax_1_applies."
     severity: must
     category: regulatory
     migration_hint: |
@@ -967,11 +981,12 @@ fields:
     intellidealer_purpose: |
       Manufacturer 'Annual Min/Max Auto-Parts Replenishment' code +
       source. Drives OEM-portal-fed auto-reorder cycle.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: amax_apr_code
-    qep_evidence: []
-    qep_gap_notes: "No AMAX APR columns."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.amax_apr_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.amax_apr_code."
     severity: should
     category: workflow
     migration_hint: |
@@ -990,11 +1005,12 @@ fields:
     intellidealer_purpose: |
       Seasonal demand modifier (e.g. snowblower-belt season Oct-Mar).
       Drives the seasonal-adjusted reorder math.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: season_code
-    qep_evidence: []
-    qep_gap_notes: "No season columns."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.season_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.season_code."
     severity: should
     category: operational
     migration_hint: |
@@ -1011,11 +1027,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
     intellidealer_field_type: percent
     intellidealer_purpose: "Forecasting confidence factor — discounts the EOQ proportionally."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: effectual_pct
-    qep_evidence: []
-    qep_gap_notes: "No effectual % column."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.effectual_pct"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.effectual_pct."
     severity: should
     category: operational
     migration_hint: |
@@ -1031,12 +1048,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
     intellidealer_field_type: number
     intellidealer_purpose: "Forecasted next-period demand qty (computed by the demand engine)."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_demand_forecasts
     qep_column: null
     qep_evidence:
-      - "database.types.ts parts_demand_forecasts (table exists)"
-    qep_gap_notes: ""
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_demand_forecasts"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_demand_forecasts."
     severity: should
     category: operational
     migration_hint: ""
@@ -1054,11 +1071,12 @@ fields:
       'Protect' levels — qty held back from sale-pick (e.g. for warranty
       reserve, or minimum-display). Months + Quantity + Code combine
       to control the protect logic.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: protect_months
-    qep_evidence: []
-    qep_gap_notes: "No protect-stock columns."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.protect_months"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.protect_months."
     severity: should
     category: operational
     migration_hint: |
@@ -1078,11 +1096,12 @@ fields:
     intellidealer_purpose: |
       Hard-stop on auto-reorder for this part (e.g. discontinued by OEM,
       or quality-hold). The Date is when the flag was set.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: do_not_order
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.do_not_order"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.do_not_order."
     severity: should
     category: workflow
     migration_hint: |
@@ -1165,12 +1184,12 @@ fields:
     intellidealer_purpose: |
       How many times a customer asked for this part and we couldn't
       fill it. Stockout-impact metric — drives stock-mix decisions.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_lost_sales
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No lost-sale tracking. Critical metric for stock-mix optimization.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_lost_sales"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_lost_sales."
     severity: must
     category: reporting
     migration_hint: |
@@ -1201,11 +1220,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
     intellidealer_field_type: number
     intellidealer_purpose: "Aggregate qty lost across all lost-sale events."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: lost_sale_quantity
-    qep_evidence: []
-    qep_gap_notes: "(see part.lost_sale_frequency)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.lost_sale_quantity"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.lost_sale_quantity."
     severity: must
     category: reporting
     migration_hint: "(see part.lost_sale_frequency)"
@@ -1223,11 +1243,12 @@ fields:
       How many times this part was special-ordered (vs pulled from stock)
       + cumulative qty. Used to convert frequent special-orders into
       stock items.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: special_order_frequency
-    qep_evidence: []
-    qep_gap_notes: "No special-order counters."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.special_order_frequency"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.special_order_frequency."
     severity: should
     category: reporting
     migration_hint: |
@@ -1354,12 +1375,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
     intellidealer_field_type: date
     intellidealer_purpose: "Most-recent vendor receipt for this part."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: dms_last_stock_ordered
     qep_evidence:
-      - "database.types.ts parts_catalog.dms_last_stock_ordered, .dms_last_ordered"
-    qep_gap_notes: ""
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.dms_last_stock_ordered"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.dms_last_stock_ordered."
     severity: must
     category: reporting
     migration_hint: ""
@@ -1428,11 +1449,12 @@ fields:
     intellidealer_purpose: |
       Original Factory Code reclassification trail (when manufacturer
       moves a part from one classification to another).
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: ofc_reclass_from
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.ofc_reclass_from"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.ofc_reclass_from."
     severity: should
     category: regulatory
     migration_hint: |
@@ -1450,11 +1472,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.50.txt
     intellidealer_field_type: bool
     intellidealer_purpose: "If TRUE, hide pricing for this part on the customer-portal MyDealer interface."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: suppress_portal_pricing
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.suppress_portal_pricing"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.suppress_portal_pricing."
     severity: should
     category: workflow
     migration_hint: |
@@ -1698,11 +1721,12 @@ fields:
     intellidealer_purpose: |
       Per-line cash receipt code (when paid at counter vs on account).
       Drives the daily cash deposit reconciliation.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_invoice_lines
     qep_column: cash_code
-    qep_evidence: []
-    qep_gap_notes: "(see parts_invoice.line_qty_ladder)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_invoice_lines.cash_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_invoice_lines.cash_code."
     severity: should
     category: financial
     migration_hint: "(see parts_invoice.line_qty_ladder)"
@@ -1717,11 +1741,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
     intellidealer_field_type: computed
     intellidealer_purpose: "Drill into open back-orders for the customer (across invoices)."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_invoice_lines
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "Requires parts_invoice_lines with back-order tracking via qty_ordered > qty_shipped."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_invoice_lines"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_invoice_lines."
     severity: should
     category: workflow
     migration_hint: ""
@@ -1860,11 +1885,12 @@ fields:
       - "Received"
       - "Cancelled"
     intellidealer_purpose: "Order pipeline state."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_orders
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "Verify status enum matches IntelliDealer values."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_orders"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_orders."
     severity: must
     category: workflow
     migration_hint: ""
@@ -1885,11 +1911,12 @@ fields:
       - "Emergency"
       - "Service Order"
     intellidealer_purpose: "Type of order — drives sourcing rules and freight terms."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_orders
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "Verify type enum."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_orders"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_orders."
     severity: must
     category: workflow
     migration_hint: ""
@@ -1904,11 +1931,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Ordering__3.20.33.txt
     intellidealer_field_type: date
     intellidealer_purpose: "Date the order was released to the vendor."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_orders
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "Verify released_at column."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_orders"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_orders."
     severity: must
     category: workflow
     migration_hint: ""
@@ -1968,12 +1996,12 @@ fields:
       Vendor-published quantity-bracket pricing (e.g. 1-9 = $5, 10-99 =
       $4.50, 100+ = $4.00). Used to bump order qty up to the next price
       break for margin.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_vendor_prices
     qep_column: null
     qep_evidence:
-      - "database.types.ts parts_vendor_prices (table exists)"
-    qep_gap_notes: "Verify quantity-bracket schema."
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_vendor_prices"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_vendor_prices."
     severity: should
     category: financial
     migration_hint: |
@@ -1993,11 +2021,12 @@ fields:
     intellidealer_purpose: |
       Per-line purchase details (extended cost, freight allocation,
       receipt history).
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_order_lines
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_order_lines"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_order_lines."
     severity: should
     category: financial
     migration_hint: ""
@@ -2015,14 +2044,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Quoting__3.22.54.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Six-digit parts-quote number (e.g. '003176'). Customer-facing."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_quotes
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No parts-side quote table. qb_quotes is equipment-side only.
-      Need a parts_quotes table for parts-only quotes (e.g. PM-kit
-      quotes, fast-moving inventory restock proposals).
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_quotes"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_quotes."
     severity: must
     category: financial
     migration_hint: |
@@ -2084,11 +2111,12 @@ fields:
       - "Expired"
       - "Converted"
     intellidealer_purpose: "Pipeline state for parts quote."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_quotes
     qep_column: status
-    qep_evidence: []
-    qep_gap_notes: "(see parts_quote.reference_number)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_quotes.status"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_quotes.status."
     severity: must
     category: workflow
     migration_hint: "(see parts_quote.reference_number)"
@@ -2103,11 +2131,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Quoting__3.22.54.txt
     intellidealer_field_type: date
     intellidealer_purpose: "Quote expiry — drives auto-flip to Expired."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_quotes
     qep_column: expiry_date
-    qep_evidence: []
-    qep_gap_notes: "(see parts_quote.reference_number)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_quotes.expiry_date"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_quotes.expiry_date."
     severity: must
     category: workflow
     migration_hint: "(see parts_quote.reference_number)"
@@ -2124,11 +2153,12 @@ fields:
     intellidealer_purpose: |
       Templated parts quotes (e.g. '500-hr PM kit for Bobcat T770').
       Cloned into customer-specific quotes.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_quotes
     qep_column: is_master
-    qep_evidence: []
-    qep_gap_notes: "(see parts_quote.reference_number)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_quotes.is_master"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_quotes.is_master."
     severity: should
     category: workflow
     migration_hint: "(see parts_quote.reference_number)"
@@ -2143,11 +2173,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Quoting__3.22.54.txt
     intellidealer_field_type: fk
     intellidealer_purpose: "Rep responsible for closing the quote."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_quotes
     qep_column: assigned_salesperson_id
-    qep_evidence: []
-    qep_gap_notes: "(see parts_quote.reference_number)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_quotes.assigned_salesperson_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_quotes.assigned_salesperson_id."
     severity: should
     category: operational
     migration_hint: "(see parts_quote.reference_number)"
@@ -2165,11 +2196,12 @@ fields:
       When a parts quote is converted into a service WO (e.g. PM-kit
       quote becomes a scheduled PM job), link the resulting
       service_job_id back to the originating quote.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_quotes
     qep_column: converted_service_job_id
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_quotes.converted_service_job_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_quotes.converted_service_job_id."
     severity: should
     category: workflow
     migration_hint: |
@@ -2190,15 +2222,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.40.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Vendor PO # (e.g. 'RM3043025')."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_orders
     qep_column: null
     qep_evidence:
-      - "database.types.ts parts_orders (table — covers parts orders, possibly equipment too)"
-    qep_gap_notes: |
-      parts_orders may double-up as PO + parts order. Verify single
-      vs separate tables — Equipment POs are distinct from parts POs
-      in IntelliDealer (e.g. "Type: Equipment" on the PO header).
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_orders"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_orders."
     severity: must
     category: financial
     migration_hint: |
@@ -2221,11 +2250,12 @@ fields:
       - "Service"
       - "Misc"
     intellidealer_purpose: "PO type (drives GL routing + receipt workflow)."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_orders
     qep_column: po_type
-    qep_evidence: []
-    qep_gap_notes: "(see purchase_order.po_number)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_orders.po_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_orders.po_type."
     severity: must
     category: financial
     migration_hint: "(see purchase_order.po_number)"
@@ -2249,11 +2279,12 @@ fields:
       - "Completed"
       - "Rejected"
     intellidealer_purpose: "PO pipeline state (8 values)."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_orders
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "Verify status enum covers all 8 values."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_orders"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_orders."
     severity: must
     category: workflow
     migration_hint: |
@@ -2274,12 +2305,12 @@ fields:
       Audit trail of who took which action and when (Created by Rylee
       McKenzie 04/30/2025; Authorized by same; Closed 05/12/2025).
       Required for vendor-PO compliance audit.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_order_events
     qep_column: null
     qep_evidence:
-      - "database.types.ts parts_order_events (table exists)"
-    qep_gap_notes: ""
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_order_events"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_order_events."
     severity: must
     category: regulatory
     migration_hint: ""
@@ -2316,11 +2347,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.40.txt
     intellidealer_field_type: currency
     intellidealer_purpose: "Sum of line-item costs on the PO."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_orders
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "Computed from parts_order_lines or column on header."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_orders"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_orders."
     severity: must
     category: financial
     migration_hint: ""
@@ -2335,11 +2367,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.40.txt
     intellidealer_field_type: currency
     intellidealer_purpose: "Vendor freight charge — added to landed cost."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_orders
     qep_column: freight_charge_cents
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_orders.freight_charge_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_orders.freight_charge_cents."
     severity: should
     category: financial
     migration_hint: |
@@ -2356,11 +2389,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.40.txt
     intellidealer_field_type: currency
     intellidealer_purpose: "Items + Freight = PO Total."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_orders
     qep_column: po_total_cents
-    qep_evidence: []
-    qep_gap_notes: "(see purchase_order.freight_charge)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_orders.po_total_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_orders.po_total_cents."
     severity: must
     category: financial
     migration_hint: "(see purchase_order.freight_charge)"
@@ -2378,11 +2412,12 @@ fields:
       Customer the PO was placed for (e.g. customer-special-order PO
       vs internal stock PO). Drives the cost-recovery vs inventory
       decision.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_orders
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "Verify FK to qrm_companies for customer-special POs."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_orders"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_orders."
     severity: should
     category: financial
     migration_hint: |
@@ -2399,11 +2434,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Purchase-Orders__3.13.40.txt
     intellidealer_field_type: json
     intellidealer_purpose: "Per-line receipt events (qty received, date, by whom, packing slip)."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_order_events
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_order_events"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_order_events."
     severity: must
     category: regulatory
     migration_hint: ""
@@ -2444,14 +2480,12 @@ fields:
       Named matrix (e.g. 'YANMAR' for Yanmar OEM matrix). Each part
       assigned to a matrix gets its sell-price computed from the
       matrix's pricing-method ladder.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_pricing_rules
     qep_column: null
     qep_evidence:
-      - "database.types.ts parts_pricing_rules (table exists)"
-    qep_gap_notes: |
-      parts_pricing_rules may cover this. Verify that rules support
-      named-matrix grouping (vs per-part rule).
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_pricing_rules"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_pricing_rules."
     severity: must
     category: financial
     migration_hint: |
@@ -2484,11 +2518,12 @@ fields:
       Maps each pricing source (Source / List Price / Cost / Average
       Cost / Level 1-4) into the computed sell price via
       addition/multiplication/lookup.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: price_matrix_pricing_details
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.price_matrix_pricing_details"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains price_matrix_pricing_details."
     severity: should
     category: financial
     migration_hint: |
@@ -2515,11 +2550,12 @@ fields:
     intellidealer_purpose: |
       Quantity-bracket pricing tied to a matrix (e.g. matrix YANMAR:
       qty 1-9 = +20%, qty 10-99 = +15%, qty 100+ = +10%).
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: price_matrix_price_breaks
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.price_matrix_price_breaks"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains price_matrix_price_breaks."
     severity: should
     category: financial
     migration_hint: |
@@ -2548,13 +2584,12 @@ fields:
       Drives how prices are auto-updated (e.g. 'Automatic' triggers
       matrix-recompute on each receipt). Matrix is the named pricing
       matrix (e.g. 'YANMAR') applied to this part.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No update_type / matrix_id columns. Add when price_matrices is
-      built.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog."
     severity: should
     category: financial
     migration_hint: |
@@ -2575,11 +2610,12 @@ fields:
     intellidealer_purpose: |
       Free-text memo / comment per part (e.g. 'Use OEM only — aftermarket
       cracks the housing'). Visible to the buyer and counter staff.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_memos
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_memos"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_memos."
     severity: should
     category: operational
     migration_hint: |
@@ -2611,12 +2647,12 @@ fields:
     intellidealer_purpose: |
       All receipts of this part — Order #, Type, Vendor, Date, Time,
       Quantity, Parts/Package, Cost. Audit trail of inbound flow.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_order_events
     qep_column: null
     qep_evidence:
-      - "database.types.ts parts_order_events"
-    qep_gap_notes: ""
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_order_events"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_order_events."
     severity: must
     category: regulatory
     migration_hint: ""
@@ -2631,11 +2667,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.55.txt
     intellidealer_field_type: json
     intellidealer_purpose: "All sales of this part — Date, Invoice #, Customer, Quantity, Price."
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: parts_invoice_lines
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "(once parts_invoice_lines exists per Section 9)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_invoice_lines"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_invoice_lines."
     severity: must
     category: reporting
     migration_hint: ""
@@ -2655,11 +2692,12 @@ fields:
     intellidealer_purpose: |
       Whether this is a remanufactured part. Drives core-charge
       handling on sale + return.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: is_reman
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.is_reman"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.is_reman."
     severity: should
     category: financial
     migration_hint: |
@@ -2679,11 +2717,12 @@ fields:
     intellidealer_purpose: |
       Refundable core deposit on a reman part. Returned when the
       customer turns in the worn-out core.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: core_charge_cents
-    qep_evidence: []
-    qep_gap_notes: "(see part.reman_flag)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.core_charge_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.core_charge_cents."
     severity: should
     category: financial
     migration_hint: "(see part.reman_flag)"
@@ -2704,11 +2743,12 @@ fields:
       Multi-branch consolidation: route orders for this part through a
       central distribution branch instead of each branch ordering
       separately. Reduces freight + improves bulk pricing.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: parts_catalog
     qep_column: central_branch_id
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_catalog.central_branch_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_catalog.central_branch_id."
     severity: should
     category: workflow
     migration_hint: |

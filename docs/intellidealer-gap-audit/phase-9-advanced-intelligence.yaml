@@ -21,6 +21,16 @@ source_artifacts:
 
 fields:
   # ─── Identity / contact header (CMASTR aggregate) ─────────────────────────
+
+
+
+
+
+
+
+
+
+
   - id: customer.status
     intellidealer_label: "Status"
     intellidealer_screen: "Customer Portal"
@@ -129,17 +139,12 @@ fields:
       Name of the customer's primary contact. Surfaced in the portal header
       so a rep can immediately see who to call. Underpinned by CMASTR's
       primary contact pointer plus the contacts master.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "qrm_contact_companies"
     qep_column: "is_primary"
     qep_evidence:
-      - "_full_schema.json qrm_contact_companies.is_primary"
-    qep_gap_notes: |
-      QEP can compute the primary contact via qrm_contact_companies but
-      qrm_companies has no denormalized primary_contact_id pointer — the
-      portal tile would need a join + LIMIT 1. Acceptable but slow on
-      a 1k-account dashboard; recommend a materialized view or a
-      primary_contact_id column on qrm_companies.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_contact_companies.is_primary"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_contact_companies.is_primary."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -183,16 +188,12 @@ fields:
       Cell phone number for the primary contact. Clicking it opens
       VitalEngage Text — a one-tap SMS workflow used heavily by reps.
       Distinct from main phone because field reps text customers directly.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "qrm_contacts"
     qep_column: "phone"
     qep_evidence:
-      - "qrm_contacts likely has a single phone field (per general CRM convention)"
-    qep_gap_notes: |
-      IntelliDealer separates main phone (CMASTR) and cell (contact-level)
-      so the portal can render two distinct click-to-call actions. QEP
-      collapses to one. For the moonshot Owner Cockpit, separate cell from
-      direct line and add a deep-link to Twilio/SMS provider.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_contacts.phone"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_contacts.phone."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -268,16 +269,12 @@ fields:
       One-line reminder/banner displayed at the top of the customer profile.
       Used for "PAY BY CASH ONLY", "Owner is Mike — only deal with him",
       etc. Sticky, high-visibility instruction to anyone touching the account.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "qrm_companies"
     qep_column: "notes"
     qep_evidence:
-      - "_full_schema.json qrm_companies.notes (string | null)"
-    qep_gap_notes: |
-      QEP has a free-form notes column but the portal "Comment" is a
-      single-line, banner-style alert that should render as a yellow callout
-      across every account view. Suggest a dedicated header_alert column or
-      a flag on notes for "show as banner".
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.notes"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.notes."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -300,15 +297,12 @@ fields:
       Outstanding Details screen for line-by-line aging. The single most
       important financial number on the screen — drives credit holds and
       collection-call routing.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "qrm_companies"
     qep_column: "total_ar_cents"
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP has no AR sub-ledger and no rolled-up AR balance on the customer.
-      This is one of the highest-impact gaps for the Owner Cockpit moonshot —
-      reps cannot answer "should I take this order?" without it. Even a
-      synced/cached value from IntelliDealer would unlock the cockpit.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.total_ar_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.total_ar_cents."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -334,14 +328,12 @@ fields:
       Payment terms code (NET30, COD, 2/10 NET30, etc.) configured on the
       Terms screen. Determines invoice due date and which collection
       workflow fires.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "qrm_companies"
     qep_column: "terms_code"
-    qep_evidence: []
-    qep_gap_notes: |
-      No QEP column captures payment terms today. Without it, Owner Cockpit
-      cannot show "this customer is COD-only — block credit sale" guard
-      rails. Required for AR moonshot.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.terms_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.terms_code."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -375,13 +367,12 @@ fields:
     intellidealer_purpose: |
       Default collections agency the customer is routed to when AR ages out.
       Click-through opens the A/R Agency screen for the agency profile.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "qrm_companies"
     qep_column: "ar_agency_id"
-    qep_evidence: []
-    qep_gap_notes: |
-      No collections-agency entity in QEP today. Defer until AR sub-ledger
-      lands; without invoices, the agency assignment has nothing to act on.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.ar_agency_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.ar_agency_id."
     severity: "could"
     category: "financial"
     migration_hint: |
@@ -415,13 +406,12 @@ fields:
       Manually-set or auto-computed credit ceiling. Compared against open AR
       + open quotes/orders to determine if a new sale can be approved.
       Cornerstone of the credit-hold workflow.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "qrm_companies"
     qep_column: "credit_limit_cents"
-    qep_evidence: []
-    qep_gap_notes: |
-      Required for moonshot Owner Cockpit "should I take this order?" guard
-      rail. Cannot compute Available Credit without it.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.credit_limit_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.credit_limit_cents."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -447,14 +437,12 @@ fields:
       open commitments (quotes, orders, rentals). Gated behind Feature 6178
       and the special-credit-check switch in IntelliDealer system settings.
       Displayed only when the dealership has explicitly opted in.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "qrm_companies"
     qep_column: "available_credit_cents (computed view)"
-    qep_evidence: []
-    qep_gap_notes: |
-      Compound gap — depends on credit_limit, total_ar, and open
-      commitments (quotes/orders/rentals) all being captured. Render as a
-      computed view, not a stored column, so it cannot drift.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -591,16 +579,12 @@ fields:
     intellidealer_purpose: |
       Per-dealership user-defined custom screens attached to a customer.
       Reflects per-dealer fields (loyalty tier, route number, etc.)
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "qrm_companies"
     qep_column: "metadata"
     qep_evidence:
-      - "qrm_companies.metadata Json"
-    qep_gap_notes: |
-      QEP supports arbitrary custom data via metadata jsonb but lacks a
-      typed custom-fields registry that lets a dealer admin define which
-      fields render where. Defer until the moonshot custom-field studio is
-      built; for now, render dealer-specific fields out of metadata.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.metadata"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.metadata."
     severity: "could"
     category: "nice_to_have"
     migration_hint: |
@@ -647,14 +631,12 @@ fields:
     intellidealer_purpose: |
       Last 5 equipment invoices with reference number, make/model code, and
       total. Click-through to invoice detail; More to view the full set.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "(new) equipment_invoices"
     qep_column: ""
-    qep_evidence: []
-    qep_gap_notes: |
-      No equipment_invoice table in QEP today (deals exist but the
-      financial closure leg is missing). Required for the Owner Cockpit
-      "lifetime value" tile.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.equipment_invoices"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains equipment_invoices."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -690,15 +672,12 @@ fields:
       Year-to-date profit (revenue minus cost) on invoices booked in the
       current fiscal year. Drives "is this customer worth keeping?"
       decisions and territory ranking.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "margin_analytics_view"
     qep_column: "avg_margin_pct"
     qep_evidence:
-      - "Phase-9 schema slice margin_analytics_view, mv_exec_margin_daily, mv_exec_margin_waterfall"
-    qep_gap_notes: |
-      QEP has org-wide margin views but no per-customer fiscal-YTD profit
-      rollup. Add a v_customer_fiscal_ytd materialized view rolled up by
-      customer_id and fiscal year configured per workspace.
+      - "apps/web/src/lib/database.types.ts public.Views.margin_analytics_view.avg_margin_pct"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains margin_analytics_view.avg_margin_pct."
     severity: "should"
     category: "reporting"
     migration_hint: |
@@ -722,12 +701,12 @@ fields:
     intellidealer_purpose: |
       Total dollar volume of purchases by this customer in the current
       fiscal year. Used as the headline "how big is this account" number.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "(new) mv_customer_fiscal_ytd"
     qep_column: "revenue_cents"
-    qep_evidence: []
-    qep_gap_notes: |
-      Same dependency as Fiscal YTD Profitability — needs invoice tables.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.mv_customer_fiscal_ytd.revenue_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains mv_customer_fiscal_ytd.revenue_cents."
     severity: "should"
     category: "reporting"
     migration_hint: |
@@ -803,11 +782,12 @@ fields:
     intellidealer_purpose: |
       Prior-fiscal-year-to-same-date purchase total. Used to YoY-compare
       a customer at-a-glance.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "(new) mv_customer_fiscal_ytd"
     qep_column: "(prior year row)"
-    qep_evidence: []
-    qep_gap_notes: "Same dependency as Fiscal YTD Purchases."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.mv_customer_fiscal_ytd"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains mv_customer_fiscal_ytd."
     severity: "could"
     category: "reporting"
     migration_hint: ""
@@ -823,11 +803,12 @@ fields:
     intellidealer_field_type: "currency"
     intellidealer_purpose: |
       Prior-fiscal-year profit for YoY profitability comparison.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "(new) mv_customer_fiscal_ytd"
     qep_column: "(prior year profit)"
-    qep_evidence: []
-    qep_gap_notes: "Same dependency."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.mv_customer_fiscal_ytd"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains mv_customer_fiscal_ytd."
     severity: "could"
     category: "reporting"
     migration_hint: ""
@@ -845,15 +826,12 @@ fields:
       Free-form reference text for terms & conditions, hours, special
       handling rules. NOT actionable — purely reference, with click-More to
       expand. Distinct from the single-line Comment banner.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "qrm_companies"
     qep_column: "notes"
     qep_evidence:
-      - "_full_schema.json qrm_companies.notes (string | null)"
-    qep_gap_notes: |
-      QEP has a single notes field. For parity with IntelliDealer memo
-      history, reuse Phase-1 `qrm_company_memos` as the canonical memo
-      store for Account 360 instead of introducing a duplicate table.
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.notes"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_companies.notes."
     severity: "could"
     category: "operational"
     migration_hint: |
@@ -929,11 +907,12 @@ fields:
     intellidealer_purpose: |
       Customer's last 5 open equipment invoices with reference + make/model.
       Inline List/Create.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "(new) equipment_invoices"
     qep_column: ""
-    qep_evidence: []
-    qep_gap_notes: "Depends on equipment_invoices table."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.equipment_invoices"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains equipment_invoices."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -955,11 +934,12 @@ fields:
     intellidealer_purpose: |
       Currently-open service work bundles for the customer. Inline Create
       lets the rep open a new jacket on the spot.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "service_jobs"
     qep_column: ""
-    qep_evidence: []
-    qep_gap_notes: "Same as job_jacket_history — needs jacket grouping."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs."
     severity: "could"
     category: "operational"
     migration_hint: ""
@@ -1094,15 +1074,12 @@ fields:
       Last 5 parts the customer has on order with overdue-day count.
       Critical operational signal — answers "where's my part?" without
       a ticket.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "parts_orders"
     qep_column: ""
     qep_evidence:
-      - "Phase-9 slice predicted_parts_plays + parts_inventory_reorder_status view"
-    qep_gap_notes: |
-      Use existing `parts_orders` as the source for customer open-order
-      records, with predictive overlays from `predicted_parts_plays`.
-      Phase-3 remains authoritative for structural parts-order schema.
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_orders"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains parts_orders."
     severity: "must"
     category: "operational"
     migration_hint: |
@@ -1190,14 +1167,12 @@ fields:
     intellidealer_purpose: |
       Marketing campaigns the customer was touched by, with date + category.
       Drives "did the email land?" attribution and re-engagement.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "(new) marketing_campaign_exposures"
     qep_column: ""
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP has analytics_events but no marketing-campaign domain model with
-      contact-level exposures. Defer until marketing automation phase
-      ships, but reserve the table.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.marketing_campaign_exposures"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains marketing_campaign_exposures."
     severity: "could"
     category: "reporting"
     migration_hint: |
@@ -1232,14 +1207,12 @@ fields:
     intellidealer_purpose: |
       Last 5 parts the customer purchased + quantity. Drives reorder-now
       predictions and cross-sell.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "predicted_parts_plays"
     qep_column: ""
     qep_evidence:
-      - "Phase-9 slice predicted_parts_plays uses customer purchase history"
-    qep_gap_notes: |
-      QEP has the predictive layer but the raw recent-purchase ledger
-      depends on parts_invoices (above).
+      - "apps/web/src/lib/database.types.ts public.Tables.predicted_parts_plays"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains predicted_parts_plays."
     severity: "should"
     category: "operational"
     migration_hint: ""

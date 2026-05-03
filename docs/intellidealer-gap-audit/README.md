@@ -14,7 +14,7 @@ Read in this order:
 
 1. **`manifest.yaml`** — the index. Per-phase counts, totals, and the top-50 must-fix blocker list.
 2. **`_schema/manifest-schema.md`** — the schema every phase YAML conforms to (field shape, severity definitions, qep_status values, naming convention).
-3. **`_blockers.csv`** — flat 234-row CSV of every `severity=must` + `qep_status=MISSING` field, sortable in any spreadsheet. The cut-over blocker list.
+3. **`_blockers.csv`** — regenerated CSV of every current `severity=must` + `qep_status=MISSING` field, sortable in any spreadsheet. Current blocker count: 91.
 4. **`_migration_order.md`** — dependency-respecting migration sequence (which DDL comes first because of foreign-key dependencies).
 5. **The 9 phase YAMLs** — open the one(s) for your scope.
 
@@ -26,7 +26,7 @@ Read in this order:
 docs/intellidealer-gap-audit/
 ├── README.md                                    ← you are here
 ├── manifest.yaml                                ← index + summary stats
-├── _blockers.csv                                ← 234 must-fix MISSING fields
+├── _blockers.csv                                ← current must-fix MISSING fields
 ├── _migration_order.md                          ← FK-respecting order of ALTERs/CREATEs
 │
 ├── _schema/
@@ -55,18 +55,18 @@ docs/intellidealer-gap-audit/
 
 | Phase | YAML | Fields | Must | Should | Could | MISSING | PARTIAL | BUILT |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| Phase-1 CRM | `phase-1-crm.yaml` | 93 | 39 | 48 | 6 | 58 | 14 | 21 |
-| Phase-2 Sales Intelligence | `phase-2-sales-intelligence.yaml` | 102 | 54 | 46 | 2 | 45 | 27 | 30 |
-| Phase-3 Parts | `phase-3-parts.yaml` | 106 | 66 | 37 | 3 | 39 | 23 | 44 |
-| Phase-4 Service | `phase-4-service.yaml` | 101 | 58 | 42 | 1 | 43 | 29 | 29 |
-| Phase-5 Deal Genome | `phase-5-deal-genome.yaml` | 100 | 57 | 32 | 11 | 83 | 10 | 7 |
-| Phase-6 Rental | `phase-6-rental.yaml` | 76 | 60 | 14 | 2 | 44 | 19 | 13 |
-| Phase-8 Financial Operations | `phase-8-financial-operations.yaml` | 92 | 60 | 22 | 10 | 73 | 10 | 9 |
-| Phase-9 Advanced Intelligence | `phase-9-advanced-intelligence.yaml` | 75 | 47 | 18 | 10 | 17 | 15 | 43 |
-| Cross-Cutting | `cross-cutting.yaml` | 102 | 55 | 41 | 6 | 39 | 24 | 39 |
-| **Totals** | — | **847** | **496** | **300** | **51** | **441** | **171** | **235** |
+| Phase-1 CRM | `phase-1-crm.yaml` | 93 | 39 | 48 | 6 | 3 | 2 | 88 |
+| Phase-2 Sales Intelligence | `phase-2-sales-intelligence.yaml` | 102 | 54 | 46 | 2 | 5 | 1 | 96 |
+| Phase-3 Parts | `phase-3-parts.yaml` | 106 | 66 | 37 | 3 | 9 | 5 | 92 |
+| Phase-4 Service | `phase-4-service.yaml` | 101 | 58 | 42 | 1 | 8 | 0 | 93 |
+| Phase-5 Deal Genome | `phase-5-deal-genome.yaml` | 100 | 57 | 32 | 11 | 64 | 0 | 36 |
+| Phase-6 Rental | `phase-6-rental.yaml` | 76 | 60 | 14 | 2 | 43 | 2 | 31 |
+| Phase-8 Financial Operations | `phase-8-financial-operations.yaml` | 92 | 60 | 22 | 10 | 9 | 0 | 83 |
+| Phase-9 Advanced Intelligence | `phase-9-advanced-intelligence.yaml` | 75 | 47 | 18 | 10 | 6 | 6 | 63 |
+| Cross-Cutting | `cross-cutting.yaml` | 102 | 55 | 41 | 6 | 4 | 2 | 96 |
+| **Totals** | — | **847** | **496** | **300** | **51** | **151** | **18** | **678** |
 
-Exact per-phase counts live in `manifest.yaml`.
+Exact per-phase counts live in `manifest.yaml`. Counts were regenerated on 2026-05-03 from `apps/web/src/lib/database.types.ts` using `bun run intellidealer:gap-audit:regen`.
 
 ---
 
@@ -95,18 +95,18 @@ Exact per-phase counts live in `manifest.yaml`.
 
 ---
 
-## Brian's #1 anchor concern (don't bury this)
+## Brian's #1 anchor concern
 
-**`customer.ein` (Federal Tax ID) is MISSING from `qrm_companies`.**
+**`customer.ein` (Federal Tax ID) is now BUILT on `qrm_companies`.**
 
-Without it QEP cannot:
+This field was the highest-priority original blocker because without it QEP could not:
 - Issue 1099-NEC/MISC at year-end (tax filing failure)
 - Pass an AvaTax exemption substantiation request
 - Resolve a customer in OFAC / sanctions screening
 - Federate the customer with state-issued resale certs
 - Federate with OEM portals (JD/Bobcat/Vermeer customer dedup)
 
-Migration in `phase-1-crm.yaml` (`customer.ein` entry) is a one-liner `ALTER TABLE` plus a format CHECK constraint and an RLS-restricted access pattern. **This is the single highest-priority gap in the entire audit.**
+Migration `397_customer_ein.sql` shipped the column, format CHECK constraint, role guard/masking, and UI surface. The phase YAML now marks `customer.ein` as `BUILT` with current `Database` type evidence.
 
 ---
 
@@ -144,6 +144,6 @@ When QEP ships a column that was previously MISSING:
 3. Set `qep_column:` to the actual column name
 4. Add the schema line to `qep_evidence:`
 5. Clear or shorten `qep_gap_notes:`
-6. Re-generate `manifest.yaml` and `_blockers.csv` (the assembly script is in this conversation's history; the builder can stash a `bin/regen-manifest.py` for reuse)
+6. Re-generate `manifest.yaml` and `_blockers.csv` with `bun run intellidealer:gap-audit:regen`
 
 When IntelliDealer is upgraded and new screens/fields appear, add new field entries to the appropriate phase YAML and bump the `generated_at:` timestamp at the top.

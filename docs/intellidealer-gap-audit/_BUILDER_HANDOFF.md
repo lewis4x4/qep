@@ -21,7 +21,7 @@ This document is the **single brief** you give to the implementer (human enginee
 >
 > 1. `docs/intellidealer-gap-audit/README.md` — orientation, severity legend, file layout
 > 2. `docs/intellidealer-gap-audit/_migration_order.md` — your execution sequence (Waves 0 → 5)
-> 3. `docs/intellidealer-gap-audit/_blockers.csv` — flat 234-row must-fix list, sortable
+> 3. `docs/intellidealer-gap-audit/_blockers.csv` — regenerated current must-fix list, sortable
 > 4. `docs/intellidealer-gap-audit/manifest.yaml` — index + per-phase counts
 > 5. The 9 phase YAMLs in `docs/intellidealer-gap-audit/phase-*.yaml` and `cross-cutting.yaml` — open the one whose wave/section you're currently working
 >

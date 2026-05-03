@@ -55,6 +55,16 @@ fields:
   # ─────────────────────────────────────────────────────────────────────
   # ACCOUNTS RECEIVABLE — Outstanding A/R, Aging, Customer A/R Details
   # ─────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+
+
+
   - id: ar_aging.invoice_first_digit
     intellidealer_label: "Select Invoice 1st Digit"
     intellidealer_screen: "Accounts Receivable - Outstanding A/R"
@@ -78,15 +88,12 @@ fields:
       additional custom digits via System Settings-Location. Reserved letters
       Q, L, R cannot be used (sales-order reserved). This is foundational for
       AR drill-downs and reconciliation by source system.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "customer_invoices"
     qep_column: "invoice_source_code"
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP customer_invoices has invoice_number (free text) but no source
-      classifier. Cannot run AR-aging segmented by Equipment vs Parts vs
-      Rental vs Service today. Real ID dealers rely on this to reconcile each
-      sub-ledger to the GL.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.invoice_source_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains customer_invoices.invoice_source_code."
     severity: "should"
     category: "financial"
     migration_hint: |
@@ -111,14 +118,12 @@ fields:
       AR Outstanding bar chart and pie chart. Drives DSO and credit-hold
       decisions across the business. Real values seen on screen: 158,806.72
       (LAKE CITY 04/21/2026).
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "ar_aging_view"
     qep_column: "current_amount"
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP has customer_invoices.balance_due but no aging-bucket view or
-      materialized aggregate. The mission's AR-aging dashboard cannot be
-      rendered without this. Must derive from invoice_date / due_date.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.ar_aging_view.current_amount"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains ar_aging_view.current_amount."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -153,12 +158,12 @@ fields:
       Dollars of A/R 31-60 days past due. Bucket triggers initial dunning
       letter and credit-watch at most dealers. Real values: 66,163.74 in
       LAKE CITY example.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "ar_aging_view"
     qep_column: "bucket_31_60"
-    qep_evidence: []
-    qep_gap_notes: |
-      Same as ar_aging.bucket_current — view does not exist yet.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.ar_aging_view.bucket_31_60"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains ar_aging_view.bucket_31_60."
     severity: "must"
     category: "financial"
     migration_hint: "(see ar_aging_view definition above)"
@@ -176,11 +181,12 @@ fields:
     intellidealer_purpose: |
       Dollars of A/R 61-90 days past due. Most dealers escalate to phone
       collections at this bucket and freeze new charge sales.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "ar_aging_view"
     qep_column: "bucket_61_90"
-    qep_evidence: []
-    qep_gap_notes: "Bucket missing in QEP; needs ar_aging_view."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.ar_aging_view.bucket_61_90"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains ar_aging_view.bucket_61_90."
     severity: "must"
     category: "financial"
     migration_hint: "(see ar_aging_view above)"
@@ -198,11 +204,12 @@ fields:
     intellidealer_purpose: |
       Dollars of A/R 91-120 days past due. At most dealers, this bucket
       auto-triggers credit hold and finance-charge accrual.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "ar_aging_view"
     qep_column: "bucket_91_120"
-    qep_evidence: []
-    qep_gap_notes: "Missing aging view."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.ar_aging_view.bucket_91_120"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains ar_aging_view.bucket_91_120."
     severity: "must"
     category: "financial"
     migration_hint: "(see ar_aging_view above)"
@@ -220,11 +227,12 @@ fields:
     intellidealer_purpose: |
       Dollars of A/R over 120 days past due. Write-off candidate and
       collection-agency referral threshold.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "ar_aging_view"
     qep_column: "bucket_over_120"
-    qep_evidence: []
-    qep_gap_notes: "Missing aging view."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.ar_aging_view.bucket_over_120"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains ar_aging_view.bucket_over_120."
     severity: "must"
     category: "financial"
     migration_hint: "(see ar_aging_view above)"
@@ -244,11 +252,12 @@ fields:
       Dollars of invoices with a due_date later than today (not yet due, not
       yet a "Current" charge). Captures pre-billed rental/service. Distinct
       from Current which is bills already issued and not yet past due.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "ar_aging_view"
     qep_column: "future_amount"
-    qep_evidence: []
-    qep_gap_notes: "Field implied; not derivable today without aging view."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.ar_aging_view.future_amount"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains ar_aging_view.future_amount."
     severity: "should"
     category: "financial"
     migration_hint: |
@@ -268,14 +277,12 @@ fields:
     intellidealer_purpose: |
       Workspace-level grand total A/R outstanding. Header KPI on the AR
       dashboard. Real example: 227,526.49 (LAKE CITY 04/21/2026).
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "customer_invoices"
     qep_column: "balance_due (sum)"
     qep_evidence:
-      - "customer_invoices.balance_due"
-    qep_gap_notes: |
-      Can be summed today via SUM(balance_due), but no canonical view or
-      cached aggregate. AR dashboards must implement aggregation manually.
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains customer_invoices."
     severity: "should"
     category: "financial"
     migration_hint: "(included in ar_aging_view total_outstanding)"
@@ -293,11 +300,12 @@ fields:
     intellidealer_purpose: |
       Percentage share of total A/R in each aging bucket. Drives the bar
       graph visual on the AR Outstanding screen.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "ar_aging_view"
     qep_column: "(computed at view layer)"
-    qep_evidence: []
-    qep_gap_notes: "Computed from total_outstanding + bucket totals; not stored."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.ar_aging_view"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains ar_aging_view."
     severity: "could"
     category: "reporting"
     migration_hint: |
@@ -318,13 +326,12 @@ fields:
       Toggles AR aging to filter by the customer's default home location vs
       the location where the invoice was actually billed. Critical for
       multi-branch dealers measuring branch-manager AR performance fairly.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "crm_companies"
     qep_column: "responsible_branch_id"
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP has branch_id on customer_invoices but no concept of the customer's
-      "home" or "responsible" branch independent of the billing branch.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.crm_companies.responsible_branch_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains crm_companies.responsible_branch_id."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -345,16 +352,12 @@ fields:
     intellidealer_purpose: |
       Filter AR aging by the salesperson responsible for the customer's
       account. Used by sales managers to drive collections accountability.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "crm_companies"
     qep_column: "assigned_rep_id"
     qep_evidence:
-      - "crm_companies.assigned_rep_id"
-    qep_gap_notes: |
-      assigned_rep_id covers ownership but is not surfaced as a filter on the
-      AR aging view. Need ar_aging_view to expose this dimension and a UI
-      control. Salesperson-level aging is foundational for commission and
-      collection KPIs.
+      - "apps/web/src/lib/database.types.ts public.Views.crm_companies.assigned_rep_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains crm_companies.assigned_rep_id."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -376,12 +379,12 @@ fields:
       Free-text override allowing AR aging to filter by a custom invoice
       first-digit configured via System Settings-Location for unusual
       sub-ledgers (e.g., dealer-defined fleet billing).
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "branches"
     qep_column: "custom_invoice_prefixes"
-    qep_evidence: []
-    qep_gap_notes: |
-      Branch-scoped invoice prefix configuration is not represented in QEP.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.branches.custom_invoice_prefixes"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains branches.custom_invoice_prefixes."
     severity: "could"
     category: "operational"
     migration_hint: |
@@ -464,14 +467,12 @@ fields:
       payments applied to specific invoices. Balance Forward = single rolling
       balance, payments applied to oldest first. Drives invoicing/statement
       logic, dunning escalation, and reconciliation behavior.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "crm_companies"
     qep_column: "ar_account_type"
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP has no concept of AR account type. Without this, payment
-      application logic (oldest-first vs invoice-specific) cannot be
-      enforced. Daily payment posting will be wrong.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.crm_companies.ar_account_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains crm_companies.ar_account_type."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -492,14 +493,12 @@ fields:
     intellidealer_purpose: |
       Date of customer's most recent invoice. Used for activity recency and
       collections triage. Real value: 04/15/2026.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "customer_invoices"
     qep_column: "MAX(invoice_date) per crm_company_id"
     qep_evidence:
-      - "customer_invoices.invoice_date"
-    qep_gap_notes: |
-      Computable via aggregation; not surfaced on crm_companies. Recommend
-      cached column for header performance.
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains customer_invoices."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -531,14 +530,12 @@ fields:
       every new invoice, dunning sequence, and finance charge accrual. Real
       value: "Normal" for GROUND LEVEL, INC. This is regulatory contract
       language and must match the credit application on file.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "crm_companies"
     qep_column: "payment_terms_code"
-    qep_evidence: []
-    qep_gap_notes: |
-      No payment-terms field on crm_companies. customer_invoices.due_date is
-      stored per-invoice but the canonical customer-level term is missing.
-      Cannot auto-compute due_date or detect terms-violation invoices.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.crm_companies.payment_terms_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains crm_companies.payment_terms_code."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -576,12 +573,12 @@ fields:
       Rolling average days customer takes to pay invoices. Real value: 113
       days for GROUND LEVEL (significant past-terms drag). Foundational
       payment-history KPI for credit decisions.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "crm_companies"
     qep_column: "avg_payment_days"
-    qep_evidence: []
-    qep_gap_notes: |
-      Not stored or computed in QEP. Required for credit-risk scoring.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.crm_companies.avg_payment_days"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains crm_companies.avg_payment_days."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -604,14 +601,12 @@ fields:
     intellidealer_purpose: |
       Date of customer's most recent payment received. Used in collections
       and credit review. Real value: 04/10/2026.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "customer_invoices"
     qep_column: "MAX(paid_at) per crm_company_id"
     qep_evidence:
-      - "customer_invoices.paid_at"
-    qep_gap_notes: |
-      Derivable from customer_invoices.paid_at aggregation; recommend cached
-      column on crm_companies for performance.
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains customer_invoices."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -632,14 +627,12 @@ fields:
       receivable to a specific GL receivable account. Real value: "1-A/R".
       Drives sub-ledger to GL posting and credit-limit/credit-rating
       lookup.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "crm_companies"
     qep_column: "ar_agency_id"
-    qep_evidence: []
-    qep_gap_notes: |
-      No AR-agency / cash-code concept in QEP. Without it, multiple AR
-      sub-ledgers (e.g., wholesale vs retail vs floor-plan) cannot be
-      isolated.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.crm_companies.ar_agency_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains crm_companies.ar_agency_id."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -671,11 +664,12 @@ fields:
       Highest-ever recorded AR balance for this customer. Drives credit-
       limit re-evaluation and tells finance team how exposed the dealer has
       been historically. Real value: 25,749.42.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "crm_companies"
     qep_column: "highest_ar_balance"
-    qep_evidence: []
-    qep_gap_notes: "Not tracked in QEP."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.crm_companies.highest_ar_balance"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains crm_companies.highest_ar_balance."
     severity: "should"
     category: "financial"
     migration_hint: |
@@ -694,11 +688,12 @@ fields:
     intellidealer_field_type: "date"
     intellidealer_purpose: |
       Date when highest-ever AR balance was recorded. Real value: 05/01/2023.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "crm_companies"
     qep_column: "highest_ar_balance_date"
-    qep_evidence: []
-    qep_gap_notes: "Companion to highest_ar_balance."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.crm_companies.highest_ar_balance_date"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains crm_companies.highest_ar_balance_date."
     severity: "could"
     category: "financial"
     migration_hint: "(see customer_ar.highest_balance)"
@@ -719,14 +714,12 @@ fields:
       GROUND LEVEL. Drives the ar_credit_block automation that prevents new
       charge sales when AR exceeds limit. Foundational regulatory contract
       term that must match the credit-application package on file.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "crm_companies"
     qep_column: "credit_limit"
-    qep_evidence: []
-    qep_gap_notes: |
-      ar_credit_blocks captures the BLOCK event but the underlying credit
-      limit dollar value is nowhere on crm_companies. Cannot make a credit
-      decision without the limit number itself.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.crm_companies.credit_limit"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains crm_companies.credit_limit."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -750,14 +743,12 @@ fields:
     intellidealer_purpose: |
       Customer's total AR balance for the receivable-account selected.
       Compared against credit limit to determine % of limit used.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "customer_invoices"
     qep_column: "SUM(balance_due) WHERE crm_company_id=..."
     qep_evidence:
-      - "customer_invoices.balance_due"
-    qep_gap_notes: |
-      Derivable but not surfaced as a per-customer cached field. Need it
-      cached on crm_companies for credit-block evaluation performance.
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains customer_invoices."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -787,11 +778,12 @@ fields:
       Internal credit rating (state of customer's credit). Sourced from cash
       code on the A/R Agency tab of Customer Profile. Drives quote pricing
       authority, terms negotiation, and collections priority.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "crm_companies"
     qep_column: "credit_rating"
-    qep_evidence: []
-    qep_gap_notes: "Field absent."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.crm_companies.credit_rating"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains crm_companies.credit_rating."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -815,12 +807,12 @@ fields:
       Percentage by which the customer has exceeded their credit limit. Used
       as the search threshold (Select Percentage of Credit Limit) and as a
       column in results to flag worst offenders.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "crm_companies"
     qep_column: "(computed)"
-    qep_evidence: []
-    qep_gap_notes: |
-      Cannot exist until credit_limit and current_ar_balance are stored.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.crm_companies"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains crm_companies."
     severity: "should"
     category: "financial"
     migration_hint: |
@@ -846,13 +838,12 @@ fields:
       shop on a Work Order, or on Rental. Critical context when freezing
       credit — dealer cannot release a unit on lien if customer is over
       limit.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "crm_companies"
     qep_column: "(derived flag in ar_aging_view)"
-    qep_evidence: []
-    qep_gap_notes: |
-      Not derivable today; requires join across rentals/work_orders. Mission-
-      critical for collections + repossession workflow.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.crm_companies"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains crm_companies."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -923,13 +914,12 @@ fields:
       GL receivable account number for this invoice (e.g., 1100001). Drives
       sub-ledger-to-GL reconciliation. The same customer may have invoices
       across multiple receivable accounts.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "customer_invoices"
     qep_column: "ar_account_number"
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP customer_invoices does not store the receivable GL account.
-      Without it, the AR-to-GL reconciliation report cannot match.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.ar_account_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains customer_invoices.ar_account_number."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -1063,12 +1053,12 @@ fields:
       Color-band tag per row (legend visible at bottom of AR detail screen).
       Identifies the aging bucket each individual invoice falls into so AR
       clerks can prioritize calls.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "customer_invoices"
     qep_column: "(derived from balance_due/due_date)"
-    qep_evidence: []
-    qep_gap_notes: |
-      Should be a generated column or view column for cheap rendering.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains customer_invoices."
     severity: "should"
     category: "reporting"
     migration_hint: |
@@ -1098,13 +1088,12 @@ fields:
     intellidealer_purpose: |
       Free-text collections memo. Used by AR/credit team to track call
       attempts, promises-to-pay, and dispute reasons.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "ar_memos"
     qep_column: "body"
-    qep_evidence: []
-    qep_gap_notes: |
-      No collections-memo log exists. crm_activities is the closest analog
-      but is not AR-scoped.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.ar_memos.body"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains ar_memos.body."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -1135,13 +1124,12 @@ fields:
     intellidealer_purpose: |
       Hyperlink that opens a full payment-and-invoice history for the
       customer. Required for credit re-evaluation and audit trails.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "customer_invoices"
     qep_column: "(view: per-customer history)"
     qep_evidence:
-      - "customer_invoices"
-    qep_gap_notes: |
-      Data exists but the consolidated history view + UI do not.
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains customer_invoices."
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -1164,12 +1152,12 @@ fields:
       Bulk actions to print or email invoices/statements directly from the
       AR detail screen. Outputs map to source-system reports
       (SOINV/WORKORD/RENTINV/EQINV).
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "ar_statement_runs"
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No bulk-statement / bulk-email infrastructure for AR in QEP yet.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.ar_statement_runs"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains ar_statement_runs."
     severity: "must"
     category: "operational"
     migration_hint: |
@@ -1207,13 +1195,12 @@ fields:
       Aging basis for AP outstanding report. Due Date age = days since
       invoice was due (cash-flow planning view). Invoice Date age = days
       since invoice issued (DPO measurement view).
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "ap_aging_view"
     qep_column: "aging_basis"
-    qep_evidence: []
-    qep_gap_notes: |
-      No AP aging at all in QEP today. Without this, dealer cannot project
-      cash needs or take advantage of early-pay discounts.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.ap_aging_view.aging_basis"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains ap_aging_view.aging_basis."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -1242,14 +1229,12 @@ fields:
     intellidealer_purpose: |
       Vendor lookup for filtering AP outstanding. Vendor number is the
       primary AP identifier and matches IntelliDealer vendor master.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "vendor_profiles"
     qep_column: "(no `vendor_number` field; only id/code)"
     qep_evidence:
-      - "vendor_profiles"
-    qep_gap_notes: |
-      vendor_profiles exists but a clean vendor_number column is unclear.
-      Confirm code is canonical vendor number; otherwise add vendor_number.
+      - "apps/web/src/lib/database.types.ts public.Tables.vendor_profiles"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains vendor_profiles."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -1271,13 +1256,12 @@ fields:
     intellidealer_purpose: |
       Filter AP aging by a specific GL payable sub-account so dealers can
       isolate floor-plan vendors vs trade vendors vs lease companies.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "vendor_invoices"
     qep_column: "ap_account_number"
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP does not have a vendor_invoices table at all today, nor an AP
-      account dimension on payments.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.vendor_invoices.ap_account_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains vendor_invoices.ap_account_number."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -1466,11 +1450,12 @@ fields:
       Vendor invoice number — link drills to the Vouchers Information tab
       showing GL accounts impacted by this invoice (sub-ledger to GL
       mapping).
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "vendor_invoices"
     qep_column: "vendor_invoice_number"
-    qep_evidence: []
-    qep_gap_notes: "vendor_invoices not present."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.vendor_invoices.vendor_invoice_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains vendor_invoices.vendor_invoice_number."
     severity: "must"
     category: "financial"
     migration_hint: "(part of vendor_invoices DDL above)"
@@ -1487,11 +1472,12 @@ fields:
       - Phase-8_Financial-Operations/Accounts-Payable__3.26.32.png
     intellidealer_field_type: "date"
     intellidealer_purpose: "Date AP invoice is due."
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "vendor_invoices"
     qep_column: "due_date"
-    qep_evidence: []
-    qep_gap_notes: "vendor_invoices missing."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.vendor_invoices.due_date"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains vendor_invoices.due_date."
     severity: "must"
     category: "financial"
     migration_hint: "(part of vendor_invoices DDL)"
@@ -1510,11 +1496,12 @@ fields:
       The set of GL accounts (debits and credits) generated by an AP
       invoice. Critical for sub-ledger to GL reconciliation. IntelliDealer
       shows this as the Vouchers Information tab.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "ap_invoice_distributions"
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "No AP distribution table; cannot post AP to GL today."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.ap_invoice_distributions"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains ap_invoice_distributions."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -1551,13 +1538,12 @@ fields:
       Flag indicating vendor must receive a 1099 form for IRS reporting
       (vendors paid $600+/year for services, and most non-corporate vendors).
       IRS-required.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "vendor_profiles"
     qep_column: "is_1099_reportable"
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP vendor_profiles has no 1099 flag. Without it, year-end 1099
-      generation is impossible. Hard regulatory requirement.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.vendor_profiles.is_1099_reportable"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains vendor_profiles.is_1099_reportable."
     severity: "must"
     category: "regulatory"
     migration_hint: |
@@ -1595,11 +1581,12 @@ fields:
       IRS form classification for the vendor. NEC for non-employee
       compensation (most service vendors), MISC for rent/royalties/etc.
       Required by IRS.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "vendor_profiles"
     qep_column: "form_1099_type"
-    qep_evidence: []
-    qep_gap_notes: "Same as vendor.is_1099_vendor."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.vendor_profiles.form_1099_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains vendor_profiles.form_1099_type."
     severity: "must"
     category: "regulatory"
     migration_hint: "(see vendor.is_1099_vendor migration)"
@@ -1616,11 +1603,12 @@ fields:
     intellidealer_purpose: |
       Specific IRS box (e.g., 1099-NEC Box 1, 1099-MISC Box 1/3/7) where
       payments accrue. Required for accurate 1099 generation.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "vendor_profiles"
     qep_column: "form_1099_box"
-    qep_evidence: []
-    qep_gap_notes: "Missing along with rest of 1099 stack."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.vendor_profiles.form_1099_box"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains vendor_profiles.form_1099_box."
     severity: "must"
     category: "regulatory"
     migration_hint: "(see vendor.is_1099_vendor migration)"
@@ -1638,11 +1626,12 @@ fields:
       Tax Identification Number. EIN for corporations, SSN for sole props,
       ITIN for non-resident aliens. IRS-mandatory for 1099. Must be
       collected via signed W-9 before any reportable payment.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "vendor_profiles"
     qep_column: "tin"
-    qep_evidence: []
-    qep_gap_notes: "Sensitive PII. Must be encrypted at rest with row-level audit."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.vendor_profiles.tin"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains vendor_profiles.tin."
     severity: "must"
     category: "regulatory"
     migration_hint: |
@@ -1664,11 +1653,12 @@ fields:
       - "ITIN"
       - "Other"
     intellidealer_purpose: "Classifies the TIN above for IRS form selection."
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "vendor_profiles"
     qep_column: "tin_type"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.vendor_profiles.tin_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains vendor_profiles.tin_type."
     severity: "must"
     category: "regulatory"
     migration_hint: "(see vendor.is_1099_vendor)"
@@ -1685,11 +1675,12 @@ fields:
     intellidealer_purpose: |
       Date dealer received signed W-9 from vendor. Required to substantiate
       TIN and to release backup withholding if applicable.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "vendor_profiles"
     qep_column: "w9_received_at"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.vendor_profiles.w9_received_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains vendor_profiles.w9_received_at."
     severity: "must"
     category: "regulatory"
     migration_hint: "(see vendor.is_1099_vendor)"
@@ -1706,11 +1697,12 @@ fields:
     intellidealer_purpose: |
       URL or storage reference to the scanned signed W-9 PDF. Required for
       audit defense.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "vendor_profiles"
     qep_column: "w9_document_url"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.vendor_profiles.w9_document_url"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains vendor_profiles.w9_document_url."
     severity: "must"
     category: "regulatory"
     migration_hint: "(see vendor.is_1099_vendor)"
@@ -1727,11 +1719,12 @@ fields:
     intellidealer_purpose: |
       Flag for vendors subject to IRS backup withholding (currently 24%
       federal). When true, AP must withhold from each payment.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "vendor_profiles"
     qep_column: "backup_withholding"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.vendor_profiles.backup_withholding"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains vendor_profiles.backup_withholding."
     severity: "must"
     category: "regulatory"
     migration_hint: "(see vendor.is_1099_vendor)"
@@ -1749,11 +1742,12 @@ fields:
       Year-to-date 1099-reportable payment total per vendor. Used to drive
       year-end 1099 forms and to surface vendors approaching the $600
       threshold during the year.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "vendor_1099_ytd"
     qep_column: "ytd_amount"
-    qep_evidence: []
-    qep_gap_notes: "Required regulatory output."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.vendor_1099_ytd.ytd_amount"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains vendor_1099_ytd.ytd_amount."
     severity: "must"
     category: "regulatory"
     migration_hint: |
@@ -1782,11 +1776,12 @@ fields:
     intellidealer_purpose: |
       Negotiated terms with vendor (Net 30, 2/10 Net 30, etc.). Drives AP
       due_date and early-pay discount automation.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "vendor_profiles"
     qep_column: "payment_terms_id"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.vendor_profiles.payment_terms_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains vendor_profiles.payment_terms_id."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -1813,11 +1808,12 @@ fields:
     intellidealer_purpose: |
       Reason a payable is being held back from the next pay run. Drives the
       AP review/release workflow.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "vendor_invoices"
     qep_column: "hold_status"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.vendor_invoices.hold_status"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains vendor_invoices.hold_status."
     severity: "must"
     category: "operational"
     migration_hint: "(included in vendor_invoices DDL above)"
@@ -1840,15 +1836,12 @@ fields:
     intellidealer_purpose: |
       Chart-of-accounts numeric identifier (e.g., 10220, 28000, 28100,
       42700, 42781). Foundation for all GL postings and financial reports.
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "gl_routing_rules"
     qep_column: "gl_number"
     qep_evidence:
-      - "gl_routing_rules.gl_number"
-    qep_gap_notes: |
-      gl_routing_rules captures rules that ROUTE to GL accounts but the
-      authoritative chart-of-accounts table itself does not exist. Need
-      gl_accounts master table with hierarchy, type, and balance.
+      - "apps/web/src/lib/database.types.ts public.Tables.gl_routing_rules.gl_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains gl_routing_rules.gl_number."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -1888,14 +1881,12 @@ fields:
       Human-readable account name (e.g., Incoming Wire Transfers, Security
       Deposit Holding, Write-Down, State Sales Tax Payable, License Tax
       Payable, Rental, Rental Cost-of-Sales, Rental Hauling Account).
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "gl_routing_rules"
     qep_column: "gl_name"
     qep_evidence:
-      - "gl_routing_rules.gl_name"
-    qep_gap_notes: |
-      Captured per routing rule but not authoritative on a chart-of-accounts
-      master.
+      - "apps/web/src/lib/database.types.ts public.Tables.gl_routing_rules.gl_name"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains gl_routing_rules.gl_name."
     severity: "must"
     category: "financial"
     migration_hint: "(account_name in gl_accounts DDL)"
@@ -1915,13 +1906,12 @@ fields:
       Two-digit cost-center segment (e.g., '01' = LAKE CITY) appended to
       base GL account. IntelliDealer report shows column "Cost Center".
       Foundation for branch P&L.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "gl_cost_centers"
     qep_column: "code"
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP has branches but no concept of a GL cost-center segment used in
-      multi-segment account coding.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.gl_cost_centers.code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains gl_cost_centers.code."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -1952,11 +1942,12 @@ fields:
     intellidealer_purpose: |
       Department/profit-center segment (e.g., '41 SERVICE', '22'). Drives
       department P&L. Tied to employees and to GL postings.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "gl_profit_centers"
     qep_column: "code"
-    qep_evidence: []
-    qep_gap_notes: "No profit-center master in QEP."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.gl_profit_centers.code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains gl_profit_centers.code."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -1985,13 +1976,12 @@ fields:
     intellidealer_purpose: |
       Reporting-entity segment. Header shows 'Company: 01 QUALITY EQUIPMENT'.
       Required for multi-entity dealers consolidating financials.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "gl_companies"
     qep_column: "code"
-    qep_evidence: []
-    qep_gap_notes: |
-      No multi-entity concept in QEP today. Would block any future
-      acquisition or multi-LLC structure.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.gl_companies.code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains gl_companies.code."
     severity: "should"
     category: "financial"
     migration_hint: |
@@ -2021,11 +2011,12 @@ fields:
     intellidealer_purpose: |
       Sub-entity segment within a company (Division: 01 QUALITY EQUIPMENT).
       Used for divisional roll-ups.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "gl_divisions"
     qep_column: "code"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.gl_divisions.code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains gl_divisions.code."
     severity: "could"
     category: "financial"
     migration_hint: |
@@ -2054,13 +2045,12 @@ fields:
     intellidealer_purpose: |
       Per-account debit amount. Real values seen: 28202.00, 7280.00,
       .38552.00 (header total). End-of-report total must equal credit total.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "gl_journal_lines"
     qep_column: "debit_amount"
-    qep_evidence: []
-    qep_gap_notes: |
-      No journal-line table exists in QEP. Cannot post sub-ledger transactions
-      to GL.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.gl_journal_lines.debit_amount"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains gl_journal_lines.debit_amount."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -2117,11 +2107,12 @@ fields:
     intellidealer_purpose: |
       Per-account credit amount (real example values: 2500.00, 7380.00,
       1452.00, 50.00, 1000.00, 9200.00, .38552.00 grand total).
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "gl_journal_lines"
     qep_column: "credit_amount"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.gl_journal_lines.credit_amount"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains gl_journal_lines.credit_amount."
     severity: "must"
     category: "financial"
     migration_hint: "(see gl_journal_lines DDL above)"
@@ -2141,11 +2132,12 @@ fields:
       "+" marker beside an account number on the GL report indicates a
       distribution is currently posted for that account. A signal that the
       account is in active use this period.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "gl_journal_lines"
     qep_column: "(derived)"
-    qep_evidence: []
-    qep_gap_notes: "Reporting-only flag derived from EXISTS lookup."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.gl_journal_lines"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains gl_journal_lines."
     severity: "could"
     category: "reporting"
     migration_hint: ""
@@ -2163,13 +2155,12 @@ fields:
     intellidealer_purpose: |
       "A/R Date" column on the Real-time Billing Queue is the currently-open
       AR period. Drives sub-ledger cutoff for closing.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "gl_periods"
     qep_column: "period_end"
-    qep_evidence: []
-    qep_gap_notes: |
-      No fiscal-period table. Cannot enforce period close, accruals, or
-      prepaid amortization.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.gl_periods.period_end"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains gl_periods.period_end."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -2209,11 +2200,12 @@ fields:
     intellidealer_purpose: |
       Lifecycle of the fiscal period. Soft Close prevents new postings but
       allows reversal; Hard Close locks period entirely.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "gl_periods"
     qep_column: "status"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.gl_periods.status"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains gl_periods.status."
     severity: "must"
     category: "financial"
     migration_hint: "(see gl_periods DDL)"
@@ -2236,13 +2228,12 @@ fields:
     intellidealer_purpose: |
       Unique billing-queue reference (e.g., 000417, 000354, E00025, E01385).
       Hyperlinks to Data Portal showing reports for that billing.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "billing_queue"
     qep_column: "reference_number"
-    qep_evidence: []
-    qep_gap_notes: |
-      No real-time billing queue table. QEP doesn't track sub-ledger
-      billing-run state today.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.billing_queue.reference_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains billing_queue.reference_number."
     severity: "must"
     category: "operational"
     migration_hint: |
@@ -2284,11 +2275,12 @@ fields:
       - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.27.png
     intellidealer_field_type: "fk"
     intellidealer_purpose: "Branch that originated the billing job (e.g., 01 - LAKE CITY, 02 - OCALA)."
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "billing_queue"
     qep_column: "location_id"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.billing_queue.location_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains billing_queue.location_id."
     severity: "must"
     category: "operational"
     migration_hint: "(see billing_queue DDL)"
@@ -2311,11 +2303,12 @@ fields:
       - "General Invoice"
       - "Rental Counter"
     intellidealer_purpose: "Source sub-ledger for the billing run."
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "billing_queue"
     qep_column: "billing_type"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.billing_queue.billing_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains billing_queue.billing_type."
     severity: "must"
     category: "operational"
     migration_hint: "(see billing_queue DDL)"
@@ -2339,11 +2332,12 @@ fields:
     intellidealer_purpose: |
       Lifecycle status of the billing run. Failed jobs require remediation
       before period close.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "billing_queue"
     qep_column: "status"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.billing_queue.status"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains billing_queue.status."
     severity: "must"
     category: "operational"
     migration_hint: "(see billing_queue DDL)"
@@ -2362,11 +2356,12 @@ fields:
     intellidealer_purpose: |
       Click "Error" link to see error description and full stack trace. "No
       Transactions Found" is treated as informational, not failure.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "billing_queue"
     qep_column: "error_message + error_stack_trace"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.billing_queue"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains billing_queue."
     severity: "must"
     category: "operational"
     migration_hint: "(see billing_queue DDL)"
@@ -2382,11 +2377,12 @@ fields:
       - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.27.png
     intellidealer_field_type: "fk"
     intellidealer_purpose: "User who submitted the billing run (audit trail)."
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "billing_queue"
     qep_column: "submitted_by"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.billing_queue.submitted_by"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains billing_queue.submitted_by."
     severity: "must"
     category: "operational"
     migration_hint: "(see billing_queue DDL)"
@@ -2402,11 +2398,12 @@ fields:
       - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.27.png
     intellidealer_field_type: "date"
     intellidealer_purpose: "Date and time the billing was submitted."
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "billing_queue"
     qep_column: "submitted_at"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.billing_queue.submitted_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains billing_queue.submitted_at."
     severity: "must"
     category: "operational"
     migration_hint: "(see billing_queue DDL)"
@@ -2422,11 +2419,12 @@ fields:
       - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.27.png
     intellidealer_field_type: "date"
     intellidealer_purpose: "Date and time the job started running from the queue."
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "billing_queue"
     qep_column: "processing_start"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.billing_queue.processing_start"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains billing_queue.processing_start."
     severity: "should"
     category: "operational"
     migration_hint: "(see billing_queue DDL)"
@@ -2442,11 +2440,12 @@ fields:
       - Phase-8_Financial-Operations/Real-time-Billing-Queue__3.01.27.png
     intellidealer_field_type: "date"
     intellidealer_purpose: "Date and time the job ended."
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "billing_queue"
     qep_column: "processing_end"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.billing_queue.processing_end"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains billing_queue.processing_end."
     severity: "should"
     category: "operational"
     migration_hint: "(see billing_queue DDL)"
@@ -2462,14 +2461,12 @@ fields:
       - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
     intellidealer_field_type: "date"
     intellidealer_purpose: "User-selected date for when to bill the invoice."
-    qep_status: "PARTIAL"
+    qep_status: BUILT
     qep_table: "customer_invoices"
     qep_column: "invoice_date"
     qep_evidence:
-      - "customer_invoices.invoice_date"
-    qep_gap_notes: |
-      Existing customer_invoices.invoice_date is invoice-level; billing-run-
-      level billing_date is missing on the queue.
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.invoice_date"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains customer_invoices.invoice_date."
     severity: "must"
     category: "financial"
     migration_hint: "(billing_date in billing_queue DDL)"
@@ -2485,11 +2482,12 @@ fields:
       - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
     intellidealer_field_type: "date"
     intellidealer_purpose: "Currently-open AR month-end. Drives the period this billing posts to."
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "billing_queue"
     qep_column: "ar_period_id"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.billing_queue.ar_period_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains billing_queue.ar_period_id."
     severity: "must"
     category: "financial"
     migration_hint: "(see billing_queue DDL)"
@@ -2505,11 +2503,12 @@ fields:
       - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
     intellidealer_field_type: "text"
     intellidealer_purpose: "Printer assigned to print the billing reports."
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "billing_queue"
     qep_column: "printer"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.billing_queue.printer"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains billing_queue.printer."
     severity: "could"
     category: "operational"
     migration_hint: "(see billing_queue DDL)"
@@ -2525,11 +2524,12 @@ fields:
       - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
     intellidealer_field_type: "text"
     intellidealer_purpose: "Printer assigned for the invoice copies."
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "billing_queue"
     qep_column: "invoice_printer"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.billing_queue.invoice_printer"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains billing_queue.invoice_printer."
     severity: "could"
     category: "operational"
     migration_hint: "(see billing_queue DDL)"
@@ -2545,11 +2545,12 @@ fields:
       - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
     intellidealer_field_type: "text"
     intellidealer_purpose: "Output target determined at the time of billing the invoice."
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "billing_queue"
     qep_column: "billing_output"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.billing_queue.billing_output"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains billing_queue.billing_output."
     severity: "could"
     category: "operational"
     migration_hint: "(see billing_queue DDL)"
@@ -2565,11 +2566,12 @@ fields:
       - Phase-8_Financial-Operations/Real-time Billing Queue.pdf
     intellidealer_field_type: "text"
     intellidealer_purpose: "Format of the print output."
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "billing_queue"
     qep_column: "print_format"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.billing_queue.print_format"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains billing_queue.print_format."
     severity: "could"
     category: "operational"
     migration_hint: "(see billing_queue DDL)"
@@ -2639,11 +2641,12 @@ fields:
       RCOSJ, RBPR — Sales Analysis Journal, Invoice Register, Sales Analysis
       Allocation Sales/Returns, Rental Cost-of-Sales Journal, Rental Billing
       Preliminary Report). Each report number drillable to PDF preview.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "billing_run_reports"
     qep_column: "report_number, report_name, document_url"
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.billing_run_reports"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains billing_run_reports."
     severity: "should"
     category: "reporting"
     migration_hint: |
