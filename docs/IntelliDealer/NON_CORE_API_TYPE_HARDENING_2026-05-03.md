@@ -79,6 +79,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Admin Deal Velocity API | Quote package lifecycle rows and quote outcome rows were cast directly before stage-duration derivation and stalled-deal detection. | Added exported quote velocity package/outcome normalizers with required field checks, quote-status validation, date guards, nullable customer fields, malformed-row filtering, and safe outcome joining before duration math. |
 | Admin price-sheets API | Price-sheet dashboard brand/sheet/item/freight-zone reads and freight-zone CRUD returns cast raw rows directly before status cards and coverage analysis consumed them. | Added exported brand, price-sheet, item-count, brand-id, and freight-zone normalizers with required field checks, boolean guards, date validation, numeric-string coercion, valid state-code filtering, malformed-row filtering, and malformed save-row rejection. |
 | Admin sheet-diff API | Pending/prior sheet headers, model item extracted JSON, and in-flight quote rows were cast directly before diff and quote-impact calculations. | Added exported sheet-header, prior-sheet-ref, model-item, and quote-impact normalizers with required identity checks, JSON-shape validation, nullable field guards, malformed-row filtering, and no-cast extracted model parsing before diff/impact math. |
+| Admin AI request log API | AI request log rows and originating quote joins were cast directly before admin stats and time-to-quote calculations. | Added exported AI-log and originating-quote normalizers with required identity/date checks, joined brand/model normalization, numeric-string coercion, JSON-shape validation, malformed-row filtering, and no-cast merge output. |
 
 ## Verification
 
@@ -214,7 +215,8 @@ Results:
 - Admin Deal Velocity API tests: `20 pass`, `0 fail`.
 - Admin price-sheets API tests: `19 pass`, `0 fail`.
 - Admin sheet-diff API tests: `26 pass`, `0 fail`.
-- Combined targeted test run: `554 pass`, `0 fail`.
+- Admin AI request log API tests: `21 pass`, `0 fail`.
+- Combined targeted test run: `575 pass`, `0 fail`.
 - Web typecheck: PASS.
 - Service feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 - Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.

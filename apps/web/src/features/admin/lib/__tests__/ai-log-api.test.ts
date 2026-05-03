@@ -21,6 +21,8 @@ const {
   getAiLogStats,
   deriveTimeToQuote,
   formatTimeToQuote,
+  normalizeAiLogRows,
+  normalizeOriginatingQuoteRows,
 } = await import("../ai-log-api");
 
 describe("ai-log-api", () => {
@@ -31,6 +33,57 @@ describe("ai-log-api", () => {
     mockGte.mockClear();
     mockEqSrc.mockClear();
     mockLimit.mockClear();
+  });
+
+  test("normalizes AI log rows and filters malformed source payloads", () => {
+    expect(normalizeAiLogRows([
+      {
+        id: "log-1",
+        created_at: "2026-04-19T10:00:00Z",
+        workspace_id: "default",
+        prompt_source: "voice",
+        raw_prompt: "need an rt135",
+        latency_ms: "42",
+        confidence: { score: 0.91 },
+        model_candidates: [{ model: "RT-135" }],
+        resolved_brand_id: "brand-1",
+        resolved_model_id: "model-1",
+        qb_brands: [{ name: "ASV" }],
+        qb_equipment_models: { name_display: "RT-135", list_price_cents: "11000000" },
+      },
+      { id: "bad-date", created_at: "nope" },
+      { created_at: "2026-04-19T10:00:00Z" },
+    ])).toEqual([
+      {
+        id: "log-1",
+        created_at: "2026-04-19T10:00:00Z",
+        workspace_id: "default",
+        prompt_source: "voice",
+        raw_prompt: "need an rt135",
+        customer_type: null,
+        delivery_state: null,
+        error: null,
+        latency_ms: 42,
+        confidence: { score: 0.91 },
+        model_candidates: [{ model: "RT-135" }],
+        resolved_brand_id: "brand-1",
+        resolved_model_id: "model-1",
+        user_id: null,
+        qb_brands: { name: "ASV" },
+        qb_equipment_models: { name_display: "RT-135", list_price_cents: 11000000 },
+      },
+    ]);
+  });
+
+  test("normalizes originating quote rows and filters invalid dates", () => {
+    expect(normalizeOriginatingQuoteRows([
+      { id: "q-1", originating_log_id: "log-1", created_at: "2026-04-19T10:00:42Z" },
+      { id: "q-2", originating_log_id: 42, created_at: "2026-04-19T10:00:43Z" },
+      { id: "bad", originating_log_id: "log-1", created_at: "bad-date" },
+    ])).toEqual([
+      { id: "q-1", originating_log_id: "log-1", created_at: "2026-04-19T10:00:42Z" },
+      { id: "q-2", originating_log_id: null, created_at: "2026-04-19T10:00:43Z" },
+    ]);
   });
 
   test("getAiRequestLogs({ daysBack: 7 }) applies a created_at >= filter", async () => {
@@ -187,9 +240,9 @@ describe("ai-log-api", () => {
 
     // Simulate 3 rows: 2 resolved, 1 voice
     const mockRows = [
-      { resolved_model_id: "uuid-1", prompt_source: "text" },
-      { resolved_model_id: "uuid-2", prompt_source: "voice" },
-      { resolved_model_id: null,     prompt_source: "text" },
+      { id: "log-1", created_at: "2026-04-19T10:00:00Z", resolved_model_id: "uuid-1", prompt_source: "text" },
+      { id: "log-2", created_at: "2026-04-19T10:01:00Z", resolved_model_id: "uuid-2", prompt_source: "voice" },
+      { id: "log-3", created_at: "2026-04-19T10:02:00Z", resolved_model_id: null,     prompt_source: "text" },
     ];
     mockLimit.mockImplementationOnce(() => Promise.resolve({ data: mockRows, error: null }));
     // getAiLogStats calls getAiRequestLogs internally, which triggers the

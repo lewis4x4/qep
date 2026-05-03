@@ -22,7 +22,7 @@
  */
 
 import { supabase } from "@/lib/supabase";
-import type { Database } from "@/lib/database.types";
+import type { Database, Json } from "@/lib/database.types";
 
 export type AiLogRow =
   Database["public"]["Tables"]["qb_ai_request_log"]["Row"] & {
@@ -48,6 +48,115 @@ export interface AiLogStats {
 }
 
 const LOG_LIMIT = 500;
+type AiLogSourceRow = Omit<AiLogRow, "time_to_quote_seconds" | "originating_quote_id">;
+type OriginatingQuoteRow = { id: string; originating_log_id: string | null; created_at: string };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isJsonValue(value: unknown): value is Json {
+  if (value === null) return true;
+  switch (typeof value) {
+    case "string":
+    case "boolean":
+      return true;
+    case "number":
+      return Number.isFinite(value);
+    case "object":
+      if (Array.isArray(value)) return value.every(isJsonValue);
+      return Object.values(value).every((entry) => entry === undefined || isJsonValue(entry));
+    default:
+      return false;
+  }
+}
+
+function requiredString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function nullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function jsonOrNull(value: unknown): Json | null {
+  return isJsonValue(value) ? value : null;
+}
+
+function isValidDateString(value: string): boolean {
+  return Number.isFinite(new Date(value).getTime());
+}
+
+function normalizeJoinedBrand(value: unknown): AiLogSourceRow["qb_brands"] {
+  const row = Array.isArray(value) ? value[0] : value;
+  if (!isRecord(row)) return null;
+  const name = requiredString(row.name);
+  return name ? { name } : null;
+}
+
+function normalizeJoinedModel(value: unknown): AiLogSourceRow["qb_equipment_models"] {
+  const row = Array.isArray(value) ? value[0] : value;
+  if (!isRecord(row)) return null;
+  const nameDisplay = requiredString(row.name_display);
+  const listPriceCents = nullableNumber(row.list_price_cents);
+  if (!nameDisplay || listPriceCents == null) return null;
+  return { name_display: nameDisplay, list_price_cents: listPriceCents };
+}
+
+export function normalizeAiLogRows(value: unknown): AiLogSourceRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const createdAt = requiredString(row.created_at);
+    const promptSource = requiredString(row.prompt_source) ?? "text";
+    const workspaceId = requiredString(row.workspace_id) ?? "default";
+    if (!id || !createdAt || !isValidDateString(createdAt)) return [];
+    return [{
+      id,
+      created_at: createdAt,
+      workspace_id: workspaceId,
+      prompt_source: promptSource,
+      raw_prompt: nullableString(row.raw_prompt) ?? "",
+      customer_type: nullableString(row.customer_type),
+      delivery_state: nullableString(row.delivery_state),
+      error: nullableString(row.error),
+      latency_ms: nullableNumber(row.latency_ms),
+      confidence: jsonOrNull(row.confidence),
+      model_candidates: jsonOrNull(row.model_candidates),
+      resolved_brand_id: nullableString(row.resolved_brand_id),
+      resolved_model_id: nullableString(row.resolved_model_id),
+      user_id: nullableString(row.user_id),
+      qb_brands: normalizeJoinedBrand(row.qb_brands),
+      qb_equipment_models: normalizeJoinedModel(row.qb_equipment_models),
+    }];
+  });
+}
+
+export function normalizeOriginatingQuoteRows(value: unknown): OriginatingQuoteRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const createdAt = requiredString(row.created_at);
+    if (!id || !createdAt || !isValidDateString(createdAt)) return [];
+    return [{
+      id,
+      originating_log_id: nullableString(row.originating_log_id),
+      created_at: createdAt,
+    }];
+  });
+}
 
 function cutoffIso(daysBack: number): string {
   const d = new Date();
@@ -109,7 +218,7 @@ export async function getAiRequestLogs(opts: AiLogFilter = {}): Promise<AiLogRow
 
   const { data, error } = await query.limit(LOG_LIMIT);
   if (error) return [];
-  const logs = (data ?? []) as Omit<AiLogRow, "time_to_quote_seconds" | "originating_quote_id">[];
+  const logs = normalizeAiLogRows(data);
   if (logs.length === 0) return [];
 
   // Fetch originating quotes for this page of logs from BOTH tables in
@@ -127,19 +236,19 @@ export async function getAiRequestLogs(opts: AiLogFilter = {}): Promise<AiLogRow
       .in("originating_log_id", logIds),
   ]);
   const quoteRows = [
-    ...((qbRes.data  ?? []) as Array<{ id: string; originating_log_id: string | null; created_at: string }>),
-    ...((pkgRes.data ?? []) as Array<{ id: string; originating_log_id: string | null; created_at: string }>),
+    ...normalizeOriginatingQuoteRows(qbRes.data),
+    ...normalizeOriginatingQuoteRows(pkgRes.data),
   ];
 
   const deltas = deriveTimeToQuote(logs, quoteRows);
 
-  return logs.map((l) => {
+  return logs.map((l): AiLogRow => {
     const match = deltas.get(l.id);
     return {
       ...l,
       time_to_quote_seconds: match?.timeToQuoteSeconds ?? null,
       originating_quote_id:  match?.quoteId ?? null,
-    } as AiLogRow;
+    };
   });
 }
 
