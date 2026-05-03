@@ -119,4 +119,69 @@ describe("hydrateDraftFromSavedQuote", () => {
     ]);
     expect(draft.attachments).toEqual([]);
   });
+
+  test("normalizes saved line item kind and recommendation trigger without casts", () => {
+    const draft = hydrateDraftFromSavedQuote({
+      quote_package_line_items: [
+        {
+          id: "line-1",
+          line_type: "warranty",
+          kind: "bad-kind",
+          description: "Extended warranty",
+          quantity: "2",
+          unit_price: "1500",
+          metadata: { source_catalog: "manual", source_id: "manual-1" },
+        },
+        {
+          id: "line-2",
+          line_type: "not-real",
+          description: "Custom setup",
+          quantity: "1",
+          amount: "500",
+        },
+      ],
+      ai_recommendation: {
+        machine: "8R 310",
+        attachments: ["Loader", "", 123],
+        reasoning: "Enough signal to recommend.",
+        alternative: {
+          machine: "6R 250",
+          attachments: ["Mower"],
+          reasoning: "Lower power.",
+        },
+        trigger: {
+          triggerType: "not-real",
+          sourceField: "voice_transcript",
+        },
+      },
+    });
+
+    expect(draft.attachments).toEqual([
+      {
+        kind: "warranty",
+        id: "manual-1",
+        title: "Extended warranty",
+        make: undefined,
+        model: undefined,
+        year: null,
+        quantity: 2,
+        unitPrice: 1500,
+        sourceCatalog: "manual",
+        sourceId: "manual-1",
+      },
+      {
+        kind: "custom",
+        id: "line-2",
+        title: "Custom setup",
+        make: undefined,
+        model: undefined,
+        year: null,
+        quantity: 1,
+        unitPrice: 500,
+      },
+    ]);
+    expect(draft.recommendation?.attachments).toEqual(["Loader"]);
+    expect(draft.recommendation?.alternative?.attachments).toEqual(["Mower"]);
+    expect(draft.recommendation?.trigger).toBeNull();
+  });
 });

@@ -137,6 +137,63 @@ describe("save/load/clear round-trip", () => {
       .window.localStorage.setItem("qep.quote-builder.local-draft.u1.deal:bad", "{not-json");
     expect(loadLocalDraft("u1.deal:bad")).toBeNull();
   });
+
+  test("load filters malformed local draft fields before returning them", () => {
+    (globalThis as unknown as { window: { localStorage: MemoryStorage } })
+      .window.localStorage.setItem(
+        "qep.quote-builder.local-draft.u1.deal:dirty",
+        JSON.stringify({
+          draft: {
+            entryMode: "not-real",
+            customerName: "  Valid Customer  ",
+            equipment: [
+              { kind: "equipment", title: "Skid Steer", quantity: "2", unitPrice: "45000" },
+              { kind: "bad-kind", title: "Bad" },
+              { kind: "attachment", title: "" },
+            ],
+            attachments: [
+              { kind: "attachment", title: "Bucket", quantity: "bad", unitPrice: "1200" },
+            ],
+            tradeAllowance: "5000",
+            commercialDiscountType: "bad",
+            quoteStatus: "approved",
+            recommendation: {
+              machine: "CTL",
+              attachments: ["Bucket", "", 42],
+              reasoning: "Matches site work.",
+              trigger: { triggerType: "bad", sourceField: "voice" },
+            },
+          },
+          savedAt: "2026-05-03T12:00:00Z",
+        }),
+      );
+
+    const loaded = loadLocalDraft("u1.deal:dirty");
+
+    expect(loaded?.entryMode).toBeUndefined();
+    expect(loaded?.customerName).toBe("  Valid Customer  ");
+    expect(loaded?.equipment).toEqual([
+      {
+        kind: "equipment",
+        title: "Skid Steer",
+        id: undefined,
+        sourceCatalog: undefined,
+        sourceId: null,
+        dealerCost: null,
+        make: undefined,
+        model: undefined,
+        year: null,
+        quantity: 2,
+        unitPrice: 45000,
+      },
+    ]);
+    expect(loaded?.attachments?.[0]?.quantity).toBe(1);
+    expect(loaded?.tradeAllowance).toBe(5000);
+    expect(loaded?.commercialDiscountType).toBeUndefined();
+    expect(loaded?.quoteStatus).toBe("approved");
+    expect(loaded?.recommendation?.attachments).toEqual(["Bucket"]);
+    expect(loaded?.recommendation?.trigger).toBeNull();
+  });
 });
 
 describe("listLocalDraftsForUser", () => {
@@ -158,6 +215,14 @@ describe("listLocalDraftsForUser", () => {
     saveLocalDraft(buildLocalDraftKey({ userId: "alice", dealId: "empty" }), makeDraft());
     saveLocalDraft(buildLocalDraftKey({ userId: "alice", dealId: "real" }), makeDraft({ customerName: "Real" }));
     expect(listLocalDraftsForUser("alice")).toHaveLength(1);
+  });
+
+  test("skips malformed draft envelopes", () => {
+    (globalThis as unknown as { window: { localStorage: MemoryStorage } })
+      .window.localStorage.setItem("qep.quote-builder.local-draft.alice.deal:bad", JSON.stringify({ draft: null }));
+    saveLocalDraft(buildLocalDraftKey({ userId: "alice", dealId: "real" }), makeDraft({ customerName: "Real" }));
+
+    expect(listLocalDraftsForUser("alice").map((record) => record.dealId)).toEqual(["real"]);
   });
 
   test("returns empty list for unknown user", () => {

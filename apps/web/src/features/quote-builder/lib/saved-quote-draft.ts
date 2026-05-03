@@ -16,11 +16,12 @@ const TAX_PROFILES: QuoteTaxProfile[] = [
   "resale_exempt",
 ];
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return null;
+  return isRecord(value) ? value : null;
 }
 
 function asArray(value: unknown): unknown[] {
@@ -41,15 +42,15 @@ function asNumber(value: unknown): number | null {
 }
 
 function isEntryMode(value: string): value is QuoteEntryMode {
-  return ENTRY_MODES.includes(value as QuoteEntryMode);
+  return ENTRY_MODES.some((mode) => mode === value);
 }
 
 function isTaxProfile(value: string): value is QuoteTaxProfile {
-  return TAX_PROFILES.includes(value as QuoteTaxProfile);
+  return TAX_PROFILES.some((profile) => profile === value);
 }
 
 function isLineItemKind(value: string): value is QuoteLineItemKind {
-  return LINE_ITEM_KINDS.includes(value as QuoteLineItemKind);
+  return LINE_ITEM_KINDS.some((kind) => kind === value);
 }
 
 function isSourceCatalog(value: string): value is NonNullable<QuoteLineItemDraft["sourceCatalog"]> {
@@ -59,7 +60,7 @@ function isSourceCatalog(value: string): value is NonNullable<QuoteLineItemDraft
 function isQuoteStatus(
   value: string,
 ): value is NonNullable<QuoteWorkspaceDraft["quoteStatus"]> {
-  return [
+  const statuses: Array<NonNullable<QuoteWorkspaceDraft["quoteStatus"]>> = [
     "draft",
     "pending_approval",
     "approved",
@@ -71,7 +72,27 @@ function isQuoteStatus(
     "expired",
     "converted_to_deal",
     "archived",
-  ].includes(value);
+  ];
+  return statuses.some((status) => status === value);
+}
+
+function normalizeAttachmentKind(primary: unknown, fallback: unknown): QuoteLineItemKind {
+  const fallbackKind = asString(fallback);
+  if (isLineItemKind(fallbackKind) && fallbackKind !== "equipment") return fallbackKind;
+  const kind = asString(primary);
+  return isLineItemKind(kind) && kind !== "equipment" ? kind : "attachment";
+}
+
+function normalizeRecommendationTriggerType(
+  value: unknown,
+): NonNullable<NonNullable<QuoteWorkspaceDraft["recommendation"]>["trigger"]>["triggerType"] | null {
+  const triggerType = asString(value);
+  return triggerType === "voice_transcript"
+    || triggerType === "ai_chat_prompt"
+    || triggerType === "manual_request"
+    || triggerType === "quote_event"
+    ? triggerType
+    : null;
 }
 
 function buildEquipmentTitle(item: Record<string, unknown>): string {
@@ -119,11 +140,7 @@ function toAttachmentDraft(item: unknown): QuoteLineItemDraft[] {
   if (!title) return [];
 
   const line: QuoteLineItemDraft = {
-    kind: isLineItemKind(asString(record.kind)) && asString(record.kind) !== "equipment"
-      ? asString(record.kind) as QuoteLineItemKind
-      : isLineItemKind(asString(record.line_type)) && asString(record.line_type) !== "equipment"
-        ? asString(record.line_type) as QuoteLineItemKind
-        : "attachment",
+    kind: normalizeAttachmentKind(record.kind, record.line_type),
     title,
     id: asString(record.id) || undefined,
     quantity: Math.max(1, Math.round(asNumber(record.quantity) ?? 1)),
@@ -187,7 +204,8 @@ function toRecommendation(value: unknown): QuoteWorkspaceDraft["recommendation"]
   const record = asRecord(value);
   if (!record) return null;
   const trigger = asRecord(record.trigger);
-  const triggerType = asString(trigger?.triggerType);
+  const triggerType = normalizeRecommendationTriggerType(trigger?.triggerType);
+  const alternative = asRecord(record.alternative);
   return {
     machine: asString(record.machine),
     attachments: asArray(record.attachments).flatMap((item) => {
@@ -195,23 +213,23 @@ function toRecommendation(value: unknown): QuoteWorkspaceDraft["recommendation"]
       return name ? [name] : [];
     }),
     reasoning: asString(record.reasoning),
-    alternative: asRecord(record.alternative)
+    alternative: alternative
       ? {
-          machine: asString((record.alternative as Record<string, unknown>).machine),
-          attachments: asArray((record.alternative as Record<string, unknown>).attachments).flatMap((item) => {
+          machine: asString(alternative.machine),
+          attachments: asArray(alternative.attachments).flatMap((item) => {
             const name = asString(item);
             return name ? [name] : [];
           }),
-          reasoning: asString((record.alternative as Record<string, unknown>).reasoning),
+          reasoning: asString(alternative.reasoning),
         }
       : null,
     jobConsiderations: asArray(record.jobConsiderations).flatMap((item) => {
       const note = asString(item);
       return note ? [note] : [];
     }),
-    trigger: trigger && ["voice_transcript", "ai_chat_prompt", "manual_request", "quote_event"].includes(triggerType)
+    trigger: trigger && triggerType
       ? {
-          triggerType: triggerType as NonNullable<NonNullable<QuoteWorkspaceDraft["recommendation"]>["trigger"]>["triggerType"],
+          triggerType,
           sourceField: asString(trigger.sourceField),
           excerpt: asString(trigger.excerpt) || null,
           createdAt: asString(trigger.createdAt) || null,

@@ -221,6 +221,7 @@ Current result:
 - Quote-builder outcome capture responses, latest-outcome reads, and outcome rollup rows now use exported normalizers before callers aggregate or render them.
 - Quote-builder deal-intelligence similar-deal, reason-intelligence, rule-acceptance, and suppression rows now use exported normalizers before scoring/coaching aggregation.
 - Quote-builder quote list/action responses, scorer calibration observations, factor attribution deals, factor verdicts, closed-deal audit rows, AI recommendation payloads, send-package responses, approval submissions/cases, approval policies, signature responses, and portal revision envelopes/mutations now use exported normalizers before UI consumption.
+- Quote-builder local draft envelopes and saved quote hydration now use runtime guards for JSON envelopes, line items, recommendation triggers, and workspace enums before persisted draft data reaches the builder.
 - Quote-builder customer search, company hydration, signal rollup, past-equipment history, and deep-link customer hydration rows now use normalizers before result assembly or draft seeding.
 - Quote-builder coach margin baselines, active brand/program lookups, and dismissed-rule reads now use exported normalizers before rule context assembly.
 - Quote-builder point-shoot trade equipment vision, book-value, and trade-valuation apply payloads now use exported normalizers before UI or valuation-row updates.
@@ -250,7 +251,7 @@ Current result:
 - Parts predictive kits, replenish queue, inventory health, vendor metrics, parts order list, catalog query typing, and forecast catalog lookup now use exported normalizers or generated query typing.
 - Parts purchase-order list/detail vendor, header, line, touchpoint, equipment model, and attachment rows now use exported normalizers.
 - Parts feature cast scan is clear for the Slice 6 inventory pattern after replacing local/browser shims with typed helpers.
-- Targeted tests passed: `379 pass`, `0 fail`.
+- Targeted tests passed: `402 pass`, `0 fail`.
 - Web typecheck passed.
 - Service feature cast scan is clear for the Slice 6 inventory pattern.
 - Fleet feature cast scan is clear for the Slice 6 inventory pattern.
