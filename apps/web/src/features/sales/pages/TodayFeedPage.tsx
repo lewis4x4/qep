@@ -132,8 +132,8 @@ export function TodayFeedPage() {
             onClick={() => {
               const plusBtn = document.querySelector(
                 "[data-capture-trigger]",
-              ) as HTMLButtonElement;
-              plusBtn?.click();
+              );
+              if (plusBtn instanceof HTMLButtonElement) plusBtn.click();
             }}
             className="mt-4 px-6 py-2.5 bg-qep-orange text-white rounded-full text-sm font-semibold shadow-md hover:shadow-lg transition-shadow"
           >

@@ -19,6 +19,15 @@ import type {
   CustomerEquipment,
   CustomerActivity,
 } from "./types";
+import {
+  normalizeCustomerActivityRows,
+  normalizeCustomerEquipmentRows,
+  normalizeDailyBriefing,
+  normalizeDealStageOptions,
+  normalizeRepCustomers,
+  normalizeRepPipelineDeals,
+  type DealStageOption,
+} from "./sales-api-normalizers";
 
 export async function fetchTodayBriefing(): Promise<DailyBriefing | null> {
   const today = new Date().toISOString().split("T")[0];
@@ -29,7 +38,7 @@ export async function fetchTodayBriefing(): Promise<DailyBriefing | null> {
     .maybeSingle();
 
   if (error) throw error;
-  return data as DailyBriefing | null;
+  return normalizeDailyBriefing(data);
 }
 
 export async function fetchRepPipeline(): Promise<RepPipelineDeal[]> {
@@ -39,7 +48,7 @@ export async function fetchRepPipeline(): Promise<RepPipelineDeal[]> {
     .limit(500);
 
   if (error) throw error;
-  return (data ?? []) as RepPipelineDeal[];
+  return normalizeRepPipelineDeals(data);
 }
 
 export async function fetchRepCustomers(): Promise<RepCustomer[]> {
@@ -49,7 +58,7 @@ export async function fetchRepCustomers(): Promise<RepCustomer[]> {
     .limit(100);
 
   if (error) throw error;
-  return (data ?? []) as RepCustomer[];
+  return normalizeRepCustomers(data);
 }
 
 export async function fetchCustomerEquipment(
@@ -63,7 +72,7 @@ export async function fetchCustomerEquipment(
     .order("engine_hours", { ascending: false, nullsFirst: false });
 
   if (error) throw error;
-  return (data ?? []) as CustomerEquipment[];
+  return normalizeCustomerEquipmentRows(data);
 }
 
 export async function fetchCustomerDeals(
@@ -75,7 +84,7 @@ export async function fetchCustomerDeals(
     .eq("company_id", companyId);
 
   if (error) throw error;
-  return (data ?? []) as RepPipelineDeal[];
+  return normalizeRepPipelineDeals(data);
 }
 
 export async function fetchCustomerActivities(
@@ -91,7 +100,7 @@ export async function fetchCustomerActivities(
     .limit(limit);
 
   if (error) throw error;
-  return (data ?? []) as CustomerActivity[];
+  return normalizeCustomerActivityRows(data);
 }
 
 export async function fetchCustomerQuotes(companyId: string) {
@@ -122,7 +131,7 @@ export async function fetchCustomerQuotes(companyId: string) {
 }
 
 export async function fetchDealStages(): Promise<
-  Array<{ id: string; name: string; sort_order: number }>
+  DealStageOption[]
 > {
   const { data, error } = await supabase
     .from("crm_deal_stages")
@@ -130,7 +139,7 @@ export async function fetchDealStages(): Promise<
     .order("sort_order", { ascending: true });
 
   if (error) throw error;
-  return (data ?? []) as Array<{ id: string; name: string; sort_order: number }>;
+  return normalizeDealStageOptions(data);
 }
 
 export async function logVisit(params: {
