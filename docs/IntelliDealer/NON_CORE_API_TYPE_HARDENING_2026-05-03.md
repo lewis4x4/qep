@@ -19,6 +19,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Service labor/agreement page client shims | Labor pricing and service agreement pages still used legacy `supabase as unknown` client shims around already-normalized queries and mutations. | Removed the shims from labor pricing, agreement list, and agreement detail pages so they use the generated Supabase client directly while keeping the existing exported normalizers as the row boundary. |
 | Vendor profiles and pricing approvals | Vendor page cast vendor, policy, portal-key, submission, and active-price query results directly into local UI row types. | Added exported normalizers for vendor rows, escalation policies, portal access keys, vendor submissions, and active vendor prices with required field checks, numeric-string coercion, status validation, supplier-type fallback, and joined vendor normalization. |
 | Service vendor profile page client shims | Vendor page still used legacy Supabase client shims around normalized portal-key/submission/price reads and approval mutations. | Removed the shims so access keys, vendor submissions, vendor prices, and submission approval/rejection use generated Supabase client calls while existing exported vendor normalizers remain the row boundary. |
+| Vendor pricing portal edge responses | Public vendor pricing portal cast generic edge JSON responses directly into the expected vendor/prices/submissions payload. | Added exported vendor portal payload normalizers with required vendor fields, price/submission numeric-string coercion, malformed-row filtering, and safe edge error extraction before accepting responses. |
 | Service scheduler, WIP, and dashboard pages | Scheduler logs, WIP summary/jobs, dashboard rollups, and overdue job rows used direct casts or legacy Supabase client shims. | Added exported service WIP/dashboard normalizers with required field checks, enum validation, numeric-string coercion, joined customer/machine normalization, malformed-row filtering, and safe count defaults; removed the page-local client shims. |
 | Service customer/equipment search and parts queue hooks | Intake search hooks and the parts queue hook returned raw customer, equipment, requirement, action, staging, and joined job payloads through direct casts. | Added exported hook normalizers with required field checks, numeric-string coercion, joined job/customer/machine normalization, action/staging filtering, malformed-row rejection, and accepted-line filtering for the parts queue. |
 | Service shop invoice and intake pages | Shop invoice detail and service intake edge responses used direct response casts that could pass malformed invoice lines or AI intake payloads into rendering. | Added exported page normalizers with required invoice/line checks, numeric-string coercion, malformed-line filtering, and safe service-intake defaults for edge responses. |
@@ -105,6 +106,7 @@ Results:
 - Service labor/agreement page shim removal: covered by existing service normalizer suites and web typecheck.
 - Vendor profile normalizer tests: `6 pass`, `0 fail`.
 - Service vendor profile page shim removal: covered by existing vendor profile normalizer suite and web typecheck.
+- Vendor pricing portal utility/normalizer tests: `5 pass`, `0 fail`.
 - Service WIP/scheduler/dashboard normalizer tests: `9 pass`, `0 fail`.
 - Service customer/equipment search and parts queue hook normalizer tests: `4 pass`, `0 fail`.
 - Service shop invoice, invoice summary, intake, and portal parts order page normalizer tests: `7 pass`, `0 fail`.
@@ -127,7 +129,7 @@ Results:
 - Portal row normalizer tests: `5 pass`, `0 fail`.
 - Parts row normalizer tests: `15 pass`, `0 fail`.
 - Parts purchase-order utility/normalizer tests: `9 pass`, `0 fail`.
-- Combined targeted test run: `147 pass`, `0 fail`.
+- Combined targeted test run: `152 pass`, `0 fail`.
 - Web typecheck: PASS.
 - Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 

@@ -2,44 +2,13 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import {
+  getVendorPricingPortalError,
+  normalizeVendorPricingPortalPayload,
+  type VendorPricingPortalPayload,
+} from "../lib/vendor-pricing-portal-utils";
 
-type PortalPriceRow = {
-  id: string;
-  partNumber: string;
-  description: string | null;
-  currentPrice: number | null;
-  currency: string;
-  effectiveDate: string;
-};
-
-type PortalSubmissionRow = {
-  id: string;
-  partNumber: string;
-  description: string | null;
-  proposedPrice: number;
-  currency: string;
-  effectiveDate: string;
-  notes: string | null;
-  status: string;
-  reviewNotes: string | null;
-  createdAt: string;
-};
-
-type PortalPayload = {
-  vendor: {
-    id: string;
-    name: string;
-    supplierType: string;
-    notes: string | null;
-    label: string | null;
-    contactName: string | null;
-    contactEmail: string | null;
-  };
-  prices: PortalPriceRow[];
-  submissions: PortalSubmissionRow[];
-};
-
-async function portalRequest<T>(accessKey: string, body: Record<string, unknown>): Promise<T> {
+async function portalRequest(accessKey: string, body: Record<string, unknown>): Promise<VendorPricingPortalPayload> {
   const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/vendor-pricing-portal`, {
     method: "POST",
     headers: {
@@ -49,10 +18,13 @@ async function portalRequest<T>(accessKey: string, body: Record<string, unknown>
     body: JSON.stringify({ accessKey, ...body }),
   });
 
-  const payload = await response.json() as T & { error?: string };
-  if (!response.ok || payload.error) {
-    throw new Error(payload.error || "Vendor portal request failed.");
+  const rawPayload: unknown = await response.json();
+  const errorMessage = getVendorPricingPortalError(rawPayload);
+  if (!response.ok || errorMessage) {
+    throw new Error(errorMessage || "Vendor portal request failed.");
   }
+  const payload = normalizeVendorPricingPortalPayload(rawPayload);
+  if (!payload) throw new Error("Vendor portal response was malformed.");
   return payload;
 }
 
@@ -67,7 +39,7 @@ export function VendorPricingPortalPage() {
 
   const portalQuery = useQuery({
     queryKey: ["vendor-pricing-portal", accessKey, search],
-    queryFn: () => portalRequest<PortalPayload>(accessKey!, { action: "session", search }),
+    queryFn: () => portalRequest(accessKey!, { action: "session", search }),
     enabled: Boolean(accessKey),
     staleTime: 10_000,
   });
@@ -84,7 +56,7 @@ export function VendorPricingPortalPage() {
           submissionNotes: draft.submissionNotes.trim() || null,
         }));
 
-      return portalRequest<PortalPayload>(accessKey!, {
+      return portalRequest(accessKey!, {
         action: "submit",
         search,
         submittedByName,
