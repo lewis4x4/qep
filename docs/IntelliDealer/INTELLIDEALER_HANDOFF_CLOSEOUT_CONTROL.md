@@ -1,0 +1,192 @@
+# IntelliDealer Handoff Closeout Control
+
+Date: 2026-05-03
+
+## Purpose
+
+This is the control document for closing the IntelliDealer handoff without mixing three different scopes:
+
+- Core customer import from `Customer Master.xlsx`, `CUST CONTACTS.pdf`, `CUST AR AGENCY.pdf`, and `CUST PROFITABILITY.pdf`.
+- IntelliDealer-to-QEP gap-audit schema waves 0-4.
+- Deferred dealer/OEM integrations that require external credentials or dealer-specific scope.
+
+If another document conflicts with this one, treat this document as the current closeout map and fix the stale document.
+
+## Current Verdict
+
+| Area | Status | Evidence | Closeout Meaning |
+| --- | --- | --- | --- |
+| Core customer import | Complete, production-proven | `CUSTOMER_IMPORT_FINAL_RECONCILIATION.md` | The imported customer data is committed, reconciled, redacted, visible in UI, and smoke-tested against `TIGER001`. |
+| Account 360 / Companies / editors / admin import UI | Complete for the customer handoff | `CUSTOMER_IMPORT_FINAL_RECONCILIATION.md`, production smoke screenshots | Operators can find, review, maintain safe imported fields, export safe staged rows, and audit import runs. |
+| Gap-audit Waves 0-4 | Implemented and remote-push verified through `506_*` by the 2026-04-27 cutover gate | `docs/intellidealer-gap-audit/_migration_order.md` | Core schema, reporting views, sensitive-field hardening, and computed/reporting surfaces were shipped for the gap-audit waves. |
+| Customer import migrations `508_*`-`519_*` | Applied remotely per the final reconciliation | `CUSTOMER_IMPORT_FINAL_RECONCILIATION.md` | Customer import staging, dashboard, storage, redaction, counts RPC, and commit transition guard are part of the production baseline. |
+| Latest local migration range | Present locally through `521_floor_customer_legacy_search_layouts.sql` | `supabase/migrations/` | Migrations after `519_*` must be treated by their own feature gates; they are not required to prove the core customer import. |
+| Wave 5 external integrations | Deferred, not complete | `_migration_order.md` Wave 5 status | AvaTax live wiring, VESign, UPS WorldShip, OEM imports, and Tethr are intentionally not marked complete. |
+| Audit manifest / YAML inventory | Stale | `docs/intellidealer-gap-audit/manifest.yaml`, phase YAMLs | The inventory still has old `MISSING`/`PARTIAL` statuses and must be regenerated before it can be used as the remaining-gap dashboard. |
+| Raw source file custody | Not closed | Untracked files under `docs/IntelliDealer/` | The files are available locally, but there is no committed manifest proving filename, size, SHA-256, row counts, and import run binding. |
+
+## Production Customer Import Baseline
+
+Authoritative import run:
+
+- Supabase project: `iciddijgonywtxoelous`
+- Import run ID: `df74305e-d37a-4e4b-be5e-457633b2cd1d`
+- Workbook SHA-256: `ade4fbb59632c8dc3bc266b86d80a43c6ecc68476f1e453654cc65cd96ba69f5`
+- Smoke account: `TIGERCAT LOGISTICS`
+- Smoke company ID: `0024eed7-05bd-43d2-b4d3-d89f03ab58ea`
+- Legacy customer number: `TIGER001`
+
+Baseline counts:
+
+| Data Set | Count |
+| --- | ---: |
+| Customer master rows mapped | `5,136` |
+| Contacts mapped | `4,657` |
+| Contact memo rows staged | `1,179` |
+| Nonblank contact memo rows | `57` |
+| A/R agency rows mapped | `19,466` |
+| Profitability rows mapped | `9,894` |
+| Canonical A/R agency rows | `19,466` |
+| Canonical profitability facts | `9,894` |
+| Import errors | `0` |
+| Raw A/R card rows | `0` |
+| Redacted A/R card rows | `347` |
+
+## What Is Complete
+
+- Positional source parsing for the customer workbook/PDF-derived sheets.
+- Lossless staging tables for customer master, contacts, contact memos, A/R agencies, profitability, and import errors.
+- Canonical commit into QRM companies, contacts, company/contact links, memos, A/R agencies, customer A/R agency assignments, profitability facts, and external IDs.
+- Non-parts seed purge tooling with parts-table guards.
+- A/R card redaction guard and verification that no raw A/R card values remain in canonical rows.
+- Browser upload preview, protected staging, commit preflight token, direct-commit rejection, discard/cancel path, safe CSV exports, and dashboard counts RPC.
+- Database transition guard blocking `committing` unless the run is already `staged`.
+- Rerun safety gate and non-production canonical commit rehearsal gate.
+- Account 360 IntelliDealer tab and drill-downs.
+- Companies legacy customer-number search and `IntelliDealer #` export.
+- Company editor safe imported profile maintenance fields.
+- Contact editor safe imported profile maintenance fields.
+- Production smoke coverage for desktop Account 360, mobile Account 360, Companies legacy search, company editor, contact editor, and admin import dashboard.
+- Gap-audit schema waves 0-4, including EIN, foundation tables, column extensions, FK/status hardening, sensitive-field guards, and reporting views.
+
+## What Is Not Complete
+
+These are not customer-import blockers, but they must not be represented as done:
+
+- Audit phase YAMLs and `manifest.yaml` have not been regenerated after the wave implementations.
+- `_blockers.csv` still reflects the original audit state, not the current shipped schema state.
+- Raw IntelliDealer source files are untracked and lack a committed custody manifest.
+- Wave 5 integrations are deferred until credentials and dealer-specific scope are available.
+- Remaining non-core raw Supabase row casts still need slice-by-slice normalization if the goal is broader API hardening.
+- The old `test-results/agent-gates/*` evidence referenced by `_migration_order.md` is not present in the current working tree; either recover those artifacts or replace them with fresh gate outputs.
+- A fresh production verification run should be captured after the latest deployed bundle before the final signoff pack is closed.
+
+## Remaining Roadmap
+
+### Slice 2: Regenerate Audit Inventory
+
+Goal: turn the gap-audit bundle back into a live dashboard.
+
+Deliverables:
+
+- Reconcile migrations `397_*`-`506_*` against the phase YAML entries.
+- Mark completed fields `BUILT` with current schema evidence.
+- Regenerate `manifest.yaml`.
+- Regenerate `_blockers.csv`.
+- Produce remaining blocker counts by phase.
+
+Gate:
+
+- The remaining `must`, `should`, and `could` counts reflect the current schema, not the original audit.
+
+### Slice 3: Source File Custody
+
+Goal: make the customer import reproducible without exposing sensitive data unnecessarily.
+
+Deliverables:
+
+- Create a committed source manifest with filename, size, SHA-256, expected row counts, and import run ID.
+- Decide whether raw files remain local, move to private storage, or are committed.
+- Bind the manifest to import run `df74305e-d37a-4e4b-be5e-457633b2cd1d`.
+
+Gate:
+
+- A reviewer can prove which source files produced the production import.
+
+### Slice 4: Fresh Production Verification
+
+Goal: prove production still matches the signed-off customer handoff after later code/deploy work.
+
+Deliverables:
+
+- Run `bun run intellidealer:customer:rerun-check`.
+- Run `bun run intellidealer:customer:verify -- df74305e-d37a-4e4b-be5e-457633b2cd1d`.
+- Run `bun run intellidealer:production:smoke`.
+- Confirm no staging leftovers or import storage leftovers remain.
+- Record current production bundle and deploy evidence.
+
+Gate:
+
+- Production verification passes with zero import errors, expected counts, and no sensitive card leakage.
+
+### Slice 5: UI Completion Review
+
+Goal: verify the user-facing workflow, not just data presence.
+
+Deliverables:
+
+- Account 360 imported customer walkthrough.
+- Companies legacy-number search walkthrough.
+- Company editor safe-field persistence walkthrough.
+- Contact editor safe-field persistence walkthrough.
+- Admin import dashboard export/preview/stage/commit/discard control walkthrough.
+- Mobile Account 360 walkthrough.
+
+Gate:
+
+- A rep/admin can operate the imported customer data without database access.
+
+### Slice 6: Non-Core API Type Hardening
+
+Goal: reduce runtime risk from stale Supabase row assumptions.
+
+Deliverables:
+
+- Normalize remaining high-risk QRM/admin API row shapes.
+- Add unit tests for each normalizer.
+- Leave metadata-only casts only where documented as low risk.
+
+Gate:
+
+- No core customer or Account 360 path depends on unchecked raw row shape assumptions.
+
+### Slice 7: Wave 5 Deferred Integration Register
+
+Goal: make deferred external dependencies explicit.
+
+Deliverables:
+
+- One register row each for AvaTax, VESign, UPS WorldShip, JD Quote II, OEM base/options imports, and Tethr.
+- For each row: credentials needed, owner, target UI, schema status, API dependency, test plan, and cutover impact.
+
+Gate:
+
+- Deferred work is intentionally parked with owners and prerequisites, not lost.
+
+### Slice 8: Final Signoff Pack
+
+Goal: close the handoff with one evidence bundle.
+
+Deliverables:
+
+- This closeout control document updated with final statuses.
+- Regenerated gap inventory.
+- Source custody manifest.
+- Fresh production verification output.
+- UI smoke evidence.
+- Deferred integration register.
+- Rerun and rollback procedure.
+
+Gate:
+
+- The repo can answer what is live, what data is in production, what was verified, what is deferred, and what remains.
