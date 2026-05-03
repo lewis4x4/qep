@@ -72,6 +72,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Parts purchase-order pages | Purchase-order list/detail pages used local Supabase client shims and trusted vendor, header, line, touchpoint, equipment model, and attachment query payloads. | Added purchase-order normalizers with status/type validation, numeric-string coercion, joined vendor/company normalization, equipment/attachment filtering, and malformed-row rejection; removed local Supabase client shims from the pages. |
 | Parts local cast cleanup | Remaining parts feature casts were local/browser shims: Web Speech API globals, a detail-page joined-row display helper, and an empty-array return cast. | Replaced speech globals with typed `Window` augmentation, replaced detail display casts with unknown-safe helpers, typed the part-activity query result, and verified the parts feature direct-cast scan is empty. |
 | Admin Base Options API | Base/options model and attachment reads cast query results directly before option counting, compatible attachment lookup, and bulk repricing. | Added exported admin base/options normalizers with required field checks, joined brand array/object normalization, numeric-string coercion, compatible-model ID cleanup, malformed-row filtering, and safe boolean defaults. |
+| Admin sheet watchdog API | Price-sheet source list/get/upsert and recent event queries cast raw watchdog rows directly before the admin watchdog health UI consumed them. | Added exported sheet source, joined-brand source, and watch-event normalizers with required field checks, event-type validation, numeric-string coercion, JSON-detail validation, malformed-row filtering, and safe nullable numeric handling. |
 
 ## Verification
 
@@ -200,7 +201,8 @@ Results:
 - Quote review workflow normalizer tests: `3 pass`, `0 fail`.
 - Equipment row/lifecycle tests: `9 pass`, `0 fail`.
 - Admin Base Options API normalizer tests: `4 pass`, `0 fail`.
-- Combined targeted test run: `420 pass`, `0 fail`.
+- Admin sheet watchdog API tests: `22 pass`, `0 fail`.
+- Combined targeted test run: `442 pass`, `0 fail`.
 - Web typecheck: PASS.
 - Service feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 - Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.

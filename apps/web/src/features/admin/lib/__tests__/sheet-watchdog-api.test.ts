@@ -3,6 +3,9 @@ import {
   detectHashChange,
   formatLastChecked,
   isOverdue,
+  normalizeSheetSourceRows,
+  normalizeSheetSourceWithBrandRows,
+  normalizeSheetWatchEventRows,
   summarizeSourceHealth,
   type SheetSourceRow,
   type SheetWatchEventRow,
@@ -45,6 +48,99 @@ function evt(
     created_at:    partial.created_at ?? "2026-04-19T00:00:00Z",
   };
 }
+
+describe("sheet watchdog row normalizers", () => {
+  test("normalizes sources with numeric strings and safe nullable fields", () => {
+    expect(normalizeSheetSourceRows([
+      {
+        id: "source-1",
+        workspace_id: "default",
+        brand_id: "brand-1",
+        label: "ASV book",
+        url: "https://example.com/asv.pdf",
+        check_freq_hours: "24",
+        last_checked_at: "2026-04-20T00:00:00Z",
+        last_hash: "abc",
+        last_etag: 42,
+        last_http_status: "200",
+        last_error: null,
+        consecutive_failures: "2",
+        notes: "watch weekly",
+        active: true,
+        created_by: "user-1",
+        created_at: "2026-04-01T00:00:00Z",
+        updated_at: "2026-04-02T00:00:00Z",
+      },
+    ])).toEqual([
+      {
+        id: "source-1",
+        workspace_id: "default",
+        brand_id: "brand-1",
+        label: "ASV book",
+        url: "https://example.com/asv.pdf",
+        check_freq_hours: 24,
+        last_checked_at: "2026-04-20T00:00:00Z",
+        last_hash: "abc",
+        last_etag: null,
+        last_http_status: 200,
+        last_error: null,
+        consecutive_failures: 2,
+        notes: "watch weekly",
+        active: true,
+        created_by: "user-1",
+        created_at: "2026-04-01T00:00:00Z",
+        updated_at: "2026-04-02T00:00:00Z",
+      },
+    ]);
+  });
+
+  test("normalizes joined brand rows and filters malformed sources", () => {
+    expect(normalizeSheetSourceWithBrandRows([
+      {
+        ...src({ id: "source-2", brand_id: "brand-2" }),
+        qb_brands: [{ id: "brand-2", name: "Barko", code: "BARKO" }],
+      },
+      { id: "missing-required-fields", qb_brands: { name: "Bad", code: "BAD" } },
+    ])).toEqual([
+      {
+        ...src({ id: "source-2", brand_id: "brand-2" }),
+        brand_name: "Barko",
+        brand_code: "BARKO",
+      },
+    ]);
+  });
+
+  test("normalizes event rows and rejects unknown event types", () => {
+    expect(normalizeSheetWatchEventRows([
+      {
+        id: "event-1",
+        workspace_id: "default",
+        source_id: "source-1",
+        event_type: "change_detected",
+        detail: { hash: "abc", nested: [1, "ok", null] },
+        price_sheet_id: "sheet-1",
+        created_at: "2026-04-20T00:00:00Z",
+      },
+      {
+        id: "event-2",
+        workspace_id: "default",
+        source_id: "source-1",
+        event_type: "not_real",
+        created_at: "2026-04-20T00:00:00Z",
+      },
+    ])).toEqual([
+      {
+        id: "event-1",
+        workspace_id: "default",
+        source_id: "source-1",
+        event_type: "change_detected",
+        detail: { hash: "abc", nested: [1, "ok", null] },
+        price_sheet_id: "sheet-1",
+        created_at: "2026-04-20T00:00:00Z",
+      },
+    ]);
+  });
+});
 
 // ── detectHashChange ─────────────────────────────────────────────────────
 

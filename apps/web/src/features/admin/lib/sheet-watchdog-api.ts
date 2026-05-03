@@ -54,6 +54,125 @@ export interface SourceHealth {
   lastSuccessAt: string | null;
 }
 
+const SHEET_EVENT_TYPES = [
+  "checked_unchanged",
+  "change_detected",
+  "sheet_extracted",
+  "error",
+  "manual_trigger",
+] as const satisfies readonly SheetEventType[];
+const SHEET_EVENT_TYPE_SET: ReadonlySet<string> = new Set(SHEET_EVENT_TYPES);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function requiredString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function numberOrZero(value: unknown): number {
+  return numberOrNull(value) ?? 0;
+}
+
+function isSheetEventType(value: unknown): value is SheetEventType {
+  return typeof value === "string" && SHEET_EVENT_TYPE_SET.has(value);
+}
+
+function isJsonValue(value: unknown): value is NonNullable<SheetWatchEventRow["detail"]> {
+  if (value === null) return false;
+  if (["string", "number", "boolean"].includes(typeof value)) return true;
+  if (Array.isArray(value)) return value.every((item) => item === null || isJsonValue(item));
+  if (!isRecord(value)) return false;
+  return Object.values(value).every((item) => item === null || isJsonValue(item));
+}
+
+function normalizeBrandJoin(value: unknown): { brand_name: string | null; brand_code: string | null } {
+  const brand = Array.isArray(value) ? value.find(isRecord) : value;
+  if (!isRecord(brand)) return { brand_name: null, brand_code: null };
+  return {
+    brand_name: stringOrNull(brand.name),
+    brand_code: stringOrNull(brand.code),
+  };
+}
+
+export function normalizeSheetSourceRows(value: unknown): SheetSourceRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const workspaceId = requiredString(row.workspace_id);
+    const brandId = requiredString(row.brand_id);
+    const label = requiredString(row.label);
+    const createdAt = requiredString(row.created_at);
+    const updatedAt = requiredString(row.updated_at);
+    if (!id || !workspaceId || !brandId || !label || !createdAt || !updatedAt) return [];
+    return [{
+      id,
+      workspace_id: workspaceId,
+      brand_id: brandId,
+      label,
+      url: stringOrNull(row.url),
+      check_freq_hours: numberOrZero(row.check_freq_hours),
+      last_checked_at: stringOrNull(row.last_checked_at),
+      last_hash: stringOrNull(row.last_hash),
+      last_etag: stringOrNull(row.last_etag),
+      last_http_status: numberOrNull(row.last_http_status),
+      last_error: stringOrNull(row.last_error),
+      consecutive_failures: numberOrZero(row.consecutive_failures),
+      notes: stringOrNull(row.notes),
+      active: row.active === true,
+      created_by: stringOrNull(row.created_by),
+      created_at: createdAt,
+      updated_at: updatedAt,
+    }];
+  });
+}
+
+export function normalizeSheetSourceWithBrandRows(value: unknown): SheetSourceWithBrand[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    const [source] = normalizeSheetSourceRows([row]);
+    if (!source || !isRecord(row)) return [];
+    return [{
+      ...source,
+      ...normalizeBrandJoin(row.qb_brands),
+    }];
+  });
+}
+
+export function normalizeSheetWatchEventRows(value: unknown): SheetWatchEventRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const workspaceId = requiredString(row.workspace_id);
+    const sourceId = requiredString(row.source_id);
+    const createdAt = requiredString(row.created_at);
+    if (!id || !workspaceId || !sourceId || !createdAt || !isSheetEventType(row.event_type)) return [];
+    return [{
+      id,
+      workspace_id: workspaceId,
+      source_id: sourceId,
+      event_type: row.event_type,
+      detail: isJsonValue(row.detail) ? row.detail : null,
+      price_sheet_id: stringOrNull(row.price_sheet_id),
+      created_at: createdAt,
+    }];
+  });
+}
+
 // ── Sources CRUD ─────────────────────────────────────────────────────────
 
 /**
@@ -67,13 +186,7 @@ export async function listSources(): Promise<SheetSourceWithBrand[]> {
     .order("brand_id", { ascending: true })
     .order("label", { ascending: true });
   if (error || !data) return [];
-  return (data as Array<SheetSourceRow & { qb_brands: { id: string; name: string; code: string } | null }>).map(
-    (row) => ({
-      ...row,
-      brand_name: row.qb_brands?.name ?? null,
-      brand_code: row.qb_brands?.code ?? null,
-    }),
-  );
+  return normalizeSheetSourceWithBrandRows(data);
 }
 
 export async function getSource(id: string): Promise<SheetSourceRow | null> {
@@ -82,7 +195,7 @@ export async function getSource(id: string): Promise<SheetSourceRow | null> {
     .select("*")
     .eq("id", id)
     .maybeSingle();
-  return (data as SheetSourceRow | null) ?? null;
+  return normalizeSheetSourceRows(data ? [data] : [])[0] ?? null;
 }
 
 export async function upsertSource(input: {
@@ -130,7 +243,9 @@ export async function upsertSource(input: {
     .select("*")
     .single();
   if (error || !data) return { error: error?.message ?? "Failed to save source" };
-  return { ok: true, row: data as SheetSourceRow };
+  const row = normalizeSheetSourceRows([data])[0];
+  if (!row) return { error: "Saved source returned malformed row" };
+  return { ok: true, row };
 }
 
 export async function deleteSource(id: string): Promise<{ ok: true } | { error: string }> {
@@ -163,7 +278,7 @@ export async function listRecentEvents(
     .eq("source_id", sourceId)
     .order("created_at", { ascending: false })
     .limit(limit);
-  return (data ?? []) as SheetWatchEventRow[];
+  return normalizeSheetWatchEventRows(data);
 }
 
 export async function listRecentEventsForWorkspace(
@@ -174,7 +289,7 @@ export async function listRecentEventsForWorkspace(
     .select("*")
     .order("created_at", { ascending: false })
     .limit(limit);
-  return (data ?? []) as SheetWatchEventRow[];
+  return normalizeSheetWatchEventRows(data);
 }
 
 /**
