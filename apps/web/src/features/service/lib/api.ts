@@ -4,35 +4,51 @@ import type {
   ServiceListFilters,
   ServiceListResponse,
 } from "./types";
+import {
+  normalizeBillingPostResult,
+  normalizeCalendarSlotsResult,
+  normalizeLinkFulfillmentRunPayload,
+  normalizePartsPopulateResult,
+  normalizeReassignFromBranchPoolResult,
+  normalizeResyncPartsResult,
+  normalizeSearchPortalOrdersResponse,
+  normalizeServiceJobResponse,
+  normalizeServiceListResponse,
+  type BillingPostResult,
+  type CalendarSlotsResult,
+  type PortalOrderSearchRow,
+  type ReassignFromBranchPoolResult,
+  type ResyncPartsResult,
+} from "./service-api-normalizers";
 
-async function invoke<T>(body: Record<string, unknown>): Promise<T> {
+async function invokeServiceRouter(body: Record<string, unknown>): Promise<unknown> {
   const { data, error } = await supabase.functions.invoke("service-job-router", {
     body,
   });
   if (error) throw new Error(error.message ?? "Service router error");
-  return data as T;
+  return data;
 }
 
 export async function createServiceJob(
   payload: Record<string, unknown>,
 ): Promise<ServiceJobWithRelations> {
-  const result = await invoke<{ job: ServiceJobWithRelations }>({
+  const result = await invokeServiceRouter({
     action: "create",
     ...payload,
   });
-  return result.job;
+  return normalizeServiceJobResponse(result);
 }
 
 export async function updateServiceJob(
   id: string,
   fields: Record<string, unknown>,
 ): Promise<ServiceJobWithRelations> {
-  const result = await invoke<{ job: ServiceJobWithRelations }>({
+  const result = await invokeServiceRouter({
     action: "update",
     id,
     ...fields,
   });
-  return result.job;
+  return normalizeServiceJobResponse(result);
 }
 
 export async function transitionServiceJob(
@@ -40,32 +56,33 @@ export async function transitionServiceJob(
   toStage: string,
   blockerInfo?: { blocker_type: string; blocker_description?: string },
 ): Promise<ServiceJobWithRelations> {
-  const result = await invoke<{ job: ServiceJobWithRelations }>({
+  const result = await invokeServiceRouter({
     action: "transition",
     id,
     to_stage: toStage,
     ...blockerInfo,
   });
-  return result.job;
+  return normalizeServiceJobResponse(result);
 }
 
 export async function getServiceJob(
   id: string,
 ): Promise<ServiceJobWithRelations> {
-  const result = await invoke<{ job: ServiceJobWithRelations }>({
+  const result = await invokeServiceRouter({
     action: "get",
     id,
   });
-  return result.job;
+  return normalizeServiceJobResponse(result);
 }
 
 export async function listServiceJobs(
   filters: ServiceListFilters = {},
 ): Promise<ServiceListResponse> {
-  return invoke<ServiceListResponse>({
+  const result = await invokeServiceRouter({
     action: "list",
     ...filters,
   });
+  return normalizeServiceListResponse(result);
 }
 
 export async function populatePartsFromJobCode(jobId: string): Promise<{ populated: number }> {
@@ -73,8 +90,7 @@ export async function populatePartsFromJobCode(jobId: string): Promise<{ populat
     body: { action: "populate_parts", job_id: jobId },
   });
   if (error) throw new Error(error.message ?? "populate_parts failed");
-  const d = data as { populated?: number };
-  return { populated: d.populated ?? 0 };
+  return normalizePartsPopulateResult(data);
 }
 
 export async function planPartsFulfillment(jobId: string): Promise<unknown> {
@@ -106,24 +122,12 @@ export async function acceptPartsIntakeLine(requirementId: string): Promise<unkn
 /** Post draft consumed-parts staging lines to a pending customer_invoices for the job (P1-A). */
 export async function postInternalBillingToInvoice(
   serviceJobId: string,
-): Promise<{
-  ok?: boolean;
-  customer_invoice_id?: string;
-  lines_posted?: number;
-  invoice_total?: number;
-  error?: string;
-}> {
+): Promise<BillingPostResult> {
   const { data, error } = await supabase.functions.invoke("service-billing-post", {
     body: { service_job_id: serviceJobId },
   });
   if (error) throw new Error(error.message ?? "billing post failed");
-  return (data ?? {}) as {
-    ok?: boolean;
-    customer_invoice_id?: string;
-    lines_posted?: number;
-    invoice_total?: number;
-    error?: string;
-  };
+  return normalizeBillingPostResult(data);
 }
 
 export async function suggestTechnicians(jobId: string): Promise<unknown> {
@@ -162,71 +166,62 @@ export async function fetchPublicJobStatus(
 export async function resyncPartsFromJobCode(
   jobId: string,
   mode: "replace_cancelled_only" | "full" = "replace_cancelled_only",
-): Promise<{ inserted: number; cancelled: number; mode: string }> {
-  return invoke({
+): Promise<ResyncPartsResult> {
+  const result = await invokeServiceRouter({
     action: "resync_parts_from_job_code",
     job_id: jobId,
     mode,
   });
+  return normalizeResyncPartsResult(result);
 }
 
 export async function assignTechnicianToJob(
   jobId: string,
   technicianUserId: string,
 ): Promise<ServiceJobWithRelations> {
-  const result = await invoke<{ job: ServiceJobWithRelations }>({
+  const result = await invokeServiceRouter({
     action: "assign_technician",
     job_id: jobId,
     technician_user_id: technicianUserId,
   });
-  return result.job;
+  return normalizeServiceJobResponse(result);
 }
 
 export async function linkPortalRequestToJob(
   jobId: string,
   portalRequestId: string,
 ): Promise<ServiceJobWithRelations> {
-  const result = await invoke<{ job: ServiceJobWithRelations }>({
+  const result = await invokeServiceRouter({
     action: "link_portal_request",
     job_id: jobId,
     portal_request_id: portalRequestId,
   });
-  return result.job;
+  return normalizeServiceJobResponse(result);
 }
 
 export async function unlinkPortalRequestFromJob(
   jobId: string,
 ): Promise<ServiceJobWithRelations> {
-  const result = await invoke<{ job: ServiceJobWithRelations }>({
+  const result = await invokeServiceRouter({
     action: "unlink_portal_request",
     job_id: jobId,
   });
-  return result.job;
+  return normalizeServiceJobResponse(result);
 }
 
-export type PortalOrderSearchRow = {
-  id: string;
-  status: string;
-  fulfillment_run_id: string | null;
-  created_at: string;
-  portal_customers: {
-    first_name: string;
-    last_name: string;
-    email: string;
-  } | null;
-};
+export type { PortalOrderSearchRow } from "./service-api-normalizers";
 
 /** Server-backed search (RPC); requires job context for workspace. */
 export async function searchPortalOrdersForJob(
   jobId: string,
   q: string,
 ): Promise<PortalOrderSearchRow[]> {
-  const result = await invoke<{ orders: PortalOrderSearchRow[] }>({
+  const result = await invokeServiceRouter({
     action: "search_portal_orders",
     job_id: jobId,
     q: q.trim(),
   });
-  return result.orders ?? [];
+  return normalizeSearchPortalOrdersResponse(result);
 }
 
 /** Thrown when linking would attach a second job to a run unless explicitly acknowledged. */
@@ -258,20 +253,13 @@ export async function linkFulfillmentRunToJob(
     },
   });
 
-  const payload = data as
-    | {
-        job?: ServiceJobWithRelations;
-        error?: string;
-        code?: string;
-        other_job_ids?: string[];
-      }
-    | null;
+  const payload = normalizeLinkFulfillmentRunPayload(data);
 
-  if (payload?.code === "shared_fulfillment_run") {
+  if (payload.code === "shared_fulfillment_run") {
     throw new SharedFulfillmentRunError(
       payload.error ??
         "Another service job is already linked to this fulfillment run.",
-      Array.isArray(payload.other_job_ids) ? payload.other_job_ids : [],
+      payload.other_job_ids,
     );
   }
 
@@ -279,11 +267,11 @@ export async function linkFulfillmentRunToJob(
     throw new Error(error.message ?? "Service router error");
   }
 
-  if (payload?.job) {
+  if (payload.job) {
     return payload.job;
   }
 
-  throw new Error(payload?.error ?? "Link fulfillment run failed");
+  throw new Error(payload.error ?? "Link fulfillment run failed");
 }
 
 /** Admin/manager: reassign open jobs from a user to the next UUID in branch pool (service_branch_config). */
@@ -291,12 +279,12 @@ export async function reassignFromBranchPool(payload: {
   branch_id: string;
   from_user_id: string;
   role: "advisor" | "technician";
-}): Promise<{ reassigned: number; replacement: string }> {
-  const result = await invoke<{ reassigned: number; replacement: string }>({
+}): Promise<ReassignFromBranchPoolResult> {
+  const result = await invokeServiceRouter({
     action: "reassign_pool",
     ...payload,
   });
-  return result;
+  return normalizeReassignFromBranchPoolResult(result);
 }
 
 /** Suggested appointment starts from branch business_hours (service-calendar-slots). */
@@ -304,10 +292,10 @@ export async function suggestCalendarSlots(body: {
   branch_id: string;
   from?: string;
   count?: number;
-}): Promise<{ slots: string[]; slot_minutes: number; branch_id: string }> {
+}): Promise<CalendarSlotsResult> {
   const { data, error } = await supabase.functions.invoke("service-calendar-slots", {
     body,
   });
   if (error) throw new Error(error.message ?? "Calendar slots failed");
-  return data as { slots: string[]; slot_minutes: number; branch_id: string };
+  return normalizeCalendarSlotsResult(data);
 }

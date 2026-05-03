@@ -26,6 +26,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Portal parts order service page | Internal portal parts order page mapped raw parts order rows through a record-list cast and local joined-row unwrapping. | Extended exported page normalizers with portal customer/fleet relation normalization, required order checks, malformed-row filtering, and safe nullable AI/shipping fields. |
 | Service parts requirement editor | Parts requirement editor cast Promise rejection results and latest shop-invoice query results directly. | Replaced the rejection cast with a type guard and added an exported shop-invoice summary normalizer for latest-invoice display rows. |
 | Service browser/local cast cleanup | Remaining service component casts included a Web Speech API window shim and service-job stage fallback cast. | Reused the existing global Web Speech API typing and replaced the stage cast with a runtime `SERVICE_STAGES` guard before transition lookup. |
+| Service API edge/router helpers | Shared service API helpers used a generic router cast and direct calendar-slot response cast, hiding malformed service job, list, portal order, fulfillment link, billing, resync, reassign, and calendar payloads. | Added exported service API response normalizers with required job checks, list filtering, portal order relation normalization, shared-fulfillment payload parsing, numeric-string coercion, and safe defaults for optional mutation results; removed the generic service API casts. |
 | Service InspectionPlus pages | Inspection list/detail pages used legacy Supabase client shims around inspection headers, findings, create, and update paths; the list tab keys also used a local cast. | Added exported inspection row/header/finding normalizers with status/approval/response validation, numeric-string coercion, malformed-row filtering, and direct generated Supabase client calls for read/create/update paths; replaced the tab cast with a typed constant. |
 | Executive shared data hook and metric drill drawer | Metric definitions, latest KPI snapshots, metric drill snapshot history, and analytics alerts were returned directly from unknown Supabase/RPC payloads. | Added exported exec normalizers with required field checks, role/status/severity/refresh-state validation, numeric-string coercion, string-array cleanup, metadata/config object guards, and reduced snapshot-history validation. |
 | Floor customer/serial/health widgets | Customer search, serial-first lookup, and customer-health list mapped raw query rows inline. | Added exported Floor widget normalizers for customer hits, equipment hits, and customer-health profiles with required ID checks, numeric-string coercion, joined company normalization, and health component guards. |
@@ -111,6 +112,7 @@ Results:
 - Service customer/equipment search and parts queue hook normalizer tests: `4 pass`, `0 fail`.
 - Service shop invoice, invoice summary, intake, and portal parts order page normalizer tests: `7 pass`, `0 fail`.
 - Service browser/local cast cleanup: covered by web typecheck and the service feature cast inventory scan.
+- Service API helper normalizer tests: `6 pass`, `0 fail`.
 - InspectionPlus utility/normalizer tests: `9 pass`, `0 fail`.
 - InspectionPlus page integration test: `1 pass`, `0 fail`.
 - Exec shared data and metric drill normalizer tests: `5 pass`, `0 fail`.
@@ -129,8 +131,9 @@ Results:
 - Portal row normalizer tests: `5 pass`, `0 fail`.
 - Parts row normalizer tests: `15 pass`, `0 fail`.
 - Parts purchase-order utility/normalizer tests: `9 pass`, `0 fail`.
-- Combined targeted test run: `152 pass`, `0 fail`.
+- Combined targeted test run: `158 pass`, `0 fail`.
 - Web typecheck: PASS.
+- Service feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 - Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 
 ## Remaining Slice 6 Work
