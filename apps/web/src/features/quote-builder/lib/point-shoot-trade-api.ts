@@ -136,6 +136,143 @@ export interface BookValueRange {
   isSynthetic: boolean;
 }
 
+export interface ApplyTradeResult {
+  valuationId: string;
+  preliminaryValueCents: number;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeConfidence(value: unknown): "high" | "medium" | "low" {
+  const normalized = typeof value === "string" ? value.toLowerCase() : "";
+  return normalized === "high" ? "high" : normalized === "medium" ? "medium" : "low";
+}
+
+function normalizeConditionOverall(value: unknown): PointShootIdentification["conditionOverall"] {
+  const normalized = typeof value === "string" ? value.toLowerCase() : "";
+  return normalized === "excellent" || normalized === "good" || normalized === "fair" || normalized === "poor"
+    ? normalized
+    : "unknown";
+}
+
+function normalizeBookValueSourceKind(value: unknown): BookValueSourceKind {
+  return value === "market_valuation"
+    || value === "auction_comps"
+    || value === "competitor_listings"
+    || value === "synthetic_iron_planet"
+    || value === "synthetic_ritchie_bros"
+    || value === "synthetic_internal_history"
+    ? value
+    : "market_valuation";
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const text = firstString(item);
+    return text ? [text] : [];
+  });
+}
+
+function parseYear(value: unknown): number | null {
+  const raw = typeof value === "string" || typeof value === "number" ? String(value) : "";
+  const yearNum = raw ? parseInt(raw.replace(/[^\d]/g, "").slice(0, 4), 10) : NaN;
+  return Number.isFinite(yearNum) && yearNum > 1900 ? yearNum : null;
+}
+
+export function normalizePointShootIdentificationPayload(payload: unknown): PointShootIdentification {
+  const record = isRecord(payload) ? payload : {};
+  const analysis = isRecord(record.analysis) ? record.analysis : {};
+  const equipment = isRecord(analysis.equipment) ? analysis.equipment : {};
+  const condition = isRecord(analysis.condition) ? analysis.condition : {};
+
+  return {
+    make: firstString(equipment.make),
+    model: firstString(equipment.model),
+    year: parseYear(equipment.year),
+    category: firstString(equipment.category),
+    conditionOverall: normalizeConditionOverall(condition.overall),
+    conditionSummary: firstString(analysis.description) ?? "",
+    confidence: normalizeConfidence(analysis.identification_confidence),
+    hoursEstimate: parseHours(nullableString(condition.hours_estimate)),
+    potentialIssues: normalizeStringArray(analysis.potential_issues),
+    photoUrl: nullableString(record.image_url),
+  };
+}
+
+export function normalizeBookValueSources(value: unknown): BookValueSource[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const name = firstString(row.name);
+    const valueCents = numberOrNull(row.value_cents);
+    if (!name || valueCents == null) return [];
+    return [{
+      kind: normalizeBookValueSourceKind(row.kind),
+      name,
+      value_cents: valueCents,
+      low_cents: numberOrNull(row.low_cents),
+      high_cents: numberOrNull(row.high_cents),
+      confidence: normalizeConfidence(row.confidence),
+      sample_size: numberOrNull(row.sample_size),
+      as_of: nullableString(row.as_of),
+      detail: nullableString(row.detail),
+    }];
+  });
+}
+
+export function normalizeBookValueRangePayload(payload: unknown): BookValueRange {
+  const record = isRecord(payload) ? payload : {};
+  return {
+    make: firstString(record.make) ?? "",
+    model: firstString(record.model) ?? "",
+    year: numberOrNull(record.year),
+    hours: numberOrNull(record.hours),
+    lowCents: numberOrNull(record.low_cents) ?? 0,
+    midCents: numberOrNull(record.mid_cents) ?? 0,
+    highCents: numberOrNull(record.high_cents) ?? 0,
+    confidence: normalizeConfidence(record.confidence),
+    sources: normalizeBookValueSources(record.sources),
+    isSynthetic: record.is_synthetic === true,
+  };
+}
+
+export function normalizeApplyTradeResultPayload(
+  payload: unknown,
+  fallbackPreliminaryValueCents: number,
+): ApplyTradeResult {
+  const record = isRecord(payload) ? payload : {};
+  const valuation = isRecord(record.valuation) ? record.valuation : {};
+  const id = firstString(valuation.id);
+  if (!id) throw new Error("Trade valuation response missing id");
+  const preliminaryValue = numberOrNull(valuation.preliminary_value);
+  return {
+    valuationId: id,
+    preliminaryValueCents: Math.round(
+      preliminaryValue == null ? fallbackPreliminaryValueCents : preliminaryValue * 100,
+    ),
+  };
+}
+
 // ── Photo → identification ───────────────────────────────────────────────
 
 /**
@@ -179,36 +316,7 @@ export async function identifyEquipmentFromPhoto(file: File): Promise<PointShoot
     },
     body: JSON.stringify({ image_base64: base64, mime_type: mime }),
   }, "equipment identification");
-  const payload = await res.json() as {
-    analysis?: {
-      equipment?: { make?: string | null; model?: string | null; year?: string | null; category?: string | null };
-      condition?: { overall?: string; hours_estimate?: string | null };
-      identification_confidence?: string;
-      description?: string;
-      potential_issues?: string[];
-    };
-    image_url?: string | null;
-  };
-  const a = payload.analysis ?? {};
-  const yearStr = a.equipment?.year ?? null;
-  const yearNum = yearStr ? parseInt(yearStr.replace(/[^\d]/g, "").slice(0, 4), 10) : NaN;
-  const overall = (a.condition?.overall ?? "unknown").toLowerCase();
-  const confidence = (a.identification_confidence ?? "low").toLowerCase();
-
-  return {
-    make:  a.equipment?.make  ?? null,
-    model: a.equipment?.model ?? null,
-    year:  Number.isFinite(yearNum) && yearNum > 1900 ? yearNum : null,
-    category: a.equipment?.category ?? null,
-    conditionOverall: ["excellent", "good", "fair", "poor"].includes(overall)
-      ? (overall as "excellent" | "good" | "fair" | "poor")
-      : "unknown",
-    conditionSummary: a.description ?? "",
-    confidence: confidence === "high" ? "high" : confidence === "medium" ? "medium" : "low",
-    hoursEstimate: parseHours(a.condition?.hours_estimate ?? null),
-    potentialIssues: Array.isArray(a.potential_issues) ? a.potential_issues : [],
-    photoUrl: payload.image_url ?? null,
-  };
+  return normalizePointShootIdentificationPayload(await res.json().catch(() => ({})));
 }
 
 // ── Book value range ─────────────────────────────────────────────────────
@@ -227,30 +335,7 @@ export async function fetchBookValueRange(input: {
     },
     body: JSON.stringify(input),
   }, "book-value lookup");
-  const p = await res.json() as {
-    make: string;
-    model: string;
-    year: number | null;
-    hours: number | null;
-    low_cents: number;
-    mid_cents: number;
-    high_cents: number;
-    confidence: "high" | "medium" | "low";
-    sources: BookValueSource[];
-    is_synthetic: boolean;
-  };
-  return {
-    make: p.make,
-    model: p.model,
-    year: p.year,
-    hours: p.hours,
-    lowCents:  p.low_cents,
-    midCents:  p.mid_cents,
-    highCents: p.high_cents,
-    confidence: p.confidence,
-    sources: p.sources ?? [],
-    isSynthetic: Boolean(p.is_synthetic),
-  };
+  return normalizeBookValueRangePayload(await res.json().catch(() => ({})));
 }
 
 // ── Apply: create the trade_valuations row ───────────────────────────────
@@ -265,11 +350,6 @@ export interface ApplyTradeInput {
   conditionOverall: PointShootIdentification["conditionOverall"];
   bookValue: BookValueRange;
   allowanceDollars: number; // what the rep is offering (derived from midCents by default)
-}
-
-export interface ApplyTradeResult {
-  valuationId: string;
-  preliminaryValueCents: number;
 }
 
 export async function applyPointShootTrade(input: ApplyTradeInput): Promise<ApplyTradeResult> {
@@ -302,15 +382,6 @@ export async function applyPointShootTrade(input: ApplyTradeInput): Promise<Appl
       operational_status: operationalStatus,
     }),
   }, "trade apply");
-  const payload = await res.json() as {
-    valuation?: {
-      id: string;
-      preliminary_value: number | null;
-    };
-  };
-  const v = payload.valuation;
-  if (!v?.id) throw new Error("Trade valuation response missing id");
-
   // Patch the row with our multi-source comps + auction_value from our
   // computed midpoint. We write cents → dollars for compatibility with
   // the existing numeric columns.
@@ -323,6 +394,10 @@ export async function applyPointShootTrade(input: ApplyTradeInput): Promise<Appl
   // Coach / manager approval UI can consume the extra fields when
   // upgraded. Aggregate bounds + meta go in a sidecar last-element.
   const auctionDollars = input.bookValue.midCents / 100;
+  const applyResult = normalizeApplyTradeResultPayload(
+    await res.json().catch(() => ({})),
+    Math.round(auctionDollars * 0.92 * 100),
+  );
   const compsArray = [
     ...input.bookValue.sources.map((s) => ({
       source: s.name,
@@ -351,10 +426,7 @@ export async function applyPointShootTrade(input: ApplyTradeInput): Promise<Appl
       auction_value: auctionDollars,
       market_comps: compsArray,
     })
-    .eq("id", v.id);
+    .eq("id", applyResult.valuationId);
 
-  return {
-    valuationId: v.id,
-    preliminaryValueCents: Math.round((v.preliminary_value ?? auctionDollars * 0.92) * 100),
-  };
+  return applyResult;
 }
