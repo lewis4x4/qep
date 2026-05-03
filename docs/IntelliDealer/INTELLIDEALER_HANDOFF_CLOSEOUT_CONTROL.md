@@ -24,6 +24,7 @@ If another document conflicts with this one, treat this document as the current 
 | Wave 5 external integrations | Deferred, not complete | `_migration_order.md` Wave 5 status | AvaTax live wiring, VESign, UPS WorldShip, OEM imports, and Tethr are intentionally not marked complete. |
 | Audit manifest / YAML inventory | Regenerated 2026-05-03 | `docs/intellidealer-gap-audit/manifest.yaml`, `_blockers.csv`, phase YAMLs | The inventory now reflects the current `Database` type under a conservative table/column-exists rule. Remaining blocker count is `91` must-fix rows. |
 | Raw source file custody | Manifested 2026-05-03 | `SOURCE_FILE_CUSTODY_MANIFEST.md` | The raw files remain untracked, but filename, size, SHA-256, page counts, workbook row counts, and import run binding are now committed and script-verifiable. |
+| Fresh production verification | Passed 2026-05-03 | `FRESH_PRODUCTION_VERIFICATION_2026-05-03.md` | Rerun safety, production reconciliation, production browser smoke, storage cleanup, and active-run checks passed against the current production bundle. |
 
 ## Production Customer Import Baseline
 
@@ -77,7 +78,6 @@ These are not customer-import blockers, but they must not be represented as done
 - Wave 5 integrations are deferred until credentials and dealer-specific scope are available.
 - Remaining non-core raw Supabase row casts still need slice-by-slice normalization if the goal is broader API hardening.
 - The old `test-results/agent-gates/*` evidence referenced by `_migration_order.md` is not present in the current working tree; either recover those artifacts or replace them with fresh gate outputs.
-- A fresh production verification run should be captured after the latest deployed bundle before the final signoff pack is closed.
 
 ## Remaining Roadmap
 
@@ -140,6 +140,8 @@ Gate:
 
 ### Slice 4: Fresh Production Verification
 
+Status: complete 2026-05-03.
+
 Goal: prove production still matches the signed-off customer handoff after later code/deploy work.
 
 Deliverables:
@@ -147,12 +149,12 @@ Deliverables:
 - Run `bun run intellidealer:customer:rerun-check`.
 - Run `bun run intellidealer:customer:verify -- df74305e-d37a-4e4b-be5e-457633b2cd1d`.
 - Run `bun run intellidealer:production:smoke`.
-- Confirm no staging leftovers or import storage leftovers remain.
-- Record current production bundle and deploy evidence.
+- Confirm no active import runs or import storage leftovers remain.
+- Record current production bundle evidence.
 
 Gate:
 
-- Production verification passes with zero import errors, expected counts, and no sensitive card leakage.
+- PASS. Production verification passed with zero import errors, expected counts, no raw A/R card rows, no active import runs, no import storage leftovers, and production bundle `/assets/index-BMAFIJPs.js`.
 
 ### Slice 5: UI Completion Review
 
