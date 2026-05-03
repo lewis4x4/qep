@@ -1,6 +1,7 @@
 import { crmSupabase } from "./qrm-supabase";
 import { dealCompositeQueryKey } from "./deal-composite-keys";
-import type { Cadence, CadenceTouchpoint, QrmDealDemoSummary, NeedsAssessment } from "./deal-composite-types";
+import { normalizeCadenceRows } from "./cadences";
+import type { Cadence, QrmDealDemoSummary, NeedsAssessment } from "./deal-composite-types";
 import type { QrmActivityItem, QrmCompanySummary, QrmContactSummary, QrmDealLossFields, QrmRepSafeDeal } from "./types";
 
 export { dealCompositeQueryKey } from "./deal-composite-keys";
@@ -142,28 +143,6 @@ function mapActivityFromJson(row: Record<string, unknown>): QrmActivityItem {
   };
 }
 
-function normalizeCadence(raw: Record<string, unknown>): Cadence {
-  const tp = raw.touchpoints ?? raw.follow_up_touchpoints;
-  const touchpoints = Array.isArray(tp) ? tp : [];
-  return {
-    id: raw.id as string,
-    cadence_type: raw.cadence_type as Cadence["cadence_type"],
-    status: raw.status as string,
-    started_at: raw.started_at as string,
-    follow_up_touchpoints: touchpoints.filter(isRecord).map((t) => ({
-      id: t.id as string,
-      touchpoint_type: t.touchpoint_type as string,
-      scheduled_date: t.scheduled_date as string,
-      purpose: t.purpose as string,
-      suggested_message: (t.suggested_message as string | null) ?? null,
-      value_type: (t.value_type as string | null) ?? null,
-      status: t.status as CadenceTouchpoint["status"],
-      completed_at: (t.completed_at as string | null) ?? null,
-      delivery_method: (t.delivery_method as string | null) ?? null,
-    })),
-  };
-}
-
 function normalizeDemo(raw: Record<string, unknown>): QrmDealDemoSummary {
   return {
     id: raw.id as string,
@@ -254,7 +233,7 @@ export async function fetchDealComposite(dealId: string): Promise<DealCompositeB
       }
     : { lossReason: null, competitor: null };
 
-  const cadences: Cadence[] = toRecordArray(cadencesJson).map((c) => normalizeCadence(c));
+  const cadences = normalizeCadenceRows(cadencesJson);
 
   const demos: QrmDealDemoSummary[] = toRecordArray(demosJson).map((d) => normalizeDemo(d));
 
