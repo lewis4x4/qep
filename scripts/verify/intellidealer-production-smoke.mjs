@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { mkdirSync, statSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
 import { createClient } from "@supabase/supabase-js";
@@ -254,6 +254,32 @@ async function smokeAdminDashboard(context) {
   await page.getByRole("columnheader", { name: "Delta", exact: true }).waitFor({ timeout: 20_000 });
   await page.getByText("No import errors recorded", { exact: false }).waitFor({ timeout: 20_000 });
 
+  const arAgencyExportButton = page.getByRole("button", { name: "Export CSV", exact: true }).nth(3);
+  await arAgencyExportButton.waitFor({ timeout: 20_000 });
+  const downloadPromise = page.waitForEvent("download", { timeout: 120_000 });
+  await arAgencyExportButton.click();
+  const download = await downloadPromise;
+  const downloadPath = await download.path();
+  if (!downloadPath) throw new Error("A/R agencies safe CSV export did not produce a local download artifact.");
+
+  const suggestedFilename = download.suggestedFilename();
+  if (!suggestedFilename.includes("ar-agencies-safe")) {
+    throw new Error(`A/R agencies export used an unexpected filename: ${suggestedFilename}`);
+  }
+
+  const csvText = readFileSync(downloadPath, "utf8");
+  const csvHeader = csvText.split(/\r?\n/, 1)[0] ?? "";
+  if (!csvHeader.includes("agency_code")) {
+    throw new Error("A/R agencies safe CSV export is missing the agency_code column.");
+  }
+  if (/\b(card_number|raw_row|raw_source|source_json|raw_json|card_redaction_token)\b/i.test(csvHeader)) {
+    throw new Error(`A/R agencies safe CSV export exposed a sensitive/internal column: ${csvHeader}`);
+  }
+  if (/REDACTED:[a-f0-9]{64}/i.test(csvText)) {
+    throw new Error("A/R agencies safe CSV export leaked a stored card redaction token.");
+  }
+  await page.getByText("Exported", { exact: false }).waitFor({ timeout: 20_000 });
+
   const screenshot = resolve(artifactDir, "admin-intellidealer-imports.png");
   await page.screenshot({ path: screenshot, fullPage: true });
   const bytes = statSync(screenshot).size;
@@ -264,6 +290,13 @@ async function smokeAdminDashboard(context) {
     route: "/admin/intellidealer-imports",
     screenshot,
     bytes,
+    safe_export_download: {
+      suggested_filename: suggestedFilename,
+      bytes: Buffer.byteLength(csvText, "utf8"),
+      header: csvHeader,
+      row_count_including_header: csvText.trimEnd().split(/\r?\n/).length,
+      sensitive_columns_excluded: true,
+    },
     console_errors: consoleErrors.slice(0, 5),
   });
   await page.close();

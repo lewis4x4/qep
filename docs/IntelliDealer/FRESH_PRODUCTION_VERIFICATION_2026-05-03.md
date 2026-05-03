@@ -62,6 +62,7 @@ Browser smoke result:
 
 - Verdict: `PASS`
 - Visible redacted card rows: `4` desktop, `4` mobile
+- Safe A/R export download: `intellidealer-ar-agencies-safe-customer-master-df74305e.csv`, `19,467` CSV rows including header, no sensitive/internal columns, no stored card redaction tokens
 - Console errors: `0`
 
 ## Residual Notes

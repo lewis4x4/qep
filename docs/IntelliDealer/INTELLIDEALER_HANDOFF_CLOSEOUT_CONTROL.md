@@ -25,6 +25,7 @@ If another document conflicts with this one, treat this document as the current 
 | Audit manifest / YAML inventory | Regenerated 2026-05-03 | `docs/intellidealer-gap-audit/manifest.yaml`, `_blockers.csv`, phase YAMLs | The inventory now reflects the current `Database` type under a conservative table/column-exists rule. Remaining blocker count is `91` must-fix rows. |
 | Raw source file custody | Manifested 2026-05-03 | `SOURCE_FILE_CUSTODY_MANIFEST.md` | The raw files remain untracked, but filename, size, SHA-256, page counts, workbook row counts, and import run binding are now committed and script-verifiable. |
 | Fresh production verification | Passed 2026-05-03 | `FRESH_PRODUCTION_VERIFICATION_2026-05-03.md` | Rerun safety, production reconciliation, production browser smoke, storage cleanup, and active-run checks passed against the current production bundle. |
+| UI completion review | Passed 2026-05-03 | `UI_COMPLETION_REVIEW_2026-05-03.md` | Account 360, Companies search, company/contact editors, admin dashboard, safe export download, browser stage, preflight rejection, discard, and cleanup are verified. |
 
 ## Production Customer Import Baseline
 
@@ -158,6 +159,8 @@ Gate:
 
 ### Slice 5: UI Completion Review
 
+Status: complete 2026-05-03.
+
 Goal: verify the user-facing workflow, not just data presence.
 
 Deliverables:
@@ -171,7 +174,7 @@ Deliverables:
 
 Gate:
 
-- A rep/admin can operate the imported customer data without database access.
+- PASS. A rep/admin can operate the imported customer data without database access. The production smoke also downloads the safe A/R agencies CSV and proves sensitive/internal columns and stored card redaction tokens are excluded.
 
 ### Slice 6: Non-Core API Type Hardening
 
