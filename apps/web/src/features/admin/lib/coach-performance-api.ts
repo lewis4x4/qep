@@ -20,6 +20,14 @@ import { supabase } from "@/lib/supabase";
 import type { Database } from "@/lib/database.types";
 
 type ActionRow = Database["public"]["Tables"]["qb_deal_coach_actions"]["Row"];
+type CoachActionRollupRow = Pick<ActionRow, "rule_id" | "action" | "shown_by" | "shown_at" | "quote_package_id">;
+type PackageStatusRow = { id: string; status: string };
+type ProfileDisplayRow = {
+  id: string;
+  display_name: string | null;
+  full_name: string | null;
+  email: string | null;
+};
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -74,6 +82,65 @@ export interface CoachPerformanceSummary {
  */
 export const MAX_ACTION_ROWS = 5000;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function requiredString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function isValidDateString(value: string): boolean {
+  return Number.isFinite(new Date(value).getTime());
+}
+
+export function normalizeCoachActionRows(value: unknown): CoachActionRollupRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const ruleId = requiredString(row.rule_id);
+    const shownAt = requiredString(row.shown_at);
+    const quotePackageId = requiredString(row.quote_package_id);
+    if (!ruleId || !shownAt || !isValidDateString(shownAt) || !quotePackageId) return [];
+    return [{
+      rule_id: ruleId,
+      action: nullableString(row.action),
+      shown_by: nullableString(row.shown_by),
+      shown_at: shownAt,
+      quote_package_id: quotePackageId,
+    }];
+  });
+}
+
+export function normalizePackageStatusRows(value: unknown): PackageStatusRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const status = requiredString(row.status);
+    return id && status ? [{ id, status }] : [];
+  });
+}
+
+export function normalizeProfileDisplayRows(value: unknown): ProfileDisplayRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    if (!id) return [];
+    return [{
+      id,
+      display_name: nullableString(row.display_name),
+      full_name: nullableString(row.full_name),
+      email: nullableString(row.email),
+    }];
+  });
+}
+
 // ── Public API ───────────────────────────────────────────────────────────
 
 export async function getCoachPerformanceSummary(
@@ -104,8 +171,7 @@ export async function getCoachPerformanceSummary(
     return { ...emptyBase, error: actionsErr.message };
   }
 
-  const actionRows = ((actions ?? []) as Pick<ActionRow,
-    "rule_id" | "action" | "shown_by" | "shown_at" | "quote_package_id">[]);
+  const actionRows = normalizeCoachActionRows(actions);
 
   if (actionRows.length === 0) return emptyBase;
 
@@ -123,7 +189,7 @@ export async function getCoachPerformanceSummary(
   }
 
   const statusByPkg = new Map<string, string>();
-  for (const p of (pkgs ?? []) as { id: string; status: string }[]) {
+  for (const p of normalizePackageStatusRows(pkgs)) {
     statusByPkg.set(p.id, p.status);
   }
 
@@ -137,9 +203,7 @@ export async function getCoachPerformanceSummary(
       .in("id", repIds);
     // A profile fetch failure is non-fatal — we fall back to raw IDs.
     if (!profilesErr) {
-      for (const p of (profiles ?? []) as Array<{
-        id: string; display_name: string | null; full_name: string | null; email: string | null;
-      }>) {
+      for (const p of normalizeProfileDisplayRows(profiles)) {
         nameByRep.set(p.id, p.display_name ?? p.full_name ?? p.email ?? p.id);
       }
     }
@@ -152,7 +216,7 @@ export async function getCoachPerformanceSummary(
 // ── Pure aggregator (exported for tests) ─────────────────────────────────
 
 export function aggregateCoachPerformance(
-  actions: Array<Pick<ActionRow, "rule_id" | "action" | "shown_by" | "quote_package_id">>,
+  actions: Array<Pick<CoachActionRollupRow, "rule_id" | "action" | "shown_by" | "quote_package_id">>,
   statusByPkg: Map<string, string>,
   nameByRep: Map<string, string>,
   windowFrom: Date,

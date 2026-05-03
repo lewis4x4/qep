@@ -263,7 +263,8 @@ Current result:
 - Admin price-sheet dashboard and freight-zone rows now use exported normalizers before status cards, item counts, and coverage analysis consume them.
 - Admin sheet-diff pending/prior sheet rows, model extracted JSON, and in-flight quote rows now use exported normalizers before diff and quote-impact math consume them.
 - Admin AI request log rows and originating quote joins now use exported normalizers before admin stats and time-to-quote calculations consume them.
-- Targeted tests passed: `575 pass`, `0 fail`.
+- Admin coach performance action, package status, and rep profile rows now use exported normalizers before performance rollups and rep dismissal leaderboards consume them.
+- Targeted tests passed: `589 pass`, `0 fail`.
 - Web typecheck passed.
 - Service feature cast scan is clear for the Slice 6 inventory pattern.
 - Fleet feature cast scan is clear for the Slice 6 inventory pattern.

@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   aggregateCoachPerformance,
+  normalizeCoachActionRows,
+  normalizePackageStatusRows,
+  normalizeProfileDisplayRows,
   wouldDemoteAt,
   wouldSuppressAt,
   type RulePerformanceRow,
@@ -29,6 +32,50 @@ function build(
     windowTo,
   );
 }
+
+// ── Source row normalizers ───────────────────────────────────────────────
+
+describe("coach performance source normalizers", () => {
+  test("normalizes action rows and filters malformed rollup inputs", () => {
+    expect(normalizeCoachActionRows([
+      {
+        rule_id: "margin-floor",
+        action: "applied",
+        shown_by: "rep-1",
+        shown_at: "2026-04-20T12:00:00Z",
+        quote_package_id: "pkg-1",
+      },
+      { rule_id: "bad-date", shown_at: "not-a-date", quote_package_id: "pkg-2" },
+      { rule_id: "", shown_at: "2026-04-20T12:00:00Z", quote_package_id: "pkg-3" },
+      { rule_id: "missing-package", shown_at: "2026-04-20T12:00:00Z" },
+    ])).toEqual([
+      {
+        rule_id: "margin-floor",
+        action: "applied",
+        shown_by: "rep-1",
+        shown_at: "2026-04-20T12:00:00Z",
+        quote_package_id: "pkg-1",
+      },
+    ]);
+  });
+
+  test("normalizes package statuses and profile display rows", () => {
+    expect(normalizePackageStatusRows([
+      { id: "pkg-1", status: "accepted" },
+      { id: "pkg-2", status: "" },
+      { status: "rejected" },
+    ])).toEqual([{ id: "pkg-1", status: "accepted" }]);
+
+    expect(normalizeProfileDisplayRows([
+      { id: "rep-1", display_name: "Alice", full_name: "Alice Rep", email: "alice@example.com" },
+      { id: "rep-2", display_name: 42, full_name: null, email: "rep2@example.com" },
+      { display_name: "Missing id" },
+    ])).toEqual([
+      { id: "rep-1", display_name: "Alice", full_name: "Alice Rep", email: "alice@example.com" },
+      { id: "rep-2", display_name: null, full_name: null, email: "rep2@example.com" },
+    ]);
+  });
+});
 
 // ── aggregateCoachPerformance — empty + headline ─────────────────────────
 
