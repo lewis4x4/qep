@@ -12,31 +12,12 @@ import {
   INSPECTIONPLUS_TEMPLATES,
   buildInspectionFindingDrafts,
   makeInspectionNumber,
+  normalizeInspectionRows,
   templateByKey,
+  type InspectionRow,
+  type InspectionStatus,
   type InspectionTemplateDefinition,
 } from "../lib/inspectionplus-utils";
-
-type InspectionStatus = "draft" | "in_progress" | "completed" | "cancelled";
-
-type InspectionRow = {
-  id: string;
-  inspection_number: string;
-  title: string;
-  template_name: string | null;
-  inspection_type: string;
-  status: InspectionStatus;
-  stock_number: string | null;
-  reference_number: string | null;
-  customer_name: string | null;
-  machine_summary: string | null;
-  service_job_id: string | null;
-  assignee_name: string | null;
-  approver_name: string | null;
-  created_by: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  created_at: string;
-};
 
 const STATUS_STYLES: Record<InspectionStatus, string> = {
   draft: "bg-slate-500/10 text-slate-600 dark:text-slate-300",
@@ -46,6 +27,7 @@ const STATUS_STYLES: Record<InspectionStatus, string> = {
 };
 
 type TabKey = "active" | "history" | "mine";
+const TAB_KEYS: TabKey[] = ["active", "history", "mine"];
 
 function displayWhen(value: string | null): string {
   if (!value) return "Not started";
@@ -75,16 +57,12 @@ export function ServiceInspectionPlusPage() {
   const inspectionsQuery = useQuery({
     queryKey: ["service-inspections"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: InspectionRow[] | null; error: unknown }> };
-        };
-      })
+      const { data, error } = await supabase
         .from("service_inspections")
         .select("id, inspection_number, title, template_name, inspection_type, status, stock_number, reference_number, customer_name, machine_summary, service_job_id, assignee_name, approver_name, created_by, started_at, completed_at, created_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return normalizeInspectionRows(data);
     },
   });
 
@@ -130,15 +108,7 @@ export function ServiceInspectionPlusPage() {
         created_by: profile?.id ?? null,
       };
 
-      const headerResult = await (supabase as unknown as {
-        from: (table: string) => {
-          insert: (row: Record<string, unknown>) => {
-            select: (columns: string) => {
-              single: () => Promise<{ data: { id: string } | null; error: unknown }>;
-            };
-          };
-        };
-      })
+      const headerResult = await supabase
         .from("service_inspections")
         .insert(header)
         .select("id")
@@ -148,11 +118,7 @@ export function ServiceInspectionPlusPage() {
         throw headerResult.error ?? new Error("Failed to create inspection");
       }
 
-      const findingsResult = await (supabase as unknown as {
-        from: (table: string) => {
-          insert: (rows: Array<Record<string, unknown>>) => Promise<{ error: unknown }>;
-        };
-      })
+      const findingsResult = await supabase
         .from("service_inspection_findings")
         .insert(
           drafts.map((draft) => ({
@@ -326,7 +292,7 @@ export function ServiceInspectionPlusPage() {
             <h2 className="mt-1 text-lg font-semibold text-foreground">Active, history, and my forms</h2>
           </div>
           <div className="flex flex-wrap gap-2">
-            {(["active", "history", "mine"] as TabKey[]).map((key) => (
+            {TAB_KEYS.map((key) => (
               <button
                 key={key}
                 type="button"

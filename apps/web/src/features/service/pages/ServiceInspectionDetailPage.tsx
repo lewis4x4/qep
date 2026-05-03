@@ -7,44 +7,14 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { ServiceSubNav } from "../components/ServiceSubNav";
 import { useServiceJob, useServiceJobList } from "../hooks/useServiceJobs";
-import { groupInspectionFindings, summarizeInspectionFindings } from "../lib/inspectionplus-utils";
-
-type InspectionStatus = "draft" | "in_progress" | "completed" | "cancelled";
-type ApprovalStatus = "not_requested" | "pending" | "approved" | "returned";
-
-type InspectionHeader = {
-  id: string;
-  inspection_number: string;
-  title: string;
-  template_name: string | null;
-  inspection_type: string;
-  status: InspectionStatus;
-  stock_number: string | null;
-  reference_number: string | null;
-  customer_name: string | null;
-  machine_summary: string | null;
-  service_job_id: string | null;
-  assignee_name: string | null;
-  approver_name: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  approval_status: ApprovalStatus;
-  created_at: string;
-  cancellation_reason: string | null;
-};
-
-type InspectionFinding = {
-  id: string;
-  inspection_id: string;
-  section_label: string;
-  finding_label: string;
-  response: "pending" | "pass" | "fail" | "na";
-  sort_order: number;
-  expected_value: string | null;
-  observed_value: string | null;
-  notes: string | null;
-  requires_follow_up: boolean;
-};
+import {
+  groupInspectionFindings,
+  normalizeInspectionFindings,
+  normalizeInspectionHeader,
+  summarizeInspectionFindings,
+  type InspectionFinding,
+  type InspectionStatus,
+} from "../lib/inspectionplus-utils";
 
 const STATUS_STYLES: Record<InspectionStatus, string> = {
   draft: "bg-slate-500/10 text-slate-600 dark:text-slate-300",
@@ -68,17 +38,13 @@ export function ServiceInspectionDetailPage() {
     queryKey: ["service-inspection", inspectionId],
     enabled: inspectionId.length > 0,
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { eq: (column: string, value: string) => { maybeSingle: () => Promise<{ data: InspectionHeader | null; error: unknown }> } };
-        };
-      })
+      const { data, error } = await supabase
         .from("service_inspections")
         .select("id, inspection_number, title, template_name, inspection_type, status, stock_number, reference_number, customer_name, machine_summary, service_job_id, assignee_name, approver_name, started_at, completed_at, approval_status, created_at, cancellation_reason")
         .eq("id", inspectionId)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      return normalizeInspectionHeader(data);
     },
   });
 
@@ -86,17 +52,13 @@ export function ServiceInspectionDetailPage() {
     queryKey: ["service-inspection-findings", inspectionId],
     enabled: inspectionId.length > 0,
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { eq: (column: string, value: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: InspectionFinding[] | null; error: unknown }> } };
-        };
-      })
+      const { data, error } = await supabase
         .from("service_inspection_findings")
         .select("id, inspection_id, section_label, finding_label, response, sort_order, expected_value, observed_value, notes, requires_follow_up")
         .eq("inspection_id", inspectionId)
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return data ?? [];
+      return normalizeInspectionFindings(data);
     },
   });
 
@@ -113,11 +75,7 @@ export function ServiceInspectionDetailPage() {
 
   const saveHeader = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => {
-          update: (row: Record<string, unknown>) => { eq: (column: string, value: string) => Promise<{ error: unknown }> };
-        };
-      })
+      const { error } = await supabase
         .from("service_inspections")
         .update(payload)
         .eq("id", inspectionId);
@@ -136,11 +94,7 @@ export function ServiceInspectionDetailPage() {
       findingId: string;
       payload: Record<string, unknown>;
     }) => {
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => {
-          update: (row: Record<string, unknown>) => { eq: (column: string, value: string) => Promise<{ error: unknown }> };
-        };
-      })
+      const { error } = await supabase
         .from("service_inspection_findings")
         .update(payload)
         .eq("id", findingId);

@@ -30,6 +30,57 @@ export type InspectionFindingProgress = {
   pending: number;
 };
 
+export type InspectionStatus = "draft" | "in_progress" | "completed" | "cancelled";
+export type InspectionApprovalStatus = "not_requested" | "pending" | "approved" | "returned";
+export type InspectionFindingResponse = "pending" | "pass" | "fail" | "na";
+
+export type InspectionRow = {
+  id: string;
+  inspection_number: string;
+  title: string;
+  template_name: string | null;
+  inspection_type: string;
+  status: InspectionStatus;
+  stock_number: string | null;
+  reference_number: string | null;
+  customer_name: string | null;
+  machine_summary: string | null;
+  service_job_id: string | null;
+  assignee_name: string | null;
+  approver_name: string | null;
+  created_by: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+};
+
+export type InspectionHeader = InspectionRow & {
+  approval_status: InspectionApprovalStatus;
+  cancellation_reason: string | null;
+};
+
+export type InspectionFinding = {
+  id: string;
+  inspection_id: string;
+  section_label: string;
+  finding_label: string;
+  response: InspectionFindingResponse;
+  sort_order: number;
+  expected_value: string | null;
+  observed_value: string | null;
+  notes: string | null;
+  requires_follow_up: boolean;
+};
+
+const INSPECTION_STATUSES = new Set<InspectionStatus>(["draft", "in_progress", "completed", "cancelled"]);
+const INSPECTION_APPROVAL_STATUSES = new Set<InspectionApprovalStatus>([
+  "not_requested",
+  "pending",
+  "approved",
+  "returned",
+]);
+const INSPECTION_FINDING_RESPONSES = new Set<InspectionFindingResponse>(["pending", "pass", "fail", "na"]);
+
 export const INSPECTIONPLUS_TEMPLATES: InspectionTemplateDefinition[] = [
   {
     key: "general_condition",
@@ -84,6 +135,122 @@ export const INSPECTIONPLUS_TEMPLATES: InspectionTemplateDefinition[] = [
     ],
   },
 ];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function requiredString(value: unknown): string | null {
+  const normalized = stringOrNull(value)?.trim();
+  return normalized ? normalized : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function inspectionStatusOrNull(value: unknown): InspectionStatus | null {
+  return typeof value === "string" && INSPECTION_STATUSES.has(value as InspectionStatus)
+    ? value as InspectionStatus
+    : null;
+}
+
+function inspectionApprovalStatusOrNull(value: unknown): InspectionApprovalStatus | null {
+  return typeof value === "string" && INSPECTION_APPROVAL_STATUSES.has(value as InspectionApprovalStatus)
+    ? value as InspectionApprovalStatus
+    : null;
+}
+
+function inspectionFindingResponseOrNull(value: unknown): InspectionFindingResponse | null {
+  return typeof value === "string" && INSPECTION_FINDING_RESPONSES.has(value as InspectionFindingResponse)
+    ? value as InspectionFindingResponse
+    : null;
+}
+
+function normalizeInspectionBaseRow(value: Record<string, unknown>): InspectionRow | null {
+  const id = requiredString(value.id);
+  const inspectionNumber = requiredString(value.inspection_number);
+  const title = requiredString(value.title);
+  const inspectionType = requiredString(value.inspection_type);
+  const status = inspectionStatusOrNull(value.status);
+  const createdAt = requiredString(value.created_at);
+  if (!id || !inspectionNumber || !title || !inspectionType || !status || !createdAt) return null;
+  return {
+    id,
+    inspection_number: inspectionNumber,
+    title,
+    template_name: stringOrNull(value.template_name),
+    inspection_type: inspectionType,
+    status,
+    stock_number: stringOrNull(value.stock_number),
+    reference_number: stringOrNull(value.reference_number),
+    customer_name: stringOrNull(value.customer_name),
+    machine_summary: stringOrNull(value.machine_summary),
+    service_job_id: stringOrNull(value.service_job_id),
+    assignee_name: stringOrNull(value.assignee_name),
+    approver_name: stringOrNull(value.approver_name),
+    created_by: stringOrNull(value.created_by),
+    started_at: stringOrNull(value.started_at),
+    completed_at: stringOrNull(value.completed_at),
+    created_at: createdAt,
+  };
+}
+
+export function normalizeInspectionRows(rows: unknown): InspectionRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const row = normalizeInspectionBaseRow(value);
+    return row ? [row] : [];
+  });
+}
+
+export function normalizeInspectionHeader(value: unknown): InspectionHeader | null {
+  if (!isRecord(value)) return null;
+  const row = normalizeInspectionBaseRow(value);
+  const approvalStatus = inspectionApprovalStatusOrNull(value.approval_status);
+  if (!row || !approvalStatus) return null;
+  return {
+    ...row,
+    approval_status: approvalStatus,
+    cancellation_reason: stringOrNull(value.cancellation_reason),
+  };
+}
+
+export function normalizeInspectionFindings(rows: unknown): InspectionFinding[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = requiredString(value.id);
+    const inspectionId = requiredString(value.inspection_id);
+    const sectionLabel = requiredString(value.section_label);
+    const findingLabel = requiredString(value.finding_label);
+    const response = inspectionFindingResponseOrNull(value.response);
+    const sortOrder = numberOrNull(value.sort_order);
+    if (!id || !inspectionId || !sectionLabel || !findingLabel || !response || sortOrder == null) return [];
+    return [{
+      id,
+      inspection_id: inspectionId,
+      section_label: sectionLabel,
+      finding_label: findingLabel,
+      response,
+      sort_order: sortOrder,
+      expected_value: stringOrNull(value.expected_value),
+      observed_value: stringOrNull(value.observed_value),
+      notes: stringOrNull(value.notes),
+      requires_follow_up: value.requires_follow_up === true,
+    }];
+  });
+}
 
 export function makeInspectionNumber(now = new Date(), suffix?: string): string {
   const stamp = [
