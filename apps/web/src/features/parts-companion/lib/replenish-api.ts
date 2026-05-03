@@ -3,6 +3,14 @@
 // ============================================================
 
 import { supabase } from "../../../lib/supabase";
+import {
+  normalizeApprovedRowsResult,
+  normalizeOrderedRowsResult,
+  normalizeRejectedRowsResult,
+  normalizeReplenishRows,
+  normalizeReplenishSummary,
+  normalizeUpdatedQtyResult,
+} from "./replenish-api-normalizers";
 
 export type QueueStatus =
   | "pending"
@@ -89,7 +97,7 @@ export interface ReplenishSummary {
 export async function fetchReplenishSummary(): Promise<ReplenishSummary> {
   const { data, error } = await supabase.rpc("replenish_queue_summary_v2");
   if (error) throw error;
-  return data as ReplenishSummary;
+  return normalizeReplenishSummary(data);
 }
 
 export async function fetchReplenishRows(
@@ -117,7 +125,7 @@ export async function fetchReplenishRows(
 
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []) as ReplenishRow[];
+  return normalizeReplenishRows(data);
 }
 
 // ── mutations ──────────────────────────────────────────────
@@ -125,7 +133,7 @@ export async function fetchReplenishRows(
 export async function approveRows(ids: string[]): Promise<{ approved_count: number }> {
   const { data, error } = await supabase.rpc("approve_replenish_rows", { p_ids: ids });
   if (error) throw error;
-  return data as { approved_count: number };
+  return normalizeApprovedRowsResult(data);
 }
 
 export async function rejectRows(ids: string[], reason?: string): Promise<{ rejected_count: number }> {
@@ -134,7 +142,7 @@ export async function rejectRows(ids: string[], reason?: string): Promise<{ reje
     p_reason: reason ?? null,
   });
   if (error) throw error;
-  return data as { rejected_count: number };
+  return normalizeRejectedRowsResult(data);
 }
 
 export async function markOrdered(ids: string[], poReference?: string): Promise<{ ordered_count: number }> {
@@ -143,7 +151,7 @@ export async function markOrdered(ids: string[], poReference?: string): Promise<
     p_po_reference: poReference ?? null,
   });
   if (error) throw error;
-  return data as { ordered_count: number };
+  return normalizeOrderedRowsResult(data);
 }
 
 export async function updateQty(id: string, newQty: number): Promise<{ new_qty: number; new_total: number }> {
@@ -152,5 +160,5 @@ export async function updateQty(id: string, newQty: number): Promise<{ new_qty: 
     p_new_qty: newQty,
   });
   if (error) throw error;
-  return data as { id: string; new_qty: number; new_total: number };
+  return normalizeUpdatedQtyResult(data);
 }

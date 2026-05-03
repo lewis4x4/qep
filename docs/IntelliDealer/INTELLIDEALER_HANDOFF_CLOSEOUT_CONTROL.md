@@ -26,7 +26,7 @@ If another document conflicts with this one, treat this document as the current 
 | Raw source file custody | Manifested 2026-05-03 | `SOURCE_FILE_CUSTODY_MANIFEST.md` | The raw files remain untracked, but filename, size, SHA-256, page counts, workbook row counts, and import run binding are now committed and script-verifiable. |
 | Fresh production verification | Passed 2026-05-03 | `FRESH_PRODUCTION_VERIFICATION_2026-05-03.md` | Rerun safety, production reconciliation, production browser smoke, storage cleanup, and active-run checks passed against the current production bundle. |
 | UI completion review | Passed 2026-05-03 | `UI_COMPLETION_REVIEW_2026-05-03.md` | Account 360, Companies search, company/contact editors, admin dashboard, safe export download, browser stage, preflight rejection, discard, and cleanup are verified. |
-| Non-core API type hardening | In progress 2026-05-03 | `NON_CORE_API_TYPE_HARDENING_2026-05-03.md` | Hardened ops payment validation, service labor pricing, QRM approval-center, service agreement, vendor profile, exec shared-data/metric drill, Floor customer/serial/health widget, Floor operational widget, owner dashboard API, Floor role-home, and parts companion pricing API row/payload shapes with targeted tests and web typecheck. |
+| Non-core API type hardening | In progress 2026-05-03 | `NON_CORE_API_TYPE_HARDENING_2026-05-03.md` | Hardened ops payment validation, service labor pricing, QRM approval-center, service agreement, vendor profile, exec shared-data/metric drill, Floor customer/serial/health widget, Floor operational widget, owner dashboard API, Floor role-home, parts companion pricing API, and replenish API row/payload shapes with targeted tests and web typecheck. |
 
 ## Production Customer Import Baseline
 
@@ -206,7 +206,8 @@ Current result:
 - Owner dashboard summary, ownership health, event feed, branch ranking, predictive intervention, ask-anything, morning brief, and team signal payloads now use exported normalizers.
 - Floor role-home quote, counter inquiry, margin, SLA, approval decision, service job, and joined-deal rows now use exported normalizers.
 - Parts companion pricing summary, active rules, pending suggestions, preview, create-rule response, and mutation result counts now use exported normalizers.
-- Targeted tests passed: `59 pass`, `0 fail`.
+- Parts companion replenish summary, enriched queue rows, and mutation result counts now use exported normalizers.
+- Targeted tests passed: `63 pass`, `0 fail`.
 - Web typecheck passed.
 
 ### Slice 7: Wave 5 Deferred Integration Register
