@@ -94,6 +94,10 @@ function firstString(...values: unknown[]): string | null {
   return null;
 }
 
+export function isAbortError(value: unknown): boolean {
+  return isRecord(value) && value.name === "AbortError";
+}
+
 function nullableString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
@@ -330,7 +334,7 @@ export function streamScenarios(opts: StreamScenariosOptions): ScenarioSession {
         }),
       });
     } catch (err) {
-      if ((err as Error).name === "AbortError") return;
+      if (isAbortError(err)) return;
       yield { type: "error", fatal: true, message: "Network error — check your connection." };
       return;
     }

@@ -224,10 +224,11 @@ Current result:
 - Quote-builder local draft envelopes and saved quote hydration now use runtime guards for JSON envelopes, line items, recommendation triggers, and workspace enums before persisted draft data reaches the builder.
 - Quote-builder page voice-handoff parsing and proposal PDF branch metadata now use runtime normalizers before scenario application or PDF generation.
 - Quote-builder Deal Copilot history rows, SSE frames, draft patches, score events, and abort detection now use runtime normalizers before React state or parent callbacks.
+- Quote-builder portal revision workflow errors now use a runtime helper before rendering mutation failure text.
 - Quote-builder customer search, company hydration, signal rollup, past-equipment history, and deep-link customer hydration rows now use normalizers before result assembly or draft seeding.
 - Quote-builder coach margin baselines, active brand/program lookups, and dismissed-rule reads now use exported normalizers before rule context assembly.
 - Quote-builder point-shoot trade equipment vision, book-value, and trade-valuation apply payloads now use exported normalizers before UI or valuation-row updates.
-- Quote-builder scenario SSE events, scenario error payloads, and parse-request responses now use exported normalizers before stream yielding or form prepopulation.
+- Quote-builder scenario SSE events, scenario error payloads, parse-request responses, and abort errors now use exported normalizers before stream yielding or form prepopulation.
 - Floor customer search, serial-first lookup, and customer-health profile rows now use exported normalizers.
 - Floor morning brief, customer parts intel, pending invoice, and supplier health rows now use exported normalizers.
 - Owner dashboard summary, ownership health, event feed, branch ranking, predictive intervention, ask-anything, morning brief, and team signal payloads now use exported normalizers.
@@ -253,7 +254,7 @@ Current result:
 - Parts predictive kits, replenish queue, inventory health, vendor metrics, parts order list, catalog query typing, and forecast catalog lookup now use exported normalizers or generated query typing.
 - Parts purchase-order list/detail vendor, header, line, touchpoint, equipment model, and attachment rows now use exported normalizers.
 - Parts feature cast scan is clear for the Slice 6 inventory pattern after replacing local/browser shims with typed helpers.
-- Targeted tests passed: `412 pass`, `0 fail`.
+- Targeted tests passed: `416 pass`, `0 fail`.
 - Web typecheck passed.
 - Service feature cast scan is clear for the Slice 6 inventory pattern.
 - Fleet feature cast scan is clear for the Slice 6 inventory pattern.

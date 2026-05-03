@@ -17,6 +17,7 @@ import {
   savePortalRevisionDraft,
   submitPortalRevision,
 } from "../lib/quote-api";
+import { firstMutationErrorMessage } from "../lib/quote-review-workflow-normalizers";
 import type {
   QuoteFinanceScenario,
   QuoteWorkspaceDraft,
@@ -186,6 +187,15 @@ export function QuoteReviewWorkflowPanels({
   const publicationStatus = portalRevision?.publishState?.publicationStatus ?? "none";
   const assignedToName = activeApprovalCase?.assignedToName ?? submitApprovalResult?.assignedToName;
   const branchName = activeApprovalCase?.branchName ?? submitApprovalResult?.branchName;
+  const revisionActionError = firstMutationErrorMessage(
+    [
+      revisionDraftMutation.error,
+      revisionSubmitMutation.error,
+      revisionReturnMutation.error,
+      revisionPublishMutation.error,
+    ],
+    "Portal revision action failed",
+  );
 
   return (
     <>
@@ -408,21 +418,9 @@ export function QuoteReviewWorkflowPanels({
             )}
           </div>
 
-          {(revisionDraftMutation.error || revisionSubmitMutation.error || revisionReturnMutation.error || revisionPublishMutation.error) && (
+          {revisionActionError && (
             <p className="text-xs text-red-400">
-              {[
-                revisionDraftMutation.error,
-                revisionSubmitMutation.error,
-                revisionReturnMutation.error,
-                revisionPublishMutation.error,
-              ].find(Boolean) instanceof Error
-                ? ([
-                  revisionDraftMutation.error,
-                  revisionSubmitMutation.error,
-                  revisionReturnMutation.error,
-                  revisionPublishMutation.error,
-                ].find(Boolean) as Error).message
-                : "Portal revision action failed"}
+              {revisionActionError}
             </p>
           )}
         </Card>

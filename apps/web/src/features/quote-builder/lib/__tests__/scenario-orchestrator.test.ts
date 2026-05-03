@@ -10,6 +10,7 @@
 
 import { describe, it, expect, mock, beforeEach } from "bun:test";
 import {
+  isAbortError,
   normalizeParseRequestPayload,
   normalizeSseEvent,
   type SseEvent,
@@ -319,6 +320,12 @@ describe("scenario orchestrator payload normalizers", () => {
       deliveryState: "FL",
       customerType: "standard",
     });
+  });
+
+  it("detects abort errors without casting", () => {
+    expect(isAbortError({ name: "AbortError" })).toBe(true);
+    expect(isAbortError(new Error("Network"))).toBe(false);
+    expect(isAbortError("AbortError")).toBe(false);
   });
 
   it("normalizes parse-request payloads", () => {
