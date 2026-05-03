@@ -2,6 +2,7 @@
  * Supplier Health API — Slice 3.5.
  */
 import { supabase } from "@/lib/supabase";
+import { normalizeSupplierHealthSummary } from "./supplier-health-api-normalizers";
 
 export type HealthTier = "green" | "yellow" | "red";
 
@@ -62,5 +63,5 @@ export async function fetchSupplierHealthSummary(): Promise<SupplierHealthSummar
     p_workspace: null,
   });
   if (error) throw new Error(`supplier_health_summary: ${error.message}`);
-  return data as SupplierHealthSummary;
+  return normalizeSupplierHealthSummary(data);
 }

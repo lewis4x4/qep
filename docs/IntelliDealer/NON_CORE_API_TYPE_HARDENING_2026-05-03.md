@@ -24,6 +24,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Floor role-home widgets | Role home quote, counter inquiry, margin, SLA, approval decision, service job, and joined-deal rows were normalized inline, while joined deal queries mapped raw rows directly. | Added exported RoleHome widget normalizers with numeric-string coercion, service-stage validation, joined relation array/object normalization, malformed-row filtering, and safe joined-deal array normalization. |
 | Parts companion pricing API | Pricing summary, active rules, pending suggestions, preview, create-rule response, and mutation count RPCs returned payloads through direct casts. | Added exported pricing API normalizers with pricing enum validation, numeric-string coercion, malformed rule/suggestion/sample filtering, safe KPI defaults, and normalized mutation count results. |
 | Parts companion replenish API | Replenish summary, enriched queue rows, and replenish mutation result RPCs returned payloads through direct casts. | Added exported replenish API normalizers with queue/source enum validation, numeric-string coercion, boolean guards, malformed-row filtering, safe KPI/vendor-summary defaults, and normalized mutation count results. |
+| Parts companion supplier health API | Supplier health summary RPC returned nested vendor, price-creep, fill-rate, and row payloads through a direct cast. | Added exported supplier health normalizers with health-tier validation, numeric-string coercion, malformed vendor-row filtering, and safe count/collection defaults. |
 
 ## Verification
 
@@ -46,6 +47,8 @@ bun test src/features/parts-companion/lib/pricing-api-normalizers.test.ts
 bun test src/features/ops/lib/payment-validation-history.test.ts src/features/service/lib/service-labor-pricing-utils.test.ts src/features/qrm/command-center/lib/approvalTypes.test.ts src/features/service/lib/service-agreement-utils.test.ts src/features/service/lib/vendor-profile-utils.test.ts src/features/exec/lib/exec-row-normalizers.test.ts src/features/floor/widgets/floor-widget-row-normalizers.test.ts src/features/floor/widgets/operational-widget-normalizers.test.ts src/features/owner/lib/owner-api-normalizers.test.ts src/features/floor/widgets/role-home-widget-normalizers.test.ts src/features/parts-companion/lib/pricing-api-normalizers.test.ts
 bun test src/features/parts-companion/lib/replenish-api-normalizers.test.ts
 bun test src/features/ops/lib/payment-validation-history.test.ts src/features/service/lib/service-labor-pricing-utils.test.ts src/features/qrm/command-center/lib/approvalTypes.test.ts src/features/service/lib/service-agreement-utils.test.ts src/features/service/lib/vendor-profile-utils.test.ts src/features/exec/lib/exec-row-normalizers.test.ts src/features/floor/widgets/floor-widget-row-normalizers.test.ts src/features/floor/widgets/operational-widget-normalizers.test.ts src/features/owner/lib/owner-api-normalizers.test.ts src/features/floor/widgets/role-home-widget-normalizers.test.ts src/features/parts-companion/lib/pricing-api-normalizers.test.ts src/features/parts-companion/lib/replenish-api-normalizers.test.ts
+bun test src/features/parts-companion/lib/supplier-health-api-normalizers.test.ts
+bun test src/features/ops/lib/payment-validation-history.test.ts src/features/service/lib/service-labor-pricing-utils.test.ts src/features/qrm/command-center/lib/approvalTypes.test.ts src/features/service/lib/service-agreement-utils.test.ts src/features/service/lib/vendor-profile-utils.test.ts src/features/exec/lib/exec-row-normalizers.test.ts src/features/floor/widgets/floor-widget-row-normalizers.test.ts src/features/floor/widgets/operational-widget-normalizers.test.ts src/features/owner/lib/owner-api-normalizers.test.ts src/features/floor/widgets/role-home-widget-normalizers.test.ts src/features/parts-companion/lib/pricing-api-normalizers.test.ts src/features/parts-companion/lib/replenish-api-normalizers.test.ts src/features/parts-companion/lib/supplier-health-api-normalizers.test.ts
 bun run --filter @qep/web typecheck
 ```
 
@@ -63,7 +66,8 @@ Results:
 - Floor role-home widget normalizer tests: `6 pass`, `0 fail`.
 - Parts companion pricing API normalizer tests: `6 pass`, `0 fail`.
 - Parts companion replenish API normalizer tests: `4 pass`, `0 fail`.
-- Combined targeted test run: `63 pass`, `0 fail`.
+- Parts companion supplier health API normalizer tests: `3 pass`, `0 fail`.
+- Combined targeted test run: `66 pass`, `0 fail`.
 - Web typecheck: PASS.
 
 ## Remaining Slice 6 Work
