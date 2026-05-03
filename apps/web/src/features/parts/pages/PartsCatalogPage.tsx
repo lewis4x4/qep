@@ -16,12 +16,10 @@ import { PartsSubNav } from "../components/PartsSubNav";
 import { CatalogSearchBar } from "../components/CatalogSearchBar";
 import { PartCrossRefPanel } from "../components/PartCrossRefPanel";
 import { PartCommandPanel, type BranchCell } from "../components/PartCommandPanel";
-import { usePartsCatalog } from "../hooks/usePartsCatalog";
+import { usePartsCatalog, type CatalogRow } from "../hooks/usePartsCatalog";
 import { useAuth } from "@/hooks/useAuth";
 import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
 import type { Database } from "@/lib/database.types";
-
-type CatalogRow = Database["public"]["Tables"]["parts_catalog"]["Row"];
 
 const ELEVATED_ROLES = ["admin", "manager", "owner"];
 
@@ -165,7 +163,7 @@ export function PartsCatalogPage() {
   // (workspace, co, div, branch, part#), so a single part_number can appear
   // multiple times). Group by part_number and keep the richest row.
   const deduped = useMemo(() => {
-    const rows = (catQ.data ?? []) as CatalogRow[];
+    const rows = catQ.data ?? [];
     const byPn = new Map<string, CatalogRow[]>();
     for (const r of rows) {
       const key = r.part_number.toLowerCase();

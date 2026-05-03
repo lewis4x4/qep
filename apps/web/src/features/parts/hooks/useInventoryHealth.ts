@@ -1,27 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import {
+  normalizeInventoryHealthRows,
+  type InventoryHealthRow,
+} from "../lib/parts-row-normalizers";
 
 const FALLBACK_LOW_STOCK_THRESHOLD = 3;
 
-export type StockStatus = "stockout" | "critical" | "reorder" | "healthy" | "no_profile";
-
-export interface InventoryHealthRow {
-  inventory_id: string;
-  workspace_id: string;
-  branch_id: string;
-  part_number: string;
-  qty_on_hand: number;
-  bin_location: string | null;
-  catalog_id: string | null;
-  reorder_point: number | null;
-  safety_stock: number | null;
-  economic_order_qty: number | null;
-  consumption_velocity: number | null;
-  avg_lead_time_days: number | null;
-  reorder_computed_at: string | null;
-  stock_status: StockStatus;
-  days_until_stockout: number | null;
-}
+export type { InventoryHealthRow, StockStatus } from "../lib/parts-row-normalizers";
 
 export function useInventoryHealth() {
   return useQuery({
@@ -36,7 +22,7 @@ export function useInventoryHealth() {
         .limit(50);
 
       if (!viewError && viewData && viewData.length > 0) {
-        const rows = (viewData as InventoryHealthRow[]).map((r) => {
+        const rows = normalizeInventoryHealthRows(viewData).map((r) => {
           if (r.stock_status === "no_profile" && r.qty_on_hand > FALLBACK_LOW_STOCK_THRESHOLD) {
             return null;
           }
@@ -60,22 +46,10 @@ export function useInventoryHealth() {
         .limit(50);
       if (error) throw error;
 
-      const legacyRows: InventoryHealthRow[] = (data ?? []).map((r) => ({
-        inventory_id: r.id,
-        workspace_id: "",
-        branch_id: r.branch_id,
-        part_number: r.part_number,
-        qty_on_hand: r.qty_on_hand,
-        bin_location: r.bin_location,
-        catalog_id: null,
+      const legacyRows = normalizeInventoryHealthRows(data).map((r): InventoryHealthRow => ({
+        ...r,
         reorder_point: FALLBACK_LOW_STOCK_THRESHOLD,
-        safety_stock: null,
-        economic_order_qty: null,
-        consumption_velocity: null,
-        avg_lead_time_days: null,
-        reorder_computed_at: null,
         stock_status: r.qty_on_hand <= 0 ? "stockout" : "critical",
-        days_until_stockout: null,
       }));
 
       return {

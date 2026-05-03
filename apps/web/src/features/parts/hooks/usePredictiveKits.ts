@@ -1,35 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
+import { normalizePredictiveKits, type PredictiveKit } from "../lib/parts-row-normalizers";
 
-export interface PredictiveKit {
-  id: string;
-  fleet_id: string | null;
-  crm_company_id: string | null;
-  equipment_make: string | null;
-  equipment_model: string | null;
-  equipment_serial: string | null;
-  current_hours: number | null;
-  predicted_service_window: string;
-  predicted_failure_type: string | null;
-  confidence: number;
-  kit_parts: Array<{
-    part_number: string;
-    description: string | null;
-    quantity: number;
-    unit_cost: number | null;
-    in_stock: boolean;
-  }>;
-  kit_value: number;
-  kit_part_count: number;
-  stock_status: string;
-  parts_in_stock: number;
-  parts_total: number;
-  status: string;
-  nearest_branch_id: string | null;
-  created_at: string;
-  company_name?: string;
-}
+export type { PredictiveKit } from "../lib/parts-row-normalizers";
 
 export interface PredictiveKitsSummary {
   kits: PredictiveKit[];
@@ -67,11 +41,7 @@ export function usePredictiveKits() {
 
         if (error) throw error;
 
-        kits = (data ?? []).map((r) => {
-          const co = r.crm_companies as { name?: string } | { name?: string }[] | null;
-          const companyName = Array.isArray(co) ? co[0]?.name : co?.name;
-          return { ...r, company_name: companyName ?? undefined } as PredictiveKit;
-        });
+        kits = normalizePredictiveKits(data);
       } catch {
         const { data, error } = await supabase
           .from("parts_predictive_kits")
@@ -81,7 +51,7 @@ export function usePredictiveKits() {
           .order("confidence", { ascending: false })
           .limit(30);
         if (error) throw error;
-        kits = (data ?? []) as PredictiveKit[];
+        kits = normalizePredictiveKits(data);
       }
 
       const suggestedCount = kits.filter((k) => k.status === "suggested").length;

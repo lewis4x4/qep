@@ -3,19 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { normalizeVendorMetricsRows } from "../lib/parts-row-normalizers";
 
 const RESPONSIVENESS_THRESHOLD = 0.4;
-
-interface VendorRow {
-  id: string;
-  name: string;
-  avg_lead_time_hours: number | null;
-  responsiveness_score: number | null;
-  fill_rate: number | null;
-  price_competitiveness: number | null;
-  composite_score: number | null;
-  machine_down_priority: boolean;
-}
 
 function pct(n: number | null): string {
   if (n == null) return "—";
@@ -45,7 +35,7 @@ export function VendorMetricsCard() {
         );
       if (error) throw error;
 
-      const rows = (data ?? []) as VendorRow[];
+      const rows = normalizeVendorMetricsRows(data);
       const withLead = rows.filter((r) => r.avg_lead_time_hours != null);
       const withScore = rows.filter((r) => r.responsiveness_score != null);
       const withFill = rows.filter((r) => r.fill_rate != null);

@@ -159,6 +159,104 @@ export type SlowMovingPart = {
   updated_at: string;
 };
 
+export type PredictiveKit = {
+  id: string;
+  fleet_id: string | null;
+  crm_company_id: string | null;
+  equipment_make: string | null;
+  equipment_model: string | null;
+  equipment_serial: string | null;
+  current_hours: number | null;
+  predicted_service_window: string;
+  predicted_failure_type: string | null;
+  confidence: number;
+  kit_parts: Array<{
+    part_number: string;
+    description: string | null;
+    quantity: number;
+    unit_cost: number | null;
+    in_stock: boolean;
+  }>;
+  kit_value: number;
+  kit_part_count: number;
+  stock_status: string;
+  parts_in_stock: number;
+  parts_total: number;
+  status: string;
+  nearest_branch_id: string | null;
+  created_at: string;
+  company_name?: string;
+};
+
+export type ReplenishQueueRow = {
+  id: string;
+  workspace_id: string;
+  part_number: string;
+  branch_id: string;
+  qty_on_hand: number;
+  reorder_point: number;
+  recommended_qty: number;
+  economic_order_qty: number | null;
+  selected_vendor_id: string | null;
+  vendor_score: number | null;
+  vendor_selection_reason: string | null;
+  estimated_unit_cost: number | null;
+  estimated_total: number | null;
+  status: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  parts_order_id: string | null;
+  rejection_reason: string | null;
+  expires_at: string;
+  computation_batch_id: string | null;
+  created_at: string;
+  vendor_name?: string;
+};
+
+export type StockStatus = "stockout" | "critical" | "reorder" | "healthy" | "no_profile";
+
+export type InventoryHealthRow = {
+  inventory_id: string;
+  workspace_id: string;
+  branch_id: string;
+  part_number: string;
+  qty_on_hand: number;
+  bin_location: string | null;
+  catalog_id: string | null;
+  reorder_point: number | null;
+  safety_stock: number | null;
+  economic_order_qty: number | null;
+  consumption_velocity: number | null;
+  avg_lead_time_days: number | null;
+  reorder_computed_at: string | null;
+  stock_status: StockStatus;
+  days_until_stockout: number | null;
+};
+
+export type VendorMetricsRow = {
+  id: string;
+  name: string;
+  avg_lead_time_hours: number | null;
+  responsiveness_score: number | null;
+  fill_rate: number | null;
+  price_competitiveness: number | null;
+  composite_score: number | null;
+  machine_down_priority: boolean;
+};
+
+export type PartsOrderListRow = {
+  id: string;
+  status: string;
+  order_source: string;
+  fulfillment_run_id: string | null;
+  line_items: unknown;
+  created_at: string;
+  portal_customer_id: string | null;
+  crm_company_id: string | null;
+  portal_customers: { first_name: string; last_name: string; email: string } | null;
+  crm_companies: { id: string; name: string } | null;
+};
+
 export type PartsOrderManagerOrderResult = {
   order: Record<string, unknown>;
 };
@@ -269,6 +367,16 @@ function coverageStatus(value: unknown, fallback: CoverageStatus): CoverageStatu
     value === "watch" ||
     value === "covered" ||
     value === "no_inventory"
+    ? value
+    : fallback;
+}
+
+function stockStatus(value: unknown, fallback: StockStatus): StockStatus {
+  return value === "stockout" ||
+    value === "critical" ||
+    value === "reorder" ||
+    value === "healthy" ||
+    value === "no_profile"
     ? value
     : fallback;
 }
@@ -633,6 +741,184 @@ export function normalizeTransferRecommendations(rows: unknown): TransferRecomme
       created_at: createdAt,
     };
   }).filter((row): row is TransferRecommendation => row !== null);
+}
+
+export function normalizePredictiveKits(rows: unknown): PredictiveKit[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((value): PredictiveKit | null => {
+    if (!isRecord(value)) return null;
+    const id = nullableString(value.id);
+    const predictedServiceWindow = nullableString(value.predicted_service_window);
+    const stock = nullableString(value.stock_status);
+    const status = nullableString(value.status);
+    const createdAt = nullableString(value.created_at);
+    if (!id || !predictedServiceWindow || !stock || !status || !createdAt) return null;
+    const company = firstRecord(value.crm_companies);
+    return {
+      id,
+      fleet_id: nullableString(value.fleet_id),
+      crm_company_id: nullableString(value.crm_company_id),
+      equipment_make: nullableString(value.equipment_make),
+      equipment_model: nullableString(value.equipment_model),
+      equipment_serial: nullableString(value.equipment_serial),
+      current_hours: numberValue(value.current_hours),
+      predicted_service_window: predictedServiceWindow,
+      predicted_failure_type: nullableString(value.predicted_failure_type),
+      confidence: numberValue(value.confidence) ?? 0,
+      kit_parts: normalizeKitParts(value.kit_parts),
+      kit_value: numberValue(value.kit_value) ?? 0,
+      kit_part_count: numberValue(value.kit_part_count) ?? 0,
+      stock_status: stock,
+      parts_in_stock: numberValue(value.parts_in_stock) ?? 0,
+      parts_total: numberValue(value.parts_total) ?? 0,
+      status,
+      nearest_branch_id: nullableString(value.nearest_branch_id),
+      created_at: createdAt,
+      ...(nullableString(company?.name) ? { company_name: nullableString(company?.name) ?? undefined } : {}),
+    };
+  }).filter((row): row is PredictiveKit => row !== null);
+}
+
+function normalizeKitParts(rows: unknown): PredictiveKit["kit_parts"] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((value) => {
+    if (!isRecord(value)) return null;
+    const partNumber = nullableString(value.part_number);
+    if (!partNumber) return null;
+    return {
+      part_number: partNumber,
+      description: nullableString(value.description),
+      quantity: numberValue(value.quantity) ?? 1,
+      unit_cost: numberValue(value.unit_cost),
+      in_stock: value.in_stock === true,
+    };
+  }).filter((row): row is PredictiveKit["kit_parts"][number] => row !== null);
+}
+
+export function normalizeReplenishQueueRows(rows: unknown): ReplenishQueueRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((value): ReplenishQueueRow | null => {
+    if (!isRecord(value)) return null;
+    const id = nullableString(value.id);
+    const workspaceId = nullableString(value.workspace_id);
+    const partNumber = nullableString(value.part_number);
+    const branchId = nullableString(value.branch_id);
+    const status = nullableString(value.status);
+    const expiresAt = nullableString(value.expires_at);
+    const createdAt = nullableString(value.created_at);
+    if (!id || !workspaceId || !partNumber || !branchId || !status || !expiresAt || !createdAt) return null;
+    const vendor = firstRecord(value.vendor_profiles);
+    return {
+      id,
+      workspace_id: workspaceId,
+      part_number: partNumber,
+      branch_id: branchId,
+      qty_on_hand: numberValue(value.qty_on_hand) ?? 0,
+      reorder_point: numberValue(value.reorder_point) ?? 0,
+      recommended_qty: numberValue(value.recommended_qty) ?? 0,
+      economic_order_qty: numberValue(value.economic_order_qty),
+      selected_vendor_id: nullableString(value.selected_vendor_id),
+      vendor_score: numberValue(value.vendor_score),
+      vendor_selection_reason: nullableString(value.vendor_selection_reason),
+      estimated_unit_cost: numberValue(value.estimated_unit_cost),
+      estimated_total: numberValue(value.estimated_total),
+      status,
+      approved_by: nullableString(value.approved_by),
+      approved_at: nullableString(value.approved_at),
+      parts_order_id: nullableString(value.parts_order_id),
+      rejection_reason: nullableString(value.rejection_reason),
+      expires_at: expiresAt,
+      computation_batch_id: nullableString(value.computation_batch_id),
+      created_at: createdAt,
+      ...(nullableString(vendor?.name) ? { vendor_name: nullableString(vendor?.name) ?? undefined } : {}),
+    };
+  }).filter((row): row is ReplenishQueueRow => row !== null);
+}
+
+export function normalizeInventoryHealthRows(rows: unknown): InventoryHealthRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((value): InventoryHealthRow | null => {
+    if (!isRecord(value)) return null;
+    const inventoryId = nullableString(value.inventory_id) ?? nullableString(value.id);
+    const branchId = nullableString(value.branch_id);
+    const partNumber = nullableString(value.part_number);
+    if (!inventoryId || !branchId || !partNumber) return null;
+    const qtyOnHand = numberValue(value.qty_on_hand) ?? 0;
+    return {
+      inventory_id: inventoryId,
+      workspace_id: stringValue(value.workspace_id),
+      branch_id: branchId,
+      part_number: partNumber,
+      qty_on_hand: qtyOnHand,
+      bin_location: nullableString(value.bin_location),
+      catalog_id: nullableString(value.catalog_id),
+      reorder_point: numberValue(value.reorder_point),
+      safety_stock: numberValue(value.safety_stock),
+      economic_order_qty: numberValue(value.economic_order_qty),
+      consumption_velocity: numberValue(value.consumption_velocity),
+      avg_lead_time_days: numberValue(value.avg_lead_time_days),
+      reorder_computed_at: nullableString(value.reorder_computed_at),
+      stock_status: stockStatus(value.stock_status, qtyOnHand <= 0 ? "stockout" : "critical"),
+      days_until_stockout: numberValue(value.days_until_stockout),
+    };
+  }).filter((row): row is InventoryHealthRow => row !== null);
+}
+
+export function normalizeVendorMetricsRows(rows: unknown): VendorMetricsRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((value): VendorMetricsRow | null => {
+    if (!isRecord(value)) return null;
+    const id = nullableString(value.id);
+    const name = nullableString(value.name);
+    if (!id || !name) return null;
+    return {
+      id,
+      name,
+      avg_lead_time_hours: numberValue(value.avg_lead_time_hours),
+      responsiveness_score: numberValue(value.responsiveness_score),
+      fill_rate: numberValue(value.fill_rate),
+      price_competitiveness: numberValue(value.price_competitiveness),
+      composite_score: numberValue(value.composite_score),
+      machine_down_priority: value.machine_down_priority === true,
+    };
+  }).filter((row): row is VendorMetricsRow => row !== null);
+}
+
+export function normalizePartsOrderListRows(rows: unknown): PartsOrderListRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((value): PartsOrderListRow | null => {
+    if (!isRecord(value)) return null;
+    const id = nullableString(value.id);
+    const status = nullableString(value.status);
+    const orderSource = nullableString(value.order_source);
+    const createdAt = nullableString(value.created_at);
+    if (!id || !status || !orderSource || !createdAt) return null;
+    const portalCustomer = firstRecord(value.portal_customers);
+    const company = firstRecord(value.crm_companies);
+    return {
+      id,
+      status,
+      order_source: orderSource,
+      fulfillment_run_id: nullableString(value.fulfillment_run_id),
+      line_items: value.line_items,
+      created_at: createdAt,
+      portal_customer_id: nullableString(value.portal_customer_id),
+      crm_company_id: nullableString(value.crm_company_id),
+      portal_customers: portalCustomer
+        ? {
+            first_name: stringValue(portalCustomer.first_name),
+            last_name: stringValue(portalCustomer.last_name),
+            email: stringValue(portalCustomer.email),
+          }
+        : null,
+      crm_companies: company && nullableString(company.id) && nullableString(company.name)
+        ? {
+            id: nullableString(company.id) ?? "",
+            name: nullableString(company.name) ?? "",
+          }
+        : null,
+    };
+  }).filter((row): row is PartsOrderListRow => row !== null);
 }
 
 function malformedEdgeResponse(message: string): Error {

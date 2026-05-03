@@ -1,31 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
+import { normalizeReplenishQueueRows, type ReplenishQueueRow } from "../lib/parts-row-normalizers";
 
-export interface ReplenishQueueRow {
-  id: string;
-  workspace_id: string;
-  part_number: string;
-  branch_id: string;
-  qty_on_hand: number;
-  reorder_point: number;
-  recommended_qty: number;
-  economic_order_qty: number | null;
-  selected_vendor_id: string | null;
-  vendor_score: number | null;
-  vendor_selection_reason: string | null;
-  estimated_unit_cost: number | null;
-  estimated_total: number | null;
-  status: string;
-  approved_by: string | null;
-  approved_at: string | null;
-  parts_order_id: string | null;
-  rejection_reason: string | null;
-  expires_at: string;
-  computation_batch_id: string | null;
-  created_at: string;
-  vendor_name?: string;
-}
+export type { ReplenishQueueRow } from "../lib/parts-row-normalizers";
 
 export interface ReplenishSummary {
   rows: ReplenishQueueRow[];
@@ -62,11 +40,7 @@ export function useReplenishQueue() {
 
         if (error) throw error;
 
-        rows = (data ?? []).map((r) => {
-          const vp = r.vendor_profiles as { name?: string } | { name?: string }[] | null;
-          const vendorName = Array.isArray(vp) ? vp[0]?.name : vp?.name;
-          return { ...r, vendor_name: vendorName ?? undefined } as ReplenishQueueRow;
-        });
+        rows = normalizeReplenishQueueRows(data);
       } catch {
         const { data, error } = await supabase
           .from("parts_auto_replenish_queue")
@@ -76,7 +50,7 @@ export function useReplenishQueue() {
           .order("created_at", { ascending: false })
           .limit(50);
         if (error) throw error;
-        rows = (data ?? []) as ReplenishQueueRow[];
+        rows = normalizeReplenishQueueRows(data);
       }
 
       const pendingCount = rows.filter((r) => r.status === "pending").length;

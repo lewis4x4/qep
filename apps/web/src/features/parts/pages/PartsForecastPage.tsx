@@ -41,7 +41,7 @@ function classify(
   row: ForecastRow,
   liveOnHand: number | null,
 ): { bucket: ForecastBucket; daysLeft: number | null } {
-  const drivers = (row.drivers ?? {}) as Record<string, unknown>;
+  const drivers = row.drivers ?? {};
   const hasSignal =
     (row.predicted_qty ?? 0) > 0 ||
     (typeof drivers.order_history === "number" && (drivers.order_history as number) > 0) ||
@@ -144,7 +144,7 @@ export function PartsForecastPage() {
         .is("deleted_at", null);
       if (error) throw error;
       const byPart = new Map<string, CatalogRow>();
-      for (const r of (data ?? []) as CatalogRow[]) {
+      for (const r of data ?? []) {
         const pn = r.part_number.toLowerCase();
         // keep first non-empty pick (richest coalesced row)
         const prev = byPart.get(pn);
