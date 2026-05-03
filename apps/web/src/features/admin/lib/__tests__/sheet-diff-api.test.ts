@@ -4,6 +4,10 @@ import {
   computeModelDiff,
   impactForOpenQuote,
   normalizeCode,
+  normalizePriorSheetRefRows,
+  normalizeQuoteImpactRows,
+  normalizeSheetHeaderRows,
+  normalizeSheetModelItemRows,
   parseQuoteEquipmentLines,
   type ModelPriceChange,
   type QuoteEquipmentLine,
@@ -31,6 +35,54 @@ function modelItem(code: string, priceCents: number, name = code): SheetItemRow 
     created_at:             "2026-04-20T00:00:00Z",
   } as SheetItemRow;
 }
+
+// ── source normalizers ───────────────────────────────────────────────────
+
+describe("sheet diff source normalizers", () => {
+  test("normalizes sheet headers and prior references", () => {
+    expect(normalizeSheetHeaderRows([
+      { id: "sheet-1", brand_id: "brand-1", status: "pending_review" },
+      { id: "", brand_id: "bad", status: "published" },
+      { brand_id: "missing-id" },
+    ])).toEqual([
+      { id: "sheet-1", brand_id: "brand-1", status: "pending_review" },
+    ]);
+
+    expect(normalizePriorSheetRefRows([
+      { id: "published-1" },
+      { id: null },
+    ])).toEqual([{ id: "published-1" }]);
+  });
+
+  test("normalizes model item rows and lets diff parsing ignore malformed extracted payloads", () => {
+    const rows = normalizeSheetModelItemRows([
+      { extracted: { model_code: "RT-135", name_display: "RT 135", list_price_cents: "110000" } },
+      { extracted: "not-an-object" },
+      { nope: true },
+    ]);
+
+    expect(rows).toEqual([
+      { extracted: { model_code: "RT-135", name_display: "RT 135", list_price_cents: "110000" } },
+    ]);
+    expect(computeModelDiff([], rows)[0]).toMatchObject({
+      modelCode: "RT-135",
+      newPriceCents: 110000,
+      kind: "new",
+    });
+  });
+
+  test("normalizes quote impact rows and filters rows missing required identity", () => {
+    expect(normalizeQuoteImpactRows([
+      { id: "quote-1", quote_number: "Q-1", customer_name: "Acme", status: "sent", equipment: [{ model: "RT-135" }] },
+      { id: "quote-2", quote_number: 42, customer_name: null, status: "draft", equipment: "bad-json-shape" },
+      { id: "", status: "sent", equipment: [] },
+      { id: "quote-3", status: "", equipment: [] },
+    ])).toEqual([
+      { id: "quote-1", quote_number: "Q-1", customer_name: "Acme", status: "sent", equipment: [{ model: "RT-135" }] },
+      { id: "quote-2", quote_number: null, customer_name: null, status: "draft", equipment: "bad-json-shape" },
+    ]);
+  });
+});
 
 // ── normalizeCode ────────────────────────────────────────────────────────
 

@@ -37,8 +37,26 @@ import type { Database, Json } from "@/lib/database.types";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
-type PriceSheetRow = Database["public"]["Tables"]["qb_price_sheets"]["Row"];
 type SheetItemRow  = Database["public"]["Tables"]["qb_price_sheet_items"]["Row"];
+type SheetModelItemRow = Pick<SheetItemRow, "extracted">;
+
+type SheetHeaderRow = {
+  id: string;
+  brand_id: string | null;
+  status: string | null;
+};
+
+type PriorSheetRefRow = {
+  id: string;
+};
+
+type QuoteImpactSourceRow = {
+  id: string;
+  quote_number: string | null;
+  customer_name: string | null;
+  status: string;
+  equipment: Json;
+};
 
 /** Rep-facing equipment line inside a quote_packages row. */
 export interface QuoteEquipmentLine {
@@ -121,8 +139,9 @@ export async function generateSheetDiff(priceSheetId: string): Promise<SheetDiff
     .select("id, brand_id, status")
     .eq("id", priceSheetId)
     .maybeSingle();
-  if (!sheet) return null;
-  const brandId = (sheet as Pick<PriceSheetRow, "brand_id">).brand_id;
+  const sheetRow = normalizeSheetHeaderRows(sheet ? [sheet] : [])[0];
+  if (!sheetRow) return null;
+  const brandId = sheetRow.brand_id;
 
   // Items on the new sheet (pending_review / extracted)
   const { data: newItems } = await supabase
@@ -141,8 +160,8 @@ export async function generateSheetDiff(priceSheetId: string): Promise<SheetDiff
         .order("published_at", { ascending: false })
         .limit(1)
         .maybeSingle()
-    : { data: null as null };
-  const priorPriceSheetId = priorQ.data ? (priorQ.data as { id: string }).id : null;
+    : { data: null };
+  const priorPriceSheetId = normalizePriorSheetRefRows(priorQ.data ? [priorQ.data] : [])[0]?.id ?? null;
 
   const { data: priorItems } = priorPriceSheetId
     ? await supabase
@@ -150,11 +169,11 @@ export async function generateSheetDiff(priceSheetId: string): Promise<SheetDiff
         .select("*")
         .eq("price_sheet_id", priorPriceSheetId)
         .eq("item_type", "model")
-    : { data: [] as SheetItemRow[] };
+    : { data: [] };
 
   const modelChanges = computeModelDiff(
-    (priorItems ?? []) as SheetItemRow[],
-    (newItems ?? []) as SheetItemRow[],
+    normalizeSheetModelItemRows(priorItems),
+    normalizeSheetModelItemRows(newItems),
   );
 
   return {
@@ -187,10 +206,7 @@ export async function getInFlightImpact(diff: SheetDiff): Promise<InFlightImpact
     .order("updated_at", { ascending: false });
 
   const rows: QuoteImpactRow[] = [];
-  for (const q of (quotes ?? []) as Array<Pick<
-    Database["public"]["Tables"]["quote_packages"]["Row"],
-    "id" | "quote_number" | "customer_name" | "status" | "equipment"
-  >>) {
+  for (const q of normalizeQuoteImpactRows(quotes)) {
     const equipment = parseQuoteEquipmentLines(q.equipment);
     const impact = impactForOpenQuote(equipment, diff.modelChanges);
     if (impact.deltaCents === 0) continue;
@@ -226,16 +242,42 @@ export function normalizeCode(raw: string | null | undefined): string {
   return raw.toLowerCase().replace(/[\s_\-./]+/g, "");
 }
 
-interface ExtractedModel {
-  model_code?: string;
-  name_display?: string;
-  list_price_cents?: number;
-}
-
 type JsonRecord = { [key: string]: Json | undefined };
 
 function isJsonRecord(value: Json): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isJsonValue(value: unknown): value is Json {
+  if (value === null) return true;
+  switch (typeof value) {
+    case "string":
+    case "boolean":
+      return true;
+    case "number":
+      return Number.isFinite(value);
+    case "object":
+      if (Array.isArray(value)) return value.every(isJsonValue);
+      return Object.values(value).every((entry) => entry === undefined || isJsonValue(entry));
+    default:
+      return false;
+  }
+}
+
+function requiredString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function jsonOrNull(value: unknown): Json {
+  return isJsonValue(value) ? value : null;
 }
 
 function readString(...values: Array<Json | undefined>): string | null {
@@ -245,6 +287,55 @@ function readString(...values: Array<Json | undefined>): string | null {
     if (trimmed) return trimmed;
   }
   return null;
+}
+
+export function normalizeSheetHeaderRows(value: unknown): SheetHeaderRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    if (!id) return [];
+    return [{
+      id,
+      brand_id: nullableString(row.brand_id),
+      status: nullableString(row.status),
+    }];
+  });
+}
+
+export function normalizePriorSheetRefRows(value: unknown): PriorSheetRefRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    return id ? [{ id }] : [];
+  });
+}
+
+export function normalizeSheetModelItemRows(value: unknown): SheetModelItemRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const extracted = jsonOrNull(row.extracted);
+    return isJsonRecord(extracted) ? [{ extracted }] : [];
+  });
+}
+
+export function normalizeQuoteImpactRows(value: unknown): QuoteImpactSourceRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const status = requiredString(row.status);
+    if (!id || !status) return [];
+    return [{
+      id,
+      quote_number: nullableString(row.quote_number),
+      customer_name: nullableString(row.customer_name),
+      status,
+      equipment: jsonOrNull(row.equipment),
+    }];
+  });
 }
 
 function readNumber(...values: Array<Json | undefined>): number | null {
@@ -290,14 +381,14 @@ export function parseQuoteEquipmentLines(value: Json): QuoteEquipmentLine[] {
 }
 
 /** Extract (code, price) from a qb_price_sheet_items.extracted payload. */
-function readItem(row: SheetItemRow): { code: string; codeNorm: string; name: string | null; price: number } {
-  const ex = (row.extracted ?? {}) as ExtractedModel;
-  const code = (ex.model_code ?? "").trim();
+function readItem(row: SheetModelItemRow): { code: string; codeNorm: string; name: string | null; price: number } {
+  const ex = isJsonRecord(row.extracted) ? row.extracted : {};
+  const code = readString(ex.model_code) ?? "";
   return {
     code,
     codeNorm: normalizeCode(code),
-    name:     (ex.name_display ?? "").trim() || null,
-    price:    Number(ex.list_price_cents ?? 0),
+    name:     readString(ex.name_display),
+    price:    readNumber(ex.list_price_cents) ?? 0,
   };
 }
 
@@ -306,8 +397,8 @@ function readItem(row: SheetItemRow): { code: string; codeNorm: string; name: st
  * pending). Pure.
  */
 export function computeModelDiff(
-  prior: SheetItemRow[],
-  incoming: SheetItemRow[],
+  prior: SheetModelItemRow[],
+  incoming: SheetModelItemRow[],
 ): ModelPriceChange[] {
   const priorByCode = new Map<string, { code: string; name: string | null; price: number }>();
   for (const r of prior) {

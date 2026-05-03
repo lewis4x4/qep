@@ -261,7 +261,8 @@ Current result:
 - Admin deal economics brand freight-key and Deal Engine readiness rows now use exported normalizers before economics status cards consume them.
 - Admin Deal Velocity quote lifecycle and outcome rows now use exported normalizers before duration math and stalled-deal detection consume them.
 - Admin price-sheet dashboard and freight-zone rows now use exported normalizers before status cards, item counts, and coverage analysis consume them.
-- Targeted tests passed: `528 pass`, `0 fail`.
+- Admin sheet-diff pending/prior sheet rows, model extracted JSON, and in-flight quote rows now use exported normalizers before diff and quote-impact math consume them.
+- Targeted tests passed: `554 pass`, `0 fail`.
 - Web typecheck passed.
 - Service feature cast scan is clear for the Slice 6 inventory pattern.
 - Fleet feature cast scan is clear for the Slice 6 inventory pattern.
