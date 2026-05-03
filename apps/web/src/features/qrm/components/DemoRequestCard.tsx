@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { dealCompositeQueryKey } from "../lib/deal-composite-keys";
+import { normalizeDemoRequestRows } from "../lib/demo-requests";
 import type { QrmDealDemoSummary } from "../lib/deal-composite-types";
 
 export type { QrmDealDemoSummary } from "../lib/deal-composite-types";
@@ -38,7 +39,7 @@ export function DemoRequestCard({ dealId, prefetched }: DemoRequestCardProps) {
         .eq("deal_id", dealId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as QrmDealDemoSummary[];
+      return normalizeDemoRequestRows(data);
     },
     staleTime: prefetched !== undefined ? Infinity : 30_000,
     enabled: Boolean(dealId),
