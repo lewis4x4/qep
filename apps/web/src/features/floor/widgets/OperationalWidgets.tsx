@@ -34,42 +34,12 @@ import {
   FloorWidgetShell,
   LoadingLine,
 } from "./DirectWrapWidgets";
-
-type CustomerPartsIntelRow = {
-  id: string;
-  crm_company_id: string;
-  churn_risk: string;
-  spend_trend: string;
-  order_count_12m: number;
-  total_spend_12m: number;
-  predicted_next_quarter_spend: number;
-  opportunity_value: number;
-  days_since_last_order: number | null;
-  recommended_outreach: string | null;
-  computed_at: string;
-  crm_companies?: { id: string; name: string } | { id: string; name: string }[] | null;
-};
-
-type InvoiceRow = {
-  id: string;
-  invoice_number: string;
-  status: string;
-  total: number;
-  balance_due: number | null;
-  due_date: string;
-  created_at: string;
-  crm_companies?: { name: string } | { name: string }[] | null;
-};
-
-type VendorRow = {
-  id: string;
-  name: string;
-  avg_lead_time_hours: number | null;
-  responsiveness_score: number | null;
-  fill_rate: number | null;
-  composite_score: number | null;
-  machine_down_priority: boolean;
-};
+import {
+  normalizeOperationalCustomerPartsIntelRows,
+  normalizeOperationalInvoiceRows,
+  normalizeOperationalMorningBriefData,
+  normalizeOperationalVendorRows,
+} from "./operational-widget-normalizers";
 
 type DealRow = {
   id: string;
@@ -96,17 +66,6 @@ type QuotePackageRow = {
   created_at: string;
   updated_at: string;
   created_by: string | null;
-};
-
-type MorningBriefEvent = {
-  type: string;
-  summary: string;
-  at: string;
-};
-
-type MorningBriefData = {
-  count: number;
-  events: MorningBriefEvent[];
 };
 
 type OpenServiceJobRow = {
@@ -154,29 +113,6 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
-function normalizeMorningBriefData(value: unknown): MorningBriefData {
-  if (!isRecord(value)) return { count: 0, events: [] };
-  const events = Array.isArray(value.events)
-    ? value.events.map(normalizeMorningBriefEvent).filter((event): event is MorningBriefEvent => event !== null)
-    : [];
-  return {
-    count: numberValue(value.count) ?? events.length,
-    events,
-  };
-}
-
-function normalizeMorningBriefEvent(value: unknown): MorningBriefEvent | null {
-  if (!isRecord(value)) return null;
-  const summary = nullableString(value.summary);
-  const at = nullableString(value.at);
-  if (!summary || !at) return null;
-  return {
-    type: nullableString(value.type) ?? "event",
-    summary,
-    at,
-  };
-}
-
 function normalizeQuotePackageRows(rows: unknown[]): QuotePackageRow[] {
   return rows.map(normalizeQuotePackageRow).filter((row): row is QuotePackageRow => row !== null);
 }
@@ -196,35 +132,6 @@ function normalizeQuotePackageRow(row: unknown): QuotePackageRow | null {
     created_at: createdAt,
     updated_at: updatedAt,
     created_by: nullableString(row.created_by),
-  };
-}
-
-function normalizeCustomerPartsIntelRows(rows: unknown[]): CustomerPartsIntelRow[] {
-  return rows.map(normalizeCustomerPartsIntelRow).filter((row): row is CustomerPartsIntelRow => row !== null);
-}
-
-function normalizeCustomerPartsIntelRow(row: unknown): CustomerPartsIntelRow | null {
-  if (!isRecord(row)) return null;
-  const id = nullableString(row.id);
-  const crmCompanyId = nullableString(row.crm_company_id);
-  const computedAt = nullableString(row.computed_at);
-  if (!id || !crmCompanyId || !computedAt) return null;
-  const company = firstRecord(row.crm_companies);
-  const companyId = nullableString(company?.id);
-  const companyName = nullableString(company?.name);
-  return {
-    id,
-    crm_company_id: crmCompanyId,
-    churn_risk: nullableString(row.churn_risk) ?? "unknown",
-    spend_trend: nullableString(row.spend_trend) ?? "unknown",
-    order_count_12m: numberValue(row.order_count_12m) ?? 0,
-    total_spend_12m: numberValue(row.total_spend_12m) ?? 0,
-    predicted_next_quarter_spend: numberValue(row.predicted_next_quarter_spend) ?? 0,
-    opportunity_value: numberValue(row.opportunity_value) ?? 0,
-    days_since_last_order: numberValue(row.days_since_last_order),
-    recommended_outreach: nullableString(row.recommended_outreach),
-    computed_at: computedAt,
-    crm_companies: companyId && companyName ? { id: companyId, name: companyName } : null,
   };
 }
 
@@ -265,52 +172,6 @@ function normalizeDealStageRow(row: unknown): DealStageRow | null {
     name,
     is_closed_won: booleanValue(row.is_closed_won),
     is_closed_lost: booleanValue(row.is_closed_lost),
-  };
-}
-
-function normalizeInvoiceRows(rows: unknown[]): InvoiceRow[] {
-  return rows.map(normalizeInvoiceRow).filter((row): row is InvoiceRow => row !== null);
-}
-
-function normalizeInvoiceRow(row: unknown): InvoiceRow | null {
-  if (!isRecord(row)) return null;
-  const id = nullableString(row.id);
-  const invoiceNumber = nullableString(row.invoice_number);
-  const status = nullableString(row.status);
-  const dueDate = nullableString(row.due_date);
-  const createdAt = nullableString(row.created_at);
-  if (!id || !invoiceNumber || !status || !dueDate || !createdAt) return null;
-  const company = firstRecord(row.crm_companies);
-  const companyName = nullableString(company?.name);
-  return {
-    id,
-    invoice_number: invoiceNumber,
-    status,
-    total: numberValue(row.total) ?? 0,
-    balance_due: numberValue(row.balance_due),
-    due_date: dueDate,
-    created_at: createdAt,
-    crm_companies: companyName ? { name: companyName } : null,
-  };
-}
-
-function normalizeVendorRows(rows: unknown[]): VendorRow[] {
-  return rows.map(normalizeVendorRow).filter((row): row is VendorRow => row !== null);
-}
-
-function normalizeVendorRow(row: unknown): VendorRow | null {
-  if (!isRecord(row)) return null;
-  const id = nullableString(row.id);
-  const name = nullableString(row.name);
-  if (!id || !name) return null;
-  return {
-    id,
-    name,
-    avg_lead_time_hours: numberValue(row.avg_lead_time_hours),
-    responsiveness_score: numberValue(row.responsiveness_score),
-    fill_rate: numberValue(row.fill_rate),
-    composite_score: numberValue(row.composite_score),
-    machine_down_priority: booleanValue(row.machine_down_priority),
   };
 }
 
@@ -435,7 +296,7 @@ export function MorningBriefFloorWidget() {
         p_hours_back: 24,
       });
       if (error) throw error;
-      return normalizeMorningBriefData(data);
+      return normalizeOperationalMorningBriefData(data);
     },
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -660,7 +521,7 @@ export function PartsCustomerIntelFloorWidget() {
         .order("computed_at", { ascending: false })
         .limit(6);
       if (error) throw error;
-      return normalizeCustomerPartsIntelRows(data ?? []);
+      return normalizeOperationalCustomerPartsIntelRows(data);
     },
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -987,7 +848,7 @@ export function PendingInvoicesFloorWidget() {
         .order("due_date", { ascending: true })
         .limit(25);
       if (error) throw error;
-      const rows = normalizeInvoiceRows(data ?? []);
+      const rows = normalizeOperationalInvoiceRows(data);
       return {
         rows,
         totalDue: rows.reduce((sum, row) => sum + Number(row.balance_due ?? row.total ?? 0), 0),
@@ -1144,7 +1005,7 @@ export function PartsSupplierHealthFloorWidget() {
         .order("machine_down_priority", { ascending: false })
         .limit(40);
       if (error) throw error;
-      const rows = normalizeVendorRows(data ?? []);
+      const rows = normalizeOperationalVendorRows(data);
       const avg = (values: number[]) =>
         values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
       return {
