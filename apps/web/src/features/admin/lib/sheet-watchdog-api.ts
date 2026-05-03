@@ -54,6 +54,12 @@ export interface SourceHealth {
   lastSuccessAt: string | null;
 }
 
+export interface SheetWatchBrandOption {
+  id: string;
+  name: string;
+  code: string;
+}
+
 const SHEET_EVENT_TYPES = [
   "checked_unchanged",
   "change_detected",
@@ -170,6 +176,17 @@ export function normalizeSheetWatchEventRows(value: unknown): SheetWatchEventRow
       price_sheet_id: stringOrNull(row.price_sheet_id),
       created_at: createdAt,
     }];
+  });
+}
+
+export function normalizeSheetWatchBrandOptions(value: unknown): SheetWatchBrandOption[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const name = requiredString(row.name);
+    const code = requiredString(row.code);
+    return id && name && code ? [{ id, name, code }] : [];
   });
 }
 

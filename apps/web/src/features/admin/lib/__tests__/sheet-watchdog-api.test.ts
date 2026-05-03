@@ -3,6 +3,7 @@ import {
   detectHashChange,
   formatLastChecked,
   isOverdue,
+  normalizeSheetWatchBrandOptions,
   normalizeSheetSourceRows,
   normalizeSheetSourceWithBrandRows,
   normalizeSheetWatchEventRows,
@@ -138,6 +139,17 @@ describe("sheet watchdog row normalizers", () => {
         price_sheet_id: "sheet-1",
         created_at: "2026-04-20T00:00:00Z",
       },
+    ]);
+  });
+
+  test("normalizes brand options for source editor pickers", () => {
+    expect(normalizeSheetWatchBrandOptions([
+      { id: "brand-1", name: "ASV", code: "ASV" },
+      { id: "brand-2", name: "", code: "BAD" },
+      { id: "brand-3", name: "Barko", code: null },
+      "bad",
+    ])).toEqual([
+      { id: "brand-1", name: "ASV", code: "ASV" },
     ]);
   });
 });

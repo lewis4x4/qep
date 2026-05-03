@@ -31,12 +31,12 @@ import {
   summarizeSourceHealth,
   formatLastChecked,
   isOverdue,
+  normalizeSheetWatchBrandOptions,
+  type SheetWatchBrandOption,
   type SheetSourceRow,
   type SheetSourceWithBrand,
   type SheetWatchEventRow,
 } from "../lib/sheet-watchdog-api";
-
-interface BrandOption { id: string; name: string; code: string; }
 
 export function SheetSourcesSection() {
   const { data: workspaceId } = useMyWorkspaceId();
@@ -44,7 +44,7 @@ export function SheetSourcesSection() {
 
   const [sources, setSources] = useState<SheetSourceWithBrand[]>([]);
   const [events, setEvents] = useState<SheetWatchEventRow[]>([]);
-  const [brands, setBrands] = useState<BrandOption[]>([]);
+  const [brands, setBrands] = useState<SheetWatchBrandOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [drawer, setDrawer] = useState<
     | { mode: "create" }
@@ -62,7 +62,7 @@ export function SheetSourcesSection() {
     ]);
     setSources(s);
     setEvents(e);
-    setBrands(((brandsRes.data ?? []) as BrandOption[]));
+    setBrands(normalizeSheetWatchBrandOptions(brandsRes.data));
     setLoading(false);
   }, []);
 
@@ -277,7 +277,7 @@ function SourceDrawer({
 }: {
   state: { mode: "create" } | { mode: "edit"; row: SheetSourceRow } | null;
   workspaceId: string;
-  brands: BrandOption[];
+  brands: SheetWatchBrandOption[];
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {

@@ -256,6 +256,7 @@ Current result:
 - Parts feature cast scan is clear for the Slice 6 inventory pattern after replacing local/browser shims with typed helpers.
 - Admin Base Options model and attachment rows now use exported normalizers before option counting, compatible attachment lookup, and bulk repricing.
 - Admin sheet watchdog source and event rows now use exported normalizers before the price-sheet watchdog health UI consumes them.
+- Admin sheet watchdog source editor brand picker now uses an exported brand-option normalizer before rendering select options.
 - Admin audit log rows and actor profile rows now use exported normalizers before audit events are merged and rendered.
 - Admin pricing discipline threshold and exception rows now use exported normalizers before margin enforcement and admin economics rollups consume them.
 - Admin deal economics brand freight-key and Deal Engine readiness rows now use exported normalizers before economics status cards consume them.
@@ -264,7 +265,7 @@ Current result:
 - Admin sheet-diff pending/prior sheet rows, model extracted JSON, and in-flight quote rows now use exported normalizers before diff and quote-impact math consume them.
 - Admin AI request log rows and originating quote joins now use exported normalizers before admin stats and time-to-quote calculations consume them.
 - Admin coach performance action, package status, and rep profile rows now use exported normalizers before performance rollups and rep dismissal leaderboards consume them.
-- Targeted tests passed: `589 pass`, `0 fail`.
+- Targeted tests passed: `590 pass`, `0 fail`.
 - Web typecheck passed.
 - Service feature cast scan is clear for the Slice 6 inventory pattern.
 - Fleet feature cast scan is clear for the Slice 6 inventory pattern.

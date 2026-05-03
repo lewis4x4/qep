@@ -73,6 +73,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Parts local cast cleanup | Remaining parts feature casts were local/browser shims: Web Speech API globals, a detail-page joined-row display helper, and an empty-array return cast. | Replaced speech globals with typed `Window` augmentation, replaced detail display casts with unknown-safe helpers, typed the part-activity query result, and verified the parts feature direct-cast scan is empty. |
 | Admin Base Options API | Base/options model and attachment reads cast query results directly before option counting, compatible attachment lookup, and bulk repricing. | Added exported admin base/options normalizers with required field checks, joined brand array/object normalization, numeric-string coercion, compatible-model ID cleanup, malformed-row filtering, and safe boolean defaults. |
 | Admin sheet watchdog API | Price-sheet source list/get/upsert and recent event queries cast raw watchdog rows directly before the admin watchdog health UI consumed them. | Added exported sheet source, joined-brand source, and watch-event normalizers with required field checks, event-type validation, numeric-string coercion, JSON-detail validation, malformed-row filtering, and safe nullable numeric handling. |
+| Admin sheet watchdog source editor | The source editor brand picker cast raw brand option rows directly in the React component before rendering select options. | Added an exported sheet-watch brand-option normalizer with required id/name/code checks and wired the source editor to use it instead of a component cast. |
 | Admin audit log API | Audit-table fanout and actor profile resolution cast raw audit rows and profile rows directly before merging admin audit events. | Added exported audit-event and actor-profile normalizers with required field checks, action validation, changed-field shape guards, snapshot object guards, malformed-row filtering, and safe actor email resolution. |
 | Admin pricing discipline API | Margin threshold lookups/admin CRUD and margin-exception rollups cast raw threshold and exception rows directly before enforcement and admin economics rendering. | Added exported margin-threshold and margin-exception normalizers with required field checks, joined brand array/object normalization, numeric-string coercion, malformed-row filtering, safe nullable cents, and malformed save-row rejection. |
 | Admin deal economics API | Brand freight keys and Deal Engine readiness counts cast raw brand, price-sheet, freight-zone, and program rows before admin economics status rendering. | Added exported brand freight-key and brand engine source-row normalizers with required brand checks, boolean guards, malformed-row filtering, and safe published-sheet/freight-zone/active-program count inputs. |
@@ -209,7 +210,7 @@ Results:
 - Quote review workflow normalizer tests: `3 pass`, `0 fail`.
 - Equipment row/lifecycle tests: `9 pass`, `0 fail`.
 - Admin Base Options API normalizer tests: `4 pass`, `0 fail`.
-- Admin sheet watchdog API tests: `22 pass`, `0 fail`.
+- Admin sheet watchdog API tests: `23 pass`, `0 fail`.
 - Admin audit API tests: `10 pass`, `0 fail`.
 - Admin pricing discipline API tests: `19 pass`, `0 fail`.
 - Admin deal economics API tests: `18 pass`, `0 fail`.
@@ -218,7 +219,7 @@ Results:
 - Admin sheet-diff API tests: `26 pass`, `0 fail`.
 - Admin AI request log API tests: `21 pass`, `0 fail`.
 - Admin coach performance API tests: `14 pass`, `0 fail`.
-- Combined targeted test run: `589 pass`, `0 fail`.
+- Combined targeted test run: `590 pass`, `0 fail`.
 - Web typecheck: PASS.
 - Service feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 - Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
