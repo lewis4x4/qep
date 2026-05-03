@@ -8,7 +8,11 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import type { BlockerDealRow, BlockerDepositRow, BlockerAnomalyRow } from "../lib/blockerTypes";
+import {
+  normalizeBlockerAnomalyRows,
+  normalizeBlockerDealRows,
+  normalizeBlockerDepositRows,
+} from "../lib/blockerTypes";
 
 const QUERY_KEY = ["qrm", "blockers"];
 
@@ -48,22 +52,10 @@ export function useBlockers() {
       if (depositsRes.error) console.error("[blockers] deposits query failed:", depositsRes.error.message);
       if (anomaliesRes.error) console.error("[blockers] anomalies query failed:", anomaliesRes.error.message);
 
-      // Normalize Supabase joined relations
-      const normalize = <T extends Record<string, unknown>>(rows: T[] | null): T[] =>
-        (rows ?? []).map((row) => {
-          const out = { ...row } as Record<string, unknown>;
-          for (const key of Object.keys(out)) {
-            if (Array.isArray(out[key])) {
-              out[key] = (out[key] as unknown[])[0] ?? null;
-            }
-          }
-          return out as T;
-        });
-
       return {
-        deals: normalize(dealsRes.data) as BlockerDealRow[],
-        deposits: (depositsRes.data ?? []) as BlockerDepositRow[],
-        anomalies: (anomaliesRes.data ?? []) as BlockerAnomalyRow[],
+        deals: normalizeBlockerDealRows(dealsRes.data),
+        deposits: normalizeBlockerDepositRows(depositsRes.data),
+        anomalies: normalizeBlockerAnomalyRows(anomaliesRes.data),
       };
     },
     staleTime: 30_000,

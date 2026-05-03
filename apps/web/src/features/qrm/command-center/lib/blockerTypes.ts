@@ -87,6 +87,116 @@ export interface BlockerAnomalyRow {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function firstRecord(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return firstRecord(value[0]);
+  return isRecord(value) ? value : null;
+}
+
+function stringValue(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function nullableBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function normalizeDealStage(value: unknown): BlockerDealRow["crm_deal_stages"] {
+  const row = firstRecord(value);
+  if (!row) return null;
+  return {
+    name: stringValue(row.name, "Unknown"),
+    sort_order: nullableNumber(row.sort_order) ?? 0,
+  };
+}
+
+function normalizeDealContact(value: unknown): BlockerDealRow["crm_contacts"] {
+  const row = firstRecord(value);
+  if (!row) return null;
+  return {
+    first_name: nullableString(row.first_name),
+    last_name: nullableString(row.last_name),
+  };
+}
+
+function normalizeDealCompany(value: unknown): BlockerDealRow["crm_companies"] {
+  const row = firstRecord(value);
+  if (!row) return null;
+  return {
+    name: stringValue(row.name, "—"),
+  };
+}
+
+export function normalizeBlockerDealRows(rows: unknown): BlockerDealRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      name: stringValue(row.name, "Untitled deal"),
+      amount: nullableNumber(row.amount),
+      stage_id: stringValue(row.stage_id, ""),
+      deposit_status: nullableString(row.deposit_status),
+      margin_check_status: nullableString(row.margin_check_status),
+      margin_pct: nullableNumber(row.margin_pct),
+      expected_close_on: nullableString(row.expected_close_on),
+      last_activity_at: nullableString(row.last_activity_at),
+      crm_deal_stages: normalizeDealStage(row.crm_deal_stages),
+      crm_contacts: normalizeDealContact(row.crm_contacts),
+      crm_companies: normalizeDealCompany(row.crm_companies),
+    }];
+  });
+}
+
+export function normalizeBlockerDepositRows(rows: unknown): BlockerDepositRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      deal_id: nullableString(row.deal_id),
+      amount: nullableNumber(row.amount),
+      status: nullableString(row.status),
+      tier: nullableString(row.tier),
+      required_amount: nullableNumber(row.required_amount),
+    }];
+  });
+}
+
+export function normalizeBlockerAnomalyRows(rows: unknown): BlockerAnomalyRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string" || typeof row.created_at !== "string") return [];
+
+    return [{
+      id: row.id,
+      entity_id: nullableString(row.entity_id),
+      alert_type: nullableString(row.alert_type),
+      severity: nullableString(row.severity),
+      title: nullableString(row.title),
+      description: nullableString(row.description),
+      acknowledged: nullableBoolean(row.acknowledged),
+      created_at: row.created_at,
+    }];
+  });
+}
+
 function unwrapJoin<T>(val: T | T[] | null): T | null {
   if (!val) return null;
   if (Array.isArray(val)) return val[0] ?? null;
