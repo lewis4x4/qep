@@ -4,12 +4,84 @@ import {
   daysBetween,
   deriveWarmth,
   formatContactName,
+  normalizeCustomerSearchCompanyRefRows,
+  normalizeCustomerSearchCompanyRows,
+  normalizeCustomerSearchContactRows,
   EMPTY_SIGNALS,
   WARM_DAYS_MAX,
   COOL_DAYS_MAX,
   type CompanySignals,
   type CustomerSearchContact,
 } from "../customer-search-api";
+
+// ── row normalizers ─────────────────────────────────────────────────────
+
+describe("customer search row normalizers", () => {
+  test("normalizeCustomerSearchContactRows filters malformed contacts", () => {
+    const rows = normalizeCustomerSearchContactRows([
+      {
+        id: "contact-1",
+        first_name: "Angela",
+        last_name: "Peterson",
+        title: "Owner",
+        email: "angela@example.com",
+        phone: "555-0100",
+        primary_company_id: "company-1",
+      },
+      { first_name: "Missing id" },
+      null,
+    ]);
+
+    expect(rows).toEqual([
+      {
+        id: "contact-1",
+        first_name: "Angela",
+        last_name: "Peterson",
+        title: "Owner",
+        email: "angela@example.com",
+        phone: "555-0100",
+        primary_company_id: "company-1",
+      },
+    ]);
+  });
+
+  test("normalizeCustomerSearchCompanyRows filters malformed companies", () => {
+    const rows = normalizeCustomerSearchCompanyRows([
+      {
+        id: "company-1",
+        name: "Acme Landscaping",
+        dba: "Acme",
+        phone: "555-0200",
+        city: "Lake City",
+        state: "FL",
+        classification: "landscape",
+      },
+      { id: "", name: "No id" },
+      undefined,
+    ]);
+
+    expect(rows).toEqual([
+      {
+        id: "company-1",
+        name: "Acme Landscaping",
+        dba: "Acme",
+        phone: "555-0200",
+        city: "Lake City",
+        state: "FL",
+        classification: "landscape",
+      },
+    ]);
+  });
+
+  test("normalizeCustomerSearchCompanyRefRows returns safe linked-company refs", () => {
+    expect(normalizeCustomerSearchCompanyRefRows([
+      { id: "company-1", name: "Acme", city: "Lake City", state: "FL", phone: "ignored" },
+      { id: null, name: "Bad" },
+    ])).toEqual([
+      { id: "company-1", name: "Acme", city: "Lake City", state: "FL" },
+    ]);
+  });
+});
 
 // ── formatContactName ───────────────────────────────────────────────────
 

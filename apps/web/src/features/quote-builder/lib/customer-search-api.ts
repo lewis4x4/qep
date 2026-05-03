@@ -17,15 +17,6 @@
  */
 
 import { supabase } from "@/lib/supabase";
-import type { Database } from "@/lib/database.types";
-
-// CRM entities live under the `public` schema as views, not tables
-// (they're materialized off the underlying qrm_* tables). The Row
-// shape is still the one Supabase returns on a select.
-type CompanyRow = Database["public"]["Views"]["crm_companies"]["Row"];
-type ContactRow = Database["public"]["Views"]["crm_contacts"]["Row"];
-type DealRow    = Database["public"]["Views"]["crm_deals"]["Row"];
-type ActivityRow = Database["public"]["Views"]["crm_activities"]["Row"];
 
 // ── Public types ─────────────────────────────────────────────────────────
 
@@ -79,6 +70,71 @@ export interface CustomerSearchCompany {
 
 export type CustomerSearchResult = CustomerSearchContact | CustomerSearchCompany;
 
+export interface CustomerSearchContactRow {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  primary_company_id: string | null;
+}
+
+export interface CustomerSearchCompanyRow {
+  id: string;
+  name: string | null;
+  dba: string | null;
+  phone: string | null;
+  city: string | null;
+  state: string | null;
+  classification: string | null;
+}
+
+export interface CustomerSearchCompanyRefRow {
+  id: string;
+  name: string | null;
+  city: string | null;
+  state: string | null;
+}
+
+interface OpenDealSignalRow {
+  company_id: string;
+  amount: number | null;
+}
+
+interface ActivitySignalRow {
+  company_id: string;
+  occurred_at: string;
+}
+
+interface CompanyNameRow {
+  id: string;
+  name: string;
+}
+
+interface PastQuoteSignalRow {
+  customer_company: string;
+  net_total: number | null;
+}
+
+interface ContactCountRow {
+  primary_company_id: string;
+}
+
+interface PastEquipmentPackageRow {
+  equipment: unknown;
+  created_at: string | null;
+}
+
+interface HydrateDealRow {
+  primary_contact_id: string | null;
+  company_id: string | null;
+}
+
+interface HydrateCompanyRow {
+  name: string | null;
+}
+
 // ── Search constants ─────────────────────────────────────────────────────
 
 export const MIN_QUERY_CHARS  = 2;
@@ -88,6 +144,154 @@ export const MAX_COMPANIES    = 4;
 // Warmth thresholds (days since last contact activity)
 export const WARM_DAYS_MAX    = 30;
 export const COOL_DAYS_MAX    = 90;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function requiredString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function normalizeCustomerSearchContactRows(rows: unknown): CustomerSearchContactRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    if (!id) return [];
+    return [{
+      id,
+      first_name: nullableString(row.first_name),
+      last_name: nullableString(row.last_name),
+      title: nullableString(row.title),
+      email: nullableString(row.email),
+      phone: nullableString(row.phone),
+      primary_company_id: nullableString(row.primary_company_id),
+    }];
+  });
+}
+
+export function normalizeCustomerSearchCompanyRows(rows: unknown): CustomerSearchCompanyRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    if (!id) return [];
+    return [{
+      id,
+      name: nullableString(row.name),
+      dba: nullableString(row.dba),
+      phone: nullableString(row.phone),
+      city: nullableString(row.city),
+      state: nullableString(row.state),
+      classification: nullableString(row.classification),
+    }];
+  });
+}
+
+export function normalizeCustomerSearchCompanyRefRows(rows: unknown): CustomerSearchCompanyRefRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    if (!id) return [];
+    return [{
+      id,
+      name: nullableString(row.name),
+      city: nullableString(row.city),
+      state: nullableString(row.state),
+    }];
+  });
+}
+
+function normalizeOpenDealSignalRows(rows: unknown): OpenDealSignalRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const companyId = requiredString(row.company_id);
+    if (!companyId) return [];
+    return [{ company_id: companyId, amount: numberOrNull(row.amount) }];
+  });
+}
+
+function normalizeActivitySignalRows(rows: unknown): ActivitySignalRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const companyId = requiredString(row.company_id);
+    const occurredAt = requiredString(row.occurred_at);
+    if (!companyId || !occurredAt) return [];
+    return [{ company_id: companyId, occurred_at: occurredAt }];
+  });
+}
+
+function normalizeCompanyNameRows(rows: unknown): CompanyNameRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const name = requiredString(row.name);
+    if (!id || !name) return [];
+    return [{ id, name }];
+  });
+}
+
+function normalizePastQuoteSignalRows(rows: unknown): PastQuoteSignalRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const customerCompany = requiredString(row.customer_company);
+    if (!customerCompany) return [];
+    return [{ customer_company: customerCompany, net_total: numberOrNull(row.net_total) }];
+  });
+}
+
+function normalizeContactCountRows(rows: unknown): ContactCountRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const primaryCompanyId = requiredString(row.primary_company_id);
+    return primaryCompanyId ? [{ primary_company_id: primaryCompanyId }] : [];
+  });
+}
+
+function normalizePastEquipmentPackageRows(rows: unknown): PastEquipmentPackageRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    return [{
+      equipment: row.equipment,
+      created_at: nullableString(row.created_at),
+    }];
+  });
+}
+
+function normalizeHydrateDealRow(row: unknown): HydrateDealRow | null {
+  if (!isRecord(row)) return null;
+  return {
+    primary_contact_id: nullableString(row.primary_contact_id),
+    company_id: nullableString(row.company_id),
+  };
+}
+
+function normalizeHydrateContactRow(row: unknown): CustomerSearchContactRow | null {
+  return normalizeCustomerSearchContactRows(row ? [row] : [])[0] ?? null;
+}
+
+function normalizeHydrateCompanyRow(row: unknown): HydrateCompanyRow | null {
+  if (!isRecord(row)) return null;
+  return { name: nullableString(row.name) };
+}
 
 // ── Main entry ───────────────────────────────────────────────────────────
 
@@ -127,10 +331,8 @@ export async function searchCustomers(
       .limit(MAX_COMPANIES),
   ]);
 
-  const contacts = (contactsRes.data ?? []) as Pick<ContactRow,
-    "id" | "first_name" | "last_name" | "title" | "email" | "phone" | "primary_company_id">[];
-  const companies = (companiesRes.data ?? []) as Pick<CompanyRow,
-    "id" | "name" | "dba" | "phone" | "city" | "state" | "classification">[];
+  const contacts = normalizeCustomerSearchContactRows(contactsRes.data);
+  const companies = normalizeCustomerSearchCompanyRows(companiesRes.data);
 
   // Collect every distinct company id referenced — both by direct company
   // hits AND by the contacts' primary_company_id — so we hydrate signals
@@ -160,7 +362,7 @@ export async function searchCustomers(
       .map((c) => c.primary_company_id)
       .filter((v): v is string => !!v),
   )];
-  const companyById = new Map<string, Pick<CompanyRow, "id" | "name" | "city" | "state">>();
+  const companyById = new Map<string, CustomerSearchCompanyRefRow>();
   for (const c of companies) {
     if (c.id) companyById.set(c.id, { id: c.id, name: c.name ?? "", city: c.city, state: c.state });
   }
@@ -170,8 +372,8 @@ export async function searchCustomers(
       .from("crm_companies")
       .select("id, name, city, state")
       .in("id", missingCompanyIds);
-    for (const row of (extras ?? []) as Pick<CompanyRow, "id" | "name" | "city" | "state">[]) {
-      if (row.id) companyById.set(row.id, row);
+    for (const row of normalizeCustomerSearchCompanyRefRows(extras)) {
+      companyById.set(row.id, row);
     }
   }
 
@@ -184,11 +386,11 @@ export async function searchCustomers(
 // ── Pure assembly + ranking (exported for tests) ─────────────────────────
 
 export function assembleResults(input: {
-  contacts:               Pick<ContactRow, "id" | "first_name" | "last_name" | "title" | "email" | "phone" | "primary_company_id">[];
-  companies:              Pick<CompanyRow, "id" | "name" | "dba" | "phone" | "city" | "state" | "classification">[];
+  contacts:               CustomerSearchContactRow[];
+  companies:              CustomerSearchCompanyRow[];
   signalsByCompany:       Map<string, CompanySignals>;
   contactCountByCompany:  Map<string, number>;
-  companyById:            Map<string, Pick<CompanyRow, "id" | "name" | "city" | "state">>;
+  companyById:            Map<string, CustomerSearchCompanyRefRow>;
   limit:                  number;
 }): CustomerSearchResult[] {
   const contactRows: CustomerSearchContact[] = input.contacts.map((c) => {
@@ -297,8 +499,7 @@ async function fetchSignalsForCompanies(
   for (const id of companyIds) signals.set(id, { ...EMPTY_SIGNALS });
 
   // Open deals rollup
-  for (const d of (openDealsRes.data ?? []) as Pick<DealRow, "company_id" | "amount">[]) {
-    if (!d.company_id) continue;
+  for (const d of normalizeOpenDealSignalRows(openDealsRes.data)) {
     const slot = signals.get(d.company_id);
     if (!slot) continue;
     slot.openDeals += 1;
@@ -308,8 +509,7 @@ async function fetchSignalsForCompanies(
   // Latest activity per company
   const seenLatest = new Set<string>();
   const now = new Date();
-  for (const a of (activitiesRes.data ?? []) as Pick<ActivityRow, "company_id" | "occurred_at">[]) {
-    if (!a.company_id || !a.occurred_at) continue;
+  for (const a of normalizeActivitySignalRows(activitiesRes.data)) {
     if (seenLatest.has(a.company_id)) continue;
     seenLatest.add(a.company_id);
     const slot = signals.get(a.company_id);
@@ -320,8 +520,8 @@ async function fetchSignalsForCompanies(
   // Past quote count — match by company NAME since quote_packages has no
   // company FK. Pull distinct names, then run one ilike batch.
   const namesByCompanyId = new Map<string, string>();
-  for (const c of (companiesRes.data ?? []) as { id: string; name: string | null }[]) {
-    if (c.id && c.name) namesByCompanyId.set(c.id, c.name);
+  for (const c of normalizeCompanyNameRows(companiesRes.data)) {
+    namesByCompanyId.set(c.id, c.name);
   }
   if (namesByCompanyId.size > 0) {
     const namesList = [...namesByCompanyId.values()];
@@ -329,8 +529,7 @@ async function fetchSignalsForCompanies(
       .from("quote_packages")
       .select("customer_company, net_total")
       .in("customer_company", namesList);
-    for (const q of (pastQuotes ?? []) as { customer_company: string | null; net_total: number | null }[]) {
-      if (!q.customer_company) continue;
+    for (const q of normalizePastQuoteSignalRows(pastQuotes)) {
       // Find the company id for this name (first hit wins — rare collisions)
       for (const [companyId, name] of namesByCompanyId) {
         if (name === q.customer_company) {
@@ -356,8 +555,7 @@ async function fetchContactCounts(companyIds: string[]): Promise<Map<string, num
     .is("deleted_at", null);
 
   const counts = new Map<string, number>();
-  for (const c of (data ?? []) as { primary_company_id: string | null }[]) {
-    if (!c.primary_company_id) continue;
+  for (const c of normalizeContactCountRows(data)) {
     counts.set(c.primary_company_id, (counts.get(c.primary_company_id) ?? 0) + 1);
   }
   return counts;
@@ -405,10 +603,11 @@ export async function fetchCustomerPastEquipment(
     .order("created_at", { ascending: false })
     .limit(50);
 
-  if (!packages || packages.length === 0) return [];
+  const packageRows = normalizePastEquipmentPackageRows(packages);
+  if (packageRows.length === 0) return [];
 
   const rollup = new Map<string, CustomerPastEquipment>();
-  for (const row of packages as { equipment: unknown; created_at: string | null }[]) {
+  for (const row of packageRows) {
     const createdAt = row.created_at ?? null;
     const items = Array.isArray(row.equipment) ? row.equipment : [];
     for (const raw of items) {
@@ -481,7 +680,8 @@ export async function hydrateCustomerById(args: {
       .is("deleted_at", null)
       .maybeSingle();
     if (deal) {
-      const d = deal as { primary_contact_id: string | null; company_id: string | null };
+      const d = normalizeHydrateDealRow(deal);
+      if (!d) return null;
       contactId = contactId ?? d.primary_contact_id ?? null;
       companyId = companyId ?? d.company_id ?? null;
     }
@@ -504,8 +704,8 @@ export async function hydrateCustomerById(args: {
       .is("deleted_at", null)
       .maybeSingle();
     if (contact) {
-      const c = contact as Pick<ContactRow,
-        "id" | "first_name" | "last_name" | "phone" | "email" | "primary_company_id">;
+      const c = normalizeHydrateContactRow(contact);
+      if (!c) return null;
       resolvedContactId = c.id ?? null;
       contactName  = formatContactName(c.first_name, c.last_name);
       contactPhone = c.phone ?? "";
@@ -524,7 +724,7 @@ export async function hydrateCustomerById(args: {
       .is("deleted_at", null)
       .maybeSingle();
     if (company) {
-      companyName = (company as { name: string | null }).name ?? "";
+      companyName = normalizeHydrateCompanyRow(company)?.name ?? "";
     }
   }
 
