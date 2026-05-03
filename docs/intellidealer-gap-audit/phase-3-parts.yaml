@@ -243,6 +243,10 @@ fields:
 
 
 
+
+
+
+
   - id: part.part_number
     intellidealer_label: "Part Number"
     intellidealer_screen: "Parts Profile / Parts Listing"
@@ -1564,15 +1568,18 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Customer's PO # for this invoice (defaults from per-customer Phase-1 PO)."
-    qep_status: MISSING
-    qep_table: parts_invoices
+    qep_status: BUILT
+    qep_table: customer_invoices
     qep_column: po_number
-    qep_evidence: []
-    qep_gap_notes: "No per-invoice PO column."
+    qep_evidence:
+      - "supabase/migrations/477_customer_invoice_wave2_columns.sql public.customer_invoices.po_number"
+      - "supabase/migrations/468_parts_invoice_lines_customer_invoices.sql canonical parts invoice parent is customer_invoices"
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.po_number"
+    qep_gap_notes: "Resolved on canonical customer_invoices header; QEP intentionally does not create a duplicate parts_invoices table."
     severity: must
     category: financial
     migration_hint: |
-      ALTER TABLE parts_invoices ADD COLUMN po_number TEXT;
+      -- No DDL. Canonical parts invoice header field is customer_invoices.po_number.
     ui_surface_hint: "Parts Invoice header — PO field (red if customer.po_required and missing)"
     dependencies: []
 
@@ -1605,18 +1612,18 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
     intellidealer_field_type: enum
     intellidealer_purpose: "Same 4-slot tax routing as elsewhere — defaults from customer + ship-to override."
-    qep_status: MISSING
-    qep_table: parts_invoices
-    qep_column: tax_code_1
-    qep_evidence: []
-    qep_gap_notes: "Per-invoice tax routing missing."
+    qep_status: BUILT
+    qep_table: customer_invoices
+    qep_column: "tax_code_1, tax_code_2, tax_code_3, tax_code_4"
+    qep_evidence:
+      - "supabase/migrations/477_customer_invoice_wave2_columns.sql public.customer_invoices.tax_code_1/tax_code_2/tax_code_3/tax_code_4"
+      - "supabase/migrations/468_parts_invoice_lines_customer_invoices.sql canonical parts invoice parent is customer_invoices"
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.tax_code_1/tax_code_2/tax_code_3/tax_code_4"
+    qep_gap_notes: "Resolved on canonical customer_invoices header; tax routing should not be duplicated on a parts_invoices table."
     severity: must
     category: regulatory
     migration_hint: |
-      ALTER TABLE parts_invoices ADD COLUMN tax_code_1 TEXT;
-      ALTER TABLE parts_invoices ADD COLUMN tax_code_2 TEXT;
-      ALTER TABLE parts_invoices ADD COLUMN tax_code_3 TEXT;
-      ALTER TABLE parts_invoices ADD COLUMN tax_code_4 TEXT;
+      -- No DDL. Canonical parts invoice tax slots are customer_invoices.tax_code_1..tax_code_4.
     ui_surface_hint: "Parts Invoice header — Tax block"
     dependencies: []
 
@@ -1648,18 +1655,19 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
     intellidealer_field_type: json
     intellidealer_purpose: "Sold-to + Ship-to addresses on the invoice (defaults from customer's ship-to book)."
-    qep_status: MISSING
-    qep_table: parts_invoices
-    qep_column: sold_to_address_id
-    qep_evidence: []
-    qep_gap_notes: "(depends on Phase-1 customer.ship_to_addresses)"
+    qep_status: BUILT
+    qep_table: customer_invoices
+    qep_column: "sold_to_address_id, ship_to_address_id"
+    qep_evidence:
+      - "supabase/migrations/477_customer_invoice_wave2_columns.sql public.customer_invoices.sold_to_address_id/ship_to_address_id"
+      - "supabase/migrations/497_wave3_cross_table_relationships.sql customer_invoices sold_to/ship_to FKs"
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.sold_to_address_id/ship_to_address_id"
+    qep_gap_notes: "Resolved on canonical customer_invoices header using qrm_company_ship_to_addresses for sold-to and ship-to references."
     severity: must
     category: financial
     migration_hint: |
-      ALTER TABLE parts_invoices ADD COLUMN sold_to_address_id UUID
-        REFERENCES qrm_company_ship_to_addresses(id);
-      ALTER TABLE parts_invoices ADD COLUMN ship_to_address_id UUID
-        REFERENCES qrm_company_ship_to_addresses(id);
+      -- No DDL. Canonical parts invoice addresses are customer_invoices.sold_to_address_id
+      -- and customer_invoices.ship_to_address_id.
     ui_surface_hint: "Parts Invoice header — Sold-To / Ship-To block"
     dependencies: []
 

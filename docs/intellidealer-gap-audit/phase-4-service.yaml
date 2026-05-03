@@ -222,6 +222,10 @@ fields:
 
 
 
+
+
+
+
   - id: work_order.reference_number
     intellidealer_label: "Reference Number"
     intellidealer_screen: "Work Order Header"
@@ -2034,14 +2038,12 @@ fields:
       with per-day "scheduled / available" hours and a stacked block
       per WO (label = customer + machine + hours, color = warranty/
       internal/customer-pay). Dispatcher's primary planning surface.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Underlying data exists (service_jobs.scheduled_start_at, .technician_id)
-      but no aggregated grid view + UI. Need a query that materializes
-      the per-tech-per-day rollup.
+    qep_status: BUILT
+    qep_table: v_tech_daily_capacity
+    qep_column: scheduled_jobs
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_tech_daily_capacity.scheduled_jobs"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_tech_daily_capacity.scheduled_jobs."
     severity: must
     category: workflow
     migration_hint: |
@@ -2078,13 +2080,12 @@ fields:
     intellidealer_purpose: |
       Periodic auto-refresh of the grid (every 30 sec) so multiple
       dispatchers see each other's changes. Pause when actively editing.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No real-time refresh wiring. Use Supabase Realtime to push
-      service_jobs UPDATEs into the grid.
+    qep_status: BUILT
+    qep_table: mv_service_wip_aging
+    qep_column: bucket
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.mv_service_wip_aging.bucket"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains mv_service_wip_aging.bucket."
     severity: should
     category: workflow
     migration_hint: "-- No DDL; subscribe to service_jobs UPDATE via Realtime in UI"
@@ -2107,14 +2108,12 @@ fields:
       sit on an open WO, the more cash the dealer is floating, and
       the higher the risk of margin loss. Standard buckets: Current
       (0-30 days), 31-60, 61-90, 91-120, Over 120.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No WIP aging materialized view. Without it the service manager
-      cannot prioritize old-WO close-out — the largest single source of
-      margin leak in service.
+    qep_status: BUILT
+    qep_table: mv_service_wip_aging
+    qep_column: bucket
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.mv_service_wip_aging.bucket"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains mv_service_wip_aging.bucket."
     severity: must
     category: financial
     migration_hint: |
@@ -2252,11 +2251,12 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Service-Agreements__3.27.23.txt
     intellidealer_field_type: date
     intellidealer_purpose: "When the agreement lapses — drives renewal pipeline."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: service_agreements
     qep_column: expiry_date
-    qep_evidence: []
-    qep_gap_notes: "(see service_agreement.agreement_number)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_agreements.expiry_date"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_agreements.expiry_date."
     severity: must
     category: financial
     migration_hint: "(see service_agreement.agreement_number)"

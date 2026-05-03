@@ -160,6 +160,10 @@ fields:
 
 
 
+
+
+
+
   - id: customer.legacy_customer_number
     intellidealer_label: "Customer Number"
     intellidealer_screen: "Customer Profile (Profile tab) / Customer Listing"
@@ -1264,16 +1268,19 @@ fields:
     intellidealer_purpose: |
       Default payment terms applied when an invoice is created. Drives
       the due-date calculation and the late-charge eligibility window.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
-    qep_column: payment_terms
-    qep_evidence: []
-    qep_gap_notes: "No payment-terms column on the customer record."
+    qep_column: payment_terms_id
+    qep_evidence:
+      - "supabase/migrations/435_payment_terms.sql public.payment_terms"
+      - "supabase/migrations/472_qrm_company_wave2_columns.sql public.qrm_companies.payment_terms_id/payment_terms_code/terms_code"
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.payment_terms_id"
+    qep_gap_notes: "Resolved by canonical qrm_companies.payment_terms_id FK to payment_terms; payment_terms_code and terms_code remain legacy/import aliases."
     severity: must
     category: financial
     migration_hint: |
-      CREATE TYPE payment_terms AS ENUM ('normal','net10','net15','net30','net45','net60','cod','prepay');
-      ALTER TABLE qrm_companies ADD COLUMN payment_terms payment_terms NOT NULL DEFAULT 'net30';
+      -- No DDL. Canonical default AR terms live in qrm_companies.payment_terms_id
+      -- referencing payment_terms(id); payment_terms_code/terms_code preserve legacy codes.
     ui_surface_hint: "Customer Profile (Details) — AR block"
     dependencies: []
 

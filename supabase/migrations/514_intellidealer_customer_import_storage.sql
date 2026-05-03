@@ -26,10 +26,10 @@ create policy "intellidealer_customer_imports_insert_admin"
   on storage.objects for insert
   with check (
     bucket_id = 'intellidealer-customer-imports'
-    and auth.role() = 'authenticated'
-    and (storage.foldername(name))[1] = auth.uid()::text
+    and (select auth.role()) = 'authenticated'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
     and (
-      (select role from public.profiles where id = auth.uid())
+      (select role from public.profiles where id = (select auth.uid()))
       in ('admin', 'manager', 'owner')
     )
   );
@@ -38,9 +38,9 @@ create policy "intellidealer_customer_imports_select_admin"
   on storage.objects for select
   using (
     bucket_id = 'intellidealer-customer-imports'
-    and auth.role() = 'authenticated'
+    and (select auth.role()) = 'authenticated'
     and (
-      (select role from public.profiles where id = auth.uid())
+      (select role from public.profiles where id = (select auth.uid()))
       in ('admin', 'manager', 'owner')
     )
   );
@@ -49,10 +49,10 @@ create policy "intellidealer_customer_imports_delete_admin"
   on storage.objects for delete
   using (
     bucket_id = 'intellidealer-customer-imports'
-    and auth.role() = 'authenticated'
-    and (storage.foldername(name))[1] = auth.uid()::text
+    and (select auth.role()) = 'authenticated'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
     and (
-      (select role from public.profiles where id = auth.uid())
+      (select role from public.profiles where id = (select auth.uid()))
       in ('admin', 'manager', 'owner')
     )
   );

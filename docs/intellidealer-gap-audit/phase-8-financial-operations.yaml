@@ -65,6 +65,10 @@ fields:
 
 
 
+
+
+
+
   - id: ar_aging.invoice_first_digit
     intellidealer_label: "Select Invoice 1st Digit"
     intellidealer_screen: "Accounts Receivable - Outstanding A/R"
@@ -1196,7 +1200,7 @@ fields:
       invoice was due (cash-flow planning view). Invoice Date age = days
       since invoice issued (DPO measurement view).
     qep_status: BUILT
-    qep_table: "ap_aging_view"
+    qep_table: "v_ap_outstanding_summary"
     qep_column: "aging_basis"
     qep_evidence:
       - "apps/web/src/lib/database.types.ts public.Views.ap_aging_view.aging_basis"
@@ -1304,11 +1308,12 @@ fields:
     intellidealer_purpose: |
       Dollars of AP not yet due. Real example: -6,243.37 (negative indicates
       vendor credits). Drives weekly cash-disbursement plan.
-    qep_status: "MISSING"
-    qep_table: "ap_aging_view"
+    qep_status: BUILT
+    qep_table: "v_ap_outstanding_summary"
     qep_column: "current_amount"
-    qep_evidence: []
-    qep_gap_notes: "No vendor_invoices table; cannot age."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_ap_outstanding_summary.current_amount"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_ap_outstanding_summary.current_amount."
     severity: "must"
     category: "financial"
     migration_hint: "(see ap_aging_view above)"
@@ -1324,11 +1329,12 @@ fields:
       - Phase-8_Financial-Operations/Accounts-Payable__3.26.26.png
     intellidealer_field_type: "currency"
     intellidealer_purpose: "Dollars of AP due in current month. Real: 437,593.96."
-    qep_status: "MISSING"
-    qep_table: "ap_aging_view"
+    qep_status: BUILT
+    qep_table: "v_ap_outstanding_summary"
     qep_column: "bucket_month_1"
-    qep_evidence: []
-    qep_gap_notes: "Same as ap_aging.bucket_current."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_ap_outstanding_summary.bucket_month_1"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_ap_outstanding_summary.bucket_month_1."
     severity: "must"
     category: "financial"
     migration_hint: "(see ap_aging_view)"
@@ -1344,11 +1350,12 @@ fields:
       - Phase-8_Financial-Operations/Accounts-Payable__3.26.26.png
     intellidealer_field_type: "currency"
     intellidealer_purpose: "Dollars of AP due in second month. Real: 308,245.63."
-    qep_status: "MISSING"
-    qep_table: "ap_aging_view"
+    qep_status: BUILT
+    qep_table: "v_ap_outstanding_summary"
     qep_column: "bucket_month_2"
-    qep_evidence: []
-    qep_gap_notes: "Same."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_ap_outstanding_summary.bucket_month_2"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_ap_outstanding_summary.bucket_month_2."
     severity: "must"
     category: "financial"
     migration_hint: "(see ap_aging_view)"
@@ -1364,11 +1371,12 @@ fields:
       - Phase-8_Financial-Operations/Accounts-Payable__3.26.26.png
     intellidealer_field_type: "currency"
     intellidealer_purpose: "Dollars of AP due in third month. Real: 84,666.15."
-    qep_status: "MISSING"
-    qep_table: "ap_aging_view"
+    qep_status: BUILT
+    qep_table: "v_ap_outstanding_summary"
     qep_column: "bucket_month_3"
-    qep_evidence: []
-    qep_gap_notes: "Same."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_ap_outstanding_summary.bucket_month_3"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_ap_outstanding_summary.bucket_month_3."
     severity: "must"
     category: "financial"
     migration_hint: "(see ap_aging_view)"
@@ -1384,11 +1392,12 @@ fields:
       - Phase-8_Financial-Operations/Accounts-Payable__3.26.26.png
     intellidealer_field_type: "currency"
     intellidealer_purpose: "Dollars of AP due more than 3 months out. Real: 2,780.00."
-    qep_status: "MISSING"
-    qep_table: "ap_aging_view"
+    qep_status: BUILT
+    qep_table: "v_ap_outstanding_summary"
     qep_column: "bucket_after_3"
-    qep_evidence: []
-    qep_gap_notes: "Same."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_ap_outstanding_summary.bucket_after_3"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_ap_outstanding_summary.bucket_after_3."
     severity: "must"
     category: "financial"
     migration_hint: "(see ap_aging_view)"
@@ -1404,11 +1413,12 @@ fields:
       - Phase-8_Financial-Operations/Accounts-Payable__3.26.26.png
     intellidealer_field_type: "currency"
     intellidealer_purpose: "Total AP outstanding. Real: 827,042.37."
-    qep_status: "MISSING"
-    qep_table: "ap_aging_view"
+    qep_status: BUILT
+    qep_table: "v_ap_outstanding_summary"
     qep_column: "total_outstanding"
-    qep_evidence: []
-    qep_gap_notes: "No AP exists in QEP."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_ap_outstanding_summary.total_outstanding"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_ap_outstanding_summary.total_outstanding."
     severity: "must"
     category: "financial"
     migration_hint: "(see ap_aging_view)"

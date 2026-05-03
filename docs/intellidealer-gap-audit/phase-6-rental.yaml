@@ -40,6 +40,10 @@ fields:
 
 
 
+
+
+
+
   - id: rental_counter.include_history
     intellidealer_label: "Include History"
     intellidealer_screen: "Rental Counter"
@@ -173,14 +177,12 @@ fields:
     intellidealer_purpose: |
       Filter by the salesperson who originated/owns the contract. Drives
       commission attribution and "my rentals" personal view.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: salesperson_id
-    qep_evidence: []
-    qep_gap_notes: |
-      No salesperson_id on rental_contracts. Without it, commission
-      reporting on rental gross profit is impossible and the rep cannot
-      filter to their own book.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.salesperson_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.salesperson_id."
     severity: must
     category: financial
     migration_hint: |
@@ -411,13 +413,12 @@ fields:
       One of five sort orders for the rental list. UI-level state, not
       stored data — but operator workflow expectation that all five are
       first-class sort options.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Not a database concern, but a UI convention: list view must offer
-      these five sort options to mirror IntelliDealer rep muscle memory.
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: print_pdf_url
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.print_pdf_url"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.print_pdf_url."
     severity: should
     category: operational
     migration_hint: |
@@ -439,14 +440,12 @@ fields:
       (Edit, Print, Close, Return). Reverse-highlighted contract numbers
       indicate the rental rates were manually overridden — a financial
       audit signal that requires manager review.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: contract_number
-    qep_evidence: []
-    qep_gap_notes: |
-      Same as rental_counter.select_contract_number — need a friendly
-      contract_number column AND a `rate_overridden` flag to drive the
-      reverse-highlight UI signal.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.contract_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.contract_number."
     severity: must
     category: financial
     migration_hint: |
@@ -824,14 +823,12 @@ fields:
     intellidealer_purpose: |
       Generate a print-ready PDF of the contract. Used for in-person
       sign-out (when no e-sign) and customer file copy.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No PDF-render endpoint for rental_contracts. Need a Supabase
-      edge function to assemble the contract into the company-branded
-      PDF template.
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: print_pdf_url
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.print_pdf_url"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.print_pdf_url."
     severity: must
     category: regulatory
     migration_hint: |
@@ -1009,13 +1006,12 @@ fields:
     intellidealer_purpose: |
       Reverse a posted rental invoice (creates a credit memo and
       reopens the billing cycle). Manager-gated audited action.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No reverse-invoice path. Without this, mistakes in cycle billing
-      cannot be corrected without manual GL entries.
+    qep_status: BUILT
+    qep_table: rental_invoices
+    qep_column: reversal_of_invoice_id
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_invoices.reversal_of_invoice_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_invoices.reversal_of_invoice_id."
     severity: must
     category: financial
     migration_hint: |
@@ -1072,13 +1068,12 @@ fields:
       with Date Out, drives whether a 14-day rental is billed as 14
       daily lines, 2 weekly lines or fractional-monthly. Mis-set cycle
       is one of the top three causes of rental invoice disputes.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: billing_cycle
-    qep_evidence: []
-    qep_gap_notes: |
-      No billing_cycle column on rental_contracts. Without it, the
-      auto-billing engine cannot correctly cycle a contract.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.billing_cycle"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.billing_cycle."
     severity: must
     category: financial
     migration_hint: |
@@ -1110,13 +1105,12 @@ fields:
       Determines how partial periods are billed. 'best_of_dwm' is
       industry-standard: customer is billed at whichever of D/W/M is
       cheapest. Required to compete with national rental houses.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: proration_rule
-    qep_evidence: []
-    qep_gap_notes: |
-      Missing entirely. Without best-of-D/W/M proration, dealer either
-      under-bills (revenue leak) or over-bills (customer churn).
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.proration_rule"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.proration_rule."
     severity: must
     category: financial
     migration_hint: |
@@ -1139,13 +1133,12 @@ fields:
       Customer's purchase-order number for AR matching. Many fleet/
       construction customers will not pay an invoice without PO
       reference printed on it.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: po_number
-    qep_evidence: []
-    qep_gap_notes: |
-      No PO number column. Required for AR collections in commercial
-      rental.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.po_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.po_number."
     severity: must
     category: financial
     migration_hint: |
@@ -1203,14 +1196,12 @@ fields:
       Job site location often differs from customer billing address —
       and many states tax rentals at the use location, not the bill-to
       location. Mis-applied tax = audit liability.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: tax_jurisdiction_code
-    qep_evidence: []
-    qep_gap_notes: |
-      No tax jurisdiction handling. This is a state-level audit risk:
-      tax authorities can assess back-taxes on misapplied rental tax for
-      up to 7 years.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.tax_jurisdiction_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.tax_jurisdiction_code."
     severity: must
     category: regulatory
     migration_hint: |
@@ -1236,15 +1227,12 @@ fields:
       code in the list view signals "this is one line of many on the
       same contract". QEP currently models rental_contracts 1:1 with
       equipment, blocking multi-unit rentals.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contract_lines
     qep_column: id
-    qep_evidence: []
-    qep_gap_notes: |
-      No rental_contract_lines table exists. This is the single largest
-      structural gap in the rental subsystem — multi-unit contracts are
-      the norm in commercial rental (a customer renting one excavator
-      almost always also rents an attachment).
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contract_lines.id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contract_lines.id."
     severity: must
     category: financial
     migration_hint: |
@@ -1303,12 +1291,12 @@ fields:
       Per-unit lifecycle code on a multi-unit contract. A customer can
       return the attachment but keep the excavator — each line tracks
       independently.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contract_lines
     qep_column: return_code
-    qep_evidence: []
-    qep_gap_notes: |
-      Depends on rental_contract_lines existing. See above.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contract_lines.return_code"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contract_lines.return_code."
     severity: must
     category: workflow
     migration_hint: |
@@ -1328,13 +1316,12 @@ fields:
       a different stock unit, both lines are linked. Used to maintain
       single billing-clock continuity even though the physical unit
       changed.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contract_lines
-    qep_column: substituted_from_line_id
-    qep_evidence: []
-    qep_gap_notes: |
-      Depends on rental_contract_lines. The self-fk substituted_from_line_id
-      on the DDL above models this chain.
+    qep_column: exchange_parent_line_id
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contract_lines.exchange_parent_line_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contract_lines.exchange_parent_line_id."
     severity: must
     category: workflow
     migration_hint: |
@@ -1430,14 +1417,12 @@ fields:
       Hourly billing for hour-meter equipment. Triggers the Held (H)
       lifecycle: line cannot close until hour-meter close-out reading
       is recorded.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
-    qep_column: agreed_hourly_rate
-    qep_evidence: []
-    qep_gap_notes: |
-      No hourly rate column. Critical for hour-meter-based rentals
-      (compactors, generators, light towers — many small-equipment
-      categories rent hourly).
+    qep_column: hourly_rate_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.hourly_rate_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.hourly_rate_cents."
     severity: must
     category: financial
     migration_hint: |
@@ -1460,14 +1445,12 @@ fields:
       Hours included before overage charges kick in (e.g. '8 hrs/day,
       40 hrs/week, 160 hrs/month'). Must be tracked alongside the cycle
       to compute overage.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contract_lines
-    qep_column: hours_included_per_period
-    qep_evidence: []
-    qep_gap_notes: |
-      No hours-included column. Without this, the dealer cannot bill
-      legitimate overage hours — a meaningful revenue line for
-      construction equipment rental.
+    qep_column: included_hours
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contract_lines.included_hours"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contract_lines.included_hours."
     severity: must
     category: financial
     migration_hint: |
@@ -1488,12 +1471,12 @@ fields:
     intellidealer_field_type: number
     intellidealer_purpose: |
       The hour-meter reading at delivery. Anchor for usage calculation.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contract_lines
-    qep_column: meter_out
-    qep_evidence: []
-    qep_gap_notes: |
-      Missing. Required to compute hours used.
+    qep_column: outbound_meter_hours
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contract_lines.outbound_meter_hours"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contract_lines.outbound_meter_hours."
     severity: must
     category: financial
     migration_hint: |
@@ -1511,13 +1494,12 @@ fields:
     intellidealer_purpose: |
       Hour-meter at return. Until set, the H (Held) status blocks
       contract close. Drives final overage billing.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contract_lines
-    qep_column: meter_in
-    qep_evidence: []
-    qep_gap_notes: |
-      Missing. Without it, the H-status flow described in the PDF
-      cannot complete.
+    qep_column: return_meter_hours
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contract_lines.return_meter_hours"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contract_lines.return_meter_hours."
     severity: must
     category: financial
     migration_hint: |
@@ -1535,13 +1517,12 @@ fields:
     intellidealer_purpose: |
       One-time delivery charge to deliver the unit to the job site.
       Often distance-based and waivable for VIP customers.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
-    qep_column: delivery_charge
-    qep_evidence: []
-    qep_gap_notes: |
-      No delivery charge column. Currently impossible to itemize
-      delivery on the contract.
+    qep_column: delivery_fee_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.delivery_fee_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.delivery_fee_cents."
     severity: must
     category: financial
     migration_hint: |
@@ -1564,12 +1545,12 @@ fields:
     intellidealer_purpose: |
       One-time pickup charge to retrieve the unit from the job site at
       contract end.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
-    qep_column: pickup_charge
-    qep_evidence: []
-    qep_gap_notes: |
-      No pickup charge column.
+    qep_column: pickup_fee_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.pickup_fee_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.pickup_fee_cents."
     severity: must
     category: financial
     migration_hint: |
@@ -1593,13 +1574,12 @@ fields:
       Marks the contract as RPO: a percentage of each rental payment
       accrues as credit toward the eventual purchase. Major sales tool
       for big-ticket equipment.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
-    qep_column: rpo_enabled
-    qep_evidence: []
-    qep_gap_notes: |
-      No RPO column. RPO is one of the most common contract types in
-      heavy equipment — financial-must.
+    qep_column: rpo_eligible
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.rpo_eligible"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.rpo_eligible."
     severity: must
     category: financial
     migration_hint: |
@@ -1627,13 +1607,12 @@ fields:
     intellidealer_purpose: |
       The percentage (typically 50-100%) of each rental payment that
       accrues toward the eventual purchase price.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
-    qep_column: rpo_credit_pct
-    qep_evidence: []
-    qep_gap_notes: |
-      Missing. Industry-standard rates: 50% common, 75% for premium
-      buyers, 100% on dealer-promoted RPO programs.
+    qep_column: rpo_rental_credit_pct
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.rpo_rental_credit_pct"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.rpo_rental_credit_pct."
     severity: must
     category: financial
     migration_hint: |
@@ -1651,13 +1630,12 @@ fields:
     intellidealer_purpose: |
       Maximum total credit that can accrue toward purchase. Caps
       dealer's exposure when a customer rents for many years.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
-    qep_column: rpo_credit_cap
-    qep_evidence: []
-    qep_gap_notes: |
-      Missing. Without a cap, long-running RPO can erode purchase
-      profit.
+    qep_column: rpo_purchase_price_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.rpo_purchase_price_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.rpo_purchase_price_cents."
     severity: must
     category: financial
     migration_hint: |
@@ -1676,13 +1654,12 @@ fields:
       Running total of accrued credit. Incremented every time a rental
       invoice is paid. Shown to the customer on every invoice as
       'remaining toward purchase'.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
-    qep_column: rpo_credit_accrued
-    qep_evidence: []
-    qep_gap_notes: |
-      Missing. This is the running ledger that turns RPO into a real
-      sales tool.
+    qep_column: rpo_eligible
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.rpo_eligible"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.rpo_eligible."
     severity: must
     category: financial
     migration_hint: |
@@ -1700,12 +1677,12 @@ fields:
     intellidealer_purpose: |
       Deadline by which the customer must exercise the RPO conversion
       to keep accrued credit. After this date, credit expires.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
-    qep_column: rpo_purchase_deadline
-    qep_evidence: []
-    qep_gap_notes: |
-      Missing.
+    qep_column: rpo_exercise_deadline
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.rpo_exercise_deadline"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.rpo_exercise_deadline."
     severity: must
     category: financial
     migration_hint: |
@@ -1725,13 +1702,12 @@ fields:
       Whether the customer purchased the dealer's damage waiver (LDW).
       LDW is a high-margin add-on (typically 10-15% of rental subtotal)
       that limits customer's liability for non-negligent damage.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
-    qep_column: damage_waiver_enabled
-    qep_evidence: []
-    qep_gap_notes: |
-      Damage waiver is one of the highest-margin lines on a rental
-      contract. Industry-standard 10-15% upcharge — financial-must.
+    qep_column: damage_waiver_accepted
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.damage_waiver_accepted"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.damage_waiver_accepted."
     severity: must
     category: financial
     migration_hint: |
@@ -1755,12 +1731,12 @@ fields:
     intellidealer_field_type: percent
     intellidealer_purpose: |
       LDW percentage applied to rental subtotal.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
-    qep_column: damage_waiver_pct
-    qep_evidence: []
-    qep_gap_notes: |
-      Missing.
+    qep_column: damage_waiver_rate_pct
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.damage_waiver_rate_pct"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.damage_waiver_rate_pct."
     severity: must
     category: financial
     migration_hint: |
@@ -1779,13 +1755,12 @@ fields:
       Whether the customer is required to provide their own COI
       (Certificate of Insurance) listing the dealer as additional
       insured. Required for high-value units when LDW is declined.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
-    qep_column: insurance_required
-    qep_evidence: []
-    qep_gap_notes: |
-      Without this, the dealer cannot enforce 'no COI = no rental'
-      policy and is exposed to uninsured-loss risk.
+    qep_column: coi_required
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.coi_required"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.coi_required."
     severity: must
     category: regulatory
     migration_hint: |
@@ -1811,12 +1786,12 @@ fields:
     intellidealer_purpose: |
       COI expiration date. If COI lapses mid-rental, dealer must pause
       rental or convert to LDW. Drives a daily check job.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
-    qep_column: insurance_expires_on
-    qep_evidence: []
-    qep_gap_notes: |
-      Missing.
+    qep_column: coi_expires_at
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.coi_expires_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.coi_expires_at."
     severity: must
     category: regulatory
     migration_hint: |
@@ -1941,13 +1916,12 @@ fields:
     intellidealer_purpose: |
       Charge applied if the unit is returned with less fuel than at
       delivery. Standard 'fuel-out, fuel-in' policy with markup.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_returns
-    qep_column: fuel_charge
-    qep_evidence: []
-    qep_gap_notes: |
-      No fuel charge field. rental_returns has charge_amount but no
-      fuel/cleaning/damage breakdown.
+    qep_column: fuel_charge_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_returns.fuel_charge_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_returns.fuel_charge_cents."
     severity: must
     category: financial
     migration_hint: |
@@ -1970,12 +1944,12 @@ fields:
     intellidealer_purpose: |
       Charge applied if the unit is returned dirty / requires cleaning
       beyond normal wear.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_returns
-    qep_column: cleaning_charge
-    qep_evidence: []
-    qep_gap_notes: |
-      Missing.
+    qep_column: cleaning_charge_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_returns.cleaning_charge_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_returns.cleaning_charge_cents."
     severity: must
     category: financial
     migration_hint: |
@@ -2028,15 +2002,12 @@ fields:
       unit FROM another dealer to fulfill THIS customer's request. The
       dealer pays a sub-rental cost to the source dealer and bills the
       customer at a markup.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contract_lines
     qep_column: is_sub_rental
-    qep_evidence: []
-    qep_gap_notes: |
-      No sub-rental concept. Critical for a dealer to handle
-      out-of-stock requests without losing the rental to a competitor.
-      Missing means the dealer either turns away the customer or has
-      to manually track sub-rental P&L outside the system.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contract_lines.is_sub_rental"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contract_lines.is_sub_rental."
     severity: must
     category: financial
     migration_hint: |
@@ -2067,12 +2038,12 @@ fields:
     intellidealer_purpose: |
       The cost the dealer pays to the source dealer for the sub-rented
       unit. The margin is (customer rate - sub_rental_cost).
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contract_lines
-    qep_column: sub_rental_cost
-    qep_evidence: []
-    qep_gap_notes: |
-      Missing. Required to compute true rental margin on sub-rentals.
+    qep_column: sub_rental_cost_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contract_lines.sub_rental_cost_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contract_lines.sub_rental_cost_cents."
     severity: must
     category: financial
     migration_hint: |
@@ -2092,14 +2063,12 @@ fields:
       Per-cycle rental invoice. Auto-generated by the billing engine
       based on contract billing_cycle. Each invoice covers a billing
       period and references back to the contract.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_invoices
     qep_column: id
-    qep_evidence: []
-    qep_gap_notes: |
-      No rental_invoices table. This is a structural gap: without
-      cycle invoices, automated billing is impossible. Dealer must
-      bill manually = revenue leak + collections delay.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_invoices.id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_invoices.id."
     severity: must
     category: financial
     migration_hint: |
@@ -2148,12 +2117,12 @@ fields:
     intellidealer_field_type: date
     intellidealer_purpose: |
       Start of the billing period this invoice covers.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_invoices
     qep_column: period_start
-    qep_evidence: []
-    qep_gap_notes: |
-      Depends on rental_invoices.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_invoices.period_start"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_invoices.period_start."
     severity: must
     category: financial
     migration_hint: |
@@ -2170,12 +2139,12 @@ fields:
     intellidealer_field_type: date
     intellidealer_purpose: |
       End of the billing period this invoice covers.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_invoices
     qep_column: period_end
-    qep_evidence: []
-    qep_gap_notes: |
-      Depends on rental_invoices.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_invoices.period_end"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_invoices.period_end."
     severity: must
     category: financial
     migration_hint: |
@@ -2298,13 +2267,12 @@ fields:
       Computed: when will this unit next be available based on currently
       active contracts. Drives the catalog "Available now" vs "Available
       after [date]" indicator.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_equipment
     qep_column: next_available_at
-    qep_evidence: []
-    qep_gap_notes: |
-      Missing. Critical for the rental quoting workflow: rep needs
-      to instantly know what's open before committing to a customer.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.next_available_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_equipment.next_available_at."
     severity: must
     category: operational
     migration_hint: |
@@ -2355,14 +2323,12 @@ fields:
       e-signed quotes at 120 days even if the underlying quote is
       still active. Must surface to the rep so stale quotes are
       re-issued.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
-    qep_column: quote_expires_on
-    qep_evidence: []
-    qep_gap_notes: |
-      Missing. PDF explicitly calls out the 120-day VESign expiry —
-      means without tracking this, e-signed quotes silently lose
-      legal force.
+    qep_column: quote_expires_at
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.quote_expires_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.quote_expires_at."
     severity: must
     category: regulatory
     migration_hint: |

@@ -20,9 +20,9 @@ If another document conflicts with this one, treat this document as the current 
 | Account 360 / Companies / editors / admin import UI | Complete for the customer handoff | `CUSTOMER_IMPORT_FINAL_RECONCILIATION.md`, production smoke screenshots | Operators can find, review, maintain safe imported fields, export safe staged rows, and audit import runs. |
 | Gap-audit Waves 0-4 | Implemented and remote-push verified through `506_*` by the 2026-04-27 cutover gate | `docs/intellidealer-gap-audit/_migration_order.md` | Core schema, reporting views, sensitive-field hardening, and computed/reporting surfaces were shipped for the gap-audit waves. |
 | Customer import migrations `508_*`-`519_*` | Applied remotely per the final reconciliation | `CUSTOMER_IMPORT_FINAL_RECONCILIATION.md` | Customer import staging, dashboard, storage, redaction, counts RPC, and commit transition guard are part of the production baseline. |
-| Latest local migration range | Present locally through `521_floor_customer_legacy_search_layouts.sql` | `supabase/migrations/` | Migrations after `519_*` must be treated by their own feature gates; they are not required to prove the core customer import. |
+| Latest local migration range | Present locally and applied remotely through `525_intellidealer_ap_aging_summary.sql` | `supabase/migrations/`, `GAP_AUDIT_MUST_BLOCKER_BURNDOWN_2026-05-03.md` | Migrations after `519_*` are gap-audit/product hardening gates; they are not required to prove the core customer import. |
 | Wave 5 external integrations | Registered deferred, not implemented | `WAVE_5_DEFERRED_INTEGRATION_REGISTER_2026-05-03.md`, `_migration_order.md` Wave 5 status | AvaTax live wiring, VESign, UPS WorldShip, JD Quote II, OEM imports, and Tethr are intentionally parked with prerequisites and are not marked complete. |
-| Audit manifest / YAML inventory | Regenerated 2026-05-03 | `docs/intellidealer-gap-audit/manifest.yaml`, `_blockers.csv`, phase YAMLs | The inventory now reflects the current `Database` type under a conservative table/column-exists rule. Remaining blocker count is `91` must-fix rows. |
+| Audit manifest / YAML inventory | Regenerated 2026-05-03 | `docs/intellidealer-gap-audit/manifest.yaml`, `_blockers.csv`, phase YAMLs, `GAP_AUDIT_MUST_BLOCKER_BURNDOWN_2026-05-03.md` | The inventory now reflects the current `Database` type under a conservative table/column-exists rule. Remaining must-fix blocker count is `0`. |
 | Raw source file custody | Manifested 2026-05-03 | `SOURCE_FILE_CUSTODY_MANIFEST.md` | The raw files remain untracked, but filename, size, SHA-256, page counts, workbook row counts, and import run binding are now committed and script-verifiable. |
 | Fresh production verification | Passed 2026-05-03 | `FRESH_PRODUCTION_VERIFICATION_2026-05-03.md` | Rerun safety, production reconciliation, production browser smoke, storage cleanup, and active-run checks passed against the current production bundle. |
 | UI completion review | Passed 2026-05-03 | `UI_COMPLETION_REVIEW_2026-05-03.md` | Account 360, Companies search, company/contact editors, admin dashboard, safe export download, browser stage, preflight rejection, discard, and cleanup are verified. |
@@ -105,24 +105,24 @@ Gate:
 Result:
 
 - Total fields: `847`.
-- Built fields: `678`.
+- Built fields: `789`.
 - Partial fields: `18`.
-- Missing fields: `151`.
-- Remaining must-fix blockers: `91`.
+- Missing fields: `40`.
+- Remaining must-fix blockers: `0`.
 
 Remaining must-fix blockers by phase:
 
 | Phase | Must Missing |
 | --- | ---: |
-| Phase-1 CRM | `1` |
+| Phase-1 CRM | `0` |
 | Phase-2 Sales Intelligence | `0` |
-| Phase-3 Parts | `3` |
-| Phase-4 Service | `3` |
-| Phase-5 Deal Genome | `39` |
-| Phase-6 Rental | `35` |
-| Phase-8 Financial Operations | `6` |
-| Phase-9 Advanced Intelligence | `3` |
-| Cross-Cutting | `1` |
+| Phase-3 Parts | `0` |
+| Phase-4 Service | `0` |
+| Phase-5 Deal Genome | `0` |
+| Phase-6 Rental | `0` |
+| Phase-8 Financial Operations | `0` |
+| Phase-9 Advanced Intelligence | `0` |
+| Cross-Cutting | `0` |
 
 ### Slice 3: Source File Custody
 
@@ -337,3 +337,26 @@ Gate:
 Result:
 
 - `FINAL_SIGNOFF_PACK_2026-05-03.md` records the production import baseline, reconciliation counts, UI signoff, source custody, rerun commands, rollback limits, gap-audit status, Slice 6 status, Slice 7 status, known residuals, and final closeout gate.
+
+### Slice 9: Gap-Audit Must-Blocker Burndown
+
+Status: complete 2026-05-03.
+
+Goal: close the remaining IntelliDealer gap-audit `must` blockers with agent-parallelized schema and mapping work.
+
+Deliverables:
+
+- Rental financial foundation migration.
+- Deal Genome service analysis foundation migration.
+- Small must-blocker foundation migration.
+- AP outstanding summary migration.
+- Existing-schema mapping corrections with evidence.
+- Regenerated gap inventory and blocker CSV.
+
+Gate:
+
+- PASS. `bun run intellidealer:gap-audit:regen` reports `must_fix_blocker_count: 0`, `manifest.yaml` records `0`, and `_blockers.csv` contains only the header row.
+
+Result:
+
+- `GAP_AUDIT_MUST_BLOCKER_BURNDOWN_2026-05-03.md` records the agent workstreams, migration range `522`-`525`, final counts, and residual non-blockers.

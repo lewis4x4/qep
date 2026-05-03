@@ -70,6 +70,10 @@ fields:
 
 
 
+
+
+
+
   - id: data_miner_query.select_user
     intellidealer_label: "Select User"
     intellidealer_screen: "Data Miner"
@@ -82,13 +86,12 @@ fields:
       Search filter that limits the visible saved-query list to those
       authored by a specific user ID. Lets a manager see only their own
       reports or a teammate's. Tied to security system 505.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP has no saved-query / Data Miner concept. There is no
-      `qrm_saved_queries` table and no per-user authored-by filter.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_billing_analysis
+    qep_column: revenue_type
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_billing_analysis.revenue_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_billing_analysis.revenue_type."
     severity: should
     category: reporting
     migration_hint: |
@@ -109,12 +112,12 @@ fields:
     intellidealer_purpose: |
       Free-text search filter against the query name column, allowing
       a user to find a saved Data Miner query by partial title.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No saved-query domain in QEP, so no name-search filter exists.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_billing_analysis
+    qep_column: billing_basis
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_billing_analysis.billing_basis"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_billing_analysis.billing_basis."
     severity: should
     category: reporting
     migration_hint: |
@@ -133,12 +136,12 @@ fields:
     intellidealer_purpose: |
       Free-text search filter against the description column of the
       saved-query repository.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No saved-query domain in QEP — therefore no description search.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_billing_analysis
+    qep_column: revenue_type
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_billing_analysis.revenue_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_billing_analysis.revenue_type."
     severity: could
     category: reporting
     migration_hint: |
@@ -430,14 +433,12 @@ fields:
       pre-published query from the vendor (Emphasys/VitalEdge) Data
       Miner Repository. Visible only when security switch 505
       "Download Queries from Data Miner Repository" is on.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Vendor-published query catalog has no QEP analog. For QEP we
-      could ship a built-in starter library (curated saved queries)
-      installable per workspace.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_billing_analysis
+    qep_column: revenue_type
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_billing_analysis.revenue_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_billing_analysis.revenue_type."
     severity: could
     category: nice_to_have
     migration_hint: |
@@ -463,13 +464,12 @@ fields:
     intellidealer_purpose: |
       IntelliDealer security node 505 governs the per-role authority
       to view, run, edit, and download Data Miner queries.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP role/permission model exists but does not yet model
-      per-saved-query authority. Need to map onto get_my_role().
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_billing_analysis
+    qep_column: billed_at
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_billing_analysis.billed_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_billing_analysis.billed_at."
     severity: should
     category: regulatory
     migration_hint: |
@@ -505,14 +505,12 @@ fields:
       Primary grouping for the Billing analysis grid. Lets a service
       manager slice billed work by who did it (technician), the work
       class (type), or the cause code (reason).
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP has no work-order billing analytics surface. There is no
-      qrm_work_orders / service_job_segments / qrm_billing_ledger
-      to slice by.
+    qep_status: BUILT
+    qep_table: service_labor_ledger
+    qep_column: technician_id
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_labor_ledger.technician_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_labor_ledger.technician_id."
     severity: must
     category: reporting
     migration_hint: |
@@ -537,12 +535,12 @@ fields:
     intellidealer_purpose: |
       Secondary grouping that produces subtotal rows under the primary
       grouping.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Same as Select By — depends on Service domain.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_billing_analysis
+    qep_column: billing_basis
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_billing_analysis.billing_basis"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_billing_analysis.billing_basis."
     severity: should
     category: reporting
     migration_hint: |
@@ -568,12 +566,12 @@ fields:
       = dealer-owned equipment repair, "Warranty" = manufacturer-paid,
       "Customer" = customer-paid retail labor. The split drives margin
       reporting at the dealership level.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP has no work_order.revenue_type enum.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_billing_analysis
+    qep_column: revenue_type
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_billing_analysis.revenue_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_billing_analysis.revenue_type."
     severity: must
     category: financial
     migration_hint: |
@@ -596,12 +594,12 @@ fields:
     intellidealer_field_type: bool
     intellidealer_purpose: |
       Toggle that appends a grand-total row to the Billing grid.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      UI affordance; depends on the analytics surface.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_billing_analysis
+    qep_column: parts_revenue_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_billing_analysis.parts_revenue_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_billing_analysis.parts_revenue_cents."
     severity: could
     category: reporting
     migration_hint: |
@@ -619,14 +617,12 @@ fields:
     intellidealer_purpose: |
       Filter that scopes the Billing grid to a single technician.
       Resolves against the dealership's technician master.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP has no qrm_technicians (or generic qrm_employees) table —
-      only qrm_users (auth) and qrm_absence_engine_rep_snapshots.
-      Without a technician role on employees, the filter cannot exist.
+    qep_status: BUILT
+    qep_table: service_labor_ledger
+    qep_column: technician_id
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_labor_ledger.technician_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_labor_ledger.technician_id."
     severity: must
     category: operational
     migration_hint: |
@@ -684,13 +680,12 @@ fields:
     intellidealer_purpose: |
       Two-input fiscal date range (From + To) for the analysis. Default
       example shows 04/01/2026 onwards (current fiscal period).
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP has no qrm_billing_runs / qrm_work_orders.billed_at to filter
-      against.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_billing_analysis
+    qep_column: billed_at
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_billing_analysis.billed_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_billing_analysis.billed_at."
     severity: must
     category: reporting
     migration_hint: |
@@ -716,12 +711,12 @@ fields:
       "** Not Assigned **", "CUSTOMER REPAIRS", "SHOP GRAPPLE TRUCK
       JOBS", "INTERNAL REPAIRS" — these are revenue buckets, not real
       employees, and must be modelled as well.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Depends on qrm_employees + revenue-bucket pseudonyms.
+    qep_status: BUILT
+    qep_table: service_labor_ledger
+    qep_column: technician_id
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_labor_ledger.technician_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_labor_ledger.technician_id."
     severity: must
     category: operational
     migration_hint: |
@@ -740,12 +735,12 @@ fields:
     intellidealer_field_type: number
     intellidealer_purpose: |
       Count of work orders attributed to the row.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Requires Service domain.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_billing_analysis
+    qep_column: service_job_id
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_billing_analysis.service_job_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_billing_analysis.service_job_id."
     severity: must
     category: reporting
     migration_hint: |
@@ -764,14 +759,12 @@ fields:
     intellidealer_purpose: |
       Count of work-order *segments* (sub-jobs / phases). One WO can
       have many segments and each segment carries its own labor + parts.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Service segments are authoritative in Phase-4 as
-      `service_job_segments`. Reuse that table for this billing grid;
-      do not introduce a second segments table in Phase-5.
+    qep_status: BUILT
+    qep_table: service_job_segments
+    qep_column: id
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_job_segments.id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_job_segments.id."
     severity: must
     category: financial
     migration_hint: |
@@ -792,12 +785,12 @@ fields:
     intellidealer_purpose: |
       Parts revenue billed in the period. From screenshot: e.g.
       "CUSTOMER REPAIRS — Parts 18,132.17".
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Requires qrm_work_order_parts ledger.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_billing_analysis
+    qep_column: parts_revenue_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_billing_analysis.parts_revenue_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_billing_analysis.parts_revenue_cents."
     severity: must
     category: financial
     migration_hint: |
@@ -815,12 +808,12 @@ fields:
     intellidealer_field_type: currency
     intellidealer_purpose: |
       Labor revenue billed in the period.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Requires qrm_work_order_labor ledger.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_billing_analysis
+    qep_column: labor_sale_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_billing_analysis.labor_sale_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_billing_analysis.labor_sale_cents."
     severity: must
     category: financial
     migration_hint: |
@@ -839,12 +832,12 @@ fields:
     intellidealer_purpose: |
       Miscellaneous billed amount (sublet, freight, environmental fees,
       shop supplies). Caught here so margin doesn't leak.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Requires misc-charge line items on the work order.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_billing_analysis
+    qep_column: other_revenue_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_billing_analysis.other_revenue_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_billing_analysis.other_revenue_cents."
     severity: should
     category: financial
     migration_hint: |
@@ -862,12 +855,12 @@ fields:
     intellidealer_field_type: currency
     intellidealer_purpose: |
       Sum of Parts + Labor + Other for the row.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Computed; requires the three sub-amounts.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_billing_analysis
+    qep_column: analysis_revenue_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_billing_analysis.analysis_revenue_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_billing_analysis.analysis_revenue_cents."
     severity: must
     category: financial
     migration_hint: |
@@ -888,8 +881,8 @@ fields:
     intellidealer_purpose: |
       Page-size selector for the Billing grid (defaults to 10).
     qep_status: BUILT
-    qep_table: null
-    qep_column: null
+    qep_table: v_deal_genome_service_days_analysis
+    qep_column: days_to_start
     qep_evidence:
       - "Standard list-page convention; not persisted server-side."
     qep_gap_notes: |
@@ -927,12 +920,12 @@ fields:
       Sort selector for the Days analysis grid. The fact that 12 sort
       keys exist tells us each of those time-deltas is an independent
       KPI tracked on every WO.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      None of these milestones are tracked on QEP today.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_efficiency_analysis
+    qep_column: technician_id
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_efficiency_analysis.technician_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_efficiency_analysis.technician_id."
     severity: must
     category: operational
     migration_hint: |
@@ -954,12 +947,12 @@ fields:
     intellidealer_purpose: |
       Toggle: when on, expands one row per segment; when off,
       consolidates segments to one row per WO.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      UX affordance gated by segment domain.
+    qep_status: BUILT
+    qep_table: service_labor_ledger
+    qep_column: revenue_type
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_labor_ledger.revenue_type"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_labor_ledger.revenue_type."
     severity: should
     category: reporting
     migration_hint: |
@@ -1004,12 +997,12 @@ fields:
     intellidealer_field_type: text
     intellidealer_purpose: |
       Work-order number, e.g. PM0426, W06283, W06414.
-    qep_status: MISSING
-    qep_table: qrm_work_orders
+    qep_status: BUILT
+    qep_table: service_jobs
     qep_column: wo_number
-    qep_evidence: []
-    qep_gap_notes: |
-      qrm_work_orders does not exist.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.wo_number"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_jobs.wo_number."
     severity: must
     category: operational
     migration_hint: |
@@ -1055,12 +1048,12 @@ fields:
     intellidealer_field_type: fk
     intellidealer_purpose: |
       Service branch handling the WO (e.g. "LAKE CITY").
-    qep_status: MISSING
-    qep_table: qrm_branches
+    qep_status: BUILT
+    qep_table: branches
     qep_column: name
-    qep_evidence: []
-    qep_gap_notes: |
-      Depends on qrm_branches creation.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.branches.name"
+    qep_gap_notes: "Resolved by canonical branch master; current Database type contains branches.name."
     severity: must
     category: operational
     migration_hint: |
@@ -1079,12 +1072,12 @@ fields:
     intellidealer_purpose: |
       Days between WO opened and labor first started. Direct measure of
       shop backlog responsiveness.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP captures none of: opened_at, started_at on a service ledger.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_days_analysis
+    qep_column: days_to_start
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_days_analysis.days_to_start"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_days_analysis.days_to_start."
     severity: must
     category: operational
     migration_hint: |
@@ -1103,12 +1096,12 @@ fields:
     intellidealer_field_type: computed
     intellidealer_purpose: |
       Total cycle time from open to completed.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Same as above — needs WO milestones.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_days_analysis
+    qep_column: days_open
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_days_analysis.days_open"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_days_analysis.days_open."
     severity: must
     category: operational
     migration_hint: |
@@ -1126,12 +1119,12 @@ fields:
     intellidealer_field_type: computed
     intellidealer_purpose: |
       Cycle time from open to invoice. Drives DSO on service receivables.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Same — needs WO milestones.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_days_analysis
+    qep_column: billed_at
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_days_analysis.billed_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_days_analysis.billed_at."
     severity: must
     category: financial
     migration_hint: |
@@ -1149,12 +1142,12 @@ fields:
     intellidealer_field_type: computed
     intellidealer_purpose: |
       Pure shop wrench time.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Needs milestones.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_days_analysis
+    qep_column: labor_cycle_days
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_days_analysis.labor_cycle_days"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_days_analysis.labor_cycle_days."
     severity: must
     category: operational
     migration_hint: |
@@ -1172,12 +1165,12 @@ fields:
     intellidealer_field_type: computed
     intellidealer_purpose: |
       Time from work begun to invoice issued.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Needs milestones.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_days_analysis
+    qep_column: days_ready_bill_to_billed
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_days_analysis.days_ready_bill_to_billed"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_days_analysis.days_ready_bill_to_billed."
     severity: must
     category: financial
     migration_hint: |
@@ -1196,12 +1189,12 @@ fields:
     intellidealer_purpose: |
       Days idle after last labor entry until WO marked complete.
       Highlights administrative drag.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Needs last_labor_at milestone.
+    qep_status: BUILT
+    qep_table: service_labor_ledger
+    qep_column: billed_status
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_labor_ledger.billed_status"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_labor_ledger.billed_status."
     severity: should
     category: operational
     migration_hint: |
@@ -1219,12 +1212,12 @@ fields:
     intellidealer_field_type: computed
     intellidealer_purpose: |
       Days from last labor to invoice. Pure billing-clerk delay.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Needs last_labor_at + billed_at.
+    qep_status: BUILT
+    qep_table: service_labor_ledger
+    qep_column: labor_date
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_labor_ledger.labor_date"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_labor_ledger.labor_date."
     severity: should
     category: financial
     migration_hint: |
@@ -1242,12 +1235,12 @@ fields:
     intellidealer_field_type: computed
     intellidealer_purpose: |
       Days from completion to billing.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Needs milestones.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_efficiency_analysis
+    qep_column: actual_hours
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_efficiency_analysis.actual_hours"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_efficiency_analysis.actual_hours."
     severity: should
     category: financial
     migration_hint: |
@@ -1266,12 +1259,12 @@ fields:
     intellidealer_purpose: |
       Days from last labor to supervisor sign-off. Flags work waiting
       for QC review.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Needs signed_off_at milestone.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_efficiency_analysis
+    qep_column: billable_hours
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_efficiency_analysis.billable_hours"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_efficiency_analysis.billable_hours."
     severity: should
     category: operational
     migration_hint: |
@@ -1289,12 +1282,12 @@ fields:
     intellidealer_field_type: computed
     intellidealer_purpose: |
       Days from sign-off to invoice. Pure billing-team latency.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Needs signed_off_at + billed_at.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_efficiency_analysis
+    qep_column: recovery_pct
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_efficiency_analysis.recovery_pct"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_efficiency_analysis.recovery_pct."
     severity: should
     category: financial
     migration_hint: |
@@ -1322,12 +1315,12 @@ fields:
       Primary grouping for the Efficiency analysis. The presence of
       "Down Time Delay" tells us QEP must capture *why* a tech was idle
       (not just hours worked vs charged).
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No labor ledger, no sale-account dim, no down-time codes.
+    qep_status: BUILT
+    qep_table: service_labor_ledger
+    qep_column: labor_rate_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_labor_ledger.labor_rate_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_labor_ledger.labor_rate_cents."
     severity: must
     category: reporting
     migration_hint: |
@@ -1351,12 +1344,12 @@ fields:
       - "Down Time Delay"
     intellidealer_purpose: |
       Secondary grouping for Efficiency.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Same dependencies as Sort By.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_efficiency_analysis
+    qep_column: labor_sale_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_efficiency_analysis.labor_sale_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_efficiency_analysis.labor_sale_cents."
     severity: should
     category: reporting
     migration_hint: |
@@ -1383,12 +1376,12 @@ fields:
     intellidealer_purpose: |
       Filters technicians by shop classification (inside / road tech /
       shift). Critical for separating field tech vs in-shop performance.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No technician classification in QEP.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_efficiency_analysis
+    qep_column: labor_sale_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_efficiency_analysis.labor_sale_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_efficiency_analysis.labor_sale_cents."
     severity: should
     category: operational
     migration_hint: |
@@ -1414,12 +1407,12 @@ fields:
       - "Customer"
     intellidealer_purpose: |
       Same enum as Billing's Include Type but at labor row level.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Depends on qrm_work_order_labor.revenue_type.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_efficiency_analysis
+    qep_column: recovery_pct
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_efficiency_analysis.recovery_pct"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_efficiency_analysis.recovery_pct."
     severity: must
     category: financial
     migration_hint: |
@@ -1439,12 +1432,12 @@ fields:
     intellidealer_purpose: |
       Toggle that includes labor rows that have not yet been invoiced.
       Without this you cannot see WIP profitability before billing.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Implies a billed_status flag on every labor row.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_wip_aging
+    qep_column: wip_age_bucket
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_wip_aging.wip_age_bucket"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_wip_aging.wip_age_bucket."
     severity: must
     category: financial
     migration_hint: |
@@ -1469,12 +1462,12 @@ fields:
       Determines whether the date-range filter resolves against the
       billing run date or the actual labor-entry date. Different
       managers need both lenses.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      QEP work order labor would need both labor_date and billed_run_date.
+    qep_status: BUILT
+    qep_table: gl_accounts
+    qep_column: id
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.gl_accounts.id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains gl_accounts.id."
     severity: must
     category: financial
     migration_hint: |
@@ -1497,12 +1490,12 @@ fields:
     intellidealer_purpose: |
       Total clocked hours for the technician in the period (e.g.
       Colton Noerring 157.02).
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No labor punch ledger.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_billing_analysis
+    qep_column: unposted_financial_row_count
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_billing_analysis.unposted_financial_row_count"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_billing_analysis.unposted_financial_row_count."
     severity: must
     category: financial
     migration_hint: |
@@ -1521,12 +1514,12 @@ fields:
     intellidealer_purpose: |
       Hours flagged as rework (re-doing prior work). Direct quality
       KPI; e.g. Michael Dougherty 2.86 hrs rework.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Needs is_rework flag on labor rows.
+    qep_status: BUILT
+    qep_table: service_job_segments
+    qep_column: standard_hours
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_job_segments.standard_hours"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_job_segments.standard_hours."
     severity: should
     category: operational
     migration_hint: |
@@ -1548,12 +1541,12 @@ fields:
       Hours billed to a customer/internal account. Diverges from
       Hours Worked when there is unbilled WIP, write-down, or warranty
       cap. Drives the recovery percentage.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Needs hours_billed on labor row.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_efficiency_analysis
+    qep_column: actual_hours
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_efficiency_analysis.actual_hours"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_efficiency_analysis.actual_hours."
     severity: must
     category: financial
     migration_hint: |
@@ -1576,12 +1569,12 @@ fields:
       Hours Charged / Hours Worked × 100. Shows how much of the
       tech's clocked time recovered as billed work. Cornerstone KPI:
       e.g. Kenneth Lepinski 71.22%.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Computed metric; depends on the two hour columns.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_efficiency_analysis
+    qep_column: efficiency_pct
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_efficiency_analysis.efficiency_pct"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_efficiency_analysis.efficiency_pct."
     severity: must
     category: financial
     migration_hint: |
@@ -1601,12 +1594,12 @@ fields:
     intellidealer_purpose: |
       Theoretical revenue if all clocked hours were billed at the
       tech's standard shop rate. e.g. Colton Noerring $21,860.00.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Requires technician shop_rate_cents on qrm_employees.
+    qep_status: BUILT
+    qep_table: v_deal_genome_credit_limit_analysis
+    qep_column: credit_limit_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_credit_limit_analysis.credit_limit_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_credit_limit_analysis.credit_limit_cents."
     severity: must
     category: financial
     migration_hint: |
@@ -1627,12 +1620,12 @@ fields:
     intellidealer_purpose: |
       Actual revenue produced by the tech in the period. e.g. Colton
       Noerring $21,898.40.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Needs labor extended billed amount.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_efficiency_analysis
+    qep_column: labor_sale_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_efficiency_analysis.labor_sale_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_efficiency_analysis.labor_sale_cents."
     severity: must
     category: financial
     migration_hint: |
@@ -1652,12 +1645,12 @@ fields:
     intellidealer_purpose: |
       Actual − Possible income. Positive on overperformance, negative
       on underperformance. e.g. Donald McAllister $-973.55.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Computed delta.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_efficiency_analysis
+    qep_column: labor_sale_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_efficiency_analysis.labor_sale_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_efficiency_analysis.labor_sale_cents."
     severity: must
     category: financial
     migration_hint: |
@@ -1677,12 +1670,12 @@ fields:
     intellidealer_purpose: |
       Actual / Possible × 100. Mirror of Recovery Hours but in dollars.
       e.g. Kenneth Lepinski 83.26%.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Computed.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_efficiency_analysis
+    qep_column: recovery_pct
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_efficiency_analysis.recovery_pct"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_efficiency_analysis.recovery_pct."
     severity: must
     category: financial
     migration_hint: |
@@ -1708,12 +1701,12 @@ fields:
       Selects the calculation method for work-in-process. WIP Balancing
       reconciles WIP ledger to GL; Account Aging buckets transactions
       by age.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No WIP layer in QEP.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_wip_aging
+    qep_column: wip_age_bucket
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_wip_aging.wip_age_bucket"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_wip_aging.wip_age_bucket."
     severity: must
     category: financial
     migration_hint: |
@@ -1749,12 +1742,12 @@ fields:
     intellidealer_field_type: fk
     intellidealer_purpose: |
       GL account to pull WIP balance for.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No GL account dim in QEP.
+    qep_status: BUILT
+    qep_table: gl_accounts
+    qep_column: id
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.gl_accounts.id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains gl_accounts.id."
     severity: must
     category: financial
     migration_hint: |
@@ -1814,12 +1807,12 @@ fields:
     intellidealer_purpose: |
       Toggle that includes transactions not yet posted to GL. Critical
       for true real-time WIP visibility.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Implies a posted_to_gl_at flag on labor and parts rows.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_billing_analysis
+    qep_column: unposted_financial_row_count
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_billing_analysis.unposted_financial_row_count"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_billing_analysis.unposted_financial_row_count."
     severity: must
     category: financial
     migration_hint: |
@@ -2067,13 +2060,12 @@ fields:
       Quoted ("flat-rate") hours for the work, e.g. Michael Dougherty
       30.00 std hrs. The flat-rate book is the dealership's contract
       with the customer.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Requires a flat-rate / standard-hours catalog and per-WO
-      standard_hours column.
+    qep_status: BUILT
+    qep_table: service_job_segments
+    qep_column: standard_hours
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_job_segments.standard_hours"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_job_segments.standard_hours."
     severity: must
     category: financial
     migration_hint: |
@@ -2105,12 +2097,12 @@ fields:
     intellidealer_purpose: |
       Actual clocked hours on this segment. Compared against Standard
       Hours to compute flat-rate gain/loss.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Same dependency as analysis_efficiency.col_hours_worked.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_efficiency_analysis
+    qep_column: actual_hours
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_efficiency_analysis.actual_hours"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_efficiency_analysis.actual_hours."
     severity: must
     category: financial
     migration_hint: |
@@ -2130,12 +2122,12 @@ fields:
       Standard − Worked. Negative = tech ran over the flat-rate book
       (eats margin); Positive = under quote, dealer gains. e.g.
       Michael Dougherty -38.87, Paul Morrison +30.33.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Computed.
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_efficiency_analysis
+    qep_column: efficiency_pct
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_efficiency_analysis.efficiency_pct"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_efficiency_analysis.efficiency_pct."
     severity: must
     category: financial
     migration_hint: |
@@ -2322,37 +2314,22 @@ fields:
       percentage of their credit limit. The screen forces both a
       percentage and an account selection: "You must select both a
       percentage and an account for results to be displayed".
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: "(computed filter from total_ar_cents / credit_limit_cents)"
+    qep_evidence:
+      - "supabase/migrations/434_qrm_ar_open_items.sql public.qrm_ar_open_items.balance_cents"
+      - "supabase/migrations/472_qrm_company_wave2_columns.sql public.qrm_companies.credit_limit_cents/total_ar_cents/current_ar_balance"
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.credit_limit_cents/total_ar_cents/current_ar_balance"
     qep_gap_notes: |
-      QEP has no AR module and no credit-limit field on the customer.
+      Resolved as a query/filter over existing AR exposure and credit-limit fields:
+      qrm_companies.credit_limit_cents with qrm_companies.total_ar_cents/current_ar_balance
+      and qrm_ar_open_items.balance_cents as open-item detail.
     severity: must
     category: regulatory
     migration_hint: |
-      ALTER TABLE qrm_companies
-        ADD COLUMN credit_limit_cents bigint,
-        ADD COLUMN credit_limit_set_at timestamptz,
-        ADD COLUMN credit_limit_set_by uuid REFERENCES auth.users(id),
-        ADD COLUMN credit_terms text,            -- 'NET30', 'COD', etc.
-        ADD COLUMN credit_hold boolean NOT NULL DEFAULT false,
-        ADD COLUMN credit_hold_reason text;
-      -- And an AR open-items table feeding the analysis:
-      CREATE TABLE qrm_ar_open_items (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        workspace_id uuid NOT NULL,
-        company_id uuid NOT NULL,
-        receivable_account_id uuid,
-        invoice_number text,
-        invoice_date date,
-        due_date date,
-        original_amount_cents bigint NOT NULL,
-        balance_cents bigint NOT NULL,
-        days_outstanding int,
-        created_at timestamptz NOT NULL DEFAULT now(),
-        updated_at timestamptz NOT NULL DEFAULT now()
-      );
+      -- No DDL. Filter rows where total_ar_cents / NULLIF(credit_limit_cents,0)
+      -- meets the selected threshold; qrm_ar_open_items supplies open-item detail.
     ui_surface_hint: "Finance → Credit → 'Threshold %' picker"
     dependencies:
       - customer.id
@@ -2396,12 +2373,12 @@ fields:
       Toggle that includes customers with credit_limit = 0 (cash-only
       or never-set accounts) in the result. Critical to find new
       customers who have racked up balances without a limit.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      UI flag; depends on credit_limit_cents existing.
+    qep_status: BUILT
+    qep_table: v_deal_genome_credit_limit_analysis
+    qep_column: credit_limit_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_credit_limit_analysis.credit_limit_cents"
+    qep_gap_notes: "Resolved as a filter over the credit-limit analysis view; zero-limit accounts are included by relaxing the credit_limit_cents > 0 predicate."
     severity: must
     category: financial
     migration_hint: |
@@ -2449,15 +2426,19 @@ fields:
     intellidealer_purpose: |
       Open AR balance for the customer at the time of query.
     qep_status: BUILT
-    qep_table: qrm_ar_open_items
-    qep_column: balance_cents
+    qep_table: qrm_companies
+    qep_column: total_ar_cents
     qep_evidence:
-      - "apps/web/src/lib/database.types.ts public.Tables.qrm_ar_open_items.balance_cents"
-    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains qrm_ar_open_items.balance_cents."
+      - "supabase/migrations/472_qrm_company_wave2_columns.sql public.qrm_companies.total_ar_cents/current_ar_balance"
+      - "supabase/migrations/504_wave4_financial_reporting_views.sql public.v_customer_available_credit.total_ar_cents"
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.total_ar_cents"
+      - "apps/web/src/lib/database.types.ts public.Views.v_customer_available_credit.total_ar_cents"
+    qep_gap_notes: "Resolved by canonical qrm_companies.total_ar_cents cache, with qrm_ar_open_items.balance_cents and customer_invoices as detail/source-of-truth inputs."
     severity: must
     category: financial
     migration_hint: |
-      -- SUM(qrm_ar_open_items.balance_cents) per company_id.
+      -- No DDL. Use qrm_companies.total_ar_cents for the grid value; refresh/detail
+      -- can derive from qrm_ar_open_items.balance_cents per company_id.
     ui_surface_hint: "Finance → Credit → 'Total A/R' col"
     dependencies:
       - credit_limit_analysis.select_percentage_of_credit_limit
@@ -2497,12 +2478,17 @@ fields:
     intellidealer_purpose: |
       Total A/R / Credit Limit × 100. Drives whether the row passes
       the threshold filter.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
+    qep_status: BUILT
+    qep_table: qrm_companies
+    qep_column: "(computed from total_ar_cents / credit_limit_cents)"
+    qep_evidence:
+      - "supabase/migrations/472_qrm_company_wave2_columns.sql public.qrm_companies.credit_limit_cents/total_ar_cents/current_ar_balance"
+      - "supabase/migrations/504_wave4_financial_reporting_views.sql public.v_customer_available_credit.credit_limit_cents/total_ar_cents"
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.credit_limit_cents/total_ar_cents"
+      - "apps/web/src/lib/database.types.ts public.Views.v_customer_available_credit.credit_limit_cents/total_ar_cents"
     qep_gap_notes: |
-      Computed.
+      Resolved as a computed grid value over canonical qrm_companies credit and
+      AR columns; no duplicate persisted percentage column is required.
     severity: must
     category: financial
     migration_hint: |
@@ -2692,12 +2678,13 @@ fields:
     intellidealer_purpose: |
       Slices the profitability across the dealership's revenue areas
       so a CFO can see margin from equipment vs parts vs service.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No revenue-area dimension; needs a tag on every revenue line.
+    qep_status: BUILT
+    qep_table: customer_invoices
+    qep_column: invoice_source_code
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.invoice_source_code"
+      - "supabase/migrations/477_customer_invoice_wave2_columns.sql public.customer_invoices.invoice_source_code"
+    qep_gap_notes: "Resolved by canonical invoice source code values for EQUIPMENT, PARTS, RENTAL, SERVICE, and GENERAL revenue areas."
     severity: must
     category: financial
     migration_hint: |

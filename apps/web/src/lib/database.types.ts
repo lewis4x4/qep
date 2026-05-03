@@ -839,6 +839,13 @@ export type Database = {
             foreignKeyName: "ap_invoice_distributions_vendor_invoice_id_fkey"
             columns: ["vendor_invoice_id"]
             isOneToOne: false
+            referencedRelation: "v_vendor_invoice_aging"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ap_invoice_distributions_vendor_invoice_id_fkey"
+            columns: ["vendor_invoice_id"]
+            isOneToOne: false
             referencedRelation: "vendor_invoices"
             referencedColumns: ["id"]
           },
@@ -981,6 +988,13 @@ export type Database = {
             foreignKeyName: "ar_credit_blocks_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "ar_credit_blocks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -1069,6 +1083,13 @@ export type Database = {
             foreignKeyName: "ar_memos_crm_company_id_fkey"
             columns: ["crm_company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "ar_memos_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -1092,6 +1113,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "equipment_invoices"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ar_memos_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
+            foreignKeyName: "ar_memos_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["customer_invoice_id"]
           },
         ]
       }
@@ -1695,6 +1730,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "portal_customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_recipients_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "campaign_recipients_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "campaign_recipients_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
           },
         ]
       }
@@ -2537,6 +2593,13 @@ export type Database = {
             foreignKeyName: "crm_company_ship_to_addresses_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_company_ship_to_addresses_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -2684,6 +2747,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "customer_attachments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -2908,6 +2978,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "customer_fleet_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "customer_fleet_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "customer_fleet_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
             foreignKeyName: "customer_fleet_purchase_deal_id_fkey"
             columns: ["purchase_deal_id"]
             isOneToOne: false
@@ -3010,6 +3101,20 @@ export type Database = {
             referencedRelation: "equipment_invoices"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "customer_invoice_line_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
+            foreignKeyName: "customer_invoice_line_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["customer_invoice_id"]
+          },
         ]
       }
       customer_invoices: {
@@ -3032,6 +3137,7 @@ export type Database = {
           esign_signed_at: string | null
           esign_status: string | null
           freight_terms: string | null
+          gl_posting_reference: string | null
           id: string
           invoice_date: string
           invoice_number: string
@@ -3045,6 +3151,7 @@ export type Database = {
           payment_terms_id: string | null
           po_number: string | null
           portal_customer_id: string | null
+          posted_to_gl_at: string | null
           print_parameters: Json | null
           salesperson_id: string | null
           service_job_id: string | null
@@ -3083,6 +3190,7 @@ export type Database = {
           esign_signed_at?: string | null
           esign_status?: string | null
           freight_terms?: string | null
+          gl_posting_reference?: string | null
           id?: string
           invoice_date?: string
           invoice_number: string
@@ -3096,6 +3204,7 @@ export type Database = {
           payment_terms_id?: string | null
           po_number?: string | null
           portal_customer_id?: string | null
+          posted_to_gl_at?: string | null
           print_parameters?: Json | null
           salesperson_id?: string | null
           service_job_id?: string | null
@@ -3134,6 +3243,7 @@ export type Database = {
           esign_signed_at?: string | null
           esign_status?: string | null
           freight_terms?: string | null
+          gl_posting_reference?: string | null
           id?: string
           invoice_date?: string
           invoice_number?: string
@@ -3147,6 +3257,7 @@ export type Database = {
           payment_terms_id?: string | null
           po_number?: string | null
           portal_customer_id?: string | null
+          posted_to_gl_at?: string | null
           print_parameters?: Json | null
           salesperson_id?: string | null
           service_job_id?: string | null
@@ -3193,6 +3304,13 @@ export type Database = {
             columns: ["crm_company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -3266,6 +3384,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "customer_invoices_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
             foreignKeyName: "customer_invoices_salesperson_id_fkey"
             columns: ["salesperson_id"]
             isOneToOne: false
@@ -3285,6 +3424,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
           },
           {
             foreignKeyName: "customer_invoices_service_job_id_fkey"
@@ -3393,6 +3560,13 @@ export type Database = {
             foreignKeyName: "customer_lifecycle_events_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "customer_lifecycle_events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -3475,6 +3649,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "customer_loyalty_enrollments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -3715,6 +3896,13 @@ export type Database = {
             columns: ["crm_company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "customer_parts_intelligence_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -3962,6 +4150,13 @@ export type Database = {
             columns: ["crm_company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "customer_profiles_extended_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -5910,6 +6105,27 @@ export type Database = {
             referencedRelation: "portal_customers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "eaas_subscriptions_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "eaas_subscriptions_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "eaas_subscriptions_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
+          },
         ]
       }
       eaas_usage_records: {
@@ -5985,6 +6201,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "equipment_invoices"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eaas_usage_records_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
+            foreignKeyName: "eaas_usage_records_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["customer_invoice_id"]
           },
           {
             foreignKeyName: "eaas_usage_records_subscription_id_fkey"
@@ -6171,6 +6401,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "email_drafts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -6601,6 +6838,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "portal_customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipment_documents_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "equipment_documents_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "equipment_documents_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
           },
           {
             foreignKeyName: "equipment_documents_uploaded_by_fkey"
@@ -10442,6 +10700,13 @@ export type Database = {
             foreignKeyName: "inspection_runs_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "inspection_runs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -10493,6 +10758,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspection_runs_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "inspection_runs_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "inspection_runs_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "inspection_runs_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
           },
           {
             foreignKeyName: "inspection_runs_service_job_id_fkey"
@@ -11327,6 +11620,34 @@ export type Database = {
             foreignKeyName: "job_code_observations_job_id_fkey"
             columns: ["job_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "job_code_observations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "job_code_observations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "job_code_observations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "job_code_observations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
             referencedColumns: ["service_job_id"]
           },
@@ -11497,6 +11818,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "job_jackets_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -11804,6 +12132,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_knowledge_notes_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "machine_knowledge_notes_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "machine_knowledge_notes_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "machine_knowledge_notes_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
           },
           {
             foreignKeyName: "machine_knowledge_notes_job_id_fkey"
@@ -15307,6 +15663,27 @@ export type Database = {
             referencedRelation: "portal_customers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "parts_llm_inference_runs_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "parts_llm_inference_runs_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "parts_llm_inference_runs_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
+          },
         ]
       }
       parts_lost_sales: {
@@ -15379,6 +15756,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "parts_lost_sales_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -15993,6 +16377,13 @@ export type Database = {
             foreignKeyName: "parts_orders_crm_company_id_fkey"
             columns: ["crm_company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "parts_orders_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -16015,6 +16406,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "parts_orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -16051,6 +16449,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "portal_customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_orders_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "parts_orders_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "parts_orders_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
           },
         ]
       }
@@ -16165,6 +16584,13 @@ export type Database = {
             columns: ["crm_company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "parts_predictive_kits_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -16876,6 +17302,34 @@ export type Database = {
             foreignKeyName: "parts_quotes_converted_service_job_id_fkey"
             columns: ["converted_service_job_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "parts_quotes_converted_service_job_id_fkey"
+            columns: ["converted_service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "parts_quotes_converted_service_job_id_fkey"
+            columns: ["converted_service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "parts_quotes_converted_service_job_id_fkey"
+            columns: ["converted_service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "parts_quotes_converted_service_job_id_fkey"
+            columns: ["converted_service_job_id"]
+            isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
             referencedColumns: ["service_job_id"]
           },
@@ -16898,6 +17352,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "parts_quotes_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -17649,6 +18110,27 @@ export type Database = {
             referencedRelation: "portal_customers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "portal_customer_notifications_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "portal_customer_notifications_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "portal_customer_notifications_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
+          },
         ]
       }
       portal_customers: {
@@ -17729,6 +18211,13 @@ export type Database = {
             columns: ["crm_company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -17832,6 +18321,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "portal_payment_intents_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -18022,11 +18518,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "portal_quote_reviews_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "portal_quote_reviews_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "portal_quote_reviews_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
             foreignKeyName: "portal_quote_reviews_service_quote_id_fkey"
             columns: ["service_quote_id"]
             isOneToOne: false
             referencedRelation: "service_quotes"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_quote_reviews_service_quote_id_fkey"
+            columns: ["service_quote_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_quote_gain_loss"
+            referencedColumns: ["service_quote_id"]
           },
         ]
       }
@@ -18240,6 +18764,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "portal_warranty_claims_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "portal_warranty_claims_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "portal_warranty_claims_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
             foreignKeyName: "portal_warranty_claims_resolved_by_fkey"
             columns: ["resolved_by"]
             isOneToOne: false
@@ -18348,6 +18893,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "post_sale_parts_playbooks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -18635,6 +19187,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "portal_customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
           },
           {
             foreignKeyName: "predicted_parts_plays_suggested_vendor_id_fkey"
@@ -19204,6 +19777,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "prospecting_visits_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -19801,6 +20381,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qb_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -21076,6 +21663,13 @@ export type Database = {
             foreignKeyName: "qb_quotes_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qb_quotes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -21551,6 +22145,13 @@ export type Database = {
             foreignKeyName: "crm_activities_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_activities_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -21753,6 +22354,13 @@ export type Database = {
             foreignKeyName: "qrm_ar_open_items_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qrm_ar_open_items_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -21832,6 +22440,11 @@ export type Database = {
           country: string | null
           county: string | null
           created_at: string
+          credit_hold: boolean
+          credit_hold_expires_at: string | null
+          credit_hold_reason: string | null
+          credit_hold_set_at: string | null
+          credit_hold_set_by: string | null
           credit_limit_cents: number | null
           credit_limit_review_at: string | null
           credit_limit_set_at: string | null
@@ -21945,6 +22558,11 @@ export type Database = {
           country?: string | null
           county?: string | null
           created_at?: string
+          credit_hold?: boolean
+          credit_hold_expires_at?: string | null
+          credit_hold_reason?: string | null
+          credit_hold_set_at?: string | null
+          credit_hold_set_by?: string | null
           credit_limit_cents?: number | null
           credit_limit_review_at?: string | null
           credit_limit_set_at?: string | null
@@ -22058,6 +22676,11 @@ export type Database = {
           country?: string | null
           county?: string | null
           created_at?: string
+          credit_hold?: boolean
+          credit_hold_expires_at?: string | null
+          credit_hold_reason?: string | null
+          credit_hold_set_at?: string | null
+          credit_hold_set_by?: string | null
           credit_limit_cents?: number | null
           credit_limit_review_at?: string | null
           credit_limit_set_at?: string | null
@@ -22179,6 +22802,13 @@ export type Database = {
             foreignKeyName: "crm_companies_parent_company_id_fkey"
             columns: ["parent_company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_companies_parent_company_id_fkey"
+            columns: ["parent_company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -22187,6 +22817,13 @@ export type Database = {
             columns: ["ar_agency_id"]
             isOneToOne: false
             referencedRelation: "ar_agencies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qrm_companies_credit_hold_set_by_fkey"
+            columns: ["credit_hold_set_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -22297,6 +22934,13 @@ export type Database = {
             foreignKeyName: "qrm_company_department_reps_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qrm_company_department_reps_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -22363,6 +23007,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qrm_company_memos_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -22546,6 +23197,13 @@ export type Database = {
             foreignKeyName: "qrm_company_ship_to_addresses_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qrm_company_ship_to_addresses_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -22596,6 +23254,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_contact_companies_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -22864,6 +23529,13 @@ export type Database = {
             foreignKeyName: "crm_contacts_primary_company_id_fkey"
             columns: ["primary_company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_contacts_primary_company_id_fkey"
+            columns: ["primary_company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -22873,6 +23545,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "portal_customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qrm_contacts_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "qrm_contacts_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "qrm_contacts_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
           },
         ]
       }
@@ -23075,6 +23768,13 @@ export type Database = {
             foreignKeyName: "qrm_customer_ar_agencies_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qrm_customer_ar_agencies_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -23245,6 +23945,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qrm_customer_profitability_import_facts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -23562,6 +24269,13 @@ export type Database = {
             foreignKeyName: "crm_deals_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -23772,6 +24486,7 @@ export type Database = {
           monthly_rental_rate: number | null
           name: string
           net_book_value_cents: number | null
+          next_available_at: string | null
           next_service_due_at: string | null
           note_amount_cents: number | null
           note_code: string | null
@@ -23867,6 +24582,7 @@ export type Database = {
           monthly_rental_rate?: number | null
           name: string
           net_book_value_cents?: number | null
+          next_available_at?: string | null
           next_service_due_at?: string | null
           note_amount_cents?: number | null
           note_code?: string | null
@@ -23962,6 +24678,7 @@ export type Database = {
           monthly_rental_rate?: number | null
           name?: string
           net_book_value_cents?: number | null
+          next_available_at?: string | null
           next_service_due_at?: string | null
           note_amount_cents?: number | null
           note_code?: string | null
@@ -24025,6 +24742,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_equipment_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -24270,6 +24994,13 @@ export type Database = {
             columns: ["linked_company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_geofences_linked_company_id_fkey"
+            columns: ["linked_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -24857,6 +25588,13 @@ export type Database = {
             foreignKeyName: "qrm_intellidealer_customer_ar_agency__canonical_company_id_fkey"
             columns: ["canonical_company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qrm_intellidealer_customer_ar_agency__canonical_company_id_fkey"
+            columns: ["canonical_company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -24958,6 +25696,13 @@ export type Database = {
             columns: ["canonical_company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qrm_intellidealer_customer_contact_me_canonical_company_id_fkey"
+            columns: ["canonical_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -25128,6 +25873,13 @@ export type Database = {
             columns: ["canonical_company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qrm_intellidealer_customer_contacts_s_canonical_company_id_fkey"
+            columns: ["canonical_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -25457,6 +26209,13 @@ export type Database = {
             foreignKeyName: "qrm_intellidealer_customer_master_sta_canonical_company_id_fkey"
             columns: ["canonical_company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qrm_intellidealer_customer_master_sta_canonical_company_id_fkey"
+            columns: ["canonical_company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -25638,6 +26397,13 @@ export type Database = {
             columns: ["canonical_company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qrm_intellidealer_customer_profitabil_canonical_company_id_fkey"
+            columns: ["canonical_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -26030,6 +26796,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qrm_prospects_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -26666,6 +27439,20 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "equipment_invoices"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quickbooks_gl_sync_jobs_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: true
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
+            foreignKeyName: "quickbooks_gl_sync_jobs_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: true
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["customer_invoice_id"]
           },
         ]
       }
@@ -28001,6 +28788,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "rental_contract_extensions_payment_invoice_id_fkey"
+            columns: ["payment_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
+            foreignKeyName: "rental_contract_extensions_payment_invoice_id_fkey"
+            columns: ["payment_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
             foreignKeyName: "rental_contract_extensions_rental_contract_id_fkey"
             columns: ["rental_contract_id"]
             isOneToOne: false
@@ -28014,6 +28815,205 @@ export type Database = {
             referencedRelation: "portal_customers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "rental_contract_extensions_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "rental_contract_extensions_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "rental_contract_extensions_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
+          },
+        ]
+      }
+      rental_contract_lines: {
+        Row: {
+          actual_returned_at: string | null
+          created_at: string
+          daily_rate_cents: number | null
+          damage_waiver_accepted: boolean | null
+          damage_waiver_amount_cents: number | null
+          damage_waiver_rate_pct: number | null
+          deleted_at: string | null
+          equipment_id: string | null
+          exchange_parent_line_id: string | null
+          hourly_rate_cents: number | null
+          id: string
+          included_hours: number | null
+          is_sub_rental: boolean
+          line_number: number
+          monthly_rate_cents: number | null
+          notes: string | null
+          outbound_meter_hours: number | null
+          outbound_odometer: number | null
+          overage_hourly_rate_cents: number | null
+          quantity: number
+          rate_override_cents: number | null
+          rate_override_reason: string | null
+          rental_contract_id: string
+          rental_end_at: string | null
+          rental_start_at: string | null
+          requested_category: string | null
+          requested_make: string | null
+          requested_model: string | null
+          return_code: string | null
+          return_meter_hours: number | null
+          return_odometer: number | null
+          rpo_eligible: boolean | null
+          rpo_purchase_price_cents: number | null
+          rpo_rental_credit_pct: number | null
+          status: Database["public"]["Enums"]["rental_contract_line_status"]
+          sub_rental_cost_cents: number | null
+          sub_rental_po_number: string | null
+          sub_rental_vendor_id: string | null
+          substitution_reason: string | null
+          updated_at: string
+          weekly_rate_cents: number | null
+          workspace_id: string
+        }
+        Insert: {
+          actual_returned_at?: string | null
+          created_at?: string
+          daily_rate_cents?: number | null
+          damage_waiver_accepted?: boolean | null
+          damage_waiver_amount_cents?: number | null
+          damage_waiver_rate_pct?: number | null
+          deleted_at?: string | null
+          equipment_id?: string | null
+          exchange_parent_line_id?: string | null
+          hourly_rate_cents?: number | null
+          id?: string
+          included_hours?: number | null
+          is_sub_rental?: boolean
+          line_number: number
+          monthly_rate_cents?: number | null
+          notes?: string | null
+          outbound_meter_hours?: number | null
+          outbound_odometer?: number | null
+          overage_hourly_rate_cents?: number | null
+          quantity?: number
+          rate_override_cents?: number | null
+          rate_override_reason?: string | null
+          rental_contract_id: string
+          rental_end_at?: string | null
+          rental_start_at?: string | null
+          requested_category?: string | null
+          requested_make?: string | null
+          requested_model?: string | null
+          return_code?: string | null
+          return_meter_hours?: number | null
+          return_odometer?: number | null
+          rpo_eligible?: boolean | null
+          rpo_purchase_price_cents?: number | null
+          rpo_rental_credit_pct?: number | null
+          status?: Database["public"]["Enums"]["rental_contract_line_status"]
+          sub_rental_cost_cents?: number | null
+          sub_rental_po_number?: string | null
+          sub_rental_vendor_id?: string | null
+          substitution_reason?: string | null
+          updated_at?: string
+          weekly_rate_cents?: number | null
+          workspace_id?: string
+        }
+        Update: {
+          actual_returned_at?: string | null
+          created_at?: string
+          daily_rate_cents?: number | null
+          damage_waiver_accepted?: boolean | null
+          damage_waiver_amount_cents?: number | null
+          damage_waiver_rate_pct?: number | null
+          deleted_at?: string | null
+          equipment_id?: string | null
+          exchange_parent_line_id?: string | null
+          hourly_rate_cents?: number | null
+          id?: string
+          included_hours?: number | null
+          is_sub_rental?: boolean
+          line_number?: number
+          monthly_rate_cents?: number | null
+          notes?: string | null
+          outbound_meter_hours?: number | null
+          outbound_odometer?: number | null
+          overage_hourly_rate_cents?: number | null
+          quantity?: number
+          rate_override_cents?: number | null
+          rate_override_reason?: string | null
+          rental_contract_id?: string
+          rental_end_at?: string | null
+          rental_start_at?: string | null
+          requested_category?: string | null
+          requested_make?: string | null
+          requested_model?: string | null
+          return_code?: string | null
+          return_meter_hours?: number | null
+          return_odometer?: number | null
+          rpo_eligible?: boolean | null
+          rpo_purchase_price_cents?: number | null
+          rpo_rental_credit_pct?: number | null
+          status?: Database["public"]["Enums"]["rental_contract_line_status"]
+          sub_rental_cost_cents?: number | null
+          sub_rental_po_number?: string | null
+          sub_rental_vendor_id?: string | null
+          substitution_reason?: string | null
+          updated_at?: string
+          weekly_rate_cents?: number | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rental_contract_lines_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "crm_equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_contract_lines_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_status_canonical"
+            referencedColumns: ["equipment_id"]
+          },
+          {
+            foreignKeyName: "rental_contract_lines_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_contract_lines_exchange_parent_line_id_fkey"
+            columns: ["exchange_parent_line_id"]
+            isOneToOne: false
+            referencedRelation: "rental_contract_lines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_contract_lines_rental_contract_id_fkey"
+            columns: ["rental_contract_id"]
+            isOneToOne: false
+            referencedRelation: "rental_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_contract_lines_sub_rental_vendor_id_fkey"
+            columns: ["sub_rental_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "sub_rental_vendors"
+            referencedColumns: ["id"]
+          },
         ]
       }
       rental_contracts: {
@@ -28024,13 +29024,27 @@ export type Database = {
           approved_end_date: string | null
           approved_start_date: string | null
           assignment_status: string
+          billing_cycle:
+            | Database["public"]["Enums"]["rental_billing_cycle"]
+            | null
           branch_id: string | null
+          coi_document_url: string | null
+          coi_expires_at: string | null
+          coi_received_at: string | null
+          coi_required: boolean
+          contract_number: string | null
           created_at: string
           customer_notes: string | null
+          damage_waiver_accepted: boolean | null
+          damage_waiver_amount_cents: number | null
+          damage_waiver_rate_pct: number | null
           dealer_notes: string | null
           dealer_response: string | null
+          delivery_address: Json
+          delivery_fee_cents: number | null
           delivery_location: string | null
           delivery_mode: string
+          delivery_required: boolean
           deposit_amount: number | null
           deposit_invoice_id: string | null
           deposit_required: boolean
@@ -28039,16 +29053,50 @@ export type Database = {
           estimate_daily_rate: number | null
           estimate_monthly_rate: number | null
           estimate_weekly_rate: number | null
+          hourly_rate_cents: number | null
           id: string
+          included_hours_per_day: number | null
+          insurance_expires_at: string | null
+          insurance_minimum_coverage_cents: number | null
+          insurance_policy_number: string | null
+          insurance_provider: string | null
+          overage_hourly_rate_cents: number | null
+          pickup_address: Json
+          pickup_fee_cents: number | null
+          pickup_required: boolean
+          po_number: string | null
+          po_received_at: string | null
+          po_required: boolean
           portal_customer_id: string
+          print_pdf_generated_at: string | null
+          print_pdf_generated_by: string | null
+          print_pdf_url: string | null
+          promised_delivery_at: string | null
+          promised_pickup_at: string | null
+          proration_rule:
+            | Database["public"]["Enums"]["rental_proration_rule"]
+            | null
+          quote_expires_at: string | null
+          rate_override_approved_at: string | null
+          rate_override_approved_by: string | null
+          rate_override_reason: string | null
           request_type: string
           requested_category: string | null
           requested_end_date: string
           requested_make: string | null
           requested_model: string | null
           requested_start_date: string
+          rpo_eligible: boolean
+          rpo_exercise_deadline: string | null
+          rpo_purchase_price_cents: number | null
+          rpo_rental_credit_pct: number | null
+          rpo_term_months: number | null
+          salesperson_id: string | null
           signed_terms_url: string | null
           status: string
+          tax_exempt: boolean
+          tax_exemption_certificate_url: string | null
+          tax_jurisdiction_code: string | null
           updated_at: string
           workspace_id: string
         }
@@ -28059,13 +29107,27 @@ export type Database = {
           approved_end_date?: string | null
           approved_start_date?: string | null
           assignment_status?: string
+          billing_cycle?:
+            | Database["public"]["Enums"]["rental_billing_cycle"]
+            | null
           branch_id?: string | null
+          coi_document_url?: string | null
+          coi_expires_at?: string | null
+          coi_received_at?: string | null
+          coi_required?: boolean
+          contract_number?: string | null
           created_at?: string
           customer_notes?: string | null
+          damage_waiver_accepted?: boolean | null
+          damage_waiver_amount_cents?: number | null
+          damage_waiver_rate_pct?: number | null
           dealer_notes?: string | null
           dealer_response?: string | null
+          delivery_address?: Json
+          delivery_fee_cents?: number | null
           delivery_location?: string | null
           delivery_mode?: string
+          delivery_required?: boolean
           deposit_amount?: number | null
           deposit_invoice_id?: string | null
           deposit_required?: boolean
@@ -28074,16 +29136,50 @@ export type Database = {
           estimate_daily_rate?: number | null
           estimate_monthly_rate?: number | null
           estimate_weekly_rate?: number | null
+          hourly_rate_cents?: number | null
           id?: string
+          included_hours_per_day?: number | null
+          insurance_expires_at?: string | null
+          insurance_minimum_coverage_cents?: number | null
+          insurance_policy_number?: string | null
+          insurance_provider?: string | null
+          overage_hourly_rate_cents?: number | null
+          pickup_address?: Json
+          pickup_fee_cents?: number | null
+          pickup_required?: boolean
+          po_number?: string | null
+          po_received_at?: string | null
+          po_required?: boolean
           portal_customer_id: string
+          print_pdf_generated_at?: string | null
+          print_pdf_generated_by?: string | null
+          print_pdf_url?: string | null
+          promised_delivery_at?: string | null
+          promised_pickup_at?: string | null
+          proration_rule?:
+            | Database["public"]["Enums"]["rental_proration_rule"]
+            | null
+          quote_expires_at?: string | null
+          rate_override_approved_at?: string | null
+          rate_override_approved_by?: string | null
+          rate_override_reason?: string | null
           request_type?: string
           requested_category?: string | null
           requested_end_date: string
           requested_make?: string | null
           requested_model?: string | null
           requested_start_date: string
+          rpo_eligible?: boolean
+          rpo_exercise_deadline?: string | null
+          rpo_purchase_price_cents?: number | null
+          rpo_rental_credit_pct?: number | null
+          rpo_term_months?: number | null
+          salesperson_id?: string | null
           signed_terms_url?: string | null
           status?: string
+          tax_exempt?: boolean
+          tax_exemption_certificate_url?: string | null
+          tax_jurisdiction_code?: string | null
           updated_at?: string
           workspace_id?: string
         }
@@ -28094,13 +29190,27 @@ export type Database = {
           approved_end_date?: string | null
           approved_start_date?: string | null
           assignment_status?: string
+          billing_cycle?:
+            | Database["public"]["Enums"]["rental_billing_cycle"]
+            | null
           branch_id?: string | null
+          coi_document_url?: string | null
+          coi_expires_at?: string | null
+          coi_received_at?: string | null
+          coi_required?: boolean
+          contract_number?: string | null
           created_at?: string
           customer_notes?: string | null
+          damage_waiver_accepted?: boolean | null
+          damage_waiver_amount_cents?: number | null
+          damage_waiver_rate_pct?: number | null
           dealer_notes?: string | null
           dealer_response?: string | null
+          delivery_address?: Json
+          delivery_fee_cents?: number | null
           delivery_location?: string | null
           delivery_mode?: string
+          delivery_required?: boolean
           deposit_amount?: number | null
           deposit_invoice_id?: string | null
           deposit_required?: boolean
@@ -28109,16 +29219,50 @@ export type Database = {
           estimate_daily_rate?: number | null
           estimate_monthly_rate?: number | null
           estimate_weekly_rate?: number | null
+          hourly_rate_cents?: number | null
           id?: string
+          included_hours_per_day?: number | null
+          insurance_expires_at?: string | null
+          insurance_minimum_coverage_cents?: number | null
+          insurance_policy_number?: string | null
+          insurance_provider?: string | null
+          overage_hourly_rate_cents?: number | null
+          pickup_address?: Json
+          pickup_fee_cents?: number | null
+          pickup_required?: boolean
+          po_number?: string | null
+          po_received_at?: string | null
+          po_required?: boolean
           portal_customer_id?: string
+          print_pdf_generated_at?: string | null
+          print_pdf_generated_by?: string | null
+          print_pdf_url?: string | null
+          promised_delivery_at?: string | null
+          promised_pickup_at?: string | null
+          proration_rule?:
+            | Database["public"]["Enums"]["rental_proration_rule"]
+            | null
+          quote_expires_at?: string | null
+          rate_override_approved_at?: string | null
+          rate_override_approved_by?: string | null
+          rate_override_reason?: string | null
           request_type?: string
           requested_category?: string | null
           requested_end_date?: string
           requested_make?: string | null
           requested_model?: string | null
           requested_start_date?: string
+          rpo_eligible?: boolean
+          rpo_exercise_deadline?: string | null
+          rpo_purchase_price_cents?: number | null
+          rpo_rental_credit_pct?: number | null
+          rpo_term_months?: number | null
+          salesperson_id?: string | null
           signed_terms_url?: string | null
           status?: string
+          tax_exempt?: boolean
+          tax_exemption_certificate_url?: string | null
+          tax_jurisdiction_code?: string | null
           updated_at?: string
           workspace_id?: string
         }
@@ -28152,6 +29296,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "rental_contracts_deposit_invoice_id_fkey"
+            columns: ["deposit_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
+            foreignKeyName: "rental_contracts_deposit_invoice_id_fkey"
+            columns: ["deposit_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
             foreignKeyName: "rental_contracts_equipment_id_fkey"
             columns: ["equipment_id"]
             isOneToOne: false
@@ -28177,6 +29335,243 @@ export type Database = {
             columns: ["portal_customer_id"]
             isOneToOne: false
             referencedRelation: "portal_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_contracts_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "rental_contracts_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "rental_contracts_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "rental_contracts_print_pdf_generated_by_fkey"
+            columns: ["print_pdf_generated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_contracts_rate_override_approved_by_fkey"
+            columns: ["rate_override_approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_contracts_salesperson_id_fkey"
+            columns: ["salesperson_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rental_invoices: {
+        Row: {
+          amount_paid_cents: number
+          balance_cents: number | null
+          billing_cycle:
+            | Database["public"]["Enums"]["rental_billing_cycle"]
+            | null
+          cleaning_charge_cents: number
+          created_at: string
+          customer_invoice_id: string | null
+          damage_charge_cents: number
+          damage_waiver_charge_cents: number
+          deleted_at: string | null
+          delivery_charge_cents: number
+          discount_cents: number
+          due_date: string | null
+          fuel_charge_cents: number
+          hourly_charge_cents: number
+          id: string
+          invoice_number: string
+          metadata: Json
+          other_charge_cents: number
+          overage_charge_cents: number
+          paid_at: string | null
+          period_end: string
+          period_start: string
+          pickup_charge_cents: number
+          posted_at: string | null
+          proration_rule:
+            | Database["public"]["Enums"]["rental_proration_rule"]
+            | null
+          rental_charge_cents: number
+          rental_contract_id: string
+          reversal_of_invoice_id: string | null
+          reversal_reason: string | null
+          reversed_at: string | null
+          reversed_by_invoice_id: string | null
+          sent_at: string | null
+          status: Database["public"]["Enums"]["rental_invoice_status"]
+          sub_rental_charge_cents: number
+          tax_cents: number
+          taxable_amount_cents: number
+          total_cents: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          amount_paid_cents?: number
+          balance_cents?: number | null
+          billing_cycle?:
+            | Database["public"]["Enums"]["rental_billing_cycle"]
+            | null
+          cleaning_charge_cents?: number
+          created_at?: string
+          customer_invoice_id?: string | null
+          damage_charge_cents?: number
+          damage_waiver_charge_cents?: number
+          deleted_at?: string | null
+          delivery_charge_cents?: number
+          discount_cents?: number
+          due_date?: string | null
+          fuel_charge_cents?: number
+          hourly_charge_cents?: number
+          id?: string
+          invoice_number: string
+          metadata?: Json
+          other_charge_cents?: number
+          overage_charge_cents?: number
+          paid_at?: string | null
+          period_end: string
+          period_start: string
+          pickup_charge_cents?: number
+          posted_at?: string | null
+          proration_rule?:
+            | Database["public"]["Enums"]["rental_proration_rule"]
+            | null
+          rental_charge_cents?: number
+          rental_contract_id: string
+          reversal_of_invoice_id?: string | null
+          reversal_reason?: string | null
+          reversed_at?: string | null
+          reversed_by_invoice_id?: string | null
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["rental_invoice_status"]
+          sub_rental_charge_cents?: number
+          tax_cents?: number
+          taxable_amount_cents?: number
+          total_cents?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          amount_paid_cents?: number
+          balance_cents?: number | null
+          billing_cycle?:
+            | Database["public"]["Enums"]["rental_billing_cycle"]
+            | null
+          cleaning_charge_cents?: number
+          created_at?: string
+          customer_invoice_id?: string | null
+          damage_charge_cents?: number
+          damage_waiver_charge_cents?: number
+          deleted_at?: string | null
+          delivery_charge_cents?: number
+          discount_cents?: number
+          due_date?: string | null
+          fuel_charge_cents?: number
+          hourly_charge_cents?: number
+          id?: string
+          invoice_number?: string
+          metadata?: Json
+          other_charge_cents?: number
+          overage_charge_cents?: number
+          paid_at?: string | null
+          period_end?: string
+          period_start?: string
+          pickup_charge_cents?: number
+          posted_at?: string | null
+          proration_rule?:
+            | Database["public"]["Enums"]["rental_proration_rule"]
+            | null
+          rental_charge_cents?: number
+          rental_contract_id?: string
+          reversal_of_invoice_id?: string | null
+          reversal_reason?: string | null
+          reversed_at?: string | null
+          reversed_by_invoice_id?: string | null
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["rental_invoice_status"]
+          sub_rental_charge_cents?: number
+          tax_cents?: number
+          taxable_amount_cents?: number
+          total_cents?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rental_invoices_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "customer_ar_history"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_invoices_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "customer_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_invoices_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_invoices_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
+            foreignKeyName: "rental_invoices_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
+            foreignKeyName: "rental_invoices_rental_contract_id_fkey"
+            columns: ["rental_contract_id"]
+            isOneToOne: false
+            referencedRelation: "rental_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_invoices_reversal_of_invoice_id_fkey"
+            columns: ["reversal_of_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "rental_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_invoices_reversed_by_invoice_id_fkey"
+            columns: ["reversed_by_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "rental_invoices"
             referencedColumns: ["id"]
           },
         ]
@@ -28261,6 +29656,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "rental_rate_rules_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "rental_rate_rules_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "rental_rate_rules_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
             foreignKeyName: "rental_rate_rules_equipment_id_fkey"
             columns: ["equipment_id"]
             isOneToOne: false
@@ -28288,15 +29704,22 @@ export type Database = {
           aging_bucket: string | null
           balance_due: number | null
           charge_amount: number | null
+          charge_breakdown: Json
+          cleaning_charge_cents: number | null
           condition_photos: Json | null
           created_at: string
           credit_invoice_number: string | null
+          damage_charge_cents: number | null
           damage_description: string | null
+          damage_labor_cents: number | null
+          damage_parts_cents: number | null
           decided_by: string | null
           decision_at: string | null
           deposit_amount: number | null
           deposit_covers_charges: boolean | null
+          environmental_fee_cents: number | null
           equipment_id: string | null
+          fuel_charge_cents: number | null
           has_charges: boolean | null
           id: string
           inspection_checklist: Json | null
@@ -28304,11 +29727,13 @@ export type Database = {
           inspection_started_at: string | null
           inspector_id: string | null
           original_payment_method: string | null
+          other_charge_cents: number | null
           refund_check_turnaround: string | null
           refund_method: string | null
           refund_status: string | null
           rental_contract_id: string | null
           rental_contract_reference: string | null
+          rental_invoice_id: string | null
           status: string
           updated_at: string
           work_order_number: string | null
@@ -28318,15 +29743,22 @@ export type Database = {
           aging_bucket?: string | null
           balance_due?: number | null
           charge_amount?: number | null
+          charge_breakdown?: Json
+          cleaning_charge_cents?: number | null
           condition_photos?: Json | null
           created_at?: string
           credit_invoice_number?: string | null
+          damage_charge_cents?: number | null
           damage_description?: string | null
+          damage_labor_cents?: number | null
+          damage_parts_cents?: number | null
           decided_by?: string | null
           decision_at?: string | null
           deposit_amount?: number | null
           deposit_covers_charges?: boolean | null
+          environmental_fee_cents?: number | null
           equipment_id?: string | null
+          fuel_charge_cents?: number | null
           has_charges?: boolean | null
           id?: string
           inspection_checklist?: Json | null
@@ -28334,11 +29766,13 @@ export type Database = {
           inspection_started_at?: string | null
           inspector_id?: string | null
           original_payment_method?: string | null
+          other_charge_cents?: number | null
           refund_check_turnaround?: string | null
           refund_method?: string | null
           refund_status?: string | null
           rental_contract_id?: string | null
           rental_contract_reference?: string | null
+          rental_invoice_id?: string | null
           status?: string
           updated_at?: string
           work_order_number?: string | null
@@ -28348,15 +29782,22 @@ export type Database = {
           aging_bucket?: string | null
           balance_due?: number | null
           charge_amount?: number | null
+          charge_breakdown?: Json
+          cleaning_charge_cents?: number | null
           condition_photos?: Json | null
           created_at?: string
           credit_invoice_number?: string | null
+          damage_charge_cents?: number | null
           damage_description?: string | null
+          damage_labor_cents?: number | null
+          damage_parts_cents?: number | null
           decided_by?: string | null
           decision_at?: string | null
           deposit_amount?: number | null
           deposit_covers_charges?: boolean | null
+          environmental_fee_cents?: number | null
           equipment_id?: string | null
+          fuel_charge_cents?: number | null
           has_charges?: boolean | null
           id?: string
           inspection_checklist?: Json | null
@@ -28364,11 +29805,13 @@ export type Database = {
           inspection_started_at?: string | null
           inspector_id?: string | null
           original_payment_method?: string | null
+          other_charge_cents?: number | null
           refund_check_turnaround?: string | null
           refund_method?: string | null
           refund_status?: string | null
           rental_contract_id?: string | null
           rental_contract_reference?: string | null
+          rental_invoice_id?: string | null
           status?: string
           updated_at?: string
           work_order_number?: string | null
@@ -28415,6 +29858,13 @@ export type Database = {
             columns: ["rental_contract_id"]
             isOneToOne: false
             referencedRelation: "rental_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_returns_rental_invoice_id_fkey"
+            columns: ["rental_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "rental_invoices"
             referencedColumns: ["id"]
           },
         ]
@@ -28714,6 +30164,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "scheduled_follow_ups_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -29294,6 +30751,7 @@ export type Database = {
           escalation_pct: number | null
           estimated_contract_value: number | null
           expires_on: string | null
+          expiry_date: string | null
           id: string
           included_hours: number | null
           included_parts_value_cents: number | null
@@ -29325,6 +30783,7 @@ export type Database = {
           escalation_pct?: number | null
           estimated_contract_value?: number | null
           expires_on?: string | null
+          expiry_date?: string | null
           id?: string
           included_hours?: number | null
           included_parts_value_cents?: number | null
@@ -29356,6 +30815,7 @@ export type Database = {
           escalation_pct?: number | null
           estimated_contract_value?: number | null
           expires_on?: string | null
+          expiry_date?: string | null
           id?: string
           included_hours?: number | null
           included_parts_value_cents?: number | null
@@ -29406,6 +30866,13 @@ export type Database = {
             foreignKeyName: "service_agreements_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_agreements_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -29436,6 +30903,211 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_agreement_programs"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_billing_rows: {
+        Row: {
+          billed_status: Database["public"]["Enums"]["work_order_billed_status"]
+          billing_basis:
+            | Database["public"]["Enums"]["work_order_billing_basis"]
+            | null
+          created_at: string
+          customer_invoice_id: string | null
+          deleted_at: string | null
+          description: string | null
+          extended_cost_cents: number
+          extended_price_cents: number
+          gl_cost_account: string | null
+          gl_revenue_account: string | null
+          id: string
+          metadata: Json
+          parts_invoice_line_id: string | null
+          posted_to_gl_at: string | null
+          quantity: number
+          revenue_type:
+            | Database["public"]["Enums"]["work_order_revenue_type"]
+            | null
+          row_type: Database["public"]["Enums"]["service_billing_row_type"]
+          service_job_id: string
+          service_job_segment_id: string | null
+          source_key: string | null
+          source_system: string | null
+          taxable: boolean | null
+          unit_cost_cents: number | null
+          unit_price_cents: number | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          billed_status?: Database["public"]["Enums"]["work_order_billed_status"]
+          billing_basis?:
+            | Database["public"]["Enums"]["work_order_billing_basis"]
+            | null
+          created_at?: string
+          customer_invoice_id?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          extended_cost_cents?: number
+          extended_price_cents?: number
+          gl_cost_account?: string | null
+          gl_revenue_account?: string | null
+          id?: string
+          metadata?: Json
+          parts_invoice_line_id?: string | null
+          posted_to_gl_at?: string | null
+          quantity?: number
+          revenue_type?:
+            | Database["public"]["Enums"]["work_order_revenue_type"]
+            | null
+          row_type: Database["public"]["Enums"]["service_billing_row_type"]
+          service_job_id: string
+          service_job_segment_id?: string | null
+          source_key?: string | null
+          source_system?: string | null
+          taxable?: boolean | null
+          unit_cost_cents?: number | null
+          unit_price_cents?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          billed_status?: Database["public"]["Enums"]["work_order_billed_status"]
+          billing_basis?:
+            | Database["public"]["Enums"]["work_order_billing_basis"]
+            | null
+          created_at?: string
+          customer_invoice_id?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          extended_cost_cents?: number
+          extended_price_cents?: number
+          gl_cost_account?: string | null
+          gl_revenue_account?: string | null
+          id?: string
+          metadata?: Json
+          parts_invoice_line_id?: string | null
+          posted_to_gl_at?: string | null
+          quantity?: number
+          revenue_type?:
+            | Database["public"]["Enums"]["work_order_revenue_type"]
+            | null
+          row_type?: Database["public"]["Enums"]["service_billing_row_type"]
+          service_job_id?: string
+          service_job_segment_id?: string | null
+          source_key?: string | null
+          source_system?: string | null
+          taxable?: boolean | null
+          unit_cost_cents?: number | null
+          unit_price_cents?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_billing_rows_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "customer_ar_history"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_billing_rows_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "customer_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_billing_rows_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_billing_rows_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
+            foreignKeyName: "service_billing_rows_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
+            foreignKeyName: "service_billing_rows_parts_invoice_line_id_fkey"
+            columns: ["parts_invoice_line_id"]
+            isOneToOne: false
+            referencedRelation: "parts_invoice_lines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_billing_rows_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "mv_service_jobs_wip"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_billing_rows_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "service_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_billing_rows_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_billing_rows_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_billing_rows_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_billing_rows_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_billing_rows_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_jobs_last_activity"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_billing_rows_service_job_segment_id_fkey"
+            columns: ["service_job_segment_id"]
+            isOneToOne: false
+            referencedRelation: "service_job_segments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_billing_rows_service_job_segment_id_fkey"
+            columns: ["service_job_segment_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_segment_id"]
           },
         ]
       }
@@ -29549,6 +31221,34 @@ export type Database = {
             foreignKeyName: "service_completion_feedback_job_id_fkey"
             columns: ["job_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_completion_feedback_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_completion_feedback_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_completion_feedback_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_completion_feedback_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
             referencedColumns: ["service_job_id"]
           },
@@ -29645,6 +31345,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_customer_notifications_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_customer_notifications_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_customer_notifications_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_customer_notifications_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
           },
           {
             foreignKeyName: "service_customer_notifications_job_id_fkey"
@@ -29838,6 +31566,13 @@ export type Database = {
             foreignKeyName: "service_inspections_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_inspections_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -29875,6 +31610,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_inspections_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_inspections_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_inspections_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_inspections_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
           },
           {
             foreignKeyName: "service_inspections_service_job_id_fkey"
@@ -29960,6 +31723,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "service_internal_billing_line_staging_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
+            foreignKeyName: "service_internal_billing_line_staging_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
             foreignKeyName: "service_internal_billing_line_staging_requirement_id_fkey"
             columns: ["requirement_id"]
             isOneToOne: false
@@ -29979,6 +31756,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_internal_billing_line_staging_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_internal_billing_line_staging_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_internal_billing_line_staging_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_internal_billing_line_staging_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
           },
           {
             foreignKeyName: "service_internal_billing_line_staging_service_job_id_fkey"
@@ -30047,6 +31852,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_job_blockers_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_job_blockers_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_job_blockers_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_job_blockers_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
           },
           {
             foreignKeyName: "service_job_blockers_job_id_fkey"
@@ -30124,6 +31957,34 @@ export type Database = {
             foreignKeyName: "service_job_events_job_id_fkey"
             columns: ["job_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_job_events_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_job_events_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_job_events_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_job_events_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
             referencedColumns: ["service_job_id"]
           },
@@ -30133,15 +31994,21 @@ export type Database = {
         Row: {
           add_on_hours: number | null
           assist_hours: number | null
+          billed_status: Database["public"]["Enums"]["work_order_billed_status"]
+          billing_basis:
+            | Database["public"]["Enums"]["work_order_billing_basis"]
+            | null
           cause: string | null
           complaint: string | null
           correction: string | null
           created_at: string
+          customer_invoice_id: string | null
           date_started: string | null
           deleted_at: string | null
           description: string | null
           estimated_completion_at: string | null
           estimated_hours: number | null
+          flat_rate_amount_cents: number | null
           gl_customer_account: string | null
           gl_internal_account: string | null
           gl_labor_account: string | null
@@ -30150,17 +32017,24 @@ export type Database = {
           id: string
           job_code_id: string | null
           job_code_number: string | null
+          labor_completed_at: string | null
+          labor_started_at: string | null
           last_activity_at: string | null
           machine_make: string | null
           machine_model: string | null
+          posted_to_gl_at: string | null
           priority: string | null
           quantity: number | null
           rate_code: string | null
           reason: string | null
+          revenue_type:
+            | Database["public"]["Enums"]["work_order_revenue_type"]
+            | null
           scheduled_start_at: string | null
           segment_number: string
           service_job_id: string
           shop_bay_id: string | null
+          standard_hours: number | null
           status: string
           technician_id: string | null
           type: string | null
@@ -30170,15 +32044,21 @@ export type Database = {
         Insert: {
           add_on_hours?: number | null
           assist_hours?: number | null
+          billed_status?: Database["public"]["Enums"]["work_order_billed_status"]
+          billing_basis?:
+            | Database["public"]["Enums"]["work_order_billing_basis"]
+            | null
           cause?: string | null
           complaint?: string | null
           correction?: string | null
           created_at?: string
+          customer_invoice_id?: string | null
           date_started?: string | null
           deleted_at?: string | null
           description?: string | null
           estimated_completion_at?: string | null
           estimated_hours?: number | null
+          flat_rate_amount_cents?: number | null
           gl_customer_account?: string | null
           gl_internal_account?: string | null
           gl_labor_account?: string | null
@@ -30187,17 +32067,24 @@ export type Database = {
           id?: string
           job_code_id?: string | null
           job_code_number?: string | null
+          labor_completed_at?: string | null
+          labor_started_at?: string | null
           last_activity_at?: string | null
           machine_make?: string | null
           machine_model?: string | null
+          posted_to_gl_at?: string | null
           priority?: string | null
           quantity?: number | null
           rate_code?: string | null
           reason?: string | null
+          revenue_type?:
+            | Database["public"]["Enums"]["work_order_revenue_type"]
+            | null
           scheduled_start_at?: string | null
           segment_number: string
           service_job_id: string
           shop_bay_id?: string | null
+          standard_hours?: number | null
           status?: string
           technician_id?: string | null
           type?: string | null
@@ -30207,15 +32094,21 @@ export type Database = {
         Update: {
           add_on_hours?: number | null
           assist_hours?: number | null
+          billed_status?: Database["public"]["Enums"]["work_order_billed_status"]
+          billing_basis?:
+            | Database["public"]["Enums"]["work_order_billing_basis"]
+            | null
           cause?: string | null
           complaint?: string | null
           correction?: string | null
           created_at?: string
+          customer_invoice_id?: string | null
           date_started?: string | null
           deleted_at?: string | null
           description?: string | null
           estimated_completion_at?: string | null
           estimated_hours?: number | null
+          flat_rate_amount_cents?: number | null
           gl_customer_account?: string | null
           gl_internal_account?: string | null
           gl_labor_account?: string | null
@@ -30224,17 +32117,24 @@ export type Database = {
           id?: string
           job_code_id?: string | null
           job_code_number?: string | null
+          labor_completed_at?: string | null
+          labor_started_at?: string | null
           last_activity_at?: string | null
           machine_make?: string | null
           machine_model?: string | null
+          posted_to_gl_at?: string | null
           priority?: string | null
           quantity?: number | null
           rate_code?: string | null
           reason?: string | null
+          revenue_type?:
+            | Database["public"]["Enums"]["work_order_revenue_type"]
+            | null
           scheduled_start_at?: string | null
           segment_number?: string
           service_job_id?: string
           shop_bay_id?: string | null
+          standard_hours?: number | null
           status?: string
           technician_id?: string | null
           type?: string | null
@@ -30242,6 +32142,41 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "service_job_segments_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "customer_ar_history"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_job_segments_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "customer_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_job_segments_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_job_segments_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
+            foreignKeyName: "service_job_segments_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["customer_invoice_id"]
+          },
           {
             foreignKeyName: "service_job_segments_job_code_id_fkey"
             columns: ["job_code_id"]
@@ -30262,6 +32197,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_job_segments_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_job_segments_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_job_segments_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_job_segments_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
           },
           {
             foreignKeyName: "service_job_segments_service_job_id_fkey"
@@ -30290,6 +32253,13 @@ export type Database = {
         Row: {
           advisor_id: string | null
           ai_diagnosis_summary: string | null
+          approved_at: string | null
+          billed_at: string | null
+          billed_status: Database["public"]["Enums"]["work_order_billed_status"]
+          billing_basis:
+            | Database["public"]["Enums"]["work_order_billing_basis"]
+            | null
+          billing_hold_reason: string | null
           branch_id: string | null
           closed_at: string | null
           contact_id: string | null
@@ -30302,6 +32272,7 @@ export type Database = {
           delivery_required: boolean
           discount_labor: string | null
           discount_parts: string | null
+          flat_rate_amount_cents: number | null
           fulfillment_run_id: string | null
           haul_required: boolean
           id: string
@@ -30310,14 +32281,21 @@ export type Database = {
           machine_down: boolean
           machine_down_at: string | null
           machine_id: string | null
+          opened_at: string | null
           pickup_required: boolean
           po_number: string | null
           portal_request_id: string | null
+          posted_to_gl_at: string | null
           pricing_group_override: string | null
           priority: Database["public"]["Enums"]["service_priority"]
+          promised_at: string | null
           quote_total: number | null
+          ready_to_bill_at: string | null
           request_type: Database["public"]["Enums"]["service_request_type"]
           requested_by_name: string | null
+          revenue_type:
+            | Database["public"]["Enums"]["work_order_revenue_type"]
+            | null
           scheduled_end_at: string | null
           scheduled_start_at: string | null
           selected_job_code_id: string | null
@@ -30327,6 +32305,7 @@ export type Database = {
           shop_or_field: string
           sold_to_address_id: string | null
           source_type: Database["public"]["Enums"]["service_source_type"]
+          standard_hours: number | null
           status_flags: Database["public"]["Enums"]["service_status_flag"][]
           tax_code_labor_1: string | null
           tax_code_labor_2: string | null
@@ -30340,11 +32319,20 @@ export type Database = {
           traffic_ticket_id: string | null
           updated_at: string
           wo_number: string | null
+          work_completed_at: string | null
+          work_started_at: string | null
           workspace_id: string
         }
         Insert: {
           advisor_id?: string | null
           ai_diagnosis_summary?: string | null
+          approved_at?: string | null
+          billed_at?: string | null
+          billed_status?: Database["public"]["Enums"]["work_order_billed_status"]
+          billing_basis?:
+            | Database["public"]["Enums"]["work_order_billing_basis"]
+            | null
+          billing_hold_reason?: string | null
           branch_id?: string | null
           closed_at?: string | null
           contact_id?: string | null
@@ -30357,6 +32345,7 @@ export type Database = {
           delivery_required?: boolean
           discount_labor?: string | null
           discount_parts?: string | null
+          flat_rate_amount_cents?: number | null
           fulfillment_run_id?: string | null
           haul_required?: boolean
           id?: string
@@ -30365,14 +32354,21 @@ export type Database = {
           machine_down?: boolean
           machine_down_at?: string | null
           machine_id?: string | null
+          opened_at?: string | null
           pickup_required?: boolean
           po_number?: string | null
           portal_request_id?: string | null
+          posted_to_gl_at?: string | null
           pricing_group_override?: string | null
           priority?: Database["public"]["Enums"]["service_priority"]
+          promised_at?: string | null
           quote_total?: number | null
+          ready_to_bill_at?: string | null
           request_type?: Database["public"]["Enums"]["service_request_type"]
           requested_by_name?: string | null
+          revenue_type?:
+            | Database["public"]["Enums"]["work_order_revenue_type"]
+            | null
           scheduled_end_at?: string | null
           scheduled_start_at?: string | null
           selected_job_code_id?: string | null
@@ -30382,6 +32378,7 @@ export type Database = {
           shop_or_field?: string
           sold_to_address_id?: string | null
           source_type?: Database["public"]["Enums"]["service_source_type"]
+          standard_hours?: number | null
           status_flags?: Database["public"]["Enums"]["service_status_flag"][]
           tax_code_labor_1?: string | null
           tax_code_labor_2?: string | null
@@ -30395,11 +32392,20 @@ export type Database = {
           traffic_ticket_id?: string | null
           updated_at?: string
           wo_number?: string | null
+          work_completed_at?: string | null
+          work_started_at?: string | null
           workspace_id?: string
         }
         Update: {
           advisor_id?: string | null
           ai_diagnosis_summary?: string | null
+          approved_at?: string | null
+          billed_at?: string | null
+          billed_status?: Database["public"]["Enums"]["work_order_billed_status"]
+          billing_basis?:
+            | Database["public"]["Enums"]["work_order_billing_basis"]
+            | null
+          billing_hold_reason?: string | null
           branch_id?: string | null
           closed_at?: string | null
           contact_id?: string | null
@@ -30412,6 +32418,7 @@ export type Database = {
           delivery_required?: boolean
           discount_labor?: string | null
           discount_parts?: string | null
+          flat_rate_amount_cents?: number | null
           fulfillment_run_id?: string | null
           haul_required?: boolean
           id?: string
@@ -30420,14 +32427,21 @@ export type Database = {
           machine_down?: boolean
           machine_down_at?: string | null
           machine_id?: string | null
+          opened_at?: string | null
           pickup_required?: boolean
           po_number?: string | null
           portal_request_id?: string | null
+          posted_to_gl_at?: string | null
           pricing_group_override?: string | null
           priority?: Database["public"]["Enums"]["service_priority"]
+          promised_at?: string | null
           quote_total?: number | null
+          ready_to_bill_at?: string | null
           request_type?: Database["public"]["Enums"]["service_request_type"]
           requested_by_name?: string | null
+          revenue_type?:
+            | Database["public"]["Enums"]["work_order_revenue_type"]
+            | null
           scheduled_end_at?: string | null
           scheduled_start_at?: string | null
           selected_job_code_id?: string | null
@@ -30437,6 +32451,7 @@ export type Database = {
           shop_or_field?: string
           sold_to_address_id?: string | null
           source_type?: Database["public"]["Enums"]["service_source_type"]
+          standard_hours?: number | null
           status_flags?: Database["public"]["Enums"]["service_status_flag"][]
           tax_code_labor_1?: string | null
           tax_code_labor_2?: string | null
@@ -30450,6 +32465,8 @@ export type Database = {
           traffic_ticket_id?: string | null
           updated_at?: string
           wo_number?: string | null
+          work_completed_at?: string | null
+          work_started_at?: string | null
           workspace_id?: string
         }
         Relationships: [
@@ -30493,6 +32510,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -30657,6 +32681,237 @@ export type Database = {
           },
         ]
       }
+      service_labor_ledger: {
+        Row: {
+          actual_hours: number | null
+          assist_hours: number | null
+          billable_hours: number | null
+          billed_status: Database["public"]["Enums"]["work_order_billed_status"]
+          billing_basis:
+            | Database["public"]["Enums"]["work_order_billing_basis"]
+            | null
+          created_at: string
+          customer_invoice_id: string | null
+          deleted_at: string | null
+          employee_id: string | null
+          ended_at: string | null
+          gl_labor_account: string | null
+          id: string
+          labor_cost_cents: number
+          labor_cost_rate_cents: number | null
+          labor_date: string | null
+          labor_rate_cents: number | null
+          labor_sale_cents: number
+          notes: string | null
+          posted_to_gl_at: string | null
+          revenue_type:
+            | Database["public"]["Enums"]["work_order_revenue_type"]
+            | null
+          service_job_id: string
+          service_job_segment_id: string | null
+          service_timecard_id: string | null
+          source_key: string | null
+          source_system: string | null
+          standard_hours: number | null
+          started_at: string | null
+          technician_id: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          actual_hours?: number | null
+          assist_hours?: number | null
+          billable_hours?: number | null
+          billed_status?: Database["public"]["Enums"]["work_order_billed_status"]
+          billing_basis?:
+            | Database["public"]["Enums"]["work_order_billing_basis"]
+            | null
+          created_at?: string
+          customer_invoice_id?: string | null
+          deleted_at?: string | null
+          employee_id?: string | null
+          ended_at?: string | null
+          gl_labor_account?: string | null
+          id?: string
+          labor_cost_cents?: number
+          labor_cost_rate_cents?: number | null
+          labor_date?: string | null
+          labor_rate_cents?: number | null
+          labor_sale_cents?: number
+          notes?: string | null
+          posted_to_gl_at?: string | null
+          revenue_type?:
+            | Database["public"]["Enums"]["work_order_revenue_type"]
+            | null
+          service_job_id: string
+          service_job_segment_id?: string | null
+          service_timecard_id?: string | null
+          source_key?: string | null
+          source_system?: string | null
+          standard_hours?: number | null
+          started_at?: string | null
+          technician_id?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          actual_hours?: number | null
+          assist_hours?: number | null
+          billable_hours?: number | null
+          billed_status?: Database["public"]["Enums"]["work_order_billed_status"]
+          billing_basis?:
+            | Database["public"]["Enums"]["work_order_billing_basis"]
+            | null
+          created_at?: string
+          customer_invoice_id?: string | null
+          deleted_at?: string | null
+          employee_id?: string | null
+          ended_at?: string | null
+          gl_labor_account?: string | null
+          id?: string
+          labor_cost_cents?: number
+          labor_cost_rate_cents?: number | null
+          labor_date?: string | null
+          labor_rate_cents?: number | null
+          labor_sale_cents?: number
+          notes?: string | null
+          posted_to_gl_at?: string | null
+          revenue_type?:
+            | Database["public"]["Enums"]["work_order_revenue_type"]
+            | null
+          service_job_id?: string
+          service_job_segment_id?: string | null
+          service_timecard_id?: string | null
+          source_key?: string | null
+          source_system?: string | null
+          standard_hours?: number | null
+          started_at?: string | null
+          technician_id?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_labor_ledger_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "customer_ar_history"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "customer_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "mv_service_jobs_wip"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "service_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_jobs_last_activity"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_service_job_segment_id_fkey"
+            columns: ["service_job_segment_id"]
+            isOneToOne: false
+            referencedRelation: "service_job_segments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_service_job_segment_id_fkey"
+            columns: ["service_job_segment_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_segment_id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_service_timecard_id_fkey"
+            columns: ["service_timecard_id"]
+            isOneToOne: false
+            referencedRelation: "service_timecards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_technician_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_labor_pricing_rules: {
         Row: {
           active: boolean
@@ -30751,6 +33006,13 @@ export type Database = {
             foreignKeyName: "service_labor_pricing_rules_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_labor_pricing_rules_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -30835,6 +33097,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_parts_actions_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_actions_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_actions_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_actions_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
           },
           {
             foreignKeyName: "service_parts_actions_job_id_fkey"
@@ -30932,6 +33222,34 @@ export type Database = {
             foreignKeyName: "service_parts_inventory_overrides_job_id_fkey"
             columns: ["job_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_inventory_overrides_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_inventory_overrides_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_inventory_overrides_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_inventory_overrides_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
             referencedColumns: ["service_job_id"]
           },
@@ -31018,6 +33336,34 @@ export type Database = {
             foreignKeyName: "service_parts_requirements_job_id_fkey"
             columns: ["job_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_requirements_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_requirements_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_requirements_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_requirements_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
             referencedColumns: ["service_job_id"]
           },
@@ -31087,6 +33433,34 @@ export type Database = {
             foreignKeyName: "service_parts_staging_job_id_fkey"
             columns: ["job_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_staging_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_staging_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_staging_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_parts_staging_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
             referencedColumns: ["service_job_id"]
           },
@@ -31151,6 +33525,13 @@ export type Database = {
             referencedRelation: "service_quotes"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "service_quote_approvals_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_quote_gain_loss"
+            referencedColumns: ["service_quote_id"]
+          },
         ]
       }
       service_quote_lines: {
@@ -31211,6 +33592,13 @@ export type Database = {
             referencedRelation: "service_quotes"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "service_quote_lines_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_quote_gain_loss"
+            referencedColumns: ["service_quote_id"]
+          },
         ]
       }
       service_quotes: {
@@ -31226,8 +33614,11 @@ export type Database = {
           job_id: string
           labor_total: number
           notes: string | null
+          outcome_at: string | null
+          outcome_by: string | null
           parts_total: number
           quote_number: string | null
+          quote_result_reason: string | null
           sent_at: string | null
           shop_supplies: number
           status: string
@@ -31248,8 +33639,11 @@ export type Database = {
           job_id: string
           labor_total?: number
           notes?: string | null
+          outcome_at?: string | null
+          outcome_by?: string | null
           parts_total?: number
           quote_number?: string | null
+          quote_result_reason?: string | null
           sent_at?: string | null
           shop_supplies?: number
           status?: string
@@ -31270,8 +33664,11 @@ export type Database = {
           job_id?: string
           labor_total?: number
           notes?: string | null
+          outcome_at?: string | null
+          outcome_by?: string | null
           parts_total?: number
           quote_number?: string | null
+          quote_result_reason?: string | null
           sent_at?: string | null
           shop_supplies?: number
           status?: string
@@ -31294,6 +33691,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_quotes"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_quotes_cloned_from_quote_id_fkey"
+            columns: ["cloned_from_quote_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_quote_gain_loss"
+            referencedColumns: ["service_quote_id"]
           },
           {
             foreignKeyName: "service_quotes_created_by_fkey"
@@ -31320,8 +33724,43 @@ export type Database = {
             foreignKeyName: "service_quotes_job_id_fkey"
             columns: ["job_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
             referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_outcome_by_fkey"
+            columns: ["outcome_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -31425,6 +33864,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "service_requests_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "service_requests_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "service_requests_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
             foreignKeyName: "service_requests_service_job_id_fkey"
             columns: ["service_job_id"]
             isOneToOne: false
@@ -31437,6 +33897,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_requests_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_requests_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_requests_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_requests_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
           },
           {
             foreignKeyName: "service_requests_service_job_id_fkey"
@@ -31553,6 +34041,34 @@ export type Database = {
             foreignKeyName: "service_tat_metrics_job_id_fkey"
             columns: ["job_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_tat_metrics_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_tat_metrics_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_tat_metrics_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_tat_metrics_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
             referencedColumns: ["service_job_id"]
           },
@@ -31637,6 +34153,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "service_timecards_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_segment_id"]
+          },
+          {
             foreignKeyName: "service_timecards_service_job_id_fkey"
             columns: ["service_job_id"]
             isOneToOne: false
@@ -31649,6 +34172,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_timecards_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_timecards_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_timecards_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_timecards_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
           },
           {
             foreignKeyName: "service_timecards_service_job_id_fkey"
@@ -32527,6 +35078,119 @@ export type Database = {
           },
         ]
       }
+      sub_rental_vendors: {
+        Row: {
+          coi_document_url: string | null
+          company_id: string | null
+          created_at: string
+          default_markup_pct: number | null
+          deleted_at: string | null
+          email: string | null
+          id: string
+          insurance_expires_at: string | null
+          insurance_policy_number: string | null
+          insurance_provider: string | null
+          name: string
+          notes: string | null
+          phone: string | null
+          status: string
+          updated_at: string
+          vendor_number: string | null
+          vendor_profile_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          coi_document_url?: string | null
+          company_id?: string | null
+          created_at?: string
+          default_markup_pct?: number | null
+          deleted_at?: string | null
+          email?: string | null
+          id?: string
+          insurance_expires_at?: string | null
+          insurance_policy_number?: string | null
+          insurance_provider?: string | null
+          name: string
+          notes?: string | null
+          phone?: string | null
+          status?: string
+          updated_at?: string
+          vendor_number?: string | null
+          vendor_profile_id?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          coi_document_url?: string | null
+          company_id?: string | null
+          created_at?: string
+          default_markup_pct?: number | null
+          deleted_at?: string | null
+          email?: string | null
+          id?: string
+          insurance_expires_at?: string | null
+          insurance_policy_number?: string | null
+          insurance_provider?: string | null
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          status?: string
+          updated_at?: string
+          vendor_number?: string | null
+          vendor_profile_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sub_rental_vendors_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sub_rental_vendors_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sub_rental_vendors_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "sub_rental_vendors_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "sub_rental_vendors_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "sub_rental_vendors_vendor_profile_id_fkey"
+            columns: ["vendor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "v_supplier_health_scorecard"
+            referencedColumns: ["vendor_id"]
+          },
+          {
+            foreignKeyName: "sub_rental_vendors_vendor_profile_id_fkey"
+            columns: ["vendor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tariff_tracking: {
         Row: {
           created_at: string
@@ -32668,6 +35332,13 @@ export type Database = {
             foreignKeyName: "tax_exemption_certificates_crm_company_id_fkey"
             columns: ["crm_company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "tax_exemption_certificates_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -32803,6 +35474,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "technician_job_performance_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "technician_job_performance_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "technician_job_performance_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "technician_job_performance_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
           },
           {
             foreignKeyName: "technician_job_performance_job_id_fkey"
@@ -33107,6 +35806,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "touches_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -33842,6 +36548,13 @@ export type Database = {
             foreignKeyName: "traffic_tickets_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "traffic_tickets_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -33975,6 +36688,34 @@ export type Database = {
             foreignKeyName: "traffic_tickets_service_job_id_fkey"
             columns: ["service_job_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "traffic_tickets_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "traffic_tickets_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "traffic_tickets_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "traffic_tickets_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
             referencedColumns: ["service_job_id"]
           },
@@ -34004,6 +36745,13 @@ export type Database = {
             columns: ["to_customer_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "traffic_tickets_to_customer_id_fkey"
+            columns: ["to_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -34230,6 +36978,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_escalations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "vendor_escalations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "vendor_escalations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "vendor_escalations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
           },
           {
             foreignKeyName: "vendor_escalations_job_id_fkey"
@@ -34718,6 +37494,13 @@ export type Database = {
             foreignKeyName: "vendor_purchase_order_lines_customer_company_id_fkey"
             columns: ["customer_company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "vendor_purchase_order_lines_customer_company_id_fkey"
+            columns: ["customer_company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -34947,6 +37730,13 @@ export type Database = {
             foreignKeyName: "vendor_purchase_orders_crm_company_id_fkey"
             columns: ["crm_company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "vendor_purchase_orders_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -35073,6 +37863,13 @@ export type Database = {
             columns: ["linked_company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "voice_captures_linked_company_id_fkey"
+            columns: ["linked_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -35219,6 +38016,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "voice_extracted_equipment_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -35492,6 +38296,13 @@ export type Database = {
             foreignKeyName: "voice_qrm_results_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "voice_qrm_results_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -35688,6 +38499,34 @@ export type Database = {
             foreignKeyName: "warranty_claims_service_job_id_fkey"
             columns: ["service_job_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "warranty_claims_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "warranty_claims_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "warranty_claims_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "warranty_claims_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
             referencedColumns: ["service_job_id"]
           },
@@ -35861,6 +38700,13 @@ export type Database = {
             foreignKeyName: "customer_invoices_crm_company_id_fkey"
             columns: ["crm_company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -35943,6 +38789,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_activities_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -36546,6 +39399,13 @@ export type Database = {
             foreignKeyName: "crm_companies_parent_company_id_fkey"
             columns: ["parent_company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_companies_parent_company_id_fkey"
+            columns: ["parent_company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -36652,6 +39512,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_contact_companies_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -36920,6 +39787,13 @@ export type Database = {
             foreignKeyName: "crm_contacts_primary_company_id_fkey"
             columns: ["primary_company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_contacts_primary_company_id_fkey"
+            columns: ["primary_company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -36929,6 +39803,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "portal_customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qrm_contacts_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "qrm_contacts_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "qrm_contacts_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
           },
         ]
       }
@@ -37335,6 +40230,13 @@ export type Database = {
             foreignKeyName: "crm_deals_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -37499,6 +40401,13 @@ export type Database = {
             foreignKeyName: "crm_deals_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -37656,6 +40565,13 @@ export type Database = {
             foreignKeyName: "crm_deals_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -37758,6 +40674,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -38112,6 +41035,13 @@ export type Database = {
             foreignKeyName: "crm_equipment_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_equipment_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -38234,6 +41164,13 @@ export type Database = {
             columns: ["linked_company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_geofences_linked_company_id_fkey"
+            columns: ["linked_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -38893,6 +41830,13 @@ export type Database = {
             foreignKeyName: "customer_invoices_crm_company_id_fkey"
             columns: ["crm_company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -38960,6 +41904,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "customer_invoices_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
             foreignKeyName: "customer_invoices_salesperson_id_fkey"
             columns: ["salesperson_id"]
             isOneToOne: false
@@ -38979,6 +41944,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
           },
           {
             foreignKeyName: "customer_invoices_service_job_id_fkey"
@@ -39111,6 +42104,13 @@ export type Database = {
             foreignKeyName: "customer_invoices_crm_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -39162,6 +42162,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "portal_customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
           },
         ]
       }
@@ -39227,6 +42248,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_equipment_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -39516,6 +42544,27 @@ export type Database = {
             referencedRelation: "portal_customers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "campaign_recipients_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "campaign_recipients_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "campaign_recipients_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
+          },
         ]
       }
       mv_customer_ar_aging: {
@@ -39550,6 +42599,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -39591,6 +42647,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -39745,6 +42808,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -39918,6 +42988,13 @@ export type Database = {
             foreignKeyName: "customer_invoices_crm_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -39955,6 +43032,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -40138,6 +43222,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "customer_fleet_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "customer_fleet_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "customer_fleet_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
             foreignKeyName: "portal_customers_crm_company_id_fkey"
             columns: ["crm_company_id"]
             isOneToOne: false
@@ -40156,6 +43261,13 @@ export type Database = {
             columns: ["crm_company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -40292,6 +43404,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "qb_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -40460,6 +43579,22 @@ export type Database = {
         }
         Relationships: []
       }
+      v_ap_outstanding_summary: {
+        Row: {
+          aging_basis: string | null
+          bucket_after_3: number | null
+          bucket_month_1: number | null
+          bucket_month_2: number | null
+          bucket_month_3: number | null
+          current_amount: number | null
+          latest_invoice_date: string | null
+          oldest_due_date: string | null
+          open_invoice_count: number | null
+          total_outstanding: number | null
+          workspace_id: string | null
+        }
+        Relationships: []
+      }
       v_branch_stack_ranking: {
         Row: {
           at_reorder_count: number | null
@@ -40519,6 +43654,192 @@ export type Database = {
             foreignKeyName: "customer_invoices_crm_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+        ]
+      }
+      v_customer_portal_ar_aging: {
+        Row: {
+          company_id: string | null
+          current_cents: number | null
+          d120plus_cents: number | null
+          d30_cents: number | null
+          d60_cents: number | null
+          d90_cents: number | null
+          latest_invoice_date: string | null
+          oldest_due_date: string | null
+          open_invoice_count: number | null
+          portal_customer_id: string | null
+          total_cents: number | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+        ]
+      }
+      v_customer_portal_open_parts_invoices: {
+        Row: {
+          balance_due: number | null
+          balance_due_cents: number | null
+          company_id: string | null
+          customer_invoice_id: string | null
+          due_date: string | null
+          freight_terms: string | null
+          invoice_date: string | null
+          invoice_number: string | null
+          line_count: number | null
+          order_number: string | null
+          po_number: string | null
+          portal_customer_id: string | null
+          qty_invoiced: number | null
+          qty_issued: number | null
+          qty_ordered: number | null
+          qty_shipped: number | null
+          ship_via: string | null
+          status: string | null
+          total: number | null
+          total_cents: number | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+        ]
+      }
+      v_customer_portal_parts_invoice_history: {
+        Row: {
+          balance_due: number | null
+          balance_due_cents: number | null
+          cash_code: string | null
+          company_id: string | null
+          customer_invoice_id: string | null
+          discount_code: string | null
+          due_date: string | null
+          freight_terms: string | null
+          invoice_date: string | null
+          invoice_number: string | null
+          line_count: number | null
+          lines: Json | null
+          lines_total_cents: number | null
+          order_number: string | null
+          po_number: string | null
+          portal_customer_id: string | null
+          print_parameters: Json | null
+          ship_via: string | null
+          status: string | null
+          tax_breakdown: Json | null
+          total: number | null
+          total_cents: number | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
           },
@@ -40559,6 +43880,431 @@ export type Database = {
           {
             foreignKeyName: "tax_exemption_certificates_crm_company_id_fkey"
             columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "tax_exemption_certificates_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+        ]
+      }
+      v_deal_genome_credit_limit_analysis: {
+        Row: {
+          available_credit_cents: number | null
+          company_id: string | null
+          credit_hold: boolean | null
+          credit_hold_expires_at: string | null
+          credit_hold_reason: string | null
+          credit_hold_set_at: string | null
+          credit_limit_cents: number | null
+          credit_limit_review_at: string | null
+          credit_rating: string | null
+          current_ar_cents: number | null
+          is_over_credit_limit: boolean | null
+          max_days_outstanding: number | null
+          name: string | null
+          open_commit_cents: number | null
+          payment_terms_code: string | null
+          payment_terms_id: string | null
+          pct_credit_used: number | null
+          terms_code: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qrm_companies_payment_terms_id_fkey"
+            columns: ["payment_terms_id"]
+            isOneToOne: false
+            referencedRelation: "payment_terms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_deal_genome_service_billing_analysis: {
+        Row: {
+          analysis_cost_cents: number | null
+          analysis_revenue_cents: number | null
+          billed_at: string | null
+          billed_status:
+            | Database["public"]["Enums"]["work_order_billed_status"]
+            | null
+          billing_basis:
+            | Database["public"]["Enums"]["work_order_billing_basis"]
+            | null
+          billing_hold_reason: string | null
+          branch_id: string | null
+          company_id: string | null
+          first_invoice_date: string | null
+          first_labor_date: string | null
+          invoice_balance_cents: number | null
+          invoice_count: number | null
+          invoice_total_cents: number | null
+          labor_cost_cents: number | null
+          labor_sale_cents: number | null
+          last_invoice_date: string | null
+          last_labor_date: string | null
+          other_revenue_cents: number | null
+          parts_revenue_cents: number | null
+          posted_to_gl_at: string | null
+          ready_to_bill_at: string | null
+          revenue_type:
+            | Database["public"]["Enums"]["work_order_revenue_type"]
+            | null
+          service_job_id: string | null
+          unbilled_billing_rows: number | null
+          unbilled_labor_rows: number | null
+          unposted_financial_row_count: number | null
+          wo_number: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+        ]
+      }
+      v_deal_genome_service_days_analysis: {
+        Row: {
+          approved_at: string | null
+          billed_at: string | null
+          billed_status:
+            | Database["public"]["Enums"]["work_order_billed_status"]
+            | null
+          branch_id: string | null
+          closed_at: string | null
+          company_id: string | null
+          current_stage: Database["public"]["Enums"]["service_stage"] | null
+          days_complete_to_ready_bill: number | null
+          days_open: number | null
+          days_ready_bill_to_billed: number | null
+          days_to_approval: number | null
+          days_to_start: number | null
+          labor_cycle_days: number | null
+          opened_at: string | null
+          promised_at: string | null
+          ready_to_bill_at: string | null
+          service_job_id: string | null
+          wo_number: string | null
+          work_completed_at: string | null
+          work_started_at: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+        ]
+      }
+      v_deal_genome_service_efficiency_analysis: {
+        Row: {
+          actual_hours: number | null
+          billable_hours: number | null
+          billing_basis:
+            | Database["public"]["Enums"]["work_order_billing_basis"]
+            | null
+          branch_id: string | null
+          company_id: string | null
+          efficiency_pct: number | null
+          employee_id: string | null
+          estimated_hours: number | null
+          labor_cost_cents: number | null
+          labor_sale_cents: number | null
+          recovery_pct: number | null
+          revenue_type:
+            | Database["public"]["Enums"]["work_order_revenue_type"]
+            | null
+          segment_number: string | null
+          service_job_id: string | null
+          service_job_segment_id: string | null
+          standard_hours: number | null
+          technician_id: string | null
+          wo_number: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_deal_genome_service_quote_gain_loss: {
+        Row: {
+          assigned_salesperson_id: string | null
+          branch_id: string | null
+          company_id: string | null
+          converted_invoice_total_cents: number | null
+          expires_at: string | null
+          outcome_at: string | null
+          quote_number: string | null
+          quote_outcome: string | null
+          quote_result_reason: string | null
+          quote_to_invoice_pct: number | null
+          quoted_labor_cents: number | null
+          quoted_other_cents: number | null
+          quoted_parts_cents: number | null
+          quoted_total_cents: number | null
+          sent_at: string | null
+          service_job_id: string | null
+          service_quote_id: string | null
+          status: string | null
+          wo_number: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_assigned_salesperson_id_fkey"
+            columns: ["assigned_salesperson_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "mv_service_jobs_wip"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "service_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_jobs_last_activity"
+            referencedColumns: ["service_job_id"]
+          },
+        ]
+      }
+      v_deal_genome_service_wip_aging: {
+        Row: {
+          analysis_wip_cents: number | null
+          billed_status:
+            | Database["public"]["Enums"]["work_order_billed_status"]
+            | null
+          branch_id: string | null
+          company_id: string | null
+          current_stage: Database["public"]["Enums"]["service_stage"] | null
+          last_wip_activity_at: string | null
+          ledger_unbilled_labor_cents: number | null
+          ledger_unbilled_parts_other_cents: number | null
+          service_job_id: string | null
+          wave4_labor_wip_cents: number | null
+          wave4_parts_wip_cents: number | null
+          wip_age_bucket: string | null
+          wip_age_days: number | null
+          wip_started_at: string | null
+          wo_number: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_rep_customers"
             referencedColumns: ["customer_id"]
@@ -41060,6 +44806,27 @@ export type Database = {
             referencedRelation: "portal_customers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "predicted_parts_plays_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_ar_aging"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["portal_customer_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["portal_customer_id"]
+          },
         ]
       }
       v_profile_active_role_blend: {
@@ -41162,6 +44929,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "crm_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
             referencedColumns: ["company_id"]
           },
           {
@@ -41409,6 +45183,57 @@ export type Database = {
             columns: ["technician_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_vendor_invoice_aging: {
+        Row: {
+          aging_basis: string | null
+          amount: number | null
+          amount_paid: number | null
+          ap_account_number: string | null
+          balance_due: number | null
+          balance_due_cents: number | null
+          branch_id: string | null
+          days_from_invoice: number | null
+          days_overdue: number | null
+          due_age_bucket: string | null
+          due_date: string | null
+          hold_status: string | null
+          id: string | null
+          invoice_age_bucket: string | null
+          invoice_date: string | null
+          is_1099_reportable: boolean | null
+          po_number: string | null
+          status: string | null
+          terms_code: string | null
+          vendor_id: string | null
+          vendor_invoice_number: string | null
+          vendor_name: string | null
+          vendor_number: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_invoices_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_invoices_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "v_supplier_health_scorecard"
+            referencedColumns: ["vendor_id"]
+          },
+          {
+            foreignKeyName: "vendor_invoices_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -43420,6 +47245,39 @@ export type Database = {
         | "rental_fleet"
         | "return_to_customer"
         | "scrap"
+      rental_billing_cycle:
+        | "hourly"
+        | "daily"
+        | "weekly"
+        | "monthly"
+        | "cycle_28_day"
+        | "custom"
+      rental_contract_line_status:
+        | "quoted"
+        | "reserved"
+        | "active"
+        | "exchanged"
+        | "returned"
+        | "cancelled"
+        | "lost"
+        | "damaged"
+      rental_invoice_status:
+        | "draft"
+        | "open"
+        | "posted"
+        | "sent"
+        | "partial"
+        | "paid"
+        | "overdue"
+        | "void"
+        | "reversed"
+      rental_proration_rule:
+        | "none"
+        | "hourly"
+        | "daily"
+        | "calendar_day"
+        | "half_day"
+        | "thirty_day_month"
       rep_department:
         | "parts"
         | "service"
@@ -43428,6 +47286,15 @@ export type Database = {
         | "admin"
         | "other"
       scenario_type: "max_margin" | "balanced" | "win_the_deal"
+      service_billing_row_type:
+        | "labor_adjustment"
+        | "part"
+        | "shop_supply"
+        | "haul"
+        | "sublet"
+        | "freight"
+        | "misc"
+        | "discount"
       service_parts_action_type:
         | "pick"
         | "transfer"
@@ -43525,6 +47392,29 @@ export type Database = {
         | "partial"
         | "rejected"
         | "paid"
+      work_order_billed_status:
+        | "unbilled"
+        | "ready_to_bill"
+        | "billing_hold"
+        | "billed"
+        | "paid"
+        | "void"
+      work_order_billing_basis:
+        | "time_and_material"
+        | "standard"
+        | "flat_rate"
+        | "warranty"
+        | "internal"
+        | "no_charge"
+      work_order_revenue_type:
+        | "customer"
+        | "warranty"
+        | "internal"
+        | "contract"
+        | "rental"
+        | "policy"
+        | "goodwill"
+        | "unknown"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -44095,6 +47985,43 @@ export const Constants = {
         "return_to_customer",
         "scrap",
       ],
+      rental_billing_cycle: [
+        "hourly",
+        "daily",
+        "weekly",
+        "monthly",
+        "cycle_28_day",
+        "custom",
+      ],
+      rental_contract_line_status: [
+        "quoted",
+        "reserved",
+        "active",
+        "exchanged",
+        "returned",
+        "cancelled",
+        "lost",
+        "damaged",
+      ],
+      rental_invoice_status: [
+        "draft",
+        "open",
+        "posted",
+        "sent",
+        "partial",
+        "paid",
+        "overdue",
+        "void",
+        "reversed",
+      ],
+      rental_proration_rule: [
+        "none",
+        "hourly",
+        "daily",
+        "calendar_day",
+        "half_day",
+        "thirty_day_month",
+      ],
       rep_department: [
         "parts",
         "service",
@@ -44104,6 +48031,16 @@ export const Constants = {
         "other",
       ],
       scenario_type: ["max_margin", "balanced", "win_the_deal"],
+      service_billing_row_type: [
+        "labor_adjustment",
+        "part",
+        "shop_supply",
+        "haul",
+        "sublet",
+        "freight",
+        "misc",
+        "discount",
+      ],
       service_parts_action_type: [
         "pick",
         "transfer",
@@ -44210,6 +48147,32 @@ export const Constants = {
         "partial",
         "rejected",
         "paid",
+      ],
+      work_order_billed_status: [
+        "unbilled",
+        "ready_to_bill",
+        "billing_hold",
+        "billed",
+        "paid",
+        "void",
+      ],
+      work_order_billing_basis: [
+        "time_and_material",
+        "standard",
+        "flat_rate",
+        "warranty",
+        "internal",
+        "no_charge",
+      ],
+      work_order_revenue_type: [
+        "customer",
+        "warranty",
+        "internal",
+        "contract",
+        "rental",
+        "policy",
+        "goodwill",
+        "unknown",
       ],
     },
   },

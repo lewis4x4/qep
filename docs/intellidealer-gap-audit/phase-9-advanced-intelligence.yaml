@@ -31,6 +31,10 @@ fields:
 
 
 
+
+
+
+
   - id: customer.status
     intellidealer_label: "Status"
     intellidealer_screen: "Customer Portal"
@@ -516,13 +520,12 @@ fields:
     intellidealer_purpose: |
       Standard 30/60/90/120+ aging buckets per customer with click-through to
       line-level outstanding detail. Backbone of cash collection.
-    qep_status: "MISSING"
-    qep_table: "(new) v_customer_ar_aging"
+    qep_status: BUILT
+    qep_table: "v_customer_portal_ar_aging"
     qep_column: ""
-    qep_evidence: []
-    qep_gap_notes: |
-      No AR sub-ledger and no aging materialized view in QEP today.
-      Required for Owner Cockpit collections cell.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_customer_portal_ar_aging"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_customer_portal_ar_aging."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -955,14 +958,12 @@ fields:
     intellidealer_field_type: "json"
     intellidealer_purpose: |
       Last 5 open parts invoices for the customer with create date.
-    qep_status: "MISSING"
-    qep_table: "parts_invoices"
+    qep_status: BUILT
+    qep_table: "v_customer_portal_open_parts_invoices"
     qep_column: ""
-    qep_evidence: []
-    qep_gap_notes: |
-      Use the existing Phase-3 `parts_invoices` surface as authoritative.
-      This portal tile should consume that table plus the Phase-3
-      extension fields, not create a duplicate table.
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_customer_portal_open_parts_invoices"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_customer_portal_open_parts_invoices."
     severity: "must"
     category: "financial"
     migration_hint: |
@@ -1052,11 +1053,12 @@ fields:
     intellidealer_field_type: "json"
     intellidealer_purpose: |
       Customer's parts invoice history with date and total.
-    qep_status: "MISSING"
-    qep_table: "parts_invoices"
+    qep_status: BUILT
+    qep_table: "v_customer_portal_parts_invoice_history"
     qep_column: ""
-    qep_evidence: []
-    qep_gap_notes: "Reuse Phase-3 `parts_invoices`; see open_parts_invoices."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_customer_portal_parts_invoice_history"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_customer_portal_parts_invoice_history."
     severity: "must"
     category: "financial"
     migration_hint: ""
@@ -1256,11 +1258,12 @@ fields:
     intellidealer_field_type: "json"
     intellidealer_purpose: |
       Last 5 rental invoices with date + total.
-    qep_status: "MISSING"
+    qep_status: BUILT
     qep_table: "(new) rental_invoices"
     qep_column: ""
-    qep_evidence: []
-    qep_gap_notes: "AR sub-ledger gap."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_invoices"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_invoices."
     severity: "should"
     category: "financial"
     migration_hint: ""

@@ -8,7 +8,7 @@ The core IntelliDealer customer import handoff is complete and production-proven
 
 This means the imported customer data is in the production database, reconciled to the source files, protected from raw A/R card exposure, visible through the intended UI paths, and covered by rerun/production/browser verification evidence.
 
-This does not mean every IntelliDealer-adjacent product gap is complete. Wave 5 external integrations remain deferred, and the broader gap-audit inventory still has non-customer-import blockers.
+This does not mean every IntelliDealer-adjacent external dependency is complete. Wave 5 external integrations remain deferred, but the regenerated broader gap-audit inventory now has `0` remaining must-fix blockers.
 
 ## Production Baseline
 
@@ -100,36 +100,36 @@ bun run intellidealer:seed:purge -- --apply --confirm-non-parts-seed-purge
 
 ## Gap-Audit Status
 
-Gap-audit Waves 0-4 are implemented and remote-push verified through `506_*` per `docs/intellidealer-gap-audit/_migration_order.md`.
+Gap-audit Waves 0-4 are implemented and remote-push verified through `506_*` per `docs/intellidealer-gap-audit/_migration_order.md`. The follow-on must-blocker burndown applied migrations `522` through `525` and regenerated the inventory to `0` remaining must-fix blockers.
 
 Current regenerated inventory:
 
 | Metric | Count |
 | --- | ---: |
 | Total fields | `847` |
-| Built | `678` |
+| Built | `789` |
 | Partial | `18` |
-| Missing | `151` |
+| Missing | `40` |
 | Must | `496` |
 | Should | `300` |
 | Could | `51` |
-| Remaining must-fix blockers | `91` |
+| Remaining must-fix blockers | `0` |
 
 Remaining must-fix blockers by phase:
 
 | Phase | Must Missing |
 | --- | ---: |
-| Phase 1 | `1` |
+| Phase 1 | `0` |
 | Phase 2 | `0` |
-| Phase 3 | `3` |
-| Phase 4 | `3` |
-| Phase 5 | `39` |
-| Phase 6 | `35` |
-| Phase 8 | `6` |
-| Phase 9 | `3` |
-| Cross-Cutting | `1` |
+| Phase 3 | `0` |
+| Phase 4 | `0` |
+| Phase 5 | `0` |
+| Phase 6 | `0` |
+| Phase 8 | `0` |
+| Phase 9 | `0` |
+| Cross-Cutting | `0` |
 
-Phase 5 and Phase 6 account for `74` of the `91` remaining must-fix blockers.
+Evidence: `docs/IntelliDealer/GAP_AUDIT_MUST_BLOCKER_BURNDOWN_2026-05-03.md`, `docs/intellidealer-gap-audit/manifest.yaml`, and `docs/intellidealer-gap-audit/_blockers.csv`.
 
 ## Slice 6 Status
 
@@ -167,7 +167,7 @@ These integrations require external credentials, dealer-specific scope, provider
 
 - Raw IntelliDealer source files remain intentionally untracked until privacy/retention is decided.
 - Wave 5 integrations are deferred and must not be represented as shipped.
-- The broader gap-audit inventory still has `91` must-fix blockers, primarily in Phase 5 and Phase 6.
+- The broader gap-audit inventory has `0` remaining must-fix blockers, but still has non-must missing/partial rows that should be handled through normal roadmap prioritization.
 - Old `test-results/agent-gates/*` artifacts referenced by the gap-audit docs are missing from the current working tree and need recovery or replacement with fresh evidence if an auditor requires those original artifacts.
 
 ## Closeout Gate

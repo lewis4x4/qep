@@ -98,6 +98,10 @@ fields:
 
 
 
+
+
+
+
   - id: employee.employee_number
     intellidealer_label: "Employee Number"
     intellidealer_screen: "Employee Profile: Listing"
@@ -214,21 +218,22 @@ fields:
       Single-digit profit-center / department code where the employee's
       wages are charged. Anchors departmental P&L roll-ups across the
       whole platform. The 0-9 enum is documented verbatim in the OCR.
-    qep_status: "MISSING"
+    qep_status: "BUILT"
     qep_table: "employees"
-    qep_column: "profit_center_code"
+    qep_column: "profit_center"
+    qep_evidence:
+      - "supabase/migrations/455_employees.sql public.employees.profit_center public.profit_center_code"
+      - "supabase/migrations/491_employee_wave2_columns.sql public.employees.profit_center"
+      - "apps/web/src/lib/database.types.ts public.Tables.employees.profit_center"
     qep_gap_notes: |
-      QEP has no profit-center taxonomy. branches.metadata is free-form
-      JSON. Without this, QEP cannot generate departmental P&L (Equipment
-      vs Parts vs Service vs Rental) — which is the standard way the
-      dealer-org reports financials.
+      Resolved by canonical employees.profit_center using the profit_center_code
+      enum. This preserves the 0-9 IntelliDealer department/P&L routing without
+      relying on branch metadata.
     severity: "must"
     category: "financial"
     migration_hint: |
-      CREATE TYPE profit_center_code AS ENUM ('0','1','2','3','4','5','6','7','8','9');
-      ALTER TABLE employees ADD COLUMN profit_center profit_center_code;
-      COMMENT ON COLUMN employees.profit_center IS
-        '0=Balance Sheet,1=Admin,2=Equipment,3=Parts,4=Service,5=Rental,6-9=User';
+      -- No DDL. Already defined by 455_employees.sql / 491_employee_wave2_columns.sql:
+      -- employees.profit_center profit_center_code.
     ui_surface_hint: "Settings > Payroll > Employee form > Profit Center dropdown"
     dependencies: [employee.employee_number]
 

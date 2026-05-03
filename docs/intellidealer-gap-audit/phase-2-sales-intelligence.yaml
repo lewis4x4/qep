@@ -260,6 +260,10 @@ fields:
 
 
 
+
+
+
+
   - id: equipment.stock_number
     intellidealer_label: "Stock Number"
     intellidealer_screen: "Equipment Profile (Profile tab)"
