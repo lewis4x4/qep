@@ -20,6 +20,7 @@ import {
   HANDOFF_ROLE_LABELS,
   formatScore,
   latestSeamScores,
+  normalizeHandoffSeamScoreRows,
   scoreTone,
   type HandoffSeamScoreRow,
 } from "../lib/handoff-trust";
@@ -31,21 +32,13 @@ export function HandoffTrustPanel() {
     queryKey: ["exec", "handoff-trust"],
     queryFn: async (): Promise<HandoffSeamScoreRow[]> => {
       const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            gte: (column: string, value: string) => {
-              order: (column: string, options: { ascending: boolean }) => Promise<{ data: HandoffSeamScoreRow[] | null; error: { message?: string } | null }>;
-            };
-          };
-        };
-      })
+      const { data, error } = await supabase
         .from("handoff_role_seam_scores")
         .select("id, from_iron_role, to_iron_role, handoff_count, scored_count, avg_composite, avg_info_completeness, avg_recipient_readiness, avg_outcome_alignment, improved_pct, degraded_pct, period_start, period_end")
         .gte("period_end", since)
         .order("period_end", { ascending: false });
       if (error) throw new Error(error.message ?? "Failed to load handoff trust scores.");
-      return latestSeamScores(data ?? []);
+      return latestSeamScores(normalizeHandoffSeamScoreRows(data));
     },
     staleTime: 5 * 60_000,
     enabled: profile?.role === "manager" || profile?.role === "owner",

@@ -75,6 +75,110 @@ export const HANDOFF_ROLE_TITLES: Record<IronRole, string> = {
   iron_man: "Iron Man",
 };
 
+const IRON_ROLES = new Set<IronRole>(["iron_manager", "iron_advisor", "iron_woman", "iron_man"]);
+const HANDOFF_OUTCOMES = new Set<NonNullable<HandoffEventRow["outcome"]>>(["improved", "unchanged", "degraded", "unknown"]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function integerOrDefault(value: unknown, fallback = 0): number {
+  const parsed = numberOrNull(value);
+  return parsed == null ? fallback : Math.trunc(parsed);
+}
+
+function dateStringOrNull(value: unknown): string | null {
+  const text = stringOrNull(value);
+  return text && Number.isFinite(new Date(text).getTime()) ? text : null;
+}
+
+function roleOrNull(value: unknown): IronRole | null {
+  return typeof value === "string" && IRON_ROLES.has(value as IronRole) ? value as IronRole : null;
+}
+
+function outcomeOrNull(value: unknown): HandoffEventRow["outcome"] {
+  return typeof value === "string" && HANDOFF_OUTCOMES.has(value as NonNullable<HandoffEventRow["outcome"]>)
+    ? value as NonNullable<HandoffEventRow["outcome"]>
+    : null;
+}
+
+function recordOrNull(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? value : null;
+}
+
+export function normalizeHandoffEventRows(rows: unknown): HandoffEventRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = stringOrNull(row.id);
+    const subjectId = stringOrNull(row.subject_id);
+    const handoffAt = dateStringOrNull(row.handoff_at);
+    const fromRole = roleOrNull(row.from_iron_role);
+    const toRole = roleOrNull(row.to_iron_role);
+    if (!id || !subjectId || !handoffAt || !fromRole || !toRole) return [];
+
+    return [{
+      id,
+      subject_id: subjectId,
+      subject_label: stringOrNull(row.subject_label),
+      handoff_reason: stringOrNull(row.handoff_reason),
+      handoff_at: handoffAt,
+      from_iron_role: fromRole,
+      to_iron_role: toRole,
+      composite_score: numberOrNull(row.composite_score),
+      info_completeness: numberOrNull(row.info_completeness),
+      recipient_readiness: numberOrNull(row.recipient_readiness),
+      outcome_alignment: numberOrNull(row.outcome_alignment),
+      outcome: outcomeOrNull(row.outcome),
+      evidence: recordOrNull(row.evidence),
+    }];
+  });
+}
+
+export function normalizeHandoffSeamScoreRows(rows: unknown): HandoffSeamScoreRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = stringOrNull(row.id);
+    const fromRole = roleOrNull(row.from_iron_role);
+    const toRole = roleOrNull(row.to_iron_role);
+    const periodStart = dateStringOrNull(row.period_start);
+    const periodEnd = dateStringOrNull(row.period_end);
+    if (!id || !fromRole || !toRole || !periodStart || !periodEnd) return [];
+
+    return [{
+      id,
+      from_iron_role: fromRole,
+      to_iron_role: toRole,
+      handoff_count: integerOrDefault(row.handoff_count),
+      scored_count: integerOrDefault(row.scored_count),
+      avg_composite: numberOrNull(row.avg_composite),
+      avg_info_completeness: numberOrNull(row.avg_info_completeness),
+      avg_recipient_readiness: numberOrNull(row.avg_recipient_readiness),
+      avg_outcome_alignment: numberOrNull(row.avg_outcome_alignment),
+      improved_pct: numberOrNull(row.improved_pct),
+      degraded_pct: numberOrNull(row.degraded_pct),
+      period_start: periodStart,
+      period_end: periodEnd,
+    }];
+  });
+}
+
 export function scoreTone(score: number | null): string {
   if (score === null) return "bg-white/5 text-slate-600";
   if (score >= 0.8) return "bg-emerald-500/20 text-emerald-400";

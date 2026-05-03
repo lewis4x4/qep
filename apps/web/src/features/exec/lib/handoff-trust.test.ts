@@ -3,6 +3,8 @@ import {
   buildSeamSummaries,
   filterHandoffEvents,
   latestSeamScores,
+  normalizeHandoffEventRows,
+  normalizeHandoffSeamScoreRows,
   summarizeHandoffs,
   type HandoffEventRow,
   type HandoffSeamScoreRow,
@@ -127,5 +129,48 @@ describe("handoff trust helpers", () => {
 
     expect(latest).toHaveLength(1);
     expect(latest[0]?.id).toBe("new");
+  });
+
+  test("normalizes handoff event rows and filters malformed role/date payloads", () => {
+    expect(normalizeHandoffEventRows([
+      {
+        id: "event-1",
+        subject_id: "deal-1",
+        handoff_at: "2026-04-10T12:00:00Z",
+        from_iron_role: "iron_advisor",
+        to_iron_role: "iron_manager",
+        composite_score: "0.72",
+        outcome: "improved",
+        evidence: { hours_to_first_action: 2 },
+      },
+      { id: "bad", subject_id: "deal-2", handoff_at: "not-a-date", from_iron_role: "bad", to_iron_role: "iron_manager" },
+    ])).toMatchObject([{
+      id: "event-1",
+      subject_id: "deal-1",
+      composite_score: 0.72,
+      from_iron_role: "iron_advisor",
+      to_iron_role: "iron_manager",
+      outcome: "improved",
+    }]);
+  });
+
+  test("normalizes handoff seam score rows", () => {
+    expect(normalizeHandoffSeamScoreRows([
+      {
+        id: "score-1",
+        from_iron_role: "iron_advisor",
+        to_iron_role: "iron_manager",
+        handoff_count: "4",
+        scored_count: "3",
+        avg_composite: "0.66",
+        period_start: "2026-04-01T00:00:00Z",
+        period_end: "2026-04-30T00:00:00Z",
+      },
+    ])).toMatchObject([{
+      id: "score-1",
+      handoff_count: 4,
+      scored_count: 3,
+      avg_composite: 0.66,
+    }]);
   });
 });

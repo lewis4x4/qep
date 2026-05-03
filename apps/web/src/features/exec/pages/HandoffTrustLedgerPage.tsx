@@ -16,6 +16,7 @@ import {
   parseHandoffEvidence,
   scoreTone,
   summarizeHandoffs,
+  normalizeHandoffEventRows,
   type HandoffEventRow,
   type IronRole,
 } from "../lib/handoff-trust";
@@ -37,21 +38,13 @@ export function HandoffTrustLedgerPage() {
     queryKey: ["exec", "handoff-events"],
     queryFn: async (): Promise<HandoffEventRow[]> => {
       const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            gte: (column: string, value: string) => {
-              order: (column: string, options: { ascending: boolean }) => Promise<{ data: HandoffEventRow[] | null; error: { message?: string } | null }>;
-            };
-          };
-        };
-      })
+      const { data, error } = await supabase
         .from("handoff_events")
         .select("id, subject_id, subject_label, handoff_reason, handoff_at, from_iron_role, to_iron_role, composite_score, info_completeness, recipient_readiness, outcome_alignment, outcome, evidence")
         .gte("handoff_at", since)
         .order("handoff_at", { ascending: false });
       if (error) throw new Error(error.message ?? "Failed to load handoff events.");
-      return data ?? [];
+      return normalizeHandoffEventRows(data);
     },
     staleTime: 60_000,
   });

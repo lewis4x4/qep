@@ -26,7 +26,7 @@ If another document conflicts with this one, treat this document as the current 
 | Raw source file custody | Manifested 2026-05-03 | `SOURCE_FILE_CUSTODY_MANIFEST.md` | The raw files remain untracked, but filename, size, SHA-256, page counts, workbook row counts, and import run binding are now committed and script-verifiable. |
 | Fresh production verification | Passed 2026-05-03 | `FRESH_PRODUCTION_VERIFICATION_2026-05-03.md` | Rerun safety, production reconciliation, production browser smoke, storage cleanup, and active-run checks passed against the current production bundle. |
 | UI completion review | Passed 2026-05-03 | `UI_COMPLETION_REVIEW_2026-05-03.md` | Account 360, Companies search, company/contact editors, admin dashboard, safe export download, browser stage, preflight rejection, discard, and cleanup are verified. |
-| Non-core API type hardening | In progress 2026-05-03 | `NON_CORE_API_TYPE_HARDENING_2026-05-03.md` | Hardened ops payment validation and ops traffic/intake/rental/SOP workflows, service labor pricing/agreement pages, QRM approval-center, service agreement, vendor profile rows and page client paths, vendor pricing portal responses, service scheduler/WIP/dashboard pages, service customer/equipment search and parts queue hooks, service shop invoice/intake/portal-parts-order pages, service parts requirement editor, service local/browser casts, service API helpers, service InspectionPlus pages, exec shared-data/metric drill, Floor customer/serial/health widget, Floor operational widget, owner dashboard API, Floor role-home, parts companion pricing/replenish/supplier-health/post-sale/intelligence/core/import/voice API, portal fleet/doc/history and portal page/API payloads, fleet map, DGE edge responses, OEM portal dashboard/vault, email draft inbox/API, sales companion API, equipment Asset 360 rows, parts hook/forecast/edge-response, parts operational hook/catalog, parts purchase-order, and parts local/browser row/payload shapes with targeted tests and web typecheck. |
+| Non-core API type hardening | In progress 2026-05-03 | `NON_CORE_API_TYPE_HARDENING_2026-05-03.md` | Hardened ops payment validation and ops traffic/intake/rental/SOP workflows, service labor pricing/agreement pages, QRM approval-center, service agreement, vendor profile rows and page client paths, vendor pricing portal responses, service scheduler/WIP/dashboard pages, service customer/equipment search and parts queue hooks, service shop invoice/intake/portal-parts-order pages, service parts requirement editor, service local/browser casts, service API helpers, service InspectionPlus pages, exec shared-data/metric drill and handoff trust, Floor customer/serial/health widget, Floor operational widget, owner dashboard API, Floor role-home, parts companion pricing/replenish/supplier-health/post-sale/intelligence/core/import/voice API, portal fleet/doc/history and portal page/API payloads, fleet map, DGE edge responses, OEM portal dashboard/vault, email draft inbox/API, sales companion API, equipment Asset 360 rows, parts hook/forecast/edge-response, parts operational hook/catalog, parts purchase-order, and parts local/browser row/payload shapes with targeted tests and web typecheck. |
 
 ## Production Customer Import Baseline
 
@@ -213,6 +213,7 @@ Current result:
 - Shared service API helpers now normalize service router, portal order search, fulfillment link, billing, resync, reassign, and calendar-slot payloads instead of using generic casts.
 - Service InspectionPlus list/detail reads and create/update paths now use exported normalizers plus generated Supabase client calls.
 - Exec metric definitions, KPI snapshots, metric drill snapshot history, and analytics alert rows now use exported normalizers.
+- Exec handoff event and seam-score rows now use exported normalizers and direct generated Supabase client calls in the ledger and panel.
 - Floor customer search, serial-first lookup, and customer-health profile rows now use exported normalizers.
 - Floor morning brief, customer parts intel, pending invoice, and supplier health rows now use exported normalizers.
 - Owner dashboard summary, ownership health, event feed, branch ranking, predictive intervention, ask-anything, morning brief, and team signal payloads now use exported normalizers.
@@ -238,7 +239,7 @@ Current result:
 - Parts predictive kits, replenish queue, inventory health, vendor metrics, parts order list, catalog query typing, and forecast catalog lookup now use exported normalizers or generated query typing.
 - Parts purchase-order list/detail vendor, header, line, touchpoint, equipment model, and attachment rows now use exported normalizers.
 - Parts feature cast scan is clear for the Slice 6 inventory pattern after replacing local/browser shims with typed helpers.
-- Targeted tests passed: `231 pass`, `0 fail`.
+- Targeted tests passed: `237 pass`, `0 fail`.
 - Web typecheck passed.
 - Service feature cast scan is clear for the Slice 6 inventory pattern.
 - Fleet feature cast scan is clear for the Slice 6 inventory pattern.
