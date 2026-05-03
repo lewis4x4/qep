@@ -4,7 +4,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BriefcaseBusiness, CalendarDays, FileText } from "lucide-react";
 import { PortalLayout } from "../components/PortalLayout";
-import { portalApi, type PortalActiveDeal } from "../lib/portal-api";
+import { portalApi } from "../lib/portal-api";
+import { normalizePortalActiveDeals } from "../lib/portal-row-normalizers";
 
 function formatMoney(value: number | null): string | null {
   if (value == null) return null;
@@ -36,7 +37,7 @@ export function PortalDealsPage() {
     staleTime: 30_000,
   });
 
-  const deals = (data?.deals ?? []) as PortalActiveDeal[];
+  const deals = normalizePortalActiveDeals(data?.deals);
 
   return (
     <PortalLayout>

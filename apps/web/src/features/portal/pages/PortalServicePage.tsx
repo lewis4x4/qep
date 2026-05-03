@@ -4,12 +4,12 @@ import { useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { portalApi } from "../lib/portal-api";
 import {
-  portalApi,
-  type PortalFleetAssetView,
-  type PortalServiceRequestCard,
-  type PortalServiceRequestsResponse,
-} from "../lib/portal-api";
+  normalizePortalFleetPickerRows,
+  normalizePortalServiceRequestsPayload,
+  normalizePortalServiceTimelinePayload,
+} from "../lib/portal-row-normalizers";
 import { PortalLayout } from "../components/PortalLayout";
 import { Plus, ImagePlus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -73,17 +73,7 @@ function PortalRequestShopTimeline({ requestId }: { requestId: string }) {
     return <p className="mt-2 border-t pt-2 text-xs text-destructive">Could not load shop updates.</p>;
   }
 
-  const payload = data as {
-    ok?: boolean;
-    service_job_id?: string | null;
-    events?: Array<{
-      id: string;
-      event_type: string;
-      created_at: string;
-      new_stage?: string | null;
-      customer_label: string;
-    }>;
-  };
+  const payload = normalizePortalServiceTimelinePayload(data);
 
   if (!payload?.ok) return null;
   if (!payload.service_job_id) {
@@ -94,7 +84,7 @@ function PortalRequestShopTimeline({ requestId }: { requestId: string }) {
     );
   }
 
-  const events = Array.isArray(payload.events) ? payload.events : [];
+  const events = payload.events;
   if (events.length === 0) {
     return (
       <p className="mt-2 border-t pt-2 text-xs text-muted-foreground">
@@ -208,9 +198,10 @@ export function PortalServicePage() {
     }
   };
 
-  const serviceData = data as PortalServiceRequestsResponse | undefined;
+  const serviceData = normalizePortalServiceRequestsPayload(data);
   const openRequests = serviceData?.open_requests ?? [];
   const completedRequests = serviceData?.completed_requests ?? [];
+  const fleetOptions = normalizePortalFleetPickerRows(fleetQuery.data?.fleet);
 
   return (
     <PortalLayout>
@@ -241,14 +232,14 @@ export function PortalServicePage() {
 
       {showForm && (
         <Card className="mb-4 space-y-3 p-4">
-          {(fleetQuery.data?.fleet ?? []).length > 0 && (
+          {fleetOptions.length > 0 && (
             <select
               value={fleetId}
               onChange={(event) => setFleetId(event.target.value)}
               className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
             >
               <option value="">Select machine…</option>
-              {(fleetQuery.data?.fleet as PortalFleetAssetView[]).map((fleet) => (
+              {fleetOptions.map((fleet) => (
                 <option key={fleet.id} value={fleet.id}>
                   {[fleet.make, fleet.model, fleet.year].filter(Boolean).join(" ")}
                 </option>
@@ -311,22 +302,8 @@ export function PortalServicePage() {
       ].map((section) => (
         <div key={section.label} className="mb-4 space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">{section.label}</p>
-          {section.rows.map((raw) => {
-            const req = raw as PortalServiceRequestCard & {
-              id: string;
-              request_type: string;
-              description: string;
-              status: string;
-              portal_status?: PortalStatusSummary | null;
-              internal_job?: { id: string; current_stage: string; closed_at: string | null }[] | { id: string; current_stage: string; closed_at: string | null } | null;
-              workspace_timeline?: {
-                branch_label: string | null;
-                next_step: string | null;
-                customer_summary: string | null;
-              } | null;
-              photo_count?: number;
-            };
-            const internalJob = Array.isArray(req.internal_job) ? req.internal_job[0] : req.internal_job;
+          {section.rows.map((req) => {
+            const internalJob = req.internal_job;
             const portalStatus = req.portal_status ?? null;
             const etaLabel = formatDate(portalStatus?.eta ?? null);
 

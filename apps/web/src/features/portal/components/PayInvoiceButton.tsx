@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { CreditCard, Mail, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { getPortalErrorMessage, normalizePortalCheckoutResponse, type PortalCheckoutResponse } from "../lib/portal-row-normalizers";
 
 interface PayInvoiceButtonProps {
   invoiceId: string;
@@ -10,14 +11,6 @@ interface PayInvoiceButtonProps {
   customerEmail?: string;
   description?: string;
   className?: string;
-}
-
-interface CheckoutResponse {
-  url?: string;
-  fallback?: string;
-  stripe_configured: boolean;
-  stripe_error?: boolean;
-  message?: string;
 }
 
 const PORTAL_STRIPE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/portal-stripe`;
@@ -53,10 +46,10 @@ export function PayInvoiceButton({
       if (!res.ok) {
         // Close the popup we pre-opened so the user isn't left with a blank tab
         try { popup?.close(); } catch { /* noop */ }
-        const err = await res.json().catch(() => ({ error: "Checkout failed" }));
-        throw new Error((err as { error?: string }).error ?? "Checkout failed");
+        const err = await res.json().catch(() => null);
+        throw new Error(getPortalErrorMessage(err) ?? "Checkout failed");
       }
-      const data = (await res.json()) as CheckoutResponse;
+      const data: PortalCheckoutResponse = normalizePortalCheckoutResponse(await res.json().catch(() => null));
       // Navigate the pre-opened popup (preserves the user-gesture chain so
       // popup blockers do not bite). If the popup was blocked at click time,
       // fall back to current-tab navigation.

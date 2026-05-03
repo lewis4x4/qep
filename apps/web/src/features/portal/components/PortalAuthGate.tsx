@@ -14,15 +14,7 @@ export function PortalAuthGate({ children }: { children: React.ReactNode }) {
         return { allowed: false, reason: "You need to sign in to access the customer portal." };
       }
 
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            eq: (column: string, value: string) => {
-              maybeSingle: () => Promise<{ data: { id: string } | null; error: { message?: string } | null }>;
-            };
-          };
-        };
-      })
+      const { data, error } = await supabase
         .from("portal_customers")
         .select("id")
         .eq("auth_user_id", userId)

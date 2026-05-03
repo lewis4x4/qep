@@ -1,9 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import {
+  getCreatedPortalOrderId,
+  getPortalErrorMessage,
+  normalizePortalActiveDeals,
+  normalizePortalCheckoutResponse,
   normalizeEquipmentDocuments,
   normalizeMachineHistoryRows,
+  normalizePortalFleetPickerRows,
   normalizePortalFleetDetailItems,
   normalizePortalFleetItems,
+  normalizePortalInvoiceRecord,
+  normalizePortalPmKitSuggestion,
+  normalizePortalServiceRequestsPayload,
+  normalizePortalServiceTimelinePayload,
 } from "./portal-row-normalizers";
 
 describe("portal row normalizers", () => {
@@ -201,5 +210,127 @@ describe("portal row normalizers", () => {
     expect(normalizePortalFleetDetailItems(null)).toEqual([]);
     expect(normalizeEquipmentDocuments("bad")).toEqual([]);
     expect(normalizeMachineHistoryRows(undefined)).toEqual([]);
+  });
+
+  test("normalizes active deals and portal statuses", () => {
+    expect(normalizePortalActiveDeals([
+      {
+        deal_id: "deal-1",
+        deal_name: "Compact loader",
+        amount: "120000",
+        portal_status: {
+          label: "Quote review",
+          source: "quote_review",
+          source_label: "Quote",
+          eta: "2026-05-10T00:00:00Z",
+          next_action: "Review terms",
+        },
+      },
+      { deal_id: "missing-name" },
+    ])).toEqual([{
+      deal_id: "deal-1",
+      deal_name: "Compact loader",
+      amount: 120000,
+      expected_close_on: null,
+      next_follow_up_at: null,
+      quote_review_id: null,
+      quote_review_status: null,
+      portal_status: {
+        label: "Quote review",
+        source: "quote_review",
+        source_label: "Quote",
+        eta: "2026-05-10T00:00:00Z",
+        last_updated_at: null,
+        next_action: "Review terms",
+      },
+    }]);
+  });
+
+  test("normalizes invoice detail nested rows", () => {
+    expect(normalizePortalInvoiceRecord({
+      invoice_number: "INV-1",
+      customer_invoice_line_items: [
+        { id: "line-1", description: "Labor", quantity: "2", unit_price: "120", line_total: "240" },
+        { line_total: "bad" },
+      ],
+      portal_payment_history: [{ label: "Payment", amount: "100", status: "paid", created_at: "2026-05-01T00:00:00Z" }],
+      portal_invoice_timeline: [{ label: "Issued", detail: "Invoice sent", at: "2026-05-01T00:00:00Z", tone: "blue" }],
+    })).toMatchObject({
+      invoice_number: "INV-1",
+      customer_invoice_line_items: [{ id: "line-1", description: "Labor", quantity: 2, unit_price: 120, line_total: 240 }],
+      portal_payment_history: [{ label: "Payment", amount: 100, status: "paid", created_at: "2026-05-01T00:00:00Z", resolved_at: null }],
+      portal_invoice_timeline: [{ label: "Issued", detail: "Invoice sent", at: "2026-05-01T00:00:00Z", tone: "blue" }],
+    });
+  });
+
+  test("normalizes service request payloads and timeline events", () => {
+    expect(normalizePortalServiceRequestsPayload({
+      open_requests: [{
+        id: "req-1",
+        request_type: "",
+        description: "Hydraulic leak",
+        internal_job: [{ id: "job-1", current_stage: "in_progress" }],
+        portal_status: { label: "In progress", source: "service_job", source_label: "Shop" },
+        workspace_timeline: { branch_label: "Lake City", next_step: "Tech assigned" },
+        photo_count: "2",
+      }],
+      workspace_summary: { open_count: "1", completed_count: "3", blocked_count: "0" },
+    })).toMatchObject({
+      open_requests: [{
+        id: "req-1",
+        request_type: "service",
+        description: "Hydraulic leak",
+        internal_job: { id: "job-1", current_stage: "in_progress" },
+        photo_count: 2,
+      }],
+      workspace_summary: { open_count: 1, completed_count: 3, blocked_count: 0 },
+    });
+
+    expect(normalizePortalServiceTimelinePayload({
+      ok: true,
+      service_job_id: "job-1",
+      events: [
+        { id: "event-1", event_type: "stage_transition", created_at: "2026-05-01T00:00:00Z", customer_label: "In shop", new_stage: "in_progress" },
+        { id: "bad" },
+      ],
+    })).toEqual({
+      ok: true,
+      service_job_id: "job-1",
+      events: [{
+        id: "event-1",
+        event_type: "stage_transition",
+        created_at: "2026-05-01T00:00:00Z",
+        customer_label: "In shop",
+        new_stage: "in_progress",
+      }],
+    });
+  });
+
+  test("normalizes fleet picker, PM kit, checkout, and generic portal helpers", () => {
+    expect(normalizePortalFleetPickerRows([{ id: "fleet-1", make: "", model: "333G", year: "2024", serial_number: "SN" }])).toEqual([
+      { id: "fleet-1", make: "Equipment", model: "333G", year: 2024, serial_number: "SN" },
+    ]);
+
+    expect(normalizePortalPmKitSuggestion({
+      ok: true,
+      ai_suggested_pm_kit: true,
+      ai_suggestion_reason: "500 hour interval",
+      line_items: [{ part_number: "P-1", quantity: "2" }, { quantity: 1 }],
+      matched_job_code: { id: "job-code-1", job_name: "500 hour service", make: "Deere" },
+    })).toMatchObject({
+      ok: true,
+      line_items: [{ part_number: "P-1", quantity: 2 }],
+      matched_job_code: { id: "job-code-1", job_name: "500 hour service", make: "Deere" },
+    });
+
+    expect(getCreatedPortalOrderId({ order: { id: "order-1" } })).toBe("order-1");
+    expect(normalizePortalCheckoutResponse({ url: "https://checkout.test", stripe_configured: true })).toEqual({
+      url: "https://checkout.test",
+      fallback: undefined,
+      stripe_configured: true,
+      stripe_error: undefined,
+      message: undefined,
+    });
+    expect(getPortalErrorMessage({ error: "No access" })).toBe("No access");
   });
 });

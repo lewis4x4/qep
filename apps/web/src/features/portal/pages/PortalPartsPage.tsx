@@ -6,49 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { portalApi, type PortalCanonicalStatus, type PortalPartsOrderSummary } from "../lib/portal-api";
+import {
+  getCreatedPortalOrderId,
+  normalizePortalFleetPickerRows,
+  normalizePortalPmKitSuggestion,
+  type PortalPmKitSuggestion,
+} from "../lib/portal-row-normalizers";
 import { PortalLayout } from "../components/PortalLayout";
 import { PartsReorderHistory } from "../components/PartsReorderHistory";
 import { normalizePortalOrderLines, portalCartSummary } from "../lib/portal-order-utils";
 import { Plus, Sparkles, Trash2 } from "lucide-react";
 
 type LineDraft = { part_number: string; quantity: number };
-
-type FleetRow = {
-  id: string;
-  make: string;
-  model: string;
-  serial_number?: string | null;
-};
-
-type SuggestPmKitResponse =
-  | {
-      ok: true;
-      ai_suggested_pm_kit: boolean;
-      ai_suggestion_reason: string;
-      line_items: Array<{
-        part_number: string;
-        quantity: number;
-        description?: string;
-        is_ai_suggested?: boolean;
-      }>;
-      matched_job_code: {
-        id: string;
-        job_name: string;
-        make: string;
-        model_family: string | null;
-      };
-    }
-  | {
-      ok: false;
-      error: string;
-      message: string;
-      matched_job_code?: {
-        id: string;
-        job_name: string;
-        make: string;
-        model_family: string | null;
-      };
-    };
 
 export function PortalPartsPage() {
   const qc = useQueryClient();
@@ -69,7 +38,7 @@ export function PortalPartsPage() {
     staleTime: 60_000,
   });
 
-  const fleet: FleetRow[] = (fleetData?.fleet as FleetRow[] | undefined) ?? [];
+  const fleet = normalizePortalFleetPickerRows(fleetData?.fleet);
 
   useEffect(() => {
     if (!fleetId && fleet.length > 0) {
@@ -106,7 +75,7 @@ export function PortalPartsPage() {
   const createAndSubmitMutation = useMutation({
     mutationFn: async (body: Record<string, unknown>) => {
       const created = await portalApi.createPartsOrder(body);
-      const orderId = (created.order as Record<string, unknown> | undefined)?.id as string | undefined;
+      const orderId = getCreatedPortalOrderId(created);
       if (!orderId) {
         throw new Error("Draft order created without an id.");
       }
@@ -126,9 +95,9 @@ export function PortalPartsPage() {
   const suggestMutation = useMutation({
     mutationFn: async () => {
       if (!fleetId) throw new Error("Select a machine from your fleet first.");
-      return portalApi.suggestPmKit(fleetId) as Promise<SuggestPmKitResponse>;
+      return normalizePortalPmKitSuggestion(await portalApi.suggestPmKit(fleetId));
     },
-    onSuccess: (res) => {
+    onSuccess: (res: PortalPmKitSuggestion) => {
       if (!res.ok) {
         setAiReason(res.message);
         setMatchedJobLabel(

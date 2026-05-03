@@ -6,21 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PortalLayout } from "../components/PortalLayout";
 import { portalApi } from "../lib/portal-api";
-import { downloadInvoiceStatement, type PortalInvoicePaymentHistoryItem } from "../lib/invoice-statement";
-
-type LineItem = {
-  id?: string;
-  description?: string;
-  quantity?: number;
-  unit_price?: number;
-  line_total?: number;
-};
-
-type InvoiceRecord = Record<string, unknown> & {
-  customer_invoice_line_items?: LineItem[];
-  portal_payment_history?: PortalInvoicePaymentHistoryItem[];
-  portal_invoice_timeline?: Array<{ label: string; detail: string; at: string | null; tone: string }>;
-};
+import { downloadInvoiceStatement } from "../lib/invoice-statement";
+import { normalizePortalInvoiceRecord } from "../lib/portal-row-normalizers";
 
 function money(value: number | null | undefined): string {
   if (value == null) return "—";
@@ -43,7 +30,7 @@ export function PortalInvoiceDetailPage() {
     staleTime: 30_000,
   });
 
-  const invoice = useMemo(() => (data?.invoice ?? null) as InvoiceRecord | null, [data?.invoice]);
+  const invoice = useMemo(() => normalizePortalInvoiceRecord(data?.invoice), [data?.invoice]);
   const lines = invoice?.customer_invoice_line_items ?? [];
   const history = invoice?.portal_payment_history ?? [];
   const timeline = invoice?.portal_invoice_timeline ?? [];

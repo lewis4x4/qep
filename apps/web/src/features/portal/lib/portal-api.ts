@@ -10,6 +10,7 @@ import type {
   PortalRentalWorkspaceSummary,
   PortalSubscriptionWorkspaceView,
 } from "../../../../../../shared/qep-moonshot-contracts";
+import { getPortalErrorMessage } from "./portal-row-normalizers";
 
 const PORTAL_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/portal-api`;
 
@@ -227,10 +228,8 @@ async function portalFetch<T extends Record<string, unknown> = Record<string, un
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {
-      const parsed = JSON.parse(text) as { error?: string };
-      if (typeof parsed?.error === "string" && parsed.error.trim()) {
-        message = parsed.error.trim();
-      }
+      const parsed = JSON.parse(text);
+      message = getPortalErrorMessage(parsed) ?? message;
     } catch {
       const t = text.trim().slice(0, 240);
       if (t) message = t;
@@ -239,7 +238,8 @@ async function portalFetch<T extends Record<string, unknown> = Record<string, un
   }
   if (!text.trim()) return {} as T;
   try {
-    return JSON.parse(text) as T;
+    const parsed: T = JSON.parse(text);
+    return parsed;
   } catch {
     throw new Error("Invalid response from portal API");
   }

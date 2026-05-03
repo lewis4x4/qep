@@ -89,6 +89,145 @@ export type MachineHistoryRow = {
     | null;
 };
 
+export type PortalActiveDealRow = {
+  deal_id: string;
+  deal_name: string;
+  amount: number | null;
+  expected_close_on: string | null;
+  next_follow_up_at: string | null;
+  quote_review_id: string | null;
+  quote_review_status: string | null;
+  portal_status: {
+    label: string;
+    source: "quote_review" | "deal_progress" | "service_job" | "portal_request" | "default";
+    source_label: string;
+    eta: string | null;
+    last_updated_at: string | null;
+    next_action?: string | null;
+  };
+};
+
+export type PortalInvoiceLineItem = {
+  id?: string;
+  description?: string;
+  quantity?: number;
+  unit_price?: number;
+  line_total?: number;
+};
+
+export type PortalInvoicePaymentHistoryItem = {
+  label: string;
+  detail: string;
+  amount: number;
+  status: "pending" | "processing" | "paid" | "failed";
+  reference: string | null;
+  created_at: string;
+  resolved_at: string | null;
+};
+
+export type PortalInvoiceTimelineItem = {
+  label: string;
+  detail: string;
+  at: string | null;
+  tone: string;
+};
+
+export type PortalInvoiceRecord = Record<string, unknown> & {
+  customer_invoice_line_items?: PortalInvoiceLineItem[];
+  portal_payment_history?: PortalInvoicePaymentHistoryItem[];
+  portal_invoice_timeline?: PortalInvoiceTimelineItem[];
+};
+
+export type PortalServiceRequestRow = Record<string, unknown> & {
+  id: string;
+  request_type: string;
+  description: string;
+  status: string;
+  portal_status?: {
+    label: string;
+    source: "service_job" | "portal_request" | "default";
+    source_label: string;
+    eta: string | null;
+    last_updated_at: string | null;
+  } | null;
+  internal_job?: { id: string; current_stage: string | null; closed_at: string | null } | null;
+  workspace_timeline?: {
+    branch_label: string | null;
+    next_step: string | null;
+    customer_summary: string | null;
+  } | null;
+  photo_count?: number;
+};
+
+export type PortalServiceRequestsPayload = {
+  open_requests: PortalServiceRequestRow[];
+  completed_requests: PortalServiceRequestRow[];
+  blocked_requests: PortalServiceRequestRow[];
+  workspace_summary: {
+    open_count: number;
+    completed_count: number;
+    blocked_count: number;
+  } | null;
+};
+
+export type PortalServiceTimelinePayload = {
+  ok: boolean;
+  service_job_id: string | null;
+  events: Array<{
+    id: string;
+    event_type: string;
+    created_at: string;
+    new_stage?: string | null;
+    customer_label: string;
+  }>;
+};
+
+export type PortalFleetPickerRow = {
+  id: string;
+  make: string;
+  model: string;
+  year: number | null;
+  serial_number?: string | null;
+};
+
+export type PortalPmKitSuggestion =
+  | {
+      ok: true;
+      ai_suggested_pm_kit: boolean;
+      ai_suggestion_reason: string;
+      line_items: Array<{
+        part_number: string;
+        quantity: number;
+        description?: string;
+        is_ai_suggested?: boolean;
+      }>;
+      matched_job_code: {
+        id: string;
+        job_name: string;
+        make: string;
+        model_family: string | null;
+      };
+    }
+  | {
+      ok: false;
+      error: string;
+      message: string;
+      matched_job_code?: {
+        id: string;
+        job_name: string;
+        make: string;
+        model_family: string | null;
+      };
+    };
+
+export type PortalCheckoutResponse = {
+  url?: string;
+  fallback?: string;
+  stripe_configured: boolean;
+  stripe_error?: boolean;
+  message?: string;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -130,9 +269,80 @@ function documentType(value: unknown): PortalDocumentType {
     : "other";
 }
 
+function validDateOrNull(value: unknown): string | null {
+  const text = nullableString(value);
+  return text && Number.isFinite(new Date(text).getTime()) ? text : null;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) : [];
+}
+
+function portalStatusSource(value: unknown): PortalActiveDealRow["portal_status"]["source"] {
+  return value === "quote_review" ||
+    value === "deal_progress" ||
+    value === "service_job" ||
+    value === "portal_request" ||
+    value === "default"
+    ? value
+    : "default";
+}
+
+function portalServiceStatusSource(value: unknown): NonNullable<PortalServiceRequestRow["portal_status"]>["source"] {
+  return value === "service_job" || value === "portal_request" || value === "default" ? value : "default";
+}
+
+function normalizeActiveDealStatus(value: unknown): PortalActiveDealRow["portal_status"] {
+  const status = firstRecord(value);
+  return {
+    label: stringValue(status?.label, "In progress"),
+    source: portalStatusSource(status?.source),
+    source_label: stringValue(status?.source_label, "Portal status"),
+    eta: validDateOrNull(status?.eta),
+    last_updated_at: validDateOrNull(status?.last_updated_at),
+    next_action: nullableString(status?.next_action),
+  };
+}
+
+export function normalizePortalActiveDeals(rows: unknown): PortalActiveDealRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const dealId = nullableString(value.deal_id);
+    const dealName = nullableString(value.deal_name);
+    if (!dealId || !dealName) return [];
+    return [{
+      deal_id: dealId,
+      deal_name: dealName,
+      amount: numberValue(value.amount),
+      expected_close_on: validDateOrNull(value.expected_close_on),
+      next_follow_up_at: validDateOrNull(value.next_follow_up_at),
+      quote_review_id: nullableString(value.quote_review_id),
+      quote_review_status: nullableString(value.quote_review_status),
+      portal_status: normalizeActiveDealStatus(value.portal_status),
+    }];
+  });
+}
+
 export function normalizePortalFleetItems(rows: unknown): PortalFleetItem[] {
   if (!Array.isArray(rows)) return [];
   return rows.map(normalizePortalFleetItem).filter((row): row is PortalFleetItem => row !== null);
+}
+
+export function normalizePortalFleetPickerRows(rows: unknown): PortalFleetPickerRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = nullableString(value.id);
+    if (!id) return [];
+    return [{
+      id,
+      make: stringValue(value.make, "Equipment"),
+      model: stringValue(value.model, ""),
+      year: numberValue(value.year),
+      serial_number: nullableString(value.serial_number),
+    }];
+  });
 }
 
 function normalizePortalFleetItem(value: unknown): PortalFleetItem | null {
@@ -288,4 +498,231 @@ function normalizeRecentLineItem(value: unknown): RecentLineItem | null {
     ...(description ? { description } : {}),
     ...(unitPrice !== null ? { unit_price: unitPrice } : {}),
   };
+}
+
+function normalizeInvoiceLineItems(value: unknown): PortalInvoiceLineItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const description = nullableString(row.description);
+    const id = nullableString(row.id);
+    if (!description && !id) return [];
+    return [{
+      ...(id ? { id } : {}),
+      ...(description ? { description } : {}),
+      ...(numberValue(row.quantity) != null ? { quantity: numberValue(row.quantity)! } : {}),
+      ...(numberValue(row.unit_price) != null ? { unit_price: numberValue(row.unit_price)! } : {}),
+      ...(numberValue(row.line_total) != null ? { line_total: numberValue(row.line_total)! } : {}),
+    }];
+  });
+}
+
+function normalizePaymentHistory(value: unknown): PortalInvoicePaymentHistoryItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const label = nullableString(row.label);
+    if (!label) return [];
+    const status = row.status === "pending" || row.status === "processing" || row.status === "paid" || row.status === "failed"
+      ? row.status
+      : "pending";
+    return [{
+      label,
+      detail: stringValue(row.detail),
+      amount: numberValue(row.amount) ?? 0,
+      status,
+      reference: nullableString(row.reference),
+      created_at: validDateOrNull(row.created_at) ?? "",
+      resolved_at: validDateOrNull(row.resolved_at),
+    }];
+  });
+}
+
+function normalizeInvoiceTimeline(value: unknown): PortalInvoiceTimelineItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const label = nullableString(row.label);
+    if (!label) return [];
+    return [{
+      label,
+      detail: stringValue(row.detail),
+      at: validDateOrNull(row.at),
+      tone: stringValue(row.tone, "blue"),
+    }];
+  });
+}
+
+export function normalizePortalInvoiceRecord(value: unknown): PortalInvoiceRecord | null {
+  if (!isRecord(value)) return null;
+  return {
+    ...value,
+    customer_invoice_line_items: normalizeInvoiceLineItems(value.customer_invoice_line_items),
+    portal_payment_history: normalizePaymentHistory(value.portal_payment_history),
+    portal_invoice_timeline: normalizeInvoiceTimeline(value.portal_invoice_timeline),
+  };
+}
+
+function normalizeServicePortalStatus(value: unknown): PortalServiceRequestRow["portal_status"] {
+  const status = firstRecord(value);
+  if (!status) return null;
+  return {
+    label: stringValue(status.label, "Status"),
+    source: portalServiceStatusSource(status.source),
+    source_label: stringValue(status.source_label, "Portal status"),
+    eta: validDateOrNull(status.eta),
+    last_updated_at: validDateOrNull(status.last_updated_at),
+  };
+}
+
+function normalizeServiceTimeline(value: unknown): PortalServiceRequestRow["workspace_timeline"] {
+  const timeline = firstRecord(value);
+  if (!timeline) return null;
+  return {
+    branch_label: nullableString(timeline.branch_label),
+    next_step: nullableString(timeline.next_step),
+    customer_summary: nullableString(timeline.customer_summary),
+  };
+}
+
+function normalizeInternalJob(value: unknown): PortalServiceRequestRow["internal_job"] {
+  const job = firstRecord(value);
+  if (!job) return null;
+  const id = nullableString(job.id);
+  if (!id) return null;
+  return {
+    id,
+    current_stage: nullableString(job.current_stage),
+    closed_at: validDateOrNull(job.closed_at),
+  };
+}
+
+function normalizePortalServiceRows(rows: unknown): PortalServiceRequestRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = nullableString(value.id);
+    if (!id) return [];
+    return [{
+      ...value,
+      id,
+      request_type: stringValue(value.request_type, "service"),
+      description: stringValue(value.description, "Service request"),
+      status: stringValue(value.status, "open"),
+      portal_status: normalizeServicePortalStatus(value.portal_status),
+      internal_job: normalizeInternalJob(value.internal_job),
+      workspace_timeline: normalizeServiceTimeline(value.workspace_timeline),
+      photo_count: numberValue(value.photo_count) ?? 0,
+    }];
+  });
+}
+
+export function normalizePortalServiceRequestsPayload(payload: unknown): PortalServiceRequestsPayload {
+  const record = isRecord(payload) ? payload : {};
+  const summary = firstRecord(record.workspace_summary);
+  return {
+    open_requests: normalizePortalServiceRows(record.open_requests ?? record.requests),
+    completed_requests: normalizePortalServiceRows(record.completed_requests),
+    blocked_requests: normalizePortalServiceRows(record.blocked_requests),
+    workspace_summary: summary
+      ? {
+          open_count: numberValue(summary.open_count) ?? 0,
+          completed_count: numberValue(summary.completed_count) ?? 0,
+          blocked_count: numberValue(summary.blocked_count) ?? 0,
+        }
+      : null,
+  };
+}
+
+export function normalizePortalServiceTimelinePayload(payload: unknown): PortalServiceTimelinePayload {
+  const record = isRecord(payload) ? payload : {};
+  return {
+    ok: record.ok === true,
+    service_job_id: nullableString(record.service_job_id),
+    events: Array.isArray(record.events)
+      ? record.events.flatMap((event) => {
+          if (!isRecord(event)) return [];
+          const id = nullableString(event.id);
+          const eventType = nullableString(event.event_type);
+          const createdAt = validDateOrNull(event.created_at);
+          const customerLabel = nullableString(event.customer_label);
+          if (!id || !eventType || !createdAt || !customerLabel) return [];
+          return [{
+            id,
+            event_type: eventType,
+            created_at: createdAt,
+            new_stage: nullableString(event.new_stage),
+            customer_label: customerLabel,
+          }];
+        })
+      : [],
+  };
+}
+
+function normalizeMatchedJobCode(value: unknown): NonNullable<PortalPmKitSuggestion["matched_job_code"]> | undefined {
+  if (!isRecord(value)) return undefined;
+  const id = nullableString(value.id);
+  const jobName = nullableString(value.job_name);
+  const make = nullableString(value.make);
+  if (!id || !jobName || !make) return undefined;
+  return {
+    id,
+    job_name: jobName,
+    make,
+    model_family: nullableString(value.model_family),
+  };
+}
+
+export function normalizePortalPmKitSuggestion(payload: unknown): PortalPmKitSuggestion {
+  const record = isRecord(payload) ? payload : {};
+  const matchedJobCode = normalizeMatchedJobCode(record.matched_job_code);
+  if (record.ok !== true) {
+    return {
+      ok: false,
+      error: stringValue(record.error, "no_match"),
+      message: stringValue(record.message, "No PM kit suggestion is available for this machine."),
+      ...(matchedJobCode ? { matched_job_code: matchedJobCode } : {}),
+    };
+  }
+
+  return {
+    ok: true,
+    ai_suggested_pm_kit: record.ai_suggested_pm_kit === true,
+    ai_suggestion_reason: stringValue(record.ai_suggestion_reason),
+    line_items: Array.isArray(record.line_items)
+      ? record.line_items.flatMap((line) => {
+          if (!isRecord(line)) return [];
+          const partNumber = nullableString(line.part_number);
+          if (!partNumber) return [];
+          return [{
+            part_number: partNumber,
+            quantity: Math.max(1, numberValue(line.quantity) ?? 1),
+            ...(nullableString(line.description) ? { description: nullableString(line.description)! } : {}),
+            ...(line.is_ai_suggested === true ? { is_ai_suggested: true } : {}),
+          }];
+        })
+      : [],
+    matched_job_code: matchedJobCode ?? { id: "unknown", job_name: "PM kit", make: "Equipment", model_family: null },
+  };
+}
+
+export function getCreatedPortalOrderId(payload: unknown): string | null {
+  if (!isRecord(payload)) return null;
+  return nullableString(firstRecord(payload.order)?.id);
+}
+
+export function normalizePortalCheckoutResponse(payload: unknown): PortalCheckoutResponse {
+  const record = isRecord(payload) ? payload : {};
+  return {
+    url: nullableString(record.url) ?? undefined,
+    fallback: nullableString(record.fallback) ?? undefined,
+    stripe_configured: record.stripe_configured === true,
+    stripe_error: record.stripe_error === true ? true : undefined,
+    message: nullableString(record.message) ?? undefined,
+  };
+}
+
+export function getPortalErrorMessage(payload: unknown): string | null {
+  if (!isRecord(payload)) return null;
+  return nullableString(payload.error) ?? nullableString(payload.message);
 }
