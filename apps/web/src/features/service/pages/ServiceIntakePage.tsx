@@ -16,29 +16,8 @@ import {
   REQUEST_TYPE_LABELS,
   PRIORITY_LABELS,
 } from "../lib/constants";
+import { normalizeIntakeResult, type IntakeResult } from "../lib/service-page-normalizers";
 import type { ServiceSourceType, ServiceRequestType, ServicePriority } from "../lib/types";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface IntakeResult {
-  machine: Record<string, unknown> | null;
-  service_history: unknown[];
-  suggested_job_codes: Array<{
-    id: string;
-    job_name: string;
-    make: string;
-    model_family: string | null;
-    manufacturer_estimated_hours: number | null;
-    shop_average_hours: number | null;
-    parts_template: unknown[];
-    confidence_score: number | null;
-  }>;
-  likely_parts: unknown[];
-  estimated_hours: number | null;
-  haul_required: boolean;
-  confidence: number;
-  suggested_next_step: string;
-}
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -219,7 +198,7 @@ export function ServiceIntakePage() {
         },
       });
       if (error) throw error;
-      return data as IntakeResult;
+      return normalizeIntakeResult(data);
     },
     onSuccess: (data) => {
       setIntakeResult(data);

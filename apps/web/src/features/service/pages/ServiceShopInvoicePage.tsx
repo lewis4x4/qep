@@ -4,31 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { ServiceSubNav } from "../components/ServiceSubNav";
 import { BranchDocumentHeader, BranchDocumentFooter } from "@/components/BranchDocumentHeader";
 import { ArrowLeft } from "lucide-react";
-
-type LineRow = {
-  id: string;
-  line_number: number;
-  description: string;
-  quantity: number;
-  unit_price: number;
-  line_total: number | null;
-};
-
-type InvoiceRow = {
-  id: string;
-  invoice_number: string;
-  invoice_date: string;
-  due_date: string;
-  description: string | null;
-  amount: number;
-  tax: number | null;
-  total: number;
-  status: string;
-  service_job_id: string | null;
-  crm_company_id: string | null;
-  branch_id: string | null;
-  customer_invoice_line_items?: LineRow[] | null;
-};
+import { normalizeShopInvoiceRow, type ShopInvoiceRow } from "../lib/service-page-normalizers";
 
 function money(n: number | null | undefined): string {
   if (n == null || Number.isNaN(Number(n))) return "—";
@@ -39,7 +15,7 @@ function money(n: number | null | undefined): string {
   }).format(Number(n));
 }
 
-function useInvoiceBranchSlug(invoice: InvoiceRow | null | undefined) {
+function useInvoiceBranchSlug(invoice: ShopInvoiceRow | null | undefined) {
   const jobId = invoice?.service_job_id;
 
   const { data: jobBranch } = useQuery({
@@ -53,7 +29,7 @@ function useInvoiceBranchSlug(invoice: InvoiceRow | null | undefined) {
         .select("branch_id")
         .eq("id", jobId)
         .maybeSingle();
-      return (data?.branch_id as string) ?? null;
+      return typeof data?.branch_id === "string" ? data.branch_id : null;
     },
   });
 
@@ -96,7 +72,7 @@ export function ServiceShopInvoicePage() {
         .eq("id", id)
         .maybeSingle();
       if (qErr) throw qErr;
-      return data as InvoiceRow | null;
+      return normalizeShopInvoiceRow(data);
     },
     enabled: id.length > 0,
   });
