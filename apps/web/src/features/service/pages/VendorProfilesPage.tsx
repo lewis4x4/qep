@@ -86,13 +86,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
   const { data: vendorAccessKeys = [] } = useQuery({
     queryKey: ["vendor-portal-access-keys"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            order: (column: string, opts: { ascending: boolean }) => Promise<{ data: unknown[] | null; error: unknown }>;
-          };
-        };
-      })
+      const { data, error } = await supabase
         .from("vendor_portal_access_keys")
         .select("id, vendor_id, label, contact_name, contact_email, expires_at, revoked_at, created_at, vendor_profiles(name)")
         .order("created_at", { ascending: false });
@@ -105,13 +99,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
   const { data: vendorSubmissions = [] } = useQuery({
     queryKey: ["vendor-price-submissions"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            order: (column: string, opts: { ascending: boolean }) => Promise<{ data: unknown[] | null; error: unknown }>;
-          };
-        };
-      })
+      const { data, error } = await supabase
         .from("parts_vendor_price_submissions")
         .select("id, vendor_id, part_number, description, proposed_list_price, currency, effective_date, submission_notes, submitted_by_name, submitted_by_email, status, review_notes, reviewed_at, vendor_profiles(name)")
         .order("created_at", { ascending: false });
@@ -124,13 +112,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
   const { data: vendorPrices = [] } = useQuery({
     queryKey: ["parts-vendor-prices"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            order: (column: string, opts: { ascending: boolean }) => Promise<{ data: unknown[] | null; error: unknown }>;
-          };
-        };
-      })
+      const { data, error } = await supabase
         .from("parts_vendor_prices")
         .select("id, vendor_id, part_number, description, list_price, currency, effective_date")
         .order("effective_date", { ascending: false });
@@ -210,9 +192,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
         ? new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
         : null;
 
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => { insert: (value: Record<string, unknown>) => Promise<{ error: unknown }> };
-      })
+      const { error } = await supabase
         .from("vendor_portal_access_keys")
         .insert({
           vendor_id: portalVendorId,
@@ -237,13 +217,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
 
   const approveSubmission = useMutation({
     mutationFn: async (submission: VendorSubmissionRow) => {
-      const { data: priceRow, error: priceError } = await (supabase as unknown as {
-        from: (table: string) => {
-          upsert: (value: Record<string, unknown>, options: { onConflict: string }) => {
-            select: (columns: string) => { single: () => Promise<{ data: { id: string } | null; error: unknown }> };
-          };
-        };
-      })
+      const { data: priceRow, error: priceError } = await supabase
         .from("parts_vendor_prices")
         .upsert({
           vendor_id: submission.vendor_id,
@@ -259,13 +233,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
         .single();
       if (priceError || !priceRow) throw priceError ?? new Error("Could not apply vendor price.");
 
-      const { error: updateError } = await (supabase as unknown as {
-        from: (table: string) => {
-          update: (value: Record<string, unknown>) => {
-            eq: (column: string, value: string) => Promise<{ error: unknown }>;
-          };
-        };
-      })
+      const { error: updateError } = await supabase
         .from("parts_vendor_price_submissions")
         .update({
           status: "approved",
@@ -287,13 +255,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
 
   const rejectSubmission = useMutation({
     mutationFn: async (submission: VendorSubmissionRow) => {
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => {
-          update: (value: Record<string, unknown>) => {
-            eq: (column: string, value: string) => Promise<{ error: unknown }>;
-          };
-        };
-      })
+      const { error } = await supabase
         .from("parts_vendor_price_submissions")
         .update({
           status: "rejected",
