@@ -13,6 +13,13 @@ const ALERT_SEVERITIES = new Set<AlertSeverity>(["info", "warn", "error", "criti
 const ALERT_STATUSES = new Set<AlertStatus>(["new", "acknowledged", "in_progress", "resolved", "dismissed"]);
 const REFRESH_STATES = new Set<MetricRefreshState>(["fresh", "stale", "recalculated", "partial", "failed"]);
 
+export interface ExecSnapshotHistoryRow {
+  metric_value: number | null;
+  period_end: string;
+  calculated_at: string;
+  refresh_state: MetricRefreshState;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -166,6 +173,23 @@ export function normalizeAnalyticsAlertRows(rows: unknown): AnalyticsAlertRow[] 
       resolved_at: stringOrNull(value.resolved_at),
       created_at: createdAt,
       updated_at: updatedAt,
+    }];
+  });
+}
+
+export function normalizeSnapshotHistoryRows(rows: unknown): ExecSnapshotHistoryRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const periodEnd = requiredString(value.period_end);
+    const calculatedAt = requiredString(value.calculated_at);
+    const refreshState = refreshStateOrNull(value.refresh_state);
+    if (!periodEnd || !calculatedAt || !refreshState) return [];
+    return [{
+      metric_value: numberOrNull(value.metric_value),
+      period_end: periodEnd,
+      calculated_at: calculatedAt,
+      refresh_state: refreshState,
     }];
   });
 }

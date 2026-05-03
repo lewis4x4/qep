@@ -21,8 +21,14 @@ import { AskIronAdvisorButton, StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { formatKpiValue, formatForMetric, relativeRefresh } from "../lib/formatters";
-import type { KpiSnapshot, MetricDefinition, AnalyticsAlertRow } from "../lib/types";
+import type { MetricDefinition, AnalyticsAlertRow } from "../lib/types";
 import { resolveMetricPlaybook, resolveMetricRecordLink } from "../lib/metric-actions";
+import {
+  normalizeAnalyticsAlertRows,
+  normalizeMetricDefinitions,
+  normalizeSnapshotHistoryRows,
+  type ExecSnapshotHistoryRow,
+} from "../lib/exec-row-normalizers";
 import { IronContextualAssistantPanel } from "@/lib/iron/IronContextualAssistant";
 import { useIronStore } from "@/lib/iron/store";
 
@@ -30,13 +36,6 @@ interface Props {
   metricKey: string | null;
   workspaceId: string;
   onClose: () => void;
-}
-
-interface SnapshotHistoryRow {
-  metric_value: number | null;
-  period_end: string;
-  calculated_at: string;
-  refresh_state: string;
 }
 
 export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
@@ -55,26 +54,26 @@ export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
       const supa = supabase as unknown as {
         from: (t: string) => {
           select: (c: string) => {
-            eq: (c: string, v: string) => { maybeSingle: () => Promise<{ data: MetricDefinition | null; error: unknown }> };
+            eq: (c: string, v: string) => { maybeSingle: () => Promise<{ data: unknown | null; error: unknown }> };
           };
         };
       };
       const res = await supa.from("analytics_metric_definitions").select("*").eq("metric_key", metricKey).maybeSingle();
-      return res.data ?? null;
+      return normalizeMetricDefinitions(res.data ? [res.data] : [])[0] ?? null;
     },
   });
 
   const { data: snapshots = [] } = useQuery({
     enabled: open,
     queryKey: ["exec", "drill", "history", metricKey, workspaceId],
-    queryFn: async (): Promise<SnapshotHistoryRow[]> => {
+    queryFn: async (): Promise<ExecSnapshotHistoryRow[]> => {
       if (!metricKey) return [];
       // P1-2 fix: explicit workspace filter so we never pull cross-workspace
       // rows. RLS still backstops it.
       const res = await (supabase as unknown as {
         from: (t: string) => {
           select: (c: string) => {
-            eq: (c: string, v: string) => { eq: (c: string, v: string) => { order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: SnapshotHistoryRow[] | null; error: unknown }> } } };
+            eq: (c: string, v: string) => { eq: (c: string, v: string) => { order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: unknown[] | null; error: unknown }> } } };
           };
         };
       }).from("analytics_kpi_snapshots")
@@ -83,7 +82,7 @@ export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
         .eq("workspace_id", workspaceId)
         .order("calculated_at", { ascending: false })
         .limit(20);
-      return res.data ?? [];
+      return normalizeSnapshotHistoryRows(res.data);
     },
   });
 
@@ -95,7 +94,7 @@ export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
       const res = await (supabase as unknown as {
         from: (t: string) => {
           select: (c: string) => {
-            eq: (c: string, v: string) => { eq: (c: string, v: string) => { order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: AnalyticsAlertRow[] | null; error: unknown }> } } };
+            eq: (c: string, v: string) => { eq: (c: string, v: string) => { order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: unknown[] | null; error: unknown }> } } };
           };
         };
       }).from("analytics_alerts")
@@ -104,7 +103,7 @@ export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
         .eq("workspace_id", workspaceId)
         .order("created_at", { ascending: false })
         .limit(10);
-      return res.data ?? [];
+      return normalizeAnalyticsAlertRows(res.data);
     },
   });
 

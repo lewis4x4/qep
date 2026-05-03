@@ -3,6 +3,7 @@ import {
   normalizeAnalyticsAlertRows,
   normalizeKpiSnapshots,
   normalizeMetricDefinitions,
+  normalizeSnapshotHistoryRows,
 } from "./exec-row-normalizers";
 
 describe("exec row normalizers", () => {
@@ -146,9 +147,34 @@ describe("exec row normalizers", () => {
     ]);
   });
 
+  test("normalizes metric drill snapshot history rows", () => {
+    expect(normalizeSnapshotHistoryRows([
+      {
+        metric_value: "125.5",
+        period_end: "2026-05-31",
+        calculated_at: "2026-05-03T12:00:00.000Z",
+        refresh_state: "partial",
+      },
+      {
+        metric_value: 10,
+        period_end: "2026-05-31",
+        calculated_at: "2026-05-03T12:00:00.000Z",
+        refresh_state: "unknown",
+      },
+    ])).toEqual([
+      {
+        metric_value: 125.5,
+        period_end: "2026-05-31",
+        calculated_at: "2026-05-03T12:00:00.000Z",
+        refresh_state: "partial",
+      },
+    ]);
+  });
+
   test("returns empty arrays for non-array inputs", () => {
     expect(normalizeMetricDefinitions(null)).toEqual([]);
     expect(normalizeKpiSnapshots({ metric_key: "weighted_pipeline" })).toEqual([]);
     expect(normalizeAnalyticsAlertRows(undefined)).toEqual([]);
+    expect(normalizeSnapshotHistoryRows({ metric_value: 10 })).toEqual([]);
   });
 });
