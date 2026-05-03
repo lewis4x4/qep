@@ -6,17 +6,12 @@ import { MapWithSidebar, MapLibreCanvas, FilterBar, StatusChipStack, type Filter
 import { Map as MapIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-
-interface EquipmentRow {
-  id: string;
-  name: string;
-  make: string | null;
-  model: string | null;
-  year: number | null;
-  engine_hours: number | null;
-  company_id: string;
-  metadata: Record<string, unknown>;
-}
+import {
+  normalizeFleetEquipmentRows,
+  normalizeFleetTelemetryRows,
+  resolveFleetCoordinate,
+  type FleetTelemetryRow,
+} from "../lib/fleet-map-normalizers";
 
 const FILTERS: FilterDef[] = [
   { key: "branch",   label: "Branch", type: "text" },
@@ -32,13 +27,6 @@ const DEFAULT_OVERLAYS: MapOverlay[] = [
   { key: "service_routes",       label: "Service routes",       enabled: false },
 ];
 
-interface TelemetryRow {
-  equipment_id: string;
-  last_lat: number | null;
-  last_lng: number | null;
-  last_reading_at: string | null;
-}
-
 export function FleetMapPage() {
   const navigate = useNavigate();
   const [overlays, setOverlays] = useState<MapOverlay[]>(DEFAULT_OVERLAYS);
@@ -46,15 +34,14 @@ export function FleetMapPage() {
   const { data: equipment = [], isLoading } = useQuery({
     queryKey: ["fleet-map", "equipment"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { is: (c: string, v: null) => { order: (c: string, o: Record<string, boolean>) => { limit: (n: number) => Promise<{ data: EquipmentRow[] | null; error: unknown }> } } } };
-      }).from("crm_equipment")
+      const { data, error } = await supabase
+        .from("crm_equipment")
         .select("id, name, make, model, year, engine_hours, company_id, metadata")
         .is("deleted_at", null)
         .order("updated_at", { ascending: false })
         .limit(500);
       if (error) throw new Error("Failed to load fleet");
-      return data ?? [];
+      return normalizeFleetEquipmentRows(data);
     },
     staleTime: 60_000,
   });
@@ -63,43 +50,34 @@ export function FleetMapPage() {
   const { data: telemetry = [] } = useQuery({
     queryKey: ["fleet-map", "telematics"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { not: (c: string, op: string, v: null) => { limit: (n: number) => Promise<{ data: TelemetryRow[] | null; error: unknown }> } } };
-      }).from("telematics_feeds")
+      const { data, error } = await supabase
+        .from("telematics_feeds")
         .select("equipment_id, last_lat, last_lng, last_reading_at")
         .not("last_lat", "is", null)
         .limit(5000);
-      if (error) return [] as TelemetryRow[];
-      return data ?? [];
+      if (error) return [];
+      return normalizeFleetTelemetryRows(data);
     },
     staleTime: 2 * 60_000,
   });
 
   // Build marker list: telematics wins, fall back to metadata.lat/lng
   const markers = useMemo<MapMarker[]>(() => {
-    const telemByEquipment = new Map<string, TelemetryRow>();
+    const telemByEquipment = new Map<string, FleetTelemetryRow>();
     for (const t of telemetry) telemByEquipment.set(t.equipment_id, t);
 
     return equipment.flatMap<MapMarker>((e) => {
       const t = telemByEquipment.get(e.id);
-      let lat: number | null = null;
-      let lng: number | null = null;
-      if (t?.last_lat != null && t?.last_lng != null) {
-        lat = Number(t.last_lat);
-        lng = Number(t.last_lng);
-      } else if (e.metadata && (e.metadata as Record<string, unknown>).lat != null) {
-        lat = Number((e.metadata as Record<string, unknown>).lat);
-        lng = Number((e.metadata as Record<string, unknown>).lng);
-      }
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return [];
+      const coordinate = resolveFleetCoordinate(e, t);
+      if (!coordinate) return [];
       const titleParts = [e.year, e.make, e.model].filter(Boolean).join(" ") || e.name;
       const idleDays = t?.last_reading_at
         ? (Date.now() - new Date(t.last_reading_at).getTime()) / 86_400_000
         : null;
       return [{
         id: e.id,
-        lat: lat as number,
-        lng: lng as number,
+        lat: coordinate.lat,
+        lng: coordinate.lng,
         label: titleParts,
         tone: idleDays != null && idleDays > 7 ? "red" : "blue",
         onClick: () => navigate(`/equipment/${e.id}`),
