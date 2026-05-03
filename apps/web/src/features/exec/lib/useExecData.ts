@@ -11,6 +11,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import type { KpiSnapshot, MetricDefinition, AnalyticsAlertRow } from "./types";
+import { normalizeAnalyticsAlertRows, normalizeKpiSnapshots, normalizeMetricDefinitions } from "./exec-row-normalizers";
 
 const supa = supabase as unknown as {
   rpc: <T>(fn: string, args?: Record<string, unknown>) => Promise<{ data: T | null; error: { message?: string } | null }>;
@@ -31,10 +32,10 @@ export function useMetricDefinitions(role: "ceo" | "cfo" | "coo") {
     queryKey: ["exec", "metric-definitions", role],
     queryFn: async (): Promise<MetricDefinition[]> => {
       const { data, error } = await (supa.from("analytics_metric_definitions").select("*") as unknown as {
-        eq: (c: string, v: string) => { order: (c: string, o: { ascending: boolean }) => Promise<{ data: MetricDefinition[] | null; error: unknown }> };
+        eq: (c: string, v: string) => { order: (c: string, o: { ascending: boolean }) => Promise<{ data: unknown[] | null; error: unknown }> };
       }).eq("owner_role", role).order("metric_key", { ascending: true });
       if (error) throw new Error(String((error as { message?: string }).message ?? "metric definitions load failed"));
-      return data ?? [];
+      return normalizeMetricDefinitions(data);
     },
     staleTime: 5 * 60_000,
   });
@@ -46,12 +47,12 @@ export function useLatestSnapshots(metricKeys: string[] | undefined) {
     enabled: !!metricKeys && metricKeys.length > 0,
     queryKey: ["exec", "latest-snapshots", metricKeys?.join(",")],
     queryFn: async (): Promise<KpiSnapshot[]> => {
-      const { data, error } = await supa.rpc<KpiSnapshot[]>("analytics_latest_snapshots", {
+      const { data, error } = await supa.rpc<unknown[]>("analytics_latest_snapshots", {
         p_metric_keys: metricKeys ?? null,
         p_role_scope: null,
       });
       if (error) throw new Error(String(error.message ?? "snapshot load failed"));
-      return data ?? [];
+      return normalizeKpiSnapshots(data);
     },
     staleTime: 60_000,
     refetchInterval: 60_000,
@@ -65,11 +66,11 @@ export function useExecAlerts(role: "ceo" | "cfo" | "coo") {
     queryFn: async (): Promise<AnalyticsAlertRow[]> => {
       const res = await (supa.from("analytics_alerts").select("*") as unknown as {
         eq: (c: string, v: string) => {
-          order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: AnalyticsAlertRow[] | null; error: unknown }> };
+          order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: unknown[] | null; error: unknown }> };
         };
       }).eq("role_target", role).order("created_at", { ascending: false }).limit(50);
       if (res.error) throw new Error("alerts load failed");
-      return (res.data ?? []).filter((r) => r.status !== "resolved" && r.status !== "dismissed");
+      return normalizeAnalyticsAlertRows(res.data).filter((r) => r.status !== "resolved" && r.status !== "dismissed");
     },
     staleTime: 30_000,
     refetchInterval: 60_000,
