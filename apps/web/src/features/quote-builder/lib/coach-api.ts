@@ -21,6 +21,82 @@ export interface MarginBaseline {
 const MIN_PERSONAL_SAMPLES = 5;
 const MIN_TEAM_SAMPLES     = 3;
 
+interface CoachBrandRow {
+  id: string;
+  name: string;
+  code: string | null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function requiredString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function normalizeMarginPctRows(rows: unknown): number[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const value = numberOrNull(row.margin_pct);
+    return value == null ? [] : [value];
+  });
+}
+
+export function normalizeCoachBrandRows(rows: unknown): CoachBrandRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const name = requiredString(row.name);
+    if (!id || !name) return [];
+    return [{ id, name, code: nullableString(row.code) }];
+  });
+}
+
+export function normalizeCoachProgramRows(
+  rows: unknown,
+  brandNameById: Map<string, string>,
+): DealCoachContext["activePrograms"] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const programId = requiredString(row.id);
+    const programCode = requiredString(row.program_code);
+    const programType = requiredString(row.program_type);
+    const programName = requiredString(row.name);
+    const brandId = requiredString(row.brand_id);
+    if (!programId || !programCode || !programType || !programName || !brandId) return [];
+    return [{
+      programId,
+      programCode,
+      programType,
+      programName,
+      brandName: brandNameById.get(brandId) ?? "Unknown",
+    }];
+  });
+}
+
+export function normalizeDismissedRuleIds(rows: unknown): string[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const ruleId = requiredString(row.rule_id);
+    return ruleId ? [ruleId] : [];
+  });
+}
+
 export async function getMarginBaseline(userId: string): Promise<MarginBaseline> {
   // 90-day window of won deals. We read quote_packages.margin_pct (numeric).
   const cutoff = new Date();
@@ -35,9 +111,7 @@ export async function getMarginBaseline(userId: string): Promise<MarginBaseline>
     .gte("created_at", cutoff.toISOString())
     .not("margin_pct", "is", null);
 
-  const personalValues = (personalRows ?? [])
-    .map((r) => r.margin_pct as number | null)
-    .filter((v): v is number => typeof v === "number");
+  const personalValues = normalizeMarginPctRows(personalRows);
 
   if (personalValues.length >= MIN_PERSONAL_SAMPLES) {
     return {
@@ -55,9 +129,7 @@ export async function getMarginBaseline(userId: string): Promise<MarginBaseline>
     .gte("created_at", cutoff.toISOString())
     .not("margin_pct", "is", null);
 
-  const teamValues = (teamRows ?? [])
-    .map((r) => r.margin_pct as number | null)
-    .filter((v): v is number => typeof v === "number");
+  const teamValues = normalizeMarginPctRows(teamRows);
 
   if (teamValues.length >= MIN_TEAM_SAMPLES) {
     return {
@@ -103,7 +175,7 @@ export async function getActiveProgramsForDraft(
     .from("qb_brands")
     .select("id, name, code")
     .in("name", brandNames);
-  let resolvedBrands = (brands ?? []) as Array<{ id: string; name: string; code: string | null }>;
+  let resolvedBrands = normalizeCoachBrandRows(brands);
 
   if (resolvedBrands.length === 0) {
     // Try case-insensitive on the first brand name as a fallback (most drafts
@@ -113,7 +185,7 @@ export async function getActiveProgramsForDraft(
       .from("qb_brands")
       .select("id, name, code")
       .ilike("name", first);
-    resolvedBrands = (ilikeRows ?? []) as typeof resolvedBrands;
+    resolvedBrands = normalizeCoachBrandRows(ilikeRows);
   }
 
   if (resolvedBrands.length === 0) return [];
@@ -130,19 +202,7 @@ export async function getActiveProgramsForDraft(
     .lte("effective_from", today)
     .or(`effective_to.is.null,effective_to.gte.${today}`);
 
-  return ((programs ?? []) as Array<{
-    id: string;
-    program_code: string;
-    program_type: string;
-    name: string;
-    brand_id: string;
-  }>).map((p) => ({
-    programId:   p.id,
-    programCode: p.program_code,
-    programType: p.program_type,
-    programName: p.name,
-    brandName:   brandNameById.get(p.brand_id) ?? "Unknown",
-  }));
+  return normalizeCoachProgramRows(programs, brandNameById);
 }
 
 // ── Action persistence ─────────────────────────────────────────────────────
@@ -198,7 +258,7 @@ export async function getDismissedRuleIds(
     .select("rule_id")
     .eq("quote_package_id", quotePackageId)
     .eq("action", "dismissed");
-  return new Set((data ?? []).map((r) => (r as { rule_id: string }).rule_id));
+  return new Set(normalizeDismissedRuleIds(data));
 }
 
 // ── Severity palette (exported for UI) ─────────────────────────────────────
