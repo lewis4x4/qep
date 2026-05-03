@@ -212,7 +212,7 @@ export function EmailDraftInboxPage() {
                 isDismissing={dismissMutation.isPending && dismissMutation.variables === draft.id}
                 isSending={markSentMutation.isPending && markSentMutation.variables === draft.id}
                 isEmailing={sendViaMutation.isPending && sendViaMutation.variables === draft.id}
-                toEmail={(draft as unknown as Record<string, unknown>).to_email as string | null ?? null}
+                toEmail={draft.to_email}
               />
             );
           })}

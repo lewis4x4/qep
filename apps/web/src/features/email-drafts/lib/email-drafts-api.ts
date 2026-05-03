@@ -23,6 +23,7 @@ export interface EmailDraft {
   equipment_id: string | null;
   subject: string;
   body: string;
+  to_email: string | null;
   preview: string | null;
   urgency_score: number | null;
   context: Record<string, unknown>;
@@ -34,34 +35,122 @@ export interface EmailDraft {
   updated_at: string;
 }
 
-type SbTable = {
-  select: (c: string) => SbSelect;
-  update: (v: Record<string, unknown>) => SbUpdate;
-};
-type SbSelect = {
-  eq: (c: string, v: string) => SbSelect;
-  in: (c: string, v: string[]) => SbSelect;
-  order: (c: string, o: Record<string, boolean>) => SbSelect;
-  limit: (n: number) => Promise<{ data: EmailDraft[] | null; error: unknown }>;
-};
-type SbUpdate = {
-  eq: (c: string, v: string) => Promise<{ data: unknown; error: unknown }>;
-};
+export interface SendEmailDraftResult {
+  sent: boolean;
+  to_email: string;
+}
 
-function sb() {
-  return (supabase as unknown as { from: (t: string) => SbTable }).from("email_drafts");
+const DRAFT_SCENARIOS = new Set<DraftScenario>([
+  "budget_cycle",
+  "price_increase",
+  "tariff",
+  "requote",
+  "trade_up",
+  "custom",
+]);
+
+const DRAFT_STATUSES = new Set<DraftStatus>([
+  "pending",
+  "edited",
+  "sent",
+  "dismissed",
+  "failed",
+]);
+
+const DRAFT_TONES = new Set<EmailDraft["tone"]>([
+  "urgent",
+  "consultative",
+  "friendly",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function finiteNumberOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function validDateStringOrNull(value: unknown): string | null {
+  const text = stringOrNull(value);
+  return text && Number.isFinite(new Date(text).getTime()) ? text : null;
+}
+
+function errorMessage(payload: unknown, fallback: string): string {
+  return isRecord(payload) && typeof payload.error === "string" && payload.error.trim().length > 0
+    ? payload.error
+    : fallback;
+}
+
+export function normalizeEmailDraftRows(rows: unknown): EmailDraft[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = stringOrNull(row.id);
+    const workspaceId = stringOrNull(row.workspace_id);
+    const subject = stringOrNull(row.subject);
+    const body = stringOrNull(row.body);
+    const createdAt = validDateStringOrNull(row.created_at);
+    const updatedAt = validDateStringOrNull(row.updated_at);
+    if (!id || !workspaceId || !subject || !body || !createdAt || !updatedAt) return [];
+
+    const scenario = stringOrNull(row.scenario);
+    const tone = stringOrNull(row.tone);
+    const status = stringOrNull(row.status);
+
+    return [{
+      id,
+      workspace_id: workspaceId,
+      scenario: scenario && DRAFT_SCENARIOS.has(scenario as DraftScenario) ? scenario as DraftScenario : "custom",
+      tone: tone && DRAFT_TONES.has(tone as EmailDraft["tone"]) ? tone as EmailDraft["tone"] : "consultative",
+      deal_id: stringOrNull(row.deal_id),
+      contact_id: stringOrNull(row.contact_id),
+      company_id: stringOrNull(row.company_id),
+      equipment_id: stringOrNull(row.equipment_id),
+      subject,
+      body,
+      to_email: stringOrNull(row.to_email),
+      preview: stringOrNull(row.preview),
+      urgency_score: finiteNumberOrNull(row.urgency_score),
+      context: isRecord(row.context) ? row.context : {},
+      status: status && DRAFT_STATUSES.has(status as DraftStatus) ? status as DraftStatus : "pending",
+      sent_at: validDateStringOrNull(row.sent_at),
+      sent_via: stringOrNull(row.sent_via),
+      created_by: stringOrNull(row.created_by),
+      created_at: createdAt,
+      updated_at: updatedAt,
+    }];
+  });
+}
+
+export function normalizeSendEmailDraftResult(payload: unknown): SendEmailDraftResult {
+  if (!isRecord(payload)) throw new Error("Malformed send email response");
+  const toEmail = stringOrNull(payload.to_email);
+  if (payload.sent !== true || !toEmail) throw new Error("Malformed send email response");
+  return { sent: true, to_email: toEmail };
 }
 
 export async function listEmailDrafts(
   statuses: DraftStatus[] = ["pending", "edited"],
 ): Promise<EmailDraft[]> {
-  const { data, error } = await sb()
+  const { data, error } = await supabase
+    .from("email_drafts")
     .select("*")
     .in("status", statuses)
     .order("urgency_score", { ascending: false })
     .limit(100);
   if (error) throw new Error(String((error as { message?: string }).message ?? "Failed to load drafts"));
-  return data ?? [];
+  return normalizeEmailDraftRows(data);
 }
 
 export async function updateEmailDraft(
@@ -71,7 +160,7 @@ export async function updateEmailDraft(
   const payload: Record<string, unknown> = { ...patch };
   // Track edited status automatically if body/subject changed without explicit status
   if ((patch.subject || patch.body) && !patch.status) payload.status = "edited";
-  const { error } = await sb().update(payload).eq("id", id);
+  const { error } = await supabase.from("email_drafts").update(payload).eq("id", id);
   if (error) throw new Error(String((error as { message?: string }).message ?? "Failed to update draft"));
 }
 
@@ -95,14 +184,14 @@ export async function markEmailDraftSent(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Failed to mark sent" }));
-    throw new Error((err as { error?: string }).error ?? "Failed to mark sent");
+    throw new Error(errorMessage(err, "Failed to mark sent"));
   }
 }
 
 /** POST to draft-email /send — actually sends the email via Resend. */
 export async function sendEmailDraft(
   draftId: string,
-): Promise<{ sent: boolean; to_email: string }> {
+): Promise<SendEmailDraftResult> {
   const session = (await supabase.auth.getSession()).data.session;
   const res = await fetch(`${DRAFT_EMAIL_URL}/send`, {
     method: "POST",
@@ -114,9 +203,9 @@ export async function sendEmailDraft(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Failed to send email" }));
-    throw new Error((err as { error?: string }).error ?? "Failed to send email");
+    throw new Error(errorMessage(err, "Failed to send email"));
   }
-  return res.json() as Promise<{ sent: boolean; to_email: string }>;
+  return normalizeSendEmailDraftResult(await res.json());
 }
 
 export const SCENARIO_LABELS: Record<DraftScenario, string> = {
