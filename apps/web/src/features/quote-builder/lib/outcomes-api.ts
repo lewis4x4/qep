@@ -25,6 +25,84 @@ export type OutcomeReason =
 
 export type PriceSensitivity = "primary" | "secondary" | "none";
 
+const OUTCOMES = new Set<OutcomeClassification>(["won", "lost", "expired", "skipped"]);
+const OUTCOME_REASONS = new Set<OutcomeReason>([
+  "price",
+  "timing",
+  "relationship",
+  "service_credit",
+  "financing",
+  "competitor",
+  "spec_mismatch",
+  "other",
+]);
+const PRICE_SENSITIVITIES = new Set<PriceSensitivity>(["primary", "secondary", "none"]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function requiredString(value: unknown): string | null {
+  const normalized = stringOrNull(value)?.trim();
+  return normalized ? normalized : null;
+}
+
+function outcomeOrNull(value: unknown): OutcomeClassification | null {
+  return typeof value === "string" && OUTCOMES.has(value as OutcomeClassification)
+    ? value as OutcomeClassification
+    : null;
+}
+
+function reasonOrNull(value: unknown): OutcomeReason | null {
+  return typeof value === "string" && OUTCOME_REASONS.has(value as OutcomeReason)
+    ? value as OutcomeReason
+    : null;
+}
+
+function priceSensitivityOrNull(value: unknown): PriceSensitivity | null {
+  return typeof value === "string" && PRICE_SENSITIVITIES.has(value as PriceSensitivity)
+    ? value as PriceSensitivity
+    : null;
+}
+
+export function normalizeQuoteOutcomeRow(value: unknown): QuoteOutcomeRow | null {
+  if (!isRecord(value)) return null;
+  const id = requiredString(value.id);
+  const workspaceId = requiredString(value.workspace_id);
+  const quotePackageId = requiredString(value.quote_package_id);
+  const outcome = outcomeOrNull(value.outcome);
+  const capturedAt = requiredString(value.captured_at);
+  const createdAt = requiredString(value.created_at);
+  if (!id || !workspaceId || !quotePackageId || !outcome || !capturedAt || !createdAt) return null;
+  return {
+    id,
+    workspace_id: workspaceId,
+    quote_package_id: quotePackageId,
+    outcome,
+    reason: reasonOrNull(value.reason),
+    reason_details: stringOrNull(value.reason_details),
+    competitor: stringOrNull(value.competitor),
+    price_sensitivity: priceSensitivityOrNull(value.price_sensitivity),
+    captured_by: stringOrNull(value.captured_by),
+    captured_at: capturedAt,
+    created_at: createdAt,
+  };
+}
+
+export function normalizeOutcomeRollupRows(rows: unknown): Array<{ outcome: OutcomeClassification; reason: OutcomeReason | null }> {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const outcome = outcomeOrNull(value.outcome);
+    if (!outcome) return [];
+    return [{ outcome, reason: reasonOrNull(value.reason) }];
+  });
+}
+
 export interface CaptureOutcomeInput {
   quotePackageId: string;
   workspaceId: string;
@@ -50,7 +128,7 @@ export async function captureQuoteOutcome(
       competitor:        input.competitor?.trim() || null,
       price_sensitivity: input.priceSensitivity ?? null,
       captured_by:       input.capturedBy ?? null,
-    } as QuoteOutcomeInsert)
+    } satisfies QuoteOutcomeInsert)
     .select("*")
     .single();
 
@@ -77,7 +155,9 @@ export async function captureQuoteOutcome(
       .eq("id", input.quotePackageId);
   }
 
-  return { ok: true, outcome: data as QuoteOutcomeRow };
+  const outcome = normalizeQuoteOutcomeRow(data);
+  if (!outcome) return { error: "Captured outcome returned malformed row" };
+  return { ok: true, outcome };
 }
 
 /**
@@ -94,7 +174,7 @@ export async function getLatestOutcomeForQuote(
     .order("captured_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return (data as QuoteOutcomeRow) ?? null;
+  return normalizeQuoteOutcomeRow(data);
 }
 
 // ── Admin rollup aggregations ────────────────────────────────────────────────
@@ -138,11 +218,7 @@ export async function getOutcomeRollup(
     q = q.gte("captured_at", cutoff.toISOString());
   }
   const { data } = await q;
-  const rows = (data ?? []) as Array<{
-    outcome: OutcomeClassification;
-    reason: OutcomeReason | null;
-  }>;
-  return aggregateOutcomes(rows);
+  return aggregateOutcomes(normalizeOutcomeRollupRows(data));
 }
 
 /**

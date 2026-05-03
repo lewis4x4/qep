@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   aggregateOutcomes,
+  normalizeOutcomeRollupRows,
+  normalizeQuoteOutcomeRow,
   type OutcomeClassification,
   type OutcomeReason,
 } from "../outcomes-api";
@@ -8,6 +10,54 @@ import {
 type Row = { outcome: OutcomeClassification; reason: OutcomeReason | null };
 
 describe("aggregateOutcomes", () => {
+  test("normalizes quote outcome rows and rejects invalid enums", () => {
+    expect(normalizeQuoteOutcomeRow({
+      id: "outcome-1",
+      workspace_id: "workspace-1",
+      quote_package_id: "quote-1",
+      outcome: "won",
+      reason: "price",
+      reason_details: "Matched competitor",
+      competitor: "Cat",
+      price_sensitivity: "primary",
+      captured_by: "user-1",
+      captured_at: "2026-05-03T12:00:00.000Z",
+      created_at: "2026-05-03T12:00:00.000Z",
+    })).toEqual({
+      id: "outcome-1",
+      workspace_id: "workspace-1",
+      quote_package_id: "quote-1",
+      outcome: "won",
+      reason: "price",
+      reason_details: "Matched competitor",
+      competitor: "Cat",
+      price_sensitivity: "primary",
+      captured_by: "user-1",
+      captured_at: "2026-05-03T12:00:00.000Z",
+      created_at: "2026-05-03T12:00:00.000Z",
+    });
+
+    expect(normalizeQuoteOutcomeRow({
+      id: "bad",
+      workspace_id: "workspace-1",
+      quote_package_id: "quote-1",
+      outcome: "maybe",
+      captured_at: "2026-05-03T12:00:00.000Z",
+      created_at: "2026-05-03T12:00:00.000Z",
+    })).toBeNull();
+  });
+
+  test("normalizes rollup rows before aggregation", () => {
+    expect(normalizeOutcomeRollupRows([
+      { outcome: "won", reason: "price", captured_at: "2026-05-03T12:00:00.000Z" },
+      { outcome: "lost", reason: "bad-reason", captured_at: "2026-05-03T12:00:00.000Z" },
+      { outcome: "bad-outcome", reason: "price", captured_at: "2026-05-03T12:00:00.000Z" },
+    ])).toEqual([
+      { outcome: "won", reason: "price" },
+      { outcome: "lost", reason: null },
+    ]);
+  });
+
   test("empty input → all zeros, null rates", () => {
     const r = aggregateOutcomes([]);
     expect(r.total).toBe(0);
