@@ -5,36 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Camera, Loader2, X } from "lucide-react";
-
-interface CatalogMatch {
-  part_number: string;
-  description: string;
-  category: string | null;
-  list_price: number | null;
-  match_score: number;
-  match_reason: string;
-  inventory: Array<{ branch_id: string; qty_on_hand: number }>;
-  substitutes: Array<{ part_number: string; relationship: string }>;
-}
-
-interface PhotoResult {
-  identification: {
-    identified_parts: Array<{
-      description: string;
-      part_type: string | null;
-      condition: string | null;
-      wear_indicators: string[];
-      confidence: number;
-    }>;
-    equipment_context: {
-      make: string | null;
-      model: string | null;
-      system: string | null;
-    } | null;
-  };
-  catalog_matches: CatalogMatch[];
-  has_matches: boolean;
-}
+import { normalizePhotoPartIdentificationResult } from "../lib/parts-row-normalizers";
 
 interface Props {
   onPartSelected?: (partNumber: string, description: string) => void;
@@ -70,7 +41,7 @@ export function PhotoPartIdentifier({ onPartSelected }: Props) {
         },
       });
       if (error) throw error;
-      return data as PhotoResult;
+      return normalizePhotoPartIdentificationResult(data);
     },
   });
 

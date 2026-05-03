@@ -1,4 +1,10 @@
 import { supabase } from "@/lib/supabase";
+import {
+  normalizeOrderManagerLinesResult,
+  normalizeOrderManagerOrderResult,
+  normalizeOrderManagerPickResult,
+  normalizeOrderManagerSubmitResult,
+} from "./parts-row-normalizers";
 
 export async function invokeCreateInternalOrder(body: {
   crm_company_id: string;
@@ -12,7 +18,7 @@ export async function invokeCreateInternalOrder(body: {
     body: { action: "create_internal_order", ...body },
   });
   if (error) throw error;
-  return data as { order: Record<string, unknown> };
+  return normalizeOrderManagerOrderResult(data);
 }
 
 export async function invokeSubmitInternalOrder(parts_order_id: string) {
@@ -20,7 +26,7 @@ export async function invokeSubmitInternalOrder(parts_order_id: string) {
     body: { action: "submit_internal_order", parts_order_id },
   });
   if (error) throw error;
-  return data as { order: Record<string, unknown>; fulfillment_run_id: string };
+  return normalizeOrderManagerSubmitResult(data);
 }
 
 export async function invokeUpdateInternalOrder(
@@ -31,7 +37,7 @@ export async function invokeUpdateInternalOrder(
     body: { action: "update_internal_order", parts_order_id, ...fields },
   });
   if (error) throw error;
-  return data as { order: Record<string, unknown> };
+  return normalizeOrderManagerOrderResult(data);
 }
 
 export async function invokeUpdateOrderLines(
@@ -42,7 +48,7 @@ export async function invokeUpdateOrderLines(
     body: { action: "update_order_lines", parts_order_id, line_items },
   });
   if (error) throw error;
-  return data as { lines: number };
+  return normalizeOrderManagerLinesResult(data);
 }
 
 export async function invokeAdvanceStatus(
@@ -54,7 +60,7 @@ export async function invokeAdvanceStatus(
     body: { action: "advance_status", parts_order_id, new_status, ...extra },
   });
   if (error) throw error;
-  return data as { order: Record<string, unknown> };
+  return normalizeOrderManagerOrderResult(data);
 }
 
 export async function invokePickOrderLine(
@@ -66,7 +72,5 @@ export async function invokePickOrderLine(
     body: { action: "pick_order_line", parts_order_id, parts_order_line_id, branch_id },
   });
   if (error) throw error;
-  return data as {
-    picked: { line_id: string; part_number: string; quantity: number; branch_id: string };
-  };
+  return normalizeOrderManagerPickResult(data);
 }

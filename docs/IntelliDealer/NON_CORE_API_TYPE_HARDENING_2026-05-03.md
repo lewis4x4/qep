@@ -32,6 +32,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Parts companion voice ops API | Voice edge responses returned through a direct cast. | Added an exported voice ops normalizer with intent validation, tool-call filtering, numeric-string coercion, and safe defaults for malformed edge responses. |
 | Portal fleet/doc/history UI | Portal fleet map/detail, document library, and reorder history pages cast RPC/view payloads directly into local UI row types. | Added exported portal row normalizers with required field checks, numeric-string coercion, document-type fallback, nested portal status/schedule normalization, recent line-item filtering, and malformed-row rejection. |
 | Parts hooks and forecast page | Demand forecast, order events, analytics, vendor trends, part activity, cross references, customer parts intel, transfer recommendations, and the forecast page used direct row/payload casts. | Added exported parts row normalizers with required field checks, numeric-string coercion, joined profile/order normalization, nested analytics/intel collection filtering, fallback cross-reference direction handling, and malformed-row rejection. |
+| Parts edge responses | Parts order manager, voice parts order, and photo identification components trusted edge function responses through direct casts. | Added exported parts edge-response normalizers with fail-fast validation for required order-manager mutation payloads and safe defaults/filtering for voice/photo assistant payloads. |
 
 ## Verification
 
@@ -94,8 +95,8 @@ Results:
 - Parts companion import API normalizer tests: `5 pass`, `0 fail`.
 - Parts companion voice ops API normalizer tests: `2 pass`, `0 fail`.
 - Portal row normalizer tests: `5 pass`, `0 fail`.
-- Parts row normalizer tests: `8 pass`, `0 fail`.
-- Combined targeted test run: `102 pass`, `0 fail`.
+- Parts row normalizer tests: `11 pass`, `0 fail`.
+- Combined targeted test run: `105 pass`, `0 fail`.
 - Web typecheck: PASS.
 
 ## Remaining Slice 6 Work

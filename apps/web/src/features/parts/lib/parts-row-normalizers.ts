@@ -159,6 +159,74 @@ export type SlowMovingPart = {
   updated_at: string;
 };
 
+export type PartsOrderManagerOrderResult = {
+  order: Record<string, unknown>;
+};
+
+export type PartsOrderManagerSubmitResult = {
+  order: Record<string, unknown>;
+  fulfillment_run_id: string;
+};
+
+export type PartsOrderManagerLinesResult = {
+  lines: number;
+};
+
+export type PartsOrderManagerPickResult = {
+  picked: {
+    line_id: string;
+    part_number: string;
+    quantity: number;
+    branch_id: string;
+  };
+};
+
+export type VoicePartsOrderResult = {
+  order_id: string;
+  extraction: {
+    parts: Array<{ description: string; quantity: number }>;
+    is_machine_down: boolean;
+    customer_name: string | null;
+  };
+  matches: Array<{
+    input_description: string;
+    matched_part: string | null;
+    confidence: string;
+  }>;
+  is_machine_down: boolean;
+  auto_submitted: boolean;
+};
+
+export type PhotoCatalogMatch = {
+  part_number: string;
+  description: string;
+  category: string | null;
+  list_price: number | null;
+  match_score: number;
+  match_reason: string;
+  inventory: Array<{ branch_id: string; qty_on_hand: number }>;
+  substitutes: Array<{ part_number: string; relationship: string }>;
+};
+
+export type PhotoPartIdentificationResult = {
+  identification: {
+    identified_parts: Array<{
+      description: string;
+      part_type: string | null;
+      condition: string | null;
+      wear_indicators: string[];
+      confidence: number;
+    }>;
+    equipment_context: {
+      make: string | null;
+      model: string | null;
+      system: string | null;
+    } | null;
+  };
+  catalog_matches: PhotoCatalogMatch[];
+  has_matches: boolean;
+};
+
 type CrossReferenceDirection = "outbound" | "inbound";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -189,6 +257,11 @@ function numberValue(value: unknown): number | null {
 
 function recordValue(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {};
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
 function coverageStatus(value: unknown, fallback: CoverageStatus): CoverageStatus {
@@ -560,4 +633,183 @@ export function normalizeTransferRecommendations(rows: unknown): TransferRecomme
       created_at: createdAt,
     };
   }).filter((row): row is TransferRecommendation => row !== null);
+}
+
+function malformedEdgeResponse(message: string): Error {
+  return new Error(message);
+}
+
+export function normalizeOrderManagerOrderResult(value: unknown): PartsOrderManagerOrderResult {
+  if (!isRecord(value) || !isRecord(value.order)) {
+    throw malformedEdgeResponse("Malformed parts order manager response: missing order.");
+  }
+  return { order: value.order };
+}
+
+export function normalizeOrderManagerSubmitResult(value: unknown): PartsOrderManagerSubmitResult {
+  const base = normalizeOrderManagerOrderResult(value);
+  if (!isRecord(value)) {
+    throw malformedEdgeResponse("Malformed parts order manager response.");
+  }
+  const fulfillmentRunId = nullableString(value.fulfillment_run_id);
+  if (!fulfillmentRunId) {
+    throw malformedEdgeResponse("Malformed parts order manager response: missing fulfillment run.");
+  }
+  return { ...base, fulfillment_run_id: fulfillmentRunId };
+}
+
+export function normalizeOrderManagerLinesResult(value: unknown): PartsOrderManagerLinesResult {
+  if (!isRecord(value)) {
+    throw malformedEdgeResponse("Malformed parts order manager response.");
+  }
+  const lines = numberValue(value.lines);
+  if (lines === null) {
+    throw malformedEdgeResponse("Malformed parts order manager response: missing line count.");
+  }
+  return { lines };
+}
+
+export function normalizeOrderManagerPickResult(value: unknown): PartsOrderManagerPickResult {
+  if (!isRecord(value) || !isRecord(value.picked)) {
+    throw malformedEdgeResponse("Malformed parts order manager response: missing picked line.");
+  }
+  const lineId = nullableString(value.picked.line_id);
+  const partNumber = nullableString(value.picked.part_number);
+  const branchId = nullableString(value.picked.branch_id);
+  const quantity = numberValue(value.picked.quantity);
+  if (!lineId || !partNumber || !branchId || quantity === null) {
+    throw malformedEdgeResponse("Malformed parts order manager response: invalid picked line.");
+  }
+  return {
+    picked: {
+      line_id: lineId,
+      part_number: partNumber,
+      quantity,
+      branch_id: branchId,
+    },
+  };
+}
+
+export function normalizeVoicePartsOrderResult(value: unknown): VoicePartsOrderResult {
+  const record = recordValue(value);
+  const extraction = recordValue(record.extraction);
+  return {
+    order_id: stringValue(record.order_id),
+    extraction: {
+      parts: normalizeVoiceExtractedParts(extraction.parts),
+      is_machine_down: extraction.is_machine_down === true,
+      customer_name: nullableString(extraction.customer_name),
+    },
+    matches: normalizeVoiceMatches(record.matches),
+    is_machine_down: record.is_machine_down === true,
+    auto_submitted: record.auto_submitted === true,
+  };
+}
+
+function normalizeVoiceExtractedParts(rows: unknown): VoicePartsOrderResult["extraction"]["parts"] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((value) => {
+    if (!isRecord(value)) return null;
+    const description = nullableString(value.description);
+    if (!description) return null;
+    return {
+      description,
+      quantity: numberValue(value.quantity) ?? 1,
+    };
+  }).filter((row): row is VoicePartsOrderResult["extraction"]["parts"][number] => row !== null);
+}
+
+function normalizeVoiceMatches(rows: unknown): VoicePartsOrderResult["matches"] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((value) => {
+    if (!isRecord(value)) return null;
+    const inputDescription = nullableString(value.input_description);
+    if (!inputDescription) return null;
+    return {
+      input_description: inputDescription,
+      matched_part: nullableString(value.matched_part),
+      confidence: stringValue(value.confidence, "unknown"),
+    };
+  }).filter((row): row is VoicePartsOrderResult["matches"][number] => row !== null);
+}
+
+export function normalizePhotoPartIdentificationResult(value: unknown): PhotoPartIdentificationResult {
+  const record = recordValue(value);
+  const identification = recordValue(record.identification);
+  const equipmentContext = firstRecord(identification.equipment_context);
+  const catalogMatches = normalizePhotoCatalogMatches(record.catalog_matches);
+  return {
+    identification: {
+      identified_parts: normalizeIdentifiedPhotoParts(identification.identified_parts),
+      equipment_context: equipmentContext
+        ? {
+            make: nullableString(equipmentContext.make),
+            model: nullableString(equipmentContext.model),
+            system: nullableString(equipmentContext.system),
+          }
+        : null,
+    },
+    catalog_matches: catalogMatches,
+    has_matches: record.has_matches === true || catalogMatches.length > 0,
+  };
+}
+
+function normalizeIdentifiedPhotoParts(rows: unknown): PhotoPartIdentificationResult["identification"]["identified_parts"] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((value) => {
+    if (!isRecord(value)) return null;
+    const description = nullableString(value.description);
+    if (!description) return null;
+    return {
+      description,
+      part_type: nullableString(value.part_type),
+      condition: nullableString(value.condition),
+      wear_indicators: stringArray(value.wear_indicators),
+      confidence: numberValue(value.confidence) ?? 0,
+    };
+  }).filter((row): row is PhotoPartIdentificationResult["identification"]["identified_parts"][number] => row !== null);
+}
+
+function normalizePhotoCatalogMatches(rows: unknown): PhotoCatalogMatch[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((value): PhotoCatalogMatch | null => {
+    if (!isRecord(value)) return null;
+    const partNumber = nullableString(value.part_number);
+    const description = nullableString(value.description);
+    if (!partNumber || !description) return null;
+    return {
+      part_number: partNumber,
+      description,
+      category: nullableString(value.category),
+      list_price: numberValue(value.list_price),
+      match_score: numberValue(value.match_score) ?? 0,
+      match_reason: stringValue(value.match_reason),
+      inventory: normalizePhotoInventoryRows(value.inventory),
+      substitutes: normalizePhotoSubstitutes(value.substitutes),
+    };
+  }).filter((row): row is PhotoCatalogMatch => row !== null);
+}
+
+function normalizePhotoInventoryRows(rows: unknown): PhotoCatalogMatch["inventory"] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((value) => {
+    if (!isRecord(value)) return null;
+    const branchId = nullableString(value.branch_id);
+    if (!branchId) return null;
+    return {
+      branch_id: branchId,
+      qty_on_hand: numberValue(value.qty_on_hand) ?? 0,
+    };
+  }).filter((row): row is PhotoCatalogMatch["inventory"][number] => row !== null);
+}
+
+function normalizePhotoSubstitutes(rows: unknown): PhotoCatalogMatch["substitutes"] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((value) => {
+    if (!isRecord(value)) return null;
+    const partNumber = nullableString(value.part_number);
+    const relationship = nullableString(value.relationship);
+    if (!partNumber || !relationship) return null;
+    return { part_number: partNumber, relationship };
+  }).filter((row): row is PhotoCatalogMatch["substitutes"][number] => row !== null);
 }

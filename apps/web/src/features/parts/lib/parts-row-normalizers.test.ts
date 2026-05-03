@@ -4,11 +4,17 @@ import {
   normalizeCrossReferenceFallbackRows,
   normalizeCustomerPartsIntel,
   normalizeForecastRows,
+  normalizeOrderManagerLinesResult,
+  normalizeOrderManagerOrderResult,
+  normalizeOrderManagerPickResult,
+  normalizeOrderManagerSubmitResult,
   normalizeOrderEvents,
   normalizePartActivityRows,
+  normalizePhotoPartIdentificationResult,
   normalizeSubstituteRows,
   normalizeTransferRecommendations,
   normalizeVendorTrends,
+  normalizeVoicePartsOrderResult,
 } from "./parts-row-normalizers";
 
 describe("parts row normalizers", () => {
@@ -307,6 +313,133 @@ describe("parts row normalizers", () => {
         created_at: "2026-05-03T12:00:00Z",
       },
     ]);
+  });
+
+  test("normalizes parts order manager edge responses and rejects malformed required payloads", () => {
+    expect(normalizeOrderManagerOrderResult({ order: { id: "order-1" } })).toEqual({
+      order: { id: "order-1" },
+    });
+    expect(normalizeOrderManagerSubmitResult({
+      order: { id: "order-1" },
+      fulfillment_run_id: "fulfill-1",
+    })).toEqual({
+      order: { id: "order-1" },
+      fulfillment_run_id: "fulfill-1",
+    });
+    expect(normalizeOrderManagerLinesResult({ lines: "3" })).toEqual({ lines: 3 });
+    expect(normalizeOrderManagerPickResult({
+      picked: {
+        line_id: "line-1",
+        part_number: "P-100",
+        quantity: "2",
+        branch_id: "01",
+      },
+    })).toEqual({
+      picked: {
+        line_id: "line-1",
+        part_number: "P-100",
+        quantity: 2,
+        branch_id: "01",
+      },
+    });
+    expect(() => normalizeOrderManagerOrderResult({})).toThrow("missing order");
+    expect(() => normalizeOrderManagerLinesResult({ lines: "bad" })).toThrow("missing line count");
+  });
+
+  test("normalizes voice parts order edge responses with safe defaults", () => {
+    expect(normalizeVoicePartsOrderResult({
+      order_id: "order-1",
+      extraction: {
+        parts: [{ description: "left track pad", quantity: "2" }, { quantity: 1 }],
+        is_machine_down: true,
+        customer_name: "Tiger",
+      },
+      matches: [
+        { input_description: "left track pad", matched_part: "P-100", confidence: "high" },
+        { matched_part: "bad" },
+      ],
+      is_machine_down: true,
+      auto_submitted: true,
+    })).toEqual({
+      order_id: "order-1",
+      extraction: {
+        parts: [{ description: "left track pad", quantity: 2 }],
+        is_machine_down: true,
+        customer_name: "Tiger",
+      },
+      matches: [{ input_description: "left track pad", matched_part: "P-100", confidence: "high" }],
+      is_machine_down: true,
+      auto_submitted: true,
+    });
+
+    expect(normalizeVoicePartsOrderResult({ extraction: "bad" })).toEqual({
+      order_id: "",
+      extraction: {
+        parts: [],
+        is_machine_down: false,
+        customer_name: null,
+      },
+      matches: [],
+      is_machine_down: false,
+      auto_submitted: false,
+    });
+  });
+
+  test("normalizes photo identification edge responses", () => {
+    expect(normalizePhotoPartIdentificationResult({
+      identification: {
+        identified_parts: [
+          {
+            description: "Hydraulic filter",
+            part_type: "filter",
+            condition: "worn",
+            wear_indicators: ["rust", 123],
+            confidence: "0.82",
+          },
+          { part_type: "missing description" },
+        ],
+        equipment_context: { make: "Deere", model: "333G", system: "hydraulics" },
+      },
+      catalog_matches: [
+        {
+          part_number: "P-100",
+          description: "Filter",
+          category: "Hydraulics",
+          list_price: "25.5",
+          match_score: "0.91",
+          match_reason: "visual",
+          inventory: [{ branch_id: "01", qty_on_hand: "4" }, { qty_on_hand: "bad" }],
+          substitutes: [{ part_number: "P-200", relationship: "interchangeable" }, { part_number: "bad" }],
+        },
+      ],
+      has_matches: false,
+    })).toEqual({
+      identification: {
+        identified_parts: [
+          {
+            description: "Hydraulic filter",
+            part_type: "filter",
+            condition: "worn",
+            wear_indicators: ["rust"],
+            confidence: 0.82,
+          },
+        ],
+        equipment_context: { make: "Deere", model: "333G", system: "hydraulics" },
+      },
+      catalog_matches: [
+        {
+          part_number: "P-100",
+          description: "Filter",
+          category: "Hydraulics",
+          list_price: 25.5,
+          match_score: 0.91,
+          match_reason: "visual",
+          inventory: [{ branch_id: "01", qty_on_hand: 4 }],
+          substitutes: [{ part_number: "P-200", relationship: "interchangeable" }],
+        },
+      ],
+      has_matches: true,
+    });
   });
 
   test("returns empty defaults for malformed inputs", () => {

@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Mic, MicOff, Loader2, AlertTriangle } from "lucide-react";
+import {
+  normalizeVoicePartsOrderResult,
+  type VoicePartsOrderResult as VoiceResult,
+} from "../lib/parts-row-normalizers";
 
 /* Web Speech API type shim — only available in chromium-based browsers. */
 type SpeechRecognitionCompat = {
@@ -20,22 +24,6 @@ type SpeechRecognitionCompat = {
 };
 type SpeechRecognitionCtor = new () => SpeechRecognitionCompat;
 
-interface VoiceResult {
-  order_id: string;
-  extraction: {
-    parts: Array<{ description: string; quantity: number }>;
-    is_machine_down: boolean;
-    customer_name: string | null;
-  };
-  matches: Array<{
-    input_description: string;
-    matched_part: string | null;
-    confidence: string;
-  }>;
-  is_machine_down: boolean;
-  auto_submitted: boolean;
-}
-
 export function VoicePartsOrderButton() {
   const navigate = useNavigate();
   const [isRecording, setIsRecording] = useState(false);
@@ -49,7 +37,7 @@ export function VoicePartsOrderButton() {
         body: { transcript: text, auto_submit: true },
       });
       if (error) throw error;
-      return data as VoiceResult;
+      return normalizeVoicePartsOrderResult(data);
     },
     onSuccess: (data) => {
       if (data.order_id) {
