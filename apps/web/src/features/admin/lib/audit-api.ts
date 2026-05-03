@@ -60,6 +60,68 @@ export interface AuditFilter {
 const DEFAULT_DAYS_BACK = 14;
 const DEFAULT_PER_TABLE_LIMIT = 100;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function requiredString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function isAuditAction(value: unknown): value is AuditAction {
+  return value === "insert" || value === "update" || value === "delete";
+}
+
+function isChangedFields(value: unknown): value is AuditEvent["changed_fields"] {
+  if (value === null) return true;
+  if (!isRecord(value)) return false;
+  return Object.values(value).every((change) =>
+    isRecord(change) && "old" in change && "new" in change
+  );
+}
+
+function snapshotOrNull(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? value : null;
+}
+
+export function normalizeAuditEvents(table: AuditTable, value: unknown): AuditEvent[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const recordId = requiredString(row.record_id);
+    const createdAt = requiredString(row.created_at);
+    if (!id || !recordId || !createdAt || !isAuditAction(row.action) || !isChangedFields(row.changed_fields)) {
+      return [];
+    }
+    return [{
+      id,
+      table,
+      record_id: recordId,
+      action: row.action,
+      actor_id: nullableString(row.actor_id),
+      actor_email: null,
+      changed_fields: row.changed_fields,
+      snapshot: snapshotOrNull(row.snapshot),
+      created_at: createdAt,
+    }];
+  });
+}
+
+export function normalizeAuditActorProfiles(value: unknown): Array<{ id: string; email: string }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const email = requiredString(row.email);
+    return id && email ? [{ id, email }] : [];
+  });
+}
+
 function cutoffIso(daysBack: number): string {
   const d = new Date();
   d.setDate(d.getDate() - daysBack);
@@ -84,26 +146,8 @@ export async function getRecentAuditEvents(
     if (cutoff) q = q.gte("created_at", cutoff);
     if (opts.action) q = q.eq("action", opts.action);
     const { data, error } = await q;
-    if (error) return [] as AuditEvent[];
-    return ((data ?? []) as Array<{
-      id: string;
-      record_id: string;
-      action: string;
-      actor_id: string | null;
-      changed_fields: Record<string, { old: unknown; new: unknown }> | null;
-      snapshot: Record<string, unknown> | null;
-      created_at: string;
-    }>).map((row) => ({
-      id: row.id,
-      table: t,
-      record_id: row.record_id,
-      action: row.action as AuditAction,
-      actor_id: row.actor_id,
-      actor_email: null, // filled in by the actor-resolution round-trip below
-      changed_fields: row.changed_fields,
-      snapshot: row.snapshot,
-      created_at: row.created_at,
-    }));
+    if (error) return [];
+    return normalizeAuditEvents(t, data);
   });
 
   const resultsPerTable = await Promise.all(queries);
@@ -118,8 +162,8 @@ export async function getRecentAuditEvents(
       .select("id, email")
       .in("id", actorIds);
     const byId = new Map<string, string>();
-    for (const p of (profiles ?? []) as Array<{ id: string; email: string | null }>) {
-      if (p.email) byId.set(p.id, p.email);
+    for (const p of normalizeAuditActorProfiles(profiles)) {
+      byId.set(p.id, p.email);
     }
     for (const e of merged) {
       if (e.actor_id && byId.has(e.actor_id)) {

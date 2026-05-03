@@ -2,11 +2,65 @@ import { describe, expect, test } from "bun:test";
 import {
   AUDIT_TABLES,
   auditTableLabel,
+  normalizeAuditActorProfiles,
+  normalizeAuditEvents,
   summarizeRecord,
   type AuditEvent,
 } from "../audit-api";
 
 describe("audit-api pure helpers", () => {
+  test("normalizes audit rows and filters malformed actions or change payloads", () => {
+    expect(normalizeAuditEvents("qb_quotes_audit", [
+      {
+        id: "event-1",
+        record_id: "quote-1",
+        action: "update",
+        actor_id: "user-1",
+        changed_fields: { status: { old: "draft", new: "sent" } },
+        snapshot: { quote_number: "Q-1" },
+        created_at: "2026-04-19T00:00:00Z",
+      },
+      {
+        id: "event-2",
+        record_id: "quote-2",
+        action: "bad",
+        changed_fields: null,
+        snapshot: {},
+        created_at: "2026-04-19T00:00:00Z",
+      },
+      {
+        id: "event-3",
+        record_id: "quote-3",
+        action: "update",
+        changed_fields: { status: { old: "draft" } },
+        snapshot: {},
+        created_at: "2026-04-19T00:00:00Z",
+      },
+    ])).toEqual([
+      {
+        id: "event-1",
+        table: "qb_quotes_audit",
+        record_id: "quote-1",
+        action: "update",
+        actor_id: "user-1",
+        actor_email: null,
+        changed_fields: { status: { old: "draft", new: "sent" } },
+        snapshot: { quote_number: "Q-1" },
+        created_at: "2026-04-19T00:00:00Z",
+      },
+    ]);
+  });
+
+  test("normalizes actor profiles and drops missing emails", () => {
+    expect(normalizeAuditActorProfiles([
+      { id: "user-1", email: "admin@example.com" },
+      { id: "user-2", email: null },
+      { id: "", email: "bad@example.com" },
+    ])).toEqual([
+      { id: "user-1", email: "admin@example.com" },
+    ]);
+  });
+
   test("AUDIT_TABLES covers all 7 qb_*_audit tables from migration 288", () => {
     expect(AUDIT_TABLES).toHaveLength(7);
     expect(AUDIT_TABLES).toEqual(expect.arrayContaining([
