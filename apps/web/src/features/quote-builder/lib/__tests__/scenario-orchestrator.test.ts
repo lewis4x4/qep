@@ -9,7 +9,12 @@
  */
 
 import { describe, it, expect, mock, beforeEach } from "bun:test";
-import type { SseEvent, SseScenarioEvent } from "../scenario-orchestrator";
+import {
+  normalizeParseRequestPayload,
+  normalizeSseEvent,
+  type SseEvent,
+  type SseScenarioEvent,
+} from "../scenario-orchestrator";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -244,6 +249,94 @@ describe("streamScenarios — SSE parsing", () => {
     expect(abortSpy.aborted).toBe(true);
 
     globalThis.AbortController = originalAbortController;
+  });
+});
+
+describe("scenario orchestrator payload normalizers", () => {
+  it("normalizes valid scenario events and filters malformed scenario payloads", () => {
+    const event = normalizeSseEvent({
+      type: "scenario",
+      index: "2",
+      scenario: {
+        label: "Cash",
+        description: "Cash deal",
+        programIds: ["program-1", "", 42],
+        customerOutOfPocketCents: "9000000",
+        totalPaidByCustomerCents: 9000000,
+        dealerMarginCents: "1000000",
+        dealerMarginPct: "0.111",
+        commissionCents: 150000,
+        pros: ["Simple"],
+        cons: ["No financing"],
+      },
+    });
+
+    expect(event?.type).toBe("scenario");
+    if (event?.type === "scenario") {
+      expect(event.index).toBe(2);
+      expect(event.scenario.programIds).toEqual(["program-1"]);
+      expect(event.scenario.dealerMarginPct).toBe(0.111);
+    }
+
+    expect(normalizeSseEvent({ type: "scenario", index: 0, scenario: { label: "bad" } })).toBeNull();
+  });
+
+  it("normalizes error and complete events with safe defaults", () => {
+    const err = normalizeSseEvent({
+      type: "error",
+      message: "No model",
+      fatal: false,
+      candidates: [
+        { modelCode: "333G", nameDisplay: "Deere 333G", listPriceCents: "10000000" },
+        { modelCode: "bad" },
+      ],
+      parsedSummary: "CTL",
+    });
+
+    expect(err).toEqual({
+      type: "error",
+      message: "No model",
+      fatal: false,
+      candidates: [{ modelCode: "333G", nameDisplay: "Deere 333G", listPriceCents: 10000000 }],
+      parsedSummary: "CTL",
+    });
+
+    const done = normalizeSseEvent({
+      type: "complete",
+      totalScenarios: "1",
+      latencyMs: "500",
+      logId: null,
+      brandId: "brand-1",
+      deliveryState: "FL",
+      customerType: "bad",
+    });
+
+    expect(done).toMatchObject({
+      type: "complete",
+      totalScenarios: 1,
+      latencyMs: 500,
+      brandId: "brand-1",
+      deliveryState: "FL",
+      customerType: "standard",
+    });
+  });
+
+  it("normalizes parse-request payloads", () => {
+    expect(normalizeParseRequestPayload({
+      resolvedModelId: "model-1",
+      resolvedBrandId: "brand-1",
+      parsedIntent: { deliveryState: "FL" },
+    })).toEqual({
+      modelId: "model-1",
+      brandId: "brand-1",
+      deliveryState: "FL",
+    });
+
+    expect(normalizeParseRequestPayload({ parsedIntent: null })).toEqual({
+      modelId: null,
+      brandId: null,
+      deliveryState: null,
+    });
   });
 });
 

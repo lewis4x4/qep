@@ -83,6 +83,194 @@ export type SseEvent =
   | SseCompleteEvent
   | SseErrorEvent;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const text = firstString(item);
+    return text ? [text] : [];
+  });
+}
+
+function normalizeCustomerType(value: unknown): "standard" | "gmu" {
+  return value === "gmu" ? "gmu" : "standard";
+}
+
+function normalizeScenario(value: unknown): QuoteScenario | null {
+  if (!isRecord(value)) return null;
+  const label = firstString(value.label);
+  const description = firstString(value.description);
+  const customerOutOfPocketCents = numberOrNull(value.customerOutOfPocketCents);
+  const totalPaidByCustomerCents = numberOrNull(value.totalPaidByCustomerCents);
+  const dealerMarginCents = numberOrNull(value.dealerMarginCents);
+  const dealerMarginPct = numberOrNull(value.dealerMarginPct);
+  const commissionCents = numberOrNull(value.commissionCents);
+  if (
+    !label
+    || !description
+    || customerOutOfPocketCents == null
+    || totalPaidByCustomerCents == null
+    || dealerMarginCents == null
+    || dealerMarginPct == null
+    || commissionCents == null
+  ) {
+    return null;
+  }
+  const monthlyPaymentCents = numberOrNull(value.monthlyPaymentCents);
+  const termMonths = numberOrNull(value.termMonths);
+  return {
+    label,
+    description,
+    programIds: stringArray(value.programIds),
+    customerOutOfPocketCents,
+    ...(monthlyPaymentCents == null ? {} : { monthlyPaymentCents }),
+    ...(termMonths == null ? {} : { termMonths }),
+    totalPaidByCustomerCents,
+    dealerMarginCents,
+    dealerMarginPct,
+    commissionCents,
+    pros: stringArray(value.pros),
+    cons: stringArray(value.cons),
+  };
+}
+
+function normalizeResolvedModel(value: unknown): SseResolvedEvent["model"] | null {
+  if (!isRecord(value)) return null;
+  const id = firstString(value.id);
+  const modelCode = firstString(value.modelCode);
+  const nameDisplay = firstString(value.nameDisplay);
+  const listPriceCents = numberOrNull(value.listPriceCents);
+  const brandCode = firstString(value.brandCode);
+  const brandName = firstString(value.brandName);
+  if (!id || !modelCode || !nameDisplay || listPriceCents == null || !brandCode || !brandName) return null;
+  return {
+    id,
+    modelCode,
+    nameDisplay,
+    listPriceCents,
+    modelYear: numberOrNull(value.modelYear),
+    brandCode,
+    brandName,
+  };
+}
+
+function normalizeCompleteModel(value: unknown): SseCompleteEvent["resolvedModel"] | undefined {
+  if (!isRecord(value)) return undefined;
+  const id = firstString(value.id);
+  const modelCode = firstString(value.modelCode);
+  const nameDisplay = firstString(value.nameDisplay);
+  const listPriceCents = numberOrNull(value.listPriceCents);
+  if (!id || !modelCode || !nameDisplay || listPriceCents == null) return undefined;
+  return { id, modelCode, nameDisplay, listPriceCents };
+}
+
+function normalizeCandidateRows(value: unknown): NonNullable<SseErrorEvent["candidates"]> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const modelCode = firstString(row.modelCode);
+    const nameDisplay = firstString(row.nameDisplay);
+    const listPriceCents = numberOrNull(row.listPriceCents);
+    if (!modelCode || !nameDisplay || listPriceCents == null) return [];
+    return [{ modelCode, nameDisplay, listPriceCents }];
+  });
+}
+
+export function normalizeSseEvent(value: unknown): SseEvent | null {
+  if (!isRecord(value)) return null;
+  if (value.type === "status") {
+    const message = firstString(value.message);
+    return message ? { type: "status", message } : null;
+  }
+  if (value.type === "resolved") {
+    const model = normalizeResolvedModel(value.model);
+    const parsedSummary = firstString(value.parsedSummary);
+    const deliveryState = firstString(value.deliveryState);
+    if (!model || !parsedSummary || !deliveryState) return null;
+    return {
+      type: "resolved",
+      model,
+      parsedSummary,
+      deliveryState,
+      customerType: normalizeCustomerType(value.customerType),
+    };
+  }
+  if (value.type === "scenario") {
+    const scenario = normalizeScenario(value.scenario);
+    const index = numberOrNull(value.index);
+    if (!scenario || index == null) return null;
+    return { type: "scenario", scenario, index };
+  }
+  if (value.type === "complete") {
+    const totalScenarios = numberOrNull(value.totalScenarios);
+    const latencyMs = numberOrNull(value.latencyMs);
+    const deliveryState = firstString(value.deliveryState);
+    if (totalScenarios == null || latencyMs == null || !deliveryState) return null;
+    const programCount = numberOrNull(value.programCount);
+    return {
+      type: "complete",
+      totalScenarios,
+      latencyMs,
+      logId: nullableString(value.logId),
+      resolvedModel: normalizeCompleteModel(value.resolvedModel),
+      brandId: nullableString(value.brandId),
+      deliveryState,
+      customerType: normalizeCustomerType(value.customerType),
+      ...(programCount == null ? {} : { programCount }),
+    };
+  }
+  if (value.type === "error") {
+    const message = firstString(value.message);
+    if (!message) return null;
+    return {
+      type: "error",
+      message,
+      fatal: value.fatal === true,
+      candidates: normalizeCandidateRows(value.candidates),
+      parsedSummary: firstString(value.parsedSummary) ?? undefined,
+    };
+  }
+  return null;
+}
+
+export function normalizeParseRequestPayload(value: unknown): {
+  modelId: string | null;
+  brandId: string | null;
+  deliveryState: string | null;
+} {
+  const record = isRecord(value) ? value : {};
+  const parsedIntent = isRecord(record.parsedIntent) ? record.parsedIntent : {};
+  return {
+    modelId: nullableString(record.resolvedModelId),
+    brandId: nullableString(record.resolvedBrandId),
+    deliveryState: nullableString(parsedIntent.deliveryState),
+  };
+}
+
+function errorMessageFromPayload(value: unknown): string | null {
+  return isRecord(value) ? firstString(value.error, value.message) : null;
+}
+
 // ── Cancellable async iterable ────────────────────────────────────────────────
 
 export interface ScenarioSession extends AsyncIterable<SseEvent> {
@@ -150,8 +338,7 @@ export function streamScenarios(opts: StreamScenariosOptions): ScenarioSession {
     if (!res.ok) {
       let msg = `qb-ai-scenarios failed (${res.status})`;
       try {
-        const body = await res.json() as { error?: string };
-        if (body.error) msg = body.error;
+        msg = errorMessageFromPayload(await res.json()) ?? msg;
       } catch { /* ignore */ }
       yield { type: "error", fatal: true, message: msg };
       return;
@@ -185,7 +372,8 @@ export function streamScenarios(opts: StreamScenariosOptions): ScenarioSession {
         const raw = line.slice("data: ".length).trim();
         if (!raw) continue;
         try {
-          const event = JSON.parse(raw) as SseEvent;
+          const event = normalizeSseEvent(JSON.parse(raw));
+          if (!event) continue;
           yield event;
           if (event.type === "complete") return;
         } catch {
@@ -230,16 +418,7 @@ export async function resolveModelFromPrompt(
       body: JSON.stringify({ prompt }),
     });
     if (!res.ok) return { modelId: null, brandId: null, deliveryState: null };
-    const data = await res.json() as {
-      resolvedModelId: string | null;
-      resolvedBrandId: string | null;
-      parsedIntent: { deliveryState: string | null };
-    };
-    return {
-      modelId:       data.resolvedModelId,
-      brandId:       data.resolvedBrandId,
-      deliveryState: data.parsedIntent?.deliveryState ?? null,
-    };
+    return normalizeParseRequestPayload(await res.json().catch(() => ({})));
   } catch {
     return { modelId: null, brandId: null, deliveryState: null };
   }
