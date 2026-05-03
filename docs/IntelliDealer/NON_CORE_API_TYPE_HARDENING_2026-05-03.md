@@ -56,7 +56,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Quote-builder incentive stack | Applied incentive reads and removal updates used component-local Supabase shims, and joined manufacturer incentive payloads were trusted directly. | Added exported quote incentive normalizers with required application checks, numeric-string coercion, joined manufacturer object/array normalization, safe manufacturer fallback, and direct generated Supabase client calls for read/update paths. |
 | Quote-builder outcomes API | Captured outcome rows, latest outcome reads, and outcome rollup rows were cast directly from Supabase payloads. | Added outcome row and rollup normalizers with outcome/reason/price-sensitivity enum validation, required field checks, and malformed-row filtering before capture responses, latest-outcome reads, and admin rollups reach callers. |
 | Quote-builder deal intelligence API | Similar quote package rows, package outcomes, margin exceptions, package statuses, coach action rows, and personal suppression rows were cast directly before scoring/coaching aggregation. | Added deal-intelligence row normalizers with required field checks, numeric-string coercion, outcome enum validation, malformed-row filtering, and safe action/status inputs before similar-deal, reason-intelligence, rule-acceptance, and suppression aggregations. |
-| Quote-builder quote API edge analytics | Quote list/action responses, scorer calibration observations, factor attribution deals, factor verdicts, and closed-deal audit payloads trusted raw edge JSON or direct response casts. | Added exported quote API normalizers with required quote IDs, numeric-string coercion, outcome/verdict validation, factor cleanup, malformed-row filtering, snake/camel audit timestamp handling, and safe error detail extraction before UI consumption. |
+| Quote-builder quote API edge analytics and approval payloads | Quote list/action responses, scorer calibration observations, factor attribution deals, factor verdicts, closed-deal audits, AI recommendations, send-package responses, approval submissions/cases, and approval policies trusted raw edge JSON or direct response casts. | Added exported quote API normalizers with required quote IDs, numeric-string coercion, outcome/verdict/route/status/condition validation, factor and recommendation nested-row cleanup, malformed-row filtering, snake/camel approval payload handling, and safe error detail extraction before UI consumption. |
 | Quote-builder customer search API | Customer/contact search, company hydration, signal rollups, past-equipment history, and deep-link hydration cast Supabase rows directly into CRM row subsets. | Added exported customer search row normalizers with required ID checks, nullable string guards, malformed-row filtering, and normalized signal/equipment/deep-link payloads before assembly or customer seeding. |
 | Quote-builder coach API | Margin baseline samples, active brand/program lookups, and dismissed-rule reads trusted raw Supabase rows and direct row casts. | Added exported coach API normalizers with numeric-string margin coercion, required brand/program identity checks, malformed-row filtering, brand-name fallback, dismissed-rule cleanup, and median coverage. |
 | Quote-builder point-shoot trade API | Equipment vision, book-value range, and trade valuation apply edge responses were trusted through direct response casts. | Added exported point-shoot trade normalizers with condition/confidence validation, year/hour parsing, source-kind fallback, malformed source filtering, safe range defaults, trade valuation ID rejection, and preliminary-value fallback handling. |
@@ -184,13 +184,13 @@ Results:
 - Quote incentive normalizer tests: `2 pass`, `0 fail`.
 - Quote outcome API tests: `10 pass`, `0 fail`.
 - Quote deal intelligence API tests: `47 pass`, `0 fail`.
-- Quote API normalizer tests: `11 pass`, `0 fail`.
+- Quote API normalizer tests: `17 pass`, `0 fail`.
 - Quote customer search API tests: `24 pass`, `0 fail`.
 - Quote coach API tests: `6 pass`, `0 fail`.
 - Quote point-shoot trade API tests: `6 pass`, `0 fail`.
 - Quote scenario orchestrator tests: `11 pass`, `0 fail`.
 - Equipment row/lifecycle tests: `9 pass`, `0 fail`.
-- Combined targeted test run: `367 pass`, `0 fail`.
+- Combined targeted test run: `373 pass`, `0 fail`.
 - Web typecheck: PASS.
 - Service feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 - Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.

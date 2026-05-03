@@ -6,9 +6,14 @@ import type {
   PortalQuoteRevisionDraft,
   PortalQuoteRevisionPublishState,
   QuoteApprovalCaseSummary,
+  QuoteApprovalCaseStatus,
+  QuoteApprovalCondition,
   QuoteApprovalConditionDraft,
+  QuoteApprovalConditionEvaluation,
+  QuoteApprovalConditionType,
   QuoteApprovalDecision,
   QuoteApprovalPolicy,
+  QuoteApprovalRouteMode,
   QuoteApprovalSubmitResult,
   QuoteFinancingPreview,
   QuoteFinanceScenario,
@@ -101,6 +106,18 @@ function normalizeFactorRows(value: unknown): Array<{ label: string; weight: num
     if (!label || weight == null) return [];
     return [{ label, weight }];
   });
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const text = firstString(item);
+    return text ? [text] : [];
+  });
+}
+
+function normalizeRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
 }
 
 /**
@@ -301,6 +318,209 @@ export function normalizeClosedDealsAudit(value: unknown): ClosedDealAuditRow[] 
   });
 }
 
+export function normalizeQuoteRecommendation(value: unknown): QuoteRecommendation {
+  const record = recordOrEmpty(value);
+  const source = isRecord(record.recommendation) ? record.recommendation : record;
+  const alternativeRecord = isRecord(source.alternative) ? source.alternative : null;
+  const triggerRecord = isRecord(source.trigger) ? source.trigger : null;
+  return {
+    machine: firstString(source.machine) ?? "",
+    attachments: normalizeStringArray(source.attachments),
+    reasoning: firstString(source.reasoning) ?? "",
+    trigger: triggerRecord
+      ? {
+          triggerType: triggerRecord.triggerType === "ai_chat_prompt"
+            || triggerRecord.triggerType === "manual_request"
+            || triggerRecord.triggerType === "quote_event"
+            ? triggerRecord.triggerType
+            : "voice_transcript",
+          sourceField: firstString(triggerRecord.sourceField) ?? "",
+          excerpt: nullableString(triggerRecord.excerpt),
+          createdAt: nullableString(triggerRecord.createdAt),
+        }
+      : null,
+    alternative: alternativeRecord
+      ? {
+          machine: firstString(alternativeRecord.machine) ?? "",
+          attachments: normalizeStringArray(alternativeRecord.attachments),
+          reasoning: firstString(alternativeRecord.reasoning) ?? "",
+          whyNotChosen: nullableString(alternativeRecord.whyNotChosen),
+        }
+      : null,
+    jobConsiderations: Array.isArray(source.jobConsiderations)
+      ? normalizeStringArray(source.jobConsiderations)
+      : null,
+    jobFacts: Array.isArray(source.jobFacts)
+      ? source.jobFacts.flatMap((fact) => {
+          if (!isRecord(fact)) return [];
+          const label = firstString(fact.label);
+          const factValue = firstString(fact.value);
+          return label && factValue ? [{ label, value: factValue }] : [];
+        })
+      : null,
+    transcriptHighlights: Array.isArray(source.transcriptHighlights)
+      ? source.transcriptHighlights.flatMap((highlight) => {
+          if (!isRecord(highlight)) return [];
+          const quote = firstString(highlight.quote);
+          const supports = firstString(highlight.supports);
+          return quote && supports ? [{ quote, supports }] : [];
+        })
+      : null,
+  };
+}
+
+export function normalizeSendQuotePackageResponse(value: unknown): { sent: boolean; to_email: string } {
+  const record = recordOrEmpty(value);
+  return {
+    sent: record.sent === true,
+    to_email: firstString(record.to_email, record.toEmail) ?? "",
+  };
+}
+
+function normalizeApprovalRouteMode(value: unknown): QuoteApprovalRouteMode {
+  return value === "branch_sales_manager"
+    || value === "branch_general_manager"
+    || value === "owner_direct"
+    || value === "admin_direct"
+    || value === "admin_queue"
+    || value === "owner_queue"
+    || value === "manager_queue"
+    ? value
+    : "manager_queue";
+}
+
+function normalizeApprovalCaseStatus(value: unknown): QuoteApprovalCaseStatus {
+  return value === "approved"
+    || value === "approved_with_conditions"
+    || value === "changes_requested"
+    || value === "rejected"
+    || value === "escalated"
+    || value === "cancelled"
+    || value === "superseded"
+    || value === "expired"
+    ? value
+    : "pending";
+}
+
+function normalizeApprovalConditionType(value: unknown): QuoteApprovalConditionType {
+  return value === "max_trade_allowance"
+    || value === "required_cash_down"
+    || value === "required_finance_scenario"
+    || value === "remove_attachment"
+    || value === "expiry_hours"
+    ? value
+    : "min_margin_pct";
+}
+
+function normalizeApprovalCondition(value: unknown): QuoteApprovalCondition | null {
+  if (!isRecord(value)) return null;
+  const id = firstString(value.id);
+  if (!id) return null;
+  return {
+    id,
+    approvalCaseId: nullableString(value.approvalCaseId ?? value.approval_case_id),
+    conditionType: normalizeApprovalConditionType(value.conditionType ?? value.condition_type),
+    conditionPayload: normalizeRecord(value.conditionPayload ?? value.condition_payload),
+    sortOrder: numOrNull(value.sortOrder ?? value.sort_order) ?? 0,
+    createdAt: nullableString(value.createdAt ?? value.created_at),
+  };
+}
+
+function normalizeApprovalEvaluation(value: unknown): QuoteApprovalConditionEvaluation | null {
+  if (!isRecord(value)) return null;
+  const id = firstString(value.id);
+  if (!id) return null;
+  return {
+    id,
+    conditionType: normalizeApprovalConditionType(value.conditionType ?? value.condition_type),
+    label: firstString(value.label) ?? "",
+    satisfied: value.satisfied === true,
+    detail: firstString(value.detail) ?? "",
+    blocking: value.blocking === true,
+  };
+}
+
+export function normalizeQuoteApprovalCaseSummary(value: unknown): QuoteApprovalCaseSummary | null {
+  if (!isRecord(value)) return null;
+  const id = firstString(value.id);
+  const quotePackageId = firstString(value.quotePackageId, value.quote_package_id);
+  const quotePackageVersionId = firstString(value.quotePackageVersionId, value.quote_package_version_id);
+  if (!id || !quotePackageId || !quotePackageVersionId) return null;
+  const conditions = Array.isArray(value.conditions) ? value.conditions : [];
+  const evaluations = Array.isArray(value.evaluations) ? value.evaluations : [];
+  return {
+    id,
+    quotePackageId,
+    quotePackageVersionId,
+    versionNumber: numOrNull(value.versionNumber ?? value.version_number),
+    dealId: nullableString(value.dealId ?? value.deal_id),
+    branchSlug: nullableString(value.branchSlug ?? value.branch_slug),
+    branchName: nullableString(value.branchName ?? value.branch_name),
+    submittedBy: nullableString(value.submittedBy ?? value.submitted_by),
+    submittedByName: nullableString(value.submittedByName ?? value.submitted_by_name),
+    assignedTo: nullableString(value.assignedTo ?? value.assigned_to),
+    assignedToName: nullableString(value.assignedToName ?? value.assigned_to_name),
+    assignedRole: nullableString(value.assignedRole ?? value.assigned_role),
+    routeMode: normalizeApprovalRouteMode(value.routeMode ?? value.route_mode),
+    policySnapshot: normalizeRecord(value.policySnapshot ?? value.policy_snapshot),
+    reasonSummary: normalizeRecord(value.reasonSummary ?? value.reason_summary),
+    status: normalizeApprovalCaseStatus(value.status),
+    decisionNote: nullableString(value.decisionNote ?? value.decision_note),
+    decidedBy: nullableString(value.decidedBy ?? value.decided_by),
+    decidedByName: nullableString(value.decidedByName ?? value.decided_by_name),
+    decidedAt: nullableString(value.decidedAt ?? value.decided_at),
+    dueAt: nullableString(value.dueAt ?? value.due_at),
+    escalateAt: nullableString(value.escalateAt ?? value.escalate_at),
+    flowApprovalId: nullableString(value.flowApprovalId ?? value.flow_approval_id),
+    conditions: conditions.flatMap((condition) => {
+      const normalized = normalizeApprovalCondition(condition);
+      return normalized ? [normalized] : [];
+    }),
+    evaluations: evaluations.flatMap((evaluation) => {
+      const normalized = normalizeApprovalEvaluation(evaluation);
+      return normalized ? [normalized] : [];
+    }),
+    canSend: value.canSend === true || value.can_send === true,
+  };
+}
+
+export function normalizeQuoteApprovalSubmitResult(value: unknown): QuoteApprovalSubmitResult {
+  const record = recordOrEmpty(value);
+  return {
+    approvalCaseId: firstString(record.approvalCaseId, record.approval_case_id) ?? "",
+    approvalId: firstString(record.approvalId, record.approval_id) ?? "",
+    quotePackageVersionId: firstString(record.quotePackageVersionId, record.quote_package_version_id) ?? "",
+    versionNumber: numOrNull(record.versionNumber ?? record.version_number) ?? 0,
+    status: "pending_approval",
+    branchName: nullableString(record.branchName ?? record.branch_name),
+    assignedToName: nullableString(record.assignedToName ?? record.assigned_to_name),
+    routeMode: normalizeApprovalRouteMode(record.routeMode ?? record.route_mode),
+    alreadyPending: record.alreadyPending === true || record.already_pending === true,
+  };
+}
+
+export function normalizeQuoteApprovalPolicy(value: unknown): QuoteApprovalPolicy {
+  const record = recordOrEmpty(value);
+  const allowedRaw = record.allowedConditionTypes ?? record.allowed_condition_types;
+  const allowed = Array.isArray(allowedRaw) ? allowedRaw : [];
+  return {
+    workspaceId: firstString(record.workspaceId, record.workspace_id) ?? "",
+    branchManagerMinMarginPct: numOrNull(record.branchManagerMinMarginPct ?? record.branch_manager_min_margin_pct) ?? 0,
+    standardMarginFloorPct: numOrNull(record.standardMarginFloorPct ?? record.standard_margin_floor_pct) ?? 0,
+    branchManagerMaxQuoteAmount: numOrNull(record.branchManagerMaxQuoteAmount ?? record.branch_manager_max_quote_amount) ?? 0,
+    submitSlaHours: numOrNull(record.submitSlaHours ?? record.submit_sla_hours) ?? 0,
+    escalationSlaHours: numOrNull(record.escalationSlaHours ?? record.escalation_sla_hours) ?? 0,
+    ownerEscalationRole: record.ownerEscalationRole === "admin" || record.owner_escalation_role === "admin"
+      ? "admin"
+      : "owner",
+    namedBranchSalesManagerPrimary: record.namedBranchSalesManagerPrimary === true || record.named_branch_sales_manager_primary === true,
+    namedBranchGeneralManagerFallback: record.namedBranchGeneralManagerFallback === true || record.named_branch_general_manager_fallback === true,
+    allowedConditionTypes: allowed.map((item) => normalizeApprovalConditionType(item)),
+    updatedAt: nullableString(record.updatedAt ?? record.updated_at),
+    updatedBy: nullableString(record.updatedBy ?? record.updated_by),
+  };
+}
+
 export async function performQuoteListAction(input: {
   quotePackageId: string;
   action: Exclude<QuoteListAction, "resume" | "resend">;
@@ -459,10 +679,8 @@ export async function getAiEquipmentRecommendation(jobDescription: string): Prom
     body: JSON.stringify({ job_description: jobDescription }),
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const detail = (body as { error?: string; message?: string }).error
-      ?? (body as { message?: string }).message
-      ?? "";
+    const body = await readJsonRecord(res);
+    const detail = errorDetail(body);
     if (res.status === 401) {
       throw new Error(
         detail
@@ -472,8 +690,7 @@ export async function getAiEquipmentRecommendation(jobDescription: string): Prom
     }
     throw new Error(detail.trim() || `AI recommendation failed (HTTP ${res.status})`);
   }
-  const json = await res.json();
-  return (json?.recommendation ?? json) as QuoteRecommendation;
+  return normalizeQuoteRecommendation(await res.json().catch(() => ({})));
 }
 
 export interface QuoteFinancingRequest {
@@ -500,8 +717,12 @@ function firstString(...values: unknown[]): string | null {
   return null;
 }
 
+function normalizeQuoteScenarioType(value: unknown): QuoteFinanceScenario["type"] {
+  return value === "lease" ? "lease" : value === "finance" ? "finance" : "cash";
+}
+
 export function normalizeQuoteFinanceScenario(raw: Record<string, unknown>): QuoteFinanceScenario {
-  const type = firstString(raw.type, "cash") as QuoteFinanceScenario["type"];
+  const type = normalizeQuoteScenarioType(firstString(raw.type, "cash"));
   const termMonths = numOrNull(raw.termMonths ?? raw.term_months);
   const rate = numOrNull(raw.rate ?? raw.apr);
   const monthlyPayment = numOrNull(raw.monthlyPayment ?? raw.monthly_payment);
@@ -532,17 +753,17 @@ export function normalizeQuoteFinanceScenario(raw: Record<string, unknown>): Quo
 
 export function normalizeQuoteFinancingPreview(raw: Record<string, unknown> | null | undefined): QuoteFinancingPreview {
   const scenariosRaw = Array.isArray(raw?.scenarios) ? raw.scenarios : [];
-  const applicableRaw = Array.isArray((raw?.incentives as { applicable?: unknown[] } | undefined)?.applicable)
-    ? ((raw?.incentives as { applicable?: unknown[] }).applicable ?? [])
-    : [];
+  const incentivesRecord = normalizeRecord(raw?.incentives);
+  const marginCheckRecord = normalizeRecord(raw?.margin_check);
+  const applicableRaw = Array.isArray(incentivesRecord.applicable) ? incentivesRecord.applicable : [];
   return {
     scenarios: scenariosRaw
       .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object")
       .map((row) => normalizeQuoteFinanceScenario(row)),
-    margin_check: raw?.margin_check && typeof raw.margin_check === "object"
+    margin_check: isRecord(raw?.margin_check)
       ? {
-          flagged: Boolean((raw.margin_check as { flagged?: unknown }).flagged),
-          message: firstString((raw.margin_check as { message?: unknown }).message) ?? undefined,
+          flagged: Boolean(marginCheckRecord.flagged),
+          message: firstString(marginCheckRecord.message) ?? undefined,
         }
       : null,
     amountFinanced: numOrNull(raw?.amountFinanced ?? raw?.amount_financed),
@@ -562,7 +783,7 @@ export function normalizeQuoteFinancingPreview(raw: Record<string, unknown> | nu
               estimated_savings: numOrNull(row.estimated_savings) ?? 0,
               end_date: firstString(row.end_date) ?? undefined,
             })),
-          total_savings: numOrNull((raw.incentives as { total_savings?: unknown }).total_savings) ?? 0,
+          total_savings: numOrNull(incentivesRecord.total_savings) ?? 0,
         }
       : null,
   };
@@ -595,10 +816,8 @@ export async function saveQuotePackage(data: Record<string, unknown>): Promise<Q
     body: JSON.stringify(data),
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const detail = (body as { error?: string; message?: string }).error
-      ?? (body as { message?: string }).message
-      ?? "";
+    const body = await readJsonRecord(res);
+    const detail = errorDetail(body);
     throw new Error(detail.trim() || `Failed to save quote (HTTP ${res.status})`);
   }
   return res.json();
@@ -610,10 +829,10 @@ export async function sendQuotePackage(quotePackageId: string): Promise<{ sent: 
     body: JSON.stringify({ quote_package_id: quotePackageId }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Failed to send quote" }));
-    throw new Error((err as { error?: string }).error ?? "Failed to send quote");
+    const err = await readJsonRecord(res);
+    throw new Error(errorDetail(err) || "Failed to send quote");
   }
-  return res.json() as Promise<{ sent: boolean; to_email: string }>;
+  return normalizeSendQuotePackageResponse(await res.json().catch(() => ({})));
 }
 
 export async function submitQuoteForApproval(quotePackageId: string): Promise<QuoteApprovalSubmitResult> {
@@ -622,31 +841,20 @@ export async function submitQuoteForApproval(quotePackageId: string): Promise<Qu
     body: JSON.stringify({ quote_package_id: quotePackageId }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Failed to submit quote for approval" }));
-    throw new Error((err as { error?: string }).error ?? "Failed to submit quote for approval");
+    const err = await readJsonRecord(res);
+    throw new Error(errorDetail(err) || "Failed to submit quote for approval");
   }
-  const body = await res.json() as Record<string, unknown>;
-  return {
-    approvalCaseId: String(body.approval_case_id ?? ""),
-    approvalId: String(body.approval_id ?? ""),
-    quotePackageVersionId: String(body.quote_package_version_id ?? ""),
-    versionNumber: Number(body.version_number ?? 0) || 0,
-    status: "pending_approval",
-    branchName: typeof body.branch_name === "string" ? body.branch_name : null,
-    assignedToName: typeof body.assigned_to_name === "string" ? body.assigned_to_name : null,
-    routeMode: (typeof body.route_mode === "string" ? body.route_mode : "manager_queue") as QuoteApprovalSubmitResult["routeMode"],
-    alreadyPending: body.already_pending === true,
-  };
+  return normalizeQuoteApprovalSubmitResult(await res.json().catch(() => ({})));
 }
 
 export async function getQuoteApprovalCase(quotePackageId: string): Promise<QuoteApprovalCaseSummary | null> {
   const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/approval-case?quote_package_id=${encodeURIComponent(quotePackageId)}`);
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Failed to load quote approval case" }));
-    throw new Error((err as { error?: string }).error ?? "Failed to load quote approval case");
+    const err = await readJsonRecord(res);
+    throw new Error(errorDetail(err) || "Failed to load quote approval case");
   }
-  const body = await res.json() as { approval_case?: QuoteApprovalCaseSummary | null };
-  return body.approval_case ?? null;
+  const body = await readJsonRecord(res);
+  return normalizeQuoteApprovalCaseSummary(body.approval_case);
 }
 
 export async function decideQuoteApprovalCase(input: {
@@ -665,21 +873,21 @@ export async function decideQuoteApprovalCase(input: {
     }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Failed to decide quote approval case" }));
-    throw new Error((err as { error?: string }).error ?? "Failed to decide quote approval case");
+    const err = await readJsonRecord(res);
+    throw new Error(errorDetail(err) || "Failed to decide quote approval case");
   }
-  const body = await res.json() as { approval_case?: QuoteApprovalCaseSummary | null };
-  return body.approval_case ?? null;
+  const body = await readJsonRecord(res);
+  return normalizeQuoteApprovalCaseSummary(body.approval_case);
 }
 
 export async function getQuoteApprovalPolicy(): Promise<QuoteApprovalPolicy> {
   const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/approval-policy`);
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Failed to load quote approval policy" }));
-    throw new Error((err as { error?: string }).error ?? "Failed to load quote approval policy");
+    const err = await readJsonRecord(res);
+    throw new Error(errorDetail(err) || "Failed to load quote approval policy");
   }
-  const body = await res.json() as { policy: QuoteApprovalPolicy };
-  return body.policy;
+  const body = await readJsonRecord(res);
+  return normalizeQuoteApprovalPolicy(body.policy);
 }
 
 export async function saveQuoteApprovalPolicy(policy: Partial<QuoteApprovalPolicy>): Promise<QuoteApprovalPolicy> {
@@ -698,11 +906,11 @@ export async function saveQuoteApprovalPolicy(policy: Partial<QuoteApprovalPolic
     }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Failed to save quote approval policy" }));
-    throw new Error((err as { error?: string }).error ?? "Failed to save quote approval policy");
+    const err = await readJsonRecord(res);
+    throw new Error(errorDetail(err) || "Failed to save quote approval policy");
   }
-  const body = await res.json() as { policy: QuoteApprovalPolicy };
-  return body.policy;
+  const body = await readJsonRecord(res);
+  return normalizeQuoteApprovalPolicy(body.policy);
 }
 
 export async function saveQuoteSignature(data: {
