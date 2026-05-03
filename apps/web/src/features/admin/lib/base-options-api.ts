@@ -1,13 +1,9 @@
 import { supabase } from "@/lib/supabase";
-import type { Database } from "@/lib/database.types";
 import {
   applyPercentAdjustment,
   attachmentMatchesModel,
   buildCopyModelCode,
 } from "./base-options-utils";
-
-type EquipmentModelRow = Database["public"]["Tables"]["qb_equipment_models"]["Row"];
-type AttachmentRow = Database["public"]["Tables"]["qb_attachments"]["Row"];
 
 export type BaseOptionsSort = "base" | "make_model" | "class";
 
@@ -72,18 +68,99 @@ function normalizeSearch(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function mapAttachmentRow(row: AttachmentRow): BaseOptionAttachmentRecord {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function requiredString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function numberOrZero(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+}
+
+function normalizeJoinedBrand(value: unknown): { code: string; name: string } {
+  const brand = Array.isArray(value) ? value.find(isRecord) : value;
+  if (!isRecord(brand)) return { code: "", name: "" };
   return {
-    id: row.id,
-    brandId: row.brand_id,
-    partNumber: row.part_number,
-    name: row.name,
-    category: row.category,
-    listPriceCents: Number(row.list_price_cents ?? 0),
-    compatibleModelIds: Array.isArray(row.compatible_model_ids) ? row.compatible_model_ids : [],
-    universal: row.universal,
-    active: row.active,
-    updatedAt: row.updated_at,
+    code: stringOrNull(brand.code) ?? "",
+    name: stringOrNull(brand.name) ?? "",
+  };
+}
+
+export function normalizeBaseOptionAttachmentRows(value: unknown): BaseOptionAttachmentRecord[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const partNumber = requiredString(row.part_number);
+    const name = requiredString(row.name);
+    const updatedAt = requiredString(row.updated_at);
+    if (!id || !partNumber || !name || !updatedAt) return [];
+    return [{
+      id,
+      brandId: stringOrNull(row.brand_id),
+      partNumber,
+      name,
+      category: stringOrNull(row.category),
+      listPriceCents: numberOrZero(row.list_price_cents),
+      compatibleModelIds: stringArray(row.compatible_model_ids),
+      universal: row.universal === true,
+      active: row.active === true,
+      updatedAt,
+    }];
+  });
+}
+
+export function normalizeBaseOptionModelRows(value: unknown): Array<Omit<BaseOptionModelRecord, "optionCount">> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const brandId = requiredString(row.brand_id);
+    const modelCode = requiredString(row.model_code);
+    const nameDisplay = requiredString(row.name_display);
+    const createdAt = requiredString(row.created_at);
+    const updatedAt = requiredString(row.updated_at);
+    if (!id || !brandId || !modelCode || !nameDisplay || !createdAt || !updatedAt) return [];
+    const brand = normalizeJoinedBrand(row.qb_brands);
+    return [{
+      id,
+      brandId,
+      brandCode: brand.code,
+      brandName: brand.name,
+      modelCode,
+      family: stringOrNull(row.family),
+      nameDisplay,
+      standardConfig: stringOrNull(row.standard_config),
+      listPriceCents: numberOrZero(row.list_price_cents),
+      active: row.active === true,
+      createdAt,
+      updatedAt,
+    }];
+  });
+}
+
+function withOptionCount(
+  row: Omit<BaseOptionModelRecord, "optionCount">,
+  optionCount: number,
+): BaseOptionModelRecord {
+  return {
+    ...row,
+    optionCount,
   };
 }
 
@@ -112,13 +189,9 @@ export async function listBaseOptionModels(filters: BaseOptionsFilters): Promise
 
   if (error) throw error;
 
-  const rawModels = (data ?? []) as Array<
-    EquipmentModelRow & {
-      qb_brands: { id: string; code: string; name: string } | Array<{ id: string; code: string; name: string }> | null;
-    }
-  >;
+  const rawModels = normalizeBaseOptionModelRows(data);
 
-  const brandIds = Array.from(new Set(rawModels.map((row) => row.brand_id).filter(Boolean)));
+  const brandIds = Array.from(new Set(rawModels.map((row) => row.brandId)));
   let attachments: BaseOptionAttachmentRecord[] = [];
   if (brandIds.length > 0) {
     const { data: attachmentData, error: attachmentError } = await supabase
@@ -129,30 +202,15 @@ export async function listBaseOptionModels(filters: BaseOptionsFilters): Promise
       .limit(1000);
 
     if (attachmentError) throw attachmentError;
-    attachments = ((attachmentData ?? []) as AttachmentRow[]).map(mapAttachmentRow);
+    attachments = normalizeBaseOptionAttachmentRows(attachmentData);
   }
 
   const filtered = rawModels
     .map((row) => {
-      const brandJoin = Array.isArray(row.qb_brands) ? row.qb_brands[0] : row.qb_brands;
       const optionCount = attachments.filter((attachment) =>
-        attachmentMatchesModel(attachment, row.id, row.brand_id, filters.includeInactive),
+        attachmentMatchesModel(attachment, row.id, row.brandId, filters.includeInactive),
       ).length;
-      return {
-        id: row.id,
-        brandId: row.brand_id,
-        brandCode: brandJoin?.code ?? "",
-        brandName: brandJoin?.name ?? "",
-        modelCode: row.model_code,
-        family: row.family,
-        nameDisplay: row.name_display,
-        standardConfig: row.standard_config,
-        listPriceCents: Number(row.list_price_cents ?? 0),
-        active: row.active,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-        optionCount,
-      };
+      return withOptionCount(row, optionCount);
     })
     .filter((row) => {
       if (!filters.includeInactive && !row.active) return false;
@@ -184,8 +242,7 @@ export async function listCompatibleAttachmentsForModel(
 
   if (error) throw error;
 
-  return ((data ?? []) as AttachmentRow[])
-    .map(mapAttachmentRow)
+  return normalizeBaseOptionAttachmentRows(data)
     .filter((attachment) => attachmentMatchesModel(attachment, modelId, brandId, includeInactive))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -341,7 +398,7 @@ export async function bulkAdjustBaseOptionPrices(input: {
     .limit(1000);
   if (attachmentError) throw attachmentError;
 
-  const attachmentRows = ((attachments ?? []) as AttachmentRow[]).map(mapAttachmentRow).filter((attachment) =>
+  const attachmentRows = normalizeBaseOptionAttachmentRows(attachments).filter((attachment) =>
     models?.some((model) => attachmentMatchesModel(attachment, model.id, model.brand_id, false)),
   );
 

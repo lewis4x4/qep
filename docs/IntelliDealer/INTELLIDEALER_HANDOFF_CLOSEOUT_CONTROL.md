@@ -254,7 +254,8 @@ Current result:
 - Parts predictive kits, replenish queue, inventory health, vendor metrics, parts order list, catalog query typing, and forecast catalog lookup now use exported normalizers or generated query typing.
 - Parts purchase-order list/detail vendor, header, line, touchpoint, equipment model, and attachment rows now use exported normalizers.
 - Parts feature cast scan is clear for the Slice 6 inventory pattern after replacing local/browser shims with typed helpers.
-- Targeted tests passed: `416 pass`, `0 fail`.
+- Admin Base Options model and attachment rows now use exported normalizers before option counting, compatible attachment lookup, and bulk repricing.
+- Targeted tests passed: `420 pass`, `0 fail`.
 - Web typecheck passed.
 - Service feature cast scan is clear for the Slice 6 inventory pattern.
 - Fleet feature cast scan is clear for the Slice 6 inventory pattern.
