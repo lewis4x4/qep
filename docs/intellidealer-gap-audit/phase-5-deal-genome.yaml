@@ -74,6 +74,7 @@ fields:
 
 
 
+
   - id: data_miner_query.select_user
     intellidealer_label: "Select User"
     intellidealer_screen: "Data Miner"
@@ -1378,10 +1379,13 @@ fields:
       shift). Critical for separating field tech vs in-shop performance.
     qep_status: BUILT
     qep_table: v_deal_genome_service_efficiency_analysis
-    qep_column: labor_sale_cents
+    qep_column: inside_outside_shift
     qep_evidence:
-      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_efficiency_analysis.labor_sale_cents"
-    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_efficiency_analysis.labor_sale_cents."
+      - "supabase/migrations/529_intellidealer_service_deal_genome_non_must.sql public.v_deal_genome_service_efficiency_analysis.inside_outside_shift, .shop_class, .shift_code"
+    qep_gap_notes: |
+      Resolved by additive migration 529. The efficiency view now carries
+      technician_profiles.inside_outside_shift/shop_class and
+      employees.shift_code for the I/O/shift filter.
     severity: should
     category: operational
     migration_hint: |
@@ -1515,11 +1519,15 @@ fields:
       Hours flagged as rework (re-doing prior work). Direct quality
       KPI; e.g. Michael Dougherty 2.86 hrs rework.
     qep_status: BUILT
-    qep_table: service_job_segments
-    qep_column: standard_hours
+    qep_table: v_deal_genome_service_efficiency_analysis
+    qep_column: rework_hours
     qep_evidence:
-      - "apps/web/src/lib/database.types.ts public.Tables.service_job_segments.standard_hours"
-    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains service_job_segments.standard_hours."
+      - "supabase/migrations/529_intellidealer_service_deal_genome_non_must.sql public.service_labor_ledger.is_rework"
+      - "supabase/migrations/529_intellidealer_service_deal_genome_non_must.sql public.v_deal_genome_service_efficiency_analysis.rework_hours"
+    qep_gap_notes: |
+      Resolved by additive migration 529. service_labor_ledger.is_rework
+      identifies rework labor rows and the efficiency view sums their
+      actual hours as rework_hours.
     severity: should
     category: operational
     migration_hint: |
@@ -1781,12 +1789,17 @@ fields:
       - "Closed"
     intellidealer_purpose: |
       Filters which work-order statuses to include in the WIP rollup.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_wip_aging
+    qep_column: current_stage
+    qep_evidence:
+      - "supabase/migrations/523_deal_genome_service_analysis_foundation.sql public.v_deal_genome_service_wip_aging.current_stage, .billed_status"
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_wip_aging.current_stage, .billed_status"
     qep_gap_notes: |
-      Depends on qrm_work_orders.status.
+      Resolved by shipped Deal Genome WIP aging view. The report can
+      filter by service lifecycle status via current_stage and by billing
+      lifecycle via billed_status; no separate qrm_work_orders table is
+      required.
     severity: should
     category: workflow
     migration_hint: |
@@ -1984,7 +1997,9 @@ fields:
     qep_column: null
     qep_evidence: []
     qep_gap_notes: |
-      Requires reporting export pipeline.
+      True deferral: the WIP data rows are queryable, but there is still
+      no generic WIP report export/print job or Edge function analogous
+      to the billing-run report pipeline.
     severity: should
     category: reporting
     migration_hint: |
@@ -2004,12 +2019,15 @@ fields:
     intellidealer_field_type: fk
     intellidealer_purpose: |
       Filter to one technician.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_quote_gain_loss_by_technician
+    qep_column: technician_id
+    qep_evidence:
+      - "supabase/migrations/529_intellidealer_service_deal_genome_non_must.sql public.v_deal_genome_service_quote_gain_loss_by_technician.technician_id"
     qep_gap_notes: |
-      Depends on qrm_employees.
+      Resolved by additive migration 529. Quote gain/loss rows are joined
+      to the service efficiency analysis surface by service_job_id, which
+      exposes the technician/profile and employee linkage where present.
     severity: should
     category: reporting
     migration_hint: |
@@ -2034,12 +2052,15 @@ fields:
       - "Shift 3"
     intellidealer_purpose: |
       Same shop-shift filter as Efficiency.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_quote_gain_loss_by_technician
+    qep_column: inside_outside_shift
+    qep_evidence:
+      - "supabase/migrations/529_intellidealer_service_deal_genome_non_must.sql public.v_deal_genome_service_quote_gain_loss_by_technician.inside_outside_shift, .shop_class, .shift_code"
     qep_gap_notes: |
-      Depends on shop classification fields.
+      Resolved by additive migration 529. The enriched quote gain/loss
+      view carries technician_profiles.inside_outside_shift/shop_class and
+      employees.shift_code for the I/O/shift filter.
     severity: should
     category: operational
     migration_hint: |
@@ -2147,12 +2168,16 @@ fields:
     intellidealer_purpose: |
       Hours flagged as rework. e.g. Colton Noerring 32.06, Michael
       Marksberry -2.86 (negative entry = correction reversal).
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_quote_gain_loss_by_technician
+    qep_column: rework_hours
+    qep_evidence:
+      - "supabase/migrations/529_intellidealer_service_deal_genome_non_must.sql public.service_labor_ledger.is_rework"
+      - "supabase/migrations/529_intellidealer_service_deal_genome_non_must.sql public.v_deal_genome_service_quote_gain_loss_by_technician.rework_hours"
     qep_gap_notes: |
-      Same dependency as analysis_efficiency.col_rework_hours.
+      Resolved by additive migration 529. service_labor_ledger now has an
+      is_rework marker and the quote gain/loss technician view sums those
+      actual hours into rework_hours.
     severity: should
     category: operational
     migration_hint: |
@@ -2176,12 +2201,17 @@ fields:
     intellidealer_purpose: |
       Selects whether to roll up payroll hours by premium code (REG,
       OT, holiday, etc.) or by date.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_payroll_hours_analysis
+    qep_column: premium_code
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_payroll_entries.labor_date, .hours"
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_payroll_premium_codes.code"
+      - "supabase/migrations/529_intellidealer_service_deal_genome_non_must.sql public.v_deal_genome_service_payroll_hours_analysis.premium_code, .labor_date"
     qep_gap_notes: |
-      No payroll layer in QEP.
+      Resolved by existing payroll tables plus additive migration 529.
+      The payroll analysis view exposes both grouping bases: premium_code
+      and labor_date.
     severity: should
     category: operational
     migration_hint: |
@@ -2282,7 +2312,9 @@ fields:
     qep_column: null
     qep_evidence: []
     qep_gap_notes: |
-      Implies a printable report.
+      True deferral: payroll detail and grouping data exist, but there is
+      still no dedicated printable payroll-hours report job or PDF export
+      function.
     severity: could
     category: reporting
     migration_hint: |
@@ -2612,12 +2644,16 @@ fields:
       - "Custom"
     intellidealer_purpose: |
       Period basis for the analysis. Implies a fiscal-period dim.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
+    qep_status: BUILT
+    qep_table: qrm_fiscal_periods
+    qep_column: period_year
+    qep_evidence:
+      - "supabase/migrations/428_qrm_fiscal_periods.sql public.qrm_fiscal_periods"
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_fiscal_periods.period_year, .period_number, .starts_on, .ends_on, .is_closed"
     qep_gap_notes: |
-      QEP has no fiscal calendar — only timestamps.
+      Resolved by existing fiscal-period foundation. qrm_fiscal_periods
+      provides period year/number and date boundaries for current/prior
+      fiscal YTD, fiscal period, and custom-period selection.
     severity: should
     category: financial
     migration_hint: |

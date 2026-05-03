@@ -264,6 +264,7 @@ fields:
 
 
 
+
   - id: equipment.stock_number
     intellidealer_label: "Stock Number"
     intellidealer_screen: "Equipment Profile (Profile tab)"
@@ -1897,11 +1898,17 @@ fields:
       - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Equipment Invoicing (Sales Support Portal).txt
     intellidealer_field_type: bool
     intellidealer_purpose: "Listing toggle that includes extended descriptions in the invoice search."
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "UI-only filter; no DDL needed."
+    qep_status: BUILT
+    qep_table: customer_invoices
+    qep_column: description
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.description"
+      - "supabase/migrations/471_equipment_invoice_view.sql exposes equipment_invoices over customer_invoices"
+    qep_gap_notes: |
+      Schema coverage exists through the invoice header description field.
+      "Show Extended Description" is an ephemeral search toggle; no persisted
+      Boolean is needed. Remaining work is UI wiring wherever the equipment
+      invoice listing search is implemented.
     severity: could
     category: nice_to_have
     migration_hint: ""
@@ -2257,11 +2264,17 @@ fields:
     intellidealer_purpose: |
       Filter by From / To serial number range — used to find units in
       a specific OEM-recall serial range.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "Query-only filter; existing serial_number column suffices once UI is wired."
+    qep_status: BUILT
+    qep_table: qrm_equipment
+    qep_column: serial_number
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.serial_number"
+      - "supabase/migrations/047_crm_equipment_moonshot.sql creates serial_number on equipment"
+      - "apps/web/src/features/floor/widgets/SerialFirstWidget.tsx uses qrm_equipment.serial_number search"
+    qep_gap_notes: |
+      Schema coverage exists: serial range is a query predicate over
+      qrm_equipment.serial_number, not a stored field. Remaining work is
+      adding From/To controls on the equipment listing UI.
     severity: should
     category: regulatory
     migration_hint: ""
@@ -2283,15 +2296,12 @@ fields:
       Cross-stock workspace for the salesman: open quotes, pending
       invoices, customer-pending equipment sales, telematics callouts,
       "Pending Equipment Sales" buckets. Drives the rep's daily focus.
-    qep_status: PARTIAL
-    qep_table: null
+    qep_status: BUILT
+    qep_table: v_rep_pipeline
     qep_column: null
     qep_evidence:
-      - "database.types.ts v_rep_pipeline (view) + qb_quotes/qb_deals"
-    qep_gap_notes: |
-      Underlying data exists (v_rep_pipeline view, qb_quotes/qb_deals).
-      No dedicated Sales Support Portal page surface in QEP today;
-      build one that aggregates these.
+      - "apps/web/src/lib/database.types.ts public.Views.v_rep_pipeline"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_rep_pipeline."
     severity: should
     category: workflow
     migration_hint: ""
@@ -2332,27 +2342,15 @@ fields:
       Button on Base & Options screen — uploads Bobcat-published
       base+options spreadsheet to refresh the catalog. Required to keep
       pricing current with manufacturer.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: equipment_base_codes_import_runs
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "No OEM-import infrastructure for Base & Options."
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.equipment_base_codes_import_runs"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains equipment_base_codes_import_runs."
     severity: should
     category: workflow
-    migration_hint: |
-      CREATE TABLE equipment_base_codes_import_runs (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        workspace_id uuid NOT NULL,
-        manufacturer TEXT NOT NULL,        -- 'bobcat','vermeer','jd','yanmar'
-        source_filename TEXT,
-        rows_inserted INTEGER NOT NULL DEFAULT 0,
-        rows_updated INTEGER NOT NULL DEFAULT 0,
-        rows_skipped INTEGER NOT NULL DEFAULT 0,
-        run_status TEXT NOT NULL,
-        error TEXT,
-        ran_by UUID REFERENCES profiles(id),
-        ran_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
+    migration_hint: "Implemented by supabase/migrations/527_intellidealer_sales_base_options_non_must.sql; parser/UI remains deferred."
     ui_surface_hint: "Base & Options screen — Import buttons"
     dependencies: [equipment.base_code]
 
@@ -2364,14 +2362,15 @@ fields:
       - docs/IntelliDealer/_OCR/Phase-2_Sales-Intelligence/Base & Options.txt
     intellidealer_field_type: computed
     intellidealer_purpose: "Vermeer-specific base/options import."
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: equipment_base_codes_import_runs
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "(see base_options.bobcat_import)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.equipment_base_codes_import_runs"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains equipment_base_codes_import_runs."
     severity: should
     category: workflow
-    migration_hint: "(see base_options.bobcat_import)"
+    migration_hint: "Implemented by supabase/migrations/527_intellidealer_sales_base_options_non_must.sql; parser/UI remains deferred."
     ui_surface_hint: "Base & Options screen — Import buttons"
     dependencies: [base_options.bobcat_import]
 
@@ -2385,11 +2384,18 @@ fields:
     intellidealer_purpose: |
       Bulk-edit workflow — apply X% increase or decrease across selected
       base/option rows. Used at OEM mid-year price changes.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "Bulk-edit UI workflow only; no DDL needed beyond base/options tables."
+    qep_status: BUILT
+    qep_table: qb_equipment_models
+    qep_column: list_price_cents
+    qep_evidence:
+      - "apps/web/src/features/admin/pages/BaseOptionsPage.tsx renders Mass increase/decrease sheet"
+      - "apps/web/src/features/admin/lib/base-options-api.ts bulkAdjustBaseOptionPrices updates qb_equipment_models.list_price_cents and compatible qb_attachments.list_price_cents"
+      - "apps/web/src/features/admin/lib/base-options-utils.ts applyPercentAdjustment supports positive and negative percentages"
+    qep_gap_notes: |
+      Existing /admin/base-options UI implements percent increase/decrease
+      across the filtered base set, with optional compatible attachment
+      repricing. It uses Quote Builder catalog tables rather than the Wave 1
+      equipment_base_codes/equipment_options catalog.
     severity: should
     category: workflow
     migration_hint: ""

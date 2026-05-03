@@ -164,6 +164,7 @@ fields:
 
 
 
+
   - id: customer.legacy_customer_number
     intellidealer_label: "Customer Number"
     intellidealer_screen: "Customer Profile (Profile tab) / Customer Listing"
@@ -2301,22 +2302,29 @@ fields:
       lift-gate truck required, signature-required, after-hours dropoff
       OK, etc. Drives carrier-rate quoting and is referenced at order
       entry to default the freight line correctly.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: qrm_companies
-    qep_column: shipping_handling_flags
-    qep_evidence: []
+    qep_column: >-
+      requires_hazmat_certified_carrier / requires_lift_gate /
+      requires_signature / allow_after_hours_dropoff / preferred_carrier /
+      shipping_notes
+    qep_evidence:
+      - >-
+        supabase/migrations/472_qrm_company_wave2_columns.sql
+        public.qrm_companies
+        requires_hazmat_certified_carrier/requires_lift_gate/requires_signature/allow_after_hours_dropoff/preferred_carrier/shipping_notes
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.requires_hazmat_certified_carrier"
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.requires_lift_gate"
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.requires_signature"
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.allow_after_hours_dropoff"
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.preferred_carrier"
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.shipping_notes"
     qep_gap_notes: |
-      No special-handling defaults. Without this every shipment requires
-      the rep to remember the customer's quirks.
+      Resolved by shipped Wave 2 customer columns. QEP stores the listed
+      customer-level special-handling defaults directly on qrm_companies.
     severity: should
     category: operational
-    migration_hint: |
-      ALTER TABLE qrm_companies ADD COLUMN requires_hazmat_certified_carrier BOOLEAN NOT NULL DEFAULT false;
-      ALTER TABLE qrm_companies ADD COLUMN requires_lift_gate BOOLEAN NOT NULL DEFAULT false;
-      ALTER TABLE qrm_companies ADD COLUMN requires_signature BOOLEAN NOT NULL DEFAULT false;
-      ALTER TABLE qrm_companies ADD COLUMN allow_after_hours_dropoff BOOLEAN NOT NULL DEFAULT false;
-      ALTER TABLE qrm_companies ADD COLUMN preferred_carrier TEXT;
-      ALTER TABLE qrm_companies ADD COLUMN shipping_notes TEXT;
+    migration_hint: ""
     ui_surface_hint: "Customer Profile — Supplement Shipping tab"
     dependencies: []
 
@@ -2532,11 +2540,17 @@ fields:
     qep_status: MISSING
     qep_table: prospect_jdquote_upload_runs
     qep_column: null
-    qep_evidence: []
+    qep_evidence:
+      - "docs/IntelliDealer/WAVE_5_DEFERRED_INTEGRATION_REGISTER_2026-05-03.md JD Quote II"
+      - >-
+        docs/intellidealer-gap-audit/_migration_order.md
+        prospect_jdquote_upload_runs deferred pending confirmed
+        JD-affiliated dealer scope
     qep_gap_notes: |
-      No JD Quote II integration. This is a JD-specific OEM feature —
-      defer until a JD-affiliated dealer is in scope, but flag as a
-      cutover risk for any JD dealer.
+      True external-integration deferral. Prospect Board foundation exists
+      via qrm_prospects, but JD Quote II upload remains intentionally
+      unbuilt until JD-affiliated dealer scope, credentials, payload
+      contract, and owner are confirmed.
     severity: could
     category: nice_to_have
     migration_hint: |
@@ -2572,11 +2586,16 @@ fields:
     qep_status: PARTIAL
     qep_table: null
     qep_column: null
-    qep_evidence: []
+    qep_evidence:
+      - "supabase/migrations/345_crm_company_search_fields.sql public.list_crm_companies_page"
+      - "apps/web/src/features/qrm/pages/QrmCompaniesPage.tsx search placeholder includes company, IntelliDealer #, Search 1/2, city, state"
+      - "apps/web/src/features/quote-builder/lib/customer-search-api.ts unified customer search queries crm_contacts and crm_companies"
+      - "apps/web/src/features/sales/lib/customer-search.ts matches primary_contact_name"
     qep_gap_notes: |
-      QEP search likely already does this (full-text across joins) but
-      the explicit user-facing toggle isn't present. Add it as a UI
-      affordance for parity.
+      Partial, not missing. QEP has Search 1/Search 2 and several customer
+      search surfaces include contact/company fields, but the Customer
+      Listing surface does not expose IntelliDealer's explicit Extended
+      Fields toggle and does not prove ship-to-name search on that page.
     severity: could
     category: nice_to_have
     migration_hint: ""
@@ -2593,13 +2612,16 @@ fields:
     intellidealer_purpose: |
       Export-to-CSV icon — produces a CSV of the current customer
       listing's filtered results.
-    qep_status: PARTIAL
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
+    qep_status: BUILT
+    qep_table: "(QRM Companies UI action)"
+    qep_column: "exportCompanies"
+    qep_evidence:
+      - "apps/web/src/features/qrm/pages/QrmCompaniesPage.tsx CSV button calls exportCompanies"
+      - "apps/web/src/lib/csv-export.ts exportCompanies"
     qep_gap_notes: |
-      QEP has CSV export on some list views; verify Customer list has it
-      and surface the icon consistently.
+      Resolved in the QRM Companies listing. The page exposes a CSV button
+      and calls the shared exportCompanies formatter for the currently
+      loaded filtered customer list.
     severity: could
     category: nice_to_have
     migration_hint: ""

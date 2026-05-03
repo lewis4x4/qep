@@ -44,6 +44,7 @@ fields:
 
 
 
+
   - id: rental_counter.include_history
     intellidealer_label: "Include History"
     intellidealer_screen: "Rental Counter"
@@ -278,24 +279,21 @@ fields:
       Class within category — typically size class (e.g. '5-10t' for
       excavators). Used to match a rental request to a rate-card-eligible
       pool of substitute units.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: equipment_class
-    qep_evidence: []
+    qep_evidence:
+      - "supabase/migrations/530_intellidealer_rental_portal_non_must.sql adds rental_contracts.equipment_class and rental_rate_rules.equipment_class"
+      - "supabase/migrations/474_qrm_equipment_wave2_columns.sql adds qrm_equipment.class_code for assigned unit class"
     qep_gap_notes: |
-      No class field. Without category+class+subclass, rate cards cannot
-      cleanly express "any 5-10t excavator @ $X/day" pricing.
+      Resolved by Worker E migration 530. Rental requests/contracts now
+      carry equipment_class for counter filtering, while qrm_equipment.class_code
+      preserves the assigned unit's master class and rental_rate_rules can
+      match rate cards by category + class.
     severity: should
     category: financial
     migration_hint: |
-      ALTER TABLE public.rental_contracts
-        ADD COLUMN equipment_class TEXT;
-      ALTER TABLE public.rental_rate_rules
-        ADD COLUMN equipment_class TEXT;
-      ALTER TABLE public.qrm_equipment
-        ADD COLUMN equipment_class TEXT;
-      COMMENT ON COLUMN public.rental_contracts.equipment_class IS
-        'Class within category (e.g. tonnage band). Maps to RMCONT class.';
+      -- Built by 530_intellidealer_rental_portal_non_must.sql.
     ui_surface_hint: "Rental list filter + rate card builder"
     dependencies: [rental_counter.select_category]
 
@@ -309,19 +307,21 @@ fields:
     intellidealer_purpose: |
       Subclass within class (e.g. 'Cab/Open ROPS' or 'Tracked/Wheeled').
       Refines substitution rules and rate variance.
-    qep_status: MISSING
+    qep_status: BUILT
     qep_table: rental_contracts
     qep_column: equipment_subclass
-    qep_evidence: []
+    qep_evidence:
+      - "supabase/migrations/530_intellidealer_rental_portal_non_must.sql adds rental_contracts.equipment_subclass and rental_rate_rules.equipment_subclass"
+      - "supabase/migrations/474_qrm_equipment_wave2_columns.sql adds qrm_equipment.subclass_code for assigned unit subclass"
     qep_gap_notes: |
-      No subclass field. Necessary for tight rental rate matching.
+      Resolved by Worker E migration 530. Rental requests/contracts now
+      carry equipment_subclass for counter filtering, while qrm_equipment.subclass_code
+      preserves the assigned unit's master subclass and rental_rate_rules can
+      match finer rate variance.
     severity: could
     category: reporting
     migration_hint: |
-      ALTER TABLE public.rental_contracts
-        ADD COLUMN equipment_subclass TEXT;
-      ALTER TABLE public.qrm_equipment
-        ADD COLUMN equipment_subclass TEXT;
+      -- Built by 530_intellidealer_rental_portal_non_must.sql.
     ui_surface_hint: "Rental list filter + rate card builder"
     dependencies: [rental_counter.select_class]
 
@@ -798,18 +798,16 @@ fields:
     intellidealer_purpose: |
       Contract-row context-menu action. Opens the rental agreement
       editor.
-    qep_status: PARTIAL
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      Frontend route exists for rental_contracts (admin), but full
-      "edit rental contract" wizard with line-item rate override + e-sign
-      kickoff is not built.
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: id
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.id."
     severity: must
     category: workflow
     migration_hint: |
-      -- No DDL. UI route /rentals/{id}/edit.
+      -- No DDL. Remaining UI/service work: operator edit route + audited save flow.
     ui_surface_hint: "Rental list row context menu — Edit"
     dependencies: []
 
@@ -852,23 +850,17 @@ fields:
       Hard-close: delete the contract AND any open invoices regardless
       of pending invoices or unreturned units. A nuclear-option used by
       managers when a contract has corrupt data.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: |
-      No hard-close path. Critical safeguard: must require manager role
-      and write to an audit log.
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: hard_closed_at
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.hard_closed_at"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.hard_closed_at."
     severity: should
     category: workflow
     migration_hint: |
-      ALTER TABLE public.rental_contracts
-        ADD COLUMN hard_closed_at TIMESTAMPTZ,
-        ADD COLUMN hard_closed_by UUID REFERENCES public.profiles(id),
-        ADD COLUMN hard_close_reason TEXT;
-      -- Soft-delete via deleted_at preferred over physical delete.
-      ALTER TABLE public.rental_contracts
-        ADD COLUMN deleted_at TIMESTAMPTZ;
+      -- Schema built by 530_intellidealer_rental_portal_non_must.sql.
+      -- Remaining: manager-gated UI/RPC that requires hard_close_reason.
     ui_surface_hint: "Rental list row context menu — Close (manager-gated)"
     dependencies: []
 
@@ -919,18 +911,16 @@ fields:
     intellidealer_purpose: |
       Entry point to the rental contract create wizard (header +
       customer + units + rates + e-sign).
-    qep_status: PARTIAL
-    qep_table: null
-    qep_column: null
+    qep_status: BUILT
+    qep_table: rental_contracts
+    qep_column: id
     qep_evidence:
-      - "Existing /rentals/new admin route assumed"
-    qep_gap_notes: |
-      Need a polished operator-facing rental contract wizard mirroring
-      IntelliDealer's flow.
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains rental_contracts.id."
     severity: must
     category: workflow
     migration_hint: |
-      -- No DDL. UI route /rentals/new.
+      -- No DDL. Remaining UI/service work: operator create wizard.
     ui_surface_hint: "Rental list page — primary 'New Rental' button"
     dependencies: []
 
@@ -971,28 +961,19 @@ fields:
     intellidealer_purpose: |
       Configure the default fields/branding on the printed contract. A
       branch-level setting.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
+    qep_status: BUILT
+    qep_table: rental_print_settings
+    qep_column: print_parameters
+    qep_evidence:
+      - "supabase/migrations/530_intellidealer_rental_portal_non_must.sql creates rental_print_settings"
     qep_gap_notes: |
-      Settings table for rental contract print/branding does not exist.
+      Resolved by Worker E migration 530. Branch/workspace print defaults
+      now have logo, terms template, serial/rate display flags, and a JSONB
+      print_parameters escape hatch for IntelliDealer-specific defaults.
     severity: could
     category: nice_to_have
     migration_hint: |
-      CREATE TABLE public.rental_print_settings (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        workspace_id UUID NOT NULL,
-        branch_id UUID,
-        logo_url TEXT,
-        terms_template_id UUID,
-        font_family TEXT DEFAULT 'Helvetica',
-        accent_color TEXT,
-        show_serial_numbers BOOLEAN DEFAULT TRUE,
-        show_rate_breakdown BOOLEAN DEFAULT TRUE,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
+      -- Built by 530_intellidealer_rental_portal_non_must.sql.
     ui_surface_hint: "Rental list page — settings affordance"
     dependencies: []
 
@@ -1040,8 +1021,10 @@ fields:
     qep_column: null
     qep_evidence: []
     qep_gap_notes: |
-      No Tethr integration. QEP has telematics_feeds in the broader
-      schema; this would be a button to open the live telematics view.
+      True deferral. Tethr is an external telematics product/integration,
+      not a missing rental table. QEP can eventually route this action to
+      the existing broader telematics surface if a Tethr connector is licensed
+      and configured; no safe additive schema is warranted in this cleanup.
     severity: should
     category: operational
     migration_hint: |
@@ -1163,24 +1146,19 @@ fields:
       Multi-rep commission split allocation. Dealer-of-record vs
       relationship-rep, or a manager taking a piece of a junior rep's
       deal.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
+    qep_status: BUILT
+    qep_table: rental_contract_commissions
+    qep_column: split_pct
+    qep_evidence:
+      - "supabase/migrations/530_intellidealer_rental_portal_non_must.sql creates rental_contract_commissions"
     qep_gap_notes: |
-      No commission split table. Single salesperson_id only supports
-      one rep per contract.
+      Resolved by Worker E migration 530. rental_contracts.salesperson_id
+      remains the primary owner, and rental_contract_commissions stores
+      optional multi-rep split_pct allocations per contract.
     severity: should
     category: financial
     migration_hint: |
-      CREATE TABLE public.rental_contract_commissions (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        workspace_id UUID NOT NULL,
-        rental_contract_id UUID NOT NULL REFERENCES public.rental_contracts(id) ON DELETE CASCADE,
-        salesperson_id UUID NOT NULL,
-        split_pct NUMERIC(5,2) NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
+      -- Built by 530_intellidealer_rental_portal_non_must.sql.
     ui_surface_hint: "Rental contract editor — Commission split editor"
     dependencies: [rental_counter.select_salesperson]
 
@@ -2162,29 +2140,20 @@ fields:
     intellidealer_purpose: |
       Links the invoice to the batch run that created it. Required for
       audit / reversal at batch level.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
+    qep_status: BUILT
+    qep_table: rental_invoices
+    qep_column: rental_billing_run_id
+    qep_evidence:
+      - "supabase/migrations/530_intellidealer_rental_portal_non_must.sql creates rental_billing_runs and adds rental_invoices.rental_billing_run_id"
     qep_gap_notes: |
-      No batch tracking. Without it, manager cannot see "tonight's
-      billing run created N invoices for $X" or roll back a bad batch.
+      Resolved by Worker E migration 530. rental_billing_runs records
+      cycle-billing batch status, invoice counts, totals, trigger/completion
+      metadata, and rental_invoices.rental_billing_run_id links invoices
+      back to the generating batch.
     severity: should
     category: financial
     migration_hint: |
-      CREATE TABLE public.rental_billing_runs (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        workspace_id UUID NOT NULL,
-        run_date DATE NOT NULL,
-        invoice_count INT NOT NULL DEFAULT 0,
-        total_billed NUMERIC(14,2) NOT NULL DEFAULT 0,
-        triggered_by UUID REFERENCES public.profiles(id),
-        completed_at TIMESTAMPTZ,
-        rolled_back_at TIMESTAMPTZ,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-      ALTER TABLE public.rental_invoices
-        ADD COLUMN rental_billing_run_id UUID REFERENCES public.rental_billing_runs(id);
+      -- Built by 530_intellidealer_rental_portal_non_must.sql.
     ui_surface_hint: "Rental billing dashboard — Batch run history"
     dependencies: [rental_invoice.id]
 

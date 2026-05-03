@@ -136,7 +136,8 @@ source_artifacts:
 #   parts_order_lines           (line items)
 #   parts_order_events          (state transitions)
 #   parts_order_notification_sends
-#   parts_invoices              (customer parts invoice header)
+#   customer_invoices           (canonical customer parts invoice header)
+#   parts_invoice_lines         (customer parts invoice detail)
 #   parts_quoting_service*      (parts quotes that link to service)
 #   parts_pricing_rules         (pricing rules engine)
 #   parts_pricing_audit         (price-change audit)
@@ -168,8 +169,8 @@ source_artifacts:
 # MAJOR GAPS for Phase-3 (despite rich parts_catalog):
 #   * Parts Invoicing Header lifecycle — Order Number → Pending → Issued
 #     → Shipped → Invoiced flow with per-line Ord/Iss/Ship/Inv columns.
-#     parts_invoices likely covers some of this but verify the four-stage
-#     quantity ladder.
+#     customer_invoices + parts_invoice_lines covers the canonical header/detail
+#     model without creating a duplicate parts_invoices header table.
 #   * Parts Invoice "View Back Orders" button — list of unreceived back-
 #     ordered lines on this customer's invoice. Operational primitive.
 #   * Cash Code on parts invoice line (per-line cash-vs-AR routing).
@@ -233,6 +234,7 @@ fields:
   # ==========================================================================
   # SECTION 1 — PARTS PROFILE / IDENTITY
   # ==========================================================================
+
 
 
 
@@ -1399,27 +1401,18 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Profile__3.19.53.txt
     intellidealer_field_type: number
     intellidealer_purpose: "On-hand divided by monthly demand — months of stock at current burn rate."
-    qep_status: PARTIAL
-    qep_table: null
-    qep_column: null
+    qep_status: BUILT
+    qep_table: v_parts_months_supply
+    qep_column: months_supply
     qep_evidence:
-      - "computed via parts_catalog.on_hand / parts_history_monthly aggregation"
-    qep_gap_notes: ""
+      - "supabase/migrations/502_wave4_customer_parts_views.sql public.v_parts_months_supply"
+      - "apps/web/src/lib/database.types.ts public.Views.v_parts_months_supply.months_supply"
+    qep_gap_notes: "Resolved by Wave 4 view over parts_catalog and parts_history_monthly; no stored column required."
     severity: should
     category: reporting
     migration_hint: |
-      CREATE OR REPLACE VIEW v_parts_months_supply AS
-        SELECT pc.id, pc.workspace_id,
-          CASE WHEN m.avg_monthly_qty > 0
-               THEN pc.on_hand::numeric / m.avg_monthly_qty
-               ELSE NULL END AS months_supply
-        FROM parts_catalog pc
-        LEFT JOIN (
-          SELECT part_catalog_id, AVG(quantity_sold) AS avg_monthly_qty
-          FROM parts_history_monthly
-          WHERE month_start > now() - INTERVAL '6 months'
-          GROUP BY part_catalog_id
-        ) m ON m.part_catalog_id = pc.id;
+      -- No DDL. Implemented by public.v_parts_months_supply in
+      -- supabase/migrations/502_wave4_customer_parts_views.sql.
     ui_surface_hint: "Parts Profile — Additional Info block"
     dependencies: []
 
@@ -1501,21 +1494,18 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.20.16.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Six-digit parts invoice/order number (e.g. '023743'). Customer-facing."
-    qep_status: PARTIAL
-    qep_table: parts_invoices
-    qep_column: null
+    qep_status: BUILT
+    qep_table: customer_invoices
+    qep_column: order_number
     qep_evidence:
-      - "database.types.ts parts_invoices (table exists)"
-    qep_gap_notes: |
-      Verify parts_invoices has a human-readable order_number column
-      separate from the UUID id.
+      - "supabase/migrations/477_customer_invoice_wave2_columns.sql public.customer_invoices.order_number"
+      - "supabase/migrations/468_parts_invoice_lines_customer_invoices.sql canonical parts invoice parent is customer_invoices"
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.order_number"
+    qep_gap_notes: "Resolved on canonical customer_invoices header; QEP intentionally does not create a duplicate parts_invoices table."
     severity: must
     category: operational
     migration_hint: |
-      ALTER TABLE parts_invoices ADD COLUMN IF NOT EXISTS order_number TEXT;
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_parts_invoices_order_number
-        ON parts_invoices (workspace_id, order_number)
-        WHERE order_number IS NOT NULL;
+      -- No DDL. Canonical parts invoice header field is customer_invoices.order_number.
     ui_surface_hint: "Parts Invoice header bar"
     dependencies: []
 
@@ -1527,12 +1517,14 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
     intellidealer_field_type: fk
     intellidealer_purpose: "Customer the invoice is billed to."
-    qep_status: PARTIAL
-    qep_table: parts_invoices
-    qep_column: null
+    qep_status: BUILT
+    qep_table: customer_invoices
+    qep_column: crm_company_id
     qep_evidence:
-      - "database.types.ts parts_invoices (table)"
-    qep_gap_notes: "Confirm FK to qrm_companies."
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.crm_company_id"
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices Relationships customer_invoices_crm_company_id_fkey"
+      - "supabase/migrations/468_parts_invoice_lines_customer_invoices.sql canonical parts invoice parent is customer_invoices"
+    qep_gap_notes: "Resolved on canonical customer_invoices header via crm_company_id FK to qrm_companies/crm_companies."
     severity: must
     category: financial
     migration_hint: ""
@@ -1547,16 +1539,18 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
     intellidealer_field_type: fk
     intellidealer_purpose: "Counter-staff or rep credited with the sale."
-    qep_status: PARTIAL
-    qep_table: parts_invoices
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "Confirm salesperson_id column on parts_invoices."
+    qep_status: BUILT
+    qep_table: customer_invoices
+    qep_column: salesperson_id
+    qep_evidence:
+      - "supabase/migrations/477_customer_invoice_wave2_columns.sql public.customer_invoices.salesperson_id"
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.salesperson_id"
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices Relationships customer_invoices_salesperson_id_fkey"
+    qep_gap_notes: "Resolved on canonical customer_invoices header; no duplicate parts_invoices salesperson column should be generated."
     severity: must
     category: financial
     migration_hint: |
-      ALTER TABLE parts_invoices ADD COLUMN IF NOT EXISTS salesperson_id UUID
-        REFERENCES profiles(id);
+      -- No DDL. Canonical parts invoice salesperson field is customer_invoices.salesperson_id.
     ui_surface_hint: "Parts Invoice header"
     dependencies: []
 
@@ -1591,16 +1585,19 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Carrier + freight terms for the shipment."
-    qep_status: MISSING
-    qep_table: parts_invoices
-    qep_column: ship_via
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_status: BUILT
+    qep_table: customer_invoices
+    qep_column: "ship_via, freight_terms"
+    qep_evidence:
+      - "supabase/migrations/477_customer_invoice_wave2_columns.sql public.customer_invoices.ship_via/freight_terms"
+      - "supabase/migrations/468_parts_invoice_lines_customer_invoices.sql canonical parts invoice parent is customer_invoices"
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.ship_via/freight_terms"
+    qep_gap_notes: "Resolved on canonical customer_invoices header; shipping terms should not be duplicated on parts_invoices."
     severity: should
     category: operational
     migration_hint: |
-      ALTER TABLE parts_invoices ADD COLUMN ship_via TEXT;
-      ALTER TABLE parts_invoices ADD COLUMN freight_terms TEXT;
+      -- No DDL. Canonical parts invoice shipping fields are customer_invoices.ship_via
+      -- and customer_invoices.freight_terms.
     ui_surface_hint: "Parts Invoice header — Shipping block"
     dependencies: []
 
@@ -1635,15 +1632,18 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.11.45.txt
     intellidealer_field_type: text
     intellidealer_purpose: "Per-invoice discount group override."
-    qep_status: MISSING
-    qep_table: parts_invoices
+    qep_status: BUILT
+    qep_table: customer_invoices
     qep_column: discount_code
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "supabase/migrations/477_customer_invoice_wave2_columns.sql public.customer_invoices.discount_code"
+      - "supabase/migrations/468_parts_invoice_lines_customer_invoices.sql canonical parts invoice parent is customer_invoices"
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.discount_code"
+    qep_gap_notes: "Resolved on canonical customer_invoices header; discount_code is the per-invoice discount override."
     severity: should
     category: financial
     migration_hint: |
-      ALTER TABLE parts_invoices ADD COLUMN discount_code TEXT;
+      -- No DDL. Canonical parts invoice discount field is customer_invoices.discount_code.
     ui_surface_hint: "Parts Invoice header — Discount block"
     dependencies: []
 
@@ -1682,40 +1682,19 @@ fields:
       Per-line four-stage quantity ladder: Ordered → Issued (pulled
       from bin) → Shipped → Invoiced. Tracks the parts handoff
       from counter to customer. Critical workflow primitive.
-    qep_status: PARTIAL
-    qep_table: parts_invoices
-    qep_column: null
+    qep_status: BUILT
+    qep_table: parts_invoice_lines
+    qep_column: "qty_ordered, qty_issued, qty_shipped, qty_invoiced"
     qep_evidence:
-      - "database.types.ts parts_invoices (table exists; verify line-item shape)"
-    qep_gap_notes: |
-      Need parts_invoice_lines with the four-quantity ladder columns.
+      - "supabase/migrations/468_parts_invoice_lines_customer_invoices.sql public.parts_invoice_lines qty_ordered/qty_issued/qty_shipped/qty_invoiced"
+      - "supabase/migrations/468_parts_invoice_lines_customer_invoices.sql parts_invoice_lines.customer_invoice_id references customer_invoices"
+      - "apps/web/src/lib/database.types.ts public.Tables.parts_invoice_lines.qty_ordered/qty_issued/qty_shipped/qty_invoiced"
+    qep_gap_notes: "Resolved by parts_invoice_lines detail rows against canonical customer_invoices header."
     severity: must
     category: workflow
     migration_hint: |
-      CREATE TABLE parts_invoice_lines (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        workspace_id uuid NOT NULL,
-        parts_invoice_id uuid NOT NULL REFERENCES parts_invoices(id) ON DELETE CASCADE,
-        sort_order INTEGER NOT NULL,
-        cash_code TEXT,
-        part_catalog_id uuid REFERENCES parts_catalog(id),
-        part_number TEXT NOT NULL,
-        description TEXT,
-        bin_location TEXT,
-        ofc TEXT,
-        qty_ordered INTEGER NOT NULL DEFAULT 0,
-        qty_issued INTEGER NOT NULL DEFAULT 0,
-        qty_shipped INTEGER NOT NULL DEFAULT 0,
-        qty_invoiced INTEGER NOT NULL DEFAULT 0,
-        unit_price_cents BIGINT NOT NULL,
-        discount_pct NUMERIC(5,2),
-        tax_applies BOOLEAN NOT NULL DEFAULT true,
-        extended_price_cents BIGINT NOT NULL,
-        substituted_part_id uuid REFERENCES parts_catalog(id),
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-      CREATE INDEX ON parts_invoice_lines (workspace_id, parts_invoice_id);
+      -- No DDL. parts_invoice_lines.customer_invoice_id points to customer_invoices
+      -- and carries qty_ordered, qty_issued, qty_shipped, and qty_invoiced.
     ui_surface_hint: "Parts Invoice Detail — Lines grid"
     dependencies: []
 
@@ -1769,15 +1748,18 @@ fields:
       - docs/IntelliDealer/_OCR/Phase-3_Parts/Parts Invoicing.txt
     intellidealer_field_type: json
     intellidealer_purpose: "Per-invoice print configuration (form, copies, label option)."
-    qep_status: MISSING
-    qep_table: parts_invoices
+    qep_status: BUILT
+    qep_table: customer_invoices
     qep_column: print_parameters
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_evidence:
+      - "supabase/migrations/477_customer_invoice_wave2_columns.sql public.customer_invoices.print_parameters"
+      - "supabase/migrations/468_parts_invoice_lines_customer_invoices.sql canonical parts invoice parent is customer_invoices"
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.print_parameters"
+    qep_gap_notes: "Resolved on canonical customer_invoices header; print parameter payload belongs with the invoice header."
     severity: could
     category: nice_to_have
     migration_hint: |
-      ALTER TABLE parts_invoices ADD COLUMN print_parameters JSONB;
+      -- No DDL. Canonical parts invoice print payload is customer_invoices.print_parameters.
     ui_surface_hint: "Parts Invoice — Print modal"
     dependencies: []
 
@@ -1813,25 +1795,17 @@ fields:
     intellidealer_purpose: |
       Pushes the invoice's ship-to into UPS WorldShip and pulls back
       tracking #. Saves manual data entry on every shipment.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "No UPS integration."
+    qep_status: BUILT
+    qep_table: shipping_label_runs
+    qep_column: customer_invoice_id
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.shipping_label_runs.customer_invoice_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains shipping_label_runs.customer_invoice_id."
     severity: should
     category: workflow
     migration_hint: |
-      CREATE TABLE shipping_label_runs (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        workspace_id uuid NOT NULL,
-        parts_invoice_id uuid REFERENCES parts_invoices(id),
-        carrier TEXT NOT NULL,
-        tracking_number TEXT,
-        label_url TEXT,
-        cost_cents BIGINT,
-        ran_by UUID REFERENCES profiles(id),
-        ran_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
+      -- Partial schema support only. shipping_label_runs.customer_invoice_id
+      -- links label attempts to canonical customer_invoices.
     ui_surface_hint: "Parts Invoice — UPS WorldShip Import button"
     dependencies: []
 

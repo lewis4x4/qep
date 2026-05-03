@@ -69,6 +69,7 @@ fields:
 
 
 
+
   - id: ar_aging.invoice_first_digit
     intellidealer_label: "Select Invoice 1st Digit"
     intellidealer_screen: "Accounts Receivable - Outstanding A/R"
@@ -869,12 +870,17 @@ fields:
       Filter toggle for the Credit Limit Analysis screen — when enabled,
       includes customers whose credit_limit is 0. Useful for finding cash-
       only customers who have unexpectedly run a balance.
-    qep_status: "MISSING"
-    qep_table: "(UI filter)"
-    qep_column: null
-    qep_evidence: []
+    qep_status: "BUILT"
+    qep_table: "qrm_companies"
+    qep_column: "credit_limit_cents"
+    qep_evidence:
+      - "supabase/migrations/472_qrm_company_wave2_columns.sql public.qrm_companies.credit_limit_cents"
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_companies.credit_limit_cents"
+      - "apps/web/src/lib/database.types.ts public.Views.crm_companies.credit_limit"
     qep_gap_notes: |
-      UI-only filter; depends on credit_limit being stored.
+      Resolved as a schema-supported UI filter: qrm_companies.credit_limit_cents
+      preserves explicit zero credit limits (0) separately from unknown/unmigrated
+      limits (NULL).
     severity: "could"
     category: "reporting"
     migration_hint: ""
@@ -2599,11 +2605,14 @@ fields:
     intellidealer_purpose: |
       Filter toggle to include billings that were attempted but not
       successfully submitted. Required for diagnosing failed runs.
-    qep_status: "MISSING"
-    qep_table: "(UI filter)"
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "UI-only; depends on billing_queue persistence."
+    qep_status: "BUILT"
+    qep_table: "billing_queue"
+    qep_column: "status"
+    qep_evidence:
+      - "supabase/migrations/450_billing_queue.sql public.billing_queue.status"
+      - "apps/web/src/lib/database.types.ts public.Tables.billing_queue.status"
+      - "supabase/migrations/450_billing_queue.sql idx_billing_queue_status"
+    qep_gap_notes: "Resolved as a schema-supported UI filter over persisted billing_queue.status, submitted_at, and error fields."
     severity: "should"
     category: "operational"
     migration_hint: ""
@@ -2621,19 +2630,18 @@ fields:
     intellidealer_purpose: |
       Scheduled job that purges Completed/Failed jobs older than one month.
       Required for billing-queue housekeeping and audit retention.
-    qep_status: "MISSING"
+    qep_status: "BUILT"
     qep_table: "(cron job)"
     qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "No batch-job scheduler entry today."
+    qep_evidence:
+      - "supabase/migrations/528_intellidealer_parts_finance_non_must.sql public.purge_billing_queue"
+      - "supabase/migrations/528_intellidealer_parts_finance_non_must.sql cron.schedule('billing-queue-purge', ...)"
+    qep_gap_notes: "Resolved by additive purge function plus guarded pg_cron schedule; environments without pg_cron skip scheduling with a notice."
     severity: "should"
     category: "operational"
     migration_hint: |
-      -- pg_cron schedule
-      SELECT cron.schedule('billing_queue_purge', '0 2 * * 0',
-        $$DELETE FROM billing_queue
-          WHERE status IN ('completed','failed')
-            AND submitted_at < now() - INTERVAL '30 days'$$);
+      -- Implemented as public.purge_billing_queue(interval '30 days') and a
+      -- guarded weekly cron job named billing-queue-purge.
     ui_surface_hint: "Settings > Batch Jobs > Billing Queue Purge"
     dependencies:
       - billing_queue.reference_number

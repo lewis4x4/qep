@@ -35,6 +35,7 @@ fields:
 
 
 
+
   - id: customer.status
     intellidealer_label: "Status"
     intellidealer_screen: "Customer Portal"
@@ -727,15 +728,21 @@ fields:
     intellidealer_purpose: |
       Generic / non-equipment invoice history (training, fees, sublet, etc.)
       Last 5 with create date and total. Important for catch-all billing.
-    qep_status: "MISSING"
-    qep_table: "(new) general_invoices"
-    qep_column: ""
-    qep_evidence: []
-    qep_gap_notes: "No invoice tables today; defer with the AR sub-ledger build."
+    qep_status: "BUILT"
+    qep_table: "customer_invoices"
+    qep_column: "invoice_source_code"
+    qep_evidence:
+      - "supabase/migrations/082_customer_portal.sql creates customer_invoices"
+      - "supabase/migrations/477_customer_invoice_wave2_columns.sql adds customer_invoices.invoice_source_code with GENERAL allowed"
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.invoice_source_code"
+    qep_gap_notes: |
+      Resolved onto canonical customer_invoices rather than creating a
+      duplicate general_invoices table. Use invoice_source_code='GENERAL'
+      for generic/non-equipment invoice history.
     severity: "should"
     category: "financial"
     migration_hint: |
-      -- general_invoices table parallel to equipment_invoices, parts_invoices, etc.
+      -- No new table. Canonical path is customer_invoices where invoice_source_code='GENERAL'.
     ui_surface_hint: "Account 360 invoice tab"
     dependencies: [customer_portal_view.equipment_invoice_history]
 
@@ -750,28 +757,22 @@ fields:
       Customer's historical "job jacket" records — IntelliDealer's term for
       a multi-document service work bundle. Shows machine description and
       job description per jacket.
-    qep_status: "PARTIAL"
-    qep_table: "service_jobs (Phase-4)"
-    qep_column: ""
+    qep_status: "BUILT"
+    qep_table: "job_jackets"
+    qep_column: "id"
     qep_evidence:
-      - "QEP service jobs cover this conceptually but the bundling-by-jacket pattern is dealer-specific"
+      - "supabase/migrations/453_job_jackets.sql creates job_jackets"
+      - "supabase/migrations/482_service_job_wave2_columns.sql adds service_jobs.job_jacket_id"
+      - "apps/web/src/lib/database.types.ts public.Tables.job_jackets"
+      - "apps/web/src/lib/database.types.ts public.Tables.service_jobs.job_jacket_id"
     qep_gap_notes: |
-      Service jobs in QEP are individual work orders. IntelliDealer's
-      job jacket aggregates multiple WOs under one customer-supplied issue.
-      Consider adding a parent_job_jacket_id on service_jobs to mirror this.
+      Resolved by existing job_jackets foundation plus service_jobs.job_jacket_id.
+      This models IntelliDealer's customer-level jacket bundle while preserving
+      service_jobs as individual work orders.
     severity: "could"
     category: "operational"
     migration_hint: |
-      ALTER TABLE service_jobs ADD COLUMN job_jacket_id UUID;
-      CREATE TABLE job_jackets (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        workspace_id UUID NOT NULL,
-        company_id UUID NOT NULL REFERENCES qrm_companies(id),
-        machine_description TEXT,
-        problem_description TEXT,
-        opened_at TIMESTAMPTZ DEFAULT now(),
-        closed_at TIMESTAMPTZ
-      );
+      -- Built by 453_job_jackets.sql and 482_service_job_wave2_columns.sql.
     ui_surface_hint: "Account 360 service tab grouped by jacket"
     dependencies: []
 
@@ -854,28 +855,20 @@ fields:
       Customer-level multimedia files (logos, site photos, signed agreements
       scanned, etc.). Multimedia tab gates which file is the "Portal"
       classification — the image rendered atop the Customer Portal screen.
-    qep_status: "PARTIAL"
-    qep_table: "(needs) customer_attachments"
-    qep_column: ""
-    qep_evidence: []
+    qep_status: "BUILT"
+    qep_table: "customer_attachments"
+    qep_column: "classification"
+    qep_evidence:
+      - "supabase/migrations/452_customer_attachments.sql creates customer_attachments"
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_attachments.classification"
     qep_gap_notes: |
-      QEP has document tables for deals/quotes/work orders but a customer
-      attachments table is not visible in this slice. Add one to host
-      logo + signed agreements + site photos.
+      Resolved by existing customer_attachments. The classification check
+      includes portal, logo, site_photo, signed_agreement, and other, matching
+      the Customer Portal multimedia use case.
     severity: "should"
     category: "operational"
     migration_hint: |
-      CREATE TABLE customer_attachments (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        workspace_id UUID NOT NULL,
-        company_id UUID NOT NULL REFERENCES qrm_companies(id),
-        classification TEXT, -- 'portal','logo','site_photo','signed_agreement','other'
-        file_url TEXT NOT NULL,
-        file_name TEXT,
-        mime_type TEXT,
-        uploaded_by UUID REFERENCES profiles(id),
-        created_at TIMESTAMPTZ DEFAULT now()
-      );
+      -- Built by 452_customer_attachments.sql.
     ui_surface_hint: "Account 360 attachments panel; portal hero image"
     dependencies: []
 
@@ -889,11 +882,17 @@ fields:
     intellidealer_purpose: |
       Customer's last 5 open general invoices with branch location.
       List/Create links lets the rep open all or start a new one inline.
-    qep_status: "MISSING"
-    qep_table: "(new) general_invoices"
-    qep_column: ""
-    qep_evidence: []
-    qep_gap_notes: "Same as general_invoice_history."
+    qep_status: "BUILT"
+    qep_table: "customer_invoices"
+    qep_column: "invoice_source_code"
+    qep_evidence:
+      - "supabase/migrations/082_customer_portal.sql creates customer_invoices"
+      - "supabase/migrations/477_customer_invoice_wave2_columns.sql adds customer_invoices.invoice_source_code with GENERAL allowed"
+      - "apps/web/src/lib/database.types.ts public.Tables.customer_invoices.status"
+    qep_gap_notes: |
+      Same canonical mapping as general_invoice_history. Open general invoices
+      are customer_invoices where invoice_source_code='GENERAL' and status is
+      an open/pending lifecycle value.
     severity: "should"
     category: "financial"
     migration_hint: ""
@@ -1009,13 +1008,17 @@ fields:
     intellidealer_purpose: |
       Customer's last 5 rental contracts with make/model + Edit/List/Create
       inline actions.
-    qep_status: "PARTIAL"
-    qep_table: "rental_contracts (Phase-3)"
-    qep_column: ""
-    qep_evidence: []
+    qep_status: "BUILT"
+    qep_table: "rental_contracts"
+    qep_column: "portal_customer_id"
+    qep_evidence:
+      - "supabase/migrations/522_rental_intellidealer_financial_foundation.sql extends rental_contracts and indexes rental portal/customer access"
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.portal_customer_id"
+      - "apps/web/src/features/portal/pages/PortalRentalsPage.tsx renders active rental contracts for portal customers"
     qep_gap_notes: |
-      Rental phase covers this; ensure the Account 360 view filters by
-      company_id and joins make/model for compact display.
+      Resolved by rental_contracts plus the portal rental workspace. Account
+      360 can filter through portal_customer_id and join qrm_equipment for
+      compact make/model display.
     severity: "must"
     category: "operational"
     migration_hint: ""
@@ -1148,11 +1151,18 @@ fields:
     intellidealer_purpose: |
       Recent rentals with stock #, description, last modified. Drill-through
       to the unit profile.
-    qep_status: "PARTIAL"
-    qep_table: "rental_contracts (Phase-3)"
-    qep_column: ""
-    qep_evidence: []
-    qep_gap_notes: "Covered by rental phase."
+    qep_status: "BUILT"
+    qep_table: "rental_contracts"
+    qep_column: "equipment_id"
+    qep_evidence:
+      - "supabase/migrations/522_rental_intellidealer_financial_foundation.sql creates rental_contract_lines and extends rental_contracts"
+      - "supabase/migrations/474_qrm_equipment_wave2_columns.sql adds qrm_equipment.stock_number"
+      - "apps/web/src/lib/database.types.ts public.Tables.rental_contracts.equipment_id"
+      - "apps/web/src/lib/database.types.ts public.Tables.qrm_equipment.stock_number"
+    qep_gap_notes: |
+      Resolved by rental_contracts/rental_contract_lines linked to qrm_equipment.
+      Recent-rented display can show stock_number plus make/model/name and
+      contract updated_at/created_at for last-modified ordering.
     severity: "should"
     category: "operational"
     migration_hint: ""
@@ -1281,11 +1291,18 @@ fields:
       Customer's Service Agreement (SAM) contracts — number + program name.
       Service agreements drive recurring service revenue and tie to
       preventive-maintenance schedules.
-    qep_status: "PARTIAL"
-    qep_table: "service_agreements (Phase-4)"
-    qep_column: ""
-    qep_evidence: []
-    qep_gap_notes: "Covered conceptually by Phase-4."
+    qep_status: "BUILT"
+    qep_table: "service_agreements"
+    qep_column: "program_id"
+    qep_evidence:
+      - "supabase/migrations/349_service_agreements.sql creates service_agreements"
+      - "supabase/migrations/424_service_agreement_programs.sql creates service_agreement_programs"
+      - "supabase/migrations/469_service_agreements_intellidealer_compat.sql adds service_agreements.program_id and contract compatibility fields"
+      - "apps/web/src/lib/database.types.ts public.Tables.service_agreements.program_id"
+    qep_gap_notes: |
+      Resolved by the existing service_agreements model and program catalog.
+      Contract number, program, billing, value, and expiry fields support the
+      SAM contracts portal tile.
     severity: "must"
     category: "financial"
     migration_hint: ""
@@ -1326,11 +1343,18 @@ fields:
     intellidealer_purpose: |
       Customer's open service requests by # and problem type. Inline
       List/More/Create. Pre-WO ticket inbox for the service department.
-    qep_status: "PARTIAL"
-    qep_table: "service_requests (Phase-4)"
-    qep_column: ""
-    qep_evidence: []
-    qep_gap_notes: "Covered conceptually by Phase-4."
+    qep_status: "BUILT"
+    qep_table: "service_requests"
+    qep_column: "service_job_id"
+    qep_evidence:
+      - "supabase/migrations/082_customer_portal.sql creates service_requests"
+      - "supabase/migrations/100_service_portal_bridge.sql adds service_requests.service_job_id"
+      - "apps/web/src/lib/database.types.ts public.Tables.service_requests"
+      - "apps/web/src/lib/database.types.ts public.Tables.service_requests.service_job_id"
+    qep_gap_notes: |
+      Resolved by customer portal service_requests plus the internal service
+      job bridge. The portal tile can list open requests and link through to
+      the created service_jobs row when one exists.
     severity: "must"
     category: "operational"
     migration_hint: ""

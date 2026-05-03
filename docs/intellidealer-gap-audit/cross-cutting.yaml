@@ -102,6 +102,7 @@ fields:
 
 
 
+
   - id: employee.employee_number
     intellidealer_label: "Employee Number"
     intellidealer_screen: "Employee Profile: Listing"
@@ -1814,15 +1815,18 @@ fields:
       Salesperson, Make/Model, Stock Number, Group, Job Site Description,
       Customer Name, Machine Serial Number, Unit Description). User
       preference; persisted client-side.
-    qep_status: "MISSING"
+    qep_status: "BUILT"
     qep_table: "user_preferences"
-    qep_column: "traffic_calendar_display_settings (jsonb)"
+    qep_column: "traffic_calendar_display_settings"
+    qep_evidence:
+      - "supabase/migrations/526_intellidealer_crm_cross_cutting_non_must.sql public.user_preferences.traffic_calendar_display_settings"
     qep_gap_notes: |
-      Replaceable in QEP via per-user preferences but not currently built.
+      Resolved by reserved non-must cleanup migration 526. QEP now has
+      per-user workspace persistence for the eleven Traffic Weekly/Monthly
+      display toggles; UI wiring can use this column without more schema.
     severity: "could"
     category: "nice_to_have"
-    migration_hint: |
-      -- store in profiles.metadata or a user_preferences table
+    migration_hint: ""
     ui_surface_hint: "Weekly / Monthly view 'Display' toggles"
     dependencies: []
 
@@ -1917,8 +1921,14 @@ fields:
     qep_status: "MISSING"
     qep_table: "(workflow)"
     qep_column: "(action)"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.printed_count"
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.last_printed_at"
+      - "supabase/migrations/462_record_change_history.sql public.record_change_history"
     qep_gap_notes: |
-      No bulk-edit on traffic tickets in QEP today.
+      True workflow deferral. QEP has ticket print counters and central
+      audit foundations, but no Traffic Management bulk-edit / receipt-print
+      action surface exists today.
     severity: "should"
     category: "operational"
     migration_hint: |
@@ -1936,15 +1946,19 @@ fields:
     intellidealer_field_type: "computed"
     intellidealer_purpose: |
       Generates the "Deliveries Completed This Month" report.
-    qep_status: "MISSING"
-    qep_table: "(report)"
-    qep_column: "(action)"
+    qep_status: "BUILT"
+    qep_table: "v_traffic_receipts_completed_this_month"
+    qep_column: "(view)"
+    qep_evidence:
+      - "supabase/migrations/526_intellidealer_crm_cross_cutting_non_must.sql public.v_traffic_receipts_completed_this_month"
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.completed_at"
     qep_gap_notes: |
-      Equivalent dashboard not built.
+      Resolved by reserved non-must cleanup migration 526 as a
+      security-invoker report view over completed traffic tickets for the
+      current calendar month.
     severity: "could"
     category: "reporting"
-    migration_hint: |
-      View / saved-query layer.
+    migration_hint: ""
     ui_surface_hint: "Listing tab footer link"
     dependencies: [traffic_ticket.receipt_number]
 
@@ -2392,11 +2406,14 @@ fields:
       - "database.types.ts qrm_auth_audit_events.actor_user_id"
       - "database.types.ts document_audit_events.actor_user_id"
       - "database.types.ts qrm_geofences.created_by"
+      - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.created_by_user_id"
+      - "apps/web/src/lib/database.types.ts public.Tables.record_change_history.actor_user_id"
     qep_gap_notes: |
-      Implemented inconsistently: some tables (qrm_geofences) carry
-      created_by, but most domain tables (traffic_tickets, qrm_companies,
-      branches) lack it as a first-class column. Audit must trawl
-      multiple *_audit_events tables.
+      Implemented inconsistently: some tables carry first-class created_by
+      or created_by_user_id and migration 526 captures actor_user_id into
+      record_change_history for key operational tables, but QEP still does
+      not enforce a universal created_by column on every workspace-scoped
+      table.
     severity: "must"
     category: "regulatory"
     migration_hint: |
@@ -2462,9 +2479,9 @@ fields:
       Field-level diff (old_value / new_value) tied to actor + timestamp.
       Required for any record that affects price, commission, or
       regulatory state.
-    qep_status: "PARTIAL"
-    qep_table: "qb_*_audit / qrm_*_audit_events / parts_pricing_audit / document_audit_events / customer_profile_access_audit"
-    qep_column: "changed_fields / snapshot / metadata"
+    qep_status: "BUILT"
+    qep_table: "record_change_history"
+    qep_column: "changed_fields / before_snapshot / after_snapshot / actor_user_id"
     qep_evidence:
       - "database.types.ts qb_deals_audit"
       - "database.types.ts qb_quotes_audit"
@@ -2472,28 +2489,23 @@ fields:
       - "database.types.ts parts_pricing_audit"
       - "database.types.ts qrm_merge_audit_events"
       - "database.types.ts qrm_company_merge_audit"
+      - "apps/web/src/lib/database.types.ts public.Tables.record_change_history"
+      - >-
+        supabase/migrations/526_intellidealer_crm_cross_cutting_non_must.sql
+        public.record_change_history_capture trigger on
+        branches/traffic_tickets/qrm_companies/crm_equipment/qrm_equipment/service_jobs/rental_contracts
     qep_gap_notes: |
-      Per-domain audit exists for the QuickBuilder, QRM, parts pricing,
-      documents, and customer-profile access. NO field-level audit on
-      branches, traffic_tickets, equipment, work_orders, rentals — the
-      operational backbone. A central trigger-based history table would
-      close this gap.
+      Resolved by reserved non-must cleanup migration 526. Per-domain audit
+      remains in place, and the central record_change_history trigger now
+      captures insert/update/delete diffs for branches, traffic_tickets,
+      qrm_companies, crm_equipment, qrm_equipment, service_jobs, and
+      rental_contracts when those tables exist.
     severity: "must"
     category: "regulatory"
     migration_hint: |
-      CREATE TABLE record_change_history (
-        id uuid primary key default gen_random_uuid(),
-        workspace_id uuid not null,
-        table_name text not null,
-        record_id uuid not null,
-        actor_user_id uuid references profiles(id),
-        action text not null check (action in ('insert','update','delete')),
-        changed_fields jsonb not null,
-        before_snapshot jsonb,
-        after_snapshot jsonb,
-        occurred_at timestamptz not null default now()
-      );
-      -- attach AFTER trigger to every workspace table that needs audit
+      -- Central table exists from migration 462; migration 526 adds
+      -- public.record_change_history_capture() and attaches AFTER triggers
+      -- to the operational backbone tables listed in qep_evidence.
     ui_surface_hint: "Record detail > 'History' tab on every entity"
     dependencies: [audit.created_by]
 

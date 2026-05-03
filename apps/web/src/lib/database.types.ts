@@ -3461,6 +3461,13 @@ export type Database = {
             referencedColumns: ["service_job_id"]
           },
           {
+            foreignKeyName: "customer_invoices_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
+          {
             foreignKeyName: "customer_invoices_service_request_id_fkey"
             columns: ["service_request_id"]
             isOneToOne: false
@@ -4928,6 +4935,13 @@ export type Database = {
             columns: ["traffic_ticket_id_fk"]
             isOneToOne: false
             referencedRelation: "traffic_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "demos_traffic_ticket_id_fk_fkey"
+            columns: ["traffic_ticket_id_fk"]
+            isOneToOne: false
+            referencedRelation: "v_traffic_receipts_completed_this_month"
             referencedColumns: ["id"]
           },
         ]
@@ -6743,6 +6757,74 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: []
+      }
+      equipment_base_codes_import_runs: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          import_format: string | null
+          manufacturer: string
+          metadata: Json
+          ran_at: string
+          ran_by: string | null
+          rows_inserted: number
+          rows_skipped: number
+          rows_updated: number
+          run_status: string
+          source_filename: string | null
+          source_sha256: string | null
+          source_storage_path: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          import_format?: string | null
+          manufacturer: string
+          metadata?: Json
+          ran_at?: string
+          ran_by?: string | null
+          rows_inserted?: number
+          rows_skipped?: number
+          rows_updated?: number
+          run_status?: string
+          source_filename?: string | null
+          source_sha256?: string | null
+          source_storage_path?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          import_format?: string | null
+          manufacturer?: string
+          metadata?: Json
+          ran_at?: string
+          ran_by?: string | null
+          rows_inserted?: number
+          rows_skipped?: number
+          rows_updated?: number
+          run_status?: string
+          source_filename?: string | null
+          source_sha256?: string | null
+          source_storage_path?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipment_base_codes_import_runs_ran_by_fkey"
+            columns: ["ran_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       equipment_documents: {
         Row: {
@@ -10795,6 +10877,13 @@ export type Database = {
             referencedColumns: ["service_job_id"]
           },
           {
+            foreignKeyName: "inspection_runs_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
+          {
             foreignKeyName: "inspection_runs_template_id_fkey"
             columns: ["template_id"]
             isOneToOne: false
@@ -11652,6 +11741,13 @@ export type Database = {
             referencedColumns: ["service_job_id"]
           },
           {
+            foreignKeyName: "job_code_observations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
+          {
             foreignKeyName: "job_code_observations_technician_id_fkey"
             columns: ["technician_id"]
             isOneToOne: false
@@ -12166,6 +12262,13 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "machine_knowledge_notes_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
             referencedColumns: ["service_job_id"]
           },
           {
@@ -17334,6 +17437,13 @@ export type Database = {
             referencedColumns: ["service_job_id"]
           },
           {
+            foreignKeyName: "parts_quotes_converted_service_job_id_fkey"
+            columns: ["converted_service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
+          {
             foreignKeyName: "parts_quotes_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
@@ -18550,6 +18660,13 @@ export type Database = {
             columns: ["service_quote_id"]
             isOneToOne: false
             referencedRelation: "v_deal_genome_service_quote_gain_loss"
+            referencedColumns: ["service_quote_id"]
+          },
+          {
+            foreignKeyName: "portal_quote_reviews_service_quote_id_fkey"
+            columns: ["service_quote_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_quote_gain_loss_by_technician"
             referencedColumns: ["service_quote_id"]
           },
         ]
@@ -26555,6 +26672,13 @@ export type Database = {
             referencedRelation: "qrm_payroll_premium_codes"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "qrm_payroll_entries_premium_code_id_fkey"
+            columns: ["premium_code_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_payroll_hours_analysis"
+            referencedColumns: ["premium_code_id"]
+          },
         ]
       }
       qrm_payroll_premium_codes: {
@@ -28706,6 +28830,125 @@ export type Database = {
           },
         ]
       }
+      rental_billing_runs: {
+        Row: {
+          billing_cycle:
+            | Database["public"]["Enums"]["rental_billing_cycle"]
+            | null
+          completed_at: string | null
+          created_at: string
+          deleted_at: string | null
+          id: string
+          invoice_count: number
+          metadata: Json
+          rollback_reason: string | null
+          rolled_back_at: string | null
+          run_date: string
+          status: string
+          total_billed_cents: number
+          triggered_by: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          billing_cycle?:
+            | Database["public"]["Enums"]["rental_billing_cycle"]
+            | null
+          completed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          invoice_count?: number
+          metadata?: Json
+          rollback_reason?: string | null
+          rolled_back_at?: string | null
+          run_date?: string
+          status?: string
+          total_billed_cents?: number
+          triggered_by?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          billing_cycle?:
+            | Database["public"]["Enums"]["rental_billing_cycle"]
+            | null
+          completed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          invoice_count?: number
+          metadata?: Json
+          rollback_reason?: string | null
+          rolled_back_at?: string | null
+          run_date?: string
+          status?: string
+          total_billed_cents?: number
+          triggered_by?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rental_billing_runs_triggered_by_fkey"
+            columns: ["triggered_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rental_contract_commissions: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          rental_contract_id: string
+          role: string | null
+          salesperson_id: string
+          split_pct: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          rental_contract_id: string
+          role?: string | null
+          salesperson_id: string
+          split_pct: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          rental_contract_id?: string
+          role?: string | null
+          salesperson_id?: string
+          split_pct?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rental_contract_commissions_rental_contract_id_fkey"
+            columns: ["rental_contract_id"]
+            isOneToOne: false
+            referencedRelation: "rental_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_contract_commissions_salesperson_id_fkey"
+            columns: ["salesperson_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rental_contract_extensions: {
         Row: {
           additional_charge: number | null
@@ -29040,6 +29283,7 @@ export type Database = {
           damage_waiver_rate_pct: number | null
           dealer_notes: string | null
           dealer_response: string | null
+          deleted_at: string | null
           delivery_address: Json
           delivery_fee_cents: number | null
           delivery_location: string | null
@@ -29049,10 +29293,15 @@ export type Database = {
           deposit_invoice_id: string | null
           deposit_required: boolean
           deposit_status: string | null
+          equipment_class: string | null
           equipment_id: string | null
+          equipment_subclass: string | null
           estimate_daily_rate: number | null
           estimate_monthly_rate: number | null
           estimate_weekly_rate: number | null
+          hard_close_reason: string | null
+          hard_closed_at: string | null
+          hard_closed_by: string | null
           hourly_rate_cents: number | null
           id: string
           included_hours_per_day: number | null
@@ -29123,6 +29372,7 @@ export type Database = {
           damage_waiver_rate_pct?: number | null
           dealer_notes?: string | null
           dealer_response?: string | null
+          deleted_at?: string | null
           delivery_address?: Json
           delivery_fee_cents?: number | null
           delivery_location?: string | null
@@ -29132,10 +29382,15 @@ export type Database = {
           deposit_invoice_id?: string | null
           deposit_required?: boolean
           deposit_status?: string | null
+          equipment_class?: string | null
           equipment_id?: string | null
+          equipment_subclass?: string | null
           estimate_daily_rate?: number | null
           estimate_monthly_rate?: number | null
           estimate_weekly_rate?: number | null
+          hard_close_reason?: string | null
+          hard_closed_at?: string | null
+          hard_closed_by?: string | null
           hourly_rate_cents?: number | null
           id?: string
           included_hours_per_day?: number | null
@@ -29206,6 +29461,7 @@ export type Database = {
           damage_waiver_rate_pct?: number | null
           dealer_notes?: string | null
           dealer_response?: string | null
+          deleted_at?: string | null
           delivery_address?: Json
           delivery_fee_cents?: number | null
           delivery_location?: string | null
@@ -29215,10 +29471,15 @@ export type Database = {
           deposit_invoice_id?: string | null
           deposit_required?: boolean
           deposit_status?: string | null
+          equipment_class?: string | null
           equipment_id?: string | null
+          equipment_subclass?: string | null
           estimate_daily_rate?: number | null
           estimate_monthly_rate?: number | null
           estimate_weekly_rate?: number | null
+          hard_close_reason?: string | null
+          hard_closed_at?: string | null
+          hard_closed_by?: string | null
           hourly_rate_cents?: number | null
           id?: string
           included_hours_per_day?: number | null
@@ -29331,6 +29592,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "rental_contracts_hard_closed_by_fkey"
+            columns: ["hard_closed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "rental_contracts_portal_customer_id_fkey"
             columns: ["portal_customer_id"]
             isOneToOne: false
@@ -29412,6 +29680,7 @@ export type Database = {
           proration_rule:
             | Database["public"]["Enums"]["rental_proration_rule"]
             | null
+          rental_billing_run_id: string | null
           rental_charge_cents: number
           rental_contract_id: string
           reversal_of_invoice_id: string | null
@@ -29457,6 +29726,7 @@ export type Database = {
           proration_rule?:
             | Database["public"]["Enums"]["rental_proration_rule"]
             | null
+          rental_billing_run_id?: string | null
           rental_charge_cents?: number
           rental_contract_id: string
           reversal_of_invoice_id?: string | null
@@ -29502,6 +29772,7 @@ export type Database = {
           proration_rule?:
             | Database["public"]["Enums"]["rental_proration_rule"]
             | null
+          rental_billing_run_id?: string | null
           rental_charge_cents?: number
           rental_contract_id?: string
           reversal_of_invoice_id?: string | null
@@ -29554,6 +29825,13 @@ export type Database = {
             referencedColumns: ["customer_invoice_id"]
           },
           {
+            foreignKeyName: "rental_invoices_rental_billing_run_id_fkey"
+            columns: ["rental_billing_run_id"]
+            isOneToOne: false
+            referencedRelation: "rental_billing_runs"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "rental_invoices_rental_contract_id_fkey"
             columns: ["rental_contract_id"]
             isOneToOne: false
@@ -29576,6 +29854,62 @@ export type Database = {
           },
         ]
       }
+      rental_print_settings: {
+        Row: {
+          accent_color: string | null
+          branch_id: string | null
+          created_at: string
+          deleted_at: string | null
+          font_family: string
+          id: string
+          logo_url: string | null
+          print_parameters: Json
+          show_rate_breakdown: boolean
+          show_serial_numbers: boolean
+          terms_template_id: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          accent_color?: string | null
+          branch_id?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          font_family?: string
+          id?: string
+          logo_url?: string | null
+          print_parameters?: Json
+          show_rate_breakdown?: boolean
+          show_serial_numbers?: boolean
+          terms_template_id?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          accent_color?: string | null
+          branch_id?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          font_family?: string
+          id?: string
+          logo_url?: string | null
+          print_parameters?: Json
+          show_rate_breakdown?: boolean
+          show_serial_numbers?: boolean
+          terms_template_id?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rental_print_settings_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rental_rate_rules: {
         Row: {
           branch_id: string | null
@@ -29583,7 +29917,9 @@ export type Database = {
           created_at: string
           customer_id: string | null
           daily_rate: number | null
+          equipment_class: string | null
           equipment_id: string | null
+          equipment_subclass: string | null
           id: string
           is_active: boolean
           make: string | null
@@ -29604,7 +29940,9 @@ export type Database = {
           created_at?: string
           customer_id?: string | null
           daily_rate?: number | null
+          equipment_class?: string | null
           equipment_id?: string | null
+          equipment_subclass?: string | null
           id?: string
           is_active?: boolean
           make?: string | null
@@ -29625,7 +29963,9 @@ export type Database = {
           created_at?: string
           customer_id?: string | null
           daily_rate?: number | null
+          equipment_class?: string | null
           equipment_id?: string | null
+          equipment_subclass?: string | null
           id?: string
           is_active?: boolean
           make?: string | null
@@ -31096,6 +31436,13 @@ export type Database = {
             referencedColumns: ["service_job_id"]
           },
           {
+            foreignKeyName: "service_billing_rows_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
+          {
             foreignKeyName: "service_billing_rows_service_job_segment_id_fkey"
             columns: ["service_job_segment_id"]
             isOneToOne: false
@@ -31107,6 +31454,20 @@ export type Database = {
             columns: ["service_job_segment_id"]
             isOneToOne: false
             referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_segment_id"]
+          },
+          {
+            foreignKeyName: "service_billing_rows_service_job_segment_id_fkey"
+            columns: ["service_job_segment_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_quote_gain_loss_by_technician"
+            referencedColumns: ["service_job_segment_id"]
+          },
+          {
+            foreignKeyName: "service_billing_rows_service_job_segment_id_fkey"
+            columns: ["service_job_segment_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
             referencedColumns: ["service_job_segment_id"]
           },
         ]
@@ -31253,6 +31614,13 @@ export type Database = {
             referencedColumns: ["service_job_id"]
           },
           {
+            foreignKeyName: "service_completion_feedback_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
+          {
             foreignKeyName: "service_completion_feedback_submitted_by_fkey"
             columns: ["submitted_by"]
             isOneToOne: false
@@ -31379,6 +31747,13 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_customer_notifications_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
             referencedColumns: ["service_job_id"]
           },
         ]
@@ -31646,6 +32021,13 @@ export type Database = {
             referencedRelation: "v_service_jobs_last_activity"
             referencedColumns: ["service_job_id"]
           },
+          {
+            foreignKeyName: "service_inspections_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
         ]
       }
       service_internal_billing_line_staging: {
@@ -31792,6 +32174,13 @@ export type Database = {
             referencedRelation: "v_service_jobs_last_activity"
             referencedColumns: ["service_job_id"]
           },
+          {
+            foreignKeyName: "service_internal_billing_line_staging_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
         ]
       }
       service_job_blockers: {
@@ -31886,6 +32275,13 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_job_blockers_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
             referencedColumns: ["service_job_id"]
           },
           {
@@ -31986,6 +32382,13 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_job_events_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
             referencedColumns: ["service_job_id"]
           },
         ]
@@ -32231,6 +32634,13 @@ export type Database = {
             columns: ["service_job_id"]
             isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_job_segments_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
             referencedColumns: ["service_job_id"]
           },
           {
@@ -32610,6 +33020,13 @@ export type Database = {
             referencedRelation: "traffic_tickets"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "service_jobs_traffic_ticket_id_fkey"
+            columns: ["traffic_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "v_traffic_receipts_completed_this_month"
+            referencedColumns: ["id"]
+          },
         ]
       }
       service_knowledge_base: {
@@ -32697,6 +33114,7 @@ export type Database = {
           ended_at: string | null
           gl_labor_account: string | null
           id: string
+          is_rework: boolean
           labor_cost_cents: number
           labor_cost_rate_cents: number | null
           labor_date: string | null
@@ -32707,6 +33125,7 @@ export type Database = {
           revenue_type:
             | Database["public"]["Enums"]["work_order_revenue_type"]
             | null
+          rework_of_labor_id: string | null
           service_job_id: string
           service_job_segment_id: string | null
           service_timecard_id: string | null
@@ -32733,6 +33152,7 @@ export type Database = {
           ended_at?: string | null
           gl_labor_account?: string | null
           id?: string
+          is_rework?: boolean
           labor_cost_cents?: number
           labor_cost_rate_cents?: number | null
           labor_date?: string | null
@@ -32743,6 +33163,7 @@ export type Database = {
           revenue_type?:
             | Database["public"]["Enums"]["work_order_revenue_type"]
             | null
+          rework_of_labor_id?: string | null
           service_job_id: string
           service_job_segment_id?: string | null
           service_timecard_id?: string | null
@@ -32769,6 +33190,7 @@ export type Database = {
           ended_at?: string | null
           gl_labor_account?: string | null
           id?: string
+          is_rework?: boolean
           labor_cost_cents?: number
           labor_cost_rate_cents?: number | null
           labor_date?: string | null
@@ -32779,6 +33201,7 @@ export type Database = {
           revenue_type?:
             | Database["public"]["Enums"]["work_order_revenue_type"]
             | null
+          rework_of_labor_id?: string | null
           service_job_id?: string
           service_job_segment_id?: string | null
           service_timecard_id?: string | null
@@ -32834,6 +33257,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "service_labor_ledger_rework_of_labor_id_fkey"
+            columns: ["rework_of_labor_id"]
+            isOneToOne: false
+            referencedRelation: "service_labor_ledger"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "service_labor_ledger_service_job_id_fkey"
             columns: ["service_job_id"]
             isOneToOne: false
@@ -32883,6 +33313,13 @@ export type Database = {
             referencedColumns: ["service_job_id"]
           },
           {
+            foreignKeyName: "service_labor_ledger_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
+          {
             foreignKeyName: "service_labor_ledger_service_job_segment_id_fkey"
             columns: ["service_job_segment_id"]
             isOneToOne: false
@@ -32894,6 +33331,20 @@ export type Database = {
             columns: ["service_job_segment_id"]
             isOneToOne: false
             referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_segment_id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_service_job_segment_id_fkey"
+            columns: ["service_job_segment_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_quote_gain_loss_by_technician"
+            referencedColumns: ["service_job_segment_id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_service_job_segment_id_fkey"
+            columns: ["service_job_segment_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
             referencedColumns: ["service_job_segment_id"]
           },
           {
@@ -33134,6 +33585,13 @@ export type Database = {
             referencedColumns: ["service_job_id"]
           },
           {
+            foreignKeyName: "service_parts_actions_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
+          {
             foreignKeyName: "service_parts_actions_requirement_id_fkey"
             columns: ["requirement_id"]
             isOneToOne: false
@@ -33254,6 +33712,13 @@ export type Database = {
             referencedColumns: ["service_job_id"]
           },
           {
+            foreignKeyName: "service_parts_inventory_overrides_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
+          {
             foreignKeyName: "service_parts_inventory_overrides_requirement_id_fkey"
             columns: ["requirement_id"]
             isOneToOne: false
@@ -33368,6 +33833,13 @@ export type Database = {
             referencedColumns: ["service_job_id"]
           },
           {
+            foreignKeyName: "service_parts_requirements_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
+          {
             foreignKeyName: "spr_vendor_fk"
             columns: ["vendor_id"]
             isOneToOne: false
@@ -33465,6 +33937,13 @@ export type Database = {
             referencedColumns: ["service_job_id"]
           },
           {
+            foreignKeyName: "service_parts_staging_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
+          {
             foreignKeyName: "service_parts_staging_requirement_id_fkey"
             columns: ["requirement_id"]
             isOneToOne: false
@@ -33532,6 +34011,13 @@ export type Database = {
             referencedRelation: "v_deal_genome_service_quote_gain_loss"
             referencedColumns: ["service_quote_id"]
           },
+          {
+            foreignKeyName: "service_quote_approvals_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_quote_gain_loss_by_technician"
+            referencedColumns: ["service_quote_id"]
+          },
         ]
       }
       service_quote_lines: {
@@ -33597,6 +34083,13 @@ export type Database = {
             columns: ["quote_id"]
             isOneToOne: false
             referencedRelation: "v_deal_genome_service_quote_gain_loss"
+            referencedColumns: ["service_quote_id"]
+          },
+          {
+            foreignKeyName: "service_quote_lines_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_quote_gain_loss_by_technician"
             referencedColumns: ["service_quote_id"]
           },
         ]
@@ -33700,6 +34193,13 @@ export type Database = {
             referencedColumns: ["service_quote_id"]
           },
           {
+            foreignKeyName: "service_quotes_cloned_from_quote_id_fkey"
+            columns: ["cloned_from_quote_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_quote_gain_loss_by_technician"
+            referencedColumns: ["service_quote_id"]
+          },
+          {
             foreignKeyName: "service_quotes_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -33753,6 +34253,13 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
             referencedColumns: ["service_job_id"]
           },
           {
@@ -33933,6 +34440,13 @@ export type Database = {
             referencedRelation: "v_service_jobs_last_activity"
             referencedColumns: ["service_job_id"]
           },
+          {
+            foreignKeyName: "service_requests_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
         ]
       }
       service_shop_bays: {
@@ -34072,6 +34586,13 @@ export type Database = {
             referencedRelation: "v_service_jobs_last_activity"
             referencedColumns: ["service_job_id"]
           },
+          {
+            foreignKeyName: "service_tat_metrics_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
         ]
       }
       service_tat_targets: {
@@ -34160,6 +34681,20 @@ export type Database = {
             referencedColumns: ["service_job_segment_id"]
           },
           {
+            foreignKeyName: "service_timecards_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_quote_gain_loss_by_technician"
+            referencedColumns: ["service_job_segment_id"]
+          },
+          {
+            foreignKeyName: "service_timecards_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_segment_id"]
+          },
+          {
             foreignKeyName: "service_timecards_service_job_id_fkey"
             columns: ["service_job_id"]
             isOneToOne: false
@@ -34206,6 +34741,13 @@ export type Database = {
             columns: ["service_job_id"]
             isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_timecards_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
             referencedColumns: ["service_job_id"]
           },
           {
@@ -34267,6 +34809,7 @@ export type Database = {
           carrier: string
           cost_cents: number | null
           created_at: string
+          customer_invoice_id: string | null
           id: string
           label_url: string | null
           parts_invoice_id: string | null
@@ -34280,6 +34823,7 @@ export type Database = {
           carrier: string
           cost_cents?: number | null
           created_at?: string
+          customer_invoice_id?: string | null
           id?: string
           label_url?: string | null
           parts_invoice_id?: string | null
@@ -34293,6 +34837,7 @@ export type Database = {
           carrier?: string
           cost_cents?: number | null
           created_at?: string
+          customer_invoice_id?: string | null
           id?: string
           label_url?: string | null
           parts_invoice_id?: string | null
@@ -34303,6 +34848,41 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "shipping_label_runs_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "customer_ar_history"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shipping_label_runs_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "customer_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shipping_label_runs_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shipping_label_runs_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_open_parts_invoices"
+            referencedColumns: ["customer_invoice_id"]
+          },
+          {
+            foreignKeyName: "shipping_label_runs_customer_invoice_id_fkey"
+            columns: ["customer_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_portal_parts_invoice_history"
+            referencedColumns: ["customer_invoice_id"]
+          },
           {
             foreignKeyName: "shipping_label_runs_ran_by_fkey"
             columns: ["ran_by"]
@@ -35511,6 +36091,13 @@ export type Database = {
             referencedColumns: ["service_job_id"]
           },
           {
+            foreignKeyName: "technician_job_performance_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
+          {
             foreignKeyName: "technician_job_performance_technician_id_fkey"
             columns: ["technician_id"]
             isOneToOne: false
@@ -36205,6 +36792,13 @@ export type Database = {
             referencedRelation: "traffic_tickets"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "traffic_ticket_comments_traffic_ticket_id_fkey"
+            columns: ["traffic_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "v_traffic_receipts_completed_this_month"
+            referencedColumns: ["id"]
+          },
         ]
       }
       traffic_ticket_lines: {
@@ -36259,6 +36853,13 @@ export type Database = {
             columns: ["traffic_ticket_id"]
             isOneToOne: false
             referencedRelation: "traffic_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "traffic_ticket_lines_traffic_ticket_id_fkey"
+            columns: ["traffic_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "v_traffic_receipts_completed_this_month"
             referencedColumns: ["id"]
           },
         ]
@@ -36720,6 +37321,13 @@ export type Database = {
             referencedColumns: ["service_job_id"]
           },
           {
+            foreignKeyName: "traffic_tickets_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
+          {
             foreignKeyName: "traffic_tickets_to_branch_id_fkey"
             columns: ["to_branch_id"]
             isOneToOne: false
@@ -36773,6 +37381,47 @@ export type Database = {
             columns: ["trucker_vendor_id"]
             isOneToOne: false
             referencedRelation: "vendor_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_preferences: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          metadata: Json
+          traffic_calendar_display_settings: Json
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          metadata?: Json
+          traffic_calendar_display_settings?: Json
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          metadata?: Json
+          traffic_calendar_display_settings?: Json
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -37012,6 +37661,13 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "vendor_escalations_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
             referencedColumns: ["service_job_id"]
           },
           {
@@ -38528,6 +39184,13 @@ export type Database = {
             columns: ["service_job_id"]
             isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "warranty_claims_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
             referencedColumns: ["service_job_id"]
           },
         ]
@@ -41981,6 +42644,13 @@ export type Database = {
             referencedColumns: ["service_job_id"]
           },
           {
+            foreignKeyName: "customer_invoices_service_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
+          {
             foreignKeyName: "customer_invoices_service_request_id_fkey"
             columns: ["service_request_id"]
             isOneToOne: false
@@ -44076,15 +44746,19 @@ export type Database = {
           efficiency_pct: number | null
           employee_id: string | null
           estimated_hours: number | null
+          inside_outside_shift: string | null
           labor_cost_cents: number | null
           labor_sale_cents: number | null
           recovery_pct: number | null
           revenue_type:
             | Database["public"]["Enums"]["work_order_revenue_type"]
             | null
+          rework_hours: number | null
           segment_number: string | null
           service_job_id: string | null
           service_job_segment_id: string | null
+          shift_code: string | null
+          shop_class: string | null
           standard_hours: number | null
           technician_id: string | null
           wo_number: string | null
@@ -44131,6 +44805,41 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_deal_genome_service_payroll_hours_analysis: {
+        Row: {
+          billing_run_date: string | null
+          branch_id: string | null
+          employee_id: string | null
+          employee_name: string | null
+          hours: number | null
+          labor_date: string | null
+          multiplier: number | null
+          payroll_entry_id: string | null
+          premium_code: string | null
+          premium_code_id: string | null
+          premium_description: string | null
+          source_module: string | null
+          source_record_id: string | null
+          technician_id: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employees_profile_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qrm_payroll_entries_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
             referencedColumns: ["id"]
           },
         ]
@@ -44248,6 +44957,155 @@ export type Database = {
             columns: ["service_job_id"]
             isOneToOne: false
             referencedRelation: "v_service_jobs_last_activity"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
+            referencedColumns: ["service_job_id"]
+          },
+        ]
+      }
+      v_deal_genome_service_quote_gain_loss_by_technician: {
+        Row: {
+          actual_hours: number | null
+          assigned_salesperson_id: string | null
+          branch_id: string | null
+          company_id: string | null
+          converted_invoice_total_cents: number | null
+          employee_id: string | null
+          expires_at: string | null
+          gain_loss_hours: number | null
+          inside_outside_shift: string | null
+          outcome_at: string | null
+          quote_number: string | null
+          quote_outcome: string | null
+          quote_result_reason: string | null
+          quote_to_invoice_pct: number | null
+          quoted_labor_cents: number | null
+          quoted_other_cents: number | null
+          quoted_parts_cents: number | null
+          quoted_total_cents: number | null
+          rework_hours: number | null
+          segment_number: string | null
+          sent_at: string | null
+          service_job_id: string | null
+          service_job_segment_id: string | null
+          service_quote_id: string | null
+          shift_code: string | null
+          shop_class: string | null
+          standard_hours: number | null
+          status: string | null
+          technician_id: string | null
+          wo_number: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "service_labor_ledger_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_quotes_assigned_salesperson_id_fkey"
+            columns: ["assigned_salesperson_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "mv_service_jobs_wip"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "service_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_billing_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_days_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_efficiency_analysis"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_service_wip_aging"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_jobs_last_activity"
+            referencedColumns: ["service_job_id"]
+          },
+          {
+            foreignKeyName: "service_quotes_job_id_fkey"
+            columns: ["service_job_id"]
+            isOneToOne: false
+            referencedRelation: "v_service_open_work_order_listing"
             referencedColumns: ["service_job_id"]
           },
         ]
@@ -45065,6 +45923,82 @@ export type Database = {
         }
         Relationships: []
       }
+      v_service_open_work_order_listing: {
+        Row: {
+          billed_status:
+            | Database["public"]["Enums"]["work_order_billed_status"]
+            | null
+          branch_id: string | null
+          company_id: string | null
+          created_at: string | null
+          current_stage: Database["public"]["Enums"]["service_stage"] | null
+          fulfillment_run_id: string | null
+          fulfillment_status: string | null
+          has_outstanding_pos: boolean | null
+          header_technician_id: string | null
+          last_activity_at: string | null
+          outstanding_po_count: number | null
+          priority: Database["public"]["Enums"]["service_priority"] | null
+          segment_number: string | null
+          segment_status: string | null
+          service_job_id: string | null
+          service_job_segment_id: string | null
+          updated_at: string | null
+          wo_number: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "service_jobs_fulfillment_run_id_fkey"
+            columns: ["fulfillment_run_id"]
+            isOneToOne: false
+            referencedRelation: "parts_fulfillment_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_jobs_technician_id_fkey"
+            columns: ["header_technician_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_supplier_fill_rate: {
         Row: {
           avg_approve_to_order_hours: number | null
@@ -45184,6 +46118,143 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_traffic_receipts_completed_this_month: {
+        Row: {
+          company_id: string | null
+          completed_at: string | null
+          created_at: string | null
+          department: string | null
+          from_location: string | null
+          id: string | null
+          receipt_number: string | null
+          receipt_type:
+            | Database["public"]["Enums"]["traffic_receipt_type"]
+            | null
+          shipping_date: string | null
+          status: string | null
+          stock_number: string | null
+          ticket_type: string | null
+          to_customer_id: string | null
+          to_location: string | null
+          unit_description_snapshot: string | null
+          updated_at: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          department?: string | null
+          from_location?: string | null
+          id?: string | null
+          receipt_number?: string | null
+          receipt_type?:
+            | Database["public"]["Enums"]["traffic_receipt_type"]
+            | null
+          shipping_date?: string | null
+          status?: string | null
+          stock_number?: string | null
+          ticket_type?: string | null
+          to_customer_id?: string | null
+          to_location?: string | null
+          unit_description_snapshot?: string | null
+          updated_at?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          department?: string | null
+          from_location?: string | null
+          id?: string | null
+          receipt_number?: string | null
+          receipt_type?:
+            | Database["public"]["Enums"]["traffic_receipt_type"]
+            | null
+          shipping_date?: string | null
+          status?: string | null
+          stock_number?: string | null
+          ticket_type?: string | null
+          to_customer_id?: string | null
+          to_location?: string | null
+          unit_description_snapshot?: string | null
+          updated_at?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "traffic_tickets_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "traffic_tickets_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "traffic_tickets_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "traffic_tickets_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "traffic_tickets_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "traffic_tickets_to_customer_id_fkey"
+            columns: ["to_customer_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "traffic_tickets_to_customer_id_fkey"
+            columns: ["to_customer_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "traffic_tickets_to_customer_id_fkey"
+            columns: ["to_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_available_credit"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "traffic_tickets_to_customer_id_fkey"
+            columns: ["to_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_deal_genome_credit_limit_analysis"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "traffic_tickets_to_customer_id_fkey"
+            columns: ["to_customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
           },
         ]
       }
@@ -46497,6 +47568,7 @@ export type Database = {
         Args: { p_document_id: string }
         Returns: number
       }
+      purge_billing_queue: { Args: { p_older_than?: string }; Returns: number }
       qb_can_access_trade_in_financial: { Args: never; Returns: boolean }
       qb_search_equipment_fuzzy: {
         Args: { p_brand_id?: string; p_limit?: number; p_query: string }

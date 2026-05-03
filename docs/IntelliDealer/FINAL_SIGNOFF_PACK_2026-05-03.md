@@ -100,16 +100,16 @@ bun run intellidealer:seed:purge -- --apply --confirm-non-parts-seed-purge
 
 ## Gap-Audit Status
 
-Gap-audit Waves 0-4 are implemented and remote-push verified through `506_*` per `docs/intellidealer-gap-audit/_migration_order.md`. The follow-on must-blocker burndown applied migrations `522` through `525` and regenerated the inventory to `0` remaining must-fix blockers.
+Gap-audit Waves 0-4 are implemented and remote-push verified through `506_*` per `docs/intellidealer-gap-audit/_migration_order.md`. The follow-on must-blocker burndown applied migrations `522` through `525` and regenerated the inventory to `0` remaining must-fix blockers. The non-must cleanup applied migrations `526` through `530` and reduced the remaining non-must inventory to `7` missing and `2` partial rows.
 
 Current regenerated inventory:
 
 | Metric | Count |
 | --- | ---: |
 | Total fields | `847` |
-| Built | `789` |
-| Partial | `18` |
-| Missing | `40` |
+| Built | `838` |
+| Partial | `2` |
+| Missing | `7` |
 | Must | `496` |
 | Should | `300` |
 | Could | `51` |
@@ -129,7 +129,7 @@ Remaining must-fix blockers by phase:
 | Phase 9 | `0` |
 | Cross-Cutting | `0` |
 
-Evidence: `docs/IntelliDealer/GAP_AUDIT_MUST_BLOCKER_BURNDOWN_2026-05-03.md`, `docs/intellidealer-gap-audit/manifest.yaml`, and `docs/intellidealer-gap-audit/_blockers.csv`.
+Evidence: `docs/IntelliDealer/GAP_AUDIT_MUST_BLOCKER_BURNDOWN_2026-05-03.md`, `docs/IntelliDealer/NON_MUST_GAP_CLEANUP_BURNDOWN_2026-05-03.md`, `docs/intellidealer-gap-audit/manifest.yaml`, and `docs/intellidealer-gap-audit/_blockers.csv`.
 
 ## Slice 6 Status
 
@@ -167,7 +167,7 @@ These integrations require external credentials, dealer-specific scope, provider
 
 - Raw IntelliDealer source files remain intentionally untracked until privacy/retention is decided.
 - Wave 5 integrations are deferred and must not be represented as shipped.
-- The broader gap-audit inventory has `0` remaining must-fix blockers, but still has non-must missing/partial rows that should be handled through normal roadmap prioritization.
+- The broader gap-audit inventory has `0` remaining must-fix blockers, with `7` non-must missing rows and `2` non-must partial rows left for external integration/workflow roadmap prioritization.
 - Old `test-results/agent-gates/*` artifacts referenced by the gap-audit docs are missing from the current working tree and need recovery or replacement with fresh evidence if an auditor requires those original artifacts.
 
 ## Closeout Gate

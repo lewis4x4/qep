@@ -33,7 +33,7 @@ Final regenerated gap-audit inventory:
 | Could | `51` |
 | Remaining must-fix blockers | `0` |
 
-Remaining `missing` and `partial` rows are not `must` blockers in the current audit inventory.
+Remaining `missing` and `partial` rows are not `must` blockers in this audit inventory. A later non-must cleanup slice reduced those residual rows further; see `NON_MUST_GAP_CLEANUP_BURNDOWN_2026-05-03.md`.
 
 ## Evidence
 

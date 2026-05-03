@@ -226,6 +226,7 @@ fields:
 
 
 
+
   - id: work_order.reference_number
     intellidealer_label: "Reference Number"
     intellidealer_screen: "Work Order Header"
@@ -2153,11 +2154,12 @@ fields:
       Different methods for computing WIP $ — WIP Balancing nets out
       progress billings; Strict Aging shows raw open balance; Posted
       Only excludes pending transactions.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: ""
+    qep_status: BUILT
+    qep_table: v_deal_genome_service_wip_aging
+    qep_column: analysis_wip_cents
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_wip_aging.analysis_wip_cents"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_wip_aging.analysis_wip_cents."
     severity: should
     category: reporting
     migration_hint: "-- driver param to mv_service_wip_aging or sister views"
@@ -2613,13 +2615,15 @@ fields:
       Toggle that limits the listing to WOs with parts on order to a
       vendor (PO out, awaiting receipt). Critical for the dispatcher
       to identify what's blocked on a missing part.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
+    qep_status: BUILT
+    qep_table: v_service_open_work_order_listing
+    qep_column: has_outstanding_pos
+    qep_evidence:
+      - "supabase/migrations/529_intellidealer_service_deal_genome_non_must.sql public.v_service_open_work_order_listing.has_outstanding_pos"
     qep_gap_notes: |
-      Underlying data exists (parts_orders FK from service_jobs through
-      service_parts_*). Wire the filter into the listing query.
+      Resolved by additive migration 529. The listing view computes
+      has_outstanding_pos from service_parts_requirements in ordering
+      status and open service_parts_actions order rows.
     severity: should
     category: workflow
     migration_hint: ""
@@ -2640,11 +2644,12 @@ fields:
       - "Held"
       - "Pending Customer"
     intellidealer_purpose: "Filter WOs by their *segment*-level status (not the WO header status)."
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "(once segments table is built)"
+    qep_status: BUILT
+    qep_table: v_service_open_work_order_listing
+    qep_column: segment_status
+    qep_evidence:
+      - "supabase/migrations/529_intellidealer_service_deal_genome_non_must.sql public.v_service_open_work_order_listing.segment_status"
+    qep_gap_notes: "Resolved by additive migration 529 over existing service_job_segments.status."
     severity: should
     category: workflow
     migration_hint: ""
@@ -2659,11 +2664,15 @@ fields:
       - docs/IntelliDealer/_OCR_PNG/Phase-4_Service_Open-Work-Orders__3.26.50.txt
     intellidealer_field_type: bool
     intellidealer_purpose: "Toggle that expands listing rows so each segment becomes its own row."
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "(once segments table is built)"
+    qep_status: BUILT
+    qep_table: v_service_open_work_order_listing
+    qep_column: service_job_segment_id
+    qep_evidence:
+      - "supabase/migrations/529_intellidealer_service_deal_genome_non_must.sql public.v_service_open_work_order_listing.service_job_segment_id"
+    qep_gap_notes: |
+      Resolved by additive migration 529. The listing view emits
+      segment-level rows via service_job_segments; the UI can collapse to
+      one row per WO or include all segment rows.
     severity: should
     category: workflow
     migration_hint: ""

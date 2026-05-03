@@ -7,9 +7,9 @@ phases:
   field_count: 93
   must_count: 39
   must_missing_count: 0
-  qep_status_missing: 2
-  qep_status_partial: 2
-  qep_status_built: 89
+  qep_status_missing: 1
+  qep_status_partial: 1
+  qep_status_built: 91
   pdf_count: 3
   png_count: 10
   ocr_count: 13
@@ -18,9 +18,9 @@ phases:
   field_count: 102
   must_count: 54
   must_missing_count: 0
-  qep_status_missing: 5
-  qep_status_partial: 1
-  qep_status_built: 96
+  qep_status_missing: 0
+  qep_status_partial: 0
+  qep_status_built: 102
   pdf_count: 5
   png_count: 40
   ocr_count: 43
@@ -29,9 +29,9 @@ phases:
   field_count: 106
   must_count: 66
   must_missing_count: 0
-  qep_status_missing: 6
-  qep_status_partial: 5
-  qep_status_built: 95
+  qep_status_missing: 2
+  qep_status_partial: 0
+  qep_status_built: 104
   pdf_count: 5
   png_count: 30
   ocr_count: 35
@@ -40,9 +40,9 @@ phases:
   field_count: 101
   must_count: 58
   must_missing_count: 0
-  qep_status_missing: 4
+  qep_status_missing: 0
   qep_status_partial: 0
-  qep_status_built: 97
+  qep_status_built: 101
   pdf_count: 8
   png_count: 36
   ocr_count: 44
@@ -51,9 +51,9 @@ phases:
   field_count: 100
   must_count: 57
   must_missing_count: 0
-  qep_status_missing: 8
+  qep_status_missing: 2
   qep_status_partial: 0
-  qep_status_built: 92
+  qep_status_built: 98
   pdf_count: 1
   png_count: 9
   ocr_count: 11
@@ -62,9 +62,9 @@ phases:
   field_count: 76
   must_count: 60
   must_missing_count: 0
-  qep_status_missing: 7
-  qep_status_partial: 2
-  qep_status_built: 67
+  qep_status_missing: 1
+  qep_status_partial: 0
+  qep_status_built: 75
   pdf_count: 1
   png_count: 0
   ocr_count: 1
@@ -73,9 +73,9 @@ phases:
   field_count: 92
   must_count: 60
   must_missing_count: 0
-  qep_status_missing: 3
+  qep_status_missing: 0
   qep_status_partial: 0
-  qep_status_built: 89
+  qep_status_built: 92
   pdf_count: 7
   png_count: 16
   ocr_count: 23
@@ -84,9 +84,9 @@ phases:
   field_count: 75
   must_count: 47
   must_missing_count: 0
-  qep_status_missing: 2
-  qep_status_partial: 6
-  qep_status_built: 67
+  qep_status_missing: 0
+  qep_status_partial: 0
+  qep_status_built: 75
   pdf_count: 1
   png_count: 0
   ocr_count: 1
@@ -95,9 +95,9 @@ phases:
   field_count: 102
   must_count: 55
   must_missing_count: 0
-  qep_status_missing: 3
-  qep_status_partial: 2
-  qep_status_built: 97
+  qep_status_missing: 1
+  qep_status_partial: 1
+  qep_status_built: 100
   pdf_count: 2
   png_count: 9
   ocr_count: 13
@@ -107,8 +107,8 @@ totals:
   severity_must: 496
   severity_should: 300
   severity_could: 51
-  qep_status_missing: 40
-  qep_status_partial: 18
-  qep_status_built: 789
+  qep_status_missing: 7
+  qep_status_partial: 2
+  qep_status_built: 838
   must_fix_blocker_count: 0
 must_fix_blockers:
