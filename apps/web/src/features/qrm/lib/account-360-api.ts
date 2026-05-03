@@ -157,6 +157,32 @@ function coerceRpcJson<T>(value: Json | null): T | null {
   return value === null ? null : value as T;
 }
 
+function requiredString(value: unknown, fallback = ""): string {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function nullableBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function normalizeProductCategory(value: unknown): IntelliDealerCompanySnapshot["product_category"] {
+  return value === "business" || value === "individual" || value === "government" || value === "non_profit" || value === "internal"
+    ? value
+    : null;
+}
+
+function normalizeArType(value: unknown): IntelliDealerCompanySnapshot["ar_type"] {
+  return value === "open_item" || value === "balance_forward" || value === "true_balance_forward" ? value : "open_item";
+}
+
 export interface IntelliDealerCompanySnapshot extends Pick<
   QrmCompanyRow,
   | "id"
@@ -273,21 +299,124 @@ export async function fetchIntelliDealerAccountSummary(companyId: string): Promi
   if (memoResult.error) throw new Error(memoResult.error.message ?? "Failed to load IntelliDealer memos");
 
   return {
-    company: companyResult.data ? toIntelliDealerCompanySnapshot(companyResult.data) : null,
-    contacts: contactResult.data ?? [],
-    arAgencies: arResult.data ?? [],
-    profitability: profitabilityResult.data ?? [],
-    memos: memoResult.data ?? [],
+    company: normalizeIntelliDealerCompanyRows(companyResult.data ? [companyResult.data] : [])[0] ?? null,
+    contacts: normalizeIntelliDealerContactRows(contactResult.data),
+    arAgencies: normalizeIntelliDealerArAgencyRows(arResult.data),
+    profitability: normalizeIntelliDealerProfitabilityRows(profitabilityResult.data),
+    memos: normalizeIntelliDealerMemoRows(memoResult.data),
   };
 }
 
-function toIntelliDealerCompanySnapshot(
-  row: Omit<IntelliDealerCompanySnapshot, "metadata"> & { metadata: Json },
-): IntelliDealerCompanySnapshot {
-  return {
-    ...row,
-    metadata: isRecord(row.metadata) ? row.metadata : null,
-  };
+export function normalizeIntelliDealerCompanyRows(rows: unknown): IntelliDealerCompanySnapshot[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      legacy_customer_number: nullableString(row.legacy_customer_number),
+      status: nullableString(row.status),
+      product_category: normalizeProductCategory(row.product_category),
+      ar_type: normalizeArType(row.ar_type),
+      payment_terms_code: nullableString(row.payment_terms_code),
+      terms_code: nullableString(row.terms_code),
+      county: nullableString(row.county),
+      territory_code: nullableString(row.territory_code),
+      pricing_level: nullableNumber(row.pricing_level),
+      business_fax: nullableString(row.business_fax),
+      business_cell: nullableString(row.business_cell),
+      do_not_contact: nullableBoolean(row.do_not_contact) ?? false,
+      opt_out_sale_pi: nullableBoolean(row.opt_out_sale_pi) ?? false,
+      metadata: isRecord(row.metadata) ? row.metadata : null,
+    }];
+  });
+}
+
+export function normalizeIntelliDealerContactRows(rows: unknown): IntelliDealerContactSignal[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      first_name: requiredString(row.first_name),
+      last_name: requiredString(row.last_name),
+      title: nullableString(row.title),
+      email: nullableString(row.email),
+      phone: nullableString(row.phone),
+      cell: nullableString(row.cell),
+      direct_phone: nullableString(row.direct_phone),
+    }];
+  });
+}
+
+export function normalizeIntelliDealerArAgencyRows(rows: unknown): IntelliDealerArAgency[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      agency_code: requiredString(row.agency_code, "UNKNOWN"),
+      expiration_year_month: nullableString(row.expiration_year_month),
+      active: nullableBoolean(row.active) ?? false,
+      is_default_agency: nullableBoolean(row.is_default_agency) ?? false,
+      credit_rating: nullableString(row.credit_rating),
+      default_promotion_code: nullableString(row.default_promotion_code),
+      credit_limit_cents: nullableNumber(row.credit_limit_cents),
+      transaction_limit_cents: nullableNumber(row.transaction_limit_cents),
+    }];
+  });
+}
+
+export function normalizeIntelliDealerProfitabilityRows(rows: unknown): IntelliDealerProfitabilityFact[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      area_code: requiredString(row.area_code, "unknown"),
+      area_label: requiredString(row.area_label, "Unknown"),
+      ytd_sales_last_month_end_cents: nullableNumber(row.ytd_sales_last_month_end_cents),
+      ytd_costs_last_month_end_cents: nullableNumber(row.ytd_costs_last_month_end_cents),
+      current_month_sales_cents: nullableNumber(row.current_month_sales_cents),
+      current_month_costs_cents: nullableNumber(row.current_month_costs_cents),
+      ytd_margin_cents: nullableNumber(row.ytd_margin_cents),
+      ytd_margin_pct: nullableNumber(row.ytd_margin_pct),
+      current_month_margin_cents: nullableNumber(row.current_month_margin_cents),
+      current_month_margin_pct: nullableNumber(row.current_month_margin_pct),
+      last_12_margin_cents: nullableNumber(row.last_12_margin_cents),
+      last_12_margin_pct: nullableNumber(row.last_12_margin_pct),
+      fiscal_last_year_sales_cents: nullableNumber(row.fiscal_last_year_sales_cents),
+      fiscal_last_year_margin_cents: nullableNumber(row.fiscal_last_year_margin_cents),
+      territory_code: nullableString(row.territory_code),
+      salesperson_code: nullableString(row.salesperson_code),
+      county_code: nullableString(row.county_code),
+      business_class_code: nullableString(row.business_class_code),
+      as_of_date: nullableString(row.as_of_date),
+    }];
+  });
+}
+
+export function normalizeIntelliDealerMemoRows(rows: unknown): IntelliDealerCompanyMemo[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      body: requiredString(row.body),
+      pinned: nullableBoolean(row.pinned) ?? false,
+      created_at: requiredString(row.created_at),
+      updated_at: requiredString(row.updated_at),
+    }];
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
