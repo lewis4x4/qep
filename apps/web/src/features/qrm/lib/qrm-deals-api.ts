@@ -1,4 +1,4 @@
-import { crmSupabase, type QrmDatabase } from "./qrm-supabase";
+import { crmSupabase } from "./qrm-supabase";
 import { patchCrmDealViaRouter } from "./qrm-router-api";
 import type {
   QrmDealBoardListInput,
@@ -17,78 +17,121 @@ const REP_SAFE_DEAL_SELECT =
 const WEIGHTED_DEAL_SELECT =
   "id, workspace_id, name, stage_id, stage_name, stage_probability, primary_contact_id, company_id, assigned_rep_id, amount, weighted_amount, expected_close_on, next_follow_up_at, last_activity_at, closed_at, hubspot_deal_id, created_at, updated_at";
 
-type QrmDealStageRow = QrmDatabase["public"]["Tables"]["crm_deal_stages"]["Row"];
-type QrmDealRow = QrmDatabase["public"]["Tables"]["crm_deals"]["Row"];
-type QrmRepSafeDealRow = QrmDatabase["public"]["Views"]["crm_deals_rep_safe"]["Row"];
-type QrmWeightedDealRow = QrmDatabase["public"]["Views"]["crm_deals_weighted"]["Row"];
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
-function toRepSafeDeal(row: QrmRepSafeDealRow): QrmRepSafeDeal {
-  // Optional fallbacks for cached rows written before migration 254 landed.
-  const r = row as QrmRepSafeDealRow & {
-    sla_deadline_at?: string | null;
-    deposit_status?: string | null;
-    deposit_amount?: number | null;
-    sort_position?: number | null;
-    margin_pct?: number | null;
-  };
+function requiredString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function nullableBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+export function normalizeRepSafeDealRows(rows: unknown): QrmRepSafeDeal[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((r) => {
+    if (!isRecord(r) || typeof r.id !== "string") return [];
+
+    return [{
+      id: r.id,
+      workspaceId: requiredString(r.workspace_id, "default"),
+      name: requiredString(r.name, "Untitled deal"),
+      stageId: requiredString(r.stage_id, ""),
+      primaryContactId: nullableString(r.primary_contact_id),
+      companyId: nullableString(r.company_id),
+      assignedRepId: nullableString(r.assigned_rep_id),
+      amount: nullableNumber(r.amount),
+      expectedCloseOn: nullableString(r.expected_close_on),
+      nextFollowUpAt: nullableString(r.next_follow_up_at),
+      lastActivityAt: nullableString(r.last_activity_at),
+      closedAt: nullableString(r.closed_at),
+      hubspotDealId: nullableString(r.hubspot_deal_id),
+      createdAt: requiredString(r.created_at, ""),
+      updatedAt: requiredString(r.updated_at, ""),
+      slaDeadlineAt: nullableString(r.sla_deadline_at),
+      depositStatus: nullableString(r.deposit_status),
+      depositAmount: nullableNumber(r.deposit_amount),
+      sortPosition: nullableNumber(r.sort_position),
+      marginPct: nullableNumber(r.margin_pct),
+    }];
+  });
+}
+
+export function normalizeWeightedDealRows(rows: unknown): QrmWeightedDeal[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      workspaceId: requiredString(row.workspace_id, "default"),
+      name: requiredString(row.name, "Untitled deal"),
+      stageId: requiredString(row.stage_id, ""),
+      stageName: requiredString(row.stage_name, "Unknown"),
+      stageProbability: nullableNumber(row.stage_probability),
+      primaryContactId: nullableString(row.primary_contact_id),
+      companyId: nullableString(row.company_id),
+      assignedRepId: nullableString(row.assigned_rep_id),
+      amount: nullableNumber(row.amount),
+      weightedAmount: nullableNumber(row.weighted_amount),
+      expectedCloseOn: nullableString(row.expected_close_on),
+      nextFollowUpAt: nullableString(row.next_follow_up_at),
+      lastActivityAt: nullableString(row.last_activity_at),
+      closedAt: nullableString(row.closed_at),
+      hubspotDealId: nullableString(row.hubspot_deal_id),
+      createdAt: requiredString(row.created_at, ""),
+      updatedAt: requiredString(row.updated_at, ""),
+    }];
+  });
+}
+
+export function normalizeDealStageRows(rows: unknown): QrmDealStage[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      workspaceId: requiredString(row.workspace_id, "default"),
+      name: requiredString(row.name, "Unnamed stage"),
+      sortOrder: nullableNumber(row.sort_order) ?? 0,
+      probability: nullableNumber(row.probability),
+      isClosedWon: nullableBoolean(row.is_closed_won) ?? false,
+      isClosedLost: nullableBoolean(row.is_closed_lost) ?? false,
+      createdAt: requiredString(row.created_at, ""),
+      updatedAt: requiredString(row.updated_at, ""),
+    }];
+  });
+}
+
+function toRepSafeDeal(row: QrmRepSafeDeal): QrmRepSafeDeal {
   return {
-    id: r.id,
-    workspaceId: r.workspace_id,
-    name: r.name,
-    stageId: r.stage_id,
-    primaryContactId: r.primary_contact_id,
-    companyId: r.company_id,
-    assignedRepId: r.assigned_rep_id,
-    amount: r.amount,
-    expectedCloseOn: r.expected_close_on,
-    nextFollowUpAt: r.next_follow_up_at,
-    lastActivityAt: r.last_activity_at,
-    closedAt: r.closed_at,
-    hubspotDealId: r.hubspot_deal_id,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-    slaDeadlineAt: r.sla_deadline_at ?? null,
-    depositStatus: r.deposit_status ?? null,
-    depositAmount: r.deposit_amount ?? null,
-    sortPosition: r.sort_position ?? null,
-    marginPct: r.margin_pct ?? null,
+    ...row,
   };
 }
 
-function toWeightedDeal(row: QrmWeightedDealRow): QrmWeightedDeal {
+function toWeightedDeal(row: QrmWeightedDeal): QrmWeightedDeal {
   return {
-    id: row.id,
-    workspaceId: row.workspace_id,
-    name: row.name,
-    stageId: row.stage_id,
-    stageName: row.stage_name,
-    stageProbability: row.stage_probability,
-    primaryContactId: row.primary_contact_id,
-    companyId: row.company_id,
-    assignedRepId: row.assigned_rep_id,
-    amount: row.amount,
-    weightedAmount: row.weighted_amount,
-    expectedCloseOn: row.expected_close_on,
-    nextFollowUpAt: row.next_follow_up_at,
-    lastActivityAt: row.last_activity_at,
-    closedAt: row.closed_at,
-    hubspotDealId: row.hubspot_deal_id,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    ...row,
   };
 }
 
-function toDealStage(row: QrmDealStageRow): QrmDealStage {
+function toDealStage(row: QrmDealStage): QrmDealStage {
   return {
-    id: row.id,
-    workspaceId: row.workspace_id,
-    name: row.name,
-    sortOrder: row.sort_order,
-    probability: row.probability,
-    isClosedWon: row.is_closed_won,
-    isClosedLost: row.is_closed_lost,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    ...row,
   };
 }
 
@@ -111,7 +154,7 @@ export async function listCrmDealStages(): Promise<QrmDealStage[]> {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as QrmDealStageRow[]).map(toDealStage);
+  return normalizeDealStageRows(data).map(toDealStage);
 }
 
 export async function listCrmOpenDealsForBoard(
@@ -143,7 +186,7 @@ export async function listCrmOpenDealsForBoard(
     throw new Error(error.message);
   }
 
-  const rows = (data ?? []) as QrmRepSafeDealRow[];
+  const rows = normalizeRepSafeDealRows(data);
   return {
     items: rows.slice(0, pageSize).map(toRepSafeDeal),
     nextCursor: rows.length > pageSize ? rows[pageSize].id : null,
@@ -161,7 +204,7 @@ export async function getCrmDeal(dealId: string): Promise<QrmRepSafeDeal | null>
     throw new Error(error.message);
   }
 
-  return data ? toRepSafeDeal(data as QrmRepSafeDealRow) : null;
+  return normalizeRepSafeDealRows(data ? [data] : [])[0] ?? null;
 }
 
 export async function getCrmDealLossFields(dealId: string): Promise<QrmDealLossFields | null> {
@@ -179,10 +222,9 @@ export async function getCrmDealLossFields(dealId: string): Promise<QrmDealLossF
     return null;
   }
 
-  const row = data as Pick<QrmDealRow, "loss_reason" | "competitor">;
   return {
-    lossReason: row.loss_reason,
-    competitor: row.competitor,
+    lossReason: isRecord(data) ? nullableString(data.loss_reason) : null,
+    competitor: isRecord(data) ? nullableString(data.competitor) : null,
   };
 }
 
@@ -197,7 +239,7 @@ export async function listRepSafeDealsForContact(contactId: string): Promise<Qrm
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as QrmRepSafeDealRow[]).map(toRepSafeDeal);
+  return normalizeRepSafeDealRows(data).map(toRepSafeDeal);
 }
 
 export async function listCrmWeightedOpenDeals(): Promise<QrmWeightedDeal[]> {
@@ -211,7 +253,7 @@ export async function listCrmWeightedOpenDeals(): Promise<QrmWeightedDeal[]> {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as QrmWeightedDealRow[]).map(toWeightedDeal);
+  return normalizeWeightedDealRows(data).map(toWeightedDeal);
 }
 
 export async function patchCrmDeal(dealId: string, input: QrmDealPatchInput): Promise<QrmRepSafeDeal> {
