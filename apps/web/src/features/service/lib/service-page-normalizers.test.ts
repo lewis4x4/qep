@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   normalizeIntakeResult,
+  normalizePortalPartsOrderRows,
   normalizeShopInvoiceRow,
 } from "./service-page-normalizers";
 
@@ -117,5 +118,46 @@ describe("service page normalizers", () => {
       confidence: 0,
       suggested_next_step: "",
     });
+  });
+
+  test("normalizes portal parts order rows and joined portal/fleet relations", () => {
+    expect(normalizePortalPartsOrderRows([
+      {
+        id: "order-1",
+        status: "submitted",
+        fulfillment_run_id: "run-1",
+        line_items: [{ part_number: "P-100" }],
+        ai_suggested_pm_kit: true,
+        ai_suggestion_reason: "PM due",
+        tracking_number: null,
+        estimated_delivery: "2026-05-05",
+        shipping_address: { city: "Ocala" },
+        created_at: "2026-05-03T10:00:00.000Z",
+        updated_at: "2026-05-03T11:00:00.000Z",
+        portal_customers: [{ first_name: "Avery", last_name: "Lane", email: "avery@example.com" }],
+        customer_fleet: { make: "Kubota", model: "KX080", serial_number: "SER-1" },
+      },
+      { id: "bad", status: "", created_at: "2026-05-03T10:00:00.000Z", updated_at: "2026-05-03T11:00:00.000Z" },
+    ])).toEqual([
+      {
+        id: "order-1",
+        status: "submitted",
+        fulfillment_run_id: "run-1",
+        line_items: [{ part_number: "P-100" }],
+        ai_suggested_pm_kit: true,
+        ai_suggestion_reason: "PM due",
+        tracking_number: null,
+        estimated_delivery: "2026-05-05",
+        shipping_address: { city: "Ocala" },
+        created_at: "2026-05-03T10:00:00.000Z",
+        updated_at: "2026-05-03T11:00:00.000Z",
+        portal_customers: { first_name: "Avery", last_name: "Lane", email: "avery@example.com" },
+        customer_fleet: { make: "Kubota", model: "KX080", serial_number: "SER-1" },
+      },
+    ]);
+  });
+
+  test("returns empty portal parts orders for malformed payloads", () => {
+    expect(normalizePortalPartsOrderRows(null)).toEqual([]);
   });
 });

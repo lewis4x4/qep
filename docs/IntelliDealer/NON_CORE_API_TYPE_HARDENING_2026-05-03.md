@@ -22,6 +22,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Service scheduler, WIP, and dashboard pages | Scheduler logs, WIP summary/jobs, dashboard rollups, and overdue job rows used direct casts or legacy Supabase client shims. | Added exported service WIP/dashboard normalizers with required field checks, enum validation, numeric-string coercion, joined customer/machine normalization, malformed-row filtering, and safe count defaults; removed the page-local client shims. |
 | Service customer/equipment search and parts queue hooks | Intake search hooks and the parts queue hook returned raw customer, equipment, requirement, action, staging, and joined job payloads through direct casts. | Added exported hook normalizers with required field checks, numeric-string coercion, joined job/customer/machine normalization, action/staging filtering, malformed-row rejection, and accepted-line filtering for the parts queue. |
 | Service shop invoice and intake pages | Shop invoice detail and service intake edge responses used direct response casts that could pass malformed invoice lines or AI intake payloads into rendering. | Added exported page normalizers with required invoice/line checks, numeric-string coercion, malformed-line filtering, and safe service-intake defaults for edge responses. |
+| Portal parts order service page | Internal portal parts order page mapped raw parts order rows through a record-list cast and local joined-row unwrapping. | Extended exported page normalizers with portal customer/fleet relation normalization, required order checks, malformed-row filtering, and safe nullable AI/shipping fields. |
 | Service InspectionPlus pages | Inspection list/detail pages used legacy Supabase client shims around inspection headers, findings, create, and update paths; the list tab keys also used a local cast. | Added exported inspection row/header/finding normalizers with status/approval/response validation, numeric-string coercion, malformed-row filtering, and direct generated Supabase client calls for read/create/update paths; replaced the tab cast with a typed constant. |
 | Executive shared data hook and metric drill drawer | Metric definitions, latest KPI snapshots, metric drill snapshot history, and analytics alerts were returned directly from unknown Supabase/RPC payloads. | Added exported exec normalizers with required field checks, role/status/severity/refresh-state validation, numeric-string coercion, string-array cleanup, metadata/config object guards, and reduced snapshot-history validation. |
 | Floor customer/serial/health widgets | Customer search, serial-first lookup, and customer-health list mapped raw query rows inline. | Added exported Floor widget normalizers for customer hits, equipment hits, and customer-health profiles with required ID checks, numeric-string coercion, joined company normalization, and health component guards. |
@@ -104,7 +105,7 @@ Results:
 - Service vendor profile page shim removal: covered by existing vendor profile normalizer suite and web typecheck.
 - Service WIP/scheduler/dashboard normalizer tests: `9 pass`, `0 fail`.
 - Service customer/equipment search and parts queue hook normalizer tests: `4 pass`, `0 fail`.
-- Service shop invoice and intake page normalizer tests: `4 pass`, `0 fail`.
+- Service shop invoice, intake, and portal parts order page normalizer tests: `6 pass`, `0 fail`.
 - InspectionPlus utility/normalizer tests: `9 pass`, `0 fail`.
 - InspectionPlus page integration test: `1 pass`, `0 fail`.
 - Exec shared data and metric drill normalizer tests: `5 pass`, `0 fail`.
@@ -123,7 +124,7 @@ Results:
 - Portal row normalizer tests: `5 pass`, `0 fail`.
 - Parts row normalizer tests: `15 pass`, `0 fail`.
 - Parts purchase-order utility/normalizer tests: `9 pass`, `0 fail`.
-- Combined targeted test run: `144 pass`, `0 fail`.
+- Combined targeted test run: `146 pass`, `0 fail`.
 - Web typecheck: PASS.
 - Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 

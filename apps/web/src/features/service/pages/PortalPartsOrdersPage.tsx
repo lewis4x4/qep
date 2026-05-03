@@ -15,6 +15,10 @@ import {
 } from "@/components/ui/table";
 import { Sparkles } from "lucide-react";
 import { ServiceSubNav } from "../components/ServiceSubNav";
+import {
+  normalizePortalPartsOrderRows,
+  type PortalPartsOrderRow,
+} from "../lib/service-page-normalizers";
 
 type OrderStatus =
   | "draft"
@@ -24,37 +28,6 @@ type OrderStatus =
   | "shipped"
   | "delivered"
   | "cancelled";
-
-type PortalPartsOrderRow = {
-  id: string;
-  status: string;
-  fulfillment_run_id: string | null;
-  line_items: unknown;
-  ai_suggested_pm_kit: boolean | null;
-  ai_suggestion_reason: string | null;
-  tracking_number: string | null;
-  estimated_delivery: string | null;
-  shipping_address: unknown;
-  created_at: string;
-  updated_at: string;
-  portal_customers:
-    | {
-        first_name: string;
-        last_name: string;
-        email: string;
-      }
-    | null;
-  customer_fleet: {
-    make: string;
-    model: string;
-    serial_number: string | null;
-  } | null;
-};
-
-function one<T>(x: T | T[] | null | undefined): T | null {
-  if (x == null) return null;
-  return Array.isArray(x) ? (x[0] ?? null) : x;
-}
 
 function validNextStatuses(current: string): OrderStatus[] {
   switch (current) {
@@ -119,12 +92,7 @@ export function PortalPartsOrdersPage() {
         .order("created_at", { ascending: false })
         .limit(200);
       if (error) throw error;
-      const raw = (data ?? []) as Record<string, unknown>[];
-      return raw.map((r) => ({
-        ...r,
-        portal_customers: one(r.portal_customers as PortalPartsOrderRow["portal_customers"] | unknown[]),
-        customer_fleet: one(r.customer_fleet as PortalPartsOrderRow["customer_fleet"] | unknown[]),
-      })) as PortalPartsOrderRow[];
+      return normalizePortalPartsOrderRows(data);
     },
     staleTime: 15_000,
   });

@@ -43,8 +43,37 @@ export type IntakeResult = {
   suggested_next_step: string;
 };
 
+export type PortalPartsOrderRow = {
+  id: string;
+  status: string;
+  fulfillment_run_id: string | null;
+  line_items: unknown;
+  ai_suggested_pm_kit: boolean | null;
+  ai_suggestion_reason: string | null;
+  tracking_number: string | null;
+  estimated_delivery: string | null;
+  shipping_address: unknown;
+  created_at: string;
+  updated_at: string;
+  portal_customers: {
+    first_name: string;
+    last_name: string;
+    email: string;
+  } | null;
+  customer_fleet: {
+    make: string;
+    model: string;
+    serial_number: string | null;
+  } | null;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function firstRecord(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return value.find(isRecord) ?? null;
+  return isRecord(value) ? value : null;
 }
 
 function stringOrNull(value: unknown): string | null {
@@ -154,4 +183,55 @@ export function normalizeIntakeResult(value: unknown): IntakeResult {
     confidence: row ? numberOrNull(row.confidence) ?? 0 : 0,
     suggested_next_step: row ? stringOrNull(row.suggested_next_step) ?? "" : "",
   };
+}
+
+function normalizePortalCustomer(value: unknown): PortalPartsOrderRow["portal_customers"] {
+  const row = firstRecord(value);
+  if (!row) return null;
+  const firstName = requiredString(row.first_name);
+  const lastName = requiredString(row.last_name);
+  const email = requiredString(row.email);
+  return firstName && lastName && email
+    ? { first_name: firstName, last_name: lastName, email }
+    : null;
+}
+
+function normalizeCustomerFleet(value: unknown): PortalPartsOrderRow["customer_fleet"] {
+  const row = firstRecord(value);
+  if (!row) return null;
+  const make = requiredString(row.make);
+  const model = requiredString(row.model);
+  if (!make || !model) return null;
+  return {
+    make,
+    model,
+    serial_number: stringOrNull(row.serial_number),
+  };
+}
+
+export function normalizePortalPartsOrderRows(rows: unknown): PortalPartsOrderRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = requiredString(value.id);
+    const status = requiredString(value.status);
+    const createdAt = requiredString(value.created_at);
+    const updatedAt = requiredString(value.updated_at);
+    if (!id || !status || !createdAt || !updatedAt) return [];
+    return [{
+      id,
+      status,
+      fulfillment_run_id: stringOrNull(value.fulfillment_run_id),
+      line_items: value.line_items,
+      ai_suggested_pm_kit: typeof value.ai_suggested_pm_kit === "boolean" ? value.ai_suggested_pm_kit : null,
+      ai_suggestion_reason: stringOrNull(value.ai_suggestion_reason),
+      tracking_number: stringOrNull(value.tracking_number),
+      estimated_delivery: stringOrNull(value.estimated_delivery),
+      shipping_address: value.shipping_address,
+      created_at: createdAt,
+      updated_at: updatedAt,
+      portal_customers: normalizePortalCustomer(value.portal_customers),
+      customer_fleet: normalizeCustomerFleet(value.customer_fleet),
+    }];
+  });
 }
