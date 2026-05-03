@@ -1,26 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
+import { normalizeTransferRecommendations, type TransferRecommendation } from "../lib/parts-row-normalizers";
 
-export interface TransferRecommendation {
-  id: string;
-  part_number: string;
-  from_branch_id: string;
-  to_branch_id: string;
-  recommended_qty: number;
-  from_qty_on_hand: number;
-  to_qty_on_hand: number;
-  to_reorder_point: number | null;
-  to_forecast_demand: number | null;
-  estimated_transfer_cost: number | null;
-  estimated_stockout_cost_avoided: number | null;
-  net_savings: number | null;
-  priority: string;
-  confidence: number;
-  reason: string;
-  status: string;
-  created_at: string;
-}
+export type { TransferRecommendation } from "../lib/parts-row-normalizers";
 
 export interface TransferSummary {
   rows: TransferRecommendation[];
@@ -52,7 +35,7 @@ export function useTransferRecommendations() {
 
         if (error) throw error;
 
-        const rows = (data ?? []) as TransferRecommendation[];
+        const rows = normalizeTransferRecommendations(data);
         return {
           rows,
           pendingCount: rows.length,

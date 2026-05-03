@@ -8,6 +8,7 @@ import { PartsSubNav } from "../components/PartsSubNav";
 import { PartCommandPanel, type BranchCell } from "../components/PartCommandPanel";
 import type { Database } from "@/lib/database.types";
 import type { ForecastRow } from "../hooks/useDemandForecast";
+import { normalizeForecastRows } from "../lib/parts-row-normalizers";
 
 type CatalogRow = Database["public"]["Tables"]["parts_catalog"]["Row"];
 
@@ -78,7 +79,7 @@ export function PartsForecastPage() {
         .select("*")
         .order("stockout_risk")
         .limit(500);
-      if (!vErr && v) return v as ForecastRow[];
+      if (!vErr && v) return normalizeForecastRows(v);
 
       const { data, error } = await supabase
         .from("parts_demand_forecasts")
@@ -86,7 +87,7 @@ export function PartsForecastPage() {
         .order("stockout_risk")
         .limit(500);
       if (error) throw error;
-      return (data ?? []) as unknown as ForecastRow[];
+      return normalizeForecastRows(data, { fallbackFromRisk: true });
     },
   });
 

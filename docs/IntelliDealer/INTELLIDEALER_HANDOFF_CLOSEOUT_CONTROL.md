@@ -26,7 +26,7 @@ If another document conflicts with this one, treat this document as the current 
 | Raw source file custody | Manifested 2026-05-03 | `SOURCE_FILE_CUSTODY_MANIFEST.md` | The raw files remain untracked, but filename, size, SHA-256, page counts, workbook row counts, and import run binding are now committed and script-verifiable. |
 | Fresh production verification | Passed 2026-05-03 | `FRESH_PRODUCTION_VERIFICATION_2026-05-03.md` | Rerun safety, production reconciliation, production browser smoke, storage cleanup, and active-run checks passed against the current production bundle. |
 | UI completion review | Passed 2026-05-03 | `UI_COMPLETION_REVIEW_2026-05-03.md` | Account 360, Companies search, company/contact editors, admin dashboard, safe export download, browser stage, preflight rejection, discard, and cleanup are verified. |
-| Non-core API type hardening | In progress 2026-05-03 | `NON_CORE_API_TYPE_HARDENING_2026-05-03.md` | Hardened ops payment validation, service labor pricing, QRM approval-center, service agreement, vendor profile, exec shared-data/metric drill, Floor customer/serial/health widget, Floor operational widget, owner dashboard API, Floor role-home, parts companion pricing/replenish/supplier-health/post-sale/intelligence/core/import/voice API, and portal fleet/doc/history row/payload shapes with targeted tests and web typecheck. |
+| Non-core API type hardening | In progress 2026-05-03 | `NON_CORE_API_TYPE_HARDENING_2026-05-03.md` | Hardened ops payment validation, service labor pricing, QRM approval-center, service agreement, vendor profile, exec shared-data/metric drill, Floor customer/serial/health widget, Floor operational widget, owner dashboard API, Floor role-home, parts companion pricing/replenish/supplier-health/post-sale/intelligence/core/import/voice API, portal fleet/doc/history, and parts hook/forecast row/payload shapes with targeted tests and web typecheck. |
 
 ## Production Customer Import Baseline
 
@@ -214,7 +214,8 @@ Current result:
 - Parts companion import preview, commit, dashboard, import run, conflict, and bulk-resolution payloads now use exported normalizers.
 - Parts companion voice ops edge responses now use an exported normalizer.
 - Portal fleet map/detail, document library, and reorder history rows now use exported normalizers.
-- Targeted tests passed: `94 pass`, `0 fail`.
+- Parts demand forecast, order events, analytics, vendor trends, part activity, cross references, customer parts intel, transfer recommendations, and forecast page rows now use exported normalizers.
+- Targeted tests passed: `102 pass`, `0 fail`.
 - Web typecheck passed.
 
 ### Slice 7: Wave 5 Deferred Integration Register

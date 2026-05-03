@@ -1,61 +1,24 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
+import {
+  normalizeAnalyticsSnapshot,
+  normalizeSlowMovingParts,
+  normalizeVendorTrends,
+  type AnalyticsSnapshot,
+  type FastMovingPart,
+  type SlowMovingPart,
+  type VendorTrend,
+} from "../lib/parts-row-normalizers";
 
-export interface CategoryRevenue {
-  category: string;
-  revenue: number;
-  cost: number;
-  margin: number;
-  line_count: number;
-}
-
-export interface SourceRevenue {
-  order_source: string;
-  revenue: number;
-  order_count: number;
-}
-
-export interface TopCustomer {
-  company_id: string;
-  company_name: string;
-  revenue: number;
-  order_count: number;
-}
-
-export interface FastMovingPart {
-  part_number: string;
-  description: string;
-  total_qty: number;
-  total_revenue: number;
-}
-
-export interface AnalyticsSnapshot {
-  id: string;
-  snapshot_date: string;
-  total_revenue: number;
-  total_cost: number;
-  total_margin: number;
-  order_count: number;
-  line_count: number;
-  revenue_by_category: CategoryRevenue[];
-  revenue_by_source: SourceRevenue[];
-  top_customers: TopCustomer[];
-  fastest_moving: FastMovingPart[];
-  total_inventory_value: number;
-  dead_stock_value: number;
-  dead_stock_count: number;
-}
-
-export interface VendorTrend {
-  id: string;
-  name: string;
-  avg_lead_time_hours: number | null;
-  responsiveness_score: number | null;
-  fill_rate: number | null;
-  composite_score: number | null;
-  machine_down_priority: boolean;
-}
+export type {
+  AnalyticsSnapshot,
+  CategoryRevenue,
+  FastMovingPart,
+  SourceRevenue,
+  TopCustomer,
+  VendorTrend,
+} from "../lib/parts-row-normalizers";
 
 export function usePartsAnalytics() {
   const workspaceQ = useMyWorkspaceId();
@@ -77,7 +40,7 @@ export function usePartsAnalytics() {
           .maybeSingle();
 
         if (error) throw error;
-        return data as AnalyticsSnapshot | null;
+        return normalizeAnalyticsSnapshot(data);
       } catch {
         return null;
       }
@@ -104,7 +67,7 @@ export function useVendorTrends() {
           .order("composite_score", { ascending: false })
           .limit(20);
         if (error) throw error;
-        return (data ?? []) as VendorTrend[];
+        return normalizeVendorTrends(data);
       } catch {
         return [];
       }
@@ -116,7 +79,7 @@ export function usePartsVelocityLive() {
   const workspaceQ = useMyWorkspaceId();
   const workspaceId = workspaceQ.data;
 
-  return useQuery<{ fastest: FastMovingPart[]; slowest: Array<{ part_number: string; description: string; qty_on_hand: number; updated_at: string }> }>({
+  return useQuery<{ fastest: FastMovingPart[]; slowest: SlowMovingPart[] }>({
     queryKey: ["parts-velocity", workspaceId],
     enabled: Boolean(workspaceId),
     staleTime: 120_000,
@@ -154,12 +117,7 @@ export function usePartsVelocityLive() {
           .order("updated_at", { ascending: true })
           .limit(15);
 
-        const slowest = (inv ?? []).map((r) => ({
-          part_number: r.part_number as string,
-          description: "",
-          qty_on_hand: Number(r.qty_on_hand),
-          updated_at: r.updated_at as string,
-        }));
+        const slowest = normalizeSlowMovingParts(inv);
 
         return { fastest, slowest };
       } catch {

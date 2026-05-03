@@ -1,20 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
+import {
+  normalizeCrossReferenceFallbackRows,
+  normalizeSubstituteRows,
+  type SubstituteRow,
+} from "../lib/parts-row-normalizers";
 
-export interface SubstituteRow {
-  xref_id: string;
-  substitute_part_number: string;
-  relationship: string;
-  confidence: number;
-  source: string;
-  fitment_notes: string | null;
-  price_delta: number | null;
-  lead_time_delta_days: number | null;
-  qty_available: number;
-  available_branch: string | null;
-  catalog_description: string | null;
-}
+export type { SubstituteRow } from "../lib/parts-row-normalizers";
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
   interchangeable: "Interchangeable",
@@ -52,7 +45,7 @@ export function useCrossReferences(
         if (branchId) params.p_branch_id = branchId;
 
         const { data, error } = await supabase.rpc("find_part_substitutes", params);
-        if (!error && data) return data as SubstituteRow[];
+        if (!error && data) return normalizeSubstituteRows(data);
       } catch { /* migration not applied */ }
 
       // Fallback: direct table query (both directions)
@@ -75,37 +68,10 @@ export function useCrossReferences(
             .limit(50),
         ]);
 
-        const rows: SubstituteRow[] = [];
-        for (const r of outbound ?? []) {
-          rows.push({
-            xref_id: r.id,
-            substitute_part_number: r.part_number_b as string,
-            relationship: r.relationship as string,
-            confidence: Number(r.confidence),
-            source: r.source as string,
-            fitment_notes: r.fitment_notes as string | null,
-            price_delta: r.price_delta != null ? Number(r.price_delta) : null,
-            lead_time_delta_days: r.lead_time_delta_days != null ? Number(r.lead_time_delta_days) : null,
-            qty_available: 0,
-            available_branch: null,
-            catalog_description: null,
-          });
-        }
-        for (const r of inbound ?? []) {
-          rows.push({
-            xref_id: r.id,
-            substitute_part_number: r.part_number_a as string,
-            relationship: r.relationship as string,
-            confidence: Number(r.confidence),
-            source: r.source as string,
-            fitment_notes: r.fitment_notes as string | null,
-            price_delta: r.price_delta != null ? -Number(r.price_delta) : null,
-            lead_time_delta_days: r.lead_time_delta_days != null ? -Number(r.lead_time_delta_days) : null,
-            qty_available: 0,
-            available_branch: null,
-            catalog_description: null,
-          });
-        }
+        const rows = [
+          ...normalizeCrossReferenceFallbackRows(outbound, "outbound"),
+          ...normalizeCrossReferenceFallbackRows(inbound, "inbound"),
+        ];
         return rows.sort((a, b) => b.confidence - a.confidence);
       } catch {
         return [];

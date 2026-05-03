@@ -1,26 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { normalizeForecastRows, type ForecastRow } from "../lib/parts-row-normalizers";
 
-export type CoverageStatus = "action_required" | "watch" | "covered" | "no_inventory";
-
-export interface ForecastRow {
-  workspace_id: string;
-  part_number: string;
-  branch_id: string;
-  forecast_month: string;
-  predicted_qty: number;
-  confidence_low: number;
-  confidence_high: number;
-  stockout_risk: string;
-  qty_on_hand_at_forecast: number | null;
-  current_qty_on_hand: number | null;
-  consumption_velocity: number | null;
-  current_reorder_point: number | null;
-  coverage_status: CoverageStatus;
-  days_of_stock_remaining: number | null;
-  drivers: Record<string, unknown>;
-  computed_at: string;
-}
+export type { CoverageStatus, ForecastRow } from "../lib/parts-row-normalizers";
 
 export interface ForecastSummary {
   rows: ForecastRow[];
@@ -45,7 +27,7 @@ export function useDemandForecast() {
         .limit(60);
 
       if (!viewError && viewData) {
-        const rows = viewData as ForecastRow[];
+        const rows = normalizeForecastRows(viewData);
         return {
           rows,
           actionRequired: rows.filter((r) => r.coverage_status === "action_required").length,
@@ -67,24 +49,7 @@ export function useDemandForecast() {
           .limit(60);
 
         if (!directError && directData) {
-          const rows: ForecastRow[] = (directData ?? []).map((r) => ({
-            workspace_id: r.workspace_id as string,
-            part_number: r.part_number as string,
-            branch_id: r.branch_id as string,
-            forecast_month: r.forecast_month as string,
-            predicted_qty: Number(r.predicted_qty),
-            confidence_low: Number(r.confidence_low),
-            confidence_high: Number(r.confidence_high),
-            stockout_risk: r.stockout_risk as string,
-            qty_on_hand_at_forecast: r.qty_on_hand_at_forecast as number | null,
-            current_qty_on_hand: null,
-            consumption_velocity: null,
-            current_reorder_point: null,
-            coverage_status: (r.stockout_risk === "critical" ? "action_required" : "watch") as CoverageStatus,
-            days_of_stock_remaining: null,
-            drivers: (r.drivers ?? {}) as Record<string, unknown>,
-            computed_at: r.computed_at as string,
-          }));
+          const rows = normalizeForecastRows(directData, { fallbackFromRisk: true });
 
           return {
             rows,
