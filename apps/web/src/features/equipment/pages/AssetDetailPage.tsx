@@ -17,6 +17,14 @@ import { fetchAsset360, type Asset360Response } from "../lib/asset-360-api";
 import { CommercialActionTab } from "../components/CommercialActionTab";
 import { MachineLifecycleCard } from "../components/MachineLifecycleCard";
 import { supabase } from "@/lib/supabase";
+import {
+  normalizeEquipmentDocumentRows,
+  normalizeEquipmentPartsOrderRows,
+  normalizeEquipmentTelematicsRows,
+  type EquipmentPartsOrderRow,
+  type EquipmentTelematicsRow,
+  type EquipmentDocumentRow,
+} from "../lib/equipment-row-normalizers";
 
 type TabKey = "service" | "parts" | "deal" | "telematics" | "docs" | "photos" | "commercial";
 
@@ -214,15 +222,6 @@ function DealTab({ data }: { data: Asset360Response }) {
   );
 }
 
-interface PartsOrderRow {
-  id: string;
-  status: string;
-  total: number | null;
-  estimated_delivery: string | null;
-  tracking_number: string | null;
-  created_at: string;
-}
-
 function PartsTab({ equipmentId, lifetimeSpend }: { equipmentId: string; lifetimeSpend: number }) {
   const fleetQuery = useQuery({
     queryKey: ["asset", "fleet-link", equipmentId],
@@ -239,7 +238,7 @@ function PartsTab({ equipmentId, lifetimeSpend }: { equipmentId: string; lifetim
     staleTime: 60_000,
   });
 
-  const ordersQuery = useQuery({
+  const ordersQuery = useQuery<EquipmentPartsOrderRow[]>({
     queryKey: ["asset", "parts-orders", equipmentId, fleetQuery.data],
     enabled: Boolean(fleetQuery.data),
     queryFn: async () => {
@@ -250,7 +249,7 @@ function PartsTab({ equipmentId, lifetimeSpend }: { equipmentId: string; lifetim
         .order("created_at", { ascending: false })
         .limit(8);
       if (error) throw error;
-      return (data ?? []) as PartsOrderRow[];
+      return normalizeEquipmentPartsOrderRows(data);
     },
     staleTime: 60_000,
   });
@@ -292,18 +291,8 @@ function PartsTab({ equipmentId, lifetimeSpend }: { equipmentId: string; lifetim
   );
 }
 
-interface TelematicsRow {
-  provider: string;
-  device_serial: string | null;
-  last_hours: number | null;
-  last_lat: number | null;
-  last_lng: number | null;
-  last_reading_at: string | null;
-  is_active: boolean;
-}
-
 function TelematicsTab({ equipmentId }: { equipmentId: string }) {
-  const telematicsQuery = useQuery({
+  const telematicsQuery = useQuery<EquipmentTelematicsRow[]>({
     queryKey: ["asset", "telematics", equipmentId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -313,7 +302,7 @@ function TelematicsTab({ equipmentId }: { equipmentId: string }) {
         .order("updated_at", { ascending: false })
         .limit(5);
       if (error) throw error;
-      return (data ?? []) as TelematicsRow[];
+      return normalizeEquipmentTelematicsRows(data);
     },
     staleTime: 60_000,
   });
@@ -351,17 +340,8 @@ function TelematicsTab({ equipmentId }: { equipmentId: string }) {
   );
 }
 
-interface EquipmentDocumentRow {
-  id: string;
-  title: string;
-  document_type: string;
-  file_url: string;
-  customer_visible: boolean;
-  updated_at: string;
-}
-
 function DocsTab({ equipmentId }: { equipmentId: string }) {
-  const docsQuery = useQuery({
+  const docsQuery = useQuery<EquipmentDocumentRow[]>({
     queryKey: ["asset", "docs", equipmentId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -371,7 +351,7 @@ function DocsTab({ equipmentId }: { equipmentId: string }) {
         .order("updated_at", { ascending: false })
         .limit(12);
       if (error) throw error;
-      return (data ?? []) as EquipmentDocumentRow[];
+      return normalizeEquipmentDocumentRows(data);
     },
     staleTime: 60_000,
   });

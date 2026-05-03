@@ -7,6 +7,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import type { Asset360Response } from "../lib/asset-360-api";
 import { KbMatchPanel } from "./KbMatchPanel";
+import { hasNonNullRecordValue } from "../lib/equipment-row-normalizers";
 
 interface CommercialActionTabProps {
   data: Asset360Response;
@@ -190,7 +191,7 @@ export function CommercialActionTab({ data }: CommercialActionTabProps) {
             onAction={() => draftMutation.mutate("custom")}
           />
         )}
-        {equipment.metadata && (equipment.metadata as Record<string, unknown>).warranty_expires_at != null && (
+        {hasNonNullRecordValue(equipment.metadata, "warranty_expires_at") && (
           <RiskCard
             tone="orange"
             icon={<Shield className="h-3.5 w-3.5" />}

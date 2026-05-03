@@ -73,7 +73,7 @@ export function KbMatchPanel({ make, model, faultCode, className = "" }: KbMatch
         p_fault_code: faultCode ?? null,
         p_limit: 5,
       });
-      if (error) return [] as KbEntry[];
+      if (error) return [];
       return (data ?? []).map(mapKbEntry);
     },
     enabled: !!(make || model || faultCode),

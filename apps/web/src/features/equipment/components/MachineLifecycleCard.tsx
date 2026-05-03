@@ -4,19 +4,13 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabase";
 import { EMPTY_ASSET_BADGES, parseAssetBadges, type AssetBadgeData } from "@/lib/asset-rpc";
 import { deriveMachineLifecycleState } from "../lib/machine-lifecycle";
+import { normalizeLifecycleSummary, type LifecycleSummaryRow } from "../lib/equipment-row-normalizers";
 
 interface MachineLifecycleCardProps {
   equipmentId: string;
   serialNumber: string | null | undefined;
   ownership: "owned" | "leased" | "customer_owned" | "rental_fleet" | "consignment";
   availability: "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned";
-}
-
-interface LifecycleSummaryRow {
-  predicted_replacement_date: string | null;
-  replacement_confidence: number | null;
-  customer_health_score: number | null;
-  revenue_breakdown: Record<string, unknown> | null;
 }
 
 function currency(value: number): string {
@@ -68,7 +62,7 @@ export function MachineLifecycleCard({
     staleTime: 60_000,
   });
 
-  const lifecycleSummaryQuery = useQuery({
+  const lifecycleSummaryQuery = useQuery<LifecycleSummaryRow | null>({
     queryKey: ["machine-lifecycle", "summary", serialNumber ?? "none"],
     enabled: Boolean(serialNumber),
     queryFn: async () => {
@@ -79,7 +73,7 @@ export function MachineLifecycleCard({
         .limit(1)
         .maybeSingle();
       if (error) throw new Error(error.message);
-      return (data as LifecycleSummaryRow | null) ?? null;
+      return normalizeLifecycleSummary(data);
     },
     staleTime: 60_000,
   });
