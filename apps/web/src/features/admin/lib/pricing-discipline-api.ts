@@ -16,6 +16,112 @@ export type MarginThresholdInsert =
 export type MarginExceptionRow =
   Database["public"]["Tables"]["qb_margin_exceptions"]["Row"];
 
+type ThresholdBrandJoin = { id: string; name: string; code: string | null };
+type MarginThresholdWithBrand = MarginThresholdRow & {
+  qb_brands?: ThresholdBrandJoin | null;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function requiredString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function requiredNumber(value: unknown): number | null {
+  const parsed = numberOrNull(value);
+  return parsed == null ? null : parsed;
+}
+
+function normalizeThresholdBrand(value: unknown): ThresholdBrandJoin | null {
+  const brand = Array.isArray(value) ? value.find(isRecord) : value;
+  if (!isRecord(brand)) return null;
+  const id = requiredString(brand.id);
+  const name = requiredString(brand.name);
+  if (!id || !name) return null;
+  return {
+    id,
+    name,
+    code: nullableString(brand.code),
+  };
+}
+
+export function normalizeMarginThresholdRows(value: unknown): MarginThresholdWithBrand[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const workspaceId = requiredString(row.workspace_id);
+    const minMarginPct = requiredNumber(row.min_margin_pct);
+    const createdAt = requiredString(row.created_at);
+    const updatedAt = requiredString(row.updated_at);
+    if (!id || !workspaceId || minMarginPct == null || !createdAt || !updatedAt) return [];
+    return [{
+      id,
+      workspace_id: workspaceId,
+      brand_id: nullableString(row.brand_id),
+      min_margin_pct: minMarginPct,
+      notes: nullableString(row.notes),
+      updated_by: nullableString(row.updated_by),
+      created_at: createdAt,
+      updated_at: updatedAt,
+      qb_brands: normalizeThresholdBrand(row.qb_brands),
+    }];
+  });
+}
+
+export function normalizeMarginExceptionRows(value: unknown): MarginExceptionRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const workspaceId = requiredString(row.workspace_id);
+    const quotePackageId = requiredString(row.quote_package_id);
+    const quotedMarginPct = requiredNumber(row.quoted_margin_pct);
+    const thresholdMarginPct = requiredNumber(row.threshold_margin_pct);
+    const deltaPts = requiredNumber(row.delta_pts);
+    const reason = requiredString(row.reason);
+    const createdAt = requiredString(row.created_at);
+    if (
+      !id
+      || !workspaceId
+      || !quotePackageId
+      || quotedMarginPct == null
+      || thresholdMarginPct == null
+      || deltaPts == null
+      || !reason
+      || !createdAt
+    ) {
+      return [];
+    }
+    return [{
+      id,
+      workspace_id: workspaceId,
+      quote_package_id: quotePackageId,
+      brand_id: nullableString(row.brand_id),
+      quoted_margin_pct: quotedMarginPct,
+      threshold_margin_pct: thresholdMarginPct,
+      delta_pts: deltaPts,
+      estimated_gap_cents: numberOrNull(row.estimated_gap_cents),
+      reason,
+      rep_id: nullableString(row.rep_id),
+      created_at: createdAt,
+    }];
+  });
+}
+
 // ── Lookups ─────────────────────────────────────────────────────────────
 
 /**
@@ -34,7 +140,8 @@ export async function getApplicableThreshold(
       .select("*")
       .eq("brand_id", brandId)
       .maybeSingle();
-    if (data) return { threshold: data as MarginThresholdRow, source: "brand" };
+    const threshold = normalizeMarginThresholdRows(data ? [data] : [])[0] ?? null;
+    if (threshold) return { threshold, source: "brand" };
   }
   // Fall back to workspace default
   const { data } = await supabase
@@ -42,7 +149,8 @@ export async function getApplicableThreshold(
     .select("*")
     .is("brand_id", null)
     .maybeSingle();
-  if (data) return { threshold: data as MarginThresholdRow, source: "default" };
+  const threshold = normalizeMarginThresholdRows(data ? [data] : [])[0] ?? null;
+  if (threshold) return { threshold, source: "default" };
   return { threshold: null, source: "none" };
 }
 
@@ -54,7 +162,7 @@ export async function listThresholds(): Promise<MarginThresholdRow[]> {
     .select("*, qb_brands!brand_id(id, name, code)")
     .order("brand_id", { ascending: true, nullsFirst: true });
   if (error) return [];
-  return (data ?? []) as MarginThresholdRow[];
+  return normalizeMarginThresholdRows(data);
 }
 
 export async function upsertThreshold(
@@ -81,7 +189,9 @@ export async function upsertThreshold(
     .select("*")
     .single();
   if (error || !data) return { error: error?.message ?? "Failed to save threshold" };
-  return { ok: true, row: data as MarginThresholdRow };
+  const row = normalizeMarginThresholdRows([data])[0];
+  if (!row) return { error: "Saved threshold returned malformed row" };
+  return { ok: true, row };
 }
 
 export async function deleteThreshold(
@@ -154,7 +264,7 @@ export async function getExceptionRollup(
     q = q.gte("created_at", cutoff.toISOString());
   }
   const { data } = await q;
-  const rows = (data ?? []) as MarginExceptionRow[];
+  const rows = normalizeMarginExceptionRows(data);
   return aggregateExceptions(rows);
 }
 

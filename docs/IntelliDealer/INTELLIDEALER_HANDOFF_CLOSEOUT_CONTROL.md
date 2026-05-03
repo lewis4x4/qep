@@ -257,7 +257,8 @@ Current result:
 - Admin Base Options model and attachment rows now use exported normalizers before option counting, compatible attachment lookup, and bulk repricing.
 - Admin sheet watchdog source and event rows now use exported normalizers before the price-sheet watchdog health UI consumes them.
 - Admin audit log rows and actor profile rows now use exported normalizers before audit events are merged and rendered.
-- Targeted tests passed: `452 pass`, `0 fail`.
+- Admin pricing discipline threshold and exception rows now use exported normalizers before margin enforcement and admin economics rollups consume them.
+- Targeted tests passed: `471 pass`, `0 fail`.
 - Web typecheck passed.
 - Service feature cast scan is clear for the Slice 6 inventory pattern.
 - Fleet feature cast scan is clear for the Slice 6 inventory pattern.

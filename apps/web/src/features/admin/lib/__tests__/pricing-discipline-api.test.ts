@@ -3,6 +3,8 @@ import {
   aggregateExceptions,
   estimateMarginGapCents,
   isUnderThreshold,
+  normalizeMarginExceptionRows,
+  normalizeMarginThresholdRows,
   type MarginExceptionRow,
 } from "../pricing-discipline-api";
 
@@ -21,6 +23,97 @@ function exc(partial: Partial<MarginExceptionRow>): MarginExceptionRow {
     created_at:           partial.created_at ?? "2026-04-19T00:00:00Z",
   } as MarginExceptionRow;
 }
+
+describe("pricing discipline row normalizers", () => {
+  test("normalizes threshold rows with joined brand arrays and numeric strings", () => {
+    expect(normalizeMarginThresholdRows([
+      {
+        id: "threshold-1",
+        workspace_id: "default",
+        brand_id: "brand-1",
+        min_margin_pct: "15.5",
+        notes: "Floor",
+        updated_by: "user-1",
+        created_at: "2026-04-01T00:00:00Z",
+        updated_at: "2026-04-02T00:00:00Z",
+        qb_brands: [{ id: "brand-1", name: "ASV", code: "ASV" }],
+      },
+    ])).toEqual([
+      {
+        id: "threshold-1",
+        workspace_id: "default",
+        brand_id: "brand-1",
+        min_margin_pct: 15.5,
+        notes: "Floor",
+        updated_by: "user-1",
+        created_at: "2026-04-01T00:00:00Z",
+        updated_at: "2026-04-02T00:00:00Z",
+        qb_brands: { id: "brand-1", name: "ASV", code: "ASV" },
+      },
+    ]);
+  });
+
+  test("filters malformed threshold rows", () => {
+    expect(normalizeMarginThresholdRows([
+      { id: "missing-required-fields", min_margin_pct: "12" },
+      {
+        id: "threshold-2",
+        workspace_id: "default",
+        brand_id: null,
+        min_margin_pct: "bad",
+        created_at: "2026-04-01T00:00:00Z",
+        updated_at: "2026-04-02T00:00:00Z",
+      },
+    ])).toEqual([]);
+  });
+
+  test("normalizes exception rows and numeric strings", () => {
+    expect(normalizeMarginExceptionRows([
+      {
+        id: "exception-1",
+        workspace_id: "default",
+        quote_package_id: "quote-1",
+        brand_id: "brand-1",
+        quoted_margin_pct: "10",
+        threshold_margin_pct: "15",
+        delta_pts: "-5",
+        estimated_gap_cents: "50000",
+        reason: "Below floor",
+        rep_id: "rep-1",
+        created_at: "2026-04-19T00:00:00Z",
+      },
+      {
+        id: "exception-2",
+        workspace_id: "default",
+        quote_package_id: "quote-2",
+        quoted_margin_pct: "bad",
+        threshold_margin_pct: "15",
+        delta_pts: "-5",
+        reason: "Bad row",
+        created_at: "2026-04-19T00:00:00Z",
+      },
+    ])).toEqual([
+      {
+        id: "exception-1",
+        workspace_id: "default",
+        quote_package_id: "quote-1",
+        brand_id: "brand-1",
+        quoted_margin_pct: 10,
+        threshold_margin_pct: 15,
+        delta_pts: -5,
+        estimated_gap_cents: 50000,
+        reason: "Below floor",
+        rep_id: "rep-1",
+        created_at: "2026-04-19T00:00:00Z",
+      },
+    ]);
+  });
+
+  test("returns empty arrays for malformed payloads", () => {
+    expect(normalizeMarginThresholdRows({})).toEqual([]);
+    expect(normalizeMarginExceptionRows("not rows")).toEqual([]);
+  });
+});
 
 describe("isUnderThreshold", () => {
   test("returns false when no threshold set", () => {
