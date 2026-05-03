@@ -15,6 +15,28 @@ export interface DealRoomSummary {
   scenarioCount: number;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function requiredString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+export function normalizeDealRoomApprovalRows(rows: unknown): DealRoomApproval[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      subject: requiredString(row.subject, "Approval"),
+      status: requiredString(row.status, "pending"),
+    }];
+  });
+}
+
 function readTaskMetadata(activity: QrmActivityItem): QrmTaskMetadata | null {
   if (activity.activityType !== "task") return null;
   const task = activity.metadata.task;

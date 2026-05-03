@@ -25,7 +25,7 @@ import { DeckSurface } from "../components/command-deck";
 import { supabase } from "@/lib/supabase";
 import type { ExtractedDealData } from "@/lib/voice-capture-extraction.types";
 import { fetchDealComposite } from "../lib/deal-composite-api";
-import { buildDealRoomSummary, type DealRoomApproval } from "../lib/deal-room";
+import { buildDealRoomSummary, normalizeDealRoomApprovalRows, type DealRoomApproval } from "../lib/deal-room";
 import {
   buildDecisionRoomBoard,
   type DecisionRoomSeat,
@@ -203,7 +203,7 @@ export function DecisionRoomSimulatorPage() {
           .in("status", ["pending", "escalated"])
           .contains("context_summary", { entity_id: dealId });
         if (error) throw error;
-        return (data ?? []) as DealRoomApproval[];
+        return normalizeDealRoomApprovalRows(data);
       } catch {
         return [];
       }

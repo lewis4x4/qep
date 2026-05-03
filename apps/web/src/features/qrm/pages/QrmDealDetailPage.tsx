@@ -16,7 +16,8 @@ import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation"
 import { formatTimestamp, toDateTimeLocalValue, toIsoOrNull } from "../lib/deal-date";
 import { buildAccountCommandHref } from "../lib/account-command";
 import { buildTradeWalkaroundHref } from "../lib/trade-walkaround";
-import { buildDealRoomSummary, type DealRoomApproval } from "../lib/deal-room";
+import { buildDealRoomSummary, normalizeDealRoomApprovalRows, type DealRoomApproval } from "../lib/deal-room";
+import { normalizeDealQuoteRows, type DealQuoteSummary } from "../lib/deal-quotes";
 import { buildDealAutopsySummary } from "../lib/deal-autopsy";
 import {
   createCrmActivity,
@@ -63,17 +64,6 @@ interface QrmDealDetailPageProps {
   userId: string;
   userRole: UserRole;
   mode?: "detail" | "room" | "autopsy";
-}
-
-interface DealQuoteSummary {
-  id: string;
-  status: string | null;
-  quote_number: string | null;
-  created_at: string;
-  updated_at: string;
-  sent_at: string | null;
-  expires_at: string | null;
-  net_total: number | null;
 }
 
 const OPEN_QUOTE_STATUSES = [
@@ -153,7 +143,7 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
           .in("status", ["pending", "escalated"])
           .contains("context_summary", { entity_id: dealId });
         if (error) throw error;
-        return (data ?? []) as DealRoomApproval[];
+        return normalizeDealRoomApprovalRows(data);
       } catch {
         return [];
       }
@@ -172,7 +162,7 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
         .order("created_at", { ascending: false })
         .limit(10);
       if (error) throw error;
-      return (data ?? []) as DealQuoteSummary[];
+      return normalizeDealQuoteRows(data);
     },
     staleTime: 30_000,
   });

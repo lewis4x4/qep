@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { buildDealRoomSummary } from "./deal-room";
+import { buildDealRoomSummary, normalizeDealRoomApprovalRows } from "./deal-room";
 import type { QrmActivityItem } from "./types";
 import type { QrmDealDemoSummary } from "./deal-composite-types";
 
@@ -76,5 +76,24 @@ describe("buildDealRoomSummary", () => {
     expect(summary.overdueTaskCount).toBe(1);
     expect(summary.pendingApprovalCount).toBe(2);
     expect(summary.scenarioCount).toBe(3);
+  });
+});
+
+describe("normalizeDealRoomApprovalRows", () => {
+  it("normalizes approval rows and filters malformed records", () => {
+    expect(normalizeDealRoomApprovalRows([
+      { id: "approval-1", subject: "", status: "escalated" },
+      { id: "approval-2", subject: "Margin approval", status: null },
+      { id: null, subject: "bad", status: "pending" },
+      "bad",
+    ])).toEqual([
+      { id: "approval-1", subject: "Approval", status: "escalated" },
+      { id: "approval-2", subject: "Margin approval", status: "pending" },
+    ]);
+  });
+
+  it("returns an empty list for non-array payloads", () => {
+    expect(normalizeDealRoomApprovalRows(null)).toEqual([]);
+    expect(normalizeDealRoomApprovalRows({ id: "approval-1" })).toEqual([]);
   });
 });
