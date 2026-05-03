@@ -5,6 +5,13 @@
  * edge function (Claude Sonnet 4.6).
  */
 import { supabase } from "@/lib/supabase";
+import {
+  normalizeEligibleDeals,
+  normalizeGenerationResult,
+  normalizePlaybookDetail,
+  normalizePlaybookSummary,
+  type PlaybookDetail,
+} from "./post-sale-api-normalizers";
 
 export interface PlaybookPart {
   part_number: string;
@@ -66,7 +73,7 @@ export async function fetchPlaybookSummary(): Promise<PlaybookSummary> {
     p_limit: 30,
   });
   if (error) throw new Error(`post_sale_playbook_summary: ${error.message}`);
-  return data as PlaybookSummary;
+  return normalizePlaybookSummary(data);
 }
 
 export interface EligibleDeal {
@@ -85,7 +92,7 @@ export async function fetchEligibleDeals(limit = 10): Promise<EligibleDeal[]> {
     p_limit: limit,
   });
   if (error) throw new Error(`eligible_deals_for_playbook: ${error.message}`);
-  return (data ?? []) as EligibleDeal[];
+  return normalizeEligibleDeals(data);
 }
 
 export interface GenerationResult {
@@ -111,7 +118,7 @@ export async function generatePlaybook(
   );
   if (error) throw new Error(`post-sale-parts-playbook: ${error.message}`);
   if (!data) throw new Error("post-sale-parts-playbook: empty response");
-  return data;
+  return normalizeGenerationResult(data);
 }
 
 export async function generateBatch(limit = 5): Promise<GenerationResult> {
@@ -121,27 +128,20 @@ export async function generateBatch(limit = 5): Promise<GenerationResult> {
   );
   if (error) throw new Error(`post-sale-parts-playbook (batch): ${error.message}`);
   if (!data) throw new Error("post-sale-parts-playbook (batch): empty response");
-  return data;
+  return normalizeGenerationResult(data);
 }
 
 // Direct fetch of one playbook's full payload (for the detail drawer).
-export async function fetchPlaybook(id: string): Promise<{
-  id: string;
-  status: string;
-  payload: PlaybookPayload;
-  total_revenue: number;
-  created_at: string;
-  sent_at: string | null;
-  deal_id: string;
-  equipment_id: string | null;
-}> {
+export async function fetchPlaybook(id: string): Promise<PlaybookDetail> {
   const { data, error } = await supabase
     .from("post_sale_parts_playbooks")
     .select("id, status, payload, total_revenue, created_at, sent_at, deal_id, equipment_id")
     .eq("id", id)
     .single();
   if (error) throw new Error(error.message);
-  return data as never;
+  const normalized = normalizePlaybookDetail(data);
+  if (!normalized) throw new Error("post_sale_parts_playbooks: malformed playbook response");
+  return normalized;
 }
 
 // Transitions: status updates.
