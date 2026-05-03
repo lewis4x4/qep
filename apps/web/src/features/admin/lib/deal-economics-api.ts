@@ -110,6 +110,86 @@ export interface BrandFreightKeyRow {
   has_inbound_freight_key: boolean;
 }
 
+type BrandEngineBrandRow = Pick<
+  BrandEngineStatusRow,
+  "id" | "code" | "name" | "discount_configured" | "has_inbound_freight_key"
+>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function requiredString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function bool(value: unknown): boolean {
+  return value === true;
+}
+
+export function normalizeBrandFreightKeyRows(value: unknown): BrandFreightKeyRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const code = requiredString(row.code);
+    const name = requiredString(row.name);
+    if (!id || !code || !name) return [];
+    return [{
+      id,
+      code,
+      name,
+      has_inbound_freight_key: bool(row.has_inbound_freight_key),
+    }];
+  });
+}
+
+export function normalizeBrandEngineBrandRows(value: unknown): BrandEngineBrandRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const code = requiredString(row.code);
+    const name = requiredString(row.name);
+    if (!id || !code || !name) return [];
+    return [{
+      id,
+      code,
+      name,
+      discount_configured: bool(row.discount_configured),
+      has_inbound_freight_key: bool(row.has_inbound_freight_key),
+    }];
+  });
+}
+
+export function normalizeBrandSheetRows(value: unknown): Array<{ brand_id: string; status: string }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const brandId = requiredString(row.brand_id);
+    const status = requiredString(row.status);
+    return brandId && status ? [{ brand_id: brandId, status }] : [];
+  });
+}
+
+export function normalizeBrandZoneRows(value: unknown): Array<{ brand_id: string }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const brandId = requiredString(row.brand_id);
+    return brandId ? [{ brand_id: brandId }] : [];
+  });
+}
+
+export function normalizeBrandProgramRows(value: unknown): Array<{ brand_id: string; active: boolean }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const brandId = requiredString(row.brand_id);
+    return brandId ? [{ brand_id: brandId, active: bool(row.active) }] : [];
+  });
+}
+
 export async function getBrandFreightKeys(): Promise<BrandFreightKeyRow[]> {
   const { data, error } = await supabase
     .from("qb_brands")
@@ -117,7 +197,7 @@ export async function getBrandFreightKeys(): Promise<BrandFreightKeyRow[]> {
     .order("name", { ascending: true });
 
   if (error) return [];
-  return (data ?? []) as BrandFreightKeyRow[];
+  return normalizeBrandFreightKeyRows(data);
 }
 
 export async function setBrandFreightKey(
@@ -172,13 +252,10 @@ export async function getBrandEngineStatus(): Promise<BrandEngineStatusRow[]> {
       .select("brand_id, active"),
   ]);
 
-  const brands   = (brandsRes.data   ?? []) as Array<{
-    id: string; code: string; name: string;
-    discount_configured: boolean; has_inbound_freight_key: boolean;
-  }>;
-  const sheets   = (sheetsRes.data   ?? []) as Array<{ brand_id: string | null; status: string }>;
-  const zones    = (zonesRes.data    ?? []) as Array<{ brand_id: string }>;
-  const programs = (programsRes.data ?? []) as Array<{ brand_id: string | null; active: boolean | null }>;
+  const brands = normalizeBrandEngineBrandRows(brandsRes.data);
+  const sheets = normalizeBrandSheetRows(sheetsRes.data);
+  const zones = normalizeBrandZoneRows(zonesRes.data);
+  const programs = normalizeBrandProgramRows(programsRes.data);
 
   const publishedByBrand = new Map<string, number>();
   for (const s of sheets) {

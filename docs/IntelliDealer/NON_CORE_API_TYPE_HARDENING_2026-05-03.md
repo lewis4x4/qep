@@ -75,6 +75,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Admin sheet watchdog API | Price-sheet source list/get/upsert and recent event queries cast raw watchdog rows directly before the admin watchdog health UI consumed them. | Added exported sheet source, joined-brand source, and watch-event normalizers with required field checks, event-type validation, numeric-string coercion, JSON-detail validation, malformed-row filtering, and safe nullable numeric handling. |
 | Admin audit log API | Audit-table fanout and actor profile resolution cast raw audit rows and profile rows directly before merging admin audit events. | Added exported audit-event and actor-profile normalizers with required field checks, action validation, changed-field shape guards, snapshot object guards, malformed-row filtering, and safe actor email resolution. |
 | Admin pricing discipline API | Margin threshold lookups/admin CRUD and margin-exception rollups cast raw threshold and exception rows directly before enforcement and admin economics rendering. | Added exported margin-threshold and margin-exception normalizers with required field checks, joined brand array/object normalization, numeric-string coercion, malformed-row filtering, safe nullable cents, and malformed save-row rejection. |
+| Admin deal economics API | Brand freight keys and Deal Engine readiness counts cast raw brand, price-sheet, freight-zone, and program rows before admin economics status rendering. | Added exported brand freight-key and brand engine source-row normalizers with required brand checks, boolean guards, malformed-row filtering, and safe published-sheet/freight-zone/active-program count inputs. |
 
 ## Verification
 
@@ -206,7 +207,8 @@ Results:
 - Admin sheet watchdog API tests: `22 pass`, `0 fail`.
 - Admin audit API tests: `10 pass`, `0 fail`.
 - Admin pricing discipline API tests: `19 pass`, `0 fail`.
-- Combined targeted test run: `471 pass`, `0 fail`.
+- Admin deal economics API tests: `18 pass`, `0 fail`.
+- Combined targeted test run: `489 pass`, `0 fail`.
 - Web typecheck: PASS.
 - Service feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 - Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.

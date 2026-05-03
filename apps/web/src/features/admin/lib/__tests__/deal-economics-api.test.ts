@@ -38,6 +38,11 @@ const {
   setBrandDealEngineEnabled,
   isBrandQuoteReady,
   missingPrereqs,
+  normalizeBrandEngineBrandRows,
+  normalizeBrandFreightKeyRows,
+  normalizeBrandProgramRows,
+  normalizeBrandSheetRows,
+  normalizeBrandZoneRows,
 } = await import("../deal-economics-api");
 
 describe("deal-economics-api", () => {
@@ -145,6 +150,15 @@ describe("deal-economics-api", () => {
 
   // ── Brand freight keys ─────────────────────────────────────────────────────
 
+  test("normalizes brand freight key rows and filters malformed brands", () => {
+    expect(normalizeBrandFreightKeyRows([
+      { id: "b1", code: "ASV", name: "ASV", has_inbound_freight_key: true },
+      { id: "b2", code: "BAD", has_inbound_freight_key: true },
+    ])).toEqual([
+      { id: "b1", code: "ASV", name: "ASV", has_inbound_freight_key: true },
+    ]);
+  });
+
   test("getBrandFreightKeys selects from qb_brands ordered by name", async () => {
     await getBrandFreightKeys();
     expect(mockFrom).toHaveBeenCalledWith("qb_brands");
@@ -173,6 +187,25 @@ describe("deal-economics-api", () => {
   });
 
   // ── Brand Engine Status (CP9) ────────────────────────────────────────────
+
+  test("normalizes brand engine source rows before rollup counting", () => {
+    expect(normalizeBrandEngineBrandRows([
+      { id: "b1", code: "ASV", name: "ASV", discount_configured: true, has_inbound_freight_key: false },
+      { id: "bad", code: "BAD" },
+    ])).toEqual([
+      { id: "b1", code: "ASV", name: "ASV", discount_configured: true, has_inbound_freight_key: false },
+    ]);
+
+    expect(normalizeBrandSheetRows([
+      { brand_id: "b1", status: "published" },
+      { brand_id: null, status: "published" },
+      { brand_id: "b2", status: "" },
+    ])).toEqual([{ brand_id: "b1", status: "published" }]);
+
+    expect(normalizeBrandZoneRows([{ brand_id: "b1" }, { brand_id: "" }])).toEqual([{ brand_id: "b1" }]);
+    expect(normalizeBrandProgramRows([{ brand_id: "b1", active: true }, { brand_id: "b2", active: "yes" }]))
+      .toEqual([{ brand_id: "b1", active: true }, { brand_id: "b2", active: false }]);
+  });
 
   test("getBrandEngineStatus fires 4 parallel queries to the right tables", async () => {
     await getBrandEngineStatus();
