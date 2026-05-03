@@ -9,21 +9,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { decideQuoteApprovalCase } from "@/features/quote-builder/lib/quote-api";
 import { crmSupabase } from "../../lib/qrm-supabase";
-import type { MarginRow, DepositRow, TradeRow, DemoRow, QuoteApprovalRow } from "../lib/approvalTypes";
+import {
+  normalizeDemoRows,
+  normalizeDepositRows,
+  normalizeMarginRows,
+  normalizeQuoteApprovalRows,
+  normalizeTradeRows,
+} from "../lib/approvalTypes";
 
 const QUERY_KEY = ["qrm", "approvals"];
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function normalizeQuoteApprovalReasonSummary(value: unknown): QuoteApprovalRow["reason_summary_json"] {
-  if (!isRecord(value)) return null;
-  const reasons = Array.isArray(value.reasons)
-    ? value.reasons.filter((reason): reason is string => typeof reason === "string")
-    : null;
-  return { reasons };
-}
 
 // ─── Query hook ────────────────────────────────────────────────────────────
 
@@ -71,30 +65,12 @@ export function useApprovals() {
       if (demosRes.error) console.error("[approvals] demos query failed:", demosRes.error.message);
       if (quotesRes.error) console.error("[approvals] quote query failed:", quotesRes.error.message);
 
-      // Normalize Supabase joined relations (arrays → single objects)
-      const normalizeJoin = <T extends Record<string, unknown>>(rows: T[] | null): T[] =>
-        (rows ?? []).map((row) => {
-          const out = { ...row } as Record<string, unknown>;
-          for (const key of Object.keys(out)) {
-            if (Array.isArray(out[key])) {
-              out[key] = (out[key] as unknown[])[0] ?? null;
-            }
-          }
-          return out as T;
-        });
-
       return {
-        margin: normalizeJoin(marginRes.data) as MarginRow[],
-        deposits: normalizeJoin(depositsRes.data) as DepositRow[],
-        trades: normalizeJoin(tradesRes.data) as TradeRow[],
-        demos: normalizeJoin(demosRes.data) as DemoRow[],
-        quotes: (quotesRes.data ?? []).map((row): QuoteApprovalRow => ({
-          ...row,
-          route_mode: row.route_mode as QuoteApprovalRow["route_mode"],
-          policy_snapshot_json: isRecord(row.policy_snapshot_json) ? row.policy_snapshot_json : null,
-          reason_summary_json: normalizeQuoteApprovalReasonSummary(row.reason_summary_json),
-          requested_at: row.created_at,
-        })),
+        margin: normalizeMarginRows(marginRes.data),
+        deposits: normalizeDepositRows(depositsRes.data),
+        trades: normalizeTradeRows(tradesRes.data),
+        demos: normalizeDemoRows(demosRes.data),
+        quotes: normalizeQuoteApprovalRows(quotesRes.data),
       };
     },
     staleTime: 30_000,

@@ -31,8 +31,86 @@ export interface ApprovalItem {
 // ─── Constants ─────────────────────────────────────────────────────────────
 
 const HIGH_URGENCY_MS = 48 * 60 * 60 * 1000; // 48 hours
+const ROUTE_MODES = new Set<QuoteApprovalRow["route_mode"]>([
+  "branch_sales_manager",
+  "branch_general_manager",
+  "owner_direct",
+  "admin_direct",
+  "admin_queue",
+  "owner_queue",
+  "manager_queue",
+]);
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function requiredString(value: unknown): string | null {
+  const normalized = stringOrNull(value)?.trim();
+  return normalized ? normalized : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function booleanOrNull(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function routeModeOrNull(value: unknown): QuoteApprovalRow["route_mode"] | null {
+  return typeof value === "string" && ROUTE_MODES.has(value as QuoteApprovalRow["route_mode"])
+    ? value as QuoteApprovalRow["route_mode"]
+    : null;
+}
+
+function validDateStringOrNull(value: unknown): string | null {
+  const normalized = requiredString(value);
+  return normalized && !Number.isNaN(Date.parse(normalized)) ? normalized : null;
+}
+
+function oneRecord(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return isRecord(value[0]) ? value[0] : null;
+  return isRecord(value) ? value : null;
+}
+
+function normalizeContactJoin(value: unknown): MarginRow["crm_contacts"] {
+  const row = oneRecord(value);
+  if (!row) return null;
+  return {
+    first_name: stringOrNull(row.first_name),
+    last_name: stringOrNull(row.last_name),
+  };
+}
+
+function normalizeDealJoin(value: unknown): { name: string; amount?: number | null } | null {
+  const row = oneRecord(value);
+  if (!row) return null;
+  const name = stringOrNull(row.name);
+  return {
+    name: name ?? "Untitled deal",
+    amount: numberOrNull(row.amount),
+  };
+}
+
+function normalizeReasonSummary(value: unknown): QuoteApprovalRow["reason_summary_json"] {
+  if (!isRecord(value)) return null;
+  const reasons = Array.isArray(value.reasons)
+    ? value.reasons.filter((reason): reason is string => typeof reason === "string")
+    : null;
+  return { reasons };
+}
 
 function formatCurrency(amount: number): string {
   if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
@@ -143,6 +221,132 @@ export interface QuoteApprovalRow {
     detail: string;
     blocking: boolean;
   }> | null;
+}
+
+// ─── Query Row Normalizers ─────────────────────────────────────────────────
+
+export function normalizeMarginRows(rows: unknown): MarginRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = requiredString(value.id);
+    const name = requiredString(value.name);
+    const updatedAt = validDateStringOrNull(value.updated_at);
+    if (!id || !name || !updatedAt) return [];
+    return [{
+      id,
+      name,
+      amount: numberOrNull(value.amount),
+      margin_pct: numberOrNull(value.margin_pct),
+      margin_amount: numberOrNull(value.margin_amount),
+      margin_check_status: stringOrNull(value.margin_check_status),
+      updated_at: updatedAt,
+      crm_contacts: normalizeContactJoin(value.crm_contacts),
+    }];
+  });
+}
+
+export function normalizeDepositRows(rows: unknown): DepositRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = requiredString(value.id);
+    const createdAt = validDateStringOrNull(value.created_at);
+    if (!id || !createdAt) return [];
+    return [{
+      id,
+      deal_id: stringOrNull(value.deal_id),
+      amount: numberOrNull(value.amount),
+      status: stringOrNull(value.status),
+      tier: stringOrNull(value.tier),
+      created_at: createdAt,
+      crm_deals: normalizeDealJoin(value.crm_deals),
+    }];
+  });
+}
+
+export function normalizeTradeRows(rows: unknown): TradeRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = requiredString(value.id);
+    const createdAt = validDateStringOrNull(value.created_at);
+    if (!id || !createdAt) return [];
+    return [{
+      id,
+      deal_id: stringOrNull(value.deal_id),
+      status: stringOrNull(value.status),
+      make: stringOrNull(value.make),
+      model: stringOrNull(value.model),
+      year: numberOrNull(value.year),
+      preliminary_value: numberOrNull(value.preliminary_value),
+      created_at: createdAt,
+      crm_deals: normalizeDealJoin(value.crm_deals),
+    }];
+  });
+}
+
+export function normalizeDemoRows(rows: unknown): DemoRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = requiredString(value.id);
+    const createdAt = validDateStringOrNull(value.created_at);
+    if (!id || !createdAt) return [];
+    return [{
+      id,
+      deal_id: stringOrNull(value.deal_id),
+      status: stringOrNull(value.status),
+      equipment_category: stringOrNull(value.equipment_category),
+      scheduled_date: stringOrNull(value.scheduled_date),
+      needs_assessment_complete: booleanOrNull(value.needs_assessment_complete),
+      buying_intent_confirmed: booleanOrNull(value.buying_intent_confirmed),
+      created_at: createdAt,
+      crm_deals: normalizeDealJoin(value.crm_deals),
+    }];
+  });
+}
+
+export function normalizeQuoteApprovalRows(rows: unknown): QuoteApprovalRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = requiredString(value.id);
+    const quotePackageId = requiredString(value.quote_package_id);
+    const quotePackageVersionId = requiredString(value.quote_package_version_id);
+    const versionNumber = numberOrNull(value.version_number);
+    const routeMode = routeModeOrNull(value.route_mode);
+    const status = requiredString(value.status);
+    const requestedAt = validDateStringOrNull(value.created_at);
+    if (!id || !quotePackageId || !quotePackageVersionId || versionNumber == null || !routeMode || !status || !requestedAt) {
+      return [];
+    }
+    return [{
+      id,
+      quote_package_id: quotePackageId,
+      quote_package_version_id: quotePackageVersionId,
+      version_number: versionNumber,
+      deal_id: stringOrNull(value.deal_id),
+      quote_number: stringOrNull(value.quote_number),
+      branch_slug: stringOrNull(value.branch_slug),
+      branch_name: stringOrNull(value.branch_name),
+      submitted_by_name: stringOrNull(value.submitted_by_name),
+      assigned_to_name: stringOrNull(value.assigned_to_name),
+      assigned_role: stringOrNull(value.assigned_role),
+      route_mode: routeMode,
+      policy_snapshot_json: isRecord(value.policy_snapshot_json) ? value.policy_snapshot_json : null,
+      reason_summary_json: normalizeReasonSummary(value.reason_summary_json),
+      decision_note: stringOrNull(value.decision_note),
+      status,
+      requested_at: requestedAt,
+      due_at: stringOrNull(value.due_at),
+      escalate_at: stringOrNull(value.escalate_at),
+      customer_name: stringOrNull(value.customer_name),
+      customer_company: stringOrNull(value.customer_company),
+      net_total: numberOrNull(value.net_total),
+      margin_pct: numberOrNull(value.margin_pct),
+    }];
+  });
 }
 
 // ─── Normalizer ────────────────────────────────────────────────────────────
