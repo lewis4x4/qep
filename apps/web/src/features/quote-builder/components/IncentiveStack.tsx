@@ -3,25 +3,11 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Sparkles, X, RefreshCw, Lock } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { normalizeAppliedIncentives } from "../lib/quote-incentive-normalizers";
 
 interface IncentiveStackProps {
   quotePackageId: string;
   className?: string;
-}
-
-interface AppliedIncentive {
-  id: string;
-  incentive_id: string;
-  applied_amount: number;
-  auto_applied: boolean;
-  removed_at: string | null;
-  manufacturer_incentives: {
-    program_name: string;
-    manufacturer: string;
-    discount_type: string;
-    requires_approval: boolean;
-    stackable: boolean;
-  } | null;
 }
 
 const RESOLVER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/quote-incentive-resolver`;
@@ -37,14 +23,13 @@ export function IncentiveStack({ quotePackageId, className = "" }: IncentiveStac
   const { data, isLoading } = useQuery({
     queryKey: ["quote", "incentives", quotePackageId],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { eq: (c: string, v: string) => { is: (c: string, v: null) => Promise<{ data: AppliedIncentive[] | null; error: unknown }> } } };
-      }).from("quote_incentive_applications")
+      const { data, error } = await supabase
+        .from("quote_incentive_applications")
         .select("id, incentive_id, applied_amount, auto_applied, removed_at, manufacturer_incentives(program_name, manufacturer, discount_type, requires_approval, stackable)")
         .eq("quote_package_id", quotePackageId)
         .is("removed_at", null);
-      if (error) return [] as AppliedIncentive[];
-      return data ?? [];
+      if (error) return [];
+      return normalizeAppliedIncentives(data);
     },
     staleTime: 30_000,
   });
@@ -69,9 +54,8 @@ export function IncentiveStack({ quotePackageId, className = "" }: IncentiveStac
   const removeMutation = useMutation({
     mutationFn: async (applicationId: string) => {
       const userId = (await supabase.auth.getSession()).data.session?.user?.id ?? null;
-      const { error } = await (supabase as unknown as {
-        from: (t: string) => { update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<{ error: unknown }> } };
-      }).from("quote_incentive_applications")
+      const { error } = await supabase
+        .from("quote_incentive_applications")
         .update({ removed_at: new Date().toISOString(), removed_by: userId, removal_reason: "manually toggled off" })
         .eq("id", applicationId);
       if (error) throw new Error("Remove failed");
