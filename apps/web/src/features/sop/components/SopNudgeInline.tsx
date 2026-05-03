@@ -4,11 +4,10 @@ import { Link } from "react-router-dom";
 import { AlertTriangle, BookOpen, ChevronRight, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { supabase } from "@/lib/supabase";
 import {
+  fetchActiveSopExecutionForContext,
   fetchSopSuggestions,
   startSopExecution,
-  type SopExecution,
   type SopSuggestion,
 } from "../lib/sop-api";
 
@@ -18,10 +17,6 @@ interface SopNudgeInlineProps {
   stage?: string | null;
 }
 
-interface ActiveExecutionRow extends Pick<SopExecution, "id" | "status" | "sop_template_id"> {
-  sop_templates?: { title: string } | null;
-}
-
 export function SopNudgeInline({
   contextEntityType,
   contextEntityId,
@@ -29,46 +24,7 @@ export function SopNudgeInline({
 }: SopNudgeInlineProps) {
   const executionQuery = useQuery({
     queryKey: ["sop", "active-execution", contextEntityType, contextEntityId],
-    queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            eq: (column: string, value: string) => {
-              eq: (column: string, value: string) => {
-                order: (column: string, options: Record<string, boolean>) => Promise<{ data: ActiveExecutionRow[] | null; error: { message?: string } | null }>;
-              };
-            };
-          };
-        };
-      })
-        .from("sop_executions")
-        .select("id, status, sop_template_id, sop_templates(title)")
-        .eq("context_entity_type", contextEntityType)
-        .eq("context_entity_id", contextEntityId)
-        .order("created_at", { ascending: false });
-
-      if (error) throw new Error(error.message ?? "Failed to load SOP execution.");
-      const active = (data ?? []).find((row: ActiveExecutionRow) => row.status === "in_progress") ?? null;
-      if (!active) {
-        return { activeExecution: null, skippedCount: 0 };
-      }
-
-      const { count } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (_columns: string, opts: { count: string; head: boolean }) => {
-            eq: (column: string, value: string) => Promise<{ count: number | null; error: { message?: string } | null }>;
-          };
-        };
-      })
-        .from("sop_step_skips")
-        .select("*", { count: "exact", head: true })
-        .eq("sop_execution_id", active.id);
-
-      return {
-        activeExecution: active,
-        skippedCount: count ?? 0,
-      };
-    },
+    queryFn: () => fetchActiveSopExecutionForContext({ contextEntityType, contextEntityId }),
     staleTime: 30_000,
   });
 

@@ -24,6 +24,33 @@ interface Packet {
   watchOuts: string[];
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
+}
+
+function payloadError(payload: unknown): string | null {
+  return isRecord(payload) && typeof payload.error === "string" ? payload.error : null;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
+
+function normalizePacket(value: unknown): Packet | null {
+  if (!isRecord(value) || typeof value.headline !== "string") return null;
+  return {
+    headline: value.headline,
+    counters: stringArray(value.counters),
+    watchOuts: stringArray(value.watchOuts),
+  };
+}
+
 async function fetchCounter(input: {
   dealId: string;
   competitor: string;
@@ -45,10 +72,12 @@ async function fetchCounter(input: {
       body: JSON.stringify(input),
     },
   );
-  const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload.error ?? `counter returned ${res.status}`);
-  if (!payload.packet) throw new Error("empty counter packet");
-  return { packet: payload.packet as Packet, source: payload.source ?? "fresh" };
+  const payload: unknown = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payloadError(payload) ?? `counter returned ${res.status}`);
+  if (!isRecord(payload)) throw new Error("empty counter packet");
+  const packet = normalizePacket(payload.packet);
+  if (!packet) throw new Error("empty counter packet");
+  return { packet, source: payload.source === "cache" ? "cache" : "fresh" };
 }
 
 export function DecisionRoomCompetitorCounter({ dealId, competitor, companyName, lossReasonHint }: Props) {
@@ -98,7 +127,7 @@ export function DecisionRoomCompetitorCounter({ dealId, competitor, companyName,
         </p>
       ) : mutation.error ? (
         <div role="alert" className="rounded-md border border-red-400/40 bg-red-500/10 p-2 text-xs text-red-200">
-          {(mutation.error as Error).message}
+          {errorMessage(mutation.error)}
           <button
             type="button"
             onClick={() => mutation.mutate()}

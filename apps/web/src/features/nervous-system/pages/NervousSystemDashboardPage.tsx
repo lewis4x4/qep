@@ -20,6 +20,16 @@ function formatCurrency(value: number): string {
   return `$${Math.round(value)}`;
 }
 
+function errorMessage(value: unknown, fallback = "unknown"): string {
+  if (value instanceof Error && value.message.trim()) return value.message;
+  if (typeof value === "string" && value.trim()) return value;
+  if (value && typeof value === "object" && !Array.isArray(value) && "message" in value) {
+    const message = value.message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return fallback;
+}
+
 export function NervousSystemDashboardPage() {
   const queryClient = useQueryClient();
   const [drawerProfileId, setDrawerProfileId] = useState<string | null>(null);
@@ -85,7 +95,7 @@ export function NervousSystemDashboardPage() {
       {refreshMutation.isError && (
         <Card className="border-red-500/20 bg-red-500/5 p-3">
           <p className="text-xs text-red-400">
-            Refresh failed: {(refreshMutation.error as Error)?.message ?? "unknown"}
+            Refresh failed: {errorMessage(refreshMutation.error)}
           </p>
         </Card>
       )}

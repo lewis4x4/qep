@@ -74,6 +74,39 @@ function splitName(full: string): { firstName: string; lastName: string } {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function payloadError(payload: unknown): string | null {
+  return isRecord(payload) && typeof payload.error === "string" ? payload.error : null;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
+
+function normalizeConfidence(value: unknown): Proposal["confidence"] {
+  return value === "high" || value === "medium" || value === "low" ? value : "low";
+}
+
+function normalizeSource(value: unknown): Proposal["source"] {
+  return value === "signer" || value === "voice" || value === "web" ? value : undefined;
+}
+
+function normalizeProposal(value: unknown): Proposal | null {
+  if (!isRecord(value) || typeof value.name !== "string" || !value.name.trim()) return null;
+  return {
+    name: value.name.trim(),
+    title: typeof value.title === "string" && value.title.trim() ? value.title : null,
+    profileUrl: typeof value.profileUrl === "string" && value.profileUrl.trim() ? value.profileUrl : null,
+    confidence: normalizeConfidence(value.confidence),
+    evidence: typeof value.evidence === "string" ? value.evidence : "",
+    mismatchReason: typeof value.mismatchReason === "string" ? value.mismatchReason : null,
+    source: normalizeSource(value.source),
+  };
+}
+
 async function fetchProposals(input: {
   dealId: string;
   archetype: string;
@@ -94,9 +127,17 @@ async function fetchProposals(input: {
       body: JSON.stringify(input),
     },
   );
-  const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload.error ?? `ghost-propose returned ${res.status}`);
-  return { proposals: payload.proposals ?? [], source: payload.source ?? "fresh" };
+  const payload: unknown = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payloadError(payload) ?? `ghost-propose returned ${res.status}`);
+  const proposals = isRecord(payload) && Array.isArray(payload.proposals)
+    ? payload.proposals
+        .map(normalizeProposal)
+        .filter((proposal): proposal is Proposal => proposal !== null)
+    : [];
+  return {
+    proposals,
+    source: isRecord(payload) && payload.source === "cache" ? "cache" : "fresh",
+  };
 }
 
 function confidenceCls(level: Proposal["confidence"]): string {
@@ -229,7 +270,7 @@ export function DecisionRoomGhostProposals({ dealId, archetype, companyName, com
   if (mutation.error) {
     return (
       <div role="alert" className="rounded-md border border-red-400/40 bg-red-500/10 p-3 text-xs text-red-200">
-        <p>Couldn't reach the web search. {(mutation.error as Error).message}</p>
+        <p>Couldn't reach the web search. {errorMessage(mutation.error)}</p>
         <button
           type="button"
           onClick={() => mutation.mutate()}

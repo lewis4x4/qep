@@ -69,6 +69,10 @@ function nullableNumberValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 function toSeverity(value: string): FlareReportRow["severity"] {
   if (value === "blocker" || value === "bug" || value === "annoyance" || value === "idea" || value === "aha_moment") {
     return value;
@@ -218,6 +222,11 @@ const STATUS_TONE: Record<FlareReportRow["status"], "blue" | "purple" | "orange"
   duplicate: "neutral",
 };
 
+const EMPTY_ARTIFACT_URLS: { screenshotUrl: string | null; domUrl: string | null } = {
+  screenshotUrl: null,
+  domUrl: null,
+};
+
 export function FlareDetailDrawer({ report, onClose }: FlareDetailDrawerProps) {
   const queryClient = useQueryClient();
   const [deploySha, setDeploySha] = useState("");
@@ -228,7 +237,7 @@ export function FlareDetailDrawer({ report, onClose }: FlareDetailDrawerProps) {
     enabled: !!report?.id && !!(report.screenshot_path || report.dom_snapshot_path),
     queryKey: ["flare-artifacts", report?.id],
     queryFn: async () => {
-      if (!report) return { screenshotUrl: null as string | null, domUrl: null as string | null };
+      if (!report) return EMPTY_ARTIFACT_URLS;
       const bucket = supabase.storage.from("flare-artifacts");
       const [shot, dom] = await Promise.all([
         report.screenshot_path ? bucket.createSignedUrl(report.screenshot_path, 3600) : Promise.resolve({ data: null }),
@@ -269,7 +278,7 @@ export function FlareDetailDrawer({ report, onClose }: FlareDetailDrawerProps) {
         if (input.fix_deploy_sha) patch.fix_deploy_sha = input.fix_deploy_sha;
       }
       const { error } = await db.from("flare_reports").update(patch).eq("id", report.id);
-      if (error) throw new Error(String((error as { message?: string }).message ?? "Update failed"));
+      if (error) throw new Error(error.message || "Update failed");
       // Fire close-the-loop notify on transitions to fixed
       if (input.status === "fixed") {
         await notifyFlareFixed(report.id);
@@ -508,7 +517,7 @@ export function FlareDetailDrawer({ report, onClose }: FlareDetailDrawerProps) {
               </div>
               {updateMutation.isError && (
                 <p className="mt-2 text-xs text-destructive">
-                  {(updateMutation.error as Error)?.message ?? "Update failed"}
+                  {errorMessage(updateMutation.error, "Update failed")}
                 </p>
               )}
             </Card>

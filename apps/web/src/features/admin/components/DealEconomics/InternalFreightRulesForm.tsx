@@ -25,6 +25,8 @@ import {
 
 type RateType = "flat" | "per_mile" | "per_cwt";
 
+const RATE_TYPES: readonly RateType[] = ["flat", "per_mile", "per_cwt"];
+
 interface RuleForm {
   weight_from_lbs: string;
   weight_to_lbs: string;
@@ -63,10 +65,14 @@ function rowToForm(row: FreightRuleRow): RuleForm {
     weight_to_lbs:       row.weight_to_lbs       != null ? String(row.weight_to_lbs)       : "",
     distance_from_miles: row.distance_from_miles != null ? String(row.distance_from_miles) : "",
     distance_to_miles:   row.distance_to_miles   != null ? String(row.distance_to_miles)   : "",
-    rate_type:           row.rate_type as RateType,
+    rate_type:           toRateType(row.rate_type),
     rate_amount_dollars: String(centsToDollars(row.rate_amount_cents)),
     priority:            String(row.priority),
   };
+}
+
+function toRateType(value: unknown): RateType {
+  return value === "per_mile" || value === "per_cwt" ? value : "flat";
 }
 
 const RATE_TYPE_LABELS: Record<RateType, string> = {
@@ -197,8 +203,8 @@ export function InternalFreightRulesForm() {
                       <td className="py-1 pr-2"><Input className="h-7 w-20" value={editForm.distance_from_miles} onChange={(e) => setEditForm((f) => ({ ...f, distance_from_miles: e.target.value }))} /></td>
                       <td className="py-1 pr-2"><Input className="h-7 w-20" value={editForm.distance_to_miles} onChange={(e) => setEditForm((f) => ({ ...f, distance_to_miles: e.target.value }))} /></td>
                       <td className="py-1 pr-2">
-                        <select className="h-7 rounded border bg-background px-1 text-sm" value={editForm.rate_type} onChange={(e) => setEditForm((f) => ({ ...f, rate_type: e.target.value as RateType }))}>
-                          {(["flat", "per_mile", "per_cwt"] as RateType[]).map((t) => <option key={t} value={t}>{RATE_TYPE_LABELS[t]}</option>)}
+                        <select className="h-7 rounded border bg-background px-1 text-sm" value={editForm.rate_type} onChange={(e) => setEditForm((f) => ({ ...f, rate_type: toRateType(e.target.value) }))}>
+                          {RATE_TYPES.map((t) => <option key={t} value={t}>{RATE_TYPE_LABELS[t]}</option>)}
                         </select>
                       </td>
                       <td className="py-1 pr-2"><Input className="h-7 w-24" type="number" value={editForm.rate_amount_dollars} onChange={(e) => setEditForm((f) => ({ ...f, rate_amount_dollars: e.target.value }))} /></td>
@@ -214,7 +220,7 @@ export function InternalFreightRulesForm() {
                       <td className="py-2 pr-3">{rule.weight_to_lbs ?? "—"}</td>
                       <td className="py-2 pr-3">{rule.distance_from_miles ?? "—"}</td>
                       <td className="py-2 pr-3">{rule.distance_to_miles ?? "—"}</td>
-                      <td className="py-2 pr-3">{RATE_TYPE_LABELS[rule.rate_type as RateType] ?? rule.rate_type}</td>
+                      <td className="py-2 pr-3">{RATE_TYPE_LABELS[toRateType(rule.rate_type)]}</td>
                       <td className="py-2 pr-3">${centsToDollars(rule.rate_amount_cents).toFixed(2)}</td>
                       <td className="py-2 pr-3">{rule.priority}</td>
                       {!isReadOnly && (
@@ -254,8 +260,8 @@ export function InternalFreightRulesForm() {
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Rate Type</Label>
-                <select className="h-8 w-full rounded border bg-background px-2 text-sm" value={addForm.rate_type} onChange={(e) => setAddForm((f) => ({ ...f, rate_type: e.target.value as RateType }))}>
-                  {(["flat", "per_mile", "per_cwt"] as RateType[]).map((t) => <option key={t} value={t}>{RATE_TYPE_LABELS[t]}</option>)}
+                <select className="h-8 w-full rounded border bg-background px-2 text-sm" value={addForm.rate_type} onChange={(e) => setAddForm((f) => ({ ...f, rate_type: toRateType(e.target.value) }))}>
+                  {RATE_TYPES.map((t) => <option key={t} value={t}>{RATE_TYPE_LABELS[t]}</option>)}
                 </select>
               </div>
               <div className="space-y-1">

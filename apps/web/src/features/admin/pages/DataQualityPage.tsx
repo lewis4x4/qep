@@ -41,6 +41,14 @@ function toStatus(value: string): DataIssue["status"] {
   return value === "resolved" || value === "ignored" ? value : "open";
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function detailName(detail: Record<string, unknown>): string | null {
+  return typeof detail.name === "string" && detail.name.trim().length > 0 ? detail.name : null;
+}
+
 function toDataIssue(row: DataIssueRow): DataIssue {
   return {
     id: row.id,
@@ -97,7 +105,7 @@ export function DataQualityPage() {
   const runAuditMutation = useMutation({
     mutationFn: async () => {
       const { error } = await db.rpc("run_data_quality_audit");
-      if (error) throw new Error(String((error as { message?: string }).message ?? "Audit failed"));
+      if (error) throw new Error(error.message || "Audit failed");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin", "data-quality"] }),
   });
@@ -153,7 +161,7 @@ export function DataQualityPage() {
 
       {(runAuditMutation.isError || updateMutation.isError) && (
         <p className="text-xs text-destructive">
-          {((runAuditMutation.error ?? updateMutation.error) as Error)?.message ?? "Operation failed"}
+          {errorMessage(runAuditMutation.error ?? updateMutation.error, "Operation failed")}
         </p>
       )}
 
@@ -193,7 +201,7 @@ export function DataQualityPage() {
                           {sev?.icon}
                           <div className="min-w-0 flex-1">
                             <p className="text-xs font-medium text-foreground truncate">
-                              {(issue.detail as { name?: string }).name ?? issue.entity_table}
+                              {detailName(issue.detail) ?? issue.entity_table}
                             </p>
                             <p className="mt-0.5 text-[10px] text-muted-foreground">
                               {issue.entity_table} · first seen {new Date(issue.first_seen).toLocaleDateString()}

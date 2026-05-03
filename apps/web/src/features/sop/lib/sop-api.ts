@@ -1,4 +1,6 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import type { Database } from "@/lib/database.types";
 
 const SOP_ENGINE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sop-engine`;
 const SOP_INGEST_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sop-ingest`;
@@ -9,6 +11,15 @@ const SOP_SUGGEST_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sop-s
 export type SopDepartment = "sales" | "service" | "parts" | "admin" | "all";
 export type SopStatus = "draft" | "active" | "archived";
 export type SopExecutionStatus = "in_progress" | "completed" | "abandoned" | "blocked";
+
+const sopSupabase: SupabaseClient<Database> = supabase;
+
+const SOP_DEPARTMENTS = ["sales", "service", "parts", "admin", "all"] as const;
+
+type Tables = Database["public"]["Tables"];
+type SopStepRow = Tables["sop_steps"]["Row"];
+type SopExecutionRow = Tables["sop_executions"]["Row"];
+type SopStepCompletionRow = Tables["sop_step_completions"]["Row"];
 
 export interface SopTemplate {
   id: string;
@@ -85,6 +96,10 @@ export interface SopSuggestion {
   nudge: string;
 }
 
+export interface ActiveSopExecution extends Pick<SopExecution, "id" | "status" | "sop_template_id"> {
+  sop_templates?: { title: string } | null;
+}
+
 export interface SopSuppressionQueueItem {
   id: string;
   workspace_id: string;
@@ -119,6 +134,307 @@ export interface SopSuppressionQueueItem {
   };
 }
 
+/* ── Unknown-safe normalizers ────────────────────────────────────── */
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringFromRecordField(value: Record<string, unknown>, field: string, fallbackMessage: string): string {
+  const fieldValue = value[field];
+  if (typeof fieldValue === "string") return fieldValue;
+  throw new Error(fallbackMessage);
+}
+
+function nullableStringFromRecordField(value: Record<string, unknown>, field: string, fallbackMessage: string): string | null {
+  const fieldValue = value[field];
+  if (fieldValue === null || fieldValue === undefined) return null;
+  if (typeof fieldValue === "string") return fieldValue;
+  throw new Error(fallbackMessage);
+}
+
+function numberFromRecordField(value: Record<string, unknown>, field: string, fallbackMessage: string): number {
+  const fieldValue = value[field];
+  if (typeof fieldValue === "number" && Number.isFinite(fieldValue)) return fieldValue;
+  throw new Error(fallbackMessage);
+}
+
+function nullableNumberFromRecordField(value: Record<string, unknown>, field: string, fallbackMessage: string): number | null {
+  const fieldValue = value[field];
+  if (fieldValue === null || fieldValue === undefined) return null;
+  if (typeof fieldValue === "number" && Number.isFinite(fieldValue)) return fieldValue;
+  throw new Error(fallbackMessage);
+}
+
+function booleanFromRecordField(value: Record<string, unknown>, field: string, fallbackMessage: string): boolean {
+  const fieldValue = value[field];
+  if (typeof fieldValue === "boolean") return fieldValue;
+  throw new Error(fallbackMessage);
+}
+
+function nullableBooleanFromRecordField(value: Record<string, unknown>, field: string, fallbackMessage: string): boolean | null {
+  const fieldValue = value[field];
+  if (fieldValue === null || fieldValue === undefined) return null;
+  if (typeof fieldValue === "boolean") return fieldValue;
+  throw new Error(fallbackMessage);
+}
+
+function normalizeStringArray(value: unknown, fallbackMessage: string): string[] | null {
+  if (value === null || value === undefined) return null;
+  if (Array.isArray(value) && value.every((item) => typeof item === "string")) return value;
+  throw new Error(fallbackMessage);
+}
+
+function normalizeRecordOrNull(value: unknown, fallbackMessage: string): Record<string, unknown> | null {
+  if (value === null || value === undefined) return null;
+  if (isRecord(value)) return value;
+  throw new Error(fallbackMessage);
+}
+
+function normalizeCountAggregate(value: unknown, fallbackMessage: string): Array<{ count: number }> | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error(fallbackMessage);
+  return value.map((item) => {
+    if (!isRecord(item)) throw new Error(fallbackMessage);
+    return { count: numberFromRecordField(item, "count", fallbackMessage) };
+  });
+}
+
+function normalizeDecisionOptions(value: unknown, fallbackMessage: string): Array<{ label: string; next_step?: number }> | null {
+  if (value === null || value === undefined) return null;
+  if (!Array.isArray(value)) throw new Error(fallbackMessage);
+  return value.map((option) => {
+    if (!isRecord(option)) throw new Error(fallbackMessage);
+    const label = stringFromRecordField(option, "label", fallbackMessage);
+    const nextStep = option.next_step;
+    if (nextStep === undefined || nextStep === null) return { label };
+    if (typeof nextStep === "number" && Number.isFinite(nextStep)) return { label, next_step: nextStep };
+    throw new Error(fallbackMessage);
+  });
+}
+
+export function isSopDepartment(value: unknown): value is SopDepartment {
+  return typeof value === "string" && SOP_DEPARTMENTS.some((department) => department === value);
+}
+
+export function normalizeSopDepartment(value: unknown, fallback: SopDepartment = "all"): SopDepartment {
+  return isSopDepartment(value) ? value : fallback;
+}
+
+function requireSopDepartment(value: unknown, fallbackMessage: string): SopDepartment {
+  if (isSopDepartment(value)) return value;
+  throw new Error(fallbackMessage);
+}
+
+function requireSopStatus(value: unknown, fallbackMessage: string): SopStatus {
+  if (value === "draft" || value === "active" || value === "archived") return value;
+  throw new Error(fallbackMessage);
+}
+
+function requireSopExecutionStatus(value: unknown, fallbackMessage: string): SopExecutionStatus {
+  if (value === "in_progress" || value === "completed" || value === "abandoned" || value === "blocked") return value;
+  throw new Error(fallbackMessage);
+}
+
+function requireSopCompletionState(value: unknown, fallbackMessage: string): SopCompletionState {
+  if (
+    value === "completed" ||
+    value === "skipped" ||
+    value === "deferred" ||
+    value === "satisfied_elsewhere" ||
+    value === "not_applicable"
+  ) return value;
+  throw new Error(fallbackMessage);
+}
+
+export function sopErrorMessage(value: unknown, fallback: string): string {
+  if (value instanceof Error && value.message.trim()) return value.message;
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (isRecord(value)) {
+    const message = value.message;
+    if (typeof message === "string" && message.trim()) return message.trim();
+    const error = value.error;
+    if (typeof error === "string" && error.trim()) return error.trim();
+  }
+  return fallback;
+}
+
+export function normalizeSopTemplatePayload(value: unknown, fallbackMessage = "Invalid SOP template response"): SopTemplate {
+  if (!isRecord(value)) throw new Error(fallbackMessage);
+  return {
+    id: stringFromRecordField(value, "id", fallbackMessage),
+    workspace_id: stringFromRecordField(value, "workspace_id", fallbackMessage),
+    title: stringFromRecordField(value, "title", fallbackMessage),
+    description: nullableStringFromRecordField(value, "description", fallbackMessage),
+    department: requireSopDepartment(value.department, fallbackMessage),
+    version: numberFromRecordField(value, "version", fallbackMessage),
+    status: requireSopStatus(value.status, fallbackMessage),
+    created_by: nullableStringFromRecordField(value, "created_by", fallbackMessage),
+    approved_by: nullableStringFromRecordField(value, "approved_by", fallbackMessage),
+    approved_at: nullableStringFromRecordField(value, "approved_at", fallbackMessage),
+    document_id: nullableStringFromRecordField(value, "document_id", fallbackMessage),
+    tags: normalizeStringArray(value.tags, fallbackMessage),
+    created_at: stringFromRecordField(value, "created_at", fallbackMessage),
+    updated_at: stringFromRecordField(value, "updated_at", fallbackMessage),
+    sop_steps: normalizeCountAggregate(value.sop_steps, fallbackMessage),
+  };
+}
+
+export function normalizeSopStepPayload(value: unknown, fallbackMessage = "Invalid SOP step response"): SopStep {
+  if (!isRecord(value)) throw new Error(fallbackMessage);
+  return {
+    id: stringFromRecordField(value, "id", fallbackMessage),
+    sop_template_id: stringFromRecordField(value, "sop_template_id", fallbackMessage),
+    sort_order: numberFromRecordField(value, "sort_order", fallbackMessage),
+    title: stringFromRecordField(value, "title", fallbackMessage),
+    instructions: nullableStringFromRecordField(value, "instructions", fallbackMessage),
+    required_role: nullableStringFromRecordField(value, "required_role", fallbackMessage),
+    estimated_duration_minutes: nullableNumberFromRecordField(value, "estimated_duration_minutes", fallbackMessage),
+    is_decision_point: nullableBooleanFromRecordField(value, "is_decision_point", fallbackMessage) ?? false,
+    decision_options: normalizeDecisionOptions(value.decision_options, fallbackMessage),
+    attachment_urls: normalizeStringArray(value.attachment_urls, fallbackMessage) ?? [],
+    created_at: stringFromRecordField(value, "created_at", fallbackMessage),
+    updated_at: stringFromRecordField(value, "updated_at", fallbackMessage),
+  };
+}
+
+export function normalizeSopExecutionPayload(value: unknown, fallbackMessage = "Invalid SOP execution response"): SopExecution {
+  if (!isRecord(value)) throw new Error(fallbackMessage);
+  const template = value.sop_templates;
+  let sopTemplates: SopExecution["sop_templates"];
+  if (template !== undefined && template !== null) {
+    if (!isRecord(template)) throw new Error(fallbackMessage);
+    sopTemplates = {
+      title: stringFromRecordField(template, "title", fallbackMessage),
+      department: requireSopDepartment(template.department, fallbackMessage),
+    };
+  }
+  return {
+    id: stringFromRecordField(value, "id", fallbackMessage),
+    workspace_id: stringFromRecordField(value, "workspace_id", fallbackMessage),
+    sop_template_id: stringFromRecordField(value, "sop_template_id", fallbackMessage),
+    started_by: nullableStringFromRecordField(value, "started_by", fallbackMessage),
+    assigned_to: nullableStringFromRecordField(value, "assigned_to", fallbackMessage),
+    context_entity_type: nullableStringFromRecordField(value, "context_entity_type", fallbackMessage),
+    context_entity_id: nullableStringFromRecordField(value, "context_entity_id", fallbackMessage),
+    status: requireSopExecutionStatus(value.status, fallbackMessage),
+    started_at: stringFromRecordField(value, "started_at", fallbackMessage),
+    completed_at: nullableStringFromRecordField(value, "completed_at", fallbackMessage),
+    notes: nullableStringFromRecordField(value, "notes", fallbackMessage),
+    created_at: stringFromRecordField(value, "created_at", fallbackMessage),
+    updated_at: stringFromRecordField(value, "updated_at", fallbackMessage),
+    sop_templates: sopTemplates,
+    sop_step_completions: normalizeCountAggregate(value.sop_step_completions, fallbackMessage),
+  };
+}
+
+export function normalizeSopStepCompletionPayload(
+  value: unknown,
+  fallbackMessage = "Invalid SOP completion response",
+): SopStepCompletion {
+  if (!isRecord(value)) throw new Error(fallbackMessage);
+  return {
+    id: stringFromRecordField(value, "id", fallbackMessage),
+    sop_execution_id: stringFromRecordField(value, "sop_execution_id", fallbackMessage),
+    sop_step_id: stringFromRecordField(value, "sop_step_id", fallbackMessage),
+    completed_by: nullableStringFromRecordField(value, "completed_by", fallbackMessage),
+    completed_at: stringFromRecordField(value, "completed_at", fallbackMessage),
+    decision_taken: nullableStringFromRecordField(value, "decision_taken", fallbackMessage),
+    notes: nullableStringFromRecordField(value, "notes", fallbackMessage),
+    evidence_urls: normalizeStringArray(value.evidence_urls, fallbackMessage) ?? [],
+    duration_minutes: nullableNumberFromRecordField(value, "duration_minutes", fallbackMessage),
+  };
+}
+
+function normalizeSopSuggestionPayload(value: unknown, fallbackMessage: string): SopSuggestion {
+  if (!isRecord(value)) throw new Error(fallbackMessage);
+  return {
+    id: stringFromRecordField(value, "id", fallbackMessage),
+    title: stringFromRecordField(value, "title", fallbackMessage),
+    description: nullableStringFromRecordField(value, "description", fallbackMessage),
+    department: requireSopDepartment(value.department, fallbackMessage),
+    tags: normalizeStringArray(value.tags, fallbackMessage),
+    version: numberFromRecordField(value, "version", fallbackMessage),
+    relevance_score: numberFromRecordField(value, "relevance_score", fallbackMessage),
+    nudge: stringFromRecordField(value, "nudge", fallbackMessage),
+  };
+}
+
+function normalizeSuppressionQueueItemPayload(value: unknown, fallbackMessage: string): SopSuppressionQueueItem {
+  if (!isRecord(value)) throw new Error(fallbackMessage);
+  const execution = value.sop_executions;
+  const step = value.sop_steps;
+  const template = value.sop_templates;
+  return {
+    id: stringFromRecordField(value, "id", fallbackMessage),
+    workspace_id: stringFromRecordField(value, "workspace_id", fallbackMessage),
+    sop_execution_id: stringFromRecordField(value, "sop_execution_id", fallbackMessage),
+    sop_step_id: stringFromRecordField(value, "sop_step_id", fallbackMessage),
+    proposed_state: requireSopCompletionState(value.proposed_state, fallbackMessage),
+    proposed_evidence: normalizeRecordOrNull(value.proposed_evidence, fallbackMessage),
+    confidence_score: numberFromRecordField(value, "confidence_score", fallbackMessage),
+    reason: nullableStringFromRecordField(value, "reason", fallbackMessage),
+    status: requireSuppressionStatus(value.status, fallbackMessage),
+    resolved_by: nullableStringFromRecordField(value, "resolved_by", fallbackMessage),
+    resolved_at: nullableStringFromRecordField(value, "resolved_at", fallbackMessage),
+    created_at: stringFromRecordField(value, "created_at", fallbackMessage),
+    updated_at: stringFromRecordField(value, "updated_at", fallbackMessage),
+    sop_executions: execution === undefined || execution === null ? undefined : normalizeSuppressionExecution(execution, fallbackMessage),
+    sop_steps: step === undefined || step === null ? undefined : normalizeSuppressionStep(step, fallbackMessage),
+    sop_templates: template === undefined || template === null ? undefined : normalizeSuppressionTemplate(template, fallbackMessage),
+  };
+}
+
+function requireSuppressionStatus(value: unknown, fallbackMessage: string): SopSuppressionQueueItem["status"] {
+  if (value === "pending" || value === "approved" || value === "rejected") return value;
+  throw new Error(fallbackMessage);
+}
+
+function normalizeSuppressionExecution(value: unknown, fallbackMessage: string): NonNullable<SopSuppressionQueueItem["sop_executions"]> {
+  if (!isRecord(value)) throw new Error(fallbackMessage);
+  return {
+    id: stringFromRecordField(value, "id", fallbackMessage),
+    sop_template_id: stringFromRecordField(value, "sop_template_id", fallbackMessage),
+    context_entity_type: nullableStringFromRecordField(value, "context_entity_type", fallbackMessage),
+    context_entity_id: nullableStringFromRecordField(value, "context_entity_id", fallbackMessage),
+    status: requireSopExecutionStatus(value.status, fallbackMessage),
+  };
+}
+
+function normalizeSuppressionStep(value: unknown, fallbackMessage: string): NonNullable<SopSuppressionQueueItem["sop_steps"]> {
+  if (!isRecord(value)) throw new Error(fallbackMessage);
+  return {
+    id: stringFromRecordField(value, "id", fallbackMessage),
+    sort_order: numberFromRecordField(value, "sort_order", fallbackMessage),
+    title: stringFromRecordField(value, "title", fallbackMessage),
+    sop_template_id: stringFromRecordField(value, "sop_template_id", fallbackMessage),
+  };
+}
+
+function normalizeSuppressionTemplate(value: unknown, fallbackMessage: string): NonNullable<SopSuppressionQueueItem["sop_templates"]> {
+  if (!isRecord(value)) throw new Error(fallbackMessage);
+  return {
+    id: stringFromRecordField(value, "id", fallbackMessage),
+    title: stringFromRecordField(value, "title", fallbackMessage),
+    department: requireSopDepartment(value.department, fallbackMessage),
+  };
+}
+
+function normalizeArray<T>(value: unknown, normalizer: (item: unknown) => T, fallbackMessage: string): T[] {
+  if (!Array.isArray(value)) throw new Error(fallbackMessage);
+  return value.map(normalizer);
+}
+
+function normalizeObjectMember<T>(
+  value: unknown,
+  field: string,
+  normalizer: (item: unknown) => T,
+  fallbackMessage: string,
+): T {
+  if (!isRecord(value)) throw new Error(fallbackMessage);
+  return normalizer(value[field]);
+}
+
 /* ── Auth helper ─────────────────────────────────────────────────── */
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -129,23 +445,135 @@ async function authHeaders(): Promise<Record<string, string>> {
   };
 }
 
-async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(url: string, normalize: (payload: unknown) => T, init: RequestInit = {}): Promise<T> {
   const res = await fetch(url, {
     ...init,
     headers: { ...(await authHeaders()), ...(init.headers ?? {}) },
   });
+  const payload: unknown = await res.json().catch(() => null);
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: `Request failed (${res.status})` }));
-    throw new Error((err as { error?: string }).error ?? `Request failed (${res.status})`);
+    throw new Error(sopErrorMessage(payload, `Request failed (${res.status})`));
   }
-  return res.json();
+  return normalize(payload);
+}
+
+function normalizeTemplateResponse(payload: unknown): { template: SopTemplate } {
+  return { template: normalizeObjectMember(payload, "template", normalizeSopTemplatePayload, "Invalid SOP template response") };
+}
+
+function normalizeStepResponse(payload: unknown): { step: SopStep } {
+  return { step: normalizeObjectMember(payload, "step", normalizeSopStepPayload, "Invalid SOP step response") };
+}
+
+function normalizeExecutionResponse(payload: unknown): { execution: SopExecution } {
+  return { execution: normalizeObjectMember(payload, "execution", normalizeSopExecutionPayload, "Invalid SOP execution response") };
+}
+
+function normalizeCompletionResponse(payload: unknown): { completion: SopStepCompletion } {
+  return {
+    completion: normalizeObjectMember(payload, "completion", normalizeSopStepCompletionPayload, "Invalid SOP completion response"),
+  };
+}
+
+function normalizeSkipResponse(payload: unknown): { skip: Record<string, unknown> } {
+  return { skip: normalizeObjectMember(payload, "skip", (item) => normalizeRecordOrNull(item, "Invalid SOP skip response") ?? {}, "Invalid SOP skip response") };
+}
+
+function normalizeTemplatesResponse(payload: unknown): { templates: SopTemplate[] } {
+  if (!isRecord(payload)) throw new Error("Invalid SOP templates response");
+  return {
+    templates: normalizeArray(
+      payload.templates,
+      (item) => normalizeSopTemplatePayload(item, "Invalid SOP templates response"),
+      "Invalid SOP templates response",
+    ),
+  };
+}
+
+function normalizeExecutionsResponse(payload: unknown): { executions: SopExecution[] } {
+  if (!isRecord(payload)) throw new Error("Invalid SOP executions response");
+  return {
+    executions: normalizeArray(
+      payload.executions,
+      (item) => normalizeSopExecutionPayload(item, "Invalid SOP executions response"),
+      "Invalid SOP executions response",
+    ),
+  };
+}
+
+function normalizeSuppressionQueueResponse(payload: unknown): { items: SopSuppressionQueueItem[] } {
+  if (!isRecord(payload)) throw new Error("Invalid SOP suppression queue response");
+  return {
+    items: normalizeArray(
+      payload.items,
+      (item) => normalizeSuppressionQueueItemPayload(item, "Invalid SOP suppression queue response"),
+      "Invalid SOP suppression queue response",
+    ),
+  };
+}
+
+function normalizeSuppressionQueueItemResponse(payload: unknown): { item: SopSuppressionQueueItem } {
+  return {
+    item: normalizeObjectMember(
+      payload,
+      "item",
+      (item) => normalizeSuppressionQueueItemPayload(item, "Invalid SOP suppression queue response"),
+      "Invalid SOP suppression queue response",
+    ),
+  };
+}
+
+export function normalizeSopIngestResponse(payload: unknown): {
+  ok: boolean;
+  template_id: string;
+  template_title: string;
+  steps_extracted: number;
+  total_steps_parsed: number;
+  parse_confidence: number;
+  status: string;
+} {
+  const fallbackMessage = "Invalid SOP ingest response";
+  if (!isRecord(payload)) throw new Error(fallbackMessage);
+  return {
+    ok: booleanFromRecordField(payload, "ok", fallbackMessage),
+    template_id: stringFromRecordField(payload, "template_id", fallbackMessage),
+    template_title: stringFromRecordField(payload, "template_title", fallbackMessage),
+    steps_extracted: numberFromRecordField(payload, "steps_extracted", fallbackMessage),
+    total_steps_parsed: numberFromRecordField(payload, "total_steps_parsed", fallbackMessage),
+    parse_confidence: numberFromRecordField(payload, "parse_confidence", fallbackMessage),
+    status: stringFromRecordField(payload, "status", fallbackMessage),
+  };
+}
+
+export function normalizeSopSuggestionsResponse(payload: unknown): {
+  context: { entity_type: string; stage?: string; department: string };
+  suggestions: SopSuggestion[];
+  total_active_sops: number;
+} {
+  const fallbackMessage = "Invalid SOP suggestions response";
+  if (!isRecord(payload) || !isRecord(payload.context)) throw new Error(fallbackMessage);
+  const stage = payload.context.stage;
+  if (stage !== undefined && typeof stage !== "string") throw new Error(fallbackMessage);
+  return {
+    context: {
+      entity_type: stringFromRecordField(payload.context, "entity_type", fallbackMessage),
+      stage,
+      department: stringFromRecordField(payload.context, "department", fallbackMessage),
+    },
+    suggestions: normalizeArray(
+      payload.suggestions,
+      (item) => normalizeSopSuggestionPayload(item, fallbackMessage),
+      fallbackMessage,
+    ),
+    total_active_sops: numberFromRecordField(payload, "total_active_sops", fallbackMessage),
+  };
 }
 
 /* ── Template CRUD ───────────────────────────────────────────────── */
 
 export async function listSopTemplates(department?: SopDepartment | "all"): Promise<{ templates: SopTemplate[] }> {
   const qs = department && department !== "all" ? `?department=${department}` : "";
-  return request<{ templates: SopTemplate[] }>(`${SOP_ENGINE_URL}/templates${qs}`);
+  return request(`${SOP_ENGINE_URL}/templates${qs}`, normalizeTemplatesResponse);
 }
 
 export async function createSopTemplate(input: {
@@ -155,14 +583,14 @@ export async function createSopTemplate(input: {
   tags?: string[];
   document_id?: string;
 }): Promise<{ template: SopTemplate }> {
-  return request<{ template: SopTemplate }>(`${SOP_ENGINE_URL}/templates`, {
+  return request(`${SOP_ENGINE_URL}/templates`, normalizeTemplateResponse, {
     method: "POST",
     body: JSON.stringify(input),
   });
 }
 
 export async function publishSopTemplate(templateId: string): Promise<{ template: SopTemplate }> {
-  return request<{ template: SopTemplate }>(`${SOP_ENGINE_URL}/templates/${templateId}/publish`, {
+  return request(`${SOP_ENGINE_URL}/templates/${templateId}/publish`, normalizeTemplateResponse, {
     method: "POST",
   });
 }
@@ -178,7 +606,7 @@ export async function addSopStep(
     is_decision_point?: boolean;
   },
 ): Promise<{ step: SopStep }> {
-  return request<{ step: SopStep }>(`${SOP_ENGINE_URL}/templates/${templateId}/steps`, {
+  return request(`${SOP_ENGINE_URL}/templates/${templateId}/steps`, normalizeStepResponse, {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -189,39 +617,31 @@ export async function fetchTemplateWithSteps(templateId: string): Promise<{
   template: SopTemplate;
   steps: SopStep[];
 }> {
-  const sb = supabase as unknown as {
-    from: (t: string) => {
-      select: (c: string) => {
-        eq: (c: string, v: string) => {
-          maybeSingle: () => Promise<{ data: SopTemplate | null; error: unknown }>;
-          order: (c: string, o: Record<string, boolean>) => Promise<{ data: SopStep[] | null; error: unknown }>;
-        };
-      };
-    };
-  };
-
-  const { data: template, error: templateError } = await sb
+  const { data: template, error: templateError } = await sopSupabase
     .from("sop_templates")
     .select("*")
     .eq("id", templateId)
     .maybeSingle();
-  if (templateError) throw new Error(String((templateError as { message?: string }).message ?? "Failed to load template"));
+  if (templateError) throw new Error(sopErrorMessage(templateError, "Failed to load template"));
   if (!template) throw new Error("Template not found");
 
-  const { data: steps, error: stepsError } = await sb
+  const { data: steps, error: stepsError } = await sopSupabase
     .from("sop_steps")
     .select("*")
     .eq("sop_template_id", templateId)
     .order("sort_order", { ascending: true });
-  if (stepsError) throw new Error(String((stepsError as { message?: string }).message ?? "Failed to load steps"));
+  if (stepsError) throw new Error(sopErrorMessage(stepsError, "Failed to load steps"));
 
-  return { template, steps: steps ?? [] };
+  return {
+    template: normalizeSopTemplatePayload(template, "Invalid SOP template response"),
+    steps: (steps ?? []).map((step: SopStepRow) => normalizeSopStepPayload(step, "Invalid SOP step response")),
+  };
 }
 
 /* ── Executions ──────────────────────────────────────────────────── */
 
 export async function listSopExecutions(): Promise<{ executions: SopExecution[] }> {
-  return request<{ executions: SopExecution[] }>(`${SOP_ENGINE_URL}/executions`);
+  return request(`${SOP_ENGINE_URL}/executions`, normalizeExecutionsResponse);
 }
 
 export async function startSopExecution(input: {
@@ -230,7 +650,7 @@ export async function startSopExecution(input: {
   context_entity_type?: string;
   context_entity_id?: string;
 }): Promise<{ execution: SopExecution }> {
-  return request<{ execution: SopExecution }>(`${SOP_ENGINE_URL}/executions`, {
+  return request(`${SOP_ENGINE_URL}/executions`, normalizeExecutionResponse, {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -253,8 +673,9 @@ export async function completeStep(
     confidence_score?: number;
   },
 ): Promise<{ completion: SopStepCompletion }> {
-  return request<{ completion: SopStepCompletion }>(
+  return request(
     `${SOP_ENGINE_URL}/executions/${executionId}/complete-step`,
+    normalizeCompletionResponse,
     { method: "POST", body: JSON.stringify(input) },
   );
 }
@@ -269,23 +690,22 @@ export async function markStepNotApplicable(
   stepId: string,
   reason: string,
 ): Promise<void> {
-  const { error } = await (supabase as unknown as {
-    from: (t: string) => { insert: (v: Record<string, unknown>) => Promise<{ error: unknown }> };
-  }).from("sop_step_completions").insert({
+  const { error } = await sopSupabase.from("sop_step_completions").insert({
     sop_execution_id: executionId,
     sop_step_id: stepId,
     completion_state: "not_applicable",
     notes: reason,
   });
-  if (error) throw new Error(String((error as { message?: string }).message ?? "NA mark failed"));
+  if (error) throw new Error(sopErrorMessage(error, "NA mark failed"));
 }
 
 export async function skipStep(
   executionId: string,
   input: { sop_step_id: string; skip_reason?: string },
 ): Promise<{ skip: Record<string, unknown> }> {
-  return request<{ skip: Record<string, unknown> }>(
+  return request(
     `${SOP_ENGINE_URL}/executions/${executionId}/skip-step`,
+    normalizeSkipResponse,
     { method: "POST", body: JSON.stringify(input) },
   );
 }
@@ -294,8 +714,9 @@ export async function closeExecution(
   executionId: string,
   input: { status?: SopExecutionStatus; notes?: string } = {},
 ): Promise<{ execution: SopExecution }> {
-  return request<{ execution: SopExecution }>(
+  return request(
     `${SOP_ENGINE_URL}/executions/${executionId}/close`,
+    normalizeExecutionResponse,
     { method: "POST", body: JSON.stringify(input) },
   );
 }
@@ -303,8 +724,9 @@ export async function closeExecution(
 export async function listSuppressionQueue(
   status: "pending" | "approved" | "rejected" = "pending",
 ): Promise<{ items: SopSuppressionQueueItem[] }> {
-  return request<{ items: SopSuppressionQueueItem[] }>(
+  return request(
     `${SOP_ENGINE_URL}/suppression-queue?status=${status}`,
+    normalizeSuppressionQueueResponse,
   );
 }
 
@@ -312,8 +734,9 @@ export async function resolveSuppressionQueueItem(
   itemId: string,
   status: "approved" | "rejected",
 ): Promise<{ item: SopSuppressionQueueItem }> {
-  return request<{ item: SopSuppressionQueueItem }>(
+  return request(
     `${SOP_ENGINE_URL}/suppression-queue/${itemId}/resolve`,
+    normalizeSuppressionQueueItemResponse,
     {
       method: "POST",
       body: JSON.stringify({ status }),
@@ -329,50 +752,34 @@ export async function fetchExecutionContext(executionId: string): Promise<{
   completions: SopStepCompletion[];
   skipped_step_ids: string[];
 }> {
-  const sb = supabase as unknown as {
-    from: (t: string) => {
-      select: (c: string) => {
-        eq: (c: string, v: string) => {
-          maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
-          order?: (c: string, o: Record<string, boolean>) => Promise<{ data: unknown; error: unknown }>;
-        };
-      };
-    };
-  };
-
-  const { data: execution, error: execErr } = await sb
+  const { data: execution, error: execErr } = await sopSupabase
     .from("sop_executions")
     .select("*")
     .eq("id", executionId)
     .maybeSingle();
-  if (execErr) throw new Error(String((execErr as { message?: string }).message ?? "Failed to load execution"));
+  if (execErr) throw new Error(sopErrorMessage(execErr, "Failed to load execution"));
   if (!execution) throw new Error("Execution not found");
 
-  const exec = execution as SopExecution;
+  const exec = normalizeSopExecutionPayload(execution, "Invalid SOP execution response");
   const { template, steps } = await fetchTemplateWithSteps(exec.sop_template_id);
 
-  const { data: completions, error: completionsErr } = await (sb
+  const { data: completions, error: completionsErr } = await sopSupabase
     .from("sop_step_completions")
     .select("*")
-    .eq("sop_execution_id", executionId) as {
-    order: (c: string, o: Record<string, boolean>) => Promise<{ data: SopStepCompletion[] | null; error: unknown }>;
-  }).order("completed_at", { ascending: true });
-  if (completionsErr) throw new Error(String((completionsErr as { message?: string }).message ?? "Failed to load completions"));
+    .eq("sop_execution_id", executionId)
+    .order("completed_at", { ascending: true });
+  if (completionsErr) throw new Error(sopErrorMessage(completionsErr, "Failed to load completions"));
 
   const skippedStepIds: string[] = [];
   try {
-    const { data: skipRows } = await (supabase as unknown as {
-      from: (t: string) => {
-        select: (c: string) => {
-          eq: (c: string, v: string) => Promise<{ data: Array<{ sop_step_id: string }> | null; error: unknown }>;
-        };
-      };
-    })
+    const { data: skipRows } = await sopSupabase
       .from("sop_step_skips")
       .select("sop_step_id")
       .eq("sop_execution_id", executionId);
     if (Array.isArray(skipRows)) {
-      for (const row of skipRows) skippedStepIds.push(row.sop_step_id);
+      for (const row of skipRows) {
+        if (typeof row.sop_step_id === "string") skippedStepIds.push(row.sop_step_id);
+      }
     }
   } catch {
     // Skips are additive signal; ignore load failure and treat as none.
@@ -382,8 +789,57 @@ export async function fetchExecutionContext(executionId: string): Promise<{
     execution: exec,
     template,
     steps,
-    completions: completions ?? [],
+    completions: (completions ?? []).map((completion: SopStepCompletionRow) =>
+      normalizeSopStepCompletionPayload(completion, "Invalid SOP completion response"),
+    ),
     skipped_step_ids: skippedStepIds,
+  };
+}
+
+export async function fetchActiveSopExecutionForContext(input: {
+  contextEntityType: "deal";
+  contextEntityId: string;
+}): Promise<{ activeExecution: ActiveSopExecution | null; skippedCount: number }> {
+  const { data, error } = await sopSupabase
+    .from("sop_executions")
+    .select("id, status, sop_template_id")
+    .eq("context_entity_type", input.contextEntityType)
+    .eq("context_entity_id", input.contextEntityId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(sopErrorMessage(error, "Failed to load SOP execution."));
+
+  const activeRow = (data ?? []).find((row: Pick<SopExecutionRow, "status">) => row.status === "in_progress");
+  if (!activeRow) return { activeExecution: null, skippedCount: 0 };
+
+  const active: ActiveSopExecution = {
+    id: activeRow.id,
+    status: requireSopExecutionStatus(activeRow.status, "Invalid SOP execution response"),
+    sop_template_id: activeRow.sop_template_id,
+    sop_templates: null,
+  };
+
+  const [skipResult, templateResult] = await Promise.all([
+    sopSupabase
+      .from("sop_step_skips")
+      .select("*", { count: "exact", head: true })
+      .eq("sop_execution_id", active.id),
+    sopSupabase
+      .from("sop_templates")
+      .select("title")
+      .eq("id", active.sop_template_id)
+      .maybeSingle(),
+  ]);
+
+  if (skipResult.error) throw new Error(sopErrorMessage(skipResult.error, "Failed to load SOP skips."));
+  if (templateResult.error) throw new Error(sopErrorMessage(templateResult.error, "Failed to load SOP template."));
+  if (templateResult.data) {
+    active.sop_templates = { title: templateResult.data.title };
+  }
+
+  return {
+    activeExecution: active,
+    skippedCount: skipResult.count ?? 0,
   };
 }
 
@@ -404,7 +860,7 @@ export async function ingestSopDocument(input: {
   parse_confidence: number;
   status: string;
 }> {
-  return request(`${SOP_INGEST_URL}`, {
+  return request(`${SOP_INGEST_URL}`, normalizeSopIngestResponse, {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -422,7 +878,7 @@ export async function fetchSopSuggestions(input: {
   suggestions: SopSuggestion[];
   total_active_sops: number;
 }> {
-  return request(`${SOP_SUGGEST_URL}/for-context`, {
+  return request(`${SOP_SUGGEST_URL}/for-context`, normalizeSopSuggestionsResponse, {
     method: "POST",
     body: JSON.stringify(input),
   });

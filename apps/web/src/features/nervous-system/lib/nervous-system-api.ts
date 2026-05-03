@@ -29,6 +29,24 @@ export type {
 
 const HEALTH_REFRESH_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/health-score-refresh`;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function readEdgeErrorMessage(res: Response, fallback: string): Promise<string> {
+  const text = await res.text();
+  if (!text.trim()) return `${fallback} (${res.status})`;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (isRecord(parsed) && typeof parsed.error === "string" && parsed.error.trim()) {
+      return parsed.error;
+    }
+  } catch {
+    return text.trim().slice(0, 240) || `${fallback} (${res.status})`;
+  }
+  return `${fallback} (${res.status})`;
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
   const session = (await supabase.auth.getSession()).data.session;
   return {
@@ -43,8 +61,7 @@ export async function fetchHealthDistribution(): Promise<HealthRefreshSummary> {
     headers: await authHeaders(),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Failed to load health distribution" }));
-    throw new Error((err as { error?: string }).error ?? `Failed to load (${res.status})`);
+    throw new Error(await readEdgeErrorMessage(res, "Failed to load"));
   }
   const normalized = normalizeHealthRefreshSummary(await res.json());
   if (!normalized) throw new Error("Health distribution returned malformed payload");
@@ -58,8 +75,7 @@ export async function runHealthRefresh(): Promise<HealthRefreshRunResult> {
     body: JSON.stringify({ source: "manual" }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Health refresh failed" }));
-    throw new Error((err as { error?: string }).error ?? `Refresh failed (${res.status})`);
+    throw new Error(await readEdgeErrorMessage(res, "Refresh failed"));
   }
   const normalized = normalizeHealthRefreshRunResult(await res.json());
   if (!normalized) throw new Error("Health refresh returned malformed payload");
@@ -84,8 +100,7 @@ export async function fetchCrossDepartmentAlerts(params?: {
 
   const { data, error } = await query;
   if (error) {
-    const msg = (error as { message?: string })?.message ?? "Failed to load alerts";
-    throw new Error(msg);
+    throw new Error(error.message || "Failed to load alerts");
   }
   return normalizeCrossDepartmentAlerts(data);
 }
@@ -106,8 +121,7 @@ export async function updateAlertStatus(alertId: string, status: AlertStatus, re
     .eq("id", alertId);
 
   if (error) {
-    const msg = (error as { message?: string })?.message ?? "Failed to update alert";
-    throw new Error(msg);
+    throw new Error(error.message || "Failed to update alert");
   }
 }
 
@@ -121,8 +135,7 @@ export async function fetchTopCustomerProfiles(limit = 20): Promise<CustomerHeal
     .limit(limit);
 
   if (error) {
-    const msg = (error as { message?: string })?.message ?? "Failed to load customer profiles";
-    throw new Error(msg);
+    throw new Error(error.message || "Failed to load customer profiles");
   }
   return normalizeCustomerHealthProfiles(data);
 }
@@ -136,8 +149,7 @@ export async function fetchRevenueByMakeModel(limit = 20): Promise<RevenueByMake
     .limit(limit);
 
   if (error) {
-    const msg = (error as { message?: string })?.message ?? "Failed to load revenue data";
-    throw new Error(msg);
+    throw new Error(error.message || "Failed to load revenue data");
   }
   return normalizeRevenueByMakeModelRows(data);
 }

@@ -17,6 +17,31 @@ const DRAFT_EMAIL_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/draft
 
 type Scenario = "trade_up" | "requote" | "budget_cycle" | "custom";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function readEdgeErrorMessage(res: Response, fallback: string): Promise<string> {
+  const text = await res.text();
+  if (!text.trim()) return fallback;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (isRecord(parsed) && typeof parsed.error === "string" && parsed.error.trim()) {
+      return parsed.error;
+    }
+  } catch {
+    return text.trim().slice(0, 240) || fallback;
+  }
+  return fallback;
+}
+
+function errorMessage(value: unknown, fallback: string): string {
+  if (value instanceof Error && value.message.trim()) return value.message;
+  if (typeof value === "string" && value.trim()) return value;
+  if (isRecord(value) && typeof value.message === "string" && value.message.trim()) return value.message;
+  return fallback;
+}
+
 /**
  * Asset 360 Commercial Action tab (v2 §1 note 9).
  *
@@ -60,8 +85,7 @@ export function CommercialActionTab({ data }: CommercialActionTabProps) {
         }),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Draft failed" }));
-        throw new Error((err as { error?: string }).error ?? "Draft failed");
+        throw new Error(await readEdgeErrorMessage(res, "Draft failed"));
       }
       return res.json();
     },
@@ -123,7 +147,7 @@ export function CommercialActionTab({ data }: CommercialActionTabProps) {
             )}
             {draftMutation.isError && (
               <p className="mt-2 text-[11px] text-red-400">
-                {(draftMutation.error as Error)?.message ?? "Draft failed"}
+                {errorMessage(draftMutation.error, "Draft failed")}
               </p>
             )}
           </div>

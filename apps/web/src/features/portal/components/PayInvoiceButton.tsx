@@ -102,7 +102,7 @@ export function PayInvoiceButton({
       )}
       {checkoutMutation.isError && (
         <p className="mt-1 text-[10px] text-red-400">
-          {(checkoutMutation.error as Error)?.message}
+          {getPortalErrorMessage(checkoutMutation.error) ?? "Checkout failed"}
         </p>
       )}
     </div>

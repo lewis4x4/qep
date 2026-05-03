@@ -61,6 +61,10 @@ function toDiscountType(value: string): DiscountType {
   return value === "pct" || value === "apr_buydown" || value === "cash_back" ? value : "flat";
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 function toIncentive(row: IncentiveRow): Incentive {
   return {
     id: row.id,
@@ -117,7 +121,7 @@ export function IncentiveCatalogPage() {
         source_url: input.source_url.trim() || null,
       };
       const { error } = await db.from("manufacturer_incentives").insert(payload);
-      if (error) throw new Error(String((error as { message?: string }).message ?? "Insert failed"));
+      if (error) throw new Error(error.message || "Insert failed");
     },
     onSuccess: () => {
       setDraft(EMPTY_NEW);
@@ -199,7 +203,7 @@ export function IncentiveCatalogPage() {
             <Field label="Discount type">
               <select
                 value={draft.discount_type}
-                onChange={(e) => setDraft((d) => ({ ...d, discount_type: e.target.value as Incentive["discount_type"] }))}
+                onChange={(e) => setDraft((d) => ({ ...d, discount_type: toDiscountType(e.target.value) }))}
                 className="w-full rounded-md border border-border bg-card px-2 py-1.5 text-sm"
               >
                 <option value="flat">Flat $</option>
@@ -261,7 +265,7 @@ export function IncentiveCatalogPage() {
             </Button>
           </div>
           {createMutation.isError && (
-            <p className="mt-2 text-xs text-red-400">{(createMutation.error as Error)?.message}</p>
+            <p className="mt-2 text-xs text-red-400">{errorMessage(createMutation.error, "Create failed")}</p>
           )}
         </Card>
       )}
@@ -340,7 +344,7 @@ export function IncentiveCatalogPage() {
                 </div>
                 {deleteMutation.isError && deleteMutation.variables === i.id && (
                   <p className="mt-1 text-[11px] text-red-400">
-                    {(deleteMutation.error as Error)?.message ?? "Delete failed"}
+                    {errorMessage(deleteMutation.error, "Delete failed")}
                   </p>
                 )}
               </Card>

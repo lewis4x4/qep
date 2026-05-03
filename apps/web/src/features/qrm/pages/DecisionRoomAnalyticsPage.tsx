@@ -84,6 +84,10 @@ function MoodBar({ dist, className }: { dist: MoodDistribution; className?: stri
   );
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
+
 function MoodChips({ dist }: { dist: MoodDistribution }) {
   return (
     <div className="flex flex-wrap items-center gap-1 text-[10px]">
@@ -269,7 +273,7 @@ export function DecisionRoomAnalyticsPage() {
 
       {error ? (
         <DeckSurface className="border-red-400/40 bg-red-500/10 p-5">
-          <p className="text-sm text-red-200">Couldn't load analytics. {(error as Error).message}</p>
+          <p className="text-sm text-red-200">Couldn't load analytics. {errorMessage(error)}</p>
         </DeckSurface>
       ) : null}
 

@@ -25,6 +25,16 @@ const STATUS_COLORS: Record<string, string> = {
   partial: "bg-cyan-500/10 text-cyan-400",
 };
 
+function errorMessage(value: unknown, fallback: string): string {
+  if (value instanceof Error && value.message.trim()) return value.message;
+  if (typeof value === "string" && value.trim()) return value;
+  if (value && typeof value === "object" && !Array.isArray(value) && "message" in value) {
+    const message = value.message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return fallback;
+}
+
 type LineItem = {
   id?: string;
   description?: string;
@@ -434,7 +444,7 @@ export function PortalInvoicesPage() {
         )}
       </div>
       {payMutation.isError && (
-        <p className="text-sm text-destructive mt-2">{(payMutation.error as Error).message}</p>
+        <p className="text-sm text-destructive mt-2">{errorMessage(payMutation.error, "Payment update failed")}</p>
       )}
     </PortalLayout>
   );

@@ -10,6 +10,8 @@ import {
   listSopTemplates,
   createSopTemplate,
   publishSopTemplate,
+  normalizeSopDepartment,
+  sopErrorMessage,
   type SopDepartment,
   type SopStatus,
   type SopTemplate,
@@ -122,7 +124,7 @@ export function SopTemplatesListPage() {
               <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Department</label>
               <select
                 value={newDept}
-                onChange={(e) => setNewDept(e.target.value as SopDepartment)}
+                onChange={(e) => setNewDept(normalizeSopDepartment(e.target.value, newDept))}
                 className="mt-1 w-full rounded-md border border-border bg-card px-2 py-1.5 text-sm"
               >
                 <option value="all">All</option>
@@ -153,7 +155,7 @@ export function SopTemplatesListPage() {
             </div>
             {createMutation.isError && (
               <p className="text-xs text-red-400">
-                {(createMutation.error as Error)?.message ?? "Failed to create template"}
+                {sopErrorMessage(createMutation.error, "Failed to create template")}
               </p>
             )}
           </div>

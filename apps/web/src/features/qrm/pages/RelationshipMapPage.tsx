@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { DeckSurface } from "../components/command-deck";
 import { supabase } from "@/lib/supabase";
-import type { ExtractedDealData } from "@/lib/voice-capture-extraction.types";
+import { normalizeExtractedDealData } from "@/lib/voice-capture-extraction";
 import { fetchAccount360 } from "../lib/account-360-api";
 import {
   buildAccountCommandHref,
@@ -138,7 +138,7 @@ export function RelationshipMapPage() {
         voiceSignals: (voiceResult.data ?? []).map((row) => ({
           linkedContactId: row.linked_contact_id,
           createdAt: row.created_at,
-          extractedData: (row.extracted_data ?? null) as ExtractedDealData | null,
+          extractedData: row.extracted_data == null ? null : normalizeExtractedDealData(row.extracted_data),
         })),
         signatures: (signaturesResult.data ?? []).map((row) => ({
           dealId: row.deal_id,

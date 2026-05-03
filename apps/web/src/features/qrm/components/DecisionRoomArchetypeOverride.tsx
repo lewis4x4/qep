@@ -48,6 +48,17 @@ const ARCHETYPE_OPTIONS: SeatArchetype[] = [
   "executive_sponsor",
 ];
 
+const ARCHETYPE_OPTION_SET = new Set<string>(ARCHETYPE_OPTIONS);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseSeatArchetype(value: string): SeatArchetype | null {
+  if (!ARCHETYPE_OPTION_SET.has(value)) return null;
+  return ARCHETYPE_OPTIONS.find((option) => option === value) ?? null;
+}
+
 export function DecisionRoomArchetypeOverride({
   seatId,
   currentArchetype,
@@ -78,11 +89,14 @@ export function DecisionRoomArchetypeOverride({
         .eq("id", contactId)
         .maybeSingle();
       if (readErr) throw readErr;
-      const prev = (row?.metadata as Record<string, unknown> | null) ?? {};
+      const prev = isRecord(row?.metadata) ? row.metadata : {};
+      const previousOverride = isRecord(prev.decision_room_override)
+        ? prev.decision_room_override
+        : {};
       const patched = {
         ...prev,
         decision_room_override: {
-          ...((prev.decision_room_override as Record<string, unknown> | null) ?? {}),
+          ...previousOverride,
           archetype: selected,
           set_at: new Date().toISOString(),
         },
@@ -140,7 +154,10 @@ export function DecisionRoomArchetypeOverride({
       <select
         id={`archetype-override-${contactId}`}
         value={selected}
-        onChange={(e) => setSelected(e.target.value as SeatArchetype)}
+        onChange={(e) => {
+          const next = parseSeatArchetype(e.target.value);
+          if (next) setSelected(next);
+        }}
         disabled={saving}
         className="h-7 rounded-md border border-white/15 bg-black/40 px-2 text-[11px] text-foreground focus:border-qep-orange focus:outline-none"
       >

@@ -9,7 +9,7 @@ import {
   formatCentsAsDollars,
   type FreightZone,
 } from "../lib/price-sheets-api";
-import type { StateCode } from "../lib/us-states";
+import { US_STATE_CODES, type StateCode } from "../lib/us-states";
 
 interface FreightZoneFormProps {
   brandId: string;
@@ -25,6 +25,13 @@ function isZeroDollar(cents: number | null): boolean {
   return cents !== null && cents === 0;
 }
 
+const US_STATE_CODE_SET = new Set<string>(US_STATE_CODES);
+
+function toStateCodes(value: unknown): StateCode[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is StateCode => typeof item === "string" && US_STATE_CODE_SET.has(item));
+}
+
 export function FreightZoneForm({
   brandId,
   workspaceId,
@@ -35,7 +42,7 @@ export function FreightZoneForm({
 }: FreightZoneFormProps) {
   const [zoneName, setZoneName]     = useState(existingZone?.zone_name ?? "");
   const [stateCodes, setStateCodes] = useState<StateCode[]>(
-    (existingZone?.state_codes ?? []) as StateCode[],
+    toStateCodes(existingZone?.state_codes),
   );
   const [largeInput, setLargeInput] = useState(
     formatCentsAsDollars(existingZone?.freight_large_cents),
@@ -49,7 +56,7 @@ export function FreightZoneForm({
   // Overlap preview: states that are already covered by another zone
   const siblingStates = new Map<string, string>(); // state → zone_name
   for (const z of siblingZones) {
-    for (const s of (z.state_codes ?? []) as string[]) {
+    for (const s of toStateCodes(z.state_codes)) {
       if (!siblingStates.has(s)) siblingStates.set(s, z.zone_name);
     }
   }

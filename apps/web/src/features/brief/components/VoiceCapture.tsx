@@ -34,6 +34,12 @@ import { Loader2, Mic, MicOff, Square } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { transcribeFeedbackAudio, type TranscribeResult } from "../lib/brief-api";
 
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+  }
+}
+
 // Hard cap so a forgotten press-and-hold doesn't burn Whisper budget. The
 // backend also caps at 8 MB, which is ~90 s of opus @ 48 kbps.
 const MAX_RECORDING_MS = 90_000;
@@ -173,7 +179,7 @@ export function VoiceCapture({ onTranscribed, disabled }: VoiceCaptureProps) {
     try {
       const AudioCtx =
         window.AudioContext ||
-        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        window.webkitAudioContext;
       if (AudioCtx) {
         const ctx = new AudioCtx();
         const source = ctx.createMediaStreamSource(stream);
@@ -204,7 +210,7 @@ export function VoiceCapture({ onTranscribed, disabled }: VoiceCaptureProps) {
     });
 
     recorder.addEventListener("error", (e) => {
-      const msg = (e as unknown as { error?: Error }).error?.message ?? "recorder error";
+      const msg = mediaRecorderErrorMessage(e);
       toast({ title: "Recording failed", description: msg, variant: "destructive" });
       teardownMediaPipeline();
       setState({ kind: "idle" });
@@ -490,6 +496,13 @@ function pickMime(): string | null {
     }
   }
   return null;
+}
+
+function mediaRecorderErrorMessage(event: Event): string {
+  const maybeError = "error" in event ? event.error : null;
+  if (maybeError instanceof Error && maybeError.message.trim()) return maybeError.message;
+  if (typeof maybeError === "string" && maybeError.trim()) return maybeError;
+  return "recorder error";
 }
 
 function formatMs(ms: number): string {

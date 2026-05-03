@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { DeckSurface } from "../components/command-deck";
 import { formatCurrency } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
-import type { ExtractedDealData } from "@/lib/voice-capture-extraction.types";
+import { normalizeExtractedDealData } from "@/lib/voice-capture-extraction";
 import { fetchAccount360 } from "../lib/account-360-api";
 import {
   buildAccountCommandHref,
@@ -109,7 +109,7 @@ export function RentalConversionEnginePage() {
         }),
         voiceSignals: (voice ?? []).map((row) => ({
           createdAt: row.created_at,
-          extractedData: (row.extracted_data ?? null) as ExtractedDealData | null,
+          extractedData: row.extracted_data == null ? null : normalizeExtractedDealData(row.extracted_data),
         })),
         openQuoteCount: openQuotes,
       });

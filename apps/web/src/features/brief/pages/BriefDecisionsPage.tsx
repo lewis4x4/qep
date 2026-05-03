@@ -17,6 +17,16 @@ const NOTEBOOKLM_BASE_URL = "https://notebooklm.google.com/notebook";
 // Locked in the plan: the QEP project brain lives here.
 const NOTEBOOKLM_NOTEBOOK_ID = "dba6dc3e-c9bb-4be1-a9cb-421e9c141a92";
 
+function errorMessage(value: unknown, fallback: string): string {
+  if (value instanceof Error && value.message.trim()) return value.message;
+  if (typeof value === "string" && value.trim()) return value;
+  if (value && typeof value === "object" && !Array.isArray(value) && "message" in value) {
+    const message = value.message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return fallback;
+}
+
 export function BriefDecisionsPage() {
   const [selected, setSelected] = useState<HubDecisionRow | null>(null);
 
@@ -51,8 +61,7 @@ export function BriefDecisionsPage() {
             </div>
           ) : decisionsQuery.error ? (
             <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-sm text-destructive">
-              Couldn't load decisions:{" "}
-              {String((decisionsQuery.error as Error).message)}
+              Couldn't load decisions: {errorMessage(decisionsQuery.error, "Failed to load decisions")}
             </div>
           ) : rows.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border bg-card p-10 text-center">

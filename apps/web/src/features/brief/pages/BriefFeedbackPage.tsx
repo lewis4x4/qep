@@ -23,6 +23,16 @@ import {
 } from "../lib/brief-api";
 import { FeedbackTimeline } from "../components/FeedbackTimeline";
 
+function errorMessage(value: unknown, fallback: string): string {
+  if (value instanceof Error && value.message.trim()) return value.message;
+  if (typeof value === "string" && value.trim()) return value;
+  if (value && typeof value === "object" && !Array.isArray(value) && "message" in value) {
+    const message = value.message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return fallback;
+}
+
 interface BriefFeedbackPageProps {
   userId: string;
   canAdminister: boolean;
@@ -95,7 +105,7 @@ export function BriefFeedbackPage({ userId, canAdminister }: BriefFeedbackPagePr
             </div>
           ) : feedbackQuery.error ? (
             <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-sm text-destructive">
-              Couldn't load feedback: {String((feedbackQuery.error as Error).message)}
+              Couldn't load feedback: {errorMessage(feedbackQuery.error, "Failed to load feedback")}
             </div>
           ) : rows.length === 0 ? (
             <EmptyState scope={scope} />

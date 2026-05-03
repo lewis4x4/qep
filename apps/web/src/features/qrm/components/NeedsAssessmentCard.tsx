@@ -26,6 +26,54 @@ function formatMoney(value: number | null): string | null {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function stringArrayOrNull(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((entry): entry is string => typeof entry === "string");
+}
+
+function normalizeNeedsAssessment(value: unknown): NeedsAssessment | null {
+  if (!isRecord(value) || typeof value.id !== "string") return null;
+  return {
+    id: value.id,
+    application: stringOrNull(value.application),
+    work_type: stringOrNull(value.work_type),
+    terrain_material: stringOrNull(value.terrain_material),
+    current_equipment: stringOrNull(value.current_equipment),
+    current_equipment_issues: stringOrNull(value.current_equipment_issues),
+    machine_interest: stringOrNull(value.machine_interest),
+    attachments_needed: stringArrayOrNull(value.attachments_needed),
+    brand_preference: stringOrNull(value.brand_preference),
+    timeline_description: stringOrNull(value.timeline_description),
+    timeline_urgency: stringOrNull(value.timeline_urgency),
+    budget_type: stringOrNull(value.budget_type),
+    budget_amount: numberOrNull(value.budget_amount),
+    monthly_payment_target: numberOrNull(value.monthly_payment_target),
+    financing_preference: stringOrNull(value.financing_preference),
+    has_trade_in: value.has_trade_in === true,
+    trade_in_details: stringOrNull(value.trade_in_details),
+    is_decision_maker: typeof value.is_decision_maker === "boolean" ? value.is_decision_maker : null,
+    decision_maker_name: stringOrNull(value.decision_maker_name),
+    next_step: stringOrNull(value.next_step),
+    entry_method: typeof value.entry_method === "string" ? value.entry_method : "manual",
+    qrm_narrative: stringOrNull(value.qrm_narrative),
+    completeness_pct: numberOrNull(value.completeness_pct),
+    fields_populated: numberOrNull(value.fields_populated) ?? 0,
+    fields_total: numberOrNull(value.fields_total) ?? 0,
+  };
+}
+
 export function NeedsAssessmentCard({ dealId, prefetched }: NeedsAssessmentCardProps) {
   const { data: assessment, isLoading, isError } = useQuery({
     queryKey: ["crm", "needs-assessment", dealId],
@@ -38,7 +86,7 @@ export function NeedsAssessmentCard({ dealId, prefetched }: NeedsAssessmentCardP
         .limit(1)
         .maybeSingle();
       if (error) throw error;
-      return data as NeedsAssessment | null;
+      return normalizeNeedsAssessment(data);
     },
     staleTime: prefetched !== undefined ? Infinity : 30_000,
     enabled: Boolean(dealId),

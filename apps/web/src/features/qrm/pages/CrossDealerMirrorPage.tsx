@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { DeckSurface } from "../components/command-deck";
 import { supabase } from "@/lib/supabase";
-import type { ExtractedDealData } from "@/lib/voice-capture-extraction.types";
+import { normalizeExtractedDealData } from "@/lib/voice-capture-extraction";
 import { fetchCustomerProfile } from "@/features/dge/lib/dge-api";
 import { fetchAccount360 } from "../lib/account-360-api";
 import {
@@ -58,6 +58,10 @@ function makeModelKey(make: string | null | undefined, model: string | null | un
   const normalizedModel = normalize(model);
   if (!normalizedMake || !normalizedModel) return null;
   return `${normalizedMake}::${normalizedModel}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function CrossDealerMirrorPage() {
@@ -235,7 +239,7 @@ export function CrossDealerMirrorPage() {
       voiceSignals: signals.voiceSignals.map((row) => ({
         linkedContactId: row.linked_contact_id,
         createdAt: row.created_at,
-        extractedData: (row.extracted_data ?? null) as ExtractedDealData | null,
+        extractedData: row.extracted_data == null ? null : normalizeExtractedDealData(row.extracted_data),
       })),
       signatures: signals.signatures.map((row) => ({
         dealId: row.deal_id,
@@ -246,9 +250,7 @@ export function CrossDealerMirrorPage() {
     });
 
     const equipmentSignals = signals.equipmentSignals.map((row) => {
-      const metadata = (row.metadata && typeof row.metadata === "object")
-        ? row.metadata
-        : {} as Record<string, unknown>;
+      const metadata = isRecord(row.metadata) ? row.metadata : {};
       const attachments = Array.isArray(metadata.attachments)
         ? metadata.attachments.filter((item: unknown) => item != null)
         : [];

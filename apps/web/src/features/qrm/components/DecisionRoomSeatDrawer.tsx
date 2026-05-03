@@ -102,6 +102,16 @@ function promptForArchetype(archetype: string): string {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : isRecord(error) && error.name === "AbortError";
+}
+
 async function askSeatPersona(input: {
   dealId: string;
   seatId: string;
@@ -232,7 +242,7 @@ export function DecisionRoomSeatDrawer({
       if (activeSeatIdRef.current !== askingSeatId) return;
       setMessages((prev) => [...prev, { role: "seat", content: reply, at: new Date().toISOString() }]);
     } catch (err) {
-      if ((err as Error)?.name === "AbortError") return;
+      if (isAbortError(err)) return;
       if (activeSeatIdRef.current !== askingSeatId) return;
       setError(err instanceof Error ? err.message : "Something went wrong asking this seat.");
     } finally {

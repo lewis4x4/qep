@@ -87,6 +87,10 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | QRM router and rental ops APIs | Shared QRM router and rental ops helpers trusted `response.json()`/generic response casts, so malformed JSON or missing object/array envelopes could reach callers. | Added JSON body readers, edge-error normalizers, required object/array envelope guards, safe cursor decoding, rental error text fallback handling, and malformed JSON rejection before callers receive router/rental payloads. |
 | QRM map/intelligence page metadata | Opportunity, seasonal, whitespace, unmapped territory, fleet intelligence, and workflow audit pages used page-local metadata/extracted-data casts. | Replaced the page-local casts with runtime metadata/extracted-data guards so malformed optional JSON cannot break those map/intelligence render paths. |
 | Admin Flow engine page | Iron SLO history and mutation error rendering trusted raw snapshot rows and cast unknown mutation errors to `Error`. | Added `normalizeIronSloHistorySnapshots` plus unknown-safe error message extraction before SLO sparkline data and mutation failures are rendered. |
+| SOP API and execution UI | SOP edge responses, generated-template rows, step JSON fields, inline nudge counts, select values, and mutation error rendering used direct casts or local Supabase shims. | Added SOP API normalizers for template/count/step/edge payloads, replaced assigned Supabase shims and query result casts, and moved page/component errors through unknown-safe helpers. |
+| Admin UI/local helpers | Accounts payable, branch management, incentive catalog, data quality, QuickBooks GL sync, rental pricing, Flow approvals, Flare drawer, and Deal Economics forms still cast mutation errors, enum values, branch/team rows, freight states, or threshold/brand rows in components. | Replaced those with unknown-safe error helpers plus small guards/normalizers for local enum/list/row shapes while leaving static option arrays documented as low-risk. |
+| QRM UI metadata/component helpers | Remaining QRM decision-room, strategist, reputation, relationship, rental conversion, operator intelligence, and Account 360 surfaces used metadata/extracted-data, localStorage, abort-error, edge-response, and error-render casts. | Added runtime guards and helpers across the assigned QRM pages/components, including a cohort-filter localStorage parser test; `Customer-strategist.tsx.backup` remained untouched. |
+| Brief, nervous-system, portal, and equipment UI/edge helpers | Build Hub pages/components, nervous-system health refresh, portal invoice payment UI, and equipment commercial action helpers cast unknown errors, browser APIs, localStorage drafts, and edge error bodies. | Added unknown-safe error extraction, browser typing, localStorage draft normalization, and edge error text parsing before those UI/edge helper paths consume or render payloads. |
 
 ## Verification
 
@@ -227,6 +231,8 @@ Results:
 - Admin coach performance API tests: `14 pass`, `0 fail`.
 - QRM router/rental/decision-room focused tests: `21 pass`, `0 fail`.
 - Combined targeted test run including the QRM router/rental/decision-room parallel pass: `615 pass`, `0 fail` across `73` files.
+- SOP/QRM UI/local hardening plus brief/nervous-system/portal/equipment focused tests: `34 pass`, `0 fail` across `7` files.
+- Web typecheck after SOP/admin/QRM UI plus brief/nervous-system/portal/equipment batch: PASS.
 - Web typecheck: PASS.
 - Service feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 - Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
@@ -241,6 +247,6 @@ Results:
 
 ## Remaining Slice 6 Work
 
-- Continue auditing the remaining non-core raw type-cast surfaces found after this pass: SOP API/pages/components, admin page/component mutation error rendering and local JSON helpers, QRM page/component metadata/error/localStorage helpers, brief page/component error/browser helpers, nervous-system edge error helpers, portal invoice payment error rendering, and equipment commercial action edge/error helpers.
-- Prioritize direct data/API boundaries first (`sop-api`, QRM page metadata, nervous-system/brief/equipment edge payloads), then clean low-risk UI-only error casts.
+- Continue auditing the remaining non-core raw type-cast surfaces found after this pass: QRM FleetRadar draft error rendering, QRM shared libs (`voice-capture-activity-metadata`, `pipeline-utils`, `trade-walkaround-api`, `qrm-quotes-api`), QRM editor enum casts, admin Exception Inbox error rendering, and static option-array casts that should either become typed constants or be documented as intentionally low-risk.
+- Ignore `Customer-strategist.tsx.backup` unless the backup file is removed or restored into active code.
 - For each target, move row-shape logic into small exported normalizers and add unit tests before replacing direct casts.

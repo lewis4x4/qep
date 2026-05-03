@@ -23,7 +23,7 @@ import { ArrowLeft, ArrowUpRight, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DeckSurface } from "../components/command-deck";
 import { supabase } from "@/lib/supabase";
-import type { ExtractedDealData } from "@/lib/voice-capture-extraction.types";
+import { normalizeExtractedDealData } from "@/lib/voice-capture-extraction";
 import { fetchDealComposite } from "../lib/deal-composite-api";
 import { buildDealRoomSummary, normalizeDealRoomApprovalRows, type DealRoomApproval } from "../lib/deal-room";
 import {
@@ -71,6 +71,10 @@ const EMPTY_RELATIONSHIP_BOARD: RelationshipMapBoard = {
   contacts: [],
   unmatchedStakeholders: [],
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 export function DecisionRoomSimulatorPage() {
   const { dealId } = useParams<{ dealId: string }>();
@@ -149,9 +153,9 @@ export function DecisionRoomSimulatorPage() {
           // Pull the rep-authored archetype override out of metadata.
           // We accept unknown shapes defensively — this field is optional
           // and can be absent, null, or legacy objects.
-          const meta = (row.metadata as Record<string, unknown> | null) ?? null;
-          const override = meta && typeof meta === "object"
-            ? (meta.decision_room_override as Record<string, unknown> | null)?.archetype
+          const meta = isRecord(row.metadata) ? row.metadata : null;
+          const override = isRecord(meta?.decision_room_override)
+            ? meta.decision_room_override.archetype
             : null;
           return {
             id: row.id,
@@ -179,7 +183,7 @@ export function DecisionRoomSimulatorPage() {
         voiceSignals: voice.map((row) => ({
           linkedContactId: row.linked_contact_id,
           createdAt: row.created_at,
-          extractedData: (row.extracted_data ?? null) as ExtractedDealData | null,
+          extractedData: row.extracted_data == null ? null : normalizeExtractedDealData(row.extracted_data),
         })),
         signatures: signatures.map((row) => ({
           dealId: row.deal_id,

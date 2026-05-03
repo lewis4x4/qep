@@ -41,6 +41,39 @@ function seatLabel(s: DecisionRoomSeat): string {
   return `Probable ${s.archetypeLabel}`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function payloadError(payload: unknown): string | null {
+  return isRecord(payload) && typeof payload.error === "string" ? payload.error : null;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
+
+function normalizeDialogueTurn(value: unknown): DialogueTurn | null {
+  if (!isRecord(value)) return null;
+  if (value.speaker !== "A" && value.speaker !== "B") return null;
+  if (typeof value.text !== "string" || !value.text.trim()) return null;
+  return { speaker: value.speaker, text: value.text };
+}
+
+function normalizeDialogueResult(payload: unknown): DialogueResult | null {
+  if (!isRecord(payload)) return null;
+  const turns = Array.isArray(payload.turns)
+    ? payload.turns
+        .map(normalizeDialogueTurn)
+        .filter((turn): turn is DialogueTurn => turn !== null)
+    : [];
+  if (turns.length === 0) return null;
+  return {
+    turns,
+    summary: typeof payload.summary === "string" ? payload.summary : "",
+  };
+}
+
 async function runDialogue(input: {
   seatA: DecisionRoomSeat;
   seatB: DecisionRoomSeat;
@@ -83,12 +116,13 @@ async function runDialogue(input: {
       }),
     },
   );
-  const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload.error ?? `dialogue returned ${res.status}`);
-  if (!Array.isArray(payload.turns) || payload.turns.length === 0) {
+  const payload: unknown = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payloadError(payload) ?? `dialogue returned ${res.status}`);
+  const result = normalizeDialogueResult(payload);
+  if (!result) {
     throw new Error("dialogue returned no turns");
   }
-  return { turns: payload.turns as DialogueTurn[], summary: payload.summary ?? "" };
+  return result;
 }
 
 export function DecisionRoomDialogue({ seat, otherSeats, dealId, companyName, dealName }: Props) {
@@ -201,7 +235,7 @@ export function DecisionRoomDialogue({ seat, otherSeats, dealId, companyName, de
 
       {mutation.error ? (
         <div role="alert" className="rounded-md border border-red-400/40 bg-red-500/10 p-3 text-xs text-red-200">
-          {(mutation.error as Error).message}
+          {errorMessage(mutation.error)}
         </div>
       ) : null}
 

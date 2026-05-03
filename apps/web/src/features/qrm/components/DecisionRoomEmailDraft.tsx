@@ -28,6 +28,28 @@ interface DraftResult {
   recipientEmail: string | null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function payloadError(payload: unknown): string | null {
+  return isRecord(payload) && typeof payload.error === "string" ? payload.error : null;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
+
+function normalizeDraftResult(payload: unknown): DraftResult | null {
+  if (!isRecord(payload)) return null;
+  if (typeof payload.subject !== "string" || typeof payload.body !== "string") return null;
+  return {
+    subject: payload.subject,
+    body: payload.body,
+    recipientEmail: typeof payload.recipientEmail === "string" ? payload.recipientEmail : null,
+  };
+}
+
 async function draftEmail(input: {
   seat: DecisionRoomSeat;
   dealId: string;
@@ -63,13 +85,11 @@ async function draftEmail(input: {
       }),
     },
   );
-  const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload.error ?? `draft-email returned ${res.status}`);
-  return {
-    subject: payload.subject as string,
-    body: payload.body as string,
-    recipientEmail: (payload.recipientEmail as string | null) ?? null,
-  };
+  const payload: unknown = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payloadError(payload) ?? `draft-email returned ${res.status}`);
+  const draft = normalizeDraftResult(payload);
+  if (!draft) throw new Error("draft-email returned an invalid draft");
+  return draft;
 }
 
 export function DecisionRoomEmailDraft({ seat, dealId, dealName, companyName, repName }: Props) {
@@ -176,7 +196,7 @@ export function DecisionRoomEmailDraft({ seat, dealId, dealName, companyName, re
 
       {mutation.error ? (
         <div role="alert" className="rounded-md border border-red-400/40 bg-red-500/10 p-3 text-xs text-red-200">
-          {(mutation.error as Error).message}
+          {errorMessage(mutation.error)}
         </div>
       ) : null}
 

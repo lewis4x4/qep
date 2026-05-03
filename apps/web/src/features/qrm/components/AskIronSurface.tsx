@@ -46,6 +46,10 @@ import {
 import { isAskIronSeedState } from "./askIronHandoff";
 import { accountCommandUrl } from "../lib/account-links";
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
+
 export function AskIronSurface() {
   const queryClient = useQueryClient();
   const location = useLocation();
@@ -104,7 +108,7 @@ export function AskIronSurface() {
         ...prev,
         {
           role: "assistant",
-          content: `Iron stumbled: ${(err as Error).message}`,
+          content: `Iron stumbled: ${errorMessage(err)}`,
         },
       ]);
     },

@@ -48,6 +48,16 @@ const CHANGE_TONE: Record<HubChangelogRow["change_type"], string> = {
   started: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
 };
 
+function errorMessage(value: unknown, fallback: string): string {
+  if (value instanceof Error && value.message.trim()) return value.message;
+  if (typeof value === "string" && value.trim()) return value;
+  if (value && typeof value === "object" && !Array.isArray(value) && "message" in value) {
+    const message = value.message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return fallback;
+}
+
 export function BriefDashboardPage({
   userId,
   stakeholderName,
@@ -207,7 +217,7 @@ export function BriefDashboardPage({
           </div>
         ) : bundleQuery.error ? (
           <div className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-            Couldn't load activity: {String((bundleQuery.error as Error).message)}
+            Couldn't load activity: {errorMessage(bundleQuery.error, "Failed to load activity")}
           </div>
         ) : feed.length === 0 ? (
           <p className="mt-4 text-sm text-muted-foreground">

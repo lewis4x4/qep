@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { DeckSurface } from "./command-deck";
 import type { DecisionRoomBoard } from "../lib/decision-room-simulator";
+import { normalizeTriedMove } from "../lib/decision-room-moves-persist";
 
 export interface TriedMove {
   moveId: string;
@@ -38,6 +39,20 @@ interface Props {
   onMoveResult: (move: TriedMove) => void;
   prefill: string | null;
   onPrefillConsumed: () => void;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function payloadError(payload: unknown): string | null {
+  return isRecord(payload) && typeof payload.error === "string" ? payload.error : null;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : isRecord(error) && error.name === "AbortError";
 }
 
 async function runTryMove(
@@ -75,12 +90,13 @@ async function runTryMove(
       signal,
     },
   );
-  const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload.error ?? `try-move returned ${res.status}`);
-  if (!payload.reactions || !Array.isArray(payload.reactions)) {
+  const payload: unknown = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payloadError(payload) ?? `try-move returned ${res.status}`);
+  const triedMove = normalizeTriedMove(payload);
+  if (!triedMove || triedMove.reactions.length === 0) {
     throw new Error("try-move returned no reactions");
   }
-  return payload as TriedMove;
+  return triedMove;
 }
 
 export function DecisionRoomMoveBar({ board, onMoveResult, prefill, onPrefillConsumed }: Props) {
@@ -122,7 +138,7 @@ export function DecisionRoomMoveBar({ board, onMoveResult, prefill, onPrefillCon
       onMoveResult(result);
       setValue("");
     } catch (err) {
-      if ((err as Error)?.name === "AbortError") return;
+      if (isAbortError(err)) return;
       setError(err instanceof Error ? err.message : "Something went wrong running this move.");
     } finally {
       if (inFlightRef.current === controller) {

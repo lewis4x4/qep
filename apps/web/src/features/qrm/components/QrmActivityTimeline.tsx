@@ -81,13 +81,36 @@ interface CommunicationDeliveryMetadata {
   externalMessageId?: string;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function normalizeCommunicationDelivery(value: unknown): CommunicationDeliveryMetadata | null {
+  if (!isRecord(value)) return null;
+  return {
+    attempted: typeof value.attempted === "boolean" ? value.attempted : undefined,
+    deliveryInProgress: typeof value.deliveryInProgress === "boolean" ? value.deliveryInProgress : undefined,
+    deliveryInProgressAt: optionalString(value.deliveryInProgressAt),
+    status: optionalString(value.status),
+    mode: optionalString(value.mode),
+    provider: optionalString(value.provider),
+    reasonCode: optionalString(value.reasonCode),
+    message: optionalString(value.message),
+    destination: optionalString(value.destination),
+    attemptedAt: optionalString(value.attemptedAt),
+    externalMessageId: optionalString(value.externalMessageId),
+  };
+}
+
 function readCommunicationDelivery(activity: QrmActivityItem): CommunicationDeliveryMetadata | null {
   if (activity.activityType !== "email" && activity.activityType !== "sms") return null;
   const metadata = activity.metadata;
-  if (!metadata || typeof metadata !== "object") return null;
-  const communication = (metadata as Record<string, unknown>).communication;
-  if (!communication || typeof communication !== "object") return null;
-  return communication as CommunicationDeliveryMetadata;
+  if (!isRecord(metadata)) return null;
+  return normalizeCommunicationDelivery(metadata.communication);
 }
 
 function deliveryTone(status: string | undefined): string {
@@ -198,10 +221,13 @@ function deliveryActionLabel(delivery: CommunicationDeliveryMetadata): string {
 function readTaskMetadata(activity: QrmActivityItem): QrmTaskMetadata | null {
   if (activity.activityType !== "task") return null;
   const metadata = activity.metadata;
-  if (!metadata || typeof metadata !== "object") return null;
-  const task = (metadata as Record<string, unknown>).task;
-  if (!task || typeof task !== "object") return null;
-  return task as QrmTaskMetadata;
+  if (!isRecord(metadata) || !isRecord(metadata.task)) return null;
+  return {
+    dueAt: typeof metadata.task.dueAt === "string" || metadata.task.dueAt === null
+      ? metadata.task.dueAt
+      : undefined,
+    status: metadata.task.status === "completed" ? "completed" : "open",
+  };
 }
 
 function formatTimestamp(value: string): string {

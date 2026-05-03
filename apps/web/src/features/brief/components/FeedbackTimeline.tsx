@@ -102,6 +102,16 @@ function eventIcon(kind: FeedbackEventType): ReactNode {
   }
 }
 
+function errorMessage(value: unknown, fallback: string): string {
+  if (value instanceof Error && value.message.trim()) return value.message;
+  if (typeof value === "string" && value.trim()) return value;
+  if (value && typeof value === "object" && !Array.isArray(value) && "message" in value) {
+    const message = value.message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return fallback;
+}
+
 export function FeedbackTimeline({
   feedbackId,
   compact = false,
@@ -126,7 +136,7 @@ export function FeedbackTimeline({
   if (eventsQuery.error) {
     return (
       <p className="mt-3 text-xs text-muted-foreground">
-        Couldn't load timeline: {(eventsQuery.error as Error).message}
+        Couldn't load timeline: {errorMessage(eventsQuery.error, "Failed to load timeline")}
       </p>
     );
   }

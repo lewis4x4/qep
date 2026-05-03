@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Upload, CheckCircle2 } from "lucide-react";
-import { ingestSopDocument, type SopDepartment } from "../lib/sop-api";
+import { ingestSopDocument, normalizeSopDepartment, sopErrorMessage, type SopDepartment } from "../lib/sop-api";
 
 const DEPARTMENTS: SopDepartment[] = ["sales", "service", "parts", "admin", "all"];
 
@@ -67,7 +67,7 @@ export function SopIngestUploadCard() {
             <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Department</label>
             <select
               value={department}
-              onChange={(e) => setDepartment(e.target.value as SopDepartment)}
+              onChange={(e) => setDepartment(normalizeSopDepartment(e.target.value, department))}
               className="mt-1 w-full rounded-md border border-border bg-card px-2 py-1.5 text-sm"
             >
               {DEPARTMENTS.map((d) => (
@@ -142,7 +142,7 @@ export function SopIngestUploadCard() {
         {ingestMutation.isError && (
           <div className="rounded-md border border-red-500/20 bg-red-500/5 p-3">
             <p className="text-xs text-red-400">
-              {(ingestMutation.error as Error)?.message ?? "Ingestion failed"}
+              {sopErrorMessage(ingestMutation.error, "Ingestion failed")}
             </p>
           </div>
         )}

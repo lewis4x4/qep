@@ -63,6 +63,10 @@ function toApprovalRow(row: ApprovalQueryRow): ApprovalRow {
   };
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function FlowApprovalsPanel() {
   const queryClient = useQueryClient();
   const [reasonById, setReasonById] = useState<Record<string, string>>({});
@@ -178,7 +182,7 @@ export function FlowApprovalsPanel() {
                 </div>
                 {decide.isError && decide.variables?.id === a.id && (
                   <p className="mt-1 text-[11px] text-red-400">
-                    {(decide.error as Error)?.message ?? "Decision failed"}
+                    {errorMessage(decide.error, "Decision failed")}
                   </p>
                 )}
               </div>

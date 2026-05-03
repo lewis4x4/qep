@@ -20,9 +20,12 @@ import type {
 } from "../lib/account-360-api";
 import { fetchFleetRadar, fetchIntelliDealerAccountSummary } from "../lib/account-360-api";
 import { fetchCompanyEquipment } from "../lib/qrm-router-api";
-import type { QrmEquipment } from "../lib/types";
 
 const DRAFT_EMAIL_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/draft-email`;
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
 
 /* ── Recommended Next Best Actions composite ─────────────────────── */
 
@@ -923,7 +926,7 @@ export function AccountCommercialTab({
     ? `${openServiceJobs.length} open service job${openServiceJobs.length === 1 ? "" : "s"}`
     : "No active service risk";
 
-  const companyEquipment = (equipmentQuery.data ?? []) as QrmEquipment[];
+  const companyEquipment = equipmentQuery.data ?? [];
   const warrantyTarget = companyEquipment.find((item) => {
     if (!item.warrantyExpiresOn) return false;
     const expiry = new Date(item.warrantyExpiresOn);
@@ -1064,7 +1067,7 @@ export function AccountCommercialTab({
         )}
         {draftMutation.isError && (
           <div className="rounded-md border border-red-500/30 bg-red-500/5 p-2 text-xs text-red-400">
-            {(draftMutation.error as Error).message}
+            {errorMessage(draftMutation.error)}
           </div>
         )}
       </Card>

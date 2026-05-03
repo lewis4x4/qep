@@ -73,6 +73,10 @@ function toCustomerOption(row: PortalCustomerOptionRow): PortalCustomerOptionRow
   return row;
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 function emptyDraft() {
   return {
     customerId: "",
@@ -326,8 +330,10 @@ export function RentalPricingPage() {
             ) : null}
             {(saveMutation.isError || toggleRuleMutation.isError || deleteRuleMutation.isError) && (
               <p className="text-xs text-destructive">
-                {((saveMutation.error ?? toggleRuleMutation.error ?? deleteRuleMutation.error) as Error)?.message ??
-                  "Pricing rule update failed"}
+                {errorMessage(
+                  saveMutation.error ?? toggleRuleMutation.error ?? deleteRuleMutation.error,
+                  "Pricing rule update failed",
+                )}
               </p>
             )}
           </div>

@@ -9,6 +9,10 @@ import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
 import { DeckSurface, StatusDot, SignalChip } from "../components/command-deck";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export function PostSaleExperienceCenterPage() {
   const boardQuery = useQuery({
     queryKey: ["qrm", "post-sale-experience"],
@@ -58,7 +62,7 @@ export function PostSaleExperienceCenterPage() {
 
       const attachmentCountByEquipment = new Map<string, number>();
       for (const row of equipmentResult.data ?? []) {
-        const metadata = (row.metadata && typeof row.metadata === "object" ? row.metadata : {}) as Record<string, unknown>;
+        const metadata = isRecord(row.metadata) ? row.metadata : {};
         const attachments = Array.isArray(metadata.attachments)
           ? metadata.attachments.filter((entry): entry is unknown => entry != null)
           : [];

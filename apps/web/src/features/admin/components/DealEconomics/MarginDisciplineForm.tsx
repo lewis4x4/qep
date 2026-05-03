@@ -31,6 +31,51 @@ type ThresholdWithBrand = MarginThresholdRow & {
 
 type BrandRow = { id: string; name: string; code: string };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function requiredString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function toBrand(value: unknown): BrandRow | null {
+  if (!isRecord(value)) return null;
+  const id = requiredString(value.id);
+  const name = requiredString(value.name);
+  if (!id || !name) return null;
+  return {
+    id,
+    name,
+    code: nullableString(value.code) ?? "",
+  };
+}
+
+function toThresholdBrand(value: unknown): ThresholdWithBrand["qb_brands"] {
+  const brand = Array.isArray(value) ? value.find(isRecord) : value;
+  if (!isRecord(brand)) return null;
+  const id = requiredString(brand.id);
+  const name = requiredString(brand.name);
+  if (!id || !name) return null;
+  return {
+    id,
+    name,
+    code: nullableString(brand.code),
+  };
+}
+
+function toThresholdWithBrand(row: MarginThresholdRow): ThresholdWithBrand {
+  const record: unknown = row;
+  return {
+    ...row,
+    qb_brands: isRecord(record) ? toThresholdBrand(record.qb_brands) : null,
+  };
+}
+
 export function MarginDisciplineForm() {
   const { profile } = useAuth();
   const { toast } = useToast();
@@ -49,7 +94,7 @@ export function MarginDisciplineForm() {
       listThresholds(),
       getExceptionRollup({ daysBack: period === "all" ? null : parseInt(period) }),
     ]);
-    setThresholds(t as ThresholdWithBrand[]);
+    setThresholds(t.map(toThresholdWithBrand));
     setRollup(r);
     setLoading(false);
   }
@@ -62,7 +107,10 @@ export function MarginDisciplineForm() {
         .from("qb_brands")
         .select("id, name, code")
         .order("name", { ascending: true });
-      if (!cancelled) setBrands((data ?? []) as BrandRow[]);
+      if (!cancelled) setBrands((data ?? []).flatMap((row) => {
+        const brand = toBrand(row);
+        return brand ? [brand] : [];
+      }));
     })();
     return () => { cancelled = true; };
   }, []);

@@ -35,6 +35,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
+
 function parseMergeResponse(value: unknown): MergeResponse {
   if (!isRecord(value)) throw new Error("Merge returned an invalid response");
   if (
@@ -239,13 +243,13 @@ export function CompanyMergeDialog({ pair, onClose }: CompanyMergeDialogProps) {
             <Card className="border-red-500/30 bg-red-500/5 p-3">
               <div className="flex items-start gap-2">
                 <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
-                <p className="text-xs text-red-400">{(mergeMutation.error as Error).message}</p>
+                <p className="text-xs text-red-400">{errorMessage(mergeMutation.error)}</p>
               </div>
             </Card>
           )}
           {undoMutation.isError && (
             <Card className="border-red-500/30 bg-red-500/5 p-3">
-              <p className="text-xs text-red-400">Undo failed: {(undoMutation.error as Error).message}</p>
+              <p className="text-xs text-red-400">Undo failed: {errorMessage(undoMutation.error)}</p>
             </Card>
           )}
 

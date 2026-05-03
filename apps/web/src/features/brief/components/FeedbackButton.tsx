@@ -54,23 +54,32 @@ interface DraftShape {
   type: FeedbackType | "";
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeDraftShape(value: unknown): DraftShape {
+  const parsed = isRecord(value) ? value : {};
+  const type = parsed.type;
+  return {
+    body: typeof parsed.body === "string" ? parsed.body : "",
+    type:
+      type === "bug" ||
+      type === "suggestion" ||
+      type === "question" ||
+      type === "approval" ||
+      type === "concern"
+        ? type
+        : "",
+  };
+}
+
 function readDraft(): DraftShape {
   if (typeof window === "undefined") return { body: "", type: "" };
   try {
     const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY);
     if (!raw) return { body: "", type: "" };
-    const parsed = JSON.parse(raw) as Partial<DraftShape>;
-    return {
-      body: typeof parsed.body === "string" ? parsed.body : "",
-      type:
-        parsed.type === "bug" ||
-        parsed.type === "suggestion" ||
-        parsed.type === "question" ||
-        parsed.type === "approval" ||
-        parsed.type === "concern"
-          ? parsed.type
-          : "",
-    };
+    return normalizeDraftShape(JSON.parse(raw));
   } catch {
     return { body: "", type: "" };
   }
@@ -338,7 +347,7 @@ function findAncestorBuildItemId(): string | null {
   if (typeof document === "undefined") return null;
   const active = document.activeElement;
   const start = active && active instanceof HTMLElement ? active : document.body;
-  const match = start.closest?.("[data-build-item-id]") as HTMLElement | null;
+  const match = start.closest<HTMLElement>("[data-build-item-id]");
   const attr = match?.dataset.buildItemId ?? null;
   return attr && attr.length === 36 ? attr : null;
 }

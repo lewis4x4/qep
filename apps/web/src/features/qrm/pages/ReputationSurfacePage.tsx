@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { fetchAccount360 } from "../lib/account-360-api";
 import { fetchCustomerProfile } from "@/features/dge/lib/dge-api";
 import { supabase } from "@/lib/supabase";
-import type { ExtractedDealData } from "@/lib/voice-capture-extraction.types";
+import { normalizeExtractedDealData } from "@/lib/voice-capture-extraction";
 import {
   buildAccountCommandHref,
   buildAccountReputationHref,
@@ -34,6 +34,10 @@ function confidenceTone(confidence: "high" | "medium" | "low"): string {
     default:
       return "text-muted-foreground";
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function ReputationSurfacePage() {
@@ -179,7 +183,7 @@ export function ReputationSurfacePage() {
       voiceSignals: signalsQuery.data.voiceSignals.map((row) => ({
         createdAt: row.created_at,
         transcript: row.transcript,
-        extractedData: (row.extracted_data ?? null) as ExtractedDealData | null,
+        extractedData: row.extracted_data == null ? null : normalizeExtractedDealData(row.extracted_data),
       })),
       feedbackSignals: signalsQuery.data.feedbackSignals.map((row) => ({
         createdAt: row.created_at,
@@ -195,9 +199,7 @@ export function ReputationSurfacePage() {
       lifecycleEvents: signalsQuery.data.lifecycleEvents.map((row) => ({
         eventType: row.event_type,
         eventAt: row.event_at,
-        metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
-          ? row.metadata as Record<string, unknown>
-          : {},
+        metadata: isRecord(row.metadata) ? row.metadata : {},
       })),
       portalReviews: signalsQuery.data.portalReviews.map((row) => ({
         createdAt: row.created_at,

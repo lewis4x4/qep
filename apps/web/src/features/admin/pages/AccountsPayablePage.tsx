@@ -47,6 +47,14 @@ function toAgingBucket(value: string | null): ApAgingBucket {
   return "current";
 }
 
+function toAgingMethod(value: string): "due" | "invoice" {
+  return value === "invoice" ? "invoice" : "due";
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 function toAgingRow(row: ApAgingViewRow): AgingRow {
   return {
     id: row.id ?? "",
@@ -186,7 +194,8 @@ function AccountsPayablePageInner() {
 
   const bucketTotals = useMemo(() => {
     const source = filtered;
-    return (["current", "31_60", "61_90", "91_120", "over_120"] as ApAgingBucket[]).map((bucket) => {
+    const agingBuckets: readonly ApAgingBucket[] = ["current", "31_60", "61_90", "91_120", "over_120"];
+    return agingBuckets.map((bucket) => {
       const rows = source.filter((row) => (agingMethod === "due" ? row.due_age_bucket : row.invoice_age_bucket) === bucket);
       return {
         bucket,
@@ -219,7 +228,7 @@ function AccountsPayablePageInner() {
 
           <div className="mt-5 flex flex-wrap gap-2">
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search vendor, invoice, payable account" className="min-w-[260px] rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
-            <select value={agingMethod} onChange={(e) => setAgingMethod(e.target.value as "due" | "invoice")} className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm">
+            <select value={agingMethod} onChange={(e) => setAgingMethod(toAgingMethod(e.target.value))} className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm">
               <option value="due">Age by Due Date</option>
               <option value="invoice">Age by Invoice Date</option>
             </select>
@@ -284,7 +293,7 @@ function AccountsPayablePageInner() {
               <input value={payableAccountName} onChange={(e) => setPayableAccountName(e.target.value)} placeholder="Payable account name" className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm" />
             </div>
             {createBill.isError ? (
-              <p className="text-sm text-destructive">{(createBill.error as Error).message}</p>
+              <p className="text-sm text-destructive">{errorMessage(createBill.error, "Failed to create bill")}</p>
             ) : null}
           </div>
         </Card>

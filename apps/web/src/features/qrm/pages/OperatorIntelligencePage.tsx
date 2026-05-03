@@ -5,7 +5,7 @@ import { Lightbulb, MessageSquare, UserRound, Wrench, ArrowUpRight } from "lucid
 import { Button } from "@/components/ui/button";
 import { DeckSurface } from "../components/command-deck";
 import { supabase } from "@/lib/supabase";
-import type { ExtractedDealData } from "@/lib/voice-capture-extraction.types";
+import { normalizeExtractedDealData } from "@/lib/voice-capture-extraction";
 import { buildAccountCommandHref } from "../lib/account-command";
 import { buildOperatorIntelligenceBoard } from "../lib/operator-intelligence";
 import { QrmPageHeader } from "../components/QrmPageHeader";
@@ -39,7 +39,7 @@ export function OperatorIntelligencePage() {
             companyName: companyJoin?.name ?? null,
             createdAt: row.created_at,
             transcript: row.transcript,
-            extractedData: (row.extracted_data ?? null) as ExtractedDealData | null,
+            extractedData: row.extracted_data == null ? null : normalizeExtractedDealData(row.extracted_data),
           };
         }),
         feedbackSignals: (feedbackResult.data ?? []).map((row) => {

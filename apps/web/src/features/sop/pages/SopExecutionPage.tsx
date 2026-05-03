@@ -12,6 +12,7 @@ import {
   skipStep,
   closeExecution,
   markStepNotApplicable,
+  sopErrorMessage,
   type SopStep,
   type SopStepCompletion,
 } from "../lib/sop-api";
@@ -242,7 +243,7 @@ export function SopExecutionPage() {
       {(completeMutation.isError || skipMutation.isError || closeMutation.isError || naMutation.isError) && (
         <Card className="border-red-500/20 p-3">
           <p className="text-xs text-red-400">
-            {((completeMutation.error || skipMutation.error || closeMutation.error || naMutation.error) as Error)?.message ?? "Action failed"}
+            {sopErrorMessage(completeMutation.error || skipMutation.error || closeMutation.error || naMutation.error, "Action failed")}
           </p>
         </Card>
       )}

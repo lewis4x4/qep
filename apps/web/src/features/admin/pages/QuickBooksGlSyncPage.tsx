@@ -95,6 +95,14 @@ function quickBooksField(value: string): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function toQuickBooksEnvironment(value: string): QuickBooksConfigDraft["environment"] {
+  return value === "sandbox" ? "sandbox" : "production";
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 function buildSavePayload(draft: QuickBooksConfigDraft): QuickBooksConfigDraft {
   return {
     client_id: draft.client_id.trim(),
@@ -396,7 +404,7 @@ export function QuickBooksGlSyncPage() {
                   <Label className="text-xs font-medium text-foreground">Environment</Label>
                   <select
                     value={draft.environment}
-                    onChange={(event) => setDraftField("environment", event.target.value as "sandbox" | "production")}
+                    onChange={(event) => setDraftField("environment", toQuickBooksEnvironment(event.target.value))}
                     className="w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
                   >
                     <option value="production">Production</option>
@@ -447,7 +455,7 @@ export function QuickBooksGlSyncPage() {
 
           {(saveConfig.error || clearConfig.error) ? (
             <p className="mt-3 text-sm text-destructive">
-              {(saveConfig.error as Error | null)?.message ?? (clearConfig.error as Error | null)?.message}
+              {errorMessage(saveConfig.error ?? clearConfig.error, "QuickBooks configuration update failed")}
             </p>
           ) : null}
         </Card>

@@ -23,6 +23,10 @@ interface ARCreditBlockBannerProps {
 
 interface Manager { id: string; full_name: string | null; role: string }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
+
 /**
  * AR Credit Block banner with embedded manager-override dialog.
  *
@@ -45,14 +49,14 @@ export function ARCreditBlockBanner({
   const isManagerPlus = currentUserRole === "manager" || currentUserRole === "owner" || currentUserRole === "admin";
 
   // Pull eligible approvers (managers, owners, admins) for the picker
-  const { data: approvers = [] } = useQuery({
+  const { data: approvers = [] } = useQuery<Manager[]>({
     queryKey: ["ar-override-approvers"],
     queryFn: async () => {
       const { data, error } = await crmSupabase
         .from("profiles")
         .select("id, full_name, role")
         .in("role", ["manager", "owner", "admin"]);
-      if (error) return [] as Manager[];
+      if (error) return [];
       return data ?? [];
     },
     enabled: open,
@@ -69,7 +73,7 @@ export function ARCreditBlockBanner({
         p_approver_id: approverId,
         p_window_days: windowDays,
       });
-      if (error) throw new Error(String((error as { message?: string }).message ?? "Override failed"));
+      if (error) throw new Error(error.message || "Override failed");
     },
     onSuccess: () => {
       setOpen(false);
@@ -173,7 +177,7 @@ export function ARCreditBlockBanner({
 
             {overrideMutation.isError && (
               <Card className="border-red-500/30 p-2">
-                <p className="text-xs text-red-400">{(overrideMutation.error as Error).message}</p>
+                <p className="text-xs text-red-400">{errorMessage(overrideMutation.error)}</p>
               </Card>
             )}
 

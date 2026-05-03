@@ -16,14 +16,19 @@ import {
   EQUIPMENT_COHORTS,
   REP_TENURE_COHORTS,
   type CohortFilter,
-  type DealSizeCohort,
   type EquipmentCohort,
-  type RepTenureCohort,
   isEmptyFilter,
   EMPTY_COHORT_FILTER,
 } from "../lib/decision-room-cohorts";
 
 const STORAGE_KEY = "qep:decision-room:analytics:cohort-filter";
+const EQUIPMENT_KEYS = [
+  ...EQUIPMENT_COHORTS.map((def) => def.key),
+  "other_machine",
+  "unknown",
+] satisfies readonly EquipmentCohort[];
+const DEAL_SIZE_KEYS = DEAL_SIZE_COHORTS.map((def) => def.key);
+const REP_TENURE_KEYS = REP_TENURE_COHORTS.map((def) => def.key);
 
 interface Props {
   value: CohortFilter;
@@ -53,15 +58,27 @@ function Chip({ label, active, onClick }: ChipProps) {
   );
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function filterAllowed<T extends string>(value: unknown, allowed: readonly T[]): T[] {
+  if (!Array.isArray(value)) return [];
+  const allowedSet = new Set<string>(allowed);
+  return value.filter((entry): entry is T => typeof entry === "string" && allowedSet.has(entry));
+}
+
 export function loadCohortFilter(): CohortFilter {
   try {
+    if (typeof localStorage === "undefined") return EMPTY_COHORT_FILTER;
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return EMPTY_COHORT_FILTER;
-    const parsed = JSON.parse(raw) as Partial<CohortFilter>;
+    const parsed = JSON.parse(raw);
+    if (!isRecord(parsed)) return EMPTY_COHORT_FILTER;
     return {
-      equipment: Array.isArray(parsed.equipment) ? (parsed.equipment as EquipmentCohort[]) : [],
-      sizes: Array.isArray(parsed.sizes) ? (parsed.sizes as DealSizeCohort[]) : [],
-      tenures: Array.isArray(parsed.tenures) ? (parsed.tenures as RepTenureCohort[]) : [],
+      equipment: filterAllowed(parsed.equipment, EQUIPMENT_KEYS),
+      sizes: filterAllowed(parsed.sizes, DEAL_SIZE_KEYS),
+      tenures: filterAllowed(parsed.tenures, REP_TENURE_KEYS),
     };
   } catch {
     return EMPTY_COHORT_FILTER;
@@ -70,6 +87,7 @@ export function loadCohortFilter(): CohortFilter {
 
 export function persistCohortFilter(filter: CohortFilter): void {
   try {
+    if (typeof localStorage === "undefined") return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(filter));
   } catch {
     // quota / private-mode — ignore.

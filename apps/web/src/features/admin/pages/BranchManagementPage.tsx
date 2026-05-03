@@ -47,6 +47,31 @@ interface TeamMember {
   role: string;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringValue(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function toTeamMember(value: unknown): TeamMember | null {
+  if (!isRecord(value)) return null;
+  const profile = Array.isArray(value.profiles) ? value.profiles.find(isRecord) : value.profiles;
+  const profileRecord = isRecord(profile) ? profile : null;
+  const id = stringValue(profileRecord?.id, stringValue(value.profile_id));
+  if (!id) return null;
+  return {
+    id,
+    full_name: stringValue(profileRecord?.full_name, "Unknown"),
+    role: stringValue(value.role, "member"),
+  };
+}
+
 function useWorkspaceMembers() {
   const wsQ = useMyWorkspaceId();
   const ws = wsQ.data;
@@ -62,14 +87,12 @@ function useWorkspaceMembers() {
           .select("profile_id, role, profiles!profile_workspaces_profile_id_fkey(id, full_name)")
           .eq("workspace_id", ws!);
         if (error) throw error;
-        return (data ?? []).map((row: Record<string, unknown>) => {
-          const p = row.profiles as Record<string, unknown> | null;
-          return {
-            id: (p?.id as string) ?? (row.profile_id as string),
-            full_name: (p?.full_name as string) ?? "Unknown",
-            role: row.role as string,
-          };
-        }).sort((a, b) => a.full_name.localeCompare(b.full_name));
+        return (data ?? [])
+          .flatMap((row) => {
+            const member = toTeamMember(row);
+            return member ? [member] : [];
+          })
+          .sort((a, b) => a.full_name.localeCompare(b.full_name));
       } catch {
         return [];
       }
@@ -288,14 +311,14 @@ function BranchManagementPageInner() {
       ...editing,
       slug: editing.slug || slugify(editing.display_name),
     };
-    saveMut.mutate(payload as BranchUpsertPayload & { id?: string }, {
+    saveMut.mutate(payload, {
       onSuccess: () => setEditing(null),
     });
   };
 
   const hours = useMemo(() => {
     if (!editing) return [];
-    return (editing.business_hours ?? []) as Array<{ dow: number; open: string; close: string }>;
+    return editing.business_hours ?? [];
   }, [editing]);
 
   const setHour = (idx: number, key: "open" | "close", val: string) => {
@@ -322,10 +345,10 @@ function BranchManagementPageInner() {
     setGeoError(null);
     try {
       const result = await geocodeAddress({
-        address_line1: (editing.address_line1 as string) ?? "",
-        city: (editing.city as string) ?? "",
-        state_province: (editing.state_province as string) ?? "",
-        postal_code: (editing.postal_code as string) ?? "",
+        address_line1: editing.address_line1 ?? "",
+        city: editing.city ?? "",
+        state_province: editing.state_province ?? "",
+        postal_code: editing.postal_code ?? "",
         country: editing.country ?? "US",
       });
       if (result) {
@@ -341,7 +364,7 @@ function BranchManagementPageInner() {
     }
   };
 
-  const caps = (editing?.capabilities ?? []) as string[];
+  const caps = editing?.capabilities ?? [];
   const toggleCap = (c: string) => {
     set("capabilities", caps.includes(c) ? caps.filter((x) => x !== c) : [...caps, c]);
   };
@@ -391,7 +414,7 @@ function BranchManagementPageInner() {
         <>
           {deleteMut.isError && (
             <p className="text-sm text-destructive">
-              {(deleteMut.error as Error)?.message ?? "Archive failed"}
+              {errorMessage(deleteMut.error, "Archive failed")}
             </p>
           )}
           {branches.length === 0 ? (
@@ -493,7 +516,7 @@ function BranchManagementPageInner() {
                 className="col-span-2"
               />
               <Field label="Slug" value={editing.slug ?? ""} onChange={(v) => set("slug", v)} placeholder="gulf-depot" />
-              <Field label="Short code" value={(editing.short_code as string) ?? ""} onChange={(v) => set("short_code", v)} placeholder="GD" />
+              <Field label="Short code" value={editing.short_code ?? ""} onChange={(v) => set("short_code", v)} placeholder="GD" />
             </div>
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-2 text-sm">
@@ -511,11 +534,11 @@ function BranchManagementPageInner() {
           {/* Address */}
           <Section icon={MapPin} title="Address">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="Address line 1" value={(editing.address_line1 as string) ?? ""} onChange={(v) => set("address_line1", v)} placeholder="123 Industrial Blvd" className="sm:col-span-2" />
-              <Field label="Address line 2" value={(editing.address_line2 as string) ?? ""} onChange={(v) => set("address_line2", v)} placeholder="Suite A" className="sm:col-span-2" />
-              <Field label="City" value={(editing.city as string) ?? ""} onChange={(v) => set("city", v)} placeholder="Lake City" />
-              <Field label="State" value={(editing.state_province as string) ?? ""} onChange={(v) => set("state_province", v)} placeholder="FL" />
-              <Field label="Postal code" value={(editing.postal_code as string) ?? ""} onChange={(v) => set("postal_code", v)} placeholder="32055" />
+              <Field label="Address line 1" value={editing.address_line1 ?? ""} onChange={(v) => set("address_line1", v)} placeholder="123 Industrial Blvd" className="sm:col-span-2" />
+              <Field label="Address line 2" value={editing.address_line2 ?? ""} onChange={(v) => set("address_line2", v)} placeholder="Suite A" className="sm:col-span-2" />
+              <Field label="City" value={editing.city ?? ""} onChange={(v) => set("city", v)} placeholder="Lake City" />
+              <Field label="State" value={editing.state_province ?? ""} onChange={(v) => set("state_province", v)} placeholder="FL" />
+              <Field label="Postal code" value={editing.postal_code ?? ""} onChange={(v) => set("postal_code", v)} placeholder="32055" />
               <Field label="Country" value={editing.country ?? "US"} onChange={(v) => set("country", v)} />
             </div>
             <div className="flex flex-wrap items-end gap-3">
@@ -539,26 +562,26 @@ function BranchManagementPageInner() {
           {/* Contact */}
           <Section icon={Phone} title="Phone & Email">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Field label="Main phone" value={(editing.phone_main as string) ?? ""} onChange={(v) => set("phone_main", v)} placeholder="(386) 555-1000" />
-              <Field label="Parts phone" value={(editing.phone_parts as string) ?? ""} onChange={(v) => set("phone_parts", v)} placeholder="(386) 555-1001" />
-              <Field label="Service phone" value={(editing.phone_service as string) ?? ""} onChange={(v) => set("phone_service", v)} placeholder="(386) 555-1002" />
-              <Field label="Sales phone" value={(editing.phone_sales as string) ?? ""} onChange={(v) => set("phone_sales", v)} placeholder="(386) 555-1003" />
-              <Field label="Fax" value={(editing.fax as string) ?? ""} onChange={(v) => set("fax", v)} />
-              <Field label="Main email" value={(editing.email_main as string) ?? ""} onChange={(v) => set("email_main", v)} placeholder="info@depot.com" />
-              <Field label="Parts email" value={(editing.email_parts as string) ?? ""} onChange={(v) => set("email_parts", v)} />
-              <Field label="Service email" value={(editing.email_service as string) ?? ""} onChange={(v) => set("email_service", v)} />
-              <Field label="Sales email" value={(editing.email_sales as string) ?? ""} onChange={(v) => set("email_sales", v)} />
-              <Field label="Website" value={(editing.website_url as string) ?? ""} onChange={(v) => set("website_url", v)} className="sm:col-span-2" />
+              <Field label="Main phone" value={editing.phone_main ?? ""} onChange={(v) => set("phone_main", v)} placeholder="(386) 555-1000" />
+              <Field label="Parts phone" value={editing.phone_parts ?? ""} onChange={(v) => set("phone_parts", v)} placeholder="(386) 555-1001" />
+              <Field label="Service phone" value={editing.phone_service ?? ""} onChange={(v) => set("phone_service", v)} placeholder="(386) 555-1002" />
+              <Field label="Sales phone" value={editing.phone_sales ?? ""} onChange={(v) => set("phone_sales", v)} placeholder="(386) 555-1003" />
+              <Field label="Fax" value={editing.fax ?? ""} onChange={(v) => set("fax", v)} />
+              <Field label="Main email" value={editing.email_main ?? ""} onChange={(v) => set("email_main", v)} placeholder="info@depot.com" />
+              <Field label="Parts email" value={editing.email_parts ?? ""} onChange={(v) => set("email_parts", v)} />
+              <Field label="Service email" value={editing.email_service ?? ""} onChange={(v) => set("email_service", v)} />
+              <Field label="Sales email" value={editing.email_sales ?? ""} onChange={(v) => set("email_sales", v)} />
+              <Field label="Website" value={editing.website_url ?? ""} onChange={(v) => set("website_url", v)} className="sm:col-span-2" />
             </div>
           </Section>
 
           {/* Managers */}
           <Section icon={Users} title="Management" defaultOpen={false}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <PersonPicker label="General Manager" value={editing.general_manager_id as string | null} onChange={(v) => set("general_manager_id", v)} members={members} />
-              <PersonPicker label="Sales Manager" value={editing.sales_manager_id as string | null} onChange={(v) => set("sales_manager_id", v)} members={members} />
-              <PersonPicker label="Service Manager" value={editing.service_manager_id as string | null} onChange={(v) => set("service_manager_id", v)} members={members} />
-              <PersonPicker label="Parts Manager" value={editing.parts_manager_id as string | null} onChange={(v) => set("parts_manager_id", v)} members={members} />
+              <PersonPicker label="General Manager" value={editing.general_manager_id ?? null} onChange={(v) => set("general_manager_id", v)} members={members} />
+              <PersonPicker label="Sales Manager" value={editing.sales_manager_id ?? null} onChange={(v) => set("sales_manager_id", v)} members={members} />
+              <PersonPicker label="Service Manager" value={editing.service_manager_id ?? null} onChange={(v) => set("service_manager_id", v)} members={members} />
+              <PersonPicker label="Parts Manager" value={editing.parts_manager_id ?? null} onChange={(v) => set("parts_manager_id", v)} members={members} />
             </div>
           </Section>
 
@@ -603,15 +626,15 @@ function BranchManagementPageInner() {
             <div className="grid grid-cols-1 gap-3">
               <BranchLogoUpload
                 branchSlug={editing.slug || slugify(editing.display_name) || "new-branch"}
-                currentUrl={(editing.logo_url as string) || null}
+                currentUrl={editing.logo_url || null}
                 onUploaded={(url) => set("logo_url", url)}
                 onRemoved={() => set("logo_url", "")}
               />
-              <Field label="Header tagline" value={(editing.header_tagline as string) ?? ""} onChange={(v) => set("header_tagline", v)} placeholder="Your Heavy Equipment Partner" />
+              <Field label="Header tagline" value={editing.header_tagline ?? ""} onChange={(v) => set("header_tagline", v)} placeholder="Your Heavy Equipment Partner" />
               <div>
                 <label className="text-[11px] text-muted-foreground block mb-0.5">Document footer text</label>
                 <textarea
-                  value={(editing.doc_footer_text as string) ?? ""}
+                  value={editing.doc_footer_text ?? ""}
                   onChange={(e) => set("doc_footer_text", e.target.value)}
                   className="w-full h-16 text-sm rounded border px-2 py-1.5 resize-none"
                   placeholder="Thank you for your business. Terms: Net 30."
@@ -623,7 +646,7 @@ function BranchManagementPageInner() {
           {/* Tax / regulatory */}
           <Section icon={Shield} title="Tax & Regulatory" defaultOpen={false}>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <Field label="Tax ID / EIN" value={(editing.tax_id as string) ?? ""} onChange={(v) => set("tax_id", v)} placeholder="XX-XXXXXXX" />
+              <Field label="Tax ID / EIN" value={editing.tax_id ?? ""} onChange={(v) => set("tax_id", v)} placeholder="XX-XXXXXXX" />
               <Field label="Default tax rate (%)" value={String((editing.default_tax_rate ?? 0) * 100)} onChange={(v) => set("default_tax_rate", (Number(v) || 0) / 100)} type="number" placeholder="7.5" />
             </div>
           </Section>
@@ -653,14 +676,14 @@ function BranchManagementPageInner() {
           <div>
             <label className="text-[11px] text-muted-foreground block mb-0.5">Internal notes</label>
             <textarea
-              value={(editing.notes as string) ?? ""}
+              value={editing.notes ?? ""}
               onChange={(e) => set("notes", e.target.value)}
               className="w-full h-16 text-sm rounded border px-2 py-1.5 resize-none"
             />
           </div>
 
           {saveMut.isError && (
-            <p className="text-sm text-destructive">{(saveMut.error as Error)?.message ?? "Save failed"}</p>
+            <p className="text-sm text-destructive">{errorMessage(saveMut.error, "Save failed")}</p>
           )}
 
           <div className="flex items-center gap-2">

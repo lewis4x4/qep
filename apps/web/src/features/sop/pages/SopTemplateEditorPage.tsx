@@ -11,6 +11,7 @@ import {
   addSopStep,
   publishSopTemplate,
   startSopExecution,
+  sopErrorMessage,
   type SopStep,
 } from "../lib/sop-api";
 
@@ -161,7 +162,7 @@ export function SopTemplateEditorPage() {
       {publishMutation.isError && (
         <Card className="border-red-500/20 p-3">
           <p className="text-xs text-red-400">
-            {(publishMutation.error as Error)?.message ?? "Publish failed"}
+            {sopErrorMessage(publishMutation.error, "Publish failed")}
           </p>
         </Card>
       )}
@@ -260,7 +261,7 @@ export function SopTemplateEditorPage() {
             </div>
             {addStepMutation.isError && (
               <p className="text-xs text-red-400">
-                {(addStepMutation.error as Error)?.message ?? "Failed to add step"}
+                {sopErrorMessage(addStepMutation.error, "Failed to add step")}
               </p>
             )}
           </div>
