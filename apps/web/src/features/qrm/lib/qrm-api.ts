@@ -22,21 +22,58 @@ const CONTACTS_PAGE_SIZE = 25;
 const COMPANIES_PAGE_SIZE = 25;
 const ACTIVITIES_PAGE_SIZE = 150;
 
-type QrmContactRow = QrmDatabase["public"]["Tables"]["crm_contacts"]["Row"];
-type QrmCompanyRow = QrmDatabase["public"]["Tables"]["crm_companies"]["Row"];
-type QrmActivityRow = QrmDatabase["public"]["Tables"]["crm_activities"]["Row"];
-type QrmActivityTemplateRow = QrmDatabase["public"]["Tables"]["crm_activity_templates"]["Row"];
 type ListCrmContactRow =
   | QrmDatabase["public"]["Functions"]["list_crm_contacts_page"]["Returns"][number]
   | QrmDatabase["public"]["Functions"]["list_crm_contacts_for_company_subtree_page"]["Returns"][number];
 type ListCrmCompanyRow = QrmDatabase["public"]["Functions"]["list_crm_companies_page"]["Returns"][number];
 
-function metadataText(row: QrmContactRow, key: string): string | null {
-  const metadata = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
-    ? row.metadata as Record<string, unknown>
-    : null;
-  const value = metadata?.[key];
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function requiredString(value: unknown, fallback = ""): string {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function nullableBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function metadataTextValue(metadata: unknown, key: string): string | null {
+  const value = recordValue(metadata)[key];
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function normalizeActivityType(value: unknown): QrmActivityItem["activityType"] {
+  return value === "note" || value === "call" || value === "email" || value === "meeting" || value === "task" || value === "sms"
+    ? value
+    : "note";
+}
+
+function normalizeTaskStatus(value: unknown): QrmActivityTemplate["taskStatus"] | undefined {
+  return value === "open" || value === "completed" ? value : undefined;
+}
+
+function normalizeProductCategory(value: unknown): QrmCompanySummary["productCategory"] {
+  return value === "business" || value === "individual" || value === "government" || value === "non_profit" || value === "internal"
+    ? value
+    : null;
+}
+
+function normalizeArType(value: unknown): QrmCompanySummary["arType"] {
+  return value === "open_item" || value === "balance_forward" || value === "true_balance_forward" ? value : null;
 }
 
 interface ContactListCursor {
@@ -48,33 +85,6 @@ interface ContactListCursor {
 interface CompanyListCursor {
   name: string;
   id: string;
-}
-
-function toContactSummary(row: QrmContactRow): QrmContactSummary {
-  return {
-    id: row.id,
-    workspaceId: row.workspace_id,
-    dgeCustomerProfileId: row.dge_customer_profile_id,
-    firstName: row.first_name,
-    lastName: row.last_name,
-    email: row.email,
-    phone: row.phone,
-    cell: row.cell ?? null,
-    directPhone: row.direct_phone ?? null,
-    birthDate: row.birth_date ?? null,
-    smsOptIn: row.sms_opt_in ?? null,
-    title: row.title,
-    primaryCompanyId: row.primary_company_id,
-    assignedRepId: row.assigned_rep_id,
-    mergedIntoContactId: row.merged_into_contact_id,
-    sourceCustomerNumber: metadataText(row, "source_customer_number"),
-    sourceContactNumber: metadataText(row, "source_contact_number"),
-    sourceStatusCode: metadataText(row, "status_code"),
-    sourceSalespersonCode: metadataText(row, "salesperson_code"),
-    myDealerUser: metadataText(row, "mydealer_user"),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
 }
 
 function toListContactSummary(row: ListCrmContactRow): QrmContactSummary {
@@ -99,36 +109,6 @@ function toListContactSummary(row: ListCrmContactRow): QrmContactSummary {
     sourceStatusCode: null,
     sourceSalespersonCode: null,
     myDealerUser: null,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
-
-function toCompanySummary(row: QrmCompanyRow): QrmCompanySummary {
-  return {
-    id: row.id,
-    workspaceId: row.workspace_id,
-    name: row.name,
-    parentCompanyId: row.parent_company_id,
-    assignedRepId: row.assigned_rep_id,
-    legacyCustomerNumber: row.legacy_customer_number ?? null,
-    status: row.status ?? null,
-    productCategory: row.product_category ?? null,
-    arType: row.ar_type ?? null,
-    paymentTermsCode: row.payment_terms_code ?? null,
-    termsCode: row.terms_code ?? null,
-    territoryCode: row.territory_code ?? null,
-    pricingLevel: row.pricing_level ?? null,
-    doNotContact: row.do_not_contact ?? null,
-    optOutSalePi: row.opt_out_sale_pi ?? null,
-    search1: row.search_1,
-    search2: row.search_2,
-    addressLine1: row.address_line_1,
-    addressLine2: row.address_line_2,
-    city: row.city,
-    state: row.state,
-    postalCode: row.postal_code,
-    country: row.country,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -164,41 +144,119 @@ function toListCompanySummary(row: ListCrmCompanyRow): QrmCompanySummary {
   };
 }
 
-function toActivityItem(row: QrmActivityRow): QrmActivityItem {
-  return {
-    id: row.id,
-    workspaceId: row.workspace_id,
-    activityType: row.activity_type,
-    body: row.body,
-    occurredAt: row.occurred_at,
-    contactId: row.contact_id,
-    companyId: row.company_id,
-    dealId: row.deal_id,
-    createdBy: row.created_by,
-    metadata:
-      row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
-        ? (row.metadata as Record<string, unknown>)
-        : {},
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
+export function normalizeContactRows(rows: unknown): QrmContactSummary[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      workspaceId: requiredString(row.workspace_id, "default"),
+      dgeCustomerProfileId: nullableString(row.dge_customer_profile_id),
+      firstName: requiredString(row.first_name),
+      lastName: requiredString(row.last_name),
+      email: nullableString(row.email),
+      phone: nullableString(row.phone),
+      cell: nullableString(row.cell),
+      directPhone: nullableString(row.direct_phone),
+      birthDate: nullableString(row.birth_date),
+      smsOptIn: nullableBoolean(row.sms_opt_in),
+      title: nullableString(row.title),
+      primaryCompanyId: nullableString(row.primary_company_id),
+      assignedRepId: nullableString(row.assigned_rep_id),
+      mergedIntoContactId: nullableString(row.merged_into_contact_id),
+      sourceCustomerNumber: metadataTextValue(row.metadata, "source_customer_number"),
+      sourceContactNumber: metadataTextValue(row.metadata, "source_contact_number"),
+      sourceStatusCode: metadataTextValue(row.metadata, "status_code"),
+      sourceSalespersonCode: metadataTextValue(row.metadata, "salesperson_code"),
+      myDealerUser: metadataTextValue(row.metadata, "mydealer_user"),
+      createdAt: requiredString(row.created_at),
+      updatedAt: requiredString(row.updated_at),
+    }];
+  });
 }
 
-function toActivityTemplate(row: QrmActivityTemplateRow): QrmActivityTemplate {
-  return {
-    id: row.id,
-    activityType: row.activity_type,
-    label: row.label,
-    description: row.description ?? "",
-    body: row.body,
-    taskDueMinutes: row.task_due_minutes ?? undefined,
-    taskStatus: row.task_status ?? undefined,
-    sortOrder: row.sort_order,
-    source: "workspace",
-    isActive: row.is_active,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
+export function normalizeCompanyRows(rows: unknown): QrmCompanySummary[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      workspaceId: requiredString(row.workspace_id, "default"),
+      name: requiredString(row.name, "Unnamed company"),
+      parentCompanyId: nullableString(row.parent_company_id),
+      assignedRepId: nullableString(row.assigned_rep_id),
+      legacyCustomerNumber: nullableString(row.legacy_customer_number),
+      status: nullableString(row.status),
+      productCategory: normalizeProductCategory(row.product_category),
+      arType: normalizeArType(row.ar_type),
+      paymentTermsCode: nullableString(row.payment_terms_code),
+      termsCode: nullableString(row.terms_code),
+      territoryCode: nullableString(row.territory_code),
+      pricingLevel: nullableNumber(row.pricing_level),
+      doNotContact: nullableBoolean(row.do_not_contact),
+      optOutSalePi: nullableBoolean(row.opt_out_sale_pi),
+      search1: nullableString(row.search_1),
+      search2: nullableString(row.search_2),
+      addressLine1: nullableString(row.address_line_1),
+      addressLine2: nullableString(row.address_line_2),
+      city: nullableString(row.city),
+      state: nullableString(row.state),
+      postalCode: nullableString(row.postal_code),
+      country: nullableString(row.country),
+      createdAt: requiredString(row.created_at),
+      updatedAt: requiredString(row.updated_at),
+    }];
+  });
+}
+
+export function normalizeActivityRows(rows: unknown): QrmActivityItem[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      workspaceId: requiredString(row.workspace_id, "default"),
+      activityType: normalizeActivityType(row.activity_type),
+      body: nullableString(row.body),
+      occurredAt: requiredString(row.occurred_at),
+      contactId: nullableString(row.contact_id),
+      companyId: nullableString(row.company_id),
+      dealId: nullableString(row.deal_id),
+      createdBy: nullableString(row.created_by),
+      metadata: recordValue(row.metadata),
+      createdAt: requiredString(row.created_at),
+      updatedAt: requiredString(row.updated_at),
+    }];
+  });
+}
+
+export function normalizeActivityTemplateRows(rows: unknown): QrmActivityTemplate[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.id !== "string") return [];
+
+    return [{
+      id: row.id,
+      activityType: normalizeActivityType(row.activity_type),
+      label: requiredString(row.label, "Untitled template"),
+      description: nullableString(row.description) ?? "",
+      body: requiredString(row.body),
+      taskDueMinutes: nullableNumber(row.task_due_minutes) ?? undefined,
+      taskStatus: normalizeTaskStatus(row.task_status),
+      sortOrder: nullableNumber(row.sort_order) ?? 0,
+      source: "workspace",
+      isActive: nullableBoolean(row.is_active) ?? false,
+      createdAt: nullableString(row.created_at) ?? undefined,
+      updatedAt: nullableString(row.updated_at) ?? undefined,
+    }];
+  });
 }
 
 async function listProfileDisplayNames(profileIds: string[]): Promise<Map<string, string>> {
@@ -379,7 +437,7 @@ export async function getCrmContact(contactId: string): Promise<QrmContactSummar
     throw new Error(error.message);
   }
 
-  return data ? toContactSummary(data as QrmContactRow) : null;
+  return normalizeContactRows(data ? [data] : [])[0] ?? null;
 }
 
 export async function listCrmContactsByIds(contactIds: string[]): Promise<QrmContactSummary[]> {
@@ -398,7 +456,7 @@ export async function listCrmContactsByIds(contactIds: string[]): Promise<QrmCon
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as QrmContactRow[]).map(toContactSummary);
+  return normalizeContactRows(data);
 }
 
 export async function listCrmCompanies(search: string, cursor?: string | null): Promise<QrmPageResult<QrmCompanySummary>> {
@@ -439,7 +497,7 @@ export async function getCrmCompany(companyId: string): Promise<QrmCompanySummar
     throw new Error(error.message);
   }
 
-  return data ? toCompanySummary(data as QrmCompanyRow) : null;
+  return normalizeCompanyRows(data ? [data] : [])[0] ?? null;
 }
 
 export async function getProfileDisplayName(profileId: string): Promise<string | null> {
@@ -470,7 +528,7 @@ export async function listContactActivities(contactId: string): Promise<QrmActiv
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as QrmActivityRow[]).map(toActivityItem);
+  return normalizeActivityRows(data);
 }
 
 export async function listContactTerritories(contactId: string): Promise<QrmContactTerritory[]> {
@@ -519,7 +577,7 @@ export async function listCompanyActivities(companyId: string): Promise<QrmActiv
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as QrmActivityRow[]).map(toActivityItem);
+  return normalizeActivityRows(data);
 }
 
 export async function listDealActivities(dealId: string): Promise<QrmActivityItem[]> {
@@ -536,7 +594,7 @@ export async function listDealActivities(dealId: string): Promise<QrmActivityIte
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as QrmActivityRow[]).map(toActivityItem);
+  return normalizeActivityRows(data);
 }
 
 export async function listCrmActivityFeed(): Promise<QrmActivityFeedItem[]> {
@@ -553,7 +611,7 @@ export async function listCrmActivityFeed(): Promise<QrmActivityFeedItem[]> {
     throw new Error(error.message);
   }
 
-  const items = ((data ?? []) as QrmActivityRow[]).map(toActivityItem);
+  const items = normalizeActivityRows(data);
   const createdByIds = Array.from(new Set(items.map((item) => item.createdBy).filter(Boolean))) as string[];
   const contactIds = Array.from(new Set(items.map((item) => item.contactId).filter(Boolean))) as string[];
   const companyIds = Array.from(new Set(items.map((item) => item.companyId).filter(Boolean))) as string[];
@@ -591,7 +649,7 @@ export async function listCrmActivityTemplates(): Promise<QrmActivityTemplate[]>
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as QrmActivityTemplateRow[]).map(toActivityTemplate);
+  return normalizeActivityTemplateRows(data);
 }
 
 export async function listManageableCrmActivityTemplates(): Promise<QrmActivityTemplate[]> {
@@ -609,7 +667,7 @@ export async function listManageableCrmActivityTemplates(): Promise<QrmActivityT
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as QrmActivityTemplateRow[]).map(toActivityTemplate);
+  return normalizeActivityTemplateRows(data);
 }
 
 export async function createCrmActivityTemplate(input: {
@@ -644,7 +702,11 @@ export async function createCrmActivityTemplate(input: {
     throw new Error(error?.message ?? "Could not create QRM activity template.");
   }
 
-  return toActivityTemplate(data as QrmActivityTemplateRow);
+  const template = normalizeActivityTemplateRows([data])[0];
+  if (!template) {
+    throw new Error("QRM activity template response was malformed.");
+  }
+  return template;
 }
 
 export async function updateCrmActivityTemplate(
@@ -682,7 +744,11 @@ export async function updateCrmActivityTemplate(
     throw new Error(error?.message ?? "Could not update QRM activity template.");
   }
 
-  return toActivityTemplate(data as QrmActivityTemplateRow);
+  const template = normalizeActivityTemplateRows([data])[0];
+  if (!template) {
+    throw new Error("QRM activity template response was malformed.");
+  }
+  return template;
 }
 
 export async function archiveCrmActivityTemplate(templateId: string): Promise<void> {
