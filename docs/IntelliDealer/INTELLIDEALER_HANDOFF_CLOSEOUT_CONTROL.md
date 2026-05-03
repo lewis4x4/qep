@@ -26,6 +26,7 @@ If another document conflicts with this one, treat this document as the current 
 | Raw source file custody | Manifested 2026-05-03 | `SOURCE_FILE_CUSTODY_MANIFEST.md` | The raw files remain untracked, but filename, size, SHA-256, page counts, workbook row counts, and import run binding are now committed and script-verifiable. |
 | Fresh production verification | Passed 2026-05-03 | `FRESH_PRODUCTION_VERIFICATION_2026-05-03.md` | Rerun safety, production reconciliation, production browser smoke, storage cleanup, and active-run checks passed against the current production bundle. |
 | UI completion review | Passed 2026-05-03 | `UI_COMPLETION_REVIEW_2026-05-03.md` | Account 360, Companies search, company/contact editors, admin dashboard, safe export download, browser stage, preflight rejection, discard, and cleanup are verified. |
+| Non-core API type hardening | In progress 2026-05-03 | `NON_CORE_API_TYPE_HARDENING_2026-05-03.md` | First pass hardened ops payment validation and service labor pricing Supabase row shapes with targeted tests and web typecheck. |
 
 ## Production Customer Import Baseline
 
@@ -178,6 +179,8 @@ Gate:
 
 ### Slice 6: Non-Core API Type Hardening
 
+Status: in progress 2026-05-03. First hardening pass complete.
+
 Goal: reduce runtime risk from stale Supabase row assumptions.
 
 Deliverables:
@@ -189,6 +192,13 @@ Deliverables:
 Gate:
 
 - No core customer or Account 360 path depends on unchecked raw row shape assumptions.
+
+Current result:
+
+- Ops payment validation history rows now use `normalizeValidationHistoryRows`.
+- Service labor pricing branch config, company options, and pricing rule rows now use exported normalizers.
+- Targeted tests passed: `9 pass`, `0 fail`.
+- Web typecheck passed.
 
 ### Slice 7: Wave 5 Deferred Integration Register
 

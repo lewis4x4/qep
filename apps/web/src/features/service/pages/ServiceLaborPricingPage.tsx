@@ -5,26 +5,14 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { ServiceSubNav } from "../components/ServiceSubNav";
-import { formatLaborPricingRule } from "../lib/service-labor-pricing-utils";
-import type { ServiceLaborPricingRuleRow } from "../lib/service-labor-pricing-utils";
-
-type BranchConfigRow = {
-  id: string;
-  branch_id: string;
-  default_labor_rate: number;
-};
-
-type RuleRow = ServiceLaborPricingRuleRow & {
-  id: string;
-  effective_start_on: string | null;
-  effective_end_on: string | null;
-  qrm_companies?: { name?: string } | { name?: string }[] | null;
-};
-
-function one<T>(value: T | T[] | null | undefined): T | null {
-  if (value == null) return null;
-  return Array.isArray(value) ? (value[0] ?? null) : value;
-}
+import {
+  formatLaborPricingRule,
+  normalizeServiceLaborBranchConfigRows,
+  normalizeServiceLaborCompanyOptions,
+  normalizeServiceLaborPricingRuleRows,
+  one,
+} from "../lib/service-labor-pricing-utils";
+import type { ServiceLaborPricingRuleWithCompany } from "../lib/service-labor-pricing-utils";
 
 export function ServiceLaborPricingPage() {
   const qc = useQueryClient();
@@ -32,11 +20,11 @@ export function ServiceLaborPricingPage() {
   const [locationCode, setLocationCode] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [customerGroupLabel, setCustomerGroupLabel] = useState("");
-  const [workOrderStatus, setWorkOrderStatus] = useState<RuleRow["work_order_status"]>("customer");
+  const [workOrderStatus, setWorkOrderStatus] = useState<ServiceLaborPricingRuleWithCompany["work_order_status"]>("customer");
   const [laborTypeCode, setLaborTypeCode] = useState("");
   const [premiumCode, setPremiumCode] = useState("");
   const [defaultPremiumCode, setDefaultPremiumCode] = useState("");
-  const [pricingCode, setPricingCode] = useState<RuleRow["pricing_code"]>("fixed_price");
+  const [pricingCode, setPricingCode] = useState<ServiceLaborPricingRuleWithCompany["pricing_code"]>("fixed_price");
   const [pricingValue, setPricingValue] = useState("150");
   const [comment, setComment] = useState("");
 
@@ -45,14 +33,14 @@ export function ServiceLaborPricingPage() {
     queryFn: async () => {
       const { data, error } = await (supabase as unknown as {
         from: (table: string) => {
-          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: BranchConfigRow[] | null; error: unknown }> };
+          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: unknown[] | null; error: unknown }> };
         };
       })
         .from("service_branch_config")
         .select("id, branch_id, default_labor_rate")
         .order("branch_id");
       if (error) throw error;
-      return data ?? [];
+      return normalizeServiceLaborBranchConfigRows(data);
     },
   });
 
@@ -61,14 +49,14 @@ export function ServiceLaborPricingPage() {
     queryFn: async () => {
       const { data, error } = await (supabase as unknown as {
         from: (table: string) => {
-          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: Array<{ id: string; name: string }> | null; error: unknown }> };
+          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: unknown[] | null; error: unknown }> };
         };
       })
         .from("qrm_companies")
         .select("id, name")
         .order("name");
       if (error) throw error;
-      return data ?? [];
+      return normalizeServiceLaborCompanyOptions(data);
     },
   });
 
@@ -77,14 +65,14 @@ export function ServiceLaborPricingPage() {
     queryFn: async () => {
       const { data, error } = await (supabase as unknown as {
         from: (table: string) => {
-          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: RuleRow[] | null; error: unknown }> };
+          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: unknown[] | null; error: unknown }> };
         };
       })
         .from("service_labor_pricing_rules")
         .select("id, location_code, customer_id, customer_group_label, work_order_status, labor_type_code, premium_code, default_premium_code, comment, pricing_code, pricing_value, effective_start_on, effective_end_on, active, qrm_companies(name)")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return normalizeServiceLaborPricingRuleRows(data);
     },
   });
 
@@ -241,7 +229,7 @@ export function ServiceLaborPricingPage() {
               />
               <select
                 value={workOrderStatus}
-                onChange={(e) => setWorkOrderStatus(e.target.value as RuleRow["work_order_status"])}
+                onChange={(e) => setWorkOrderStatus(e.target.value as ServiceLaborPricingRuleWithCompany["work_order_status"])}
                 className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
               >
                 <option value="customer">Customer</option>
@@ -273,7 +261,7 @@ export function ServiceLaborPricingPage() {
               />
               <select
                 value={pricingCode}
-                onChange={(e) => setPricingCode(e.target.value as RuleRow["pricing_code"])}
+                onChange={(e) => setPricingCode(e.target.value as ServiceLaborPricingRuleWithCompany["pricing_code"])}
                 className="rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
               >
                 <option value="fixed_price">Fixed Price</option>

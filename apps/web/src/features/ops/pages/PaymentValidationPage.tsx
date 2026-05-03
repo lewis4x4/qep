@@ -19,21 +19,7 @@ import {
   type TransactionType,
   type ValidationResult,
 } from "../lib/payment-validation";
-
-interface ValidationHistoryRow {
-  id: string;
-  amount: number;
-  attempt_outcome: string | null;
-  created_at: string;
-  daily_check_total: number | null;
-  invoice_reference: string | null;
-  is_delivery_day: boolean | null;
-  override_reason: string | null;
-  passed: boolean;
-  payment_type: string;
-  rule_applied: string | null;
-  transaction_type: string | null;
-}
+import { normalizeValidationHistoryRows } from "../lib/payment-validation-history";
 
 function formatCurrency(value: number | null | undefined): string {
   return new Intl.NumberFormat("en-US", {
@@ -71,7 +57,7 @@ export function PaymentValidationPage() {
         .order("created_at", { ascending: false })
         .limit(8);
       if (error) throw error;
-      return (data ?? []) as ValidationHistoryRow[];
+      return normalizeValidationHistoryRows(data);
     },
     staleTime: 30_000,
   });
