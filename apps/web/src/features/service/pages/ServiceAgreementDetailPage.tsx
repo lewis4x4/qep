@@ -6,53 +6,14 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { ServiceSubNav } from "../components/ServiceSubNav";
-import { deriveServiceAgreementStatus, formatAgreementWindow, type ServiceAgreementStatus } from "../lib/service-agreement-utils";
-
-type AgreementHeader = {
-  id: string;
-  contract_number: string;
-  status: ServiceAgreementStatus;
-  customer_id: string | null;
-  equipment_id: string | null;
-  location_code: string | null;
-  program_name: string;
-  category: string | null;
-  coverage_summary: string | null;
-  starts_on: string | null;
-  expires_on: string | null;
-  renewal_date: string | null;
-  billing_cycle: string | null;
-  term_months: number | null;
-  included_pm_services: number | null;
-  estimated_contract_value: number | null;
-  notes: string | null;
-  qrm_companies?: { name?: string } | { name?: string }[] | null;
-  qrm_equipment?: {
-    stock_number?: string | null;
-    serial_number?: string | null;
-    make?: string | null;
-    model?: string | null;
-    name?: string | null;
-  } | {
-    stock_number?: string | null;
-    serial_number?: string | null;
-    make?: string | null;
-    model?: string | null;
-    name?: string | null;
-  }[] | null;
-};
-
-type MaintenanceRow = {
-  id: string;
-  label: string | null;
-  scheduled_date: string | null;
-  status: string;
-};
-
-function one<T>(value: T | T[] | null | undefined): T | null {
-  if (value == null) return null;
-  return Array.isArray(value) ? (value[0] ?? null) : value;
-}
+import {
+  deriveServiceAgreementStatus,
+  formatAgreementWindow,
+  normalizeServiceAgreementMaintenanceRows,
+  normalizeServiceAgreementRow,
+  one,
+  type ServiceAgreementStatus,
+} from "../lib/service-agreement-utils";
 
 const STATUS_STYLES: Record<ServiceAgreementStatus, string> = {
   draft: "bg-slate-500/10 text-slate-600 dark:text-slate-300",
@@ -71,7 +32,7 @@ export function ServiceAgreementDetailPage() {
     queryFn: async () => {
       const { data, error } = await (supabase as unknown as {
         from: (table: string) => {
-          select: (columns: string) => { eq: (column: string, value: string) => { maybeSingle: () => Promise<{ data: AgreementHeader | null; error: unknown }> } };
+          select: (columns: string) => { eq: (column: string, value: string) => { maybeSingle: () => Promise<{ data: unknown | null; error: unknown }> } };
         };
       })
         .from("service_agreements")
@@ -79,7 +40,7 @@ export function ServiceAgreementDetailPage() {
         .eq("id", agreementId)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      return normalizeServiceAgreementRow(data);
     },
   });
 
@@ -89,7 +50,7 @@ export function ServiceAgreementDetailPage() {
     queryFn: async () => {
       const { data, error } = await (supabase as unknown as {
         from: (table: string) => {
-          select: (columns: string) => { eq: (column: string, value: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: MaintenanceRow[] | null; error: unknown }> } };
+          select: (columns: string) => { eq: (column: string, value: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: unknown[] | null; error: unknown }> } };
         };
       })
         .from("maintenance_schedules")
@@ -97,7 +58,7 @@ export function ServiceAgreementDetailPage() {
         .eq("equipment_id", agreementQuery.data!.equipment_id!)
         .order("scheduled_date", { ascending: true });
       if (error) throw error;
-      return data ?? [];
+      return normalizeServiceAgreementMaintenanceRows(data);
     },
   });
 

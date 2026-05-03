@@ -11,42 +11,12 @@ import {
   deriveServiceAgreementStatus,
   formatAgreementWindow,
   matchesAgreementSearch,
+  normalizeServiceAgreementCompanyOptions,
+  normalizeServiceAgreementEquipmentOptions,
+  normalizeServiceAgreementRows,
+  one,
   type ServiceAgreementStatus,
 } from "../lib/service-agreement-utils";
-
-type AgreementRow = {
-  id: string;
-  contract_number: string;
-  status: ServiceAgreementStatus;
-  customer_id: string | null;
-  equipment_id: string | null;
-  location_code: string | null;
-  program_name: string;
-  category: string | null;
-  coverage_summary: string | null;
-  starts_on: string | null;
-  expires_on: string | null;
-  renewal_date: string | null;
-  billing_cycle: string | null;
-  term_months: number | null;
-  included_pm_services: number | null;
-  estimated_contract_value: number | null;
-  notes: string | null;
-  qrm_companies?: { name?: string } | { name?: string }[] | null;
-  qrm_equipment?: {
-    stock_number?: string | null;
-    serial_number?: string | null;
-    make?: string | null;
-    model?: string | null;
-    name?: string | null;
-  } | {
-    stock_number?: string | null;
-    serial_number?: string | null;
-    make?: string | null;
-    model?: string | null;
-    name?: string | null;
-  }[] | null;
-};
 
 const STATUS_STYLES: Record<ServiceAgreementStatus, string> = {
   draft: "bg-slate-500/10 text-slate-600 dark:text-slate-300",
@@ -54,11 +24,6 @@ const STATUS_STYLES: Record<ServiceAgreementStatus, string> = {
   expired: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
   cancelled: "bg-red-500/10 text-red-700 dark:text-red-300",
 };
-
-function one<T>(value: T | T[] | null | undefined): T | null {
-  if (value == null) return null;
-  return Array.isArray(value) ? (value[0] ?? null) : value;
-}
 
 export function ServiceAgreementsPage() {
   const { profile } = useAuth();
@@ -76,14 +41,14 @@ export function ServiceAgreementsPage() {
     queryFn: async () => {
       const { data, error } = await (supabase as unknown as {
         from: (table: string) => {
-          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: Array<{ id: string; name: string }> | null; error: unknown }> };
+          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: unknown[] | null; error: unknown }> };
         };
       })
         .from("qrm_companies")
         .select("id, name")
         .order("name");
       if (error) throw error;
-      return data ?? [];
+      return normalizeServiceAgreementCompanyOptions(data);
     },
   });
 
@@ -92,14 +57,14 @@ export function ServiceAgreementsPage() {
     queryFn: async () => {
       const { data, error } = await (supabase as unknown as {
         from: (table: string) => {
-          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: Array<{ id: string; name: string | null; stock_number: string | null; serial_number: string | null; make: string | null; model: string | null }> | null; error: unknown }> };
+          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: unknown[] | null; error: unknown }> };
         };
       })
         .from("qrm_equipment")
         .select("id, name, stock_number, serial_number, make, model")
         .order("updated_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return normalizeServiceAgreementEquipmentOptions(data);
     },
   });
 
@@ -111,14 +76,14 @@ export function ServiceAgreementsPage() {
     queryFn: async () => {
       const { data, error } = await (supabase as unknown as {
         from: (table: string) => {
-          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: AgreementRow[] | null; error: unknown }> };
+          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: unknown[] | null; error: unknown }> };
         };
       })
         .from("service_agreements")
         .select("id, contract_number, status, customer_id, equipment_id, location_code, program_name, category, coverage_summary, starts_on, expires_on, renewal_date, billing_cycle, term_months, included_pm_services, estimated_contract_value, notes, qrm_companies(name), qrm_equipment(stock_number, serial_number, make, model, name)")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return normalizeServiceAgreementRows(data);
     },
   });
 
