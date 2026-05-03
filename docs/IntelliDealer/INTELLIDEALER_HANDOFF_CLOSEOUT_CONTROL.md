@@ -229,6 +229,7 @@ Current result:
 - Quote-builder coach margin baselines, active brand/program lookups, and dismissed-rule reads now use exported normalizers before rule context assembly.
 - Quote-builder point-shoot trade equipment vision, book-value, and trade-valuation apply payloads now use exported normalizers before UI or valuation-row updates.
 - Quote-builder scenario SSE events, scenario error payloads, parse-request responses, and abort errors now use exported normalizers before stream yielding or form prepopulation.
+- QRM follow-up sequence steps, sequences, enrollments, sequence-name lookups, and saved-sequence RPC payloads now use exported normalizers before campaign automation and sequence editors consume them.
 - Floor customer search, serial-first lookup, and customer-health profile rows now use exported normalizers.
 - Floor morning brief, customer parts intel, pending invoice, and supplier health rows now use exported normalizers.
 - Owner dashboard summary, ownership health, event feed, branch ranking, predictive intervention, ask-anything, morning brief, and team signal payloads now use exported normalizers.
@@ -265,7 +266,7 @@ Current result:
 - Admin sheet-diff pending/prior sheet rows, model extracted JSON, and in-flight quote rows now use exported normalizers before diff and quote-impact math consume them.
 - Admin AI request log rows and originating quote joins now use exported normalizers before admin stats and time-to-quote calculations consume them.
 - Admin coach performance action, package status, and rep profile rows now use exported normalizers before performance rollups and rep dismissal leaderboards consume them.
-- Targeted tests passed: `590 pass`, `0 fail`.
+- Targeted tests passed: `594 pass`, `0 fail`.
 - Web typecheck passed.
 - Service feature cast scan is clear for the Slice 6 inventory pattern.
 - Fleet feature cast scan is clear for the Slice 6 inventory pattern.

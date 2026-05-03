@@ -65,6 +65,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Quote-builder coach API | Margin baseline samples, active brand/program lookups, and dismissed-rule reads trusted raw Supabase rows and direct row casts. | Added exported coach API normalizers with numeric-string margin coercion, required brand/program identity checks, malformed-row filtering, brand-name fallback, dismissed-rule cleanup, and median coverage. |
 | Quote-builder point-shoot trade API | Equipment vision, book-value range, and trade valuation apply edge responses were trusted through direct response casts. | Added exported point-shoot trade normalizers with condition/confidence validation, year/hour parsing, source-kind fallback, malformed source filtering, safe range defaults, trade valuation ID rejection, and preliminary-value fallback handling. |
 | Quote-builder scenario orchestrator | Scenario SSE events, scenario error bodies, parse-request responses, and abort errors were trusted through JSON/error casts. | Added exported scenario normalizers with event-shape validation, scenario numeric coercion, candidate filtering, customer-type fallback, parse-response cleanup, malformed SSE skipping, safe edge error extraction, and unknown-safe abort detection. |
+| QRM follow-up sequence API | Follow-up steps, sequence rows, sequence enrollment rows, sequence-name lookups, and saved-sequence RPC payloads were cast directly before campaign automation and sequence editors consumed them. | Added exported follow-up step, sequence, enrollment, sequence-name, and RPC-payload normalizers with required identity checks, enum guards, numeric coercion, metadata object guards, malformed-row filtering, and no-cast sequence/enrollment mapping. |
 | Equipment Asset 360 tabs | Asset detail parts, telematics, document, lifecycle-summary, and warranty metadata payloads were trusted through page/component casts. | Added exported equipment row normalizers with required field checks, numeric-string coercion, date validation, malformed-row filtering, safe metadata probing, and typed React Query consumption. |
 | Parts hooks and forecast page | Demand forecast, order events, analytics, vendor trends, part activity, cross references, customer parts intel, transfer recommendations, and the forecast page used direct row/payload casts. | Added exported parts row normalizers with required field checks, numeric-string coercion, joined profile/order normalization, nested analytics/intel collection filtering, fallback cross-reference direction handling, and malformed-row rejection. |
 | Parts edge responses | Parts order manager, voice parts order, and photo identification components trusted edge function responses through direct casts. | Added exported parts edge-response normalizers with fail-fast validation for required order-manager mutation payloads and safe defaults/filtering for voice/photo assistant payloads. |
@@ -208,6 +209,7 @@ Results:
 - Quote builder page normalizer tests: `4 pass`, `0 fail`.
 - Quote Deal Copilot normalizer tests: `6 pass`, `0 fail`.
 - Quote review workflow normalizer tests: `3 pass`, `0 fail`.
+- QRM follow-up API normalizer tests: `4 pass`, `0 fail`.
 - Equipment row/lifecycle tests: `9 pass`, `0 fail`.
 - Admin Base Options API normalizer tests: `4 pass`, `0 fail`.
 - Admin sheet watchdog API tests: `23 pass`, `0 fail`.
@@ -219,7 +221,7 @@ Results:
 - Admin sheet-diff API tests: `26 pass`, `0 fail`.
 - Admin AI request log API tests: `21 pass`, `0 fail`.
 - Admin coach performance API tests: `14 pass`, `0 fail`.
-- Combined targeted test run: `590 pass`, `0 fail`.
+- Combined targeted test run: `594 pass`, `0 fail`.
 - Web typecheck: PASS.
 - Service feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 - Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.

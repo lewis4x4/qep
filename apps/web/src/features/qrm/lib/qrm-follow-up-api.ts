@@ -4,19 +4,161 @@ import type {
   QrmFollowUpSequence,
   QrmFollowUpSequenceEditorInput,
   QrmFollowUpStep,
+  QrmFollowUpStepType,
   QrmSequenceEnrollment,
 } from "./types";
 
 type SequenceRow = QrmDatabase["public"]["Tables"]["follow_up_sequences"]["Row"];
 type StepRow = QrmDatabase["public"]["Tables"]["follow_up_steps"]["Row"];
-type EnrollmentRow = QrmDatabase["public"]["Tables"]["sequence_enrollments"]["Row"];
+type SequenceNameRow = Pick<SequenceRow, "id" | "name">;
+type EnrollmentSourceRow = {
+  id: string;
+  sequence_id: string;
+  deal_id: string;
+  deal_name: string | null;
+  contact_id: string | null;
+  contact_name: string | null;
+  owner_id: string | null;
+  hub_id: string;
+  enrolled_at: string;
+  current_step: number;
+  next_step_due_at: string | null;
+  status: QrmEnrollmentStatus;
+  completed_at: string | null;
+  cancelled_at: string | null;
+  metadata: Record<string, unknown>;
+  updated_at: string;
+};
 
 export const ALLOWED_SEQUENCE_TRIGGER_STAGES = ["quote_sent"] as const;
+const ALLOWED_SEQUENCE_TRIGGER_STAGE_SET: ReadonlySet<string> = new Set(ALLOWED_SEQUENCE_TRIGGER_STAGES);
+const FOLLOW_UP_STEP_TYPES: readonly QrmFollowUpStepType[] = ["task", "email", "call_log", "stalled_alert"];
+const FOLLOW_UP_STEP_TYPE_SET: ReadonlySet<string> = new Set(FOLLOW_UP_STEP_TYPES);
+const ENROLLMENT_STATUSES: readonly QrmEnrollmentStatus[] = ["active", "completed", "paused", "cancelled"];
+const ENROLLMENT_STATUS_SET: ReadonlySet<string> = new Set(ENROLLMENT_STATUSES);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
 
 function normalizeJsonRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  if (!isRecord(value)) return {};
+  return { ...value };
+}
+
+function requiredString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function requiredNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function isStepType(value: unknown): value is QrmFollowUpStepType {
+  return typeof value === "string" && FOLLOW_UP_STEP_TYPE_SET.has(value);
+}
+
+function isEnrollmentStatus(value: unknown): value is QrmEnrollmentStatus {
+  return typeof value === "string" && ENROLLMENT_STATUS_SET.has(value);
+}
+
+export function normalizeFollowUpStepRows(value: unknown): StepRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const sequenceId = requiredString(row.sequence_id);
+    const stepNumber = requiredNumber(row.step_number);
+    const dayOffset = requiredNumber(row.day_offset);
+    const createdAt = requiredString(row.created_at);
+    if (!id || !sequenceId || stepNumber == null || dayOffset == null || !isStepType(row.step_type) || !createdAt) return [];
+    return [{
+      id,
+      sequence_id: sequenceId,
+      step_number: stepNumber,
+      day_offset: dayOffset,
+      step_type: row.step_type,
+      subject: nullableString(row.subject),
+      body_template: nullableString(row.body_template),
+      task_priority: nullableString(row.task_priority),
+      created_at: createdAt,
+    }];
+  });
+}
+
+export function normalizeFollowUpSequenceRows(value: unknown): SequenceRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const name = requiredString(row.name);
+    const triggerStage = requiredString(row.trigger_stage);
+    const createdAt = requiredString(row.created_at);
+    const updatedAt = requiredString(row.updated_at);
+    if (!id || !name || !triggerStage || !createdAt || !updatedAt) return [];
+    return [{
+      id,
+      name,
+      description: nullableString(row.description),
+      trigger_stage: triggerStage,
+      is_active: row.is_active === true,
+      created_by: nullableString(row.created_by),
+      created_at: createdAt,
+      updated_at: updatedAt,
+    }];
+  });
+}
+
+export function normalizeSequenceNameRows(value: unknown): SequenceNameRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const name = requiredString(row.name);
+    return id && name ? [{ id, name }] : [];
+  });
+}
+
+export function normalizeSequenceEnrollmentRows(value: unknown): EnrollmentSourceRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const sequenceId = requiredString(row.sequence_id);
+    const dealId = requiredString(row.deal_id);
+    const hubId = requiredString(row.hub_id);
+    const enrolledAt = requiredString(row.enrolled_at);
+    const currentStep = requiredNumber(row.current_step);
+    const updatedAt = requiredString(row.updated_at);
+    if (!id || !sequenceId || !dealId || !hubId || !enrolledAt || currentStep == null || !isEnrollmentStatus(row.status) || !updatedAt) return [];
+    return [{
+      id,
+      sequence_id: sequenceId,
+      deal_id: dealId,
+      deal_name: nullableString(row.deal_name),
+      contact_id: nullableString(row.contact_id),
+      contact_name: nullableString(row.contact_name),
+      owner_id: nullableString(row.owner_id),
+      hub_id: hubId,
+      enrolled_at: enrolledAt,
+      current_step: currentStep,
+      next_step_due_at: nullableString(row.next_step_due_at),
+      status: row.status,
+      completed_at: nullableString(row.completed_at),
+      cancelled_at: nullableString(row.cancelled_at),
+      metadata: normalizeJsonRecord(row.metadata),
+      updated_at: updatedAt,
+    }];
+  });
 }
 
 function toStep(row: StepRow): QrmFollowUpStep {
@@ -50,7 +192,7 @@ async function loadSequenceSteps(sequenceIds: string[]): Promise<Map<string, Qrm
   }
 
   const stepMap = new Map<string, QrmFollowUpStep[]>();
-  for (const row of (steps ?? []) as StepRow[]) {
+  for (const row of normalizeFollowUpStepRows(steps)) {
     const mapped = toStep(row);
     const current = stepMap.get(mapped.sequenceId) ?? [];
     current.push(mapped);
@@ -70,55 +212,66 @@ async function getCrmFollowUpSequence(sequenceId: string): Promise<QrmFollowUpSe
     throw new Error(sequenceError?.message ?? "Could not reload follow-up sequence.");
   }
 
+  const [sequenceRow] = normalizeFollowUpSequenceRows([sequence]);
+  if (!sequenceRow) {
+    throw new Error("Follow-up sequence response was invalid.");
+  }
+
   const stepMap = await loadSequenceSteps([sequenceId]);
   return {
-    id: sequence.id,
-    name: sequence.name,
-    description: sequence.description,
-    triggerStage: sequence.trigger_stage,
-    isActive: sequence.is_active,
-    createdBy: sequence.created_by,
-    createdAt: sequence.created_at,
-    updatedAt: sequence.updated_at,
-    steps: stepMap.get(sequence.id) ?? [],
+    id: sequenceRow.id,
+    name: sequenceRow.name,
+    description: sequenceRow.description,
+    triggerStage: sequenceRow.trigger_stage,
+    isActive: sequenceRow.is_active,
+    createdBy: sequenceRow.created_by,
+    createdAt: sequenceRow.created_at,
+    updatedAt: sequenceRow.updated_at,
+    steps: stepMap.get(sequenceRow.id) ?? [],
   };
 }
 
-function toSequenceFromRpc(payload: unknown): QrmFollowUpSequence {
-  const record = payload && typeof payload === "object" && !Array.isArray(payload)
-    ? (payload as Record<string, unknown>)
-    : null;
+export function normalizeFollowUpSequenceRpcPayload(payload: unknown): QrmFollowUpSequence | null {
+  if (!isRecord(payload)) return null;
+  const id = requiredString(payload.id);
+  const name = requiredString(payload.name);
+  const triggerStage = requiredString(payload.triggerStage);
+  const createdAt = requiredString(payload.createdAt);
+  const updatedAt = requiredString(payload.updatedAt);
+  if (!id || !name || !triggerStage || !createdAt || !updatedAt) return null;
 
-  if (!record || typeof record.id !== "string" || typeof record.name !== "string") {
-    throw new Error("Saved sequence response was invalid.");
-  }
-
-  const steps = Array.isArray(record.steps)
-    ? record.steps.map((step) => {
-        const stepRecord = step as Record<string, unknown>;
-        return {
-          id: String(stepRecord.id),
-          sequenceId: String(stepRecord.sequenceId),
-          stepNumber: Number(stepRecord.stepNumber),
-          dayOffset: Number(stepRecord.dayOffset),
-          stepType: stepRecord.stepType as QrmFollowUpStep["stepType"],
-          subject: typeof stepRecord.subject === "string" ? stepRecord.subject : null,
-          bodyTemplate: typeof stepRecord.bodyTemplate === "string" ? stepRecord.bodyTemplate : null,
-          taskPriority: typeof stepRecord.taskPriority === "string" ? stepRecord.taskPriority : null,
-          createdAt: String(stepRecord.createdAt),
-        };
+  const steps = Array.isArray(payload.steps)
+    ? payload.steps.flatMap((step): QrmFollowUpStep[] => {
+        if (!isRecord(step)) return [];
+        const stepId = requiredString(step.id);
+        const sequenceId = requiredString(step.sequenceId);
+        const stepNumber = requiredNumber(step.stepNumber);
+        const dayOffset = requiredNumber(step.dayOffset);
+        const stepCreatedAt = requiredString(step.createdAt);
+        if (!stepId || !sequenceId || stepNumber == null || dayOffset == null || !isStepType(step.stepType) || !stepCreatedAt) return [];
+        return [{
+          id: stepId,
+          sequenceId,
+          stepNumber,
+          dayOffset,
+          stepType: step.stepType,
+          subject: nullableString(step.subject),
+          bodyTemplate: nullableString(step.bodyTemplate),
+          taskPriority: nullableString(step.taskPriority),
+          createdAt: stepCreatedAt,
+        }];
       })
     : [];
 
   return {
-    id: record.id,
-    name: record.name,
-    description: typeof record.description === "string" ? record.description : null,
-    triggerStage: String(record.triggerStage),
-    isActive: Boolean(record.isActive),
-    createdBy: typeof record.createdBy === "string" ? record.createdBy : null,
-    createdAt: String(record.createdAt),
-    updatedAt: String(record.updatedAt),
+    id,
+    name,
+    description: nullableString(payload.description),
+    triggerStage,
+    isActive: payload.isActive === true,
+    createdBy: nullableString(payload.createdBy),
+    createdAt,
+    updatedAt,
     steps,
   };
 }
@@ -133,7 +286,7 @@ export async function listCrmFollowUpSequences(): Promise<QrmFollowUpSequence[]>
     throw new Error(sequenceError.message);
   }
 
-  const sequenceRows = (sequences ?? []) as SequenceRow[];
+  const sequenceRows = normalizeFollowUpSequenceRows(sequences);
   if (sequenceRows.length === 0) {
     return [];
   }
@@ -158,7 +311,7 @@ export async function saveCrmFollowUpSequence(
   userId: string,
 ): Promise<QrmFollowUpSequence> {
   const normalizedTriggerStage = input.triggerStage.trim();
-  if (!ALLOWED_SEQUENCE_TRIGGER_STAGES.includes(normalizedTriggerStage as (typeof ALLOWED_SEQUENCE_TRIGGER_STAGES)[number])) {
+  if (!ALLOWED_SEQUENCE_TRIGGER_STAGE_SET.has(normalizedTriggerStage)) {
     throw new Error("Choose a supported trigger stage.");
   }
 
@@ -196,7 +349,11 @@ export async function saveCrmFollowUpSequence(
     throw new Error(error.message);
   }
 
-  return toSequenceFromRpc(data);
+  const sequence = normalizeFollowUpSequenceRpcPayload(data);
+  if (!sequence) {
+    throw new Error("Saved sequence response was invalid.");
+  }
+  return sequence;
 }
 
 export async function listCrmSequenceEnrollments(): Promise<QrmSequenceEnrollment[]> {
@@ -210,7 +367,7 @@ export async function listCrmSequenceEnrollments(): Promise<QrmSequenceEnrollmen
     throw new Error(enrollmentError.message);
   }
 
-  const enrollmentRows = (enrollments ?? []) as EnrollmentRow[];
+  const enrollmentRows = normalizeSequenceEnrollmentRows(enrollments);
   if (enrollmentRows.length === 0) {
     return [];
   }
@@ -225,7 +382,7 @@ export async function listCrmSequenceEnrollments(): Promise<QrmSequenceEnrollmen
     throw new Error(sequenceError.message);
   }
 
-  const sequenceNameById = new Map((sequences ?? []).map((row) => [row.id, row.name]));
+  const sequenceNameById = new Map(normalizeSequenceNameRows(sequences).map((row) => [row.id, row.name]));
 
   return enrollmentRows.map((row) => ({
     id: row.id,
