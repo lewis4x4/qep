@@ -23,7 +23,7 @@ If another document conflicts with this one, treat this document as the current 
 | Latest local migration range | Present locally through `521_floor_customer_legacy_search_layouts.sql` | `supabase/migrations/` | Migrations after `519_*` must be treated by their own feature gates; they are not required to prove the core customer import. |
 | Wave 5 external integrations | Deferred, not complete | `_migration_order.md` Wave 5 status | AvaTax live wiring, VESign, UPS WorldShip, OEM imports, and Tethr are intentionally not marked complete. |
 | Audit manifest / YAML inventory | Regenerated 2026-05-03 | `docs/intellidealer-gap-audit/manifest.yaml`, `_blockers.csv`, phase YAMLs | The inventory now reflects the current `Database` type under a conservative table/column-exists rule. Remaining blocker count is `91` must-fix rows. |
-| Raw source file custody | Not closed | Untracked files under `docs/IntelliDealer/` | The files are available locally, but there is no committed manifest proving filename, size, SHA-256, row counts, and import run binding. |
+| Raw source file custody | Manifested 2026-05-03 | `SOURCE_FILE_CUSTODY_MANIFEST.md` | The raw files remain untracked, but filename, size, SHA-256, page counts, workbook row counts, and import run binding are now committed and script-verifiable. |
 
 ## Production Customer Import Baseline
 
@@ -73,7 +73,7 @@ Baseline counts:
 
 These are not customer-import blockers, but they must not be represented as done:
 
-- Raw IntelliDealer source files are untracked and lack a committed custody manifest.
+- Raw IntelliDealer source files remain untracked by policy until a privacy/retention decision approves committing or moving them to controlled private storage.
 - Wave 5 integrations are deferred until credentials and dealer-specific scope are available.
 - Remaining non-core raw Supabase row casts still need slice-by-slice normalization if the goal is broader API hardening.
 - The old `test-results/agent-gates/*` evidence referenced by `_migration_order.md` is not present in the current working tree; either recover those artifacts or replace them with fresh gate outputs.
@@ -123,17 +123,20 @@ Remaining must-fix blockers by phase:
 
 ### Slice 3: Source File Custody
 
+Status: complete 2026-05-03.
+
 Goal: make the customer import reproducible without exposing sensitive data unnecessarily.
 
 Deliverables:
 
 - Create a committed source manifest with filename, size, SHA-256, expected row counts, and import run ID.
-- Decide whether raw files remain local, move to private storage, or are committed.
+- Add a repeatable custody verifier: `bun run intellidealer:source:custody`.
+- Keep raw files untracked unless a separate privacy/retention decision approves a different storage path.
 - Bind the manifest to import run `df74305e-d37a-4e4b-be5e-457633b2cd1d`.
 
 Gate:
 
-- A reviewer can prove which source files produced the production import.
+- PASS. A reviewer can prove which source files produced the production import, while the raw files remain outside Git.
 
 ### Slice 4: Fresh Production Verification
 

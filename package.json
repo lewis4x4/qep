@@ -55,6 +55,7 @@
     "intellidealer:customer:commit-rehearsal": "bun ./scripts/verify/intellidealer-canonical-commit-rehearsal.mjs",
     "intellidealer:production:smoke": "bun ./scripts/verify/intellidealer-production-smoke.mjs",
     "intellidealer:gap-audit:regen": "bun ./scripts/regenerate-intellidealer-gap-audit.mjs",
+    "intellidealer:source:custody": "bun ./scripts/verify-intellidealer-source-custody.mjs",
     "qrm:sequences:production:smoke": "bun ./scripts/verify/qrm-follow-up-sequence-production-smoke.mjs"
   },
   "devDependencies": {
