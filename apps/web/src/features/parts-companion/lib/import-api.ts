@@ -5,6 +5,16 @@
 // ============================================================
 
 import { supabase } from "../../../lib/supabase";
+import {
+  normalizeCommitImportResult,
+  normalizeDashboardStats,
+  normalizeImportConflicts,
+  normalizeImportPreviewResult,
+  normalizeImportRun,
+  normalizeResolvedConflictCount,
+  type CommitImportResult,
+  type ImportPreviewResult,
+} from "./import-api-normalizers";
 
 // ── types ──────────────────────────────────────────────────
 
@@ -118,7 +128,7 @@ async function getAccessToken(): Promise<string> {
   return session.access_token;
 }
 
-async function invokeBulkImport<T>(body: Record<string, unknown>): Promise<T> {
+async function invokeBulkImport(body: Record<string, unknown>): Promise<unknown> {
   const token = await getAccessToken();
   const { data, error } = await supabase.functions.invoke("parts-bulk-import", {
     body,
@@ -131,7 +141,7 @@ async function invokeBulkImport<T>(body: Record<string, unknown>): Promise<T> {
         : error.message;
     throw new Error(msg || "parts-bulk-import failed");
   }
-  return data as T;
+  return data;
 }
 
 // ── upload to storage ──────────────────────────────────────
@@ -178,25 +188,16 @@ export async function startImportPreview(input: {
   vendor_code?: string | null;
   branch_scope?: string | null;
   effective_date?: string | null;
-}): Promise<{
-  run_id: string;
-  status: ImportStatus;
-  file_type: ImportFileType;
-  file_size_bytes: number;
-  file_hash: string;
-  stats: PreviewStats;
-  duplicate_of: ImportRun | null;
-}> {
-  return invokeBulkImport({ action: "preview", ...input });
+}): Promise<ImportPreviewResult> {
+  const result = normalizeImportPreviewResult(await invokeBulkImport({ action: "preview", ...input }));
+  if (!result) throw new Error("parts-bulk-import preview: malformed response");
+  return result;
 }
 
-export async function commitImportRun(runId: string): Promise<{
-  run_id: string;
-  status: ImportStatus;
-  rows_inserted: number;
-  rows_updated: number;
-}> {
-  return invokeBulkImport({ action: "commit", run_id: runId });
+export async function commitImportRun(runId: string): Promise<CommitImportResult> {
+  const result = normalizeCommitImportResult(await invokeBulkImport({ action: "commit", run_id: runId }));
+  if (!result) throw new Error("parts-bulk-import commit: malformed response");
+  return result;
 }
 
 export async function cancelImportRun(runId: string): Promise<void> {
@@ -210,7 +211,7 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
     p_workspace: null,
   });
   if (error) throw error;
-  return data as DashboardStats;
+  return normalizeDashboardStats(data);
 }
 
 export async function fetchImportRun(runId: string): Promise<ImportRun> {
@@ -220,7 +221,9 @@ export async function fetchImportRun(runId: string): Promise<ImportRun> {
     .eq("id", runId)
     .single();
   if (error || !data) throw error ?? new Error("run not found");
-  return data as ImportRun;
+  const run = normalizeImportRun(data);
+  if (!run) throw new Error("parts_import_runs: malformed run response");
+  return run;
 }
 
 export async function fetchRunConflicts(runId: string): Promise<ImportConflict[]> {
@@ -231,7 +234,7 @@ export async function fetchRunConflicts(runId: string): Promise<ImportConflict[]
     .order("priority", { ascending: true })
     .order("field_name", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as ImportConflict[];
+  return normalizeImportConflicts(data);
 }
 
 export async function resolveConflict(input: {
@@ -268,5 +271,5 @@ export async function resolveBulkConflicts(input: {
     p_notes: input.notes ?? null,
   });
   if (error) throw error;
-  return data as number;
+  return normalizeResolvedConflictCount(data);
 }
