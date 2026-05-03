@@ -7,41 +7,12 @@ import { Sparkles, RefreshCw, Check, ChevronDown, ChevronUp, TrendingUp } from "
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid,
 } from "recharts";
+import { normalizeDgeScenarioResponse, type Scenario, type VariableBreakdown } from "../lib/dge-api-normalizers";
 
 interface DgeIntelligencePanelProps {
   dealId: string;
   dealAmount?: number;
   userRole: string;
-}
-
-interface VariableBreakdown {
-  id: string;
-  variable_name: string;
-  variable_value: number;
-  variable_unit: string;
-  weight: number;
-  impact_direction: "positive" | "negative" | "neutral";
-  description: string;
-  display_order: number;
-}
-
-interface Scenario {
-  type: string;
-  label: string;
-  equipment_price?: number;
-  trade_allowance?: number;
-  total_deal_value?: number;
-  total_margin?: number;
-  margin_pct?: number;
-  close_probability?: number;
-  expected_value?: number;
-  reasoning?: string;
-  dge_variable_breakdown?: VariableBreakdown[];
-}
-
-interface ScenarioResponse {
-  scenarios: (Scenario & { id: string; scenario_type: string })[];
-  selected_scenario: string | null;
 }
 
 function formatCurrency(v: number | undefined): string {
@@ -171,7 +142,7 @@ export function DgeIntelligencePanel({ dealId, dealAmount, userRole }: DgeIntell
         },
       );
       if (!res.ok) throw new Error("Failed to load DGE scenarios");
-      return res.json() as Promise<ScenarioResponse>;
+      return normalizeDgeScenarioResponse(await res.json());
     },
     staleTime: 60_000,
     refetchOnWindowFocus: false,

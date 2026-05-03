@@ -4,24 +4,14 @@ import type {
   MarketValuationRequest,
   MarketValuationResult,
 } from "../types";
+import {
+  getDgeEdgeErrorMessage,
+  normalizeCustomerProfileResponse,
+  normalizeMarketValuationResult,
+} from "./dge-api-normalizers";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-
-interface EdgeErrorResponse {
-  error?: {
-    code?: string;
-    message?: string;
-    details?: unknown;
-  };
-}
-
-function extractErrorMessage(payload: EdgeErrorResponse, fallback: string): string {
-  if (payload.error?.message && payload.error.message.trim().length > 0) {
-    return payload.error.message;
-  }
-  return fallback;
-}
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -45,16 +35,16 @@ export async function fetchMarketValuation(
     body: JSON.stringify(request),
   });
 
-  const payload = await response.json() as MarketValuationResult & EdgeErrorResponse;
+  const payload: unknown = await response.json();
   if (!response.ok) {
-    throw new Error(extractErrorMessage(payload, "Market valuation request failed."));
+    throw new Error(getDgeEdgeErrorMessage(payload, "Market valuation request failed."));
   }
 
-  if (payload.error) {
-    throw new Error(extractErrorMessage(payload, "Market valuation request failed."));
+  if (getDgeEdgeErrorMessage(payload, "") !== "") {
+    throw new Error(getDgeEdgeErrorMessage(payload, "Market valuation request failed."));
   }
 
-  return payload;
+  return normalizeMarketValuationResult(payload);
 }
 
 export async function fetchCustomerProfile(params: {
@@ -85,10 +75,10 @@ export async function fetchCustomerProfile(params: {
     return null;
   }
 
-  const payload = await response.json() as CustomerProfileResponse & EdgeErrorResponse;
+  const payload: unknown = await response.json();
   if (!response.ok) {
-    throw new Error(extractErrorMessage(payload, "Customer profile request failed."));
+    throw new Error(getDgeEdgeErrorMessage(payload, "Customer profile request failed."));
   }
 
-  return payload;
+  return normalizeCustomerProfileResponse(payload);
 }

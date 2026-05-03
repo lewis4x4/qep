@@ -4,20 +4,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { Sparkles, RefreshCw } from "lucide-react";
+import { normalizeDgeScenarioList, type Scenario } from "../lib/dge-api-normalizers";
 
 interface DgeScenarioPanelProps {
   dealId: string;
-}
-
-interface Scenario {
-  type: string;
-  label: string;
-  equipment_price?: number;
-  trade_allowance?: number;
-  margin_pct?: number;
-  close_probability?: number;
-  expected_value?: number;
-  reasoning?: string;
 }
 
 function formatCurrency(v: number | undefined): string {
@@ -48,7 +38,7 @@ export function DgeScenarioPanel({ dealId }: DgeScenarioPanelProps) {
       if (!res.ok) throw new Error("DGE optimization failed");
       return res.json();
     },
-    onSuccess: (data) => setScenarios(data.scenarios ?? []),
+    onSuccess: (data) => setScenarios(normalizeDgeScenarioList(data)),
   });
 
   return (
