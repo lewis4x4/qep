@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { countPortalSetupReady, matchesOemPortalFilters, sortOemPortals, type OemPortalRow } from "./oem-portal-utils";
+import {
+  countPortalSetupReady,
+  matchesOemPortalFilters,
+  normalizeOemPortalRows,
+  sortOemPortals,
+  type OemPortalRow,
+} from "./oem-portal-utils";
 
 const base: OemPortalRow = {
   id: "1",
@@ -41,5 +47,42 @@ describe("oem-portal-utils", () => {
       { ...base, id: "2", launch_url: null },
       { ...base, id: "3", status: "needs_setup" },
     ])).toBe(1);
+  });
+
+  test("normalizes portal rows and filters malformed records", () => {
+    expect(normalizeOemPortalRows([
+      {
+        id: "portal-1",
+        brand_code: "ASV",
+        oem_name: "ASV",
+        portal_name: "ASV Dealer Portal",
+        segment: "bad",
+        launch_url: "",
+        status: "bad",
+        access_mode: "shared_login",
+        favorite: true,
+        mfa_required: "yes",
+        credential_owner: "Ops",
+        support_contact: "ops@example.com",
+        notes: null,
+        sort_order: "8",
+      },
+      { id: "portal-2", oem_name: "", portal_name: "Missing OEM" },
+    ])).toEqual([{
+      id: "portal-1",
+      brand_code: "ASV",
+      oem_name: "ASV",
+      portal_name: "ASV Dealer Portal",
+      segment: "support",
+      launch_url: null,
+      status: "needs_setup",
+      access_mode: "shared_login",
+      favorite: true,
+      mfa_required: false,
+      credential_owner: "Ops",
+      support_contact: "ops@example.com",
+      notes: null,
+      sort_order: 8,
+    }]);
   });
 });

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck } from "lucide-react";
-import { oemVaultQueryKeys, vaultApi, type TotpPayload } from "../lib/vault-api";
+import { oemVaultQueryKeys, vaultApi } from "../lib/vault-api";
 
 interface TotpRingProps {
   credentialId: string;
@@ -35,8 +35,7 @@ export function TotpRing({ credentialId, label, disabled }: TotpRingProps) {
   // When the server-computed window expires, refetch the next code.
   useEffect(() => {
     if (!query.data) return;
-    const data = query.data as TotpPayload;
-    const windowEnd = (query.dataUpdatedAt ?? 0) + data.remaining_seconds * 1000;
+    const windowEnd = (query.dataUpdatedAt ?? 0) + query.data.remaining_seconds * 1000;
     if (nowMs >= windowEnd) {
       qc.invalidateQueries({ queryKey: oemVaultQueryKeys.totp(credentialId) });
     }
@@ -64,7 +63,7 @@ export function TotpRing({ credentialId, label, disabled }: TotpRingProps) {
       </div>
     );
   }
-  const data = query.data as TotpPayload | undefined;
+  const data = query.data;
   if (!data) return null;
 
   const elapsed = Math.floor((nowMs - (query.dataUpdatedAt ?? nowMs)) / 1000);

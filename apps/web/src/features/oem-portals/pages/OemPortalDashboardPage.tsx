@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { matchesOemPortalFilters, sortOemPortals, countPortalSetupReady, type OemPortalRow } from "../lib/oem-portal-utils";
+import { matchesOemPortalFilters, sortOemPortals, countPortalSetupReady, normalizeOemPortalRows, type OemPortalRow } from "../lib/oem-portal-utils";
 import { oemVaultQueryKeys, vaultApi, type CredentialMeta } from "../lib/vault-api";
 import { CredentialCard } from "../components/CredentialCard";
 import { CredentialSheet } from "../components/CredentialSheet";
@@ -44,16 +44,12 @@ export function OemPortalDashboardPage() {
   const portalsQuery = useQuery({
     queryKey: ["oem-portals"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: OemPortalRow[] | null; error: unknown }> };
-        };
-      })
+      const { data, error } = await supabase
         .from("oem_portal_profiles")
         .select("id, brand_code, oem_name, portal_name, segment, launch_url, status, access_mode, favorite, mfa_required, credential_owner, support_contact, notes, sort_order")
         .order("sort_order");
       if (error) throw error;
-      return data ?? [];
+      return normalizeOemPortalRows(data);
     },
   });
 
@@ -68,11 +64,7 @@ export function OemPortalDashboardPage() {
 
   const savePortal = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => {
-          update: (value: Record<string, unknown>) => { eq: (column: string, value: string) => Promise<{ error: unknown }> };
-        };
-      })
+      const { error } = await supabase
         .from("oem_portal_profiles")
         .update(payload)
         .eq("id", selected!.id);
@@ -83,9 +75,7 @@ export function OemPortalDashboardPage() {
 
   const createPortal = useMutation({
     mutationFn: async () => {
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => { insert: (value: Record<string, unknown>) => Promise<{ error: unknown }> };
-      })
+      const { error } = await supabase
         .from("oem_portal_profiles")
         .insert({
           oem_name: "New OEM",
