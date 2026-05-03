@@ -3,6 +3,19 @@
 // ============================================================
 
 import { supabase } from "../../../lib/supabase";
+import {
+  normalizeActionPlayResult,
+  normalizeAiPredictionResult,
+  normalizeEmbedBackfillResult,
+  normalizeIntelligenceSummary,
+  normalizeLlmInferenceRunRows,
+  normalizePredictivePlaysSummary,
+  normalizePredictivePredictionResult,
+  normalizeSeededForecastResult,
+  recoveredAiPredictionResultFromRuns,
+  type PredictivePredictionResult,
+  type SeededForecastResult,
+} from "./intelligence-api-normalizers";
 
 export interface IntelligenceKpis {
   total_parts: number;
@@ -68,26 +81,16 @@ export async function fetchIntelligenceSummary(): Promise<IntelligenceSummary> {
     p_workspace: null,
   });
   if (error) throw error;
-  return data as IntelligenceSummary;
+  return normalizeIntelligenceSummary(data);
 }
 
-export async function runSeededForecast(months = 3): Promise<{
-  ok: boolean;
-  forecasts_written: number;
-  batch_id: string;
-  elapsed_ms: number;
-}> {
+export async function runSeededForecast(months = 3): Promise<SeededForecastResult> {
   const { data, error } = await supabase.rpc("compute_seeded_forecast", {
     p_workspace: null,
     p_forecast_months: months,
   });
   if (error) throw error;
-  return data as {
-    ok: boolean;
-    forecasts_written: number;
-    batch_id: string;
-    elapsed_ms: number;
-  };
+  return normalizeSeededForecastResult(data);
 }
 
 // ── Predictive Plays (Phase 3.3 moonshot) ──────────────────
@@ -136,26 +139,16 @@ export async function fetchPredictivePlays(): Promise<PredictivePlaysSummary> {
     p_workspace: null,
   });
   if (error) throw error;
-  return data as PredictivePlaysSummary;
+  return normalizePredictivePlaysSummary(data);
 }
 
-export async function runPredictivePrediction(lookaheadDays = 90): Promise<{
-  ok: boolean;
-  plays_written: number;
-  machines_scanned: number;
-  elapsed_ms: number;
-}> {
+export async function runPredictivePrediction(lookaheadDays = 90): Promise<PredictivePredictionResult> {
   const { data, error } = await supabase.rpc("predict_parts_needs", {
     p_workspace: null,
     p_lookahead_days: lookaheadDays,
   });
   if (error) throw error;
-  return data as {
-    ok: boolean;
-    plays_written: number;
-    machines_scanned: number;
-    elapsed_ms: number;
-  };
+  return normalizePredictivePredictionResult(data);
 }
 
 export interface AiPredictionResult {
@@ -185,7 +178,7 @@ export async function runAiPredictions(maxMachines = 10): Promise<AiPredictionRe
       headers: { Authorization: `Bearer ${session.access_token}` },
     });
     if (error) throw error;
-    return data as AiPredictionResult;
+    return normalizeAiPredictionResult(data);
   } catch (err) {
     // The Supabase edge gateway sometimes drops the HTTP connection on calls
     // that take 10-20s (Claude + embedding + grounding chain). The server
@@ -210,36 +203,7 @@ export async function runAiPredictions(maxMachines = 10): Promise<AiPredictionRe
         .limit(20);
 
       if (recentRuns && recentRuns.length > 0) {
-        // Aggregate across any runs that landed in this window
-        const agg = recentRuns.reduce(
-          (acc: { machines: Set<string>; proposed: number; grounded: number; written: number; tokens_in: number; tokens_out: number; cost_cents: number; elapsed: number }, r: any) => {
-            if (r.fleet_id) acc.machines.add(r.fleet_id);
-            acc.proposed += r.plays_proposed ?? 0;
-            acc.grounded += r.plays_grounded ?? 0;
-            acc.written += r.plays_written ?? 0;
-            acc.tokens_in += r.tokens_in ?? 0;
-            acc.tokens_out += r.tokens_out ?? 0;
-            acc.cost_cents += Number(r.cost_usd_cents ?? 0);
-            acc.elapsed = Math.max(acc.elapsed, r.elapsed_ms ?? 0);
-            return acc;
-          },
-          { machines: new Set<string>(), proposed: 0, grounded: 0, written: 0, tokens_in: 0, tokens_out: 0, cost_cents: 0, elapsed: 0 },
-        );
-
-        return {
-          ok: true,
-          machines_processed: agg.machines.size,
-          plays_proposed: agg.proposed,
-          plays_grounded: agg.grounded,
-          plays_written: agg.written,
-          llm_errors: 0,
-          grounding_rejections: agg.proposed - agg.grounded,
-          cost_cents: agg.cost_cents,
-          total_tokens_in: agg.tokens_in,
-          total_tokens_out: agg.tokens_out,
-          elapsed_ms: agg.elapsed,
-          batch_id: "recovered-from-gateway-timeout",
-        } satisfies AiPredictionResult;
+        return recoveredAiPredictionResultFromRuns(normalizeLlmInferenceRunRows(recentRuns));
       }
     }
 
@@ -277,7 +241,7 @@ export async function runEmbedBackfill(maxBatches = 100): Promise<EmbedBackfillR
     headers: { Authorization: `Bearer ${session.access_token}` },
   });
   if (error) throw error;
-  return data as EmbedBackfillResult;
+  return normalizeEmbedBackfillResult(data);
 }
 
 export async function actionPlay(
@@ -291,5 +255,5 @@ export async function actionPlay(
     p_note: note ?? null,
   });
   if (error) throw error;
-  return data as ActionPlayResult;
+  return normalizeActionPlayResult(data);
 }
