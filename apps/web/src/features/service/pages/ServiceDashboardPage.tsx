@@ -11,31 +11,12 @@ import {
   type FilterDef,
 } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
-
-interface ServiceJobRow {
-  id: string;
-  customer_id: string | null;
-  machine_id: string | null;
-  current_stage: string;
-  scheduled_end_at: string | null;
-  customer_problem_summary: string | null;
-  branch_id: string | null;
-  technician_id: string | null;
-  invoice_total: number | null;
-  customer_name?: string | null;
-  open_deal_value?: number | null;
-  trade_up_score?: number | null;
-}
-
-interface RollupRow {
-  workspace_id: string;
-  branch_id: string | null;
-  overdue_count: number;
-  pending_count: number;
-  active_count: number;
-  closed_count: number;
-  total_count: number;
-}
+import {
+  normalizeServiceDashboardOverdueRows,
+  normalizeServiceDashboardRollupRows,
+  type ServiceDashboardJobRow,
+  type ServiceDashboardRollupRow,
+} from "../lib/service-wip-utils";
 
 const FILTERS: FilterDef[] = [
   { key: "branch", label: "Branch", type: "text" },
@@ -57,11 +38,9 @@ export function ServiceDashboardPage() {
   const rollupQuery = useQuery({
     queryKey: ["service-dashboard", "rollup"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => Promise<{ data: RollupRow[] | null; error: unknown }> };
-      }).from("service_dashboard_rollup").select("*");
+      const { data, error } = await supabase.from("service_dashboard_rollup").select("*");
       if (error) throw new Error("Failed to load rollup");
-      return data ?? [];
+      return normalizeServiceDashboardRollupRows(data);
     },
     staleTime: 30_000,
   });
@@ -69,16 +48,15 @@ export function ServiceDashboardPage() {
   const overdueQuery = useQuery({
     queryKey: ["service-dashboard", "overdue"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { lt: (c: string, v: string) => { not: (c: string, op: string, v: string[]) => { order: (c: string, o: Record<string, boolean>) => { limit: (n: number) => Promise<{ data: ServiceJobRow[] | null; error: unknown }> } } } } };
-      }).from("service_jobs")
+      const { data, error } = await supabase
+        .from("service_jobs")
         .select("id, customer_id, machine_id, current_stage, scheduled_end_at, customer_problem_summary, branch_id, technician_id, invoice_total")
         .lt("scheduled_end_at", new Date().toISOString())
         .not("current_stage", "in", ["closed", "invoiced", "cancelled"])
         .order("scheduled_end_at", { ascending: true })
         .limit(50);
       if (error) throw new Error("Failed to load overdue work orders");
-      return data ?? [];
+      return normalizeServiceDashboardOverdueRows(data);
     },
     staleTime: 30_000,
   });
@@ -154,8 +132,8 @@ export function ServiceDashboardPage() {
 function DashboardPivot({
   rollupRows, overdueRows, isLoading,
 }: {
-  rollupRows: RollupRow[];
-  overdueRows: ServiceJobRow[];
+  rollupRows: ServiceDashboardRollupRow[];
+  overdueRows: ServiceDashboardJobRow[];
   isLoading: boolean;
 }) {
   return (

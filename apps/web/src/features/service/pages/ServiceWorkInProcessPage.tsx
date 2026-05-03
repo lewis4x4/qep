@@ -10,22 +10,11 @@ import {
   getServiceWipBillingStatus,
   getServiceWipValue,
   matchesServiceWipFilters,
+  normalizeServiceWipJobRows,
+  normalizeServiceWipSummaryRows,
   type ServiceWipAgingBucket,
   type ServiceWipBillingStatus,
 } from "../lib/service-wip-utils";
-import type { ServiceJobWithRelations } from "../lib/types";
-
-type WipSummaryRow = {
-  workspace_id: string;
-  branch_id: string | null;
-  billing_status: ServiceWipBillingStatus;
-  aging_bucket: ServiceWipAgingBucket;
-  job_count: number;
-  total_value: number;
-  avg_stage_hours: number;
-};
-
-type WipJobRow = ServiceJobWithRelations;
 
 const BUCKET_ORDER: ServiceWipAgingBucket[] = ["current", "31_60", "61_90", "91_120", "over_120"];
 
@@ -56,32 +45,24 @@ export function ServiceWorkInProcessPage() {
   const summaryQuery = useQuery({
     queryKey: ["service-wip-summary"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => Promise<{ data: WipSummaryRow[] | null; error: unknown }>;
-        };
-      })
+      const { data, error } = await supabase
         .from("service_work_in_process_summary")
         .select("*");
       if (error) throw error;
-      return data ?? [];
+      return normalizeServiceWipSummaryRows(data);
     },
   });
 
   const jobsQuery = useQuery({
     queryKey: ["service-wip-jobs"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { is: (column: string, value: null) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: WipJobRow[] | null; error: unknown }> } };
-        };
-      })
+      const { data, error } = await supabase
         .from("service_jobs")
         .select("id, workspace_id, customer_id, contact_id, machine_id, source_type, request_type, priority, current_stage, status_flags, branch_id, advisor_id, service_manager_id, technician_id, requested_by_name, customer_problem_summary, ai_diagnosis_summary, selected_job_code_id, haul_required, shop_or_field, scheduled_start_at, scheduled_end_at, quote_total, invoice_total, portal_request_id, fulfillment_run_id, tracking_token, created_at, updated_at, closed_at, deleted_at, customer:crm_companies(id, name), machine:crm_equipment(id, make, model, serial_number, year)")
         .is("closed_at", null)
         .order("created_at", { ascending: true });
       if (error) throw error;
-      return data ?? [];
+      return normalizeServiceWipJobRows(data);
     },
   });
 

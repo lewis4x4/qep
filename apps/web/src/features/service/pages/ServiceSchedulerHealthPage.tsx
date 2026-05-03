@@ -3,22 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { ServiceSubNav } from "../components/ServiceSubNav";
 import { Activity } from "lucide-react";
-
-type CronRun = {
-  id: string;
-  job_name: string;
-  started_at: string;
-  finished_at: string | null;
-  ok: boolean;
-  error: string | null;
-  metadata: Record<string, unknown>;
-};
+import { normalizeServiceCronRunRows, type ServiceCronRun } from "../lib/service-wip-utils";
 
 /** Same worker started twice within this window (possible Path A + Path B overlap). */
 const DUPLICATE_WINDOW_MS = 90_000;
 
-function findCloseStartPairs(runs: CronRun[]): { job_name: string; first: string; second: string; deltaSec: number }[] {
-  const byJob = new Map<string, CronRun[]>();
+function findCloseStartPairs(runs: ServiceCronRun[]): { job_name: string; first: string; second: string; deltaSec: number }[] {
+  const byJob = new Map<string, ServiceCronRun[]>();
   for (const r of runs) {
     const list = byJob.get(r.job_name) ?? [];
     list.push(r);
@@ -60,11 +51,11 @@ export function ServiceSchedulerHealthPage() {
         .order("started_at", { ascending: false })
         .limit(150);
       if (qErr) throw qErr;
-      return (data ?? []) as CronRun[];
+      return normalizeServiceCronRunRows(data);
     },
   });
 
-  const byJob = new Map<string, CronRun[]>();
+  const byJob = new Map<string, ServiceCronRun[]>();
   for (const r of runs) {
     const list = byJob.get(r.job_name) ?? [];
     list.push(r);
