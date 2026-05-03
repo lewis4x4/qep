@@ -15,57 +15,16 @@ import { Link } from "react-router-dom";
 import { Activity, ChevronRight, Loader2, ShieldCheck } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { CustomerHealthProfile } from "@/features/nervous-system/lib/nervous-system-api";
-import type { Database, Json } from "@/lib/database.types";
+import { normalizeCustomerHealthProfiles } from "./floor-widget-row-normalizers";
 
 const AT_RISK_LIMIT = 5;
 const AT_RISK_THRESHOLD = 60;
-type CustomerHealthProfileRow = Pick<
-  Database["public"]["Tables"]["customer_profiles_extended"]["Row"],
-  | "id"
-  | "customer_name"
-  | "company_name"
-  | "health_score"
-  | "health_score_components"
-  | "health_score_updated_at"
-  | "pricing_persona"
-  | "lifetime_value"
->;
 
 function scoreTone(score: number): { text: string; border: string; bg: string; label: string } {
   if (score >= 80) return { text: "text-emerald-400", border: "border-emerald-500/30", bg: "bg-emerald-500/10", label: "Excellent" };
   if (score >= 60) return { text: "text-sky-400",    border: "border-sky-500/30",     bg: "bg-sky-500/10",     label: "Good" };
   if (score >= 40) return { text: "text-amber-400",  border: "border-amber-500/30",   bg: "bg-amber-500/10",   label: "Fair" };
   return            { text: "text-rose-400",   border: "border-rose-500/30",    bg: "bg-rose-500/10",    label: "At risk" };
-}
-
-function isRecord(value: Json | null | undefined): value is { [key: string]: Json | undefined } {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function readNumber(value: Json | undefined): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
-function normalizeCustomerHealthProfile(row: CustomerHealthProfileRow): CustomerHealthProfile {
-  const components = isRecord(row.health_score_components)
-    ? {
-        deal_velocity: readNumber(row.health_score_components.deal_velocity),
-        service_engagement: readNumber(row.health_score_components.service_engagement),
-        parts_revenue: readNumber(row.health_score_components.parts_revenue),
-        financial_health: readNumber(row.health_score_components.financial_health),
-      }
-    : null;
-
-  return {
-    id: row.id,
-    customer_name: row.customer_name,
-    company_name: row.company_name,
-    health_score: row.health_score,
-    health_score_components: components,
-    health_score_updated_at: row.health_score_updated_at,
-    pricing_persona: row.pricing_persona,
-    lifetime_value: row.lifetime_value,
-  };
 }
 
 async function fetchAtRiskCustomers(): Promise<CustomerHealthProfile[]> {
@@ -82,7 +41,7 @@ async function fetchAtRiskCustomers(): Promise<CustomerHealthProfile[]> {
   if (error) {
     throw new Error(error.message ?? "Failed to load customer health");
   }
-  return (data ?? []).map(normalizeCustomerHealthProfile);
+  return normalizeCustomerHealthProfiles(data);
 }
 
 async function fetchCoverage(): Promise<{

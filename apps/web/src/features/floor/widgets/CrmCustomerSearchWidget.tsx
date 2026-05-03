@@ -15,14 +15,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Building2, Loader2, Phone, Search, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import type { Database } from "@/lib/database.types";
-
-type CompanyHitRow = Pick<
-  Database["public"]["Tables"]["qrm_companies"]["Row"],
-  "id" | "name" | "dba" | "legacy_customer_number" | "phone" | "city" | "state"
->;
-
-type CompanyHit = CompanyHitRow;
+import { normalizeCompanyHits, type CompanyHit } from "./floor-widget-row-normalizers";
 
 const RESULT_LIMIT = 5;
 const MIN_QUERY_LEN = 2;
@@ -42,7 +35,7 @@ async function searchCompanies(query: string): Promise<CompanyHit[]> {
     .order("name", { ascending: true })
     .limit(RESULT_LIMIT);
   if (error) throw new Error(error.message);
-  return data ?? [];
+  return normalizeCompanyHits(data);
 }
 
 export function CrmCustomerSearchWidget() {
