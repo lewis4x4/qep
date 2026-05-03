@@ -4,6 +4,7 @@ import {
   normalizeActivityTemplateRows,
   normalizeCompanyRows,
   normalizeContactRows,
+  parseEncodedQrmCursor,
 } from "./qrm-api";
 
 describe("qrm shared api row normalizers", () => {
@@ -158,5 +159,13 @@ describe("qrm shared api row normalizers", () => {
     expect(normalizeCompanyRows({ id: "company-1" })).toEqual([]);
     expect(normalizeActivityRows(undefined)).toEqual([]);
     expect(normalizeActivityTemplateRows("bad")).toEqual([]);
+  });
+
+  it("parses encoded list cursors as unknown JSON and rejects malformed cursor payloads", () => {
+    const raw = { lastName: "Fields", firstName: "Ava", id: "contact-1" };
+    const encoded = btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(raw))));
+
+    expect(parseEncodedQrmCursor(encoded)).toEqual(raw);
+    expect(() => parseEncodedQrmCursor("not-base64-json")).toThrow("Invalid list cursor.");
   });
 });

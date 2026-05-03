@@ -29,7 +29,6 @@ type ExceptionQueueRow = Database["public"]["Tables"]["exception_queue"]["Row"];
 type ExceptionQueueUpdate = Database["public"]["Tables"]["exception_queue"]["Update"];
 type IronFlowSuggestionDbRow = Database["public"]["Tables"]["iron_flow_suggestions"]["Row"];
 type IronFlowSuggestionUpdate = Database["public"]["Tables"]["iron_flow_suggestions"]["Update"];
-type IronSloHistoryRow = Pick<Database["public"]["Tables"]["iron_slo_history"]["Row"], "snapshot">;
 
 interface WorkflowDef {
   id: string;
@@ -136,8 +135,9 @@ type IronFlowSuggestionSelectedRow = Pick<
   | "promoted_flow_id"
 >;
 
-function toRecord(value: Json | null): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return Object.fromEntries(Object.entries(value));
 }
 
 function toStringArray(value: Json): string[] {
@@ -238,7 +238,7 @@ function booleanFromRecord(record: Record<string, unknown>, key: keyof IronSloSn
   return record[key] === true;
 }
 
-function toIronSloSnapshot(value: Json | null): IronSloSnapshot | null {
+function toIronSloSnapshot(value: unknown): IronSloSnapshot | null {
   const record = toRecord(value);
   if (!record) return null;
   return {
@@ -263,6 +263,24 @@ function toIronSloSnapshot(value: Json | null): IronSloSnapshot | null {
     active_users_24h: numberFromRecord(record, "active_users_24h"),
     cost_pass: booleanFromRecord(record, "cost_pass"),
   };
+}
+
+export function normalizeIronSloHistorySnapshots(value: unknown): IronSloSnapshot[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    const record = toRecord(row);
+    if (!record) return [];
+    const snapshot = toIronSloSnapshot(record.snapshot);
+    return snapshot ? [snapshot] : [];
+  });
+}
+
+function errorMessage(value: unknown, fallback: string): string {
+  if (value instanceof Error && value.message.trim()) return value.message;
+  if (typeof value === "string" && value.trim()) return value;
+  const record = toRecord(value);
+  if (record && typeof record.message === "string" && record.message.trim()) return record.message;
+  return fallback;
 }
 
 const STATUS_TONE: Record<string, "blue" | "purple" | "orange" | "green" | "red" | "neutral"> = {
@@ -516,10 +534,7 @@ export function FlowAdminPage() {
       if (error) return [];
       // Snapshots come back newest-first; reverse so the sparkline reads
       // left=oldest → right=newest, which is the convention humans expect.
-      return ((data ?? []) as IronSloHistoryRow[])
-        .map((r) => toIronSloSnapshot(r.snapshot))
-        .filter((snapshot): snapshot is IronSloSnapshot => snapshot !== null)
-        .reverse();
+      return normalizeIronSloHistorySnapshots(data).reverse();
     },
     staleTime: 60_000,
     refetchInterval: 5 * 60_000,
@@ -582,12 +597,12 @@ export function FlowAdminPage() {
           */}
           {runPatternMining.isError && (
             <span className="text-[10px] text-red-400">
-              Mine patterns: {(runPatternMining.error as Error)?.message ?? "failed"}
+              Mine patterns: {errorMessage(runPatternMining.error, "failed")}
             </span>
           )}
           {runNow.isError && (
             <span className="text-[10px] text-red-400">
-              Run now: {(runNow.error as Error)?.message ?? "failed"}
+              Run now: {errorMessage(runNow.error, "failed")}
             </span>
           )}
         </div>
@@ -613,7 +628,7 @@ export function FlowAdminPage() {
               Generate draft
             </Button>
             {synthesize.error && (
-              <span className="text-[10px] text-red-400">{(synthesize.error as Error).message}</span>
+              <span className="text-[10px] text-red-400">{errorMessage(synthesize.error, "Generate failed")}</span>
             )}
           </div>
           {synthResult && (
@@ -780,7 +795,7 @@ export function FlowAdminPage() {
             <div className="flex items-center justify-end gap-2">
               {saveQuotePolicyMutation.isError && (
                 <span className="text-[10px] text-red-400">
-                  {(saveQuotePolicyMutation.error as Error)?.message ?? "Save failed"}
+                  {errorMessage(saveQuotePolicyMutation.error, "Save failed")}
                 </span>
               )}
               {saveQuotePolicyMutation.isSuccess && (
@@ -957,7 +972,7 @@ export function FlowAdminPage() {
                     </Button>
                     {toggleEnabled.isError && toggleEnabled.variables?.id === wf.id && (
                       <span className="text-[10px] text-red-400">
-                        {(toggleEnabled.error as Error)?.message ?? "toggle failed"}
+                        {errorMessage(toggleEnabled.error, "toggle failed")}
                       </span>
                     )}
                   </div>
@@ -1030,12 +1045,12 @@ export function FlowAdminPage() {
           </div>
           {promoteSuggestion.error && (
             <p className="mt-2 text-[10px] text-red-400">
-              Promote failed: {(promoteSuggestion.error as Error).message}
+              Promote failed: {errorMessage(promoteSuggestion.error, "unknown")}
             </p>
           )}
           {dismissSuggestion.isError && (
             <p className="mt-2 text-[10px] text-red-400">
-              Dismiss failed: {(dismissSuggestion.error as Error)?.message ?? "unknown"}
+              Dismiss failed: {errorMessage(dismissSuggestion.error, "unknown")}
             </p>
           )}
           {runPatternMining.data && (
@@ -1111,7 +1126,7 @@ export function FlowAdminPage() {
                   </div>
                   {replayDeadLetter.isError && replayDeadLetter.variables?.exceptionId === dl.id && (
                     <p className="mt-1 text-[10px] text-red-400">
-                      {(replayDeadLetter.error as Error)?.message ?? "replay failed"}
+                      {errorMessage(replayDeadLetter.error, "replay failed")}
                     </p>
                   )}
                 </div>

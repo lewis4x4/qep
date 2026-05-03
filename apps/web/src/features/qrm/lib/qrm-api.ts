@@ -87,6 +87,30 @@ interface CompanyListCursor {
   id: string;
 }
 
+export function parseEncodedQrmCursor(cursor: string): unknown {
+  try {
+    const binary = atob(cursor);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new Error("Invalid list cursor.");
+  }
+}
+
+function normalizeContactListCursor(value: unknown): ContactListCursor | null {
+  if (!isRecord(value)) return null;
+  return typeof value.lastName === "string" && typeof value.firstName === "string" && typeof value.id === "string"
+    ? { lastName: value.lastName, firstName: value.firstName, id: value.id }
+    : null;
+}
+
+function normalizeCompanyListCursor(value: unknown): CompanyListCursor | null {
+  if (!isRecord(value)) return null;
+  return typeof value.name === "string" && typeof value.id === "string"
+    ? { name: value.name, id: value.id }
+    : null;
+}
+
 function toListContactSummary(row: ListCrmContactRow): QrmContactSummary {
   return {
     id: row.id,
@@ -367,15 +391,24 @@ function encodeCursor(value: ContactListCursor | CompanyListCursor): string {
   return btoa(binary);
 }
 
-function decodeCursor<T>(cursor: string | null | undefined): T | null {
+function decodeContactCursor(cursor: string | null | undefined): ContactListCursor | null {
   if (!cursor) return null;
-  try {
-    const binary = atob(cursor);
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    return JSON.parse(new TextDecoder().decode(bytes)) as T;
-  } catch {
+  const parsed = parseEncodedQrmCursor(cursor);
+  const normalized = normalizeContactListCursor(parsed);
+  if (!normalized) {
     throw new Error("Invalid list cursor.");
   }
+  return normalized;
+}
+
+function decodeCompanyCursor(cursor: string | null | undefined): CompanyListCursor | null {
+  if (!cursor) return null;
+  const parsed = parseEncodedQrmCursor(cursor);
+  const normalized = normalizeCompanyListCursor(parsed);
+  if (!normalized) {
+    throw new Error("Invalid list cursor.");
+  }
+  return normalized;
 }
 
 export async function listCrmContacts(
@@ -383,7 +416,7 @@ export async function listCrmContacts(
   cursor?: string | null,
   options?: { treeRootCompanyId?: string },
 ): Promise<QrmPageResult<QrmContactSummary>> {
-  const decodedCursor = decodeCursor<ContactListCursor>(cursor);
+  const decodedCursor = decodeContactCursor(cursor);
   const treeRoot = options?.treeRootCompanyId?.trim();
   const normalizedSearch = search.trim() || undefined;
 
@@ -460,7 +493,7 @@ export async function listCrmContactsByIds(contactIds: string[]): Promise<QrmCon
 }
 
 export async function listCrmCompanies(search: string, cursor?: string | null): Promise<QrmPageResult<QrmCompanySummary>> {
-  const decodedCursor = decodeCursor<CompanyListCursor>(cursor);
+  const decodedCursor = decodeCompanyCursor(cursor);
   const { data, error } = await crmSupabase.rpc("list_crm_companies_page", {
     p_search: search.trim() || undefined,
     p_after_name: decodedCursor?.name,

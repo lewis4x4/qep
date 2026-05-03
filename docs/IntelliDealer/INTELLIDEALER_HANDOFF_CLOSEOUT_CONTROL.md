@@ -79,6 +79,7 @@ These are not customer-import blockers, but they must not be represented as done
 - Raw IntelliDealer source files remain untracked by policy until a privacy/retention decision approves committing or moving them to controlled private storage.
 - Wave 5 integrations are deferred until credentials and dealer-specific scope are available.
 - Remaining non-core raw Supabase row casts still need slice-by-slice normalization if the goal is broader API hardening.
+- The latest Slice 6 scan still shows non-core hardening work in SOP, admin UI errors/local JSON helpers, QRM page/component metadata and browser helpers, brief, nervous-system, portal payment UI, and equipment commercial action helpers.
 - The old `test-results/agent-gates/*` evidence referenced by `_migration_order.md` is not present in the current working tree; either recover those artifacts or replace them with fresh gate outputs.
 
 ## Remaining Roadmap
@@ -266,7 +267,12 @@ Current result:
 - Admin sheet-diff pending/prior sheet rows, model extracted JSON, and in-flight quote rows now use exported normalizers before diff and quote-impact math consume them.
 - Admin AI request log rows and originating quote joins now use exported normalizers before admin stats and time-to-quote calculations consume them.
 - Admin coach performance action, package status, and rep profile rows now use exported normalizers before performance rollups and rep dismissal leaderboards consume them.
-- Targeted tests passed: `594 pass`, `0 fail`.
+- QRM decision-room move analytics fetch/persist paths now normalize move, profile, deal, stage, needs-assessment, persisted-move, reaction, and saved history rows before decision-room UI state consumes them.
+- QRM router responses, QRM list cursors, and rental ops responses now validate JSON envelopes, required object/array payloads, and edge error shapes before callers consume them.
+- QRM opportunity, seasonal, whitespace, unmapped territory, fleet intelligence, and workflow audit pages now use runtime metadata/extracted-data guards instead of page-local record casts.
+- Flow Admin Iron SLO history rows and mutation error render paths now use unknown-safe normalizers/helpers instead of raw SLO row and `Error` casts.
+- Targeted tests passed including the latest QRM router/rental/decision-room focused files: `615 pass`, `0 fail` across `73` files.
+- Latest QRM router/rental/decision-room focused tests passed independently: `21 pass`, `0 fail`.
 - Web typecheck passed.
 - Service feature cast scan is clear for the Slice 6 inventory pattern.
 - Fleet feature cast scan is clear for the Slice 6 inventory pattern.
@@ -277,6 +283,7 @@ Current result:
 - Equipment feature cast scan is clear for the Slice 6 inventory pattern.
 - Ops feature cast scan is clear for the Slice 6 inventory pattern.
 - Portal feature cast scan is clear for the Slice 6 inventory pattern.
+- Latest high-risk direct-cast scan still shows remaining non-core targets outside the just-cleared areas: SOP API/pages/components, admin mutation-error/local JSON helpers, QRM page/component metadata/error/localStorage helpers, brief page/component error/browser helpers, nervous-system edge-error helpers, portal payment UI error rendering, and equipment commercial action helper errors.
 
 ### Slice 7: Wave 5 Deferred Integration Register
 

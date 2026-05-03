@@ -16,7 +16,7 @@ import {
   classifyCohort,
   type CohortTags,
 } from "./decision-room-cohorts";
-import type { MoveRow } from "./decision-room-analytics";
+import type { Mood, MoveRow } from "./decision-room-analytics";
 
 const DEFAULT_ROW_LIMIT = 500;
 
@@ -26,7 +26,7 @@ export const moveRowsQueryKey = (windowDays: number) =>
 interface MoveDbRow {
   id: string;
   move_text: string;
-  mood: string | null;
+  mood: Mood | null;
   velocity_delta: number | null;
   created_at: string;
   user_id: string | null;
@@ -64,6 +64,105 @@ interface DealView {
   machineInterest: string | null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringField(row: Record<string, unknown>, key: string): string | null {
+  const value = row[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function nullableStringField(row: Record<string, unknown>, key: string): string | null {
+  const value = row[key];
+  return typeof value === "string" ? value : null;
+}
+
+function nullableNumberField(row: Record<string, unknown>, key: string): number | null {
+  const value = row[key];
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function nullableBooleanField(row: Record<string, unknown>, key: string): boolean | null {
+  const value = row[key];
+  return typeof value === "boolean" ? value : null;
+}
+
+function normalizeMood(value: unknown): Mood | null {
+  return value === "positive" || value === "mixed" || value === "negative" ? value : null;
+}
+
+export function normalizeMoveDbRow(payload: unknown): MoveDbRow | null {
+  if (!isRecord(payload)) return null;
+  const id = stringField(payload, "id");
+  const moveText = stringField(payload, "move_text");
+  const createdAt = stringField(payload, "created_at");
+  if (!id || !moveText || !createdAt) return null;
+
+  return {
+    id,
+    move_text: moveText,
+    mood: normalizeMood(payload.mood),
+    velocity_delta: nullableNumberField(payload, "velocity_delta"),
+    created_at: createdAt,
+    user_id: nullableStringField(payload, "user_id"),
+    deal_id: nullableStringField(payload, "deal_id"),
+  };
+}
+
+export function normalizeProfileDbRow(payload: unknown): ProfileDbRow | null {
+  if (!isRecord(payload)) return null;
+  const id = stringField(payload, "id");
+  if (!id) return null;
+  return {
+    id,
+    full_name: nullableStringField(payload, "full_name"),
+    created_at: nullableStringField(payload, "created_at"),
+  };
+}
+
+export function normalizeDealDbRow(payload: unknown): DealDbRow | null {
+  if (!isRecord(payload)) return null;
+  const id = stringField(payload, "id");
+  if (!id) return null;
+  return {
+    id,
+    name: nullableStringField(payload, "name"),
+    amount: nullableNumberField(payload, "amount"),
+    stage_id: nullableStringField(payload, "stage_id"),
+  };
+}
+
+export function normalizeStageDbRow(payload: unknown): StageDbRow | null {
+  if (!isRecord(payload)) return null;
+  const id = stringField(payload, "id");
+  if (!id) return null;
+  return {
+    id,
+    is_closed_won: nullableBooleanField(payload, "is_closed_won"),
+    is_closed_lost: nullableBooleanField(payload, "is_closed_lost"),
+  };
+}
+
+export function normalizeNeedsAssessmentDbRow(payload: unknown): NeedsAssessmentDbRow | null {
+  if (!isRecord(payload)) return null;
+  const dealId = stringField(payload, "deal_id");
+  if (!dealId) return null;
+  return {
+    deal_id: dealId,
+    machine_interest: nullableStringField(payload, "machine_interest"),
+  };
+}
+
+function normalizeRows<T>(rows: unknown, normalize: (row: unknown) => T | null): T[] {
+  return Array.isArray(rows) ? rows.map(normalize).filter((row): row is T => row !== null) : [];
+}
+
 /**
  * Fetch recent move rows + classify each with its cohort tag triple.
  * One entry query + three parallel hydrations. Limit defaults to 500
@@ -85,26 +184,32 @@ export async function fetchMoveRows(
     .order("created_at", { ascending: false })
     .limit(limit);
   if (moveErr) throw moveErr;
-  const moves = (moveData ?? []) as MoveDbRow[];
+  const moves = normalizeRows(moveData, normalizeMoveDbRow);
   if (moves.length === 0) return [];
 
-  const userIds = Array.from(new Set(moves.map((m) => m.user_id).filter((v): v is string => !!v)));
-  const dealIds = Array.from(new Set(moves.map((m) => m.deal_id).filter((v): v is string => !!v)));
+  const userIds = Array.from(
+    new Set(moves.map((m) => m.user_id).filter((v): v is string => !!v)),
+  );
+  const dealIds = Array.from(
+    new Set(moves.map((m) => m.deal_id).filter((v): v is string => !!v)),
+  );
 
   const [profilesResult, dealsResult] = await Promise.all([
     userIds.length > 0
       ? supabase.from("profiles").select("id, full_name, created_at").in("id", userIds)
-      : Promise.resolve({ data: [] as ProfileDbRow[], error: null }),
+      : Promise.resolve({ data: [], error: null }),
     dealIds.length > 0
       ? supabase
           .from("crm_deals")
           .select("id, name, amount, stage_id")
           .in("id", dealIds)
-      : Promise.resolve({ data: [] as DealDbRow[], error: null }),
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
-  const profiles = (profilesResult.error ? [] : (profilesResult.data ?? [])) as ProfileDbRow[];
-  const deals = (dealsResult.error ? [] : (dealsResult.data ?? [])) as DealDbRow[];
+  const profiles = profilesResult.error
+    ? []
+    : normalizeRows(profilesResult.data, normalizeProfileDbRow);
+  const deals = dealsResult.error ? [] : normalizeRows(dealsResult.data, normalizeDealDbRow);
 
   const stageIds = Array.from(
     new Set(deals.map((d) => d.stage_id).filter((v): v is string => !!v)),
@@ -120,17 +225,19 @@ export async function fetchMoveRows(
           .from("crm_deal_stages")
           .select("id, is_closed_won, is_closed_lost")
           .in("id", stageIds)
-      : Promise.resolve({ data: [] as StageDbRow[], error: null }),
+      : Promise.resolve({ data: [], error: null }),
     dealIds.length > 0
       ? supabase
           .from("needs_assessments")
           .select("deal_id, machine_interest")
           .in("deal_id", dealIds)
-      : Promise.resolve({ data: [] as NeedsAssessmentDbRow[], error: null }),
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
-  const stages = (stageResult.error ? [] : (stageResult.data ?? [])) as StageDbRow[];
-  const assessments = (assessmentResult.error ? [] : (assessmentResult.data ?? [])) as NeedsAssessmentDbRow[];
+  const stages = stageResult.error ? [] : normalizeRows(stageResult.data, normalizeStageDbRow);
+  const assessments = assessmentResult.error
+    ? []
+    : normalizeRows(assessmentResult.data, normalizeNeedsAssessmentDbRow);
 
   const profileById = new Map(profiles.map((p) => [p.id, p]));
   const stageById = new Map(stages.map((s) => [s.id, s]));
@@ -167,7 +274,7 @@ export async function fetchMoveRows(
     return {
       id: row.id,
       moveText: row.move_text,
-      mood: (row.mood as "positive" | "mixed" | "negative" | null) ?? null,
+      mood: row.mood,
       velocityDelta: row.velocity_delta,
       createdAt: row.created_at,
       userId: row.user_id,

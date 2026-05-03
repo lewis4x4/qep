@@ -65,6 +65,14 @@ function opportunityHref(accountId: string, opportunity: WhiteSpaceOpportunity):
   }
 }
 
+function isMetadataRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function toMetadataRecord(value: unknown): Record<string, unknown> {
+  return isMetadataRecord(value) ? value : {};
+}
+
 export function WhiteSpaceMapPage() {
   const { accountId } = useParams<{ accountId: string }>();
 
@@ -99,7 +107,7 @@ export function WhiteSpaceMapPage() {
         .limit(500);
       if (error) throw new Error(error.message);
       return (data ?? []).map((row) => {
-        const metadata = (row.metadata && typeof row.metadata === "object" ? row.metadata : {}) as Record<string, unknown>;
+        const metadata = toMetadataRecord(row.metadata);
         const attachments = Array.isArray(metadata.attachments) ? metadata.attachments.filter((item) => item != null) : [];
         return {
           equipmentId: row.id,

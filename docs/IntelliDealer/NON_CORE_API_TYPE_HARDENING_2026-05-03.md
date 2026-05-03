@@ -83,6 +83,10 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Admin sheet-diff API | Pending/prior sheet headers, model item extracted JSON, and in-flight quote rows were cast directly before diff and quote-impact calculations. | Added exported sheet-header, prior-sheet-ref, model-item, and quote-impact normalizers with required identity checks, JSON-shape validation, nullable field guards, malformed-row filtering, and no-cast extracted model parsing before diff/impact math. |
 | Admin AI request log API | AI request log rows and originating quote joins were cast directly before admin stats and time-to-quote calculations. | Added exported AI-log and originating-quote normalizers with required identity/date checks, joined brand/model normalization, numeric-string coercion, JSON-shape validation, malformed-row filtering, and no-cast merge output. |
 | Admin coach performance API | Deal-coach action rows, package status rows, and rep profile rows were cast directly before performance rollups and rep dismissal leaderboards consumed them. | Added exported coach-action, package-status, and profile-display normalizers with required identity/date checks, nullable field guards, malformed-row filtering, and no-cast rollup inputs. |
+| QRM decision-room moves | Move analytics fetch/persist paths trusted move, profile, deal, stage, needs-assessment, localStorage, reaction, and saved history rows through direct casts. | Added exported move/profile/deal/stage/needs-assessment, persisted-move, reaction, and history normalizers with required identity checks, enum validation, numeric-string coercion, malformed-row filtering, and localStorage cleanup before decision-room UI state consumes the payloads. |
+| QRM router and rental ops APIs | Shared QRM router and rental ops helpers trusted `response.json()`/generic response casts, so malformed JSON or missing object/array envelopes could reach callers. | Added JSON body readers, edge-error normalizers, required object/array envelope guards, safe cursor decoding, rental error text fallback handling, and malformed JSON rejection before callers receive router/rental payloads. |
+| QRM map/intelligence page metadata | Opportunity, seasonal, whitespace, unmapped territory, fleet intelligence, and workflow audit pages used page-local metadata/extracted-data casts. | Replaced the page-local casts with runtime metadata/extracted-data guards so malformed optional JSON cannot break those map/intelligence render paths. |
+| Admin Flow engine page | Iron SLO history and mutation error rendering trusted raw snapshot rows and cast unknown mutation errors to `Error`. | Added `normalizeIronSloHistorySnapshots` plus unknown-safe error message extraction before SLO sparkline data and mutation failures are rendered. |
 
 ## Verification
 
@@ -221,7 +225,8 @@ Results:
 - Admin sheet-diff API tests: `26 pass`, `0 fail`.
 - Admin AI request log API tests: `21 pass`, `0 fail`.
 - Admin coach performance API tests: `14 pass`, `0 fail`.
-- Combined targeted test run: `594 pass`, `0 fail`.
+- QRM router/rental/decision-room focused tests: `21 pass`, `0 fail`.
+- Combined targeted test run including the QRM router/rental/decision-room parallel pass: `615 pass`, `0 fail` across `73` files.
 - Web typecheck: PASS.
 - Service feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 - Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
@@ -236,6 +241,6 @@ Results:
 
 ## Remaining Slice 6 Work
 
-- Continue auditing non-core QRM/admin/service pages with `supabase as unknown` or direct `as SomeRow[]` result casts.
-- Prioritize pages where malformed rows can break operator flows: quote-builder, admin, and remaining QRM/portal-adjacent surfaces.
+- Continue auditing the remaining non-core raw type-cast surfaces found after this pass: SOP API/pages/components, admin page/component mutation error rendering and local JSON helpers, QRM page/component metadata/error/localStorage helpers, brief page/component error/browser helpers, nervous-system edge error helpers, portal invoice payment error rendering, and equipment commercial action edge/error helpers.
+- Prioritize direct data/API boundaries first (`sop-api`, QRM page metadata, nervous-system/brief/equipment edge payloads), then clean low-risk UI-only error casts.
 - For each target, move row-shape logic into small exported normalizers and add unit tests before replacing direct casts.

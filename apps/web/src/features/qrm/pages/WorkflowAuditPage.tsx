@@ -8,6 +8,14 @@ import { QrmSubNav } from "../components/QrmSubNav";
 import { DeckSurface, StatusDot, type StatusTone } from "../components/command-deck";
 import { buildWorkflowAuditBoard } from "../lib/workflow-audit";
 
+function isMetadataRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function toMetadataRecord(value: unknown): Record<string, unknown> {
+  return isMetadataRecord(value) ? value : {};
+}
+
 export function WorkflowAuditPage() {
   const auditQuery = useQuery({
     queryKey: ["qrm", "workflow-audit"],
@@ -82,7 +90,7 @@ export function WorkflowAuditPage() {
         actions: (actionsResult.data ?? []).map((row) => ({
           actionType: row.action_type,
           createdAt: row.created_at,
-          metadata: (row.metadata && typeof row.metadata === "object" ? row.metadata : {}) as Record<string, unknown>,
+          metadata: toMetadataRecord(row.metadata),
         })),
       });
     },

@@ -18,6 +18,14 @@ const DEFAULT_OVERLAYS: MapOverlay[] = [
   { key: "no_pipeline", label: "No open pipeline", enabled: true },
 ];
 
+function isMetadataRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function toMetadataRecord(value: unknown): Record<string, unknown> {
+  return isMetadataRecord(value) ? value : {};
+}
+
 export function UnmappedTerritoryPage() {
   const navigate = useNavigate();
   const [overlays, setOverlays] = useState<MapOverlay[]>(DEFAULT_OVERLAYS);
@@ -79,7 +87,7 @@ export function UnmappedTerritoryPage() {
 
       return buildUnmappedTerritoryBoard({
         equipment: (equipmentResult.data ?? []).map((row) => {
-          const metadata = (row.metadata && typeof row.metadata === "object" ? row.metadata : {}) as Record<string, unknown>;
+          const metadata = toMetadataRecord(row.metadata);
           const companyJoin = Array.isArray(row.crm_companies) ? row.crm_companies[0] : row.crm_companies;
           return {
             companyId: row.company_id,

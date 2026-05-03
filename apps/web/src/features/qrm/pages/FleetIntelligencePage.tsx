@@ -26,6 +26,14 @@ function replacementWindowTone(value: "now" | "30d" | "60d" | "90d" | "future" |
   }
 }
 
+function isMetadataRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function toMetadataRecord(value: unknown): Record<string, unknown> {
+  return isMetadataRecord(value) ? value : {};
+}
+
 export function FleetIntelligencePage() {
   const { accountId } = useParams<{ accountId: string }>();
 
@@ -60,9 +68,7 @@ export function FleetIntelligencePage() {
         .limit(500);
       if (error) throw new Error(error.message);
       return (data ?? []).map((row) => {
-        const metadata = (row.metadata && typeof row.metadata === "object"
-          ? row.metadata
-          : {}) as Record<string, unknown>;
+        const metadata = toMetadataRecord(row.metadata);
         const attachments = Array.isArray(metadata.attachments)
           ? metadata.attachments.filter((item) => item != null)
           : [];

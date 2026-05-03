@@ -30,7 +30,7 @@ import type {
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-interface EdgeErrorPayload {
+export interface EdgeErrorPayload {
   error?: {
     code?: string;
     message?: string;
@@ -58,10 +58,66 @@ async function getAuthHeaders(idempotencyKey?: string): Promise<Record<string, s
   };
 }
 
-async function requestRouter<T>(
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function normalizeRouterErrorPayload(payload: unknown): EdgeErrorPayload["error"] | null {
+  if (!isRecord(payload) || !isRecord(payload.error)) return null;
+  const error = payload.error;
+  return {
+    code: typeof error.code === "string" ? error.code : undefined,
+    message: typeof error.message === "string" ? error.message : undefined,
+    details: error.details,
+  };
+}
+
+export async function readRouterJsonPayload(response: Response, path = "QRM router"): Promise<Record<string, unknown>> {
+  const text = await response.text();
+  if (!text.trim()) {
+    return {};
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error(`${path} returned malformed JSON.`);
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error(`${path} returned an invalid JSON payload.`);
+  }
+  return parsed;
+}
+
+export function requireRouterArrayPayload<T>(payload: Record<string, unknown>, key: string): T[] {
+  const value = payload[key];
+  if (!Array.isArray(value)) {
+    throw new Error(`QRM router response is missing a valid '${key}' array.`);
+  }
+  return value as T[];
+}
+
+export function requireRouterObjectPayload<T>(payload: Record<string, unknown>, key: string): T {
+  const value = payload[key];
+  if (!isRecord(value)) {
+    throw new Error(`QRM router response is missing a valid '${key}' object.`);
+  }
+  return value as T;
+}
+
+export function requireRouterRecordPayload<T>(payload: Record<string, unknown>, label = "QRM router response"): T {
+  if (!isRecord(payload)) {
+    throw new Error(`${label} is not a valid object.`);
+  }
+  return payload as T;
+}
+
+async function requestRouter(
   path: string,
   options: RouterRequestOptions = {},
-): Promise<T> {
+): Promise<Record<string, unknown>> {
   const method = options.method ?? "GET";
   const response = await fetch(`${SUPABASE_URL}/functions/v1/qrm-router${path}`, {
     method,
@@ -69,9 +125,10 @@ async function requestRouter<T>(
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
 
-  const payload = await response.json() as T & EdgeErrorPayload;
-  if (!response.ok || payload.error) {
-    const message = payload.error?.message || "QRM request failed.";
+  const payload = await readRouterJsonPayload(response, `QRM router ${method} ${path}`);
+  const edgeError = normalizeRouterErrorPayload(payload);
+  if (!response.ok || edgeError) {
+    const message = edgeError?.message || `QRM request failed (${response.status}).`;
     throw new Error(message);
   }
 
@@ -81,8 +138,8 @@ async function requestRouter<T>(
 export async function searchCrm(query: string): Promise<QrmSearchItem[]> {
   if (!query.trim()) return [];
   const params = new URLSearchParams({ q: query.trim(), types: "contact,company" });
-  const payload = await requestRouter<{ results: QrmSearchItem[] }>(`/qrm/search?${params.toString()}`);
-  return payload.results;
+  const payload = await requestRouter(`/qrm/search?${params.toString()}`);
+  return requireRouterArrayPayload<QrmSearchItem>(payload, "results");
 }
 
 /**
@@ -98,168 +155,169 @@ export async function searchQrmGraph(
   const allTypes: QrmSearchEntityType[] =
     types && types.length > 0 ? types : ["contact", "company", "deal", "equipment", "rental"];
   const params = new URLSearchParams({ q: query.trim(), types: allTypes.join(",") });
-  const payload = await requestRouter<{ results: QrmSearchItem[] }>(
+  const payload = await requestRouter(
     `/qrm/search?${params.toString()}`,
   );
-  return payload.results;
+  return requireRouterArrayPayload<QrmSearchItem>(payload, "results");
 }
 
 export async function createCrmActivityViaRouter(
   input: QrmActivityCreateInput,
 ): Promise<QrmActivityItem> {
-  const payload = await requestRouter<{ activity: QrmActivityItem }>("/qrm/activities", {
+  const payload = await requestRouter("/qrm/activities", {
     method: "POST",
     body: input,
   });
-  return payload.activity;
+  return requireRouterObjectPayload<QrmActivityItem>(payload, "activity");
 }
 
 export async function patchCrmActivityTaskViaRouter(
   activityId: string,
   input: QrmActivityTaskPatchInput,
 ): Promise<QrmActivityItem> {
-  const payload = await requestRouter<{ activity: QrmActivityItem }>(`/qrm/activities/${activityId}`, {
+  const payload = await requestRouter(`/qrm/activities/${activityId}`, {
     method: "PATCH",
     body: input,
   });
-  return payload.activity;
+  return requireRouterObjectPayload<QrmActivityItem>(payload, "activity");
 }
 
 export async function patchCrmActivityViaRouter(
   activityId: string,
   input: QrmActivityPatchInput,
 ): Promise<QrmActivityItem> {
-  const payload = await requestRouter<{ activity: QrmActivityItem }>(`/qrm/activities/${activityId}`, {
+  const payload = await requestRouter(`/qrm/activities/${activityId}`, {
     method: "PATCH",
     body: input,
   });
-  return payload.activity;
+  return requireRouterObjectPayload<QrmActivityItem>(payload, "activity");
 }
 
 export async function deliverCrmActivityViaRouter(
   activityId: string,
   updatedAt?: string,
 ): Promise<QrmActivityItem> {
-  const payload = await requestRouter<{ activity: QrmActivityItem }>(`/qrm/activities/${activityId}/deliver`, {
+  const payload = await requestRouter(`/qrm/activities/${activityId}/deliver`, {
     method: "POST",
     body: { sendNow: true, updatedAt },
   });
-  return payload.activity;
+  return requireRouterObjectPayload<QrmActivityItem>(payload, "activity");
 }
 
 export async function patchCrmDealViaRouter(
   dealId: string,
   input: QrmDealPatchInput,
 ): Promise<QrmRepSafeDeal> {
-  const payload = await requestRouter<{ deal: QrmRepSafeDeal }>(`/qrm/deals/${dealId}`, {
+  const payload = await requestRouter(`/qrm/deals/${dealId}`, {
     method: "PATCH",
     body: input,
   });
-  return payload.deal;
+  return requireRouterObjectPayload<QrmRepSafeDeal>(payload, "deal");
 }
 
 export async function createCrmContactViaRouter(
   input: QrmContactUpsertInput,
 ): Promise<QrmContactSummary> {
-  const payload = await requestRouter<{ contact: QrmContactSummary }>("/qrm/contacts", {
+  const payload = await requestRouter("/qrm/contacts", {
     method: "POST",
     body: input,
   });
-  return payload.contact;
+  return requireRouterObjectPayload<QrmContactSummary>(payload, "contact");
 }
 
 export async function patchCrmContactViaRouter(
   contactId: string,
   input: Partial<QrmContactUpsertInput>,
 ): Promise<QrmContactSummary> {
-  const payload = await requestRouter<{ contact: QrmContactSummary }>(`/qrm/contacts/${contactId}`, {
+  const payload = await requestRouter(`/qrm/contacts/${contactId}`, {
     method: "PATCH",
     body: input,
   });
-  return payload.contact;
+  return requireRouterObjectPayload<QrmContactSummary>(payload, "contact");
 }
 
 export async function createCrmCompanyViaRouter(
   input: QrmCompanyUpsertInput,
 ): Promise<QrmCompanySummary> {
-  const payload = await requestRouter<{ company: QrmCompanySummary }>("/qrm/companies", {
+  const payload = await requestRouter("/qrm/companies", {
     method: "POST",
     body: input,
   });
-  return payload.company;
+  return requireRouterObjectPayload<QrmCompanySummary>(payload, "company");
 }
 
 export async function patchCrmCompanyViaRouter(
   companyId: string,
   input: Partial<QrmCompanyUpsertInput>,
 ): Promise<QrmCompanySummary> {
-  const payload = await requestRouter<{ company: QrmCompanySummary }>(`/qrm/companies/${companyId}`, {
+  const payload = await requestRouter(`/qrm/companies/${companyId}`, {
     method: "PATCH",
     body: input,
   });
-  return payload.company;
+  return requireRouterObjectPayload<QrmCompanySummary>(payload, "company");
 }
 
 export async function listCrmCampaignsViaRouter(): Promise<QrmCampaign[]> {
-  const payload = await requestRouter<{ campaigns: QrmCampaign[] }>("/qrm/campaigns");
-  return payload.campaigns;
+  const payload = await requestRouter("/qrm/campaigns");
+  return requireRouterArrayPayload<QrmCampaign>(payload, "campaigns");
 }
 
 export async function createCrmCampaignViaRouter(
   input: QrmCampaignInput,
 ): Promise<QrmCampaign> {
-  const payload = await requestRouter<{ campaign: QrmCampaign }>("/qrm/campaigns", {
+  const payload = await requestRouter("/qrm/campaigns", {
     method: "POST",
     body: input,
   });
-  return payload.campaign;
+  return requireRouterObjectPayload<QrmCampaign>(payload, "campaign");
 }
 
 export async function patchCrmCampaignViaRouter(
   campaignId: string,
   input: QrmCampaignInput,
 ): Promise<QrmCampaign> {
-  const payload = await requestRouter<{ campaign: QrmCampaign }>(`/qrm/campaigns/${campaignId}`, {
+  const payload = await requestRouter(`/qrm/campaigns/${campaignId}`, {
     method: "PATCH",
     body: input,
   });
-  return payload.campaign;
+  return requireRouterObjectPayload<QrmCampaign>(payload, "campaign");
 }
 
 export async function executeCrmCampaignViaRouter(
   campaignId: string,
 ): Promise<{ campaignId: string; state: string; executionSummary: Record<string, unknown> }> {
-  const payload = await requestRouter<{ result: { campaignId: string; state: string; executionSummary: Record<string, unknown> } }>(
+  const payload = await requestRouter(
     `/qrm/campaigns/${campaignId}/execute`,
     {
       method: "POST",
     },
   );
-  return payload.result;
+  return requireRouterObjectPayload<{ campaignId: string; state: string; executionSummary: Record<string, unknown> }>(payload, "result");
 }
 
 export async function listCrmCampaignRecipientsViaRouter(
   campaignId: string,
 ): Promise<QrmCampaignRecipient[]> {
-  const payload = await requestRouter<{ recipients: QrmCampaignRecipient[] }>(
+  const payload = await requestRouter(
     `/qrm/campaigns/${campaignId}/recipients`,
   );
-  return payload.recipients;
+  return requireRouterArrayPayload<QrmCampaignRecipient>(payload, "recipients");
 }
 
 export async function createCrmDealViaRouter(
   input: QrmDealCreateInput,
 ): Promise<QrmRepSafeDeal> {
-  const payload = await requestRouter<{ deal: QrmRepSafeDeal }>("/qrm/deals", {
+  const payload = await requestRouter("/qrm/deals", {
     method: "POST",
     body: input,
   });
-  return payload.deal;
+  return requireRouterObjectPayload<QrmRepSafeDeal>(payload, "deal");
 }
 
 export async function fetchCompanyHierarchy(companyId: string): Promise<QrmCompanyHierarchy | null> {
   try {
-    return await requestRouter<QrmCompanyHierarchy>(`/qrm/companies/${companyId}/hierarchy`);
+    const payload = await requestRouter(`/qrm/companies/${companyId}/hierarchy`);
+    return requireRouterRecordPayload<QrmCompanyHierarchy>(payload, "Company hierarchy response");
   } catch (error) {
     if (error instanceof Error && error.message.toLowerCase().includes("not found")) {
       return null;
@@ -273,36 +331,34 @@ export async function updateCompanyParent(
   companyId: string,
   parentCompanyId: string | null,
 ): Promise<{ id: string; parentCompanyId: string | null; updatedAt: string }> {
-  const payload = await requestRouter<{
-    company: { id: string; parentCompanyId: string | null; updatedAt: string };
-  }>(`/qrm/companies/${companyId}/parent`, {
+  const payload = await requestRouter(`/qrm/companies/${companyId}/parent`, {
     method: "PATCH",
     body: { parentCompanyId },
   });
-  return payload.company;
+  return requireRouterObjectPayload<{ id: string; parentCompanyId: string | null; updatedAt: string }>(payload, "company");
 }
 
 export async function fetchCompanyShipTos(
   companyId: string,
 ): Promise<QrmCompanyShipToAddress[]> {
-  const payload = await requestRouter<{ shipTos: QrmCompanyShipToAddress[] }>(
+  const payload = await requestRouter(
     `/qrm/companies/${companyId}/ship-tos`,
   );
-  return payload.shipTos;
+  return requireRouterArrayPayload<QrmCompanyShipToAddress>(payload, "shipTos");
 }
 
 export async function createCompanyShipTo(
   companyId: string,
   input: QrmCompanyShipToInput,
 ): Promise<QrmCompanyShipToAddress> {
-  const payload = await requestRouter<{ shipTo: QrmCompanyShipToAddress }>(
+  const payload = await requestRouter(
     `/qrm/companies/${companyId}/ship-tos`,
     {
       method: "POST",
       body: input,
     },
   );
-  return payload.shipTo;
+  return requireRouterObjectPayload<QrmCompanyShipToAddress>(payload, "shipTo");
 }
 
 export async function patchCompanyShipTo(
@@ -310,57 +366,57 @@ export async function patchCompanyShipTo(
   shipToId: string,
   input: QrmCompanyShipToInput,
 ): Promise<QrmCompanyShipToAddress | { id: string; archived: true }> {
-  const payload = await requestRouter<{ shipTo: QrmCompanyShipToAddress | { id: string; archived: true } }>(
+  const payload = await requestRouter(
     `/qrm/companies/${companyId}/ship-tos/${shipToId}`,
     {
       method: "PATCH",
       body: input,
     },
   );
-  return payload.shipTo;
+  return requireRouterObjectPayload<QrmCompanyShipToAddress | { id: string; archived: true }>(payload, "shipTo");
 }
 
 export async function fetchCompanyEquipment(companyId: string): Promise<QrmEquipment[]> {
   const params = new URLSearchParams({ company_id: companyId });
-  const payload = await requestRouter<{ items: QrmEquipment[] }>(`/qrm/equipment?${params.toString()}`);
-  return payload.items;
+  const payload = await requestRouter(`/qrm/equipment?${params.toString()}`);
+  return requireRouterArrayPayload<QrmEquipment>(payload, "items");
 }
 
 /** Equipment on this company and all descendant companies (matches hierarchy roll-up). */
 export async function fetchCompanySubtreeEquipment(companyId: string): Promise<QrmEquipment[]> {
   const params = new URLSearchParams({ subtree_root: companyId });
-  const payload = await requestRouter<{ items: QrmEquipment[] }>(`/qrm/equipment?${params.toString()}`);
-  return payload.items;
+  const payload = await requestRouter(`/qrm/equipment?${params.toString()}`);
+  return requireRouterArrayPayload<QrmEquipment>(payload, "items");
 }
 
 export async function createCompanyEquipment(input: Omit<Partial<QrmEquipment>, "id" | "createdAt" | "updatedAt" | "companyName"> & { companyId: string; name: string }): Promise<QrmEquipment> {
-  const payload = await requestRouter<{ equipment: QrmEquipment }>("/qrm/equipment", {
+  const payload = await requestRouter("/qrm/equipment", {
     method: "POST",
     body: input,
   });
-  return payload.equipment;
+  return requireRouterObjectPayload<QrmEquipment>(payload, "equipment");
 }
 
 export async function getEquipmentById(equipmentId: string): Promise<QrmEquipment> {
-  const payload = await requestRouter<{ equipment: QrmEquipment }>(`/qrm/equipment/${equipmentId}`);
-  return payload.equipment;
+  const payload = await requestRouter(`/qrm/equipment/${equipmentId}`);
+  return requireRouterObjectPayload<QrmEquipment>(payload, "equipment");
 }
 
 export async function patchEquipment(
   equipmentId: string,
   input: Partial<QrmEquipment>,
 ): Promise<QrmEquipment> {
-  const payload = await requestRouter<{ equipment: QrmEquipment }>(`/qrm/equipment/${equipmentId}`, {
+  const payload = await requestRouter(`/qrm/equipment/${equipmentId}`, {
     method: "PATCH",
     body: input,
   });
-  return payload.equipment;
+  return requireRouterObjectPayload<QrmEquipment>(payload, "equipment");
 }
 
 export async function fetchDealEquipment(dealId: string): Promise<QrmDealEquipmentLink[]> {
   const params = new URLSearchParams({ deal_id: dealId });
-  const payload = await requestRouter<{ items: QrmDealEquipmentLink[] }>(`/qrm/deal-equipment?${params.toString()}`);
-  return payload.items;
+  const payload = await requestRouter(`/qrm/deal-equipment?${params.toString()}`);
+  return requireRouterArrayPayload<QrmDealEquipmentLink>(payload, "items");
 }
 
 export async function linkEquipmentToDeal(input: {
@@ -369,15 +425,15 @@ export async function linkEquipmentToDeal(input: {
   role?: QrmDealEquipmentRole;
   notes?: string | null;
 }): Promise<QrmDealEquipmentLink> {
-  const payload = await requestRouter<{ link: QrmDealEquipmentLink }>("/qrm/deal-equipment", {
+  const payload = await requestRouter("/qrm/deal-equipment", {
     method: "POST",
     body: input,
   });
-  return payload.link;
+  return requireRouterObjectPayload<QrmDealEquipmentLink>(payload, "link");
 }
 
 export async function unlinkEquipmentFromDeal(linkId: string): Promise<void> {
-  await requestRouter<{ deleted: boolean }>(`/qrm/deal-equipment/${linkId}`, {
+  await requestRouter(`/qrm/deal-equipment/${linkId}`, {
     method: "DELETE",
   });
 }
@@ -396,7 +452,8 @@ export async function listCustomFieldDefinitions(
   constraints: Record<string, unknown>;
 }>> {
   const params = new URLSearchParams({ object_type: objectType });
-  const payload = await requestRouter<{ items: Array<{
+  const payload = await requestRouter(`/qrm/custom-field-definitions?${params.toString()}`);
+  return requireRouterArrayPayload<{
     id: string;
     objectType: QrmRecordType;
     key: string;
@@ -406,8 +463,7 @@ export async function listCustomFieldDefinitions(
     visibilityRoles: string[];
     sortOrder: number;
     constraints: Record<string, unknown>;
-  }> }>(`/qrm/custom-field-definitions?${params.toString()}`);
-  return payload.items;
+  }>(payload, "items");
 }
 
 export async function createCustomFieldDefinition(input: {
@@ -418,7 +474,7 @@ export async function createCustomFieldDefinition(input: {
   required: boolean;
   visibilityRoles: string[];
 }): Promise<void> {
-  await requestRouter<{ definition: unknown }>("/qrm/custom-field-definitions", {
+  await requestRouter("/qrm/custom-field-definitions", {
     method: "POST",
     body: input,
   });
@@ -429,8 +485,8 @@ export async function fetchRecordCustomFields(
   recordId: string,
 ): Promise<QrmCustomField[]> {
   const params = new URLSearchParams({ record_type: recordType, record_id: recordId });
-  const payload = await requestRouter<{ fields: QrmCustomField[] }>(`/qrm/custom-fields?${params.toString()}`);
-  return payload.fields;
+  const payload = await requestRouter(`/qrm/custom-fields?${params.toString()}`);
+  return requireRouterArrayPayload<QrmCustomField>(payload, "fields");
 }
 
 export async function saveRecordCustomFields(
@@ -438,7 +494,7 @@ export async function saveRecordCustomFields(
   recordId: string,
   values: Record<string, unknown>,
 ): Promise<QrmCustomField[]> {
-  const payload = await requestRouter<{ fields: QrmCustomField[] }>("/qrm/custom-fields", {
+  const payload = await requestRouter("/qrm/custom-fields", {
     method: "PATCH",
     body: {
       recordType,
@@ -446,16 +502,16 @@ export async function saveRecordCustomFields(
       values,
     },
   });
-  return payload.fields;
+  return requireRouterArrayPayload<QrmCustomField>(payload, "fields");
 }
 
 export async function listDuplicateCandidates(): Promise<QrmDuplicateCandidate[]> {
-  const payload = await requestRouter<{ candidates: QrmDuplicateCandidate[] }>("/qrm/duplicates");
-  return payload.candidates;
+  const payload = await requestRouter("/qrm/duplicates");
+  return requireRouterArrayPayload<QrmDuplicateCandidate>(payload, "candidates");
 }
 
 export async function dismissDuplicateCandidate(candidateId: string): Promise<void> {
-  await requestRouter<{ ok: boolean }>(`/qrm/duplicates/${candidateId}/dismiss`, {
+  await requestRouter(`/qrm/duplicates/${candidateId}/dismiss`, {
     method: "POST",
   });
 }
@@ -464,7 +520,7 @@ export async function mergeDuplicateContacts(input: {
   survivorId: string;
   loserId: string;
 }): Promise<void> {
-  await requestRouter<{ merge: unknown }>("/qrm/merges", {
+  await requestRouter("/qrm/merges", {
     method: "POST",
     idempotencyKey: crypto.randomUUID(),
     body: input,
@@ -508,10 +564,10 @@ export async function listQrmMoves(params: ListMovesParams = {}): Promise<QrmMov
   if (params.limit != null) q.set("limit", String(params.limit));
 
   const qs = q.toString();
-  const payload = await requestRouter<{ moves: QrmMove[] }>(
+  const payload = await requestRouter(
     `/qrm/moves${qs ? `?${qs}` : ""}`,
   );
-  return payload.moves;
+  return requireRouterArrayPayload<QrmMove>(payload, "moves");
 }
 
 /**
@@ -565,18 +621,19 @@ export async function patchQrmMove(
   moveId: string,
   input: PatchMoveInput,
 ): Promise<QrmMovePatchResult> {
-  const payload = await requestRouter<{
-    move: QrmMove;
-    touch_id: string | null;
-    signals_suppressed: number;
-  }>(`/qrm/moves/${moveId}`, {
+  const payload = await requestRouter(`/qrm/moves/${moveId}`, {
     method: "PATCH",
     body: input,
   });
+  const move = requireRouterObjectPayload<QrmMove>(payload, "move");
+  const touchId = typeof payload.touch_id === "string" ? payload.touch_id : null;
+  const signalsSuppressed = typeof payload.signals_suppressed === "number" && Number.isFinite(payload.signals_suppressed)
+    ? payload.signals_suppressed
+    : 0;
   return {
-    move: payload.move,
-    touchId: payload.touch_id ?? null,
-    signalsSuppressed: payload.signals_suppressed ?? 0,
+    move,
+    touchId,
+    signalsSuppressed,
   };
 }
 
@@ -625,10 +682,10 @@ export async function listQrmSignals(
   if (params.limit != null) q.set("limit", String(params.limit));
 
   const qs = q.toString();
-  const payload = await requestRouter<{ signals: QrmSignal[] }>(
+  const payload = await requestRouter(
     `/qrm/signals${qs ? `?${qs}` : ""}`,
   );
-  return payload.signals;
+  return requireRouterArrayPayload<QrmSignal>(payload, "signals");
 }
 
 /**
@@ -640,8 +697,8 @@ export async function listQrmSignalsByIds(ids: readonly string[]): Promise<QrmSi
   const filtered = ids.filter((id) => typeof id === "string" && id.length > 0);
   if (filtered.length === 0) return [];
   const q = new URLSearchParams({ ids: filtered.join(",") });
-  const payload = await requestRouter<{ signals: QrmSignal[] }>(
+  const payload = await requestRouter(
     `/qrm/signals?${q.toString()}`,
   );
-  return payload.signals;
+  return requireRouterArrayPayload<QrmSignal>(payload, "signals");
 }

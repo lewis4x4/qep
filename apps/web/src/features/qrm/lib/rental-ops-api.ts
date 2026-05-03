@@ -2,6 +2,52 @@ import { supabase } from "@/lib/supabase";
 
 const RENTAL_OPS_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rental-ops`;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseRentalOpsJson(text: string): unknown {
+  return JSON.parse(text);
+}
+
+export function normalizeRentalOpsErrorMessage(text: string, status: number): string {
+  let message = `Request failed (${status})`;
+  try {
+    const parsed = parseRentalOpsJson(text);
+    if (isRecord(parsed) && typeof parsed.error === "string" && parsed.error.trim()) {
+      message = parsed.error.trim();
+    }
+  } catch {
+    const fallback = text.trim().slice(0, 240);
+    if (fallback) message = fallback;
+  }
+  return message;
+}
+
+export function normalizeRentalOpsSuccessPayload(text: string): Record<string, unknown> {
+  if (!text.trim()) return {};
+
+  let parsed: unknown;
+  try {
+    parsed = parseRentalOpsJson(text);
+  } catch {
+    throw new Error("Rental ops returned malformed JSON.");
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error("Rental ops returned an invalid JSON payload.");
+  }
+  return parsed;
+}
+
+export function requireRentalOpsObjectPayload(payload: Record<string, unknown>, key: string): Record<string, unknown> {
+  const value = payload[key];
+  if (!isRecord(value)) {
+    throw new Error(`Rental ops response is missing a valid '${key}' object.`);
+  }
+  return value;
+}
+
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const sessionResult = await supabase.auth.getSession();
   let session = sessionResult.data.session;
@@ -18,7 +64,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   };
 }
 
-async function rentalOpsFetch<T extends Record<string, unknown>>(body: Record<string, unknown>): Promise<T> {
+async function rentalOpsFetch(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const res = await fetch(RENTAL_OPS_API_URL, {
     method: "POST",
     headers: await getAuthHeaders(),
@@ -26,17 +72,9 @@ async function rentalOpsFetch<T extends Record<string, unknown>>(body: Record<st
   });
   const text = await res.text();
   if (!res.ok) {
-    let message = `Request failed (${res.status})`;
-    try {
-      const parsed = JSON.parse(text) as { error?: string };
-      if (typeof parsed.error === "string" && parsed.error.trim()) message = parsed.error.trim();
-    } catch {
-      const fallback = text.trim().slice(0, 240);
-      if (fallback) message = fallback;
-    }
-    throw new Error(message);
+    throw new Error(normalizeRentalOpsErrorMessage(text, res.status));
   }
-  return text.trim() ? JSON.parse(text) as T : {} as T;
+  return normalizeRentalOpsSuccessPayload(text);
 }
 
 export const rentalOpsApi = {
@@ -47,27 +85,27 @@ export const rentalOpsApi = {
     dealer_response?: string | null;
     deposit_amount?: number;
   }) =>
-    rentalOpsFetch<{ contract: Record<string, unknown> }>({
+    rentalOpsFetch({
       action: "approve_booking",
       ...data,
-    }),
+    }).then((payload) => ({ contract: requireRentalOpsObjectPayload(payload, "contract") })),
   declineBooking: (data: { contract_id: string; dealer_response?: string | null }) =>
-    rentalOpsFetch<{ contract: Record<string, unknown> }>({
+    rentalOpsFetch({
       action: "decline_booking",
       ...data,
-    }),
+    }).then((payload) => ({ contract: requireRentalOpsObjectPayload(payload, "contract") })),
   approveExtension: (data: {
     extension_id: string;
     dealer_response?: string | null;
     additional_charge?: number;
   }) =>
-    rentalOpsFetch<{ extension: Record<string, unknown> }>({
+    rentalOpsFetch({
       action: "approve_extension",
       ...data,
-    }),
+    }).then((payload) => ({ extension: requireRentalOpsObjectPayload(payload, "extension") })),
   declineExtension: (data: { extension_id: string; dealer_response?: string | null }) =>
-    rentalOpsFetch<{ extension: Record<string, unknown> }>({
+    rentalOpsFetch({
       action: "decline_extension",
       ...data,
-    }),
+    }).then((payload) => ({ extension: requireRentalOpsObjectPayload(payload, "extension") })),
 };
