@@ -26,7 +26,8 @@ If another document conflicts with this one, treat this document as the current 
 | Raw source file custody | Manifested 2026-05-03 | `SOURCE_FILE_CUSTODY_MANIFEST.md` | The raw files remain untracked, but filename, size, SHA-256, page counts, workbook row counts, and import run binding are now committed and script-verifiable. |
 | Fresh production verification | Passed 2026-05-03 | `FRESH_PRODUCTION_VERIFICATION_2026-05-03.md` | Rerun safety, production reconciliation, production browser smoke, storage cleanup, and active-run checks passed against the current production bundle. |
 | UI completion review | Passed 2026-05-03 | `UI_COMPLETION_REVIEW_2026-05-03.md` | Account 360, Companies search, company/contact editors, admin dashboard, safe export download, browser stage, preflight rejection, discard, and cleanup are verified. |
-| Non-core API type hardening | In progress 2026-05-03 | `NON_CORE_API_TYPE_HARDENING_2026-05-03.md` | Hardened ops payment validation and ops traffic/intake/rental/SOP workflows, service labor pricing/agreement pages, QRM approval-center, service agreement, vendor profile rows and page client paths, vendor pricing portal responses, service scheduler/WIP/dashboard pages, service customer/equipment search and parts queue hooks, service shop invoice/intake/portal-parts-order pages, service parts requirement editor, service local/browser casts, service API helpers, service InspectionPlus pages, exec shared-data/metric drill/command-center components and handoff trust, nervous-system API/health drawer, Brief Build Hub API, quote-builder incentive stack/outcomes/deal-intelligence/quote API recommendation/send/approval/portal-revision/customer-search/coach/point-shoot-trade/scenario payloads, Floor customer/serial/health widget, Floor operational widget, owner dashboard API, Floor role-home, parts companion pricing/replenish/supplier-health/post-sale/intelligence/core/import/voice API, portal fleet/doc/history and portal page/API payloads, fleet map, DGE edge responses, OEM portal dashboard/vault, email draft inbox/API, sales companion API, equipment Asset 360 rows, parts hook/forecast/edge-response, parts operational hook/catalog, parts purchase-order, and parts local/browser row/payload shapes with targeted tests and web typecheck. |
+| Non-core API type hardening | Active-code pass complete 2026-05-03 | `NON_CORE_API_TYPE_HARDENING_2026-05-03.md` | Slice 6 active-code high-risk direct-cast scan is clear except for the intentional central `qrm-supabase` typed-client adapter; remaining matches are tests or `Customer-strategist.tsx.backup`. |
+| Final signoff pack | Passed 2026-05-03 | `FINAL_SIGNOFF_PACK_2026-05-03.md` | The handoff now has one closeout bundle for production data, source custody, UI readiness, verification commands, rollback limits, deferred integrations, and remaining residuals. |
 
 ## Production Customer Import Baseline
 
@@ -78,7 +79,6 @@ These are not customer-import blockers, but they must not be represented as done
 
 - Raw IntelliDealer source files remain untracked by policy until a privacy/retention decision approves committing or moving them to controlled private storage.
 - Wave 5 integrations are deferred until credentials and dealer-specific scope are available.
-- Remaining non-core raw Supabase row casts still need slice-by-slice normalization if the goal is broader API hardening.
 - The latest Slice 6 active-code scan is clear except for the intentional central `qrm-supabase` typed-client adapter; remaining matches are malformed-type test fixtures and `Customer-strategist.tsx.backup`, which is excluded unless restored into active code.
 - The old `test-results/agent-gates/*` evidence referenced by `_migration_order.md` is not present in the current working tree; either recover those artifacts or replace them with fresh gate outputs.
 
@@ -180,7 +180,7 @@ Gate:
 
 ### Slice 6: Non-Core API Type Hardening
 
-Status: in progress 2026-05-03. First hardening pass complete.
+Status: complete for assigned active-code hardening scope 2026-05-03.
 
 Goal: reduce runtime risk from stale Supabase row assumptions.
 
@@ -192,7 +192,7 @@ Deliverables:
 
 Gate:
 
-- No core customer or Account 360 path depends on unchecked raw row shape assumptions.
+- PASS. No core customer or Account 360 path depends on unchecked raw row shape assumptions, and the assigned active-code scan is clear except for the intentional central `qrm-supabase` typed-client adapter.
 
 Current result:
 
@@ -316,6 +316,8 @@ Result:
 
 ### Slice 8: Final Signoff Pack
 
+Status: complete 2026-05-03.
+
 Goal: close the handoff with one evidence bundle.
 
 Deliverables:
@@ -330,4 +332,8 @@ Deliverables:
 
 Gate:
 
-- The repo can answer what is live, what data is in production, what was verified, what is deferred, and what remains.
+- PASS. The repo can answer what is live, what data is in production, what was verified, what is deferred, and what remains.
+
+Result:
+
+- `FINAL_SIGNOFF_PACK_2026-05-03.md` records the production import baseline, reconciliation counts, UI signoff, source custody, rerun commands, rollback limits, gap-audit status, Slice 6 status, Slice 7 status, known residuals, and final closeout gate.
