@@ -8,8 +8,67 @@ import {
   buildSimilarDealsQuery,
   computePriceBand,
   deriveOutcomeFromStatus,
+  normalizeCoachActionRows,
+  normalizeMarginExceptionRows,
+  normalizePackageOutcomeRows,
+  normalizePackageStatusRows,
+  normalizeSimilarPackageRows,
+  normalizeSuppressionActionRows,
   type ReasonBucket,
 } from "../deal-intelligence-api";
+
+// ── row normalizers ──────────────────────────────────────────────────────
+
+describe("deal intelligence row normalizers", () => {
+  test("normalizes similar package rows and numeric strings", () => {
+    expect(normalizeSimilarPackageRows([
+      {
+        id: "pkg-1",
+        equipment: [{ make: "ASV" }],
+        net_total: "100000",
+        margin_pct: "22.5",
+        status: "accepted",
+        created_at: "2026-05-03T12:00:00.000Z",
+      },
+      { id: "bad", status: "draft" },
+    ])).toEqual([
+      {
+        id: "pkg-1",
+        equipment: [{ make: "ASV" }],
+        net_total: 100000,
+        margin_pct: 22.5,
+        status: "accepted",
+        created_at: "2026-05-03T12:00:00.000Z",
+      },
+    ]);
+  });
+
+  test("normalizes package outcomes and rejects invalid outcome enums", () => {
+    expect(normalizePackageOutcomeRows([
+      { quote_package_id: "pkg-1", outcome: "won" },
+      { quote_package_id: "pkg-2", outcome: "bad" },
+      { outcome: "lost" },
+    ])).toEqual([{ quote_package_id: "pkg-1", outcome: "won" }]);
+  });
+
+  test("normalizes exception, status, action, and suppression rows", () => {
+    expect(normalizeMarginExceptionRows([
+      { quote_package_id: "pkg-1", reason: "competitor match", estimated_gap_cents: "4500", created_at: "2026-05-03T12:00:00.000Z" },
+      { quote_package_id: "bad", reason: "missing date" },
+    ])).toEqual([
+      { quote_package_id: "pkg-1", reason: "competitor match", estimated_gap_cents: 4500, created_at: "2026-05-03T12:00:00.000Z" },
+    ]);
+
+    expect(normalizePackageStatusRows([{ id: "pkg-1", status: "accepted" }, { id: "bad" }]))
+      .toEqual([{ id: "pkg-1", status: "accepted" }]);
+
+    expect(normalizeCoachActionRows([{ rule_id: "margin_baseline", action: "applied" }, { action: "dismissed" }]))
+      .toEqual([{ rule_id: "margin_baseline", action: "applied" }]);
+
+    expect(normalizeSuppressionActionRows([{ rule_id: "active_programs" }, { rule_id: "" }]))
+      .toEqual([{ rule_id: "active_programs" }]);
+  });
+});
 
 // ── computePriceBand ─────────────────────────────────────────────────────
 

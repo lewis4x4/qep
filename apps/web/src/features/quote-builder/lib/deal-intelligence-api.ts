@@ -19,17 +19,152 @@
  */
 
 import { supabase } from "@/lib/supabase";
-import type { Database } from "@/lib/database.types";
 import type { QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
-type QuotePackageRow = Database["public"]["Tables"]["quote_packages"]["Row"];
-type OutcomeRow      = Database["public"]["Tables"]["qb_quote_outcomes"]["Row"];
-type ExceptionRow    = Database["public"]["Tables"]["qb_margin_exceptions"]["Row"];
-type ActionRow       = Database["public"]["Tables"]["qb_deal_coach_actions"]["Row"];
-
 export type QuoteOutcome = "won" | "lost" | "expired" | "skipped";
+
+interface SimilarPackageRow {
+  id: string;
+  equipment: unknown;
+  net_total: number | null;
+  margin_pct: number | null;
+  status: string;
+  created_at: string;
+}
+
+interface PackageOutcomeRow {
+  quote_package_id: string;
+  outcome: QuoteOutcome;
+}
+
+interface MarginExceptionSampleRow {
+  quote_package_id: string;
+  reason: string | null;
+  estimated_gap_cents: number | null;
+  created_at: string;
+}
+
+interface PackageStatusRow {
+  id: string;
+  status: string;
+}
+
+interface CoachActionSampleRow {
+  rule_id: string;
+  action: string | null;
+}
+
+interface SuppressionActionRow {
+  rule_id: string;
+}
+
+const QUOTE_OUTCOMES = new Set<QuoteOutcome>(["won", "lost", "expired", "skipped"]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function requiredString(value: unknown): string | null {
+  const normalized = stringOrNull(value)?.trim();
+  return normalized ? normalized : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function quoteOutcomeOrNull(value: unknown): QuoteOutcome | null {
+  return typeof value === "string" && QUOTE_OUTCOMES.has(value as QuoteOutcome)
+    ? value as QuoteOutcome
+    : null;
+}
+
+export function normalizeSimilarPackageRows(rows: unknown): SimilarPackageRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = requiredString(value.id);
+    const status = requiredString(value.status);
+    const createdAt = requiredString(value.created_at);
+    if (!id || !status || !createdAt) return [];
+    return [{
+      id,
+      equipment: value.equipment,
+      net_total: numberOrNull(value.net_total),
+      margin_pct: numberOrNull(value.margin_pct),
+      status,
+      created_at: createdAt,
+    }];
+  });
+}
+
+export function normalizePackageOutcomeRows(rows: unknown): PackageOutcomeRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const quotePackageId = requiredString(value.quote_package_id);
+    const outcome = quoteOutcomeOrNull(value.outcome);
+    if (!quotePackageId || !outcome) return [];
+    return [{ quote_package_id: quotePackageId, outcome }];
+  });
+}
+
+export function normalizeMarginExceptionRows(rows: unknown): MarginExceptionSampleRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const quotePackageId = requiredString(value.quote_package_id);
+    const createdAt = requiredString(value.created_at);
+    if (!quotePackageId || !createdAt) return [];
+    return [{
+      quote_package_id: quotePackageId,
+      reason: stringOrNull(value.reason),
+      estimated_gap_cents: numberOrNull(value.estimated_gap_cents),
+      created_at: createdAt,
+    }];
+  });
+}
+
+export function normalizePackageStatusRows(rows: unknown): PackageStatusRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = requiredString(value.id);
+    const status = requiredString(value.status);
+    if (!id || !status) return [];
+    return [{ id, status }];
+  });
+}
+
+export function normalizeCoachActionRows(rows: unknown): CoachActionSampleRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const ruleId = requiredString(value.rule_id);
+    if (!ruleId) return [];
+    return [{ rule_id: ruleId, action: stringOrNull(value.action) }];
+  });
+}
+
+export function normalizeSuppressionActionRows(rows: unknown): SuppressionActionRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const ruleId = requiredString(value.rule_id);
+    return ruleId ? [{ rule_id: ruleId }] : [];
+  });
+}
 
 // ── Similar deal outcomes ────────────────────────────────────────────────
 
@@ -79,8 +214,7 @@ export async function getSimilarDealOutcomes(
     .gte("net_total", priceBandLow)
     .lte("net_total", priceBandHigh);
 
-  const rows = ((pkgs ?? []) as Array<Pick<QuotePackageRow,
-    "id" | "equipment" | "net_total" | "margin_pct" | "status" | "created_at">>)
+  const rows = normalizeSimilarPackageRows(pkgs)
     .filter((p) => brandMatches(p.equipment, query.brandName));
 
   if (rows.length === 0) {
@@ -103,10 +237,10 @@ export async function getSimilarDealOutcomes(
     .in("quote_package_id", ids);
 
   const outcomeByPkg = new Map<string, QuoteOutcome>();
-  for (const o of (outcomes ?? []) as Pick<OutcomeRow, "quote_package_id" | "outcome">[]) {
+  for (const o of normalizePackageOutcomeRows(outcomes)) {
     // If a package has multiple outcome rows (reopens), latest row wins —
     // we don't have ordering here, but this fallback is fine for aggregate.
-    outcomeByPkg.set(o.quote_package_id, o.outcome as QuoteOutcome);
+    outcomeByPkg.set(o.quote_package_id, o.outcome);
   }
 
   // Quote-package status is our secondary signal: status=accepted on a
@@ -179,8 +313,7 @@ export async function getReasonIntelligence(daysBack = 180): Promise<ReasonIntel
     .select("quote_package_id, reason, estimated_gap_cents, created_at")
     .gte("created_at", cutoff.toISOString());
 
-  const exceptionRows = ((excs ?? []) as Pick<ExceptionRow,
-    "quote_package_id" | "reason" | "estimated_gap_cents" | "created_at">[]);
+  const exceptionRows = normalizeMarginExceptionRows(excs);
 
   if (exceptionRows.length === 0) {
     return { stats: [], totalSamples: 0 };
@@ -193,8 +326,8 @@ export async function getReasonIntelligence(daysBack = 180): Promise<ReasonIntel
     .in("quote_package_id", ids);
 
   const outcomeByPkg = new Map<string, QuoteOutcome>();
-  for (const o of (outcomes ?? []) as Pick<OutcomeRow, "quote_package_id" | "outcome">[]) {
-    outcomeByPkg.set(o.quote_package_id, o.outcome as QuoteOutcome);
+  for (const o of normalizePackageOutcomeRows(outcomes)) {
+    outcomeByPkg.set(o.quote_package_id, o.outcome);
   }
 
   // Fall back to package status when there's no explicit outcome row
@@ -203,7 +336,7 @@ export async function getReasonIntelligence(daysBack = 180): Promise<ReasonIntel
     .select("id, status")
     .in("id", ids);
   const statusByPkg = new Map<string, string>();
-  for (const p of (pkgStatuses ?? []) as { id: string; status: string }[]) {
+  for (const p of normalizePackageStatusRows(pkgStatuses)) {
     statusByPkg.set(p.id, p.status);
   }
 
@@ -248,7 +381,7 @@ export async function getRuleAcceptanceStats(daysBack = 60): Promise<RuleAccepta
     .order("shown_at", { ascending: false })
     .limit(MAX_ACCEPTANCE_ROWS);
 
-  return aggregateRuleAcceptance(((rows ?? []) as Pick<ActionRow, "rule_id" | "action">[]));
+  return aggregateRuleAcceptance(normalizeCoachActionRows(rows));
 }
 
 // ── Personal suppression memory ──────────────────────────────────────────
@@ -282,7 +415,7 @@ export async function getPersonalSuppressions(
     .gte("acted_at", cutoff.toISOString());
 
   const counts = new Map<string, number>();
-  for (const r of (rows ?? []) as Pick<ActionRow, "rule_id">[]) {
+  for (const r of normalizeSuppressionActionRows(rows)) {
     counts.set(r.rule_id, (counts.get(r.rule_id) ?? 0) + 1);
   }
 
@@ -319,7 +452,7 @@ export function computePriceBand(
  * Tolerates null/missing brand and missing equipment.
  */
 export function brandMatches(
-  equipment: QuotePackageRow["equipment"],
+  equipment: unknown,
   brandName: string | null,
 ): boolean {
   if (!brandName) return true; // no brand filter = match everything in range
@@ -418,7 +551,7 @@ export function aggregateReasonIntelligence(
 
 /** Aggregate rule acceptance given action rows. Pure. */
 export function aggregateRuleAcceptance(
-  rows: Array<Pick<ActionRow, "rule_id" | "action">>,
+  rows: Array<{ rule_id: string; action: string | null }>,
 ): RuleAcceptanceStat[] {
   const byRule = new Map<string, { shown: number; applied: number; dismissed: number }>();
   for (const r of rows) {
