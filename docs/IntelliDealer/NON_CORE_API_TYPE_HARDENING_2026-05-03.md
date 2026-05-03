@@ -27,6 +27,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Parts companion supplier health API | Supplier health summary RPC returned nested vendor, price-creep, fill-rate, and row payloads through a direct cast. | Added exported supplier health normalizers with health-tier validation, numeric-string coercion, malformed vendor-row filtering, and safe count/collection defaults. |
 | Parts companion post-sale playbook API | Post-sale playbook summary, eligible deals, generation edge responses, and detail payloads returned through direct casts or untyped `never`. | Added exported post-sale normalizers with playbook status/window validation, numeric-string coercion, malformed row/part filtering, safe payload defaults, and malformed detail-response rejection. |
 | Parts companion intelligence API | Parts intelligence summary, seeded forecast, predictive plays, predictive run, AI prediction, embed backfill, action-play, and AI timeout recovery rows returned through direct casts or untyped aggregation. | Added exported intelligence normalizers with enum validation, numeric-string coercion, malformed row/play filtering, safe KPI defaults, normalized run results, and typed AI recovery aggregation. |
+| Parts companion core API | Queue items, request activity, machine profiles, counter inquiries, and preferences returned Supabase rows through direct casts. | Added exported companion API normalizers with request/activity/preference enum validation, numeric-string coercion, nested machine metadata guards, malformed-row filtering, and safe null handling for detail/preference reads. |
 
 ## Verification
 
@@ -55,6 +56,8 @@ bun test src/features/parts-companion/lib/post-sale-api-normalizers.test.ts
 bun test src/features/ops/lib/payment-validation-history.test.ts src/features/service/lib/service-labor-pricing-utils.test.ts src/features/qrm/command-center/lib/approvalTypes.test.ts src/features/service/lib/service-agreement-utils.test.ts src/features/service/lib/vendor-profile-utils.test.ts src/features/exec/lib/exec-row-normalizers.test.ts src/features/floor/widgets/floor-widget-row-normalizers.test.ts src/features/floor/widgets/operational-widget-normalizers.test.ts src/features/owner/lib/owner-api-normalizers.test.ts src/features/floor/widgets/role-home-widget-normalizers.test.ts src/features/parts-companion/lib/pricing-api-normalizers.test.ts src/features/parts-companion/lib/replenish-api-normalizers.test.ts src/features/parts-companion/lib/supplier-health-api-normalizers.test.ts src/features/parts-companion/lib/post-sale-api-normalizers.test.ts
 bun test src/features/parts-companion/lib/intelligence-api-normalizers.test.ts
 bun test src/features/ops/lib/payment-validation-history.test.ts src/features/service/lib/service-labor-pricing-utils.test.ts src/features/qrm/command-center/lib/approvalTypes.test.ts src/features/service/lib/service-agreement-utils.test.ts src/features/service/lib/vendor-profile-utils.test.ts src/features/exec/lib/exec-row-normalizers.test.ts src/features/floor/widgets/floor-widget-row-normalizers.test.ts src/features/floor/widgets/operational-widget-normalizers.test.ts src/features/owner/lib/owner-api-normalizers.test.ts src/features/floor/widgets/role-home-widget-normalizers.test.ts src/features/parts-companion/lib/pricing-api-normalizers.test.ts src/features/parts-companion/lib/replenish-api-normalizers.test.ts src/features/parts-companion/lib/supplier-health-api-normalizers.test.ts src/features/parts-companion/lib/post-sale-api-normalizers.test.ts src/features/parts-companion/lib/intelligence-api-normalizers.test.ts
+bun test src/features/parts-companion/lib/companion-api-normalizers.test.ts
+bun test src/features/ops/lib/payment-validation-history.test.ts src/features/service/lib/service-labor-pricing-utils.test.ts src/features/qrm/command-center/lib/approvalTypes.test.ts src/features/service/lib/service-agreement-utils.test.ts src/features/service/lib/vendor-profile-utils.test.ts src/features/exec/lib/exec-row-normalizers.test.ts src/features/floor/widgets/floor-widget-row-normalizers.test.ts src/features/floor/widgets/operational-widget-normalizers.test.ts src/features/owner/lib/owner-api-normalizers.test.ts src/features/floor/widgets/role-home-widget-normalizers.test.ts src/features/parts-companion/lib/pricing-api-normalizers.test.ts src/features/parts-companion/lib/replenish-api-normalizers.test.ts src/features/parts-companion/lib/supplier-health-api-normalizers.test.ts src/features/parts-companion/lib/post-sale-api-normalizers.test.ts src/features/parts-companion/lib/intelligence-api-normalizers.test.ts src/features/parts-companion/lib/companion-api-normalizers.test.ts
 bun run --filter @qep/web typecheck
 ```
 
@@ -75,7 +78,8 @@ Results:
 - Parts companion supplier health API normalizer tests: `3 pass`, `0 fail`.
 - Parts companion post-sale playbook API normalizer tests: `5 pass`, `0 fail`.
 - Parts companion intelligence API normalizer tests: `6 pass`, `0 fail`.
-- Combined targeted test run: `77 pass`, `0 fail`.
+- Parts companion core API normalizer tests: `5 pass`, `0 fail`.
+- Combined targeted test run: `82 pass`, `0 fail`.
 - Web typecheck: PASS.
 
 ## Remaining Slice 6 Work

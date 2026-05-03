@@ -13,6 +13,15 @@ import type {
   PartsPreferences,
   RequestItem,
 } from "./types";
+import {
+  normalizeCounterInquiries,
+  normalizeMachineProfile,
+  normalizeMachineProfiles,
+  normalizePartsPreferences,
+  normalizeQueueItem,
+  normalizeQueueItems,
+  normalizeRequestActivities,
+} from "./companion-api-normalizers";
 
 // ── Auth Helper ─────────────────────────────────────────────
 
@@ -54,7 +63,7 @@ export async function fetchPartsQueue(): Promise<QueueItem[]> {
     .order("created_at", { ascending: true });
 
   if (error) throw error;
-  return (data || []) as QueueItem[];
+  return normalizeQueueItems(data);
 }
 
 export async function fetchRequestDetail(
@@ -67,7 +76,7 @@ export async function fetchRequestDetail(
     .single();
 
   if (error) return null;
-  return data as QueueItem;
+  return normalizeQueueItem(data);
 }
 
 export async function fetchRequestActivity(
@@ -80,7 +89,7 @@ export async function fetchRequestActivity(
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return (data || []) as RequestActivity[];
+  return normalizeRequestActivities(data);
 }
 
 // ── Request Actions (via Edge Function) ─────────────────────
@@ -209,7 +218,7 @@ export async function fetchMachineProfiles(filters?: {
   const { data, error } = await query;
   if (error) throw error;
 
-  let results = (data || []) as MachineProfile[];
+  let results = normalizeMachineProfiles(data);
 
   // Client-side text filter if search provided
   if (filters?.search) {
@@ -236,7 +245,7 @@ export async function fetchMachineProfile(
     .single();
 
   if (error) return null;
-  return data as MachineProfile;
+  return normalizeMachineProfile(data);
 }
 
 // ── Counter Inquiries ───────────────────────────────────────
@@ -273,7 +282,7 @@ export async function fetchRecentInquiries(
     .limit(limit);
 
   if (error) throw error;
-  return (data || []) as CounterInquiry[];
+  return normalizeCounterInquiries(data);
 }
 
 // ── Preferences ─────────────────────────────────────────────
@@ -290,7 +299,7 @@ export async function fetchPreferences(): Promise<PartsPreferences | null> {
     .eq("user_id", user.id)
     .single();
 
-  return data as PartsPreferences | null;
+  return normalizePartsPreferences(data);
 }
 
 export async function upsertPreferences(
