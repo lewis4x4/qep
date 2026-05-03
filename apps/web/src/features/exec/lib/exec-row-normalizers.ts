@@ -20,6 +20,104 @@ export interface ExecSnapshotHistoryRow {
   refresh_state: MetricRefreshState;
 }
 
+export interface ExecMarginWaterfallRow {
+  month: string;
+  revenue: number;
+  gross_margin_dollars: number;
+  net_contribution_dollars: number | null;
+  load_dollars: number;
+  loaded_margin_pct: number | null;
+}
+
+export interface ExecPolicyExceptionRow {
+  id: string;
+  source: string;
+  severity: AlertSeverity;
+  title: string;
+  detail: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ExecBranchComparisonRow {
+  branch_id: string | null;
+  overdue: number | null;
+  active: number | null;
+  closed: number | null;
+}
+
+export interface ExecHealthMoverRow {
+  customer_profile_id: string;
+  health_score: number | null;
+  health_score_updated_at: string | null;
+}
+
+export interface ExecCustomerProfileRow {
+  id: string;
+  customer_name: string;
+  company_name: string | null;
+  lifetime_value: number | null;
+  fleet_size: number | null;
+}
+
+export interface ExecPacketResponse {
+  ok: true;
+  run_id: string | null;
+  role: string;
+  generated_at: string;
+  markdown: string;
+  json: Record<string, unknown>;
+  stats: { definitions: number; snapshots: number; alerts: number };
+}
+
+export interface ExecPacketRunRow {
+  id: string;
+  generated_at: string;
+  packet_md: string;
+  metrics_count: number;
+  alerts_count: number;
+  delivery_status: string | null;
+  delivered_at: string | null;
+  delivery_target: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface ExecTrafficRow {
+  id: string;
+  stock_number: string;
+  ticket_type: string;
+  status: string;
+  blocker_reason: string | null;
+  promised_delivery_at: string | null;
+  to_location: string;
+}
+
+export interface ExecInventoryReadinessRow {
+  total_units: number;
+  ready_units: number;
+  in_prep_units: number;
+  blocked_units: number;
+  intake_stalled: number;
+  ready_rate_pct: number;
+}
+
+export interface ExecRentalReturnRow {
+  id: string;
+  status: string;
+  aging_bucket: string | null;
+  refund_status: string | null;
+  damage_description: string | null;
+}
+
+export interface ExecInterventionHistoryRow {
+  id: string;
+  resolution_type: string;
+  resolution_notes: string | null;
+  resolved_at: string;
+  time_to_resolve_minutes: number | null;
+  recurrence_count: number;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -58,6 +156,10 @@ function numberRecordOrNull(value: unknown): Record<string, number> | null {
     if (numeric != null) out[key] = numeric;
   }
   return out;
+}
+
+function numberOrZero(value: unknown): number {
+  return numberOrNull(value) ?? 0;
 }
 
 function roleOrNull(value: unknown): ExecRoleTab | "shared" | null {
@@ -190,6 +292,205 @@ export function normalizeSnapshotHistoryRows(rows: unknown): ExecSnapshotHistory
       period_end: periodEnd,
       calculated_at: calculatedAt,
       refresh_state: refreshState,
+    }];
+  });
+}
+
+export function normalizeExecMarginWaterfallRows(rows: unknown): ExecMarginWaterfallRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const month = requiredString(value.month);
+    if (!month) return [];
+    return [{
+      month,
+      revenue: numberOrZero(value.revenue),
+      gross_margin_dollars: numberOrZero(value.gross_margin_dollars),
+      net_contribution_dollars: numberOrNull(value.net_contribution_dollars),
+      load_dollars: numberOrZero(value.load_dollars),
+      loaded_margin_pct: numberOrNull(value.loaded_margin_pct),
+    }];
+  });
+}
+
+export function normalizeExecPolicyExceptionRows(rows: unknown): ExecPolicyExceptionRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = requiredString(value.id);
+    const source = requiredString(value.source);
+    const severity = severityOrNull(value.severity);
+    const title = requiredString(value.title);
+    const createdAt = requiredString(value.created_at);
+    if (!id || !source || !severity || !title || !createdAt) return [];
+    return [{
+      id,
+      source,
+      severity,
+      title,
+      detail: stringOrNull(value.detail),
+      payload: recordOrEmpty(value.payload),
+      created_at: createdAt,
+    }];
+  });
+}
+
+export function normalizeExecBranchComparisonRows(rows: unknown): ExecBranchComparisonRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    return [{
+      branch_id: stringOrNull(value.branch_id),
+      overdue: numberOrNull(value.overdue),
+      active: numberOrNull(value.active),
+      closed: numberOrNull(value.closed),
+    }];
+  });
+}
+
+export function normalizeExecHealthMoverRows(rows: unknown): ExecHealthMoverRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const customerProfileId = requiredString(value.customer_profile_id);
+    if (!customerProfileId) return [];
+    return [{
+      customer_profile_id: customerProfileId,
+      health_score: numberOrNull(value.health_score),
+      health_score_updated_at: stringOrNull(value.health_score_updated_at),
+    }];
+  });
+}
+
+export function normalizeExecCustomerProfileRows(rows: unknown): ExecCustomerProfileRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = requiredString(value.id);
+    const customerName = requiredString(value.customer_name);
+    if (!id || !customerName) return [];
+    return [{
+      id,
+      customer_name: customerName,
+      company_name: stringOrNull(value.company_name),
+      lifetime_value: numberOrNull(value.lifetime_value),
+      fleet_size: numberOrNull(value.fleet_size),
+    }];
+  });
+}
+
+export function normalizeExecPacketResponse(value: unknown): ExecPacketResponse | null {
+  if (!isRecord(value) || value.ok !== true) return null;
+  const role = requiredString(value.role);
+  const generatedAt = requiredString(value.generated_at);
+  const markdown = requiredString(value.markdown);
+  if (!role || !generatedAt || !markdown || !isRecord(value.stats)) return null;
+  return {
+    ok: true,
+    run_id: stringOrNull(value.run_id),
+    role,
+    generated_at: generatedAt,
+    markdown,
+    json: recordOrEmpty(value.json),
+    stats: {
+      definitions: numberOrZero(value.stats.definitions),
+      snapshots: numberOrZero(value.stats.snapshots),
+      alerts: numberOrZero(value.stats.alerts),
+    },
+  };
+}
+
+export function normalizeExecPacketRunRows(rows: unknown): ExecPacketRunRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = requiredString(value.id);
+    const generatedAt = requiredString(value.generated_at);
+    const packetMd = requiredString(value.packet_md);
+    if (!id || !generatedAt || !packetMd) return [];
+    return [{
+      id,
+      generated_at: generatedAt,
+      packet_md: packetMd,
+      metrics_count: numberOrZero(value.metrics_count),
+      alerts_count: numberOrZero(value.alerts_count),
+      delivery_status: stringOrNull(value.delivery_status),
+      delivered_at: stringOrNull(value.delivered_at),
+      delivery_target: stringOrNull(value.delivery_target),
+      metadata: isRecord(value.metadata) ? value.metadata : null,
+    }];
+  });
+}
+
+export function normalizeExecTrafficRows(rows: unknown): ExecTrafficRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = requiredString(value.id);
+    const stockNumber = requiredString(value.stock_number);
+    const ticketType = requiredString(value.ticket_type);
+    const status = requiredString(value.status);
+    const toLocation = requiredString(value.to_location);
+    if (!id || !stockNumber || !ticketType || !status || !toLocation) return [];
+    return [{
+      id,
+      stock_number: stockNumber,
+      ticket_type: ticketType,
+      status,
+      blocker_reason: stringOrNull(value.blocker_reason),
+      promised_delivery_at: stringOrNull(value.promised_delivery_at),
+      to_location: toLocation,
+    }];
+  });
+}
+
+export function normalizeExecInventoryReadinessRows(rows: unknown): ExecInventoryReadinessRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    return [{
+      total_units: numberOrZero(value.total_units),
+      ready_units: numberOrZero(value.ready_units),
+      in_prep_units: numberOrZero(value.in_prep_units),
+      blocked_units: numberOrZero(value.blocked_units),
+      intake_stalled: numberOrZero(value.intake_stalled),
+      ready_rate_pct: numberOrZero(value.ready_rate_pct),
+    }];
+  });
+}
+
+export function normalizeExecRentalReturnRows(rows: unknown): ExecRentalReturnRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = requiredString(value.id);
+    const status = requiredString(value.status);
+    if (!id || !status) return [];
+    return [{
+      id,
+      status,
+      aging_bucket: stringOrNull(value.aging_bucket),
+      refund_status: stringOrNull(value.refund_status),
+      damage_description: stringOrNull(value.damage_description),
+    }];
+  });
+}
+
+export function normalizeExecInterventionHistoryRows(rows: unknown): ExecInterventionHistoryRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((value) => {
+    if (!isRecord(value)) return [];
+    const id = requiredString(value.id);
+    const resolutionType = requiredString(value.resolution_type);
+    const resolvedAt = requiredString(value.resolved_at);
+    if (!id || !resolutionType || !resolvedAt) return [];
+    return [{
+      id,
+      resolution_type: resolutionType,
+      resolution_notes: stringOrNull(value.resolution_notes),
+      resolved_at: resolvedAt,
+      time_to_resolve_minutes: numberOrNull(value.time_to_resolve_minutes),
+      recurrence_count: numberOrZero(value.recurrence_count),
     }];
   });
 }

@@ -5,27 +5,12 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Building2, HeartPulse, ArrowRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-
-interface BranchRow {
-  branch_id: string | null;
-  overdue: number | null;
-  active: number | null;
-  closed: number | null;
-}
-
-interface HealthMoverRow {
-  customer_profile_id: string | null;
-  health_score: number | null;
-  health_score_updated_at: string | null;
-}
-
-interface CustomerProfileRow {
-  id: string;
-  customer_name: string;
-  company_name: string | null;
-  lifetime_value: number | null;
-  fleet_size: number | null;
-}
+import {
+  normalizeExecBranchComparisonRows,
+  normalizeExecCustomerProfileRows,
+  normalizeExecHealthMoverRows,
+  type ExecCustomerProfileRow,
+} from "../../lib/exec-row-normalizers";
 
 function formatCurrency(value: number | null | undefined): string {
   return new Intl.NumberFormat("en-US", {
@@ -39,18 +24,12 @@ export function CeoGrowthExplorer() {
   const branchQuery = useQuery({
     queryKey: ["ceo", "branch-comparison"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            order: (column: string, options: Record<string, boolean>) => Promise<{ data: BranchRow[] | null; error: { message?: string } | null }>;
-          };
-        };
-      })
+      const { data, error } = await supabase
         .from("exec_branch_comparison")
         .select("*")
         .order("branch_id", { ascending: true });
       if (error) throw new Error(error.message ?? "Failed to load branch comparison.");
-      return data ?? [];
+      return normalizeExecBranchComparisonRows(data);
     },
     staleTime: 60_000,
   });
@@ -58,21 +37,13 @@ export function CeoGrowthExplorer() {
   const moversQuery = useQuery({
     queryKey: ["ceo", "health-movers"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            order: (column: string, options: Record<string, boolean>) => {
-              limit: (count: number) => Promise<{ data: HealthMoverRow[] | null; error: { message?: string } | null }>;
-            };
-          };
-        };
-      })
+      const { data, error } = await supabase
         .from("exec_health_movers")
         .select("*")
         .order("health_score", { ascending: true })
         .limit(6);
       if (error) throw new Error(error.message ?? "Failed to load health movers.");
-      return data ?? [];
+      return normalizeExecHealthMoverRows(data);
     },
     staleTime: 60_000,
   });
@@ -89,24 +60,18 @@ export function CeoGrowthExplorer() {
     queryKey: ["ceo", "health-mover-profiles", profileIds.join(",")],
     enabled: profileIds.length > 0,
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            in: (column: string, values: string[]) => Promise<{ data: CustomerProfileRow[] | null; error: { message?: string } | null }>;
-          };
-        };
-      })
+      const { data, error } = await supabase
         .from("customer_profiles_extended")
         .select("id, customer_name, company_name, lifetime_value, fleet_size")
         .in("id", profileIds);
       if (error) throw new Error(error.message ?? "Failed to load customer profiles.");
-      return data ?? [];
+      return normalizeExecCustomerProfileRows(data);
     },
     staleTime: 60_000,
   });
 
   const profileById = useMemo(() => {
-    const map = new Map<string, CustomerProfileRow>();
+    const map = new Map<string, ExecCustomerProfileRow>();
     for (const profile of profilesQuery.data ?? []) map.set(profile.id, profile);
     return map;
   }, [profilesQuery.data]);

@@ -10,37 +10,27 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Truck, Wrench, RotateCcw } from "lucide-react";
 import { StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
-
-interface TrafficRow {
-  id: string;
-  stock_number: string;
-  ticket_type: string;
-  status: string;
-  blocker_reason: string | null;
-  promised_delivery_at: string | null;
-  to_location: string;
-}
+import {
+  normalizeExecInventoryReadinessRows,
+  normalizeExecRentalReturnRows,
+  normalizeExecTrafficRows,
+  type ExecInventoryReadinessRow,
+  type ExecRentalReturnRow,
+  type ExecTrafficRow,
+} from "../../lib/exec-row-normalizers";
 
 export function TodaysExecutionBoard() {
   const { data: atRisk = [] } = useQuery({
     queryKey: ["coo", "at-risk-traffic"],
-    queryFn: async (): Promise<TrafficRow[]> => {
-      const supa = supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            neq: (col: string, val: string) => {
-              order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: TrafficRow[] | null; error: unknown }> };
-            };
-          };
-        };
-      };
-      const res = await supa.from("traffic_tickets")
+    queryFn: async (): Promise<ExecTrafficRow[]> => {
+      const res = await supabase
+        .from("traffic_tickets")
         .select("id, stock_number, ticket_type, status, blocker_reason, promised_delivery_at, to_location")
         .neq("status", "completed")
         .order("promised_delivery_at", { ascending: true })
         .limit(15);
       if (res.error) return [];
-      return res.data ?? [];
+      return normalizeExecTrafficRows(res.data);
     },
     staleTime: 60_000,
   });
@@ -97,25 +87,14 @@ export function TodaysExecutionBoard() {
 }
 
 export function InventoryReadinessRail() {
-  interface ReadinessRow {
-    total_units: number;
-    ready_units: number;
-    in_prep_units: number;
-    blocked_units: number;
-    intake_stalled: number;
-    ready_rate_pct: number;
-  }
   const { data } = useQuery({
     queryKey: ["coo", "readiness"],
-    queryFn: async (): Promise<ReadinessRow | null> => {
-      const supa = supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { limit: (n: number) => Promise<{ data: ReadinessRow[] | null; error: unknown }> } };
-      };
+    queryFn: async (): Promise<ExecInventoryReadinessRow | null> => {
       // P0-1 fix (mig 193): use security_invoker wrapper view that filters
       // by workspace + role. Direct MV access is revoked from authenticated.
-      const res = await supa.from("exec_inventory_readiness_v").select("*").limit(1);
+      const res = await supabase.from("exec_inventory_readiness_v").select("*").limit(1);
       if (res.error) return null;
-      return res.data?.[0] ?? null;
+      return normalizeExecInventoryReadinessRows(res.data)[0] ?? null;
     },
     staleTime: 5 * 60_000,
   });
@@ -170,32 +149,17 @@ function ReadinessTile({ label, value, tone }: { label: string; value: number; t
 }
 
 export function RecoveryQueuePanel() {
-  interface ReturnRow {
-    id: string;
-    status: string;
-    aging_bucket: string | null;
-    refund_status: string | null;
-    damage_description: string | null;
-  }
   const { data: rows = [] } = useQuery({
     queryKey: ["coo", "rental-returns"],
-    queryFn: async (): Promise<ReturnRow[]> => {
-      const supa = supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            neq: (col: string, val: string) => {
-              order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: ReturnRow[] | null; error: unknown }> };
-            };
-          };
-        };
-      };
-      const res = await supa.from("rental_returns")
+    queryFn: async (): Promise<ExecRentalReturnRow[]> => {
+      const res = await supabase
+        .from("rental_returns")
         .select("id, status, aging_bucket, refund_status, damage_description")
         .neq("status", "completed")
         .order("created_at", { ascending: true })
         .limit(15);
       if (res.error) return [];
-      return res.data ?? [];
+      return normalizeExecRentalReturnRows(res.data);
     },
     staleTime: 60_000,
   });

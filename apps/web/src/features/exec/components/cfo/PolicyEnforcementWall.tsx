@@ -10,41 +10,23 @@ import { ShieldAlert } from "lucide-react";
 import { StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { resolvePolicyWallActions } from "../../lib/policy-wall-actions";
-
-interface ExceptionRow {
-  id: string;
-  source: string;
-  severity: "info" | "warn" | "error" | "critical";
-  title: string;
-  detail: string | null;
-  payload: Record<string, unknown>;
-  created_at: string;
-}
+import { normalizeExecPolicyExceptionRows, type ExecPolicyExceptionRow } from "../../lib/exec-row-normalizers";
 
 const FINANCE_SOURCES = ["analytics_alert", "tax_failed", "stripe_mismatch", "ar_override_pending"];
 
 export function PolicyEnforcementWall() {
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["cfo", "policy-wall"],
-    queryFn: async (): Promise<ExceptionRow[]> => {
-      const res = await (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            in: (col: string, vals: string[]) => {
-              eq: (c: string, v: string) => {
-                order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: ExceptionRow[] | null; error: unknown }> };
-              };
-            };
-          };
-        };
-      }).from("exception_queue")
+    queryFn: async (): Promise<ExecPolicyExceptionRow[]> => {
+      const res = await supabase
+        .from("exception_queue")
         .select("id, source, severity, title, detail, payload, created_at")
         .in("source", FINANCE_SOURCES)
         .eq("status", "open")
         .order("created_at", { ascending: false })
         .limit(20);
       if (res.error) return [];
-      return res.data ?? [];
+      return normalizeExecPolicyExceptionRows(res.data);
     },
     staleTime: 60_000,
   });

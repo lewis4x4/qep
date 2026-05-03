@@ -17,29 +17,12 @@ import { FileDown, Loader2, Download, Check, History } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { ExecRoleTab } from "../lib/types";
 import { EXEC_PACKET_PRESETS, getPacketPreset } from "../lib/packet-presets";
-
-interface PacketResponse {
-  ok: boolean;
-  run_id: string | null;
-  role: string;
-  generated_at: string;
-  markdown: string;
-  json: Record<string, unknown>;
-  stats: { definitions: number; snapshots: number; alerts: number };
-  error?: string;
-}
-
-interface PacketRunRow {
-  id: string;
-  generated_at: string;
-  packet_md: string;
-  metrics_count: number;
-  alerts_count: number;
-  delivery_status: string | null;
-  delivered_at: string | null;
-  delivery_target: string | null;
-  metadata: Record<string, unknown> | null;
-}
+import {
+  normalizeExecPacketResponse,
+  normalizeExecPacketRunRows,
+  type ExecPacketResponse,
+  type ExecPacketRunRow,
+} from "../lib/exec-row-normalizers";
 
 interface Props {
   role: ExecRoleTab;
@@ -48,7 +31,7 @@ interface Props {
 export function CommandCenterExportMenu({ role }: Props) {
   const queryClient = useQueryClient();
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [packet, setPacket] = useState<PacketResponse | null>(null);
+  const [packet, setPacket] = useState<ExecPacketResponse | null>(null);
   const [presetId, setPresetId] = useState(EXEC_PACKET_PRESETS[role][0].id);
   const [branchId, setBranchId] = useState<string | null>(null);
   const preset = getPacketPreset(role, presetId);
@@ -56,34 +39,22 @@ export function CommandCenterExportMenu({ role }: Props) {
 
   const { data: history = [] } = useQuery({
     queryKey: ["exec", "packet-runs", role],
-    queryFn: async (): Promise<PacketRunRow[]> => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            eq: (c: string, v: string) => {
-              order: (c: string, o: { ascending: boolean }) => {
-                limit: (n: number) => Promise<{ data: PacketRunRow[] | null; error: unknown }>;
-              };
-            };
-          };
-        };
-      }).from("exec_packet_runs")
+    queryFn: async (): Promise<ExecPacketRunRow[]> => {
+      const { data, error } = await supabase
+        .from("exec_packet_runs")
         .select("id, generated_at, packet_md, metrics_count, alerts_count, delivery_status, delivered_at, delivery_target, metadata")
         .eq("role", role)
         .order("generated_at", { ascending: false })
         .limit(5);
       if (error) throw new Error("packet history load failed");
-      return data ?? [];
+      return normalizeExecPacketRunRows(data);
     },
     staleTime: 30_000,
   });
 
   const generate = useMutation({
-    mutationFn: async (): Promise<PacketResponse> => {
-      const supa = supabase as unknown as {
-        functions: { invoke: (name: string, opts: { body: Record<string, unknown> }) => Promise<{ data: PacketResponse | null; error: { message?: string } | null }> };
-      };
-      const res = await supa.functions.invoke("exec-packet-generator", {
+    mutationFn: async (): Promise<ExecPacketResponse> => {
+      const res = await supabase.functions.invoke("exec-packet-generator", {
         body: {
           role,
           preset: preset.id,
@@ -92,8 +63,9 @@ export function CommandCenterExportMenu({ role }: Props) {
         },
       });
       if (res.error) throw new Error(res.error.message ?? "packet generation failed");
-      if (!res.data?.ok) throw new Error(res.data?.error ?? "packet generation failed");
-      return res.data;
+      const normalized = normalizeExecPacketResponse(res.data);
+      if (!normalized) throw new Error("packet generation returned malformed payload");
+      return normalized;
     },
     onSuccess: (data) => {
       setPacket(data);
@@ -110,13 +82,7 @@ export function CommandCenterExportMenu({ role }: Props) {
       if (input.deliveryStatus === "downloaded" || input.deliveryStatus === "emailed") {
         patch.delivered_at = new Date().toISOString();
       }
-      const { error } = await (supabase as unknown as {
-        from: (t: string) => {
-          update: (v: Record<string, unknown>) => {
-            eq: (c: string, v: string) => Promise<{ error: unknown }>;
-          };
-        };
-      }).from("exec_packet_runs").update(patch).eq("id", input.runId);
+      const { error } = await supabase.from("exec_packet_runs").update(patch).eq("id", input.runId);
       if (error) throw new Error("packet status update failed");
     },
     onSuccess: () => {
@@ -150,7 +116,7 @@ export function CommandCenterExportMenu({ role }: Props) {
     }
   }
 
-  function openHistoryRun(run: PacketRunRow) {
+  function openHistoryRun(run: ExecPacketRunRow) {
     setPacket({
       ok: true,
       run_id: run.id,

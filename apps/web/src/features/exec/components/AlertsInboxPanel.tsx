@@ -17,6 +17,7 @@ import { supabase } from "@/lib/supabase";
 import type { AnalyticsAlertRow, ExecRoleTab, AlertSeverity } from "../lib/types";
 import { useExecAlerts } from "../lib/useExecData";
 import { resolveExecAlertPlaybookLink, resolveExecAlertRecordLink } from "../lib/alert-actions";
+import { normalizeExecInterventionHistoryRows, type ExecInterventionHistoryRow } from "../lib/exec-row-normalizers";
 
 const SEVERITY_TONE: Record<AlertSeverity, "red" | "orange" | "yellow" | "blue"> = {
   critical: "red",
@@ -38,16 +39,10 @@ export function AlertsInboxPanel({ role }: Props) {
       const patch: Record<string, unknown> = { status };
       if (status === "acknowledged") patch.acknowledged_at = new Date().toISOString();
       if (status === "resolved") patch.resolved_at = new Date().toISOString();
-      const supa = supabase as unknown as {
-        from: (t: string) => {
-          update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<{ error: unknown }> };
-        };
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
-      };
-      const { error } = await supa.from("analytics_alerts").update(patch).eq("id", id);
+      const { error } = await supabase.from("analytics_alerts").update(patch).eq("id", id);
       if (error) throw new Error(String((error as { message?: string }).message ?? "transition failed"));
       // Audit log
-      await supa.rpc("log_analytics_action", {
+      await supabase.rpc("log_analytics_action", {
         p_action_type: status === "acknowledged" ? "alert_acknowledge" : status === "resolved" ? "alert_resolve" : "alert_dismiss",
         p_source_widget: "alerts_inbox_panel",
         p_alert_id: id,
@@ -167,15 +162,6 @@ function AlertRow({
 
 // ─── Intervention History (Slice 5.4) ─────────────────────────────────────
 
-interface InterventionRow {
-  id: string;
-  resolution_type: string;
-  resolution_notes: string | null;
-  resolved_at: string;
-  time_to_resolve_minutes: number | null;
-  recurrence_count: number;
-}
-
 function InterventionHistory({
   alert,
   show,
@@ -187,16 +173,14 @@ function InterventionHistory({
 }) {
   const { data: history = [], isLoading } = useQuery({
     queryKey: ["intervention-history", alert.alert_type, alert.title],
-    queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: InterventionRow[] | null; error: unknown }>;
-      }).rpc("lookup_intervention_history", {
+    queryFn: async (): Promise<ExecInterventionHistoryRow[]> => {
+      const { data, error } = await supabase.rpc("lookup_intervention_history", {
         p_alert_type: alert.alert_type ?? "unknown",
         p_alert_title: (alert.title ?? "").slice(0, 120),
         p_limit: 3,
       });
       if (error) return [];
-      return data ?? [];
+      return normalizeExecInterventionHistoryRows(data);
     },
     enabled: show,
     staleTime: 60_000,

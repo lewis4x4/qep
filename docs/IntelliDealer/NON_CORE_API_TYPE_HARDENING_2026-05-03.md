@@ -30,6 +30,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Service API edge/router helpers | Shared service API helpers used a generic router cast and direct calendar-slot response cast, hiding malformed service job, list, portal order, fulfillment link, billing, resync, reassign, and calendar payloads. | Added exported service API response normalizers with required job checks, list filtering, portal order relation normalization, shared-fulfillment payload parsing, numeric-string coercion, and safe defaults for optional mutation results; removed the generic service API casts. |
 | Service InspectionPlus pages | Inspection list/detail pages used legacy Supabase client shims around inspection headers, findings, create, and update paths; the list tab keys also used a local cast. | Added exported inspection row/header/finding normalizers with status/approval/response validation, numeric-string coercion, malformed-row filtering, and direct generated Supabase client calls for read/create/update paths; replaced the tab cast with a typed constant. |
 | Executive shared data hook and metric drill drawer | Metric definitions, latest KPI snapshots, metric drill snapshot history, and analytics alerts were returned directly from unknown Supabase/RPC payloads through local client shims. | Added exported exec normalizers with required field checks, role/status/severity/refresh-state validation, numeric-string coercion, string-array cleanup, metadata/config object guards, and reduced snapshot-history validation; removed the local Supabase shims so the shared hook and metric drill drawer use generated client calls. |
+| Executive command-center components | CFO margin/policy panels, CEO growth explorer, packet export/history, alerts intervention history, and COO execution/readiness/recovery panels used component-local Supabase shims and trusted raw row/edge payloads. | Extended exported exec normalizers for margin waterfall, policy exceptions, branch comparison, health movers, customer profiles, packet edge responses/history, traffic tickets, readiness rows, rental returns, and intervention history; removed the component-local shims and verified the exec feature cast scan is clean. |
 | Executive handoff trust ledger/panel | Handoff event and seam-score reads used page/component Supabase shims and trusted row payloads directly. | Added handoff event and seam-score row normalizers with role/outcome/date validation, numeric-string coercion, malformed-row filtering, and direct generated Supabase client calls for the ledger and panel. |
 | Floor customer/serial/health widgets | Customer search, serial-first lookup, and customer-health list mapped raw query rows inline. | Added exported Floor widget normalizers for customer hits, equipment hits, and customer-health profiles with required ID checks, numeric-string coercion, joined company normalization, and health component guards. |
 | Floor operational widgets | Morning brief RPC, customer parts intel, pending invoices, and supplier health rows were normalized inline or cast through component-local assumptions. | Added exported operational widget normalizers with required field checks, numeric-string coercion, joined company array/object normalization, malformed event filtering, and safe boolean handling. |
@@ -146,7 +147,7 @@ Results:
 - Service API helper normalizer tests: `6 pass`, `0 fail`.
 - InspectionPlus utility/normalizer tests: `9 pass`, `0 fail`.
 - InspectionPlus page integration test: `1 pass`, `0 fail`.
-- Exec shared data and metric drill normalizer tests: `5 pass`, `0 fail`; shared hook and metric drill drawer shim removal covered by web typecheck.
+- Exec shared data, metric drill, command-center component, packet, COO board, and intervention-history normalizer tests: `9 pass`, `0 fail`; exec feature shim removal covered by web typecheck and a clean feature cast scan.
 - Exec handoff trust tests: `6 pass`, `0 fail`.
 - Floor customer/serial/health widget normalizer tests: `4 pass`, `0 fail`.
 - Floor operational widget normalizer tests: `5 pass`, `0 fail`.
@@ -169,7 +170,7 @@ Results:
 - Email draft API normalizer tests: `4 pass`, `0 fail`.
 - Sales API normalizer tests: `4 pass`, `0 fail`.
 - Equipment row/lifecycle tests: `9 pass`, `0 fail`.
-- Combined targeted test run: `237 pass`, `0 fail`.
+- Combined targeted test run: `241 pass`, `0 fail`.
 - Web typecheck: PASS.
 - Service feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 - Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
@@ -185,5 +186,5 @@ Results:
 ## Remaining Slice 6 Work
 
 - Continue auditing non-core QRM/admin/service pages with `supabase as unknown` or direct `as SomeRow[]` result casts.
-- Prioritize pages where malformed rows can break operator flows: remaining executive components, owner-adjacent components, and non-parts admin/service surfaces.
+- Prioritize pages where malformed rows can break operator flows: quote-builder, brief, admin, remaining QRM/portal-adjacent surfaces, and nervous-system.
 - For each target, move row-shape logic into small exported normalizers and add unit tests before replacing direct casts.

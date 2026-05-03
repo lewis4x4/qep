@@ -5,15 +5,7 @@ import { Button } from "@/components/ui/button";
 import { TrendingDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatKpiValue } from "../../lib/formatters";
-
-interface WaterfallRow {
-  month: string;
-  revenue: number;
-  gross_margin_dollars: number;
-  net_contribution_dollars: number | null;
-  load_dollars: number;
-  loaded_margin_pct: number | null;
-}
+import { normalizeExecMarginWaterfallRows, type ExecMarginWaterfallRow } from "../../lib/exec-row-normalizers";
 
 interface Props {
   onDrill?: (metricKey: string) => void;
@@ -24,19 +16,14 @@ const DRILL_METRIC_KEY = "gross_margin_pct_mtd";
 export function MarginWaterfallExplorer({ onDrill }: Props) {
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["cfo", "margin-waterfall"],
-    queryFn: async (): Promise<WaterfallRow[]> => {
-      const res = await (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: WaterfallRow[] | null; error: unknown }> };
-          };
-        };
-      }).from("exec_margin_waterfall_v")
+    queryFn: async (): Promise<ExecMarginWaterfallRow[]> => {
+      const res = await supabase
+        .from("exec_margin_waterfall_v")
         .select("month, revenue, gross_margin_dollars, net_contribution_dollars, load_dollars, loaded_margin_pct")
         .order("month", { ascending: false })
         .limit(6);
       if (res.error) return [];
-      return res.data ?? [];
+      return normalizeExecMarginWaterfallRows(res.data);
     },
     staleTime: 5 * 60_000,
   });
