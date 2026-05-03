@@ -37,27 +37,13 @@ export function VoiceFieldNotes({ jobId, machineId }: Props) {
   });
 
   const startSpeech = () => {
-    const w = window as unknown as {
-      SpeechRecognition?: new () => {
-        lang: string;
-        onresult: ((ev: unknown) => void) | null;
-        onend: (() => void) | null;
-        start: () => void;
-      };
-      webkitSpeechRecognition?: new () => {
-        lang: string;
-        onresult: ((ev: unknown) => void) | null;
-        onend: (() => void) | null;
-        start: () => void;
-      };
-    };
-    const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
     setListening(true);
     const rec = new SR();
     rec.lang = "en-US";
-    rec.onresult = (ev: unknown) => {
-      const results = (ev as { results: ArrayLike<{ 0: { transcript: string } }> }).results;
+    rec.onresult = (ev) => {
+      const { results } = ev;
       const t = Array.from(results)
         .map((r) => r[0]?.transcript ?? "")
         .join(" ");

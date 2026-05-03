@@ -21,6 +21,7 @@ import {
   updateServiceJob,
 } from "../lib/api";
 import {
+  SERVICE_STAGES,
   STAGE_LABELS,
   STAGE_COLORS,
   PRIORITY_LABELS,
@@ -37,6 +38,14 @@ import { Check, Copy, X } from "lucide-react";
 interface Props {
   jobId: string | null;
   onClose: () => void;
+}
+
+const SERVICE_STAGE_SET = new Set<ServiceStage>(SERVICE_STAGES);
+
+function normalizeServiceStage(value: unknown): ServiceStage {
+  return typeof value === "string" && SERVICE_STAGE_SET.has(value as ServiceStage)
+    ? value as ServiceStage
+    : "request_received";
 }
 
 export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
@@ -192,7 +201,7 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
 
   // Hooks must run unconditionally — never place useMemo/useCallback after `if (!jobId) return null`
   // or opening a job throws "Rendered more hooks than during the previous render".
-  const stage = (job?.current_stage ?? "request_received") as ServiceStage;
+  const stage = normalizeServiceStage(job?.current_stage);
   const publicPreview = useMemo(
     () => (job ? getPublicServiceStatus(job.current_stage) : null),
     [job?.current_stage],
