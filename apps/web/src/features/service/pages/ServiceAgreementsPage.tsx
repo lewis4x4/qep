@@ -39,11 +39,7 @@ export function ServiceAgreementsPage() {
   const companiesQuery = useQuery({
     queryKey: ["service-agreements", "companies"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: unknown[] | null; error: unknown }> };
-        };
-      })
+      const { data, error } = await supabase
         .from("qrm_companies")
         .select("id, name")
         .order("name");
@@ -55,11 +51,7 @@ export function ServiceAgreementsPage() {
   const equipmentQuery = useQuery({
     queryKey: ["service-agreements", "equipment"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: unknown[] | null; error: unknown }> };
-        };
-      })
+      const { data, error } = await supabase
         .from("qrm_equipment")
         .select("id, name, stock_number, serial_number, make, model")
         .order("updated_at", { ascending: false });
@@ -74,11 +66,7 @@ export function ServiceAgreementsPage() {
   const agreementsQuery = useQuery({
     queryKey: ["service-agreements"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: unknown[] | null; error: unknown }> };
-        };
-      })
+      const { data, error } = await supabase
         .from("service_agreements")
         .select("id, contract_number, status, customer_id, equipment_id, location_code, program_name, category, coverage_summary, starts_on, expires_on, renewal_date, billing_cycle, term_months, included_pm_services, estimated_contract_value, notes, qrm_companies(name), qrm_equipment(stock_number, serial_number, make, model, name)")
         .order("created_at", { ascending: false });
@@ -89,11 +77,7 @@ export function ServiceAgreementsPage() {
 
   const createAgreement = useMutation({
     mutationFn: async () => {
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => {
-          insert: (row: Record<string, unknown>) => Promise<{ error: unknown }>;
-        };
-      })
+      const { error } = await supabase
         .from("service_agreements")
         .insert({
           contract_number: contractNumber.trim(),

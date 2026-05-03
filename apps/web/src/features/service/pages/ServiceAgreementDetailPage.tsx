@@ -30,11 +30,7 @@ export function ServiceAgreementDetailPage() {
     queryKey: ["service-agreement", agreementId],
     enabled: agreementId.length > 0,
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { eq: (column: string, value: string) => { maybeSingle: () => Promise<{ data: unknown | null; error: unknown }> } };
-        };
-      })
+      const { data, error } = await supabase
         .from("service_agreements")
         .select("id, contract_number, status, customer_id, equipment_id, location_code, program_name, category, coverage_summary, starts_on, expires_on, renewal_date, billing_cycle, term_months, included_pm_services, estimated_contract_value, notes, qrm_companies(name), qrm_equipment(stock_number, serial_number, make, model, name)")
         .eq("id", agreementId)
@@ -48,11 +44,7 @@ export function ServiceAgreementDetailPage() {
     queryKey: ["service-agreement-maintenance", agreementQuery.data?.equipment_id],
     enabled: Boolean(agreementQuery.data?.equipment_id),
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { eq: (column: string, value: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: unknown[] | null; error: unknown }> } };
-        };
-      })
+      const { data, error } = await supabase
         .from("maintenance_schedules")
         .select("id, label, scheduled_date, status")
         .eq("equipment_id", agreementQuery.data!.equipment_id!)
@@ -64,11 +56,7 @@ export function ServiceAgreementDetailPage() {
 
   const updateAgreement = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => {
-          update: (row: Record<string, unknown>) => { eq: (column: string, value: string) => Promise<{ error: unknown }> };
-        };
-      })
+      const { error } = await supabase
         .from("service_agreements")
         .update(payload)
         .eq("id", agreementId);

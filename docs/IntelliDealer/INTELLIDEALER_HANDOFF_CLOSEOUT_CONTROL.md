@@ -26,7 +26,7 @@ If another document conflicts with this one, treat this document as the current 
 | Raw source file custody | Manifested 2026-05-03 | `SOURCE_FILE_CUSTODY_MANIFEST.md` | The raw files remain untracked, but filename, size, SHA-256, page counts, workbook row counts, and import run binding are now committed and script-verifiable. |
 | Fresh production verification | Passed 2026-05-03 | `FRESH_PRODUCTION_VERIFICATION_2026-05-03.md` | Rerun safety, production reconciliation, production browser smoke, storage cleanup, and active-run checks passed against the current production bundle. |
 | UI completion review | Passed 2026-05-03 | `UI_COMPLETION_REVIEW_2026-05-03.md` | Account 360, Companies search, company/contact editors, admin dashboard, safe export download, browser stage, preflight rejection, discard, and cleanup are verified. |
-| Non-core API type hardening | In progress 2026-05-03 | `NON_CORE_API_TYPE_HARDENING_2026-05-03.md` | Hardened ops payment validation, service labor pricing, QRM approval-center, service agreement, vendor profile, exec shared-data/metric drill, Floor customer/serial/health widget, Floor operational widget, owner dashboard API, Floor role-home, parts companion pricing/replenish/supplier-health/post-sale/intelligence/core/import/voice API, portal fleet/doc/history, parts hook/forecast/edge-response, parts operational hook/catalog, parts purchase-order, and parts local/browser row/payload shapes with targeted tests and web typecheck. |
+| Non-core API type hardening | In progress 2026-05-03 | `NON_CORE_API_TYPE_HARDENING_2026-05-03.md` | Hardened ops payment validation, service labor pricing/agreement pages, QRM approval-center, service agreement, vendor profile, exec shared-data/metric drill, Floor customer/serial/health widget, Floor operational widget, owner dashboard API, Floor role-home, parts companion pricing/replenish/supplier-health/post-sale/intelligence/core/import/voice API, portal fleet/doc/history, parts hook/forecast/edge-response, parts operational hook/catalog, parts purchase-order, and parts local/browser row/payload shapes with targeted tests and web typecheck. |
 
 ## Production Customer Import Baseline
 
@@ -199,6 +199,7 @@ Current result:
 - Service labor pricing branch config, company options, and pricing rule rows now use exported normalizers.
 - QRM approval center margin, deposit, trade, demo, and quote approval rows now use exported normalizers.
 - Service agreement list/detail rows, company/equipment options, and maintenance schedule rows now use exported normalizers.
+- Service labor pricing and agreement pages no longer use legacy Supabase client shims around normalized queries/mutations.
 - Vendor profiles, escalation policies, portal keys, vendor submissions, and active vendor price rows now use exported normalizers.
 - Exec metric definitions, KPI snapshots, metric drill snapshot history, and analytics alert rows now use exported normalizers.
 - Floor customer search, serial-first lookup, and customer-health profile rows now use exported normalizers.

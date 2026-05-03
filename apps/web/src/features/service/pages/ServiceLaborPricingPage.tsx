@@ -31,11 +31,7 @@ export function ServiceLaborPricingPage() {
   const branchConfigQuery = useQuery({
     queryKey: ["service-branch-config", "labor-pricing"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: unknown[] | null; error: unknown }> };
-        };
-      })
+      const { data, error } = await supabase
         .from("service_branch_config")
         .select("id, branch_id, default_labor_rate")
         .order("branch_id");
@@ -47,11 +43,7 @@ export function ServiceLaborPricingPage() {
   const companiesQuery = useQuery({
     queryKey: ["service-labor-pricing", "companies"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: unknown[] | null; error: unknown }> };
-        };
-      })
+      const { data, error } = await supabase
         .from("qrm_companies")
         .select("id, name")
         .order("name");
@@ -63,11 +55,7 @@ export function ServiceLaborPricingPage() {
   const rulesQuery = useQuery({
     queryKey: ["service-labor-pricing-rules"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => { order: (column: string, opts?: Record<string, boolean>) => Promise<{ data: unknown[] | null; error: unknown }> };
-        };
-      })
+      const { data, error } = await supabase
         .from("service_labor_pricing_rules")
         .select("id, location_code, customer_id, customer_group_label, work_order_status, labor_type_code, premium_code, default_premium_code, comment, pricing_code, pricing_value, effective_start_on, effective_end_on, active, qrm_companies(name)")
         .order("created_at", { ascending: false });
@@ -78,11 +66,7 @@ export function ServiceLaborPricingPage() {
 
   const saveBranchRate = useMutation({
     mutationFn: async ({ id, default_labor_rate }: { id: string; default_labor_rate: number }) => {
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => {
-          update: (row: Record<string, unknown>) => { eq: (column: string, value: string) => Promise<{ error: unknown }> };
-        };
-      })
+      const { error } = await supabase
         .from("service_branch_config")
         .update({ default_labor_rate })
         .eq("id", id);
@@ -93,11 +77,7 @@ export function ServiceLaborPricingPage() {
 
   const createRule = useMutation({
     mutationFn: async () => {
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => {
-          insert: (row: Record<string, unknown>) => Promise<{ error: unknown }>;
-        };
-      })
+      const { error } = await supabase
         .from("service_labor_pricing_rules")
         .insert({
           location_code: locationCode || null,
@@ -131,11 +111,7 @@ export function ServiceLaborPricingPage() {
 
   const toggleRule = useMutation({
     mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
-      const { error } = await (supabase as unknown as {
-        from: (table: string) => {
-          update: (row: Record<string, unknown>) => { eq: (column: string, value: string) => Promise<{ error: unknown }> };
-        };
-      })
+      const { error } = await supabase
         .from("service_labor_pricing_rules")
         .update({ active })
         .eq("id", id);
