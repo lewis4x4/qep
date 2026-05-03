@@ -24,6 +24,18 @@ type SpeechRecognitionCompat = {
 };
 type SpeechRecognitionCtor = new () => SpeechRecognitionCompat;
 
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+  }
+}
+
+function getSpeechRecognitionCtor(): SpeechRecognitionCtor | undefined {
+  if (typeof window === "undefined") return undefined;
+  return window.SpeechRecognition ?? window.webkitSpeechRecognition;
+}
+
 export function VoicePartsOrderButton() {
   const navigate = useNavigate();
   const [isRecording, setIsRecording] = useState(false);
@@ -46,12 +58,7 @@ export function VoicePartsOrderButton() {
     },
   });
 
-  const hasSpeechRecognition =
-    typeof window !== "undefined" &&
-    !!(
-      (window as unknown as Record<string, unknown>).SpeechRecognition ??
-      (window as unknown as Record<string, unknown>).webkitSpeechRecognition
-    );
+  const hasSpeechRecognition = Boolean(getSpeechRecognitionCtor());
 
   const toggleRecording = useCallback(() => {
     if (isRecording) {
@@ -65,10 +72,7 @@ export function VoicePartsOrderButton() {
       return;
     }
 
-    const Ctor = (
-      (window as unknown as Record<string, unknown>).SpeechRecognition ??
-      (window as unknown as Record<string, unknown>).webkitSpeechRecognition
-    ) as SpeechRecognitionCtor | undefined;
+    const Ctor = getSpeechRecognitionCtor();
     if (!Ctor) { setShowPanel(true); return; }
 
     const recognition = new Ctor();

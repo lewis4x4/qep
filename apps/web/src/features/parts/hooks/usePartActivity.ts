@@ -5,12 +5,12 @@ import { normalizePartActivityRows, type PartActivityRow } from "../lib/parts-ro
 export type { PartActivityRow } from "../lib/parts-row-normalizers";
 
 export function usePartActivity(partNumber: string | null | undefined) {
-  return useQuery({
+  return useQuery<PartActivityRow[]>({
     queryKey: ["parts-catalog-activity", partNumber?.toLowerCase() ?? null],
     enabled: !!partNumber,
     staleTime: 60_000,
     queryFn: async () => {
-      if (!partNumber) return [] as PartActivityRow[];
+      if (!partNumber) return [];
       const since = new Date();
       since.setDate(since.getDate() - 90);
 

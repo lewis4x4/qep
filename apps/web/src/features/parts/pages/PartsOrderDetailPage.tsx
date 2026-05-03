@@ -28,9 +28,17 @@ import {
   invokePickOrderLine,
 } from "../lib/parts-api";
 
-function one<T>(x: T | T[] | null | undefined): T | null {
-  if (x == null) return null;
-  return Array.isArray(x) ? (x[0] ?? null) : x;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function firstRecord(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return value.find(isRecord) ?? null;
+  return isRecord(value) ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 export function PartsOrderDetailPage() {
@@ -123,16 +131,16 @@ export function PartsOrderDetailPage() {
     },
   });
 
-  const row = orderQ.data as Record<string, unknown> | null | undefined;
-  const portal = one(row?.portal_customers as object | object[] | null) as {
-    first_name?: string;
-    last_name?: string;
-    email?: string;
-  } | null;
-  const crm = one(row?.crm_companies as object | object[] | null) as {
-    id?: string;
-    name?: string;
-  } | null;
+  const row = orderQ.data;
+  const portal = firstRecord(row?.portal_customers);
+  const crm = firstRecord(row?.crm_companies);
+  const portalName = portal
+    ? `${nullableString(portal.first_name) ?? ""} ${nullableString(portal.last_name) ?? ""}`.trim()
+    : "";
+  const portalEmail = nullableString(portal?.email);
+  const customerLabel = portal
+    ? `${portalName || "Portal customer"}${portalEmail ? ` (${portalEmail})` : ""}`
+    : nullableString(crm?.name) ?? "—";
 
   const status = typeof row?.status === "string" ? row.status : "";
   const nextOpts = validNextStatuses(status);
@@ -195,13 +203,11 @@ export function PartsOrderDetailPage() {
               <OrderStatusBadge status={status} />
               <Badge variant="outline">{orderSource}</Badge>
               <VoiceOrderBadge orderSource={orderSource} />
-              <MachineDownBadge isMachineDown={!!(row as Record<string, unknown>)?.is_machine_down} />
+              <MachineDownBadge isMachineDown={row.is_machine_down === true} />
             </div>
             <p>
               <span className="text-muted-foreground">Customer: </span>
-              {portal
-                ? `${portal.first_name ?? ""} ${portal.last_name ?? ""} (${portal.email})`
-                : crm?.name ?? "—"}
+              {customerLabel}
             </p>
             {fulfillmentRunId && (
               <p>

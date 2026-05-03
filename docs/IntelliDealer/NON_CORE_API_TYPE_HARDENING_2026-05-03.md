@@ -35,6 +35,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Parts edge responses | Parts order manager, voice parts order, and photo identification components trusted edge function responses through direct casts. | Added exported parts edge-response normalizers with fail-fast validation for required order-manager mutation payloads and safe defaults/filtering for voice/photo assistant payloads. |
 | Parts operational hooks/catalog | Predictive kits, replenish queue, inventory health, vendor metrics, parts order list, catalog query typing, and forecast catalog lookup used direct casts or local joined-row assumptions. | Extended exported parts row normalizers with predictive kit, replenish queue, inventory health, vendor scorecard, order-list, and typed catalog handling, including joined company/vendor/customer normalization and malformed-row filtering. |
 | Parts purchase-order pages | Purchase-order list/detail pages used local Supabase client shims and trusted vendor, header, line, touchpoint, equipment model, and attachment query payloads. | Added purchase-order normalizers with status/type validation, numeric-string coercion, joined vendor/company normalization, equipment/attachment filtering, and malformed-row rejection; removed local Supabase client shims from the pages. |
+| Parts local cast cleanup | Remaining parts feature casts were local/browser shims: Web Speech API globals, a detail-page joined-row display helper, and an empty-array return cast. | Replaced speech globals with typed `Window` augmentation, replaced detail display casts with unknown-safe helpers, typed the part-activity query result, and verified the parts feature direct-cast scan is empty. |
 
 ## Verification
 
@@ -102,9 +103,10 @@ Results:
 - Parts purchase-order utility/normalizer tests: `9 pass`, `0 fail`.
 - Combined targeted test run: `118 pass`, `0 fail`.
 - Web typecheck: PASS.
+- Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 
 ## Remaining Slice 6 Work
 
 - Continue auditing non-core QRM/admin/service pages with `supabase as unknown` or direct `as SomeRow[]` result casts.
-- Prioritize pages where malformed rows can break operator flows: remaining executive components, owner-adjacent components, and portal/parts companion API helpers.
+- Prioritize pages where malformed rows can break operator flows: remaining executive components, owner-adjacent components, and non-parts admin/service surfaces.
 - For each target, move row-shape logic into small exported normalizers and add unit tests before replacing direct casts.
