@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import {
+  normalizeCustomerResults,
+  normalizeEquipmentResults,
+  type CustomerResult,
+  type EquipmentResult,
+} from "../lib/service-hook-normalizers";
 
-export interface CustomerResult {
-  id: string;
-  name: string;
-  phone: string | null;
-  city: string | null;
-  state: string | null;
-}
+export type { CustomerResult, EquipmentResult } from "../lib/service-hook-normalizers";
 
 export function useCustomerSearch(query: string) {
   return useQuery({
@@ -21,20 +21,11 @@ export function useCustomerSearch(query: string) {
         .order("name")
         .limit(8);
       if (error) throw error;
-      return (data ?? []) as CustomerResult[];
+      return normalizeCustomerResults(data);
     },
     enabled: query.trim().length >= 2,
     staleTime: 15_000,
   });
-}
-
-export interface EquipmentResult {
-  id: string;
-  make: string;
-  model: string;
-  serial_number: string;
-  year: number | null;
-  customer_id: string | null;
 }
 
 export function useCustomerEquipment(customerId: string | null) {
@@ -50,7 +41,7 @@ export function useCustomerEquipment(customerId: string | null) {
         .order("make")
         .limit(20);
       if (error) throw error;
-      return (data ?? []) as EquipmentResult[];
+      return normalizeEquipmentResults(data);
     },
     enabled: !!customerId,
     staleTime: 30_000,
@@ -70,7 +61,7 @@ export function useEquipmentSearch(query: string) {
         .is("deleted_at", null)
         .limit(8);
       if (error) throw error;
-      return (data ?? []) as EquipmentResult[];
+      return normalizeEquipmentResults(data);
     },
     enabled: query.trim().length >= 2,
     staleTime: 15_000,
