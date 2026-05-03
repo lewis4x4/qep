@@ -3,6 +3,7 @@
 // ============================================================
 
 import { supabase } from "../../../lib/supabase";
+import { normalizeVoiceOpsResult } from "./voice-ops-api-normalizers";
 
 export interface VoiceOpsContext {
   customer_id?: string;
@@ -46,5 +47,5 @@ export async function submitVoiceCommand(input: {
     headers: { Authorization: `Bearer ${session.access_token}` },
   });
   if (error) throw error;
-  return data as VoiceOpsResult;
+  return normalizeVoiceOpsResult(data);
 }
