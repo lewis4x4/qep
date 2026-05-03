@@ -91,6 +91,11 @@ const {
   uploadAndExtractSheet,
   retryExtract,
   retryPublish,
+  normalizeBrandIdRows,
+  normalizeBrandSheetSourceRows,
+  normalizeFreightZoneRows,
+  normalizePriceSheetItemRows,
+  normalizePriceSheetSourceRows,
 } = await import("../price-sheets-api");
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -141,6 +146,46 @@ describe("price-sheets-api", () => {
     tableData["qb_price_sheets"]      = { data: [], error: null };
     tableData["qb_freight_zones"]     = { data: [], error: null };
     tableData["qb_price_sheet_items"] = { data: [], error: null };
+  });
+
+  test("normalizes dashboard source rows and filters malformed payloads", () => {
+    expect(normalizeBrandSheetSourceRows([
+      { id: "b1", code: "ASV", name: "ASV", discount_configured: true, has_inbound_freight_key: false },
+      { id: "bad", code: "BAD" },
+    ])).toEqual([
+      { id: "b1", code: "ASV", name: "ASV", discount_configured: true, has_inbound_freight_key: false },
+    ]);
+
+    expect(normalizePriceSheetSourceRows([
+      { id: "s1", brand_id: "b1", uploaded_at: "2026-04-01T00:00:00Z", status: "published" },
+      { id: "s2", brand_id: "b1", uploaded_at: "not-a-date", status: "published" },
+      { id: "s3", brand_id: null, uploaded_at: "2026-04-01T00:00:00Z", status: "published" },
+    ])).toEqual([
+      { id: "s1", brand_id: "b1", uploaded_at: "2026-04-01T00:00:00Z", status: "published" },
+    ]);
+
+    expect(normalizeBrandIdRows([{ brand_id: "b1" }, { brand_id: "" }])).toEqual([{ brand_id: "b1" }]);
+    expect(normalizePriceSheetItemRows([{ price_sheet_id: "s1" }, { price_sheet_id: null }]))
+      .toEqual([{ price_sheet_id: "s1" }]);
+  });
+
+  test("normalizes freight zones and filters invalid states", () => {
+    expect(normalizeFreightZoneRows([
+      {
+        ...FREIGHT_ZONE_ROW,
+        freight_large_cents: "194200",
+        freight_small_cents: "77700",
+        state_codes: ["FL", "XX", 42, "GA"],
+      },
+      { id: "bad-zone", brand_id: "brand-asv-uuid" },
+    ])).toEqual([
+      {
+        ...FREIGHT_ZONE_ROW,
+        freight_large_cents: 194200,
+        freight_small_cents: 77700,
+        state_codes: ["FL", "GA"],
+      },
+    ]);
   });
 
   // ── Test 1: getBrandSheetStatus — brand with a published sheet ─────────────

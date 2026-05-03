@@ -77,6 +77,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Admin pricing discipline API | Margin threshold lookups/admin CRUD and margin-exception rollups cast raw threshold and exception rows directly before enforcement and admin economics rendering. | Added exported margin-threshold and margin-exception normalizers with required field checks, joined brand array/object normalization, numeric-string coercion, malformed-row filtering, safe nullable cents, and malformed save-row rejection. |
 | Admin deal economics API | Brand freight keys and Deal Engine readiness counts cast raw brand, price-sheet, freight-zone, and program rows before admin economics status rendering. | Added exported brand freight-key and brand engine source-row normalizers with required brand checks, boolean guards, malformed-row filtering, and safe published-sheet/freight-zone/active-program count inputs. |
 | Admin Deal Velocity API | Quote package lifecycle rows and quote outcome rows were cast directly before stage-duration derivation and stalled-deal detection. | Added exported quote velocity package/outcome normalizers with required field checks, quote-status validation, date guards, nullable customer fields, malformed-row filtering, and safe outcome joining before duration math. |
+| Admin price-sheets API | Price-sheet dashboard brand/sheet/item/freight-zone reads and freight-zone CRUD returns cast raw rows directly before status cards and coverage analysis consumed them. | Added exported brand, price-sheet, item-count, brand-id, and freight-zone normalizers with required field checks, boolean guards, date validation, numeric-string coercion, valid state-code filtering, malformed-row filtering, and malformed save-row rejection. |
 
 ## Verification
 
@@ -210,7 +211,8 @@ Results:
 - Admin pricing discipline API tests: `19 pass`, `0 fail`.
 - Admin deal economics API tests: `18 pass`, `0 fail`.
 - Admin Deal Velocity API tests: `20 pass`, `0 fail`.
-- Combined targeted test run: `509 pass`, `0 fail`.
+- Admin price-sheets API tests: `19 pass`, `0 fail`.
+- Combined targeted test run: `528 pass`, `0 fail`.
 - Web typecheck: PASS.
 - Service feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 - Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.

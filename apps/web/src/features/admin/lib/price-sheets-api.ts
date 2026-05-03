@@ -12,6 +12,7 @@
 
 import { supabase } from "@/lib/supabase";
 import type { Database } from "@/lib/database.types";
+import { US_STATE_CODES, type StateCode } from "./us-states";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,137 @@ export type FreightZoneUpdate = Database["public"]["Tables"]["qb_freight_zones"]
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 const IN_FLIGHT_STATUSES = new Set(["pending_review", "extracting", "extracted"]);
+const US_STATE_CODE_SET: ReadonlySet<string> = new Set(US_STATE_CODES);
+
+type BrandSheetSourceRow = {
+  id: string;
+  code: string;
+  name: string;
+  discount_configured: boolean;
+  has_inbound_freight_key: boolean;
+};
+
+type PriceSheetSourceRow = {
+  id: string;
+  brand_id: string;
+  uploaded_at: string;
+  status: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function requiredString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function bool(value: unknown): boolean {
+  return value === true;
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function requiredNumber(value: unknown): number | null {
+  const parsed = numberOrNull(value);
+  return parsed == null ? null : parsed;
+}
+
+function isStateCode(value: unknown): value is StateCode {
+  return typeof value === "string" && US_STATE_CODE_SET.has(value);
+}
+
+function validStateCodes(value: unknown): StateCode[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isStateCode);
+}
+
+export function normalizeBrandSheetSourceRows(value: unknown): BrandSheetSourceRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const code = requiredString(row.code);
+    const name = requiredString(row.name);
+    if (!id || !code || !name) return [];
+    return [{
+      id,
+      code,
+      name,
+      discount_configured: bool(row.discount_configured),
+      has_inbound_freight_key: bool(row.has_inbound_freight_key),
+    }];
+  });
+}
+
+export function normalizePriceSheetSourceRows(value: unknown): PriceSheetSourceRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const brandId = requiredString(row.brand_id);
+    const uploadedAt = requiredString(row.uploaded_at);
+    const status = requiredString(row.status);
+    if (!id || !brandId || !uploadedAt || !status || !Number.isFinite(new Date(uploadedAt).getTime())) return [];
+    return [{ id, brand_id: brandId, uploaded_at: uploadedAt, status }];
+  });
+}
+
+export function normalizeBrandIdRows(value: unknown): Array<{ brand_id: string }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const brandId = requiredString(row.brand_id);
+    return brandId ? [{ brand_id: brandId }] : [];
+  });
+}
+
+export function normalizePriceSheetItemRows(value: unknown): Array<{ price_sheet_id: string }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const priceSheetId = requiredString(row.price_sheet_id);
+    return priceSheetId ? [{ price_sheet_id: priceSheetId }] : [];
+  });
+}
+
+export function normalizeFreightZoneRows(value: unknown): FreightZone[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const workspaceId = requiredString(row.workspace_id);
+    const brandId = requiredString(row.brand_id);
+    const zoneName = requiredString(row.zone_name);
+    const freightLargeCents = requiredNumber(row.freight_large_cents);
+    const freightSmallCents = requiredNumber(row.freight_small_cents);
+    const createdAt = requiredString(row.created_at);
+    if (!id || !workspaceId || !brandId || !zoneName || freightLargeCents == null || freightSmallCents == null || !createdAt) {
+      return [];
+    }
+    return [{
+      id,
+      workspace_id: workspaceId,
+      brand_id: brandId,
+      zone_name: zoneName,
+      state_codes: validStateCodes(row.state_codes),
+      freight_large_cents: freightLargeCents,
+      freight_small_cents: freightSmallCents,
+      effective_from: nullableString(row.effective_from),
+      effective_to: nullableString(row.effective_to),
+      created_at: createdAt,
+    }];
+  });
+}
 
 function sheetVersion(uploadedAt: string): string {
   const d = new Date(uploadedAt);
@@ -77,9 +209,9 @@ export async function getBrandSheetStatus(): Promise<BrandSheetStatus[]> {
       .select("brand_id"),
   ]);
 
-  const brands  = (brandsRes.data  ?? []) as Array<{ id: string; code: string; name: string; discount_configured: boolean; has_inbound_freight_key: boolean }>;
-  const sheets  = (sheetsRes.data  ?? []) as Array<{ id: string; brand_id: string | null; uploaded_at: string; status: string }>;
-  const zones   = (zonesRes.data   ?? []) as Array<{ brand_id: string }>;
+  const brands = normalizeBrandSheetSourceRows(brandsRes.data);
+  const sheets = normalizePriceSheetSourceRows(sheetsRes.data);
+  const zones = normalizeBrandIdRows(zonesRes.data);
 
   // Latest published sheet per brand (sheets are ordered newest-first)
   const latestPublished = new Map<string, typeof sheets[0]>();
@@ -105,7 +237,7 @@ export async function getBrandSheetStatus(): Promise<BrandSheetStatus[]> {
       .from("qb_price_sheet_items")
       .select("price_sheet_id")
       .in("price_sheet_id", publishedIds);
-    for (const item of (items ?? []) as Array<{ price_sheet_id: string }>) {
+    for (const item of normalizePriceSheetItemRows(items)) {
       itemCountBySheet.set(item.price_sheet_id, (itemCountBySheet.get(item.price_sheet_id) ?? 0) + 1);
     }
   }
@@ -144,7 +276,7 @@ export async function getFreightZones(brandId: string): Promise<FreightZone[]> {
     .order("zone_name", { ascending: true });
 
   if (error) return [];
-  return (data ?? []) as FreightZone[];
+  return normalizeFreightZoneRows(data);
 }
 
 /**
@@ -163,7 +295,9 @@ export async function upsertFreightZone(
       .select("*")
       .single();
     if (error) return { error: error.message };
-    return { ok: true, zone: data as FreightZone };
+    const zone = normalizeFreightZoneRows(data ? [data] : [])[0];
+    if (!zone) return { error: "Saved freight zone returned malformed row" };
+    return { ok: true, zone };
   }
 
   const { data, error } = await supabase
@@ -172,7 +306,9 @@ export async function upsertFreightZone(
     .select("*")
     .single();
   if (error) return { error: error.message };
-  return { ok: true, zone: data as FreightZone };
+  const zone = normalizeFreightZoneRows(data ? [data] : [])[0];
+  if (!zone) return { error: "Saved freight zone returned malformed row" };
+  return { ok: true, zone };
 }
 
 export async function deleteFreightZone(
@@ -188,8 +324,6 @@ export async function deleteFreightZone(
 }
 
 // ── Coverage analysis (CP7) ──────────────────────────────────────────────────
-
-import { US_STATE_CODES, type StateCode } from "./us-states";
 
 export type FreightCoverage = {
   /** State codes with at least one zone. */
@@ -215,7 +349,7 @@ export function analyzeFreightCoverage(zones: FreightZone[]): FreightCoverage {
   const zonesPerState = new Map<StateCode, Set<string>>();
 
   for (const zone of zones) {
-    const states = (zone.state_codes ?? []) as StateCode[];
+    const states = validStateCodes(zone.state_codes);
     const seenInThisZone = new Set<StateCode>();
     for (const state of states) {
       if (seenInThisZone.has(state)) continue;
