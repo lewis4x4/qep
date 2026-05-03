@@ -66,6 +66,77 @@ export interface VelocitySummary {
   sentToOutcome: StageStats;
 }
 
+const QUOTE_STATUSES = ["draft", "ready", "sent", "viewed", "accepted", "rejected", "expired"] as const;
+const QUOTE_STATUS_SET: ReadonlySet<string> = new Set(QUOTE_STATUSES);
+
+interface NormalizedQuotePackageRow {
+  id: string;
+  status: QuoteStatus;
+  created_at: string;
+  sent_at: string | null;
+  viewed_at: string | null;
+  customer_name: string | null;
+  customer_company: string | null;
+}
+
+interface NormalizedOutcomeRow {
+  quote_package_id: string;
+  outcome: string;
+  captured_at: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function requiredString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function isQuoteStatus(value: unknown): value is QuoteStatus {
+  return typeof value === "string" && QUOTE_STATUS_SET.has(value);
+}
+
+function isValidDateString(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(new Date(value).getTime());
+}
+
+export function normalizeQuoteVelocityPackageRows(value: unknown): NormalizedQuotePackageRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const createdAt = isValidDateString(row.created_at) ? row.created_at : null;
+    if (!id || !createdAt || !isQuoteStatus(row.status)) return [];
+    return [{
+      id,
+      status: row.status,
+      created_at: createdAt,
+      sent_at: isValidDateString(row.sent_at) ? row.sent_at : null,
+      viewed_at: isValidDateString(row.viewed_at) ? row.viewed_at : null,
+      customer_name: nullableString(row.customer_name),
+      customer_company: nullableString(row.customer_company),
+    }];
+  });
+}
+
+export function normalizeQuoteVelocityOutcomeRows(value: unknown): NormalizedOutcomeRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const quotePackageId = requiredString(row.quote_package_id);
+    const outcome = requiredString(row.outcome);
+    const capturedAt = isValidDateString(row.captured_at) ? row.captured_at : null;
+    return quotePackageId && outcome && capturedAt
+      ? [{ quote_package_id: quotePackageId, outcome, captured_at: capturedAt }]
+      : [];
+  });
+}
+
 // ── Query ────────────────────────────────────────────────────────────────
 
 function cutoffIso(daysBack: number): string {
@@ -100,20 +171,8 @@ export async function getQuoteVelocityRows(
       .order("captured_at", { ascending: false }),
   ]);
 
-  const quotes = (quotesRes.data ?? []) as Array<{
-    id: string;
-    status: string;
-    created_at: string;
-    sent_at: string | null;
-    viewed_at: string | null;
-    customer_name: string | null;
-    customer_company: string | null;
-  }>;
-  const outcomeRows = (outcomesRes.data ?? []) as Array<{
-    quote_package_id: string;
-    outcome: string;
-    captured_at: string;
-  }>;
+  const quotes = normalizeQuoteVelocityPackageRows(quotesRes.data);
+  const outcomeRows = normalizeQuoteVelocityOutcomeRows(outcomesRes.data);
 
   // Latest outcome per quote (outcomeRows already sorted desc)
   const latestOutcome = new Map<string, { outcome: string; captured_at: string }>();
@@ -148,7 +207,7 @@ export async function getQuoteVelocityRows(
     return {
       id: q.id,
       customer: q.customer_company || q.customer_name || null,
-      status: q.status as QuoteStatus,
+      status: q.status,
       created_at: q.created_at,
       sent_at: q.sent_at,
       viewed_at: q.viewed_at,

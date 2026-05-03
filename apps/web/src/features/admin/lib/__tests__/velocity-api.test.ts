@@ -4,6 +4,8 @@ import {
   summarizeVelocity,
   findStalledQuotes,
   formatDuration,
+  normalizeQuoteVelocityOutcomeRows,
+  normalizeQuoteVelocityPackageRows,
   type QuoteVelocityRow,
 } from "../velocity-api";
 
@@ -22,6 +24,73 @@ function row(partial: Partial<QuoteVelocityRow>): QuoteVelocityRow {
     currentStageAgeSec: partial.currentStageAgeSec ?? 0,
   };
 }
+
+describe("velocity row normalizers", () => {
+  test("normalizes quote package rows and rejects invalid statuses/dates", () => {
+    expect(normalizeQuoteVelocityPackageRows([
+      {
+        id: "q-1",
+        status: "sent",
+        created_at: "2026-04-01T10:00:00Z",
+        sent_at: "2026-04-01T11:00:00Z",
+        viewed_at: "bad-date",
+        customer_name: "Jane",
+        customer_company: "QEP",
+      },
+      {
+        id: "q-2",
+        status: "not-real",
+        created_at: "2026-04-01T10:00:00Z",
+      },
+      {
+        id: "q-3",
+        status: "draft",
+        created_at: "bad-date",
+      },
+    ])).toEqual([
+      {
+        id: "q-1",
+        status: "sent",
+        created_at: "2026-04-01T10:00:00Z",
+        sent_at: "2026-04-01T11:00:00Z",
+        viewed_at: null,
+        customer_name: "Jane",
+        customer_company: "QEP",
+      },
+    ]);
+  });
+
+  test("normalizes outcome rows and drops malformed payloads", () => {
+    expect(normalizeQuoteVelocityOutcomeRows([
+      {
+        quote_package_id: "q-1",
+        outcome: "won",
+        captured_at: "2026-04-02T10:00:00Z",
+      },
+      {
+        quote_package_id: "q-2",
+        outcome: "",
+        captured_at: "2026-04-02T10:00:00Z",
+      },
+      {
+        quote_package_id: "q-3",
+        outcome: "lost",
+        captured_at: "not-a-date",
+      },
+    ])).toEqual([
+      {
+        quote_package_id: "q-1",
+        outcome: "won",
+        captured_at: "2026-04-02T10:00:00Z",
+      },
+    ]);
+  });
+
+  test("normalizers return empty arrays for malformed non-arrays", () => {
+    expect(normalizeQuoteVelocityPackageRows({})).toEqual([]);
+    expect(normalizeQuoteVelocityOutcomeRows("nope")).toEqual([]);
+  });
+});
 
 describe("computeStageStats", () => {
   test("empty input → all null / zero", () => {

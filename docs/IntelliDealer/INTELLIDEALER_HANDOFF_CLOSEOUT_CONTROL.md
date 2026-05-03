@@ -259,7 +259,8 @@ Current result:
 - Admin audit log rows and actor profile rows now use exported normalizers before audit events are merged and rendered.
 - Admin pricing discipline threshold and exception rows now use exported normalizers before margin enforcement and admin economics rollups consume them.
 - Admin deal economics brand freight-key and Deal Engine readiness rows now use exported normalizers before economics status cards consume them.
-- Targeted tests passed: `489 pass`, `0 fail`.
+- Admin Deal Velocity quote lifecycle and outcome rows now use exported normalizers before duration math and stalled-deal detection consume them.
+- Targeted tests passed: `509 pass`, `0 fail`.
 - Web typecheck passed.
 - Service feature cast scan is clear for the Slice 6 inventory pattern.
 - Fleet feature cast scan is clear for the Slice 6 inventory pattern.
