@@ -7,6 +7,17 @@
  * narrowed to the generated Row types.
  */
 import { supabase } from "@/lib/supabase";
+import {
+  normalizeFeedbackSeenEventRows,
+  normalizeFeedbackSeenRows,
+  normalizeHubChangelogRows,
+  normalizeHubDecisionRows,
+  normalizeHubFeedbackEventRows,
+  normalizeHubFeedbackLinkRows,
+  normalizeHubFeedbackRow,
+  normalizeHubFeedbackRows,
+  normalizeStakeholderBriefing,
+} from "./brief-normalizers";
 
 export type FeedbackType = "bug" | "suggestion" | "question" | "approval" | "concern";
 export type FeedbackStatus =
@@ -163,7 +174,9 @@ export async function submitHubFeedback(payload: IntakePayload): Promise<IntakeR
   if (!data?.feedback) {
     throw new Error("feedback intake returned empty payload");
   }
-  return data;
+  const feedback = normalizeHubFeedbackRow(data.feedback);
+  if (!feedback) throw new Error("feedback intake returned malformed feedback");
+  return { ...data, feedback };
 }
 
 export interface ListFeedbackOpts {
@@ -193,7 +206,9 @@ export async function draftFeedbackFix(feedbackId: string): Promise<DraftFixResu
   });
   if (error) throw new Error(error.message || "draft-fix failed");
   if (!data?.feedback) throw new Error("draft-fix returned empty payload");
-  return data;
+  const feedback = normalizeHubFeedbackRow(data.feedback);
+  if (!feedback) throw new Error("draft-fix returned malformed feedback");
+  return { ...data, feedback };
 }
 
 export interface MergeResult {
@@ -209,7 +224,9 @@ export async function mergeFeedbackPr(feedbackId: string): Promise<MergeResult> 
   });
   if (error) throw new Error(error.message || "merge failed");
   if (!data?.feedback) throw new Error("merge returned empty payload");
-  return data;
+  const feedback = normalizeHubFeedbackRow(data.feedback);
+  if (!feedback) throw new Error("merge returned malformed feedback");
+  return { ...data, feedback };
 }
 
 export interface HubBuildItemRow {
@@ -317,8 +334,8 @@ export async function loadDashboardBundle(userId: string): Promise<DashboardBund
       needs_your_input: needsInputRes.count ?? 0,
       open_feedback: openFbRes.count ?? 0,
     },
-    briefing: (briefingRes.data ?? null) as StakeholderBriefing | null,
-    feed: (feedRes.data ?? []) as HubChangelogRow[],
+    briefing: normalizeStakeholderBriefing(briefingRes.data),
+    feed: normalizeHubChangelogRows(feedRes.data),
   };
 }
 
@@ -347,7 +364,7 @@ export async function listHubDecisions(limit = 50): Promise<HubDecisionRow[]> {
     .order("created_at", { ascending: false })
     .limit(safeLimit);
   if (error) throw new Error(error.message);
-  return (data ?? []) as HubDecisionRow[];
+  return normalizeHubDecisionRows(data);
 }
 
 export interface AskBrainCitation {
@@ -393,7 +410,7 @@ export async function refreshStakeholderBrief(): Promise<StakeholderBriefing | n
     body: { regenerate: true },
   });
   if (error) throw new Error(error.message || "brief refresh failed");
-  return data?.brief ?? null;
+  return normalizeStakeholderBriefing(data?.brief);
 }
 
 export async function listHubFeedback(opts: ListFeedbackOpts): Promise<HubFeedbackRow[]> {
@@ -418,7 +435,7 @@ export async function listHubFeedback(opts: ListFeedbackOpts): Promise<HubFeedba
 
   const withPreview = await buildQuery(selectWithPreview);
   if (!withPreview.error) {
-    return (withPreview.data ?? []) as unknown as HubFeedbackRow[];
+    return normalizeHubFeedbackRows(withPreview.data);
   }
 
   const missingPreviewColumns =
@@ -430,14 +447,7 @@ export async function listHubFeedback(opts: ListFeedbackOpts): Promise<HubFeedba
 
   const legacy = await buildQuery(selectLegacy);
   if (legacy.error) throw new Error(legacy.error.message);
-  return ((legacy.data ?? []) as unknown as Omit<
-    HubFeedbackRow,
-    "claude_preview_url" | "claude_preview_ready_at"
-  >[]).map((row) => ({
-    ...row,
-    claude_preview_url: null,
-    claude_preview_ready_at: null,
-  }));
+  return normalizeHubFeedbackRows(legacy.data);
 }
 
 // ── V2.4 dedup links ────────────────────────────────────────────────────────
@@ -481,8 +491,8 @@ export async function listFeedbackLinks(feedbackId: string): Promise<FeedbackLin
   if (asDuplicate.error) throw new Error(asDuplicate.error.message);
 
   const edges = [
-    ...((asPrimary.data ?? []) as HubFeedbackLinkRow[]),
-    ...((asDuplicate.data ?? []) as HubFeedbackLinkRow[]),
+    ...normalizeHubFeedbackLinkRows(asPrimary.data),
+    ...normalizeHubFeedbackLinkRows(asDuplicate.data),
   ];
   const maxSimilarity = edges.reduce((m, e) => Math.max(m, e.similarity), 0);
   return { count: edges.length, maxSimilarity, edges };
@@ -506,7 +516,7 @@ export async function listFeedbackEvents(feedbackId: string, limit = 50): Promis
     .order("created_at", { ascending: false })
     .limit(safeLimit);
   if (error) throw new Error(error.message);
-  return (data ?? []) as HubFeedbackEventRow[];
+  return normalizeHubFeedbackEventRows(data);
 }
 
 export interface UnseenEventsSummary {
@@ -533,7 +543,7 @@ export async function countUnseenFeedbackEvents(userId: string): Promise<UnseenE
     .is("deleted_at", null);
   if (feedbackErr) throw new Error(feedbackErr.message);
 
-  const feedbackRows = (rows ?? []) as Array<{ id: string; last_seen_events_at: string | null }>;
+  const feedbackRows = normalizeFeedbackSeenRows(rows);
   if (feedbackRows.length === 0) {
     return { total: 0, perFeedback: {}, latestAt: null };
   }
@@ -552,7 +562,7 @@ export async function countUnseenFeedbackEvents(userId: string): Promise<UnseenE
     .limit(500);
   if (eventsErr) throw new Error(eventsErr.message);
 
-  const eventRows = (events ?? []) as Array<{ id: string; feedback_id: string; created_at: string }>;
+  const eventRows = normalizeFeedbackSeenEventRows(events);
 
   const perFeedback: Record<string, number> = {};
   let total = 0;

@@ -52,6 +52,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Email draft inbox/API | Email drafts used a local Supabase client shim, direct `to_email` record casts, and trusted send-edge JSON. | Added exported email draft normalizers with scenario/status/tone validation, required field checks, numeric-string coercion, context guards, safe `to_email` handling, and malformed send-response rejection. |
 | Sales companion API | Daily briefing, rep pipeline, customer, equipment, activity, and deal-stage rows were returned through direct casts, and the empty-state capture trigger used a DOM cast. | Added exported sales API normalizers with required field checks, enum validation, numeric-string coercion, nested briefing guards, malformed-row filtering, and a runtime button guard for the capture trigger. |
 | Nervous system API and health drawer | Cross-department alerts, customer health profiles, revenue-by-model rows, health refresh edge responses, health-score drawer RPC payloads, profile links, and AR blockers used Supabase shims or trusted raw JSON. | Added exported nervous-system normalizers with department/status/severity validation, component/signal numeric coercion, edge-response validation, drawer component guards, malformed-row filtering, and direct generated Supabase client calls; the nervous-system feature cast scan is clean. |
+| Brief Build Hub API | Dashboard briefing/changelog rows, decision rows, feedback inbox rows, feedback link/event rows, unseen-event counters, and feedback-bearing edge responses were returned through direct casts. | Added exported Brief API normalizers with feedback type/status/priority/event validation, changelog/link enum validation, required field checks, string-array cleanup, payload/data object guards, numeric coercion, legacy preview-column fallback, and malformed-row filtering. |
 | Equipment Asset 360 tabs | Asset detail parts, telematics, document, lifecycle-summary, and warranty metadata payloads were trusted through page/component casts. | Added exported equipment row normalizers with required field checks, numeric-string coercion, date validation, malformed-row filtering, safe metadata probing, and typed React Query consumption. |
 | Parts hooks and forecast page | Demand forecast, order events, analytics, vendor trends, part activity, cross references, customer parts intel, transfer recommendations, and the forecast page used direct row/payload casts. | Added exported parts row normalizers with required field checks, numeric-string coercion, joined profile/order normalization, nested analytics/intel collection filtering, fallback cross-reference direction handling, and malformed-row rejection. |
 | Parts edge responses | Parts order manager, voice parts order, and photo identification components trusted edge function responses through direct casts. | Added exported parts edge-response normalizers with fail-fast validation for required order-manager mutation payloads and safe defaults/filtering for voice/photo assistant payloads. |
@@ -171,8 +172,9 @@ Results:
 - Email draft API normalizer tests: `4 pass`, `0 fail`.
 - Sales API normalizer tests: `4 pass`, `0 fail`.
 - Nervous system normalizer tests: `4 pass`, `0 fail`.
+- Brief API normalizer tests: `5 pass`, `0 fail`.
 - Equipment row/lifecycle tests: `9 pass`, `0 fail`.
-- Combined targeted test run: `245 pass`, `0 fail`.
+- Combined targeted test run: `250 pass`, `0 fail`.
 - Web typecheck: PASS.
 - Service feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 - Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
@@ -188,5 +190,5 @@ Results:
 ## Remaining Slice 6 Work
 
 - Continue auditing non-core QRM/admin/service pages with `supabase as unknown` or direct `as SomeRow[]` result casts.
-- Prioritize pages where malformed rows can break operator flows: quote-builder, brief, admin, and remaining QRM/portal-adjacent surfaces.
+- Prioritize pages where malformed rows can break operator flows: quote-builder, admin, and remaining QRM/portal-adjacent surfaces.
 - For each target, move row-shape logic into small exported normalizers and add unit tests before replacing direct casts.
