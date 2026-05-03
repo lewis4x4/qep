@@ -90,6 +90,10 @@ import { useQuotePDF } from "../hooks/useQuotePDF";
 import { useQuoteFinancingPreview } from "../hooks/useQuoteFinancingPreview";
 import { useQuoteTaxPreview } from "../hooks/useQuoteTaxPreview";
 import { buildCustomFinanceScenario } from "../lib/custom-finance";
+import {
+  buildQuotePdfBranch,
+  parsePendingScenarioSelection,
+} from "../lib/quote-builder-page-normalizers";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { VoiceRecorder } from "@/features/voice-qrm/components/VoiceRecorder";
@@ -689,12 +693,8 @@ export function QuoteBuilderV2Page() {
       const raw = sessionStorage.getItem("qep.voiceQuote.pendingSelection");
       if (!raw) return;
       sessionStorage.removeItem("qep.voiceQuote.pendingSelection");
-      const parsed = JSON.parse(raw) as ScenarioSelection & { at?: string };
-      // Older-than-10-minute handoffs are suspicious (closed tab, came back later)
-      if (parsed.at) {
-        const ageMs = Date.now() - new Date(parsed.at).getTime();
-        if (ageMs > 10 * 60 * 1000) return;
-      }
+      const parsed = parsePendingScenarioSelection(raw);
+      if (!parsed) return;
       handleScenarioSelection(parsed);
     } catch {
       // Malformed payload — ignore silently; the user is in the quote builder
@@ -1189,20 +1189,7 @@ export function QuoteBuilderV2Page() {
         lender: scenario.lender ?? "Preferred lender",
       })),
       selectedFinancingLabel: draft.selectedFinanceScenario,
-      branch: (() => {
-        const branch = selectedBranch as unknown as Record<string, unknown> | undefined;
-        return {
-          name: (branch?.display_name as string) ?? "Quality Equipment & Parts",
-          address: (branch?.address_line1 as string) ?? undefined,
-          city: (branch?.city as string) ?? undefined,
-          state: (branch?.state_province as string) ?? undefined,
-          postalCode: (branch?.postal_code as string) ?? undefined,
-          phone: (branch?.phone_main as string) ?? undefined,
-          email: (branch?.email_main as string) ?? undefined,
-          website: (branch?.website_url as string) ?? undefined,
-          footerText: (branch?.doc_footer_text as string) ?? undefined,
-        };
-      })(),
+      branch: buildQuotePdfBranch(selectedBranch),
     });
   }
 
@@ -2812,20 +2799,7 @@ export function QuoteBuilderV2Page() {
                     lender: scenario.lender ?? "Preferred lender",
                   })),
                   selectedFinancingLabel: draft.selectedFinanceScenario,
-                  branch: (() => {
-                    const branch = selectedBranch as unknown as Record<string, unknown> | undefined;
-                    return {
-                      name: (branch?.display_name as string) ?? "Quality Equipment & Parts",
-                      address: (branch?.address_line1 as string) ?? undefined,
-                      city: (branch?.city as string) ?? undefined,
-                      state: (branch?.state_province as string) ?? undefined,
-                      postalCode: (branch?.postal_code as string) ?? undefined,
-                      phone: (branch?.phone_main as string) ?? undefined,
-                      email: (branch?.email_main as string) ?? undefined,
-                      website: (branch?.website_url as string) ?? undefined,
-                      footerText: (branch?.doc_footer_text as string) ?? undefined,
-                    };
-                  })(),
+                  branch: buildQuotePdfBranch(selectedBranch),
                 })}
                 disabled={pdfGenerating || !isQuoteApprovedForDistribution(draft.quoteStatus)}
                 title={isQuoteApprovedForDistribution(draft.quoteStatus) ? undefined : "PDF unlocks after owner approval"}
