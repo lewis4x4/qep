@@ -16,6 +16,10 @@ import type {
   QuoteRecommendation,
   QuoteWorkspaceDraft,
 } from "../../../../../../shared/qep-moonshot-contracts";
+import type { ClosedDealAuditRow } from "./closed-deals-audit";
+import type { DealFactorObservation } from "./factor-attribution";
+import type { FactorVerdict } from "./factor-verdict";
+import type { CalibrationObservation, CalibrationOutcome } from "./scorer-calibration";
 
 const QUOTE_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/quote-builder-v2`;
 
@@ -58,6 +62,45 @@ export interface PortalRevisionEnvelope {
   } | null;
   draft: PortalQuoteRevisionDraft | null;
   publishState: PortalQuoteRevisionPublishState | null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function recordOrEmpty(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+async function readJsonRecord(res: Response): Promise<Record<string, unknown>> {
+  return recordOrEmpty(await res.json().catch(() => ({})));
+}
+
+function errorDetail(body: Record<string, unknown>): string {
+  return firstString(body.error, body.message) ?? "";
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function requiredString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function isCalibrationOutcome(value: unknown): value is CalibrationOutcome {
+  return value === "won" || value === "lost" || value === "expired";
+}
+
+function normalizeFactorRows(value: unknown): Array<{ label: string; weight: number }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const label = firstString(row.label);
+    const weight = numOrNull(row.weight);
+    if (!label || weight == null) return [];
+    return [{ label, weight }];
+  });
 }
 
 /**
@@ -132,10 +175,8 @@ export async function listQuotePackages(params?: {
     // 401 after the retry means the gateway is still rejecting — the
     // session is genuinely unrecoverable at that point and the user
     // needs to sign out / in.
-    const body = await res.json().catch(() => ({}));
-    const detail = (body as { error?: string; message?: string }).error
-      ?? (body as { message?: string }).message
-      ?? "";
+    const body = await readJsonRecord(res);
+    const detail = errorDetail(body);
     if (res.status === 401) {
       throw new Error(
         detail
@@ -145,7 +186,7 @@ export async function listQuotePackages(params?: {
     }
     throw new Error(detail.trim() || `Failed to list quotes (HTTP ${res.status})`);
   }
-  return res.json();
+  return normalizeQuoteListResponse(await res.json().catch(() => ({})));
 }
 
 export function buildQuoteListUrl(params?: { status?: string; search?: string }): string {
@@ -166,6 +207,100 @@ export function buildQuoteListActionPayload(input: {
   };
 }
 
+export function normalizeQuoteListItem(value: unknown): QuoteListItem | null {
+  if (!isRecord(value) || typeof value.id !== "string" || value.id.trim().length === 0) return null;
+  return {
+    id: value.id,
+    quote_number: nullableString(value.quote_number),
+    customer_name: nullableString(value.customer_name),
+    customer_company: nullableString(value.customer_company),
+    contact_name: nullableString(value.contact_name),
+    status: requiredString(value.status, "draft"),
+    net_total: numOrNull(value.net_total),
+    equipment_summary: requiredString(value.equipment_summary),
+    entry_mode: nullableString(value.entry_mode),
+    created_at: requiredString(value.created_at),
+    updated_at: requiredString(value.updated_at),
+    accepted_at: nullableString(value.accepted_at),
+    win_probability_score: numOrNull(value.win_probability_score),
+  };
+}
+
+export function normalizeQuoteListResponse(value: unknown): { items: QuoteListItem[] } {
+  const record = recordOrEmpty(value);
+  const items = Array.isArray(record.items) ? record.items : [];
+  return {
+    items: items.flatMap((item) => {
+      const normalized = normalizeQuoteListItem(item);
+      return normalized ? [normalized] : [];
+    }),
+  };
+}
+
+export function normalizeQuoteListActionResponse(
+  value: unknown,
+): { ok: true; quote?: QuoteListItem | null } {
+  const record = recordOrEmpty(value);
+  const quote = normalizeQuoteListItem(record.quote);
+  return record.ok === true && "quote" in record
+    ? { ok: true, quote }
+    : { ok: true };
+}
+
+export function normalizeScorerCalibrationObservations(value: unknown): CalibrationObservation[] {
+  const observations = recordOrEmpty(value).observations;
+  if (!Array.isArray(observations)) return [];
+  return observations.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const score = numOrNull(row.score);
+    if (score == null || !isCalibrationOutcome(row.outcome)) return [];
+    return [{ score, outcome: row.outcome }];
+  });
+}
+
+export function normalizeFactorAttributionDeals(value: unknown): DealFactorObservation[] {
+  const deals = recordOrEmpty(value).deals;
+  if (!Array.isArray(deals)) return [];
+  return deals.flatMap((row) => {
+    if (!isRecord(row) || !isCalibrationOutcome(row.outcome)) return [];
+    return [{ outcome: row.outcome, factors: normalizeFactorRows(row.factors) }];
+  });
+}
+
+export function normalizeFactorVerdicts(value: unknown): Map<string, FactorVerdict> {
+  const verdicts = recordOrEmpty(value).verdicts;
+  const out = new Map<string, FactorVerdict>();
+  if (!Array.isArray(verdicts)) return out;
+  for (const row of verdicts) {
+    if (!isRecord(row)) continue;
+    const label = firstString(row.label);
+    if (!label) continue;
+    if (row.verdict !== "proven" && row.verdict !== "suspect" && row.verdict !== "unknown") {
+      continue;
+    }
+    out.set(label, row.verdict);
+  }
+  return out;
+}
+
+export function normalizeClosedDealsAudit(value: unknown): ClosedDealAuditRow[] {
+  const audits = recordOrEmpty(value).audits;
+  if (!Array.isArray(audits)) return [];
+  return audits.flatMap((row) => {
+    if (!isRecord(row) || !isCalibrationOutcome(row.outcome)) return [];
+    const packageId = firstString(row.packageId, row.package_id);
+    const score = numOrNull(row.score);
+    if (!packageId || score == null) return [];
+    return [{
+      packageId,
+      score,
+      outcome: row.outcome,
+      factors: normalizeFactorRows(row.factors),
+      capturedAt: nullableString(row.capturedAt ?? row.captured_at),
+    }];
+  });
+}
+
 export async function performQuoteListAction(input: {
   quotePackageId: string;
   action: Exclude<QuoteListAction, "resume" | "resend">;
@@ -175,13 +310,11 @@ export async function performQuoteListAction(input: {
     body: JSON.stringify(buildQuoteListActionPayload(input)),
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const detail = (body as { error?: string; message?: string }).error
-      ?? (body as { message?: string }).message
-      ?? "";
+    const body = await readJsonRecord(res);
+    const detail = errorDetail(body);
     throw new Error(detail.trim() || `Quote action failed (HTTP ${res.status})`);
   }
-  return res.json() as Promise<{ ok: true; quote?: QuoteListItem | null }>;
+  return normalizeQuoteListActionResponse(await res.json().catch(() => ({})));
 }
 
 /**
@@ -205,14 +338,11 @@ export async function getScorerCalibrationObservations(): Promise<
     return { ok: false, reason: "forbidden", message: "Requires manager or owner role" };
   }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const detail = (body as { error?: string }).error ?? `HTTP ${res.status}`;
+    const body = await readJsonRecord(res);
+    const detail = errorDetail(body) || `HTTP ${res.status}`;
     return { ok: false, reason: "error", message: detail };
   }
-  const body = (await res.json()) as {
-    observations?: Array<{ score: number; outcome: "won" | "lost" | "expired" }>;
-  };
-  return { ok: true, observations: Array.isArray(body.observations) ? body.observations : [] };
+  return { ok: true, observations: normalizeScorerCalibrationObservations(await res.json().catch(() => ({}))) };
 }
 
 /**
@@ -232,14 +362,11 @@ export async function getFactorAttributionDeals(): Promise<
     return { ok: false, reason: "forbidden", message: "Requires manager or owner role" };
   }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const detail = (body as { error?: string }).error ?? `HTTP ${res.status}`;
+    const body = await readJsonRecord(res);
+    const detail = errorDetail(body) || `HTTP ${res.status}`;
     return { ok: false, reason: "error", message: detail };
   }
-  const body = (await res.json()) as {
-    deals?: Array<{ factors: Array<{ label: string; weight: number }>; outcome: "won" | "lost" | "expired" }>;
-  };
-  return { ok: true, deals: Array.isArray(body.deals) ? body.deals : [] };
+  return { ok: true, deals: normalizeFactorAttributionDeals(await res.json().catch(() => ({}))) };
 }
 
 /**
@@ -260,19 +387,7 @@ export async function getFactorVerdicts(): Promise<
   try {
     const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/factor-verdicts`);
     if (!res.ok) return new Map();
-    const body = (await res.json()) as {
-      verdicts?: Array<{ label: string; verdict: "proven" | "suspect" | "unknown" }>;
-    };
-    const out = new Map<string, "proven" | "suspect" | "unknown">();
-    if (!Array.isArray(body.verdicts)) return out;
-    for (const row of body.verdicts) {
-      if (!row || typeof row.label !== "string" || row.label.length === 0) continue;
-      if (row.verdict !== "proven" && row.verdict !== "suspect" && row.verdict !== "unknown") {
-        continue;
-      }
-      out.set(row.label, row.verdict);
-    }
-    return out;
+    return normalizeFactorVerdicts(await res.json().catch(() => ({})));
   } catch {
     return new Map();
   }
@@ -304,20 +419,11 @@ export async function getClosedDealsAudit(): Promise<
     return { ok: false, reason: "forbidden", message: "Requires manager or owner role" };
   }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const detail = (body as { error?: string }).error ?? `HTTP ${res.status}`;
+    const body = await readJsonRecord(res);
+    const detail = errorDetail(body) || `HTTP ${res.status}`;
     return { ok: false, reason: "error", message: detail };
   }
-  const body = (await res.json()) as {
-    audits?: Array<{
-      packageId: string;
-      score: number;
-      outcome: "won" | "lost" | "expired";
-      factors: Array<{ label: string; weight: number }>;
-      capturedAt: string | null;
-    }>;
-  };
-  return { ok: true, audits: Array.isArray(body.audits) ? body.audits : [] };
+  return { ok: true, audits: normalizeClosedDealsAudit(await res.json().catch(() => ({}))) };
 }
 
 export async function getCompetitorListings(make: string, model?: string): Promise<{ listings: CompetitorListing[] }> {

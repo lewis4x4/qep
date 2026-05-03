@@ -2,8 +2,14 @@ import { describe, expect, test } from "bun:test";
 import {
   buildQuoteListActionPayload,
   buildQuoteListUrl,
+  normalizeClosedDealsAudit,
+  normalizeFactorAttributionDeals,
+  normalizeFactorVerdicts,
   normalizeQuoteFinanceScenario,
   normalizeQuoteFinancingPreview,
+  normalizeQuoteListActionResponse,
+  normalizeQuoteListResponse,
+  normalizeScorerCalibrationObservations,
 } from "../quote-api";
 
 describe("normalizeQuoteFinanceScenario", () => {
@@ -46,6 +52,124 @@ describe("quote list API helpers", () => {
       quote_package_id: "quote-1",
       action: "archive",
     });
+  });
+
+  test("normalizeQuoteListResponse filters malformed items and preserves valid rows", () => {
+    const normalized = normalizeQuoteListResponse({
+      items: [
+        {
+          id: "quote-1",
+          quote_number: "Q-1001",
+          customer_name: "Sam Green",
+          customer_company: "Green Farms",
+          contact_name: null,
+          status: "sent",
+          net_total: "125000",
+          equipment_summary: "8R Tractor",
+          entry_mode: "manual",
+          created_at: "2026-05-01T00:00:00Z",
+          updated_at: "2026-05-02T00:00:00Z",
+          accepted_at: null,
+          win_probability_score: "81",
+        },
+        { quote_number: "missing-id" },
+        null,
+      ],
+    });
+
+    expect(normalized.items).toHaveLength(1);
+    expect(normalized.items[0]?.id).toBe("quote-1");
+    expect(normalized.items[0]?.net_total).toBe(125000);
+    expect(normalized.items[0]?.win_probability_score).toBe(81);
+  });
+
+  test("normalizeQuoteListActionResponse normalizes optional quote payload", () => {
+    const normalized = normalizeQuoteListActionResponse({
+      ok: true,
+      quote: {
+        id: "quote-2",
+        status: "archived",
+        equipment_summary: "Compact tractor",
+        created_at: "2026-05-01T00:00:00Z",
+        updated_at: "2026-05-02T00:00:00Z",
+      },
+    });
+
+    expect(normalized.ok).toBe(true);
+    expect(normalized.quote?.id).toBe("quote-2");
+    expect(normalized.quote?.customer_name).toBeNull();
+  });
+});
+
+describe("quote edge analytics normalizers", () => {
+  test("normalizeScorerCalibrationObservations filters bad rows", () => {
+    const observations = normalizeScorerCalibrationObservations({
+      observations: [
+        { score: "74", outcome: "won" },
+        { score: 20, outcome: "skipped" },
+        { score: "bad", outcome: "lost" },
+      ],
+    });
+
+    expect(observations).toEqual([{ score: 74, outcome: "won" }]);
+  });
+
+  test("normalizeFactorAttributionDeals keeps valid outcomes and cleans factors", () => {
+    const deals = normalizeFactorAttributionDeals({
+      deals: [
+        {
+          outcome: "lost",
+          factors: [
+            { label: "Price pressure", weight: "-8" },
+            { label: "", weight: 4 },
+            { label: "No weight" },
+          ],
+        },
+        { outcome: "skipped", factors: [{ label: "Ignored", weight: 1 }] },
+      ],
+    });
+
+    expect(deals).toEqual([
+      { outcome: "lost", factors: [{ label: "Price pressure", weight: -8 }] },
+    ]);
+  });
+
+  test("normalizeFactorVerdicts builds a safe verdict map", () => {
+    const verdicts = normalizeFactorVerdicts({
+      verdicts: [
+        { label: "Fast follow-up", verdict: "proven" },
+        { label: "Bad verdict", verdict: "maybe" },
+        { label: "", verdict: "suspect" },
+      ],
+    });
+
+    expect(verdicts.size).toBe(1);
+    expect(verdicts.get("Fast follow-up")).toBe("proven");
+  });
+
+  test("normalizeClosedDealsAudit supports camel and snake case timestamps", () => {
+    const audits = normalizeClosedDealsAudit({
+      audits: [
+        {
+          package_id: "pkg-1",
+          score: "88",
+          outcome: "expired",
+          factors: [{ label: "Aging quote", weight: "7" }],
+          captured_at: "2026-05-02T00:00:00Z",
+        },
+        { packageId: "", score: 20, outcome: "won", factors: [] },
+      ],
+    });
+
+    expect(audits).toEqual([
+      {
+        packageId: "pkg-1",
+        score: 88,
+        outcome: "expired",
+        factors: [{ label: "Aging quote", weight: 7 }],
+        capturedAt: "2026-05-02T00:00:00Z",
+      },
+    ]);
   });
 });
 
