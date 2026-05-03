@@ -65,6 +65,14 @@ import type {
   WinProbabilityFactor,
   WinProbabilityLift,
 } from "../lib/win-probability-scorer";
+import {
+  isAbortError,
+  normalizeCopilotTurnRows,
+  parseDealCopilotSseEvent,
+  type CopilotTurnViewModel,
+  type DealCopilotSseEvent,
+  type TurnStatus,
+} from "../lib/deal-copilot-normalizers";
 
 // ── Public props ──────────────────────────────────────────────────────────
 
@@ -92,31 +100,6 @@ export interface DealCopilotPanelProps {
 
 // ── Internal turn view-model ──────────────────────────────────────────────
 
-type TurnStatus = "pending" | "streaming" | "complete" | "error";
-
-/** In-flight + persisted turns share a single shape so the scroll feed
- *  can render either without branching. Fields get populated as SSE
- *  events arrive; pre-complete turns have null ids. */
-interface TurnViewModel {
-  /** Stable client-side id. Replaced with the server `id` on complete. */
-  key: string;
-  status: TurnStatus;
-  turnIndex: number | null;
-  inputSource: CopilotInputSource;
-  rawInput: string;
-  /** Claude-extracted signals. Empty object until `extracted` SSE arrives. */
-  extractedSignals: CopilotExtractedSignals;
-  /** Natural-language reply from the copilot. */
-  copilotReply: string | null;
-  /** Score delta for the turn. null pre-`score` event or when extraction
-   *  produced no patch. */
-  scoreBefore: number | null;
-  scoreAfter: number | null;
-  /** Error message for error'd turns. */
-  errorMessage: string | null;
-  createdAt: string;
-}
-
 // ── Component ─────────────────────────────────────────────────────────────
 
 export function DealCopilotPanel({
@@ -129,7 +112,7 @@ export function DealCopilotPanel({
   onDraftPatch,
   dealId,
 }: DealCopilotPanelProps) {
-  const [turns, setTurns] = useState<TurnViewModel[]>([]);
+  const [turns, setTurns] = useState<CopilotTurnViewModel[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [inputMode, setInputMode] = useState<"text" | "voice">("text");
   const [composerText, setComposerText] = useState("");
@@ -165,8 +148,7 @@ export function DealCopilotPanel({
         setFatalError("Couldn't load prior turns. New turns will still save.");
         setTurns([]);
       } else {
-        const rows = (data ?? []) as Array<Record<string, unknown>>;
-        setTurns(rows.map(dbRowToViewModel));
+        setTurns(normalizeCopilotTurnRows(data ?? []));
       }
       setIsHistoryLoading(false);
     })();
@@ -286,7 +268,7 @@ export function DealCopilotPanel({
           ),
         );
       } catch (err) {
-        if ((err as { name?: string }).name === "AbortError") return;
+        if (isAbortError(err)) return;
         const msg = err instanceof Error ? err.message : "Copilot submit failed.";
         setTurns((prev) =>
           prev.map((t) =>
@@ -465,32 +447,13 @@ export function DealCopilotPanel({
 
 // ── SSE event application ────────────────────────────────────────────────
 
-type SseEventBase =
-  | { type: "status"; message: string }
-  | { type: "extracted"; signals: CopilotExtractedSignals; confidence: Record<string, number> }
-  | {
-      type: "draftPatch";
-      patch: Partial<QuoteWorkspaceDraft>;
-      changedPaths: string[];
-    }
-  | {
-      type: "score";
-      before: number | null;
-      after: number;
-      factors: WinProbabilityFactor[];
-      lifts: WinProbabilityLift[];
-    }
-  | { type: "reply"; text: string }
-  | { type: "complete"; turnId: string | null; turnIndex: number | null; latencyMs: number }
-  | { type: "error"; message: string; fatal: boolean };
-
 interface SseApplyContext {
-  setTurns: React.Dispatch<React.SetStateAction<TurnViewModel[]>>;
+  setTurns: React.Dispatch<React.SetStateAction<CopilotTurnViewModel[]>>;
   onScore: DealCopilotPanelProps["onScore"];
   onDraftPatch: DealCopilotPanelProps["onDraftPatch"];
 }
 
-function applySseEvent(evt: SseEventBase, optimisticKey: string, ctx: SseApplyContext) {
+function applySseEvent(evt: DealCopilotSseEvent, optimisticKey: string, ctx: SseApplyContext) {
   switch (evt.type) {
     case "status":
       // We don't surface per-status banners inside the turn card; the
@@ -562,7 +525,7 @@ function applySseEvent(evt: SseEventBase, optimisticKey: string, ctx: SseApplyCo
 
 async function consumeSseStream(
   body: ReadableStream<Uint8Array>,
-  onEvent: (evt: SseEventBase) => void,
+  onEvent: (evt: DealCopilotSseEvent) => void,
 ) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -581,11 +544,8 @@ async function consumeSseStream(
         .find((line) => line.startsWith("data:"));
       if (dataLine) {
         const json = dataLine.slice("data:".length).trim();
-        try {
-          onEvent(JSON.parse(json) as SseEventBase);
-        } catch {
-          // Ignore malformed frames — better to keep streaming than kill the connection.
-        }
+        const event = parseDealCopilotSseEvent(json);
+        if (event) onEvent(event);
       }
       frameEnd = buffer.indexOf("\n\n");
     }
@@ -594,7 +554,7 @@ async function consumeSseStream(
 
 // ── Sub-components ────────────────────────────────────────────────────────
 
-function TurnCard({ turn }: { turn: TurnViewModel }) {
+function TurnCard({ turn }: { turn: CopilotTurnViewModel }) {
   const delta =
     turn.scoreBefore !== null && turn.scoreAfter !== null
       ? turn.scoreAfter - turn.scoreBefore
@@ -791,22 +751,6 @@ function hasAnyExtraction(signals: CopilotExtractedSignals): boolean {
     signals.financingPref ||
     signals.customerWarmth
   );
-}
-
-function dbRowToViewModel(row: Record<string, unknown>): TurnViewModel {
-  return {
-    key: (row.id as string) ?? `persisted-${row.turn_index}`,
-    status: "complete",
-    turnIndex: (row.turn_index as number) ?? null,
-    inputSource: (row.input_source as CopilotInputSource) ?? "text",
-    rawInput: (row.raw_input as string) ?? "",
-    extractedSignals: (row.extracted_signals as CopilotExtractedSignals) ?? {},
-    copilotReply: (row.copilot_reply as string | null) ?? null,
-    scoreBefore: (row.score_before as number | null) ?? null,
-    scoreAfter: (row.score_after as number | null) ?? null,
-    errorMessage: null,
-    createdAt: (row.created_at as string) ?? new Date().toISOString(),
-  };
 }
 
 // Re-export the turn type for the ConversationalDealEngine tab wrapper.
