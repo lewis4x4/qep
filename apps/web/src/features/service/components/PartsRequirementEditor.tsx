@@ -10,6 +10,7 @@ import {
   postInternalBillingToInvoice,
   resyncPartsFromJobCode,
 } from "../lib/api";
+import { normalizeShopInvoiceSummary } from "../lib/service-page-normalizers";
 import type { ServicePartsRequirement } from "../lib/types";
 
 interface Props {
@@ -82,11 +83,11 @@ export function PartsRequirementEditor({ jobId, selectedJobCodeId, parts }: Prop
       const ok = results.filter((r) => r.status === "fulfilled").length;
       const failed = results.filter((r) => r.status === "rejected").length;
       if (failed > 0 && ok === 0) {
-        const first = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
+        const first = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
         const msg =
-          first.reason instanceof Error
+          first?.reason instanceof Error
             ? first.reason.message
-            : typeof first.reason === "string"
+            : typeof first?.reason === "string"
               ? first.reason
               : "Accept failed";
         throw new Error(`${msg} (${failed} of ${suggestedIds.length})`);
@@ -132,7 +133,7 @@ export function PartsRequirementEditor({ jobId, selectedJobCodeId, parts }: Prop
         .limit(1)
         .maybeSingle();
       if (error) throw error;
-      return data as { id: string; invoice_number: string; status: string } | null;
+      return normalizeShopInvoiceSummary(data);
     },
   });
 

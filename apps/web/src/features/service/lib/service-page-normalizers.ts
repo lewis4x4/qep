@@ -23,6 +23,12 @@ export type ShopInvoiceRow = {
   customer_invoice_line_items?: ShopInvoiceLineRow[] | null;
 };
 
+export type ShopInvoiceSummary = {
+  id: string;
+  invoice_number: string;
+  status: string;
+};
+
 export type IntakeResult = {
   machine: Record<string, unknown> | null;
   service_history: unknown[];
@@ -148,6 +154,16 @@ export function normalizeShopInvoiceRow(value: unknown): ShopInvoiceRow | null {
     branch_id: stringOrNull(value.branch_id),
     customer_invoice_line_items: normalizeShopInvoiceLines(value.customer_invoice_line_items),
   };
+}
+
+export function normalizeShopInvoiceSummary(value: unknown): ShopInvoiceSummary | null {
+  if (!isRecord(value)) return null;
+  const id = requiredString(value.id);
+  const invoiceNumber = requiredString(value.invoice_number);
+  const status = requiredString(value.status);
+  return id && invoiceNumber && status
+    ? { id, invoice_number: invoiceNumber, status }
+    : null;
 }
 
 function normalizeSuggestedJobCodes(rows: unknown): IntakeResult["suggested_job_codes"] {

@@ -3,6 +3,7 @@ import {
   normalizeIntakeResult,
   normalizePortalPartsOrderRows,
   normalizeShopInvoiceRow,
+  normalizeShopInvoiceSummary,
 } from "./service-page-normalizers";
 
 describe("service page normalizers", () => {
@@ -60,6 +61,19 @@ describe("service page normalizers", () => {
   test("rejects malformed shop invoice rows", () => {
     expect(normalizeShopInvoiceRow(null)).toBeNull();
     expect(normalizeShopInvoiceRow({ id: "inv-1", invoice_number: "SI-100" })).toBeNull();
+  });
+
+  test("normalizes shop invoice summaries", () => {
+    expect(normalizeShopInvoiceSummary({
+      id: "inv-1",
+      invoice_number: "SI-100",
+      status: "pending",
+    })).toEqual({
+      id: "inv-1",
+      invoice_number: "SI-100",
+      status: "pending",
+    });
+    expect(normalizeShopInvoiceSummary({ id: "inv-1", invoice_number: "" })).toBeNull();
   });
 
   test("normalizes service intake edge responses with safe defaults", () => {
