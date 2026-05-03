@@ -13,6 +13,7 @@ import { accountCommandUrl } from "../lib/account-links";
 import { supabase } from "@/lib/supabase";
 
 type LensKey = "aging" | "expensive" | "trade_up" | "underutilized" | "attachment_upsell";
+const LENS_KEYS: LensKey[] = ["aging", "expensive", "trade_up", "underutilized", "attachment_upsell"];
 
 const LENS_META: Record<LensKey, { label: string; icon: React.ReactNode; color: string; description: string }> = {
   aging: {
@@ -48,6 +49,14 @@ const LENS_META: Record<LensKey, { label: string; icon: React.ReactNode; color: 
 };
 
 const DRAFT_EMAIL_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/draft-email`;
+
+function isLensKey(value: string): value is LensKey {
+  return LENS_KEYS.some((key) => key === value);
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
 export function FleetRadarPage() {
   const { companyId } = useParams<{ companyId: string }>();
@@ -157,7 +166,7 @@ export function FleetRadarPage() {
         >
           All ({totalCount})
         </button>
-        {(Object.keys(LENS_META) as LensKey[]).map((key) => {
+        {LENS_KEYS.map((key) => {
           const meta = LENS_META[key];
           const isActive = key === activeLens;
           return (
@@ -197,7 +206,7 @@ export function FleetRadarPage() {
       {!isError && allItems.length > 0 && (
         <div className="space-y-2">
           {allItems.map((item) => {
-            const meta = LENS_META[item.lens as LensKey] ?? LENS_META.aging;
+            const meta = isLensKey(item.lens) ? LENS_META[item.lens] : LENS_META.aging;
             const titleParts = [item.year, item.make, item.model].filter(Boolean);
             const drafting = draftMutation.isPending && draftMutation.variables?.id === item.id;
             return (
@@ -252,7 +261,7 @@ export function FleetRadarPage() {
       {draftMutation.isError && (
         <Card className="border-red-500/30 bg-red-500/5 p-3">
           <p className="text-xs text-red-400">
-            {(draftMutation.error as Error)?.message ?? "Draft failed"}
+            {getErrorMessage(draftMutation.error, "Draft failed")}
           </p>
         </Card>
       )}

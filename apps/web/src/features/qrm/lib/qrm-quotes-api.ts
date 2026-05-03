@@ -1,4 +1,5 @@
 import { crmSupabase, type QrmDatabase } from "./qrm-supabase";
+import type { Json } from "@/lib/database.types";
 import type { QrmQuote, QrmQuoteUpsertInput } from "./types";
 
 const QUOTE_SELECT =
@@ -9,7 +10,7 @@ type QuoteUpdate = QrmDatabase["public"]["Tables"]["quotes"]["Update"];
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === "object" && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(value));
   }
   return {};
 }
@@ -32,6 +33,26 @@ function nullableString(value: unknown): string | null {
 
 function normalizeQuoteStatus(value: unknown): QrmQuote["status"] {
   return value === "draft" || value === "linked" || value === "archived" ? value : "draft";
+}
+
+function toJsonValue(value: unknown): Json {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => toJsonValue(item));
+  }
+  if (isRecord(value)) {
+    const jsonRecord: Record<string, Json | undefined> = {};
+    for (const [key, item] of Object.entries(value)) {
+      jsonRecord[key] = item === undefined ? undefined : toJsonValue(item);
+    }
+    return jsonRecord;
+  }
+  return null;
 }
 
 export function normalizeQuoteRows(rows: unknown): QrmQuote[] {
@@ -65,9 +86,9 @@ function toInsertPayload(input: QrmQuoteUpsertInput): QuoteInsert {
     crm_deal_id: input.crmDealId ?? null,
     status: input.status,
     title: input.title ?? null,
-    line_items: input.lineItems as QuoteInsert["line_items"],
-    customer_snapshot: input.customerSnapshot as QuoteInsert["customer_snapshot"],
-    metadata: (input.metadata ?? {}) as QuoteInsert["metadata"],
+    line_items: toJsonValue(input.lineItems),
+    customer_snapshot: toJsonValue(input.customerSnapshot),
+    metadata: toJsonValue(input.metadata ?? {}),
     linked_at: input.linkedAt ?? (input.status === "linked" ? new Date().toISOString() : null),
   };
 }
@@ -78,9 +99,9 @@ function toUpdatePayload(input: QrmQuoteUpsertInput): QuoteUpdate {
     crm_deal_id: input.crmDealId ?? null,
     status: input.status,
     title: input.title ?? null,
-    line_items: input.lineItems as QuoteUpdate["line_items"],
-    customer_snapshot: input.customerSnapshot as QuoteUpdate["customer_snapshot"],
-    metadata: (input.metadata ?? {}) as QuoteUpdate["metadata"],
+    line_items: toJsonValue(input.lineItems),
+    customer_snapshot: toJsonValue(input.customerSnapshot),
+    metadata: toJsonValue(input.metadata ?? {}),
     linked_at: input.linkedAt ?? (input.status === "linked" ? new Date().toISOString() : null),
   };
 }

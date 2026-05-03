@@ -91,6 +91,8 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Admin UI/local helpers | Accounts payable, branch management, incentive catalog, data quality, QuickBooks GL sync, rental pricing, Flow approvals, Flare drawer, and Deal Economics forms still cast mutation errors, enum values, branch/team rows, freight states, or threshold/brand rows in components. | Replaced those with unknown-safe error helpers plus small guards/normalizers for local enum/list/row shapes while leaving static option arrays documented as low-risk. |
 | QRM UI metadata/component helpers | Remaining QRM decision-room, strategist, reputation, relationship, rental conversion, operator intelligence, and Account 360 surfaces used metadata/extracted-data, localStorage, abort-error, edge-response, and error-render casts. | Added runtime guards and helpers across the assigned QRM pages/components, including a cohort-filter localStorage parser test; `Customer-strategist.tsx.backup` remained untouched. |
 | Brief, nervous-system, portal, and equipment UI/edge helpers | Build Hub pages/components, nervous-system health refresh, portal invoice payment UI, and equipment commercial action helpers cast unknown errors, browser APIs, localStorage drafts, and edge error bodies. | Added unknown-safe error extraction, browser typing, localStorage draft normalization, and edge error text parsing before those UI/edge helper paths consume or render payloads. |
+| QRM shared libs, FleetRadar, and editor helpers | Remaining active QRM hits included FleetRadar error/static key casts, voice-capture metadata reads, pipeline localStorage parsing, trade walkaround response casting, quote metadata typing, company editor enum casts, KPI response casts, and empty-array component casts. | Added runtime guards/normalizers for those QRM payloads, converted static horizon/category arrays to typed constants, and added focused tests for pipeline cache, voice-capture metadata, and trade walkaround payloads. |
+| Admin final UI option/error cleanup | Remaining active admin hits included Exception Inbox mutation error rendering and static filter/option array casts in audit, AI log, deal velocity, Flow Admin, and win/loss rollup views. | Replaced the Exception Inbox error cast with an unknown-safe helper and moved static filters/options to typed constants. |
 
 ## Verification
 
@@ -233,6 +235,9 @@ Results:
 - Combined targeted test run including the QRM router/rental/decision-room parallel pass: `615 pass`, `0 fail` across `73` files.
 - SOP/QRM UI/local hardening plus brief/nervous-system/portal/equipment focused tests: `34 pass`, `0 fail` across `7` files.
 - Web typecheck after SOP/admin/QRM UI plus brief/nervous-system/portal/equipment batch: PASS.
+- QRM shared-lib/FleetRadar/editor cleanup focused tests: `16 pass`, `0 fail` across `6` files.
+- Web typecheck after final QRM/admin cleanup batch: PASS.
+- Final active-code high-risk cast scan: only intentional `qrm-supabase` typed client adapter remains; other hits are test fixtures or `Customer-strategist.tsx.backup`.
 - Web typecheck: PASS.
 - Service feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 - Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
@@ -247,6 +252,6 @@ Results:
 
 ## Remaining Slice 6 Work
 
-- Continue auditing the remaining non-core raw type-cast surfaces found after this pass: QRM FleetRadar draft error rendering, QRM shared libs (`voice-capture-activity-metadata`, `pipeline-utils`, `trade-walkaround-api`, `qrm-quotes-api`), QRM editor enum casts, admin Exception Inbox error rendering, and static option-array casts that should either become typed constants or be documented as intentionally low-risk.
-- Ignore `Customer-strategist.tsx.backup` unless the backup file is removed or restored into active code.
-- For each target, move row-shape logic into small exported normalizers and add unit tests before replacing direct casts.
+- Active-code Slice 6 inventory is clear except for `qrm-supabase`, which is the central structural typed-client adapter used to bind QRM-specific generated types to the shared Supabase client.
+- Remaining scan matches are test fixtures that intentionally inject malformed types and `Customer-strategist.tsx.backup`, which is excluded unless restored into active code.
+- If the backup file is no longer needed, remove it in a separate cleanup commit rather than treating it as an active-code blocker.

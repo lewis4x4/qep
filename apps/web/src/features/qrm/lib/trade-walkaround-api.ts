@@ -45,32 +45,77 @@ export interface TradeValuationResponse {
   pipeline_duration_ms: number;
 }
 
-function mapTradeValuation(row: Record<string, unknown>): TradeValuationRecord {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function requiredString(value: unknown, field: string): string {
+  if (typeof value === "string" && value.length > 0) return value;
+  throw new Error(`Trade valuation response is missing '${field}'.`);
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function stringArrayOrNull(value: unknown): string[] | null {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : null;
+}
+
+function mapTradeValuation(row: unknown): TradeValuationRecord {
+  if (!isRecord(row)) {
+    throw new Error("Trade valuation response was malformed.");
+  }
+
   return {
-    id: row.id as string,
-    deal_id: (row.deal_id as string | null) ?? null,
-    make: row.make as string,
-    model: row.model as string,
-    year: (row.year as number | null) ?? null,
-    serial_number: (row.serial_number as string | null) ?? null,
-    hours: (row.hours as number | null) ?? null,
+    id: requiredString(row.id, "id"),
+    deal_id: nullableString(row.deal_id),
+    make: requiredString(row.make, "make"),
+    model: requiredString(row.model, "model"),
+    year: nullableNumber(row.year),
+    serial_number: nullableString(row.serial_number),
+    hours: nullableNumber(row.hours),
     photos: normalizeTradePhotos(row.photos),
-    video_url: (row.video_url as string | null) ?? null,
-    operational_status: (row.operational_status as string | null) ?? null,
-    last_full_service: (row.last_full_service as string | null) ?? null,
-    needed_repairs: (row.needed_repairs as string | null) ?? null,
-    attachments_included: Array.isArray(row.attachments_included)
-      ? row.attachments_included.filter((value): value is string => typeof value === "string")
-      : null,
-    ai_condition_score: (row.ai_condition_score as number | null) ?? null,
-    ai_condition_notes: (row.ai_condition_notes as string | null) ?? null,
-    ai_detected_damage: Array.isArray(row.ai_detected_damage)
-      ? row.ai_detected_damage.filter((value): value is string => typeof value === "string")
-      : null,
-    preliminary_value: (row.preliminary_value as number | null) ?? null,
-    final_value: (row.final_value as number | null) ?? null,
-    conditional_language: (row.conditional_language as string | null) ?? null,
-    created_at: row.created_at as string,
+    video_url: nullableString(row.video_url),
+    operational_status: nullableString(row.operational_status),
+    last_full_service: nullableString(row.last_full_service),
+    needed_repairs: nullableString(row.needed_repairs),
+    attachments_included: stringArrayOrNull(row.attachments_included),
+    ai_condition_score: nullableNumber(row.ai_condition_score),
+    ai_condition_notes: nullableString(row.ai_condition_notes),
+    ai_detected_damage: stringArrayOrNull(row.ai_detected_damage),
+    preliminary_value: nullableNumber(row.preliminary_value),
+    final_value: nullableNumber(row.final_value),
+    conditional_language: nullableString(row.conditional_language),
+    created_at: requiredString(row.created_at, "created_at"),
+  };
+}
+
+function mapAiAssessment(value: unknown): TradeValuationResponse["ai_assessment"] {
+  if (!isRecord(value)) {
+    return { score: 0, notes: "", detected_damage: [] };
+  }
+  return {
+    score: nullableNumber(value.score) ?? 0,
+    notes: nullableString(value.notes) ?? "",
+    detected_damage: stringArrayOrNull(value.detected_damage) ?? [],
+  };
+}
+
+export function normalizeTradeValuationResponse(payload: unknown): TradeValuationResponse {
+  if (!isRecord(payload)) {
+    throw new Error("Trade valuation response was malformed.");
+  }
+  return {
+    valuation: mapTradeValuation(payload.valuation),
+    ai_assessment: mapAiAssessment(payload.ai_assessment),
+    pipeline_duration_ms: nullableNumber(payload.pipeline_duration_ms) ?? 0,
   };
 }
 
@@ -84,7 +129,7 @@ export async function getTradeValuation(dealId: string): Promise<TradeValuationR
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  return mapTradeValuation(data as Record<string, unknown>);
+  return mapTradeValuation(data);
 }
 
 export async function uploadTradeWalkaroundPhoto(input: {
@@ -121,12 +166,15 @@ export async function createTradeValuation(input: {
     headers: await getAuthHeaders(),
     body: JSON.stringify(input),
   });
-  const payload = await response.json().catch(() => ({}));
+  const payload: unknown = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error((payload as { error?: string }).error ?? "Failed to create trade valuation.");
+    const message = isRecord(payload) && typeof payload.error === "string"
+      ? payload.error
+      : "Failed to create trade valuation.";
+    throw new Error(message);
   }
-  return {
-    ...payload,
-    valuation: mapTradeValuation((payload as { valuation: Record<string, unknown> }).valuation),
-  } as TradeValuationResponse;
+  if (!isRecord(payload)) {
+    throw new Error("Trade valuation response was malformed.");
+  }
+  return normalizeTradeValuationResponse(payload);
 }

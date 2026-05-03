@@ -20,6 +20,7 @@ import {
  */
 
 type PeriodFilter = "30" | "90" | "all";
+const PERIOD_FILTERS: readonly PeriodFilter[] = ["30", "90", "all"];
 
 export function WinLossRollup() {
   const [period, setPeriod] = useState<PeriodFilter>("90");
@@ -42,7 +43,7 @@ export function WinLossRollup() {
           <CardTitle className="text-base">Win/Loss Reasons</CardTitle>
           <div className="flex items-center gap-2 text-xs">
             <span className="text-muted-foreground">Period:</span>
-            {(["30", "90", "all"] as PeriodFilter[]).map((p) => (
+            {PERIOD_FILTERS.map((p) => (
               <button
                 key={p}
                 type="button"

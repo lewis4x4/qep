@@ -16,6 +16,7 @@ import {
 
 type PeriodFilter = "30" | "90" | "all";
 const DEFAULT_STALL_DAYS = 14;
+const PERIOD_FILTERS: readonly PeriodFilter[] = ["30", "90", "all"];
 
 export function DealVelocityPage() {
   return (
@@ -60,7 +61,7 @@ function DealVelocityPageInner() {
       {/* Filters */}
       <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-4 py-2 text-sm">
         <span className="text-muted-foreground">Period:</span>
-        {(["30", "90", "all"] as PeriodFilter[]).map((p) => (
+        {PERIOD_FILTERS.map((p) => (
           <button
             key={p}
             type="button"

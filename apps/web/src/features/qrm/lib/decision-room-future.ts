@@ -14,6 +14,8 @@ import type { DecisionRoomBoard } from "./decision-room-simulator";
 
 export type FutureHorizon = "7d" | "14d" | "30d";
 
+const FUTURE_HORIZONS: FutureHorizon[] = ["7d", "14d", "30d"];
+
 export interface FutureTick {
   horizon: FutureHorizon;
   /** Signed days added to the current velocity at this horizon. */
@@ -96,5 +98,5 @@ export function projectFutureState(board: DecisionRoomBoard, horizon: FutureHori
 }
 
 export function projectAllHorizons(board: DecisionRoomBoard): FutureTick[] {
-  return (["7d", "14d", "30d"] as FutureHorizon[]).map((h) => projectFutureState(board, h));
+  return FUTURE_HORIZONS.map((h) => projectFutureState(board, h));
 }

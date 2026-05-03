@@ -8,21 +8,42 @@ import { useToast } from "@/hooks/use-toast";
 import { createCrmCompanyViaRouter, patchCrmCompanyViaRouter } from "../lib/qrm-router-api";
 import type { QrmCompanySummary } from "../lib/types";
 
-const PRODUCT_CATEGORY_OPTIONS = [
+type ProductCategory = QrmCompanySummary["productCategory"];
+type ProductCategoryOptionValue = NonNullable<ProductCategory> | "";
+type ArType = QrmCompanySummary["arType"];
+type ArTypeOptionValue = NonNullable<ArType> | "";
+
+const PRODUCT_CATEGORY_OPTIONS: { value: ProductCategoryOptionValue; label: string }[] = [
   { value: "", label: "Unspecified" },
   { value: "business", label: "Business" },
   { value: "individual", label: "Individual" },
   { value: "government", label: "Government" },
   { value: "non_profit", label: "Non-profit" },
   { value: "internal", label: "Internal" },
-] as const;
+];
 
-const AR_TYPE_OPTIONS = [
+const AR_TYPE_OPTIONS: { value: ArTypeOptionValue; label: string }[] = [
   { value: "", label: "Unspecified" },
   { value: "open_item", label: "Open item" },
   { value: "balance_forward", label: "Balance forward" },
   { value: "true_balance_forward", label: "True balance forward" },
-] as const;
+];
+
+function isProductCategory(value: string): value is NonNullable<ProductCategory> {
+  return PRODUCT_CATEGORY_OPTIONS.some((option) => option.value === value && option.value !== "");
+}
+
+function normalizeProductCategory(value: string): ProductCategory {
+  return isProductCategory(value) ? value : null;
+}
+
+function isArType(value: string): value is NonNullable<ArType> {
+  return AR_TYPE_OPTIONS.some((option) => option.value === value && option.value !== "");
+}
+
+function normalizeArType(value: string): ArType {
+  return isArType(value) ? value : null;
+}
 
 interface QrmCompanyEditorSheetProps {
   open: boolean;
@@ -114,8 +135,8 @@ export function QrmCompanyEditorSheet({
         postalCode: postalCode.trim() || null,
         country: country.trim() || null,
         status: status.trim() || null,
-        productCategory: (productCategory || null) as QrmCompanySummary["productCategory"],
-        arType: (arType || null) as QrmCompanySummary["arType"],
+        productCategory: normalizeProductCategory(productCategory),
+        arType: normalizeArType(arType),
         paymentTermsCode: paymentTermsCode.trim() || null,
         termsCode: termsCode.trim() || null,
         territoryCode: territoryCode.trim() || null,

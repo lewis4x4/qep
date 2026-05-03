@@ -42,6 +42,15 @@ function toStatus(value: string): ExceptionRow["status"] {
   return value === "in_progress" || value === "resolved" || value === "dismissed" ? value : "open";
 }
 
+function errorMessage(value: unknown, fallback: string): string {
+  if (value instanceof Error && value.message) return value.message;
+  if (value && typeof value === "object" && "message" in value) {
+    const message = value.message;
+    if (typeof message === "string" && message.length > 0) return message;
+  }
+  return fallback;
+}
+
 function toExceptionRow(row: ExceptionQueueRow): ExceptionRow {
   return {
     id: row.id,
@@ -258,7 +267,7 @@ export function ExceptionInboxPage() {
                     </div>
                     {updateMutation.isError && updateMutation.variables?.id === e.id && (
                       <p className="mt-1 text-xs text-destructive">
-                        {(updateMutation.error as Error)?.message ?? "Update failed"}
+                        {errorMessage(updateMutation.error, "Update failed")}
                       </p>
                     )}
                   </div>

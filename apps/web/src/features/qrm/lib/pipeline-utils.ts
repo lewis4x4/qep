@@ -22,6 +22,69 @@ export interface OpenDealsFirstPageResult extends CachedOpenDealsPayload {
   fromCache: boolean;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function asRequiredString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function asNullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function asNullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function normalizeCachedDeal(value: unknown): QrmRepSafeDeal | null {
+  if (!isRecord(value)) return null;
+  const id = asRequiredString(value.id);
+  const workspaceId = asRequiredString(value.workspaceId);
+  const name = asRequiredString(value.name);
+  const stageId = asRequiredString(value.stageId);
+  const createdAt = asRequiredString(value.createdAt);
+  const updatedAt = asRequiredString(value.updatedAt);
+  if (!id || !workspaceId || !name || !stageId || !createdAt || !updatedAt) {
+    return null;
+  }
+
+  return {
+    id,
+    workspaceId,
+    name,
+    stageId,
+    primaryContactId: asNullableString(value.primaryContactId),
+    companyId: asNullableString(value.companyId),
+    assignedRepId: asNullableString(value.assignedRepId),
+    amount: asNullableNumber(value.amount),
+    expectedCloseOn: asNullableString(value.expectedCloseOn),
+    nextFollowUpAt: asNullableString(value.nextFollowUpAt),
+    lastActivityAt: asNullableString(value.lastActivityAt),
+    closedAt: asNullableString(value.closedAt),
+    hubspotDealId: asNullableString(value.hubspotDealId),
+    createdAt,
+    updatedAt,
+    slaDeadlineAt: asNullableString(value.slaDeadlineAt),
+    depositStatus: asNullableString(value.depositStatus),
+    depositAmount: asNullableNumber(value.depositAmount),
+    sortPosition: asNullableNumber(value.sortPosition),
+    marginPct: asNullableNumber(value.marginPct),
+  };
+}
+
+export function normalizeCachedOpenDealsPayload(value: unknown): CachedOpenDealsPayload | null {
+  if (!isRecord(value) || !Array.isArray(value.items)) return null;
+  return {
+    items: value.items.flatMap((item) => {
+      const deal = normalizeCachedDeal(item);
+      return deal ? [deal] : [];
+    }),
+    nextCursor: typeof value.nextCursor === "string" ? value.nextCursor : null,
+  };
+}
+
 export function formatMoney(value: number | null): string {
   if (value === null) {
     return "Amount TBD";
@@ -85,15 +148,8 @@ export function readCachedOpenDeals(): CachedOpenDealsPayload | null {
       return null;
     }
 
-    const parsed = JSON.parse(raw) as Partial<CachedOpenDealsPayload>;
-    if (!Array.isArray(parsed.items)) {
-      return null;
-    }
-
-    return {
-      items: parsed.items as QrmRepSafeDeal[],
-      nextCursor: typeof parsed.nextCursor === "string" ? parsed.nextCursor : null,
-    };
+    const parsed: unknown = JSON.parse(raw);
+    return normalizeCachedOpenDealsPayload(parsed);
   } catch (error) {
     return null;
   }

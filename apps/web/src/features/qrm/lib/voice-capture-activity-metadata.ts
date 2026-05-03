@@ -51,6 +51,10 @@ function asBool(v: unknown): boolean {
   return v === true;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 export function formatVoiceCaptureDealStage(value: string | null | undefined): string | null {
   if (!value) return null;
   return DEAL_STAGE_LABELS[value] ?? value;
@@ -73,40 +77,36 @@ export function formatVoiceCaptureFollowUpDate(value: string | null | undefined)
 }
 
 function parseExtractedSummary(raw: unknown): QrmVoiceCaptureExtractedSummary | null {
-  if (!raw || typeof raw !== "object") return null;
-  const o = raw as Record<string, unknown>;
+  if (!isRecord(raw)) return null;
   return {
-    contactName: asString(o.contactName),
-    companyName: asString(o.companyName),
-    machineInterest: asString(o.machineInterest),
-    applicationUseCase: asString(o.applicationUseCase),
-    equipmentMake: asString(o.equipmentMake),
-    equipmentModel: asString(o.equipmentModel),
-    dealStage: asString(o.dealStage),
-    urgencyLevel: asString(o.urgencyLevel),
-    financingInterest: asString(o.financingInterest),
-    tradeInLikelihood: asString(o.tradeInLikelihood),
-    nextStep: asString(o.nextStep),
-    followUpDate: asString(o.followUpDate),
-    keyConcerns: asString(o.keyConcerns),
-    competitorsMentioned: asStringArray(o.competitorsMentioned),
-    recommendedNextAction: asString(o.recommendedNextAction),
-    managerAttentionFlag: asBool(o.managerAttentionFlag),
+    contactName: asString(raw.contactName),
+    companyName: asString(raw.companyName),
+    machineInterest: asString(raw.machineInterest),
+    applicationUseCase: asString(raw.applicationUseCase),
+    equipmentMake: asString(raw.equipmentMake),
+    equipmentModel: asString(raw.equipmentModel),
+    dealStage: asString(raw.dealStage),
+    urgencyLevel: asString(raw.urgencyLevel),
+    financingInterest: asString(raw.financingInterest),
+    tradeInLikelihood: asString(raw.tradeInLikelihood),
+    nextStep: asString(raw.nextStep),
+    followUpDate: asString(raw.followUpDate),
+    keyConcerns: asString(raw.keyConcerns),
+    competitorsMentioned: asStringArray(raw.competitorsMentioned),
+    recommendedNextAction: asString(raw.recommendedNextAction),
+    managerAttentionFlag: asBool(raw.managerAttentionFlag),
   };
 }
 
 export function isVoiceCaptureActivity(activity: QrmActivityItem): boolean {
-  const m = activity.metadata;
-  if (!m || typeof m !== "object") return false;
-  return (m as Record<string, unknown>).source === "voice_capture";
+  return activity.metadata.source === "voice_capture";
 }
 
 export function readVoiceCaptureTimelineSignals(activity: QrmActivityItem): QrmVoiceCaptureTimelineSignals | null {
   if (!isVoiceCaptureActivity(activity)) return null;
-  const m = activity.metadata as Record<string, unknown>;
-  const summary = parseExtractedSummary(m.extractedSummary);
-  const actionItems = Array.isArray(m.actionItems)
-    ? m.actionItems.filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+  const summary = parseExtractedSummary(activity.metadata.extractedSummary);
+  const actionItems = Array.isArray(activity.metadata.actionItems)
+    ? activity.metadata.actionItems.filter((x): x is string => typeof x === "string" && x.trim().length > 0)
     : [];
   if (!summary) return null;
   return { summary, actionItems };

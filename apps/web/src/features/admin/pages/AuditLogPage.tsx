@@ -41,6 +41,9 @@ function actionVariant(a: AuditAction): "success" | "info" | "destructive" {
 type DaysFilter = "7" | "30" | "all";
 type ActionFilter = "all" | AuditAction;
 
+const DAY_FILTERS: readonly DaysFilter[] = ["7", "30", "all"];
+const ACTION_FILTERS: readonly ActionFilter[] = ["all", "insert", "update", "delete"];
+
 // ── Expanded row ──────────────────────────────────────────────────────────────
 
 function ExpandedRow({ event }: { event: AuditEvent }) {
@@ -139,7 +142,7 @@ function AuditLogPageInner() {
       <div className="space-y-3 rounded-lg border bg-muted/40 px-4 py-3 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-muted-foreground">Period:</span>
-          {(["7", "30", "all"] as DaysFilter[]).map((d) => (
+          {DAY_FILTERS.map((d) => (
             <button
               key={d}
               type="button"
@@ -152,7 +155,7 @@ function AuditLogPageInner() {
             </button>
           ))}
           <span className="ml-4 text-muted-foreground">Action:</span>
-          {(["all", "insert", "update", "delete"] as ActionFilter[]).map((a) => (
+          {ACTION_FILTERS.map((a) => (
             <button
               key={a}
               type="button"

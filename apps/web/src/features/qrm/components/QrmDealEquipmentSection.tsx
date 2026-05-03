@@ -35,6 +35,14 @@ const ROLE_OPTIONS: { value: QrmDealEquipmentRole; label: string }[] = [
   { value: "part_exchange", label: "Part Exchange" },
 ];
 
+function isDealEquipmentRole(value: string): value is QrmDealEquipmentRole {
+  return ROLE_OPTIONS.some((option) => option.value === value);
+}
+
+function normalizeDealEquipmentRole(value: string): QrmDealEquipmentRole {
+  return isDealEquipmentRole(value) ? value : "subject";
+}
+
 const roleColor: Record<string, string> = {
   subject: "bg-sky-500/15 text-sky-400",
   trade_in: "bg-amber-500/15 text-amber-400",
@@ -65,7 +73,7 @@ export function QrmDealEquipmentSection({ dealId, companyId }: QrmDealEquipmentS
 
   const companyEquipmentQuery = useQuery({
     queryKey: ["crm", "company", companyId ?? "__none__", "equipment"],
-    queryFn: () => (companyId ? fetchCompanyEquipment(companyId) : Promise.resolve([] as QrmEquipment[])),
+    queryFn: async (): Promise<QrmEquipment[]> => (companyId ? fetchCompanyEquipment(companyId) : []),
     staleTime: 30_000,
     enabled: sheetOpen && !!companyId,
   });
@@ -207,7 +215,7 @@ export function QrmDealEquipmentSection({ dealId, companyId }: QrmDealEquipmentS
                   id="de-role"
                   className={selectClass}
                   value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value as QrmDealEquipmentRole)}
+                  onChange={(e) => setSelectedRole(normalizeDealEquipmentRole(e.target.value))}
                 >
                   {ROLE_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>

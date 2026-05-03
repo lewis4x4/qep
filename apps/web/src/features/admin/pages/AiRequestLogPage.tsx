@@ -99,6 +99,9 @@ function ExpandedRow({ row }: { row: AiLogRow }) {
 type DaysFilter = "7" | "30" | "all";
 type SourceFilter = "all" | "text" | "voice";
 
+const DAY_FILTERS: readonly DaysFilter[] = ["7", "30", "all"];
+const SOURCE_FILTERS: readonly SourceFilter[] = ["all", "text", "voice"];
+
 export function AiRequestLogPage() {
   return (
     <RequireAdmin>
@@ -150,7 +153,7 @@ function AiRequestLogPageInner() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">Period:</span>
-          {(["7", "30", "all"] as DaysFilter[]).map((d) => (
+          {DAY_FILTERS.map((d) => (
             <button
               key={d}
               onClick={() => setDays(d)}
@@ -164,7 +167,7 @@ function AiRequestLogPageInner() {
         </div>
         <div className="flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">Source:</span>
-          {(["all", "text", "voice"] as SourceFilter[]).map((s) => (
+          {SOURCE_FILTERS.map((s) => (
             <button
               key={s}
               onClick={() => setSource(s)}

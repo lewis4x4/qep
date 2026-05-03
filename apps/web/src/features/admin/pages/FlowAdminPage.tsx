@@ -50,6 +50,16 @@ interface WorkflowDef {
 
 type SurfaceFilter = "all" | "automated" | "iron";
 
+const QUOTE_APPROVAL_CONDITION_TYPES: readonly QuoteApprovalConditionType[] = [
+  "min_margin_pct",
+  "max_trade_allowance",
+  "required_cash_down",
+  "required_finance_scenario",
+  "remove_attachment",
+  "expiry_hours",
+];
+const SURFACE_FILTERS: readonly SurfaceFilter[] = ["all", "automated", "iron"];
+
 interface IronSuggestionRow {
   id: string;
   pattern_signature: string;
@@ -764,14 +774,7 @@ export function FlowAdminPage() {
             <div>
               <p className="mb-2 text-[11px] uppercase tracking-wider text-muted-foreground">Allowed condition types</p>
               <div className="grid gap-2 sm:grid-cols-3">
-                {([
-                  "min_margin_pct",
-                  "max_trade_allowance",
-                  "required_cash_down",
-                  "required_finance_scenario",
-                  "remove_attachment",
-                  "expiry_hours",
-                ] as QuoteApprovalConditionType[]).map((type) => (
+                {QUOTE_APPROVAL_CONDITION_TYPES.map((type) => (
                   <label key={type} className="flex items-center gap-2 text-sm text-foreground">
                     <input
                       type="checkbox"
@@ -817,7 +820,7 @@ export function FlowAdminPage() {
       {/* Surface filter chips: All / Automated / Iron */}
       <div className="flex items-center gap-2">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Surface:</span>
-        {(["all", "automated", "iron"] as SurfaceFilter[]).map((s) => (
+        {SURFACE_FILTERS.map((s) => (
           <button
             key={s}
             type="button"
@@ -1103,7 +1106,8 @@ export function FlowAdminPage() {
           </p>
           <div className="space-y-1.5">
             {deadLetters.map((dl) => {
-              const runId = dl.payload?.flow_run_id as string | undefined;
+              const runIdValue = dl.payload.flow_run_id;
+              const runId = typeof runIdValue === "string" ? runIdValue : undefined;
               return (
                 <div key={dl.id} className="rounded border border-red-500/30 bg-red-500/5 p-2 text-[11px]">
                   <div className="flex items-start justify-between gap-2">

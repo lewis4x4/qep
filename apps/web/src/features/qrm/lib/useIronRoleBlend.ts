@@ -22,12 +22,8 @@ import { coerceBlendRowsFromView, type IronRoleBlendInput } from "./iron-roles";
 
 const FIVE_MINUTES = 5 * 60 * 1000;
 
-// Stable empty-array sentinel — returning a fresh `[]` from the hook on
-// every render would break React.memo / useMemo downstream because the
-// array reference would change even though the contents didn't. This
-// constant lets every "loading" / "error" / "empty" render share the
-// SAME array instance.
-const EMPTY_BLEND: readonly IronRoleBlendInput[] = Object.freeze([]);
+// Stable empty-array sentinel. Callers should treat it as read-only.
+const EMPTY_BLEND: IronRoleBlendInput[] = [];
 
 export interface UseIronRoleBlendResult {
   blend: IronRoleBlendInput[];
@@ -71,11 +67,7 @@ export function useIronRoleBlend(profileId: string | null | undefined): UseIronR
   });
 
   return {
-    // Cast away `readonly` only at the boundary — callers receive a normal
-    // mutable array type, but the underlying instance is the frozen shared
-    // sentinel and they should treat it as read-only. The helpers in
-    // iron-roles.ts never mutate.
-    blend: query.data ?? (EMPTY_BLEND as IronRoleBlendInput[]),
+    blend: query.data ?? EMPTY_BLEND,
     isLoading: query.isLoading,
     isError: query.isError,
     error: query.error,

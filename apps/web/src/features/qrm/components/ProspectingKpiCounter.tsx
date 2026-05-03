@@ -14,6 +14,35 @@ interface KpiData {
   consecutive_days_met: number;
 }
 
+const DEFAULT_KPI: KpiData = {
+  total_visits: 0,
+  positive_visits: 0,
+  target: 10,
+  target_met: false,
+  consecutive_days_met: 0,
+};
+
+function readNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function normalizeKpiData(value: unknown): KpiData {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return DEFAULT_KPI;
+  }
+
+  return {
+    total_visits: readNumber("total_visits" in value ? value.total_visits : undefined, DEFAULT_KPI.total_visits),
+    positive_visits: readNumber("positive_visits" in value ? value.positive_visits : undefined, DEFAULT_KPI.positive_visits),
+    target: readNumber("target" in value ? value.target : undefined, DEFAULT_KPI.target),
+    target_met: "target_met" in value && value.target_met === true,
+    consecutive_days_met: readNumber(
+      "consecutive_days_met" in value ? value.consecutive_days_met : undefined,
+      DEFAULT_KPI.consecutive_days_met,
+    ),
+  };
+}
+
 /**
  * Real-time prospecting KPI counter for Iron Advisor dashboard.
  * Shows daily positive visit count vs. 10-visit target.
@@ -32,21 +61,9 @@ export function ProspectingKpiCounter({ userId }: ProspectingKpiCounterProps) {
         .maybeSingle();
       if (error) {
         console.warn("[prospecting-kpi]", error);
-        return {
-          total_visits: 0,
-          positive_visits: 0,
-          target: 10,
-          target_met: false,
-          consecutive_days_met: 0,
-        } as KpiData;
+        return DEFAULT_KPI;
       }
-      return (data ?? {
-        total_visits: 0,
-        positive_visits: 0,
-        target: 10,
-        target_met: false,
-        consecutive_days_met: 0,
-      }) as KpiData;
+      return normalizeKpiData(data);
     },
     staleTime: 15_000,
     refetchInterval: 30_000, // Auto-refresh every 30 seconds

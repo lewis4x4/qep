@@ -9,6 +9,8 @@
 
 export type BlockerCategory = "deposit_missing" | "margin_flagged" | "anomaly_critical";
 
+const BLOCKER_CATEGORIES: BlockerCategory[] = ["deposit_missing", "margin_flagged", "anomaly_critical"];
+
 export interface BlockedDeal {
   id: string;
   dealId: string;
@@ -238,7 +240,7 @@ export function groupBlockedDeals(
   }
 
   const grouped = new Map<BlockerCategory, BlockedDeal[]>();
-  for (const cat of ["deposit_missing", "margin_flagged", "anomaly_critical"] as BlockerCategory[]) {
+  for (const cat of BLOCKER_CATEGORIES) {
     grouped.set(cat, []);
   }
 
@@ -318,7 +320,7 @@ export function groupBlockedDeals(
   let totalBlocked = 0;
   let totalRevenue = 0;
 
-  for (const cat of ["deposit_missing", "margin_flagged", "anomaly_critical"] as BlockerCategory[]) {
+  for (const cat of BLOCKER_CATEGORIES) {
     const deals = grouped.get(cat) ?? [];
     if (deals.length === 0) continue;
     deals.sort((a, b) => b.amount - a.amount); // Highest value first

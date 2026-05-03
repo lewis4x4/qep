@@ -79,7 +79,7 @@ These are not customer-import blockers, but they must not be represented as done
 - Raw IntelliDealer source files remain untracked by policy until a privacy/retention decision approves committing or moving them to controlled private storage.
 - Wave 5 integrations are deferred until credentials and dealer-specific scope are available.
 - Remaining non-core raw Supabase row casts still need slice-by-slice normalization if the goal is broader API hardening.
-- The latest Slice 6 scan still shows non-core hardening work in QRM FleetRadar, selected QRM shared libs/editor helpers, admin Exception Inbox, and static option-array casts that need either typed constants or explicit low-risk documentation.
+- The latest Slice 6 active-code scan is clear except for the intentional central `qrm-supabase` typed-client adapter; remaining matches are malformed-type test fixtures and `Customer-strategist.tsx.backup`, which is excluded unless restored into active code.
 - The old `test-results/agent-gates/*` evidence referenced by `_migration_order.md` is not present in the current working tree; either recover those artifacts or replace them with fresh gate outputs.
 
 ## Remaining Roadmap
@@ -275,9 +275,12 @@ Current result:
 - Admin accounts payable, branch management, incentive catalog, data quality, QuickBooks GL sync, rental pricing, Flow approvals, Flare drawer, and Deal Economics form helpers now use unknown-safe error helpers and small local enum/list/row guards.
 - Remaining assigned QRM strategist/reputation/relationship/rental conversion/operator intelligence/decision-room/Account 360 UI helpers now guard metadata, extracted data, localStorage, abort errors, edge responses, and mutation error rendering.
 - Brief Build Hub UI helpers, nervous-system health refresh, portal invoice payment UI, and equipment commercial action helpers now use unknown-safe error extraction, browser typing, localStorage draft guards, and edge error text parsing.
+- Final QRM active-code cleanup hardened FleetRadar, voice-capture metadata, pipeline localStorage parsing, trade walkaround responses, QRM quote metadata handling, company editor enum values, KPI responses, and deal-equipment empty fallbacks.
+- Final admin active-code cleanup replaced Exception Inbox error casting and moved remaining audit/AI-log/deal-velocity/Flow Admin/win-loss static filter arrays to typed constants.
 - Targeted tests passed including the latest QRM router/rental/decision-room focused files: `615 pass`, `0 fail` across `73` files.
 - Latest QRM router/rental/decision-room focused tests passed independently: `21 pass`, `0 fail`.
 - Latest SOP/QRM UI/local plus brief/nervous-system/portal/equipment focused tests passed: `34 pass`, `0 fail` across `7` files.
+- Latest QRM shared-lib/FleetRadar/editor focused tests passed: `16 pass`, `0 fail` across `6` files.
 - Web typecheck passed.
 - Service feature cast scan is clear for the Slice 6 inventory pattern.
 - Fleet feature cast scan is clear for the Slice 6 inventory pattern.
@@ -288,7 +291,7 @@ Current result:
 - Equipment feature cast scan is clear for the Slice 6 inventory pattern.
 - Ops feature cast scan is clear for the Slice 6 inventory pattern.
 - Portal feature cast scan is clear for the Slice 6 inventory pattern.
-- Latest high-risk direct-cast scan after the second parallel batch now shows remaining active-code targets concentrated in QRM FleetRadar, QRM shared libs/editor helpers, admin Exception Inbox, and static option-array casts; `Customer-strategist.tsx.backup` is excluded from active-code closeout unless restored.
+- Latest high-risk direct-cast scan after the final cleanup batch shows only the intentional `qrm-supabase` typed client adapter in active code; remaining matches are tests or `Customer-strategist.tsx.backup`.
 
 ### Slice 7: Wave 5 Deferred Integration Register
 
