@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/lib/supabase";
-import type { Json } from "@/lib/database.types";
 import { InspectionChecklist } from "../components/InspectionChecklist";
 import { SignatureCapture } from "../components/SignatureCapture";
 import {
@@ -16,6 +15,7 @@ import {
   serializeDriverChecklist,
   updateChecklistItem,
 } from "../lib/traffic-ticket-driver";
+import { normalizeTrafficTicketRows, type TrafficTicketRow } from "../lib/ops-row-normalizers";
 import {
   AlertTriangle,
   Camera,
@@ -25,34 +25,6 @@ import {
   MapPin,
   Truck,
 } from "lucide-react";
-
-interface TrafficTicketRow {
-  id: string;
-  billing_comments: string;
-  completed_at: string | null;
-  created_at: string;
-  delivery_address: string | null;
-  delivery_lat: number | null;
-  delivery_lng: number | null;
-  delivery_photos: Json | null;
-  delivery_signature_url: string | null;
-  department: string;
-  driver_checklist: Json | null;
-  driver_id: string | null;
-  from_location: string;
-  hour_meter_reading: number | null;
-  locked: boolean | null;
-  problems_reported: string | null;
-  proof_of_delivery_complete: boolean | null;
-  shipping_date: string;
-  status: string;
-  stock_number: string;
-  ticket_type: string;
-  to_contact_name: string;
-  to_contact_phone: string;
-  to_location: string;
-  urgency: string | null;
-}
 
 const FILTERS = ["all", "haul_pending", "scheduled", "being_shipped", "completed"] as const;
 const BUCKET = "equipment-photos";
@@ -85,7 +57,7 @@ export function TrafficTicketsPage() {
   const [problemNotes, setProblemNotes] = useState("");
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
 
-  const { data: tickets = [], isLoading, isError, error } = useQuery({
+  const { data: tickets = [], isLoading, isError, error } = useQuery<TrafficTicketRow[]>({
     queryKey: ["ops", "traffic-tickets", statusFilter],
     queryFn: async () => {
       let query = supabase
@@ -99,7 +71,7 @@ export function TrafficTicketsPage() {
 
       const { data, error } = await query.limit(50);
       if (error) throw error;
-      return (data ?? []) as TrafficTicketRow[];
+      return normalizeTrafficTicketRows(data);
     },
     staleTime: 15_000,
   });

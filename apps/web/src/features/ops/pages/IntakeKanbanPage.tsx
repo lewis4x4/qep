@@ -24,6 +24,7 @@ import {
   validateIntakeStageAdvance,
   type IntakeCardRecord,
 } from "../lib/intake-kanban";
+import { normalizeIntakeCardRows } from "../lib/ops-row-normalizers";
 
 const STAGES = [
   { num: 1, label: "Purchase & Logistics", color: "border-l-blue-400" },
@@ -140,7 +141,7 @@ export function IntakeKanbanPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [stageError, setStageError] = useState<string | null>(null);
 
-  const { data: items = [], isLoading, isError, error } = useQuery({
+  const { data: items = [], isLoading, isError, error } = useQuery<IntakeCardRecord[]>({
     queryKey: ["ops", "intake"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -149,7 +150,7 @@ export function IntakeKanbanPage() {
         .order("current_stage")
         .order("created_at");
       if (error) throw error;
-      return (data ?? []) as IntakeCardRecord[];
+      return normalizeIntakeCardRows(data);
     },
     staleTime: 15_000,
   });

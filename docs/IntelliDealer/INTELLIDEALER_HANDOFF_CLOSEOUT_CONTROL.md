@@ -26,7 +26,7 @@ If another document conflicts with this one, treat this document as the current 
 | Raw source file custody | Manifested 2026-05-03 | `SOURCE_FILE_CUSTODY_MANIFEST.md` | The raw files remain untracked, but filename, size, SHA-256, page counts, workbook row counts, and import run binding are now committed and script-verifiable. |
 | Fresh production verification | Passed 2026-05-03 | `FRESH_PRODUCTION_VERIFICATION_2026-05-03.md` | Rerun safety, production reconciliation, production browser smoke, storage cleanup, and active-run checks passed against the current production bundle. |
 | UI completion review | Passed 2026-05-03 | `UI_COMPLETION_REVIEW_2026-05-03.md` | Account 360, Companies search, company/contact editors, admin dashboard, safe export download, browser stage, preflight rejection, discard, and cleanup are verified. |
-| Non-core API type hardening | In progress 2026-05-03 | `NON_CORE_API_TYPE_HARDENING_2026-05-03.md` | Hardened ops payment validation, service labor pricing/agreement pages, QRM approval-center, service agreement, vendor profile rows and page client paths, vendor pricing portal responses, service scheduler/WIP/dashboard pages, service customer/equipment search and parts queue hooks, service shop invoice/intake/portal-parts-order pages, service parts requirement editor, service local/browser casts, service API helpers, service InspectionPlus pages, exec shared-data/metric drill, Floor customer/serial/health widget, Floor operational widget, owner dashboard API, Floor role-home, parts companion pricing/replenish/supplier-health/post-sale/intelligence/core/import/voice API, portal fleet/doc/history, fleet map, DGE edge responses, OEM portal dashboard/vault, email draft inbox/API, sales companion API, equipment Asset 360 rows, parts hook/forecast/edge-response, parts operational hook/catalog, parts purchase-order, and parts local/browser row/payload shapes with targeted tests and web typecheck. |
+| Non-core API type hardening | In progress 2026-05-03 | `NON_CORE_API_TYPE_HARDENING_2026-05-03.md` | Hardened ops payment validation and ops traffic/intake/rental/SOP workflows, service labor pricing/agreement pages, QRM approval-center, service agreement, vendor profile rows and page client paths, vendor pricing portal responses, service scheduler/WIP/dashboard pages, service customer/equipment search and parts queue hooks, service shop invoice/intake/portal-parts-order pages, service parts requirement editor, service local/browser casts, service API helpers, service InspectionPlus pages, exec shared-data/metric drill, Floor customer/serial/health widget, Floor operational widget, owner dashboard API, Floor role-home, parts companion pricing/replenish/supplier-health/post-sale/intelligence/core/import/voice API, portal fleet/doc/history, fleet map, DGE edge responses, OEM portal dashboard/vault, email draft inbox/API, sales companion API, equipment Asset 360 rows, parts hook/forecast/edge-response, parts operational hook/catalog, parts purchase-order, and parts local/browser row/payload shapes with targeted tests and web typecheck. |
 
 ## Production Customer Import Baseline
 
@@ -196,6 +196,7 @@ Gate:
 Current result:
 
 - Ops payment validation history rows now use `normalizeValidationHistoryRows`.
+- Ops traffic tickets, PDI intake, intake kanban, rental returns, GL routing, SOP compliance summary, and payment validation RPC payloads now use exported normalizers before reaching UI state.
 - Service labor pricing branch config, company options, and pricing rule rows now use exported normalizers.
 - QRM approval center margin, deposit, trade, demo, and quote approval rows now use exported normalizers.
 - Service agreement list/detail rows, company/equipment options, and maintenance schedule rows now use exported normalizers.
@@ -236,7 +237,7 @@ Current result:
 - Parts predictive kits, replenish queue, inventory health, vendor metrics, parts order list, catalog query typing, and forecast catalog lookup now use exported normalizers or generated query typing.
 - Parts purchase-order list/detail vendor, header, line, touchpoint, equipment model, and attachment rows now use exported normalizers.
 - Parts feature cast scan is clear for the Slice 6 inventory pattern after replacing local/browser shims with typed helpers.
-- Targeted tests passed: `199 pass`, `0 fail`.
+- Targeted tests passed: `227 pass`, `0 fail`.
 - Web typecheck passed.
 - Service feature cast scan is clear for the Slice 6 inventory pattern.
 - Fleet feature cast scan is clear for the Slice 6 inventory pattern.
@@ -245,6 +246,7 @@ Current result:
 - Email drafts feature cast scan is clear for the Slice 6 inventory pattern.
 - Sales feature cast scan is clear for the Slice 6 inventory pattern.
 - Equipment feature cast scan is clear for the Slice 6 inventory pattern.
+- Ops feature cast scan is clear for the Slice 6 inventory pattern.
 
 ### Slice 7: Wave 5 Deferred Integration Register
 

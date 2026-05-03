@@ -11,6 +11,7 @@ This is Slice 6 hardening work outside the core IntelliDealer customer import pa
 | Surface | Previous Risk | Hardening |
 | --- | --- | --- |
 | Ops payment validation history | Query result was cast directly to the UI row type. Malformed amounts, dates, booleans, or missing IDs could reach rendering. | Added `normalizeValidationHistoryRows` with required field checks, numeric-string coercion, invalid-date rejection, and malformed-row filtering. |
+| Ops traffic/intake/rental/SOP workflows | Traffic tickets, PDI intake, intake kanban, rental returns, GL routing rules, SOP compliance summary, and payment validation RPC output trusted raw rows or page-local RPC shims. | Added exported ops row normalizers with required field checks, numeric-string coercion, boolean/date validation, joined equipment normalization, malformed-row filtering, and normalized payment RPC JSON before UI use. |
 | Service labor pricing branch defaults | Query result was typed through an unknown Supabase client cast and returned directly. | Added `normalizeServiceLaborBranchConfigRows` with required ID/branch checks and safe numeric coercion. |
 | Service labor pricing customer options | Query result was returned directly as company options. | Added `normalizeServiceLaborCompanyOptions` with required ID/name filtering. |
 | Service labor pricing rules | Query result was returned directly as pricing rules with joined company data. | Added `normalizeServiceLaborPricingRuleRows` with enum validation, numeric coercion, active-boolean enforcement, and joined company array/object normalization. |
@@ -114,11 +115,15 @@ bun test src/features/ops/lib/payment-validation-history.test.ts src/features/se
 bun test src/features/equipment/lib/equipment-row-normalizers.test.ts src/features/equipment/lib/machine-lifecycle.test.ts
 bun test src/features/ops/lib/payment-validation-history.test.ts src/features/service/lib/service-labor-pricing-utils.test.ts src/features/qrm/command-center/lib/approvalTypes.test.ts src/features/service/lib/service-agreement-utils.test.ts src/features/service/lib/vendor-profile-utils.test.ts src/features/service/lib/vendor-pricing-portal-utils.test.ts src/features/service/lib/service-wip-utils.test.ts src/features/service/lib/service-hook-normalizers.test.ts src/features/service/lib/service-page-normalizers.test.ts src/features/service/lib/service-api-normalizers.test.ts src/features/service/lib/inspectionplus-utils.test.ts src/features/exec/lib/exec-row-normalizers.test.ts src/features/floor/widgets/floor-widget-row-normalizers.test.ts src/features/floor/widgets/operational-widget-normalizers.test.ts src/features/owner/lib/owner-api-normalizers.test.ts src/features/floor/widgets/role-home-widget-normalizers.test.ts src/features/parts-companion/lib/pricing-api-normalizers.test.ts src/features/parts-companion/lib/replenish-api-normalizers.test.ts src/features/parts-companion/lib/supplier-health-api-normalizers.test.ts src/features/parts-companion/lib/post-sale-api-normalizers.test.ts src/features/parts-companion/lib/intelligence-api-normalizers.test.ts src/features/parts-companion/lib/companion-api-normalizers.test.ts src/features/parts-companion/lib/import-api-normalizers.test.ts src/features/parts-companion/lib/voice-ops-api-normalizers.test.ts src/features/portal/lib/portal-row-normalizers.test.ts src/features/parts/lib/parts-row-normalizers.test.ts src/features/parts/lib/purchase-order-utils.test.ts src/features/fleet/lib/fleet-map-normalizers.test.ts src/features/dge/lib/dge-api-normalizers.test.ts src/features/oem-portals/lib/oem-portal-utils.test.ts src/features/oem-portals/lib/vault-api.test.ts src/features/email-drafts/lib/email-drafts-api.test.ts src/features/sales/lib/sales-api-normalizers.test.ts src/features/equipment/lib/equipment-row-normalizers.test.ts src/features/equipment/lib/machine-lifecycle.test.ts
 bun run --filter @qep/web typecheck
+bun test src/features/ops/lib/ops-row-normalizers.test.ts src/features/ops/lib/intake-kanban.test.ts src/features/ops/lib/rental-return-branching.test.ts src/features/ops/lib/traffic-ticket-driver.test.ts src/features/ops/lib/payment-validation.test.ts src/features/ops/lib/payment-validation-history.test.ts
+bun test src/features/ops/lib/payment-validation-history.test.ts src/features/ops/lib/ops-row-normalizers.test.ts src/features/ops/lib/intake-kanban.test.ts src/features/ops/lib/rental-return-branching.test.ts src/features/ops/lib/traffic-ticket-driver.test.ts src/features/ops/lib/payment-validation.test.ts src/features/service/lib/service-labor-pricing-utils.test.ts src/features/qrm/command-center/lib/approvalTypes.test.ts src/features/service/lib/service-agreement-utils.test.ts src/features/service/lib/vendor-profile-utils.test.ts src/features/service/lib/vendor-pricing-portal-utils.test.ts src/features/service/lib/service-wip-utils.test.ts src/features/service/lib/service-hook-normalizers.test.ts src/features/service/lib/service-page-normalizers.test.ts src/features/service/lib/service-api-normalizers.test.ts src/features/service/lib/inspectionplus-utils.test.ts src/features/exec/lib/exec-row-normalizers.test.ts src/features/floor/widgets/floor-widget-row-normalizers.test.ts src/features/floor/widgets/operational-widget-normalizers.test.ts src/features/owner/lib/owner-api-normalizers.test.ts src/features/floor/widgets/role-home-widget-normalizers.test.ts src/features/parts-companion/lib/pricing-api-normalizers.test.ts src/features/parts-companion/lib/replenish-api-normalizers.test.ts src/features/parts-companion/lib/supplier-health-api-normalizers.test.ts src/features/parts-companion/lib/post-sale-api-normalizers.test.ts src/features/parts-companion/lib/intelligence-api-normalizers.test.ts src/features/parts-companion/lib/companion-api-normalizers.test.ts src/features/parts-companion/lib/import-api-normalizers.test.ts src/features/parts-companion/lib/voice-ops-api-normalizers.test.ts src/features/portal/lib/portal-row-normalizers.test.ts src/features/parts/lib/parts-row-normalizers.test.ts src/features/parts/lib/purchase-order-utils.test.ts src/features/fleet/lib/fleet-map-normalizers.test.ts src/features/dge/lib/dge-api-normalizers.test.ts src/features/oem-portals/lib/oem-portal-utils.test.ts src/features/oem-portals/lib/vault-api.test.ts src/features/email-drafts/lib/email-drafts-api.test.ts src/features/sales/lib/sales-api-normalizers.test.ts src/features/equipment/lib/equipment-row-normalizers.test.ts src/features/equipment/lib/machine-lifecycle.test.ts
+bun run --filter @qep/web typecheck
 ```
 
 Results:
 
 - Payment validation normalizer tests: `3 pass`, `0 fail`.
+- Ops workflow row normalizer/helper tests: `31 pass`, `0 fail`.
 - Service labor pricing utility and normalizer tests: `6 pass`, `0 fail`.
 - Approval center normalizer tests: `3 pass`, `0 fail`.
 - Service agreement utility and normalizer tests: `8 pass`, `0 fail`.
@@ -155,7 +160,7 @@ Results:
 - Email draft API normalizer tests: `4 pass`, `0 fail`.
 - Sales API normalizer tests: `4 pass`, `0 fail`.
 - Equipment row/lifecycle tests: `9 pass`, `0 fail`.
-- Combined targeted test run: `199 pass`, `0 fail`.
+- Combined targeted test run: `227 pass`, `0 fail`.
 - Web typecheck: PASS.
 - Service feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 - Parts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
@@ -165,6 +170,7 @@ Results:
 - Email drafts feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 - Sales feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 - Equipment feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
+- Ops feature direct-cast scan: no remaining matches for the Slice 6 cast inventory pattern.
 
 ## Remaining Slice 6 Work
 

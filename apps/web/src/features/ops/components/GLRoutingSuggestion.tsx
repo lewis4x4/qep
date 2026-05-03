@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import { AlertTriangle } from "lucide-react";
+import { normalizeGlRules, type GLRule } from "../lib/ops-row-normalizers";
 
 interface GLRoutingSuggestionProps {
   equipmentStatus?: string;
@@ -14,22 +15,6 @@ interface GLRoutingSuggestionProps {
   title?: string;
 }
 
-interface GLRule {
-  gl_code: string;
-  gl_name: string;
-  gl_number: string | null;
-  description: string | null;
-  equipment_status: string | null;
-  ticket_type: string | null;
-  is_customer_damage: boolean | null;
-  has_ldw: boolean | null;
-  is_sales_truck: boolean | null;
-  is_event_related: boolean | null;
-  requires_ownership_approval: boolean;
-  truck_numbers: string[] | null;
-  usage_examples: string | null;
-}
-
 export function GLRoutingSuggestion({
   equipmentStatus,
   ticketType,
@@ -40,7 +25,7 @@ export function GLRoutingSuggestion({
   isEventRelated,
   title = "Suggested GL Account",
 }: GLRoutingSuggestionProps) {
-  const { data: rules, isLoading } = useQuery({
+  const { data: rules, isLoading } = useQuery<GLRule[]>({
     queryKey: ["ops", "gl-rules"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -48,7 +33,7 @@ export function GLRoutingSuggestion({
         .select("*")
         .order("gl_code");
       if (error) throw error;
-      return (data ?? []) as GLRule[];
+      return normalizeGlRules(data);
     },
     staleTime: 300_000,
   });

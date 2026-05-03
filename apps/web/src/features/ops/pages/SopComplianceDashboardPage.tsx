@@ -7,47 +7,20 @@ import { AskIronAdvisorButton } from "@/components/primitives";
 import {
   listSuppressionQueue,
   resolveSuppressionQueueItem,
-  type SopSuppressionQueueItem,
 } from "../../sop/lib/sop-api";
-
-interface StepAnalysis {
-  step_id: string;
-  sort_order: number;
-  step_title: string;
-  completions: number;
-  skips: number;
-  skip_rate_pct: number;
-}
-
-interface ComplianceRow {
-  template_id: string;
-  template_title: string;
-  department: string;
-  version: number;
-  total_executions: number;
-  completed_executions: number;
-  abandoned_executions: number;
-  blocked_executions: number;
-  completion_rate_pct: number | null;
-  avg_duration_minutes: number | null;
-  step_analysis: StepAnalysis[] | null;
-}
+import { normalizeComplianceRows, type ComplianceRow } from "../lib/ops-row-normalizers";
 
 export function SopComplianceDashboardPage() {
   const queryClient = useQueryClient();
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError } = useQuery<ComplianceRow[]>({
     queryKey: ["ops", "sop-compliance"],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => { order: (c: string, o: Record<string, boolean>) => Promise<{ data: ComplianceRow[] | null; error: unknown }> };
-        };
-      })
+      const { data, error } = await supabase
         .from("sop_compliance_summary")
         .select("*")
         .order("total_executions", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as ComplianceRow[];
+      return normalizeComplianceRows(data);
     },
     staleTime: 60_000,
   });

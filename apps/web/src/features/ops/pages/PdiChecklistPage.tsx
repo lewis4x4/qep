@@ -22,6 +22,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { normalizePdiIntakeRecord, type PdiCheckResult, type PdiIntakeRecord } from "../lib/ops-row-normalizers";
 
 // ─── Default PDI Checklist Items ──────────────────────────────────────────
 
@@ -58,27 +59,6 @@ const DEFAULT_PDI_ITEMS: PdiItem[] = [
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
-interface CheckResult {
-  id: string;
-  status: "pass" | "fail" | "skip";
-  note?: string;
-  photo_url?: string;
-  checked_at: string;
-}
-
-interface IntakeRecord {
-  id: string;
-  stock_number: string | null;
-  current_stage: number;
-  pdi_checklist: CheckResult[] | null;
-  pdi_completed: boolean;
-  pdi_signed_off_by: string | null;
-  decals_installed: boolean;
-  qr_code_installed: boolean;
-  attachments_mounted: boolean;
-  pdi_photos: string[] | null;
-}
-
 // ─── Main Component ────────────────────────────────────────────────────────
 
 export function PdiChecklistPage() {
@@ -89,7 +69,7 @@ export function PdiChecklistPage() {
   const [noteInput, setNoteInput] = useState<Record<string, string>>({});
 
   // Load intake record
-  const { data: intake, isLoading, isError } = useQuery({
+  const { data: intake, isLoading, isError } = useQuery<PdiIntakeRecord | null>({
     queryKey: ["ops", "intake", intakeId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -98,14 +78,14 @@ export function PdiChecklistPage() {
         .eq("id", intakeId!)
         .single();
       if (error) throw error;
-      return data as IntakeRecord;
+      return normalizePdiIntakeRecord(data);
     },
     enabled: !!intakeId,
     staleTime: 10_000,
   });
 
   // Parse existing checklist state
-  const existingResults = new Map<string, CheckResult>();
+  const existingResults = new Map<string, PdiCheckResult>();
   for (const r of intake?.pdi_checklist ?? []) {
     existingResults.set(r.id, r);
   }
@@ -121,9 +101,9 @@ export function PdiChecklistPage() {
 
   // Mutation: update checklist
   const checkMutation = useMutation({
-    mutationFn: async (result: CheckResult) => {
+    mutationFn: async (result: PdiCheckResult) => {
       const existing = intake?.pdi_checklist ?? [];
-      const updated = existing.filter((r: CheckResult) => r.id !== result.id);
+      const updated = existing.filter((r: PdiCheckResult) => r.id !== result.id);
       updated.push(result);
 
       const { error } = await supabase

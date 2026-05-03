@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/lib/supabase";
-import type { Json } from "@/lib/database.types";
 import { useAuth } from "@/hooks/useAuth";
 import { InspectionChecklist } from "../components/InspectionChecklist";
 import {
@@ -17,6 +16,7 @@ import {
   serializeReturnChecklist,
   updateReturnChecklistItem,
 } from "../lib/rental-return-branching";
+import { normalizeRentalReturnRows, type RentalReturnRow } from "../lib/ops-row-normalizers";
 import { AlertTriangle, CheckCircle2, Loader2, RotateCcw, Wrench } from "lucide-react";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -32,31 +32,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 const PAYMENT_METHODS = ["cash", "check", "wire", "credit_card", "debit_card", "ach"] as const;
 const PHOTO_BUCKET = "equipment-photos";
 
-interface RentalReturnRow {
-  id: string;
-  balance_due: number | null;
-  charge_amount: number | null;
-  condition_photos: Json | null;
-  created_at: string;
-  credit_invoice_number: string | null;
-  damage_description: string | null;
-  decided_by: string | null;
-  deposit_amount: number | null;
-  deposit_covers_charges: boolean | null;
-  equipment_id: string | null;
-  has_charges: boolean | null;
-  inspection_checklist: Json | null;
-  inspection_date: string | null;
-  inspector_id: string | null;
-  original_payment_method: string | null;
-  refund_method: string | null;
-  refund_status: string | null;
-  rental_contract_reference: string | null;
-  status: string;
-  work_order_number: string | null;
-}
-
-function asPhotoArray(value: Json | null | undefined): string[] {
+function asPhotoArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 }
 
@@ -94,7 +70,7 @@ export function RentalReturnsPage() {
   const [originalPaymentMethod, setOriginalPaymentMethod] = useState<string | null>(null);
   const [refundMethod, setRefundMethod] = useState<string | null>(null);
 
-  const { data: returns = [], isLoading, isError, error } = useQuery({
+  const { data: returns = [], isLoading, isError, error } = useQuery<RentalReturnRow[]>({
     queryKey: ["ops", "rental-returns"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -103,7 +79,7 @@ export function RentalReturnsPage() {
         .neq("status", "completed")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as RentalReturnRow[];
+      return normalizeRentalReturnRows(data);
     },
     staleTime: 15_000,
   });

@@ -20,6 +20,23 @@ import {
   type ValidationResult,
 } from "../lib/payment-validation";
 import { normalizeValidationHistoryRows } from "../lib/payment-validation-history";
+import { normalizeValidationResult } from "../lib/ops-row-normalizers";
+
+type ValidatePaymentRpc = (
+  params: {
+    p_workspace_id: string;
+    p_customer_id: string | null;
+    p_payment_type: string;
+    p_amount: number;
+    p_transaction_type: string;
+    p_is_delivery_day: boolean;
+  },
+) => Promise<{ data: unknown; error: { message?: string } | null }>;
+
+const validatePaymentRpc: ValidatePaymentRpc = async (params) => {
+  const result = await supabase.rpc("validate_payment", params as never);
+  return { data: result.data, error: result.error };
+};
 
 function formatCurrency(value: number | null | undefined): string {
   return new Intl.NumberFormat("en-US", {
@@ -68,9 +85,7 @@ export function PaymentValidationPage() {
         throw new Error("Payment type, amount, and transaction type are required.");
       }
 
-      const rpcResult = await (supabase as unknown as {
-        rpc: (fn: string, params: Record<string, unknown>) => Promise<{ data: ValidationResult | null; error: { message?: string } | null }>;
-      }).rpc("validate_payment", {
+      const rpcResult = await validatePaymentRpc({
         p_workspace_id: profile?.active_workspace_id ?? "default",
         p_customer_id: null,
         p_payment_type: paymentType,
@@ -83,7 +98,7 @@ export function PaymentValidationPage() {
         throw new Error(rpcResult.error.message ?? "Validation RPC failed.");
       }
 
-      const validation = rpcResult.data ?? { passed: false, rule_applied: null, reason: "Validation failed." };
+      const validation = normalizeValidationResult(rpcResult.data);
       const insertResult = await supabase
         .from("payment_validations")
         .insert({
