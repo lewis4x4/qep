@@ -5,6 +5,13 @@ import {
 } from "@/components/ui/sheet";
 import { TrendingUp, TrendingDown, Minus, AlertCircle, Info } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import {
+  normalizeArBlockRow,
+  normalizeCustomerProfileLinkRow,
+  normalizeHealthScoreDrawerPayload,
+  type ArBlockRow,
+  type HealthScoreDrawerComponents,
+} from "../lib/nervous-system-normalizers";
 
 interface HealthScoreDrawerProps {
   customerProfileId: string | null;
@@ -12,27 +19,13 @@ interface HealthScoreDrawerProps {
   onOpenChange: (open: boolean) => void;
 }
 
-interface DrawerPayload {
+interface DrawerQueryPayload {
   current_score: number | null;
-  components: Record<string, { score?: number; signals?: Record<string, unknown> }>;
+  components: HealthScoreDrawerComponents;
   delta_7d: number | null;
   delta_30d: number | null;
   delta_90d: number | null;
-}
-
-interface DrawerQueryPayload extends DrawerPayload {
   blockers: HealthScoreBlocker[];
-}
-
-interface CustomerProfileLinkRow {
-  crm_company_id: string | null;
-}
-
-interface ArBlockRow {
-  id: string;
-  block_reason: string;
-  current_max_aging_days: number | null;
-  blocked_at: string;
 }
 
 interface HealthScoreBlocker {
@@ -46,13 +39,21 @@ function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function componentSignals(value: HealthScoreDrawerComponents[string] | undefined): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) && value.signals && typeof value.signals === "object" && !Array.isArray(value.signals)
+    ? value.signals
+    : {};
+}
+
 function deriveHealthBlockers(
   score: number | null,
-  components: DrawerPayload["components"],
+  components: HealthScoreDrawerComponents,
   arBlock: ArBlockRow | null,
 ): HealthScoreBlocker[] {
   const blockers: HealthScoreBlocker[] = [];
-  const signals = (components.financial_health?.signals ?? components.deal_velocity?.signals ?? {}) as Record<string, unknown>;
+  const signals = Object.keys(componentSignals(components.financial_health)).length > 0
+    ? componentSignals(components.financial_health)
+    : componentSignals(components.deal_velocity);
   const avgDaysToPay = asNumber(signals.avg_days_to_pay);
   const quoteCloseRatio = asNumber(signals.quote_close_ratio);
   const partsSpend90d = asNumber(signals.parts_spend_90d);
@@ -131,56 +132,38 @@ export function HealthScoreDrawer({
     queryKey: ["health-score-drawer", customerProfileId],
     queryFn: async (): Promise<DrawerQueryPayload | null> => {
       if (!customerProfileId) return null;
-      const { data, error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: DrawerPayload | null; error: unknown }>;
-      }).rpc("get_health_score_with_deltas", { p_customer_profile_id: customerProfileId });
+      const { data, error } = await supabase.rpc("get_health_score_with_deltas", { p_customer_profile_id: customerProfileId });
       if (error) throw new Error("RPC failed");
+      const payload = normalizeHealthScoreDrawerPayload(data);
 
-      const { data: profileLink } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            eq: (column: string, value: string) => {
-              maybeSingle: () => Promise<{ data: CustomerProfileLinkRow | null; error: unknown }>;
-            };
-          };
-        };
-      })
+      const { data: profileLinkData } = await supabase
         .from("customer_profiles_extended")
         .select("crm_company_id")
         .eq("id", customerProfileId)
         .maybeSingle();
+      const profileLink = normalizeCustomerProfileLinkRow(profileLinkData);
 
       let arBlock: ArBlockRow | null = null;
       if (profileLink?.crm_company_id) {
-        const blockResult = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (columns: string) => {
-            eq: (column: string, value: string) => {
-              eq: (column: string, value: string) => {
-                maybeSingle: () => Promise<{ data: ArBlockRow | null; error: unknown }>;
-              };
-            };
-          };
-        };
-      })
+        const blockResult = await supabase
           .from("ar_credit_blocks")
           .select("id, block_reason, current_max_aging_days, blocked_at")
           .eq("company_id", profileLink.crm_company_id)
           .eq("status", "active")
           .maybeSingle();
 
-        arBlock = blockResult.data;
+        arBlock = normalizeArBlockRow(blockResult.data);
       }
 
       return {
-        current_score: data?.current_score ?? null,
-        components: data?.components ?? {},
-        delta_7d: data?.delta_7d ?? null,
-        delta_30d: data?.delta_30d ?? null,
-        delta_90d: data?.delta_90d ?? null,
+        current_score: payload.current_score,
+        components: payload.components,
+        delta_7d: payload.delta_7d,
+        delta_30d: payload.delta_30d,
+        delta_90d: payload.delta_90d,
         blockers: deriveHealthBlockers(
-          data?.current_score ?? null,
-          data?.components ?? {},
+          payload.current_score,
+          payload.components,
           arBlock,
         ),
       };
@@ -196,7 +179,7 @@ export function HealthScoreDrawer({
   // Component → score map (handles either {component: number} or {component: {score: number}})
   const componentScores: Array<{ name: string; weight: number }> = Object.entries(components).map(([name, val]) => ({
     name,
-    weight: typeof val === "number" ? val : Number(val?.score ?? 0),
+    weight: typeof val === "number" ? val : Number(val.score ?? 0),
   }));
 
   // Top 3 positive (highest contribution) and bottom 3 negative (lowest)
