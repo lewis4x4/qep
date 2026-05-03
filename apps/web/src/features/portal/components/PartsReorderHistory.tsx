@@ -2,27 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { portalApi } from "../lib/portal-api";
+import {
+  normalizeMachineHistoryRows,
+  type MachineHistoryRow,
+  type RecentLineItem,
+} from "../lib/portal-row-normalizers";
 import { History, RotateCcw, Package } from "lucide-react";
-
-interface RecentLineItem {
-  part_number?: string;
-  quantity?: number;
-  description?: string;
-  unit_price?: number;
-}
-
-interface MachineHistoryRow {
-  fleet_id: string;
-  make: string | null;
-  model: string | null;
-  year: number | null;
-  serial_number: string | null;
-  last_ordered_at: string | null;
-  total_orders: number;
-  recent_line_items:
-    | Array<{ li: RecentLineItem[] | RecentLineItem; created_at: string }>
-    | null;
-}
 
 interface PartsReorderHistoryProps {
   /** Optional: if set, show only history for this fleet id. */
@@ -50,9 +35,9 @@ function extractLineItems(row: MachineHistoryRow): RecentLineItem[] {
   for (const orderEntry of row.recent_line_items) {
     const li = orderEntry?.li;
     if (Array.isArray(li)) {
-      flat.push(...(li as RecentLineItem[]));
+      flat.push(...li);
     } else if (li && typeof li === "object") {
-      flat.push(li as RecentLineItem);
+      flat.push(li);
     }
   }
   return flat;
@@ -65,7 +50,7 @@ export function PartsReorderHistory({ fleetFilterId, onReorder }: PartsReorderHi
     staleTime: 60_000,
   });
 
-  const allRows = (data?.history ?? []) as unknown as MachineHistoryRow[];
+  const allRows = normalizeMachineHistoryRows(data?.history);
   const rows = fleetFilterId ? allRows.filter((r) => r.fleet_id === fleetFilterId) : allRows;
 
   return (

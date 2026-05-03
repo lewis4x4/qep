@@ -18,34 +18,7 @@ import { AssetCountdownStack, AskIronAdvisorButton, StatusChipStack } from "@/co
 import { PortalLayout } from "../components/PortalLayout";
 import { portalApi } from "../lib/portal-api";
 import { derivePortalAssetLifecycleState } from "../lib/portal-asset-360";
-
-interface MaintenanceScheduleRow {
-  id: string;
-  label?: string | null;
-  next_due_date?: string | null;
-  next_due_hours?: number | null;
-}
-
-interface PortalFleetDetailItem {
-  id: string;
-  equipment_id?: string | null;
-  make: string | null;
-  model: string | null;
-  name?: string | null;
-  year: number | null;
-  serial_number: string | null;
-  current_hours: number | null;
-  warranty_expiry: string | null;
-  next_service_due: string | null;
-  trade_in_interest?: boolean;
-  portal_status?: {
-    label: string;
-    source_label: string;
-    eta: string | null;
-    last_updated_at: string | null;
-  } | null;
-  maintenance_schedules?: MaintenanceScheduleRow[] | null;
-}
+import { normalizePortalFleetDetailItems } from "../lib/portal-row-normalizers";
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
@@ -65,7 +38,7 @@ export function PortalEquipmentDetailPage() {
   });
 
   const item = useMemo(() => {
-    const rows = (data?.fleet ?? []) as unknown as PortalFleetDetailItem[];
+    const rows = normalizePortalFleetDetailItems(data?.fleet);
     return rows.find((row) => row.id === equipmentId) ?? null;
   }, [data?.fleet, equipmentId]);
 

@@ -6,40 +6,14 @@ import { Button } from "@/components/ui/button";
 import { portalApi } from "../lib/portal-api";
 import { PortalLayout } from "../components/PortalLayout";
 import {
+  normalizeEquipmentDocuments,
+  type EquipmentDocument,
+  type PortalDocumentType as DocumentType,
+} from "../lib/portal-row-normalizers";
+import {
   BookOpen, Wrench, Package, Shield, FileText, ClipboardCheck, Receipt, Image as ImageIcon,
   Download, ArrowLeft, FolderOpen,
 } from "lucide-react";
-
-type DocumentType =
-  | "operator_manual"
-  | "service_manual"
-  | "parts_manual"
-  | "warranty_certificate"
-  | "service_record"
-  | "inspection_report"
-  | "invoice"
-  | "receipt"
-  | "photo"
-  | "other";
-
-interface EquipmentDocument {
-  id: string;
-  fleet_id: string | null;
-  crm_equipment_id: string | null;
-  document_type: DocumentType;
-  title: string;
-  description: string | null;
-  file_url: string;
-  file_size_bytes: number | null;
-  mime_type: string | null;
-  customer_visible: boolean;
-  created_at: string;
-  portal_visibility?: {
-    label: string;
-    detail: string;
-    released_at: string;
-  } | null;
-}
 
 const TYPE_META: Record<DocumentType, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
   operator_manual:      { label: "Operator manuals",       icon: BookOpen,       color: "text-blue-400" },
@@ -85,7 +59,7 @@ export function PortalDocumentsPage() {
     staleTime: 60_000,
   });
 
-  const docs = (data?.documents ?? []) as unknown as EquipmentDocument[];
+  const docs = normalizeEquipmentDocuments(data?.documents);
 
   // Group by document_type
   const grouped = useMemo(() => {

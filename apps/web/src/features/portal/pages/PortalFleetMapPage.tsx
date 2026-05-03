@@ -5,6 +5,7 @@ import { Map as MapIcon } from "lucide-react";
 import { MapWithSidebar, MapLibreCanvas, StatusChipStack, type MapOverlay, type MapMarker } from "@/components/primitives";
 import { PortalLayout } from "../components/PortalLayout";
 import { portalApi } from "../lib/portal-api";
+import { normalizePortalFleetItems } from "../lib/portal-row-normalizers";
 import { useState } from "react";
 
 const PORTAL_OVERLAYS: MapOverlay[] = [
@@ -12,18 +13,6 @@ const PORTAL_OVERLAYS: MapOverlay[] = [
   { key: "warranty",       label: "Warranty windows", enabled: false },
   { key: "service_routes", label: "Upcoming service visits", enabled: false },
 ];
-
-interface PortalFleetItem {
-  id: string;
-  name: string;
-  make: string | null;
-  model: string | null;
-  year: number | null;
-  engine_hours: number | null;
-  stage_label?: string | null;
-  last_lat?: number | null;
-  last_lng?: number | null;
-}
 
 /**
  * Customer-facing fleet map mirror. Reuses MapWithSidebar + StatusChipStack
@@ -40,7 +29,7 @@ export function PortalFleetMapPage() {
     staleTime: 60_000,
   });
 
-  const items = ((data?.fleet ?? []) as unknown as PortalFleetItem[]);
+  const items = normalizePortalFleetItems(data?.fleet);
 
   const markers: MapMarker[] = items.flatMap((e) => {
     if (e.last_lat == null || e.last_lng == null) return [];
