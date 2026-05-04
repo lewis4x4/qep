@@ -58,6 +58,7 @@
     "intellidealer:source:custody": "bun ./scripts/verify-intellidealer-source-custody.mjs",
     "qrm:sequences:production:smoke": "bun ./scripts/verify/qrm-follow-up-sequence-production-smoke.mjs",
     "wave5:provider:verify": "bun ./scripts/verify/wave5-deferred-provider-readiness.mjs",
+    "parity:open-rows": "bun ./scripts/verify/parity-open-rows.mjs",
     "parity:closeout:preflight": "bun ./scripts/verify/parity-closeout-preflight.mjs"
   },
   "devDependencies": {

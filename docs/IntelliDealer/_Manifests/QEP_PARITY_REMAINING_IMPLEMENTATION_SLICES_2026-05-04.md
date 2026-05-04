@@ -528,6 +528,7 @@ Primary blocker:
 After any slice changes workbook status:
 
 ```bash
+bun run parity:open-rows -- --expect-open=0
 bun run migrations:check
 bun run wave5:provider:verify
 bun run segment:gates --segment parity-closeout --ui
