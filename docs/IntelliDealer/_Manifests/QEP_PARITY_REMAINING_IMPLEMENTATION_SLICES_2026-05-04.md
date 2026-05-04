@@ -86,6 +86,12 @@ Done:
 
 ### Slice 1 — JD Provider Readiness and Scope Decision
 
+Status: decision packet queued 2026-05-04; workbook rows remain `GAP` until live JD proof or replacement/de-scope evidence exists.
+
+Decision packet:
+
+- `docs/IntelliDealer/_Manifests/QEP_JD_PROVIDER_DECISION_PACKET_2026-05-04.md`
+
 Goal: decide whether JD Quote II / JD PO / JD Proactive Jobs are live integration requirements for this QEP deployment before adding schema or adapters.
 
 Workbook rows governed:
@@ -170,6 +176,12 @@ Done when:
 - It is not collapsed into JD Quote II upload evidence.
 
 ### Slice 5 — OEM Base & Options Imports
+
+Status: decision packet queued 2026-05-04; workbook rows remain `PARTIAL` until OEM fixture/API-backed import proof or replacement/de-scope evidence exists.
+
+Decision packet:
+
+- `docs/IntelliDealer/_Manifests/QEP_OEM_BASE_OPTIONS_IMPORT_DECISION_PACKET_2026-05-04.md`
 
 Goal: finish Bobcat and Vermeer Base & Options imports on top of canonical IntelliDealer base/options tables.
 
@@ -309,6 +321,12 @@ Closed assumptions:
 
 ### Slice 8 — VESign Provider Integration
 
+Status: decision packet queued 2026-05-04; workbook rows remain `PARTIAL` until live VESign proof or native-signing replacement/de-scope evidence exists.
+
+Decision packet:
+
+- `docs/IntelliDealer/_Manifests/QEP_VESIGN_PROVIDER_DECISION_PACKET_2026-05-04.md`
+
 Goal: move existing native signature compatibility to a real VESign/VitalEdge provider workflow, or formally de-scope it.
 
 Workbook rows covered:
@@ -358,6 +376,12 @@ Primary blockers:
 - Decision whether native QEP signing is fallback or replacement/de-scope evidence
 
 ### Slice 9 — Tethr Provider Actions
+
+Status: decision packet queued 2026-05-04; workbook rows remain `PARTIAL` until live Tethr proof or generic-telematics replacement/de-scope evidence exists.
+
+Decision packet:
+
+- `docs/IntelliDealer/_Manifests/QEP_TETHR_PROVIDER_DECISION_PACKET_2026-05-04.md`
 
 Goal: finish provider-specific `Tethr It Now` actions beyond generic telematics storage.
 

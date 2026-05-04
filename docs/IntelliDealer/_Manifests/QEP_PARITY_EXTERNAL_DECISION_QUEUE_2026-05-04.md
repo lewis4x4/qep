@@ -6,27 +6,36 @@ Workbook: `QEP_Parity_Worksheet.xlsx`
 
 ## Purpose
 
-This queue captures the remaining workbook rows that cannot be honestly promoted from `PARTIAL` by code alone. Each item needs field UAT evidence, vendor contract/feed proof, or a source-controlled product decision.
+This queue captures the remaining workbook rows that cannot be honestly promoted from `PARTIAL` or `GAP` by code alone. Each item needs field UAT evidence, vendor contract/feed proof, source fixtures/contracts, or a source-controlled product decision.
 
-No row is closed by this queue document. Rows remain `PARTIAL` until the named closure evidence exists.
+No row is closed by this queue document. Rows remain `PARTIAL` / `GAP` until the named closure evidence exists.
 
 ## Queue
 
 | Slice | Workbook row | Current status | Packet | Closure evidence required | Status |
 | --- | --- | --- | --- | --- | --- |
+| Slices 1–4 | JD Quote II / JD PO / JD Proactive Jobs rows | `GAP` | `QEP_JD_PROVIDER_DECISION_PACKET_2026-05-04.md` | Live JD scope/contract/fixtures/authorization evidence before build, or source-controlled de-scope/replacement decision. | Queued |
+| Slice 5 | Bobcat and Vermeer Base & Options imports | `PARTIAL` | `QEP_OEM_BASE_OPTIONS_IMPORT_DECISION_PACKET_2026-05-04.md` | OEM sample file/API contracts and canonical table mapping before build, or source-controlled de-scope/replacement decision. | Queued |
+| Slice 8 | VESign fields across invoicing, quoting, and rental | `PARTIAL` | `QEP_VESIGN_PROVIDER_DECISION_PACKET_2026-05-04.md` | Live VESign contract/API/webhook/status evidence before build, or source-controlled native-signing replacement decision. | Queued |
+| Slice 9 | Tethr It Now actions | `PARTIAL` | `QEP_TETHR_PROVIDER_DECISION_PACKET_2026-05-04.md` | Live Tethr credentials/API/webhook/mapping evidence before build, or source-controlled generic-telematics replacement decision. | Queued |
 | Slice 10 | Gap Register: Service Mobile Web UI not production-validated for technicians | `PARTIAL` | `QEP_SERVICE_MOBILE_UAT_EXECUTION_PACKET_2026-05-04.md` | Completed technician UAT result with device/browser/network, pass/fail, screenshots/video or equivalent proof, and blocking issue disposition. | Queued |
 | Slice 11 | Gap Register: IronGuides vendor contract pending | `PARTIAL` | `QEP_IRONGUIDES_DECISION_PACKET_2026-05-04.md` | Either live contract/feed onboarding evidence or a signed/source-controlled replacement decision that retires IronGuides as a live requirement. | Queued |
 
 ## Execution Order
 
-1. Run Service Mobile UAT with a named technician on production mobile hardware.
-2. Record the completed UAT result using the existing result template.
-3. Hold IronGuides business decision: live feed onboarding vs replacement/de-scope.
-4. If IronGuides remains required, collect contract/feed/API credentials before implementation.
-5. If IronGuides is retired, add a decommission/replacement decision and update runtime/provider readiness rows before moving the workbook row to `N_A`.
+1. Resolve JD provider scope first because four `GAP` rows depend on it.
+2. Collect OEM Bobcat/Vermeer file/API fixtures before parser/UI implementation.
+3. Resolve VESign and Tethr as live provider integrations or source-controlled replacements before status promotion.
+4. Run Service Mobile UAT with a named technician on production mobile hardware and record the completed result template.
+5. Hold IronGuides business decision: live feed onboarding vs replacement/de-scope.
+6. If a provider is retired, add a decommission/replacement decision and update runtime/provider readiness rows before moving the workbook row to `N_A`.
 
 ## Guardrails
 
+- Do not mark JD rows `BUILT` from generic quote/PO evidence; JD Quote II/JD PO/JD Proactive Jobs need provider-specific proof.
+- Do not mark OEM import rows `BUILT` from canonical tables alone; Bobcat/Vermeer fixture/API-backed import behavior must exist.
+- Do not mark VESign rows `BUILT` from native QEP signing alone; VESign requires provider proof unless replaced/de-scoped.
+- Do not mark Tethr rows `BUILT` from generic telematics alone; Tethr requires provider action proof unless replaced/de-scoped.
 - Do not mark Service Mobile `BUILT` from automated tests alone; the worksheet row explicitly requires production technician validation.
 - Do not mark IronGuides `BUILT` from fallback/blended/mock valuation evidence; a live IronGuides feed must exist.
-- Do not mark IronGuides `N_A` without a source-controlled business decision naming the replacement valuation policy.
+- Do not mark any provider row `N_A` without a source-controlled business decision naming the replacement policy.
