@@ -402,11 +402,17 @@ Primary blockers:
 
 ### Slice 10 — Service Mobile Technician UAT
 
+Status: decision/UAT execution packet queued 2026-05-04; workbook row remains `PARTIAL` until completed field evidence exists.
+
 Goal: close the remaining manual UAT row with actual field acceptance evidence.
 
 Workbook row covered:
 
 - Gap Register: Service Mobile Web UI not production-validated for technicians
+
+Execution packet:
+
+- `docs/IntelliDealer/_Manifests/QEP_SERVICE_MOBILE_UAT_EXECUTION_PACKET_2026-05-04.md`
 
 Existing prep artifacts:
 
@@ -422,17 +428,27 @@ Done when:
 - Pass/fail result and screenshots/video or equivalent proof are attached/source-controlled as allowed.
 - Any blockers are fixed or explicitly waived with owner/expiration.
 
+Queued:
+
+- UAT run request now names required evidence, execution steps, pass criteria, and closure guardrails.
+
 Primary blocker:
 
 - Real technician field UAT is external/manual and cannot be proven from repo alone.
 
 ### Slice 11 — IronGuides Decision or Feed Onboarding
 
+Status: decision packet queued 2026-05-04; workbook row remains `PARTIAL` until live-feed proof or replacement decision exists.
+
 Goal: resolve the IronGuides contract row by live feed onboarding or a true product replacement decision.
 
 Workbook row covered:
 
 - Gap Register: IronGuides vendor contract pending
+
+Decision packet:
+
+- `docs/IntelliDealer/_Manifests/QEP_IRONGUIDES_DECISION_PACKET_2026-05-04.md`
 
 Important correction:
 
@@ -449,18 +465,21 @@ Closure paths:
    - Runtime/integration status marks the live feed as non-required/replaced.
    - Workbook row moves to `N_A` / replaced, not `BUILT`.
 
+Queued:
+
+- Decision packet now separates the live-feed path from the replacement/de-scope path and states the correct workbook target for each (`BUILT` for live feed, `N_A` for replacement).
+
 Primary blocker:
 
 - Explicit business decision or live contract/feed access.
 
 ## Recommended Execution Order
 
-1. **Slice 10 + Slice 11 decision prep** — queue manual UAT and IronGuides business decision; these do not need code first.
-2. **Slice 6** — Equipment sale/rental reversal; requires finance policy before implementation.
-3. **Slices 1–4** — JD readiness, upload, accepted POs, Proactive Jobs; only after JD scope/contract decisions.
-4. **Slice 5** — OEM Base & Options imports; only after Bobcat/Vermeer sample formats or API path exists.
-5. **Slices 8–9** — VESign and Tethr; provider-gated, should wait for credentials/contracts unless de-scoped.
-6. Regenerate/sync workbook and run final verification after each status-changing slice.
+1. **Slice 6** — Equipment sale/rental reversal; requires finance policy before implementation.
+2. **Slices 1–4** — JD readiness, upload, accepted POs, Proactive Jobs; only after JD scope/contract decisions.
+3. **Slice 5** — OEM Base & Options imports; only after Bobcat/Vermeer sample formats or API path exists.
+4. **Slices 8–9** — VESign and Tethr; provider-gated, should wait for credentials/contracts unless de-scoped.
+5. Regenerate/sync workbook and run final verification after each status-changing slice.
 
 ## End-to-End Verification Gate
 
