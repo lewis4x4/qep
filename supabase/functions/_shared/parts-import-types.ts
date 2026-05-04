@@ -151,7 +151,9 @@ export function parseStr(raw: unknown): string | null {
 /** SHA-256 hash of a buffer → hex string. */
 export async function sha256(buf: ArrayBuffer | Uint8Array): Promise<string> {
   const data = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
-  const hash = await crypto.subtle.digest("SHA-256", data);
+  const digestInput = new Uint8Array(data.byteLength);
+  digestInput.set(data);
+  const hash = await crypto.subtle.digest("SHA-256", digestInput);
   return Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");

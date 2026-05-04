@@ -250,13 +250,12 @@ export async function previewPartmast(
     const conflicts: PlannedConflict[] = [];
 
     for (const [field, incomingValue] of partmastFieldPairs(p)) {
-      // @ts-ignore dynamic field
       const currentValue = existing[field];
       if (normalizeEq(currentValue, incomingValue)) continue;
 
       // Manual override guard
       const overrideField = `${field}_manual_override` as keyof ExistingPart;
-      const overrideFlag = (existing as Record<string, unknown>)[overrideField];
+      const overrideFlag = (existing as unknown as Record<string, unknown>)[overrideField];
       if (MANUAL_OVERRIDE_FIELDS.includes(field as never) && overrideFlag === true) {
         conflicts.push({
           part_id: existing.id,
@@ -289,10 +288,9 @@ export async function previewPartmast(
       const before: Record<string, unknown> = {};
       const after: Record<string, unknown> = {};
       for (const f of changed.slice(0, 6)) {
-        // @ts-ignore
-        before[f] = existing[f];
-        // @ts-ignore
-        after[f] = (p as Record<string, unknown>)[f];
+        const field = f as PartmastDiffField;
+        before[field] = existing[field];
+        after[field] = p[field];
       }
       stats.sample_updates.push({
         key,
@@ -345,6 +343,27 @@ export interface ExistingPart {
   manual_updated_at: string | null;
 }
 
+const PARTMAST_DIFF_FIELDS = [
+  "description",
+  "cost_price",
+  "list_price",
+  "on_hand",
+  "on_order",
+  "back_ordered",
+  "bin_location",
+  "reorder_point",
+  "eoq",
+  "safety_stock_qty",
+  "pricing_level_1",
+  "pricing_level_2",
+  "pricing_level_3",
+  "pricing_level_4",
+  "class_code",
+  "category_code",
+] as const;
+
+type PartmastDiffField = typeof PARTMAST_DIFF_FIELDS[number];
+
 export interface PlannedConflict {
   part_id: string;
   part_number: string;
@@ -380,25 +399,8 @@ function normalizeEq(a: unknown, b: unknown): boolean {
 }
 
 /** Emit (field_name, value) pairs from a parsed row for diffing. */
-function partmastFieldPairs(p: PartmastParsed): Array<[string, unknown]> {
-  return [
-    ["description", p.description],
-    ["cost_price", p.cost_price],
-    ["list_price", p.list_price],
-    ["on_hand", p.on_hand],
-    ["on_order", p.on_order],
-    ["back_ordered", p.back_ordered],
-    ["bin_location", p.bin_location],
-    ["reorder_point", p.reorder_point],
-    ["eoq", p.eoq],
-    ["safety_stock_qty", p.safety_stock_qty],
-    ["pricing_level_1", p.pricing_level_1],
-    ["pricing_level_2", p.pricing_level_2],
-    ["pricing_level_3", p.pricing_level_3],
-    ["pricing_level_4", p.pricing_level_4],
-    ["class_code", p.class_code],
-    ["category_code", p.category_code],
-  ];
+function partmastFieldPairs(p: PartmastParsed): Array<[PartmastDiffField, PartmastParsed[PartmastDiffField]]> {
+  return PARTMAST_DIFF_FIELDS.map((field) => [field, p[field]]);
 }
 
 /** Map a parsed row to parts_catalog upsert payload. */

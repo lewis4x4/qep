@@ -90,7 +90,7 @@ export function PartsInventoryPage({ subNav = "service" }: { subNav?: "service" 
 
     if (sortConfig) {
         // Type-safe dynamic key access: narrow each row to a string-keyed
-        // record so we don't need `as any`. Coerce the fetched value into a
+        // record so we don't need unsafe casts. Coerce the fetched value into a
         // comparable primitive so the `<`/`>` comparison is well-defined
         // (object / array values, which would otherwise trigger NaN
         // comparisons, fall back to their stringified form).

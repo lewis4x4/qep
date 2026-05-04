@@ -337,9 +337,9 @@ async function handleCommit(
   const highPriorityUnresolved = (unresolved ?? []).filter((c) => c.priority === "high").length;
   if (highPriorityUnresolved > 0) {
     return safeJsonError(
-      origin,
-      409,
       `${highPriorityUnresolved} high-priority conflicts still unresolved — resolve before commit`,
+      409,
+      origin,
     );
   }
 

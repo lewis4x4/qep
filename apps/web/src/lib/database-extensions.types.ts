@@ -3,7 +3,7 @@
  *
  * These fill the gap until `supabase gen types` is re-run against the
  * production schema. Once regenerated, this file can be deleted and
- * all `as any` casts removed.
+ * all unsafe casts removed.
  *
  * IMPORTANT: Run `supabase gen types typescript --project-id iciddijgonywtxoelous --schema public`
  * to regenerate database.types.ts, then delete this file.

@@ -274,3 +274,9 @@ Results:
 - Program helper cleanup removed raw casts from rebate tracking, recommendation scoring, and scenario financing-term selection while preserving the existing 30-test program suite.
 - `qrm-honesty-scan` now stores query results as typed/unknown rows and normalizes joined stage shapes before scorer dispatch.
 - Targeted Deno checks passed for the changed edge functions; program helper tests and web typecheck passed.
+
+## 2026-05-04 Final Suppression Cleanup
+
+- Removed the remaining active-code `@ts-ignore` directives from the shared CDK PARTMAST import planner by replacing stringly dynamic field access with explicit typed diff fields.
+- Tightened the shared import SHA-256 helper so the PARTMAST parser can pass Deno checking without ArrayBuffer/SharedArrayBuffer type ambiguity.
+- Reworded stale comments that contained historical unsafe-cast text, leaving the strict active-code scan empty for raw `any` casts, typed `any` catches, and TypeScript suppression directives outside tests/backups.
