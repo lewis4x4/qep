@@ -2,6 +2,7 @@
 
 Date: 2026-05-04  
 Source roadmap: `QEP_PARITY_REMAINING_IMPLEMENTATION_SLICES_2026-05-04.md`  
+Owner action runbook: `QEP_PARITY_OWNER_ACTION_RUNBOOK_2026-05-04.md`
 Workbook: `QEP_Parity_Worksheet.xlsx`
 
 ## Purpose
