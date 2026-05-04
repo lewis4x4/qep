@@ -60,14 +60,14 @@
  * unauthenticated request.
  */
 export function isServiceRoleCaller(req: Request): boolean {
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const internalSecretHeader = req.headers.get("x-internal-service-secret") ?? "";
+  const authHeader = (req.headers.get("Authorization") ?? "").trim();
+  const internalSecretHeader = (req.headers.get("x-internal-service-secret") ?? "").trim();
 
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const serviceRoleKey = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
   const internalServiceSecret =
-    Deno.env.get("INTERNAL_SERVICE_SECRET") ??
-    Deno.env.get("DGE_INTERNAL_SERVICE_SECRET") ??
-    "";
+    (Deno.env.get("INTERNAL_SERVICE_SECRET") ??
+      Deno.env.get("DGE_INTERNAL_SERVICE_SECRET") ??
+      "").trim();
 
   // Path 1: legacy Bearer service_role_key
   if (serviceRoleKey.length > 0 && authHeader === `Bearer ${serviceRoleKey}`) {
