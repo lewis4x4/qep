@@ -224,7 +224,11 @@ Primary blockers:
 
 ### Slice 6 — Equipment Sale / Rental Invoice Reversal by Stock Number
 
-Status: foundation started 2026-05-04; workbook row remains GAP until the atomic reversal RPC/edge/UI flow is implemented and verified.
+Status: foundation started and finance-policy packet queued 2026-05-04; workbook row remains GAP until the atomic reversal RPC/edge/UI flow is implemented and verified.
+
+Decision packet:
+
+- `docs/IntelliDealer/_Manifests/QEP_EQUIPMENT_REVERSAL_FINANCE_POLICY_PACKET_2026-05-04.md`
 
 Foundation landed:
 
@@ -269,8 +273,11 @@ Primary blockers:
 - Finance policy for paid/posted/closed-period invoices
 - Credit memo / reversal journal requirements
 - Tax treatment
-- Direct invoice-equipment linkage model
 - Rental invoice branch behavior
+
+Resolved foundation blocker:
+
+- Direct invoice-equipment linkage model now exists via `customer_invoices.qrm_equipment_id`, `equipment_invoices.equipment_id`, and `equipment_invoices.stock_number`.
 
 ### Slice 7 — Quick Add On Order Unit
 

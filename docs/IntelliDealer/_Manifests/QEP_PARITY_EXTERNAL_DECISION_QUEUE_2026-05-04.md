@@ -14,6 +14,7 @@ No row is closed by this queue document. Rows remain `PARTIAL` / `GAP` until the
 
 | Slice | Workbook row | Current status | Packet | Closure evidence required | Status |
 | --- | --- | --- | --- | --- | --- |
+| Slice 6 | Reverse the sales of a stock number | `GAP` | `QEP_EQUIPMENT_REVERSAL_FINANCE_POLICY_PACKET_2026-05-04.md` | Approved paid/posted/closed-period, credit memo, GL reversal, tax, equipment state, rental-branch, authorization, and idempotency policy before build, or source-controlled external-process decision. | Queued |
 | Slices 1–4 | JD Quote II / JD PO / JD Proactive Jobs rows | `GAP` | `QEP_JD_PROVIDER_DECISION_PACKET_2026-05-04.md` | Live JD scope/contract/fixtures/authorization evidence before build, or source-controlled de-scope/replacement decision. | Queued |
 | Slice 5 | Bobcat and Vermeer Base & Options imports | `PARTIAL` | `QEP_OEM_BASE_OPTIONS_IMPORT_DECISION_PACKET_2026-05-04.md` | OEM sample file/API contracts and canonical table mapping before build, or source-controlled de-scope/replacement decision. | Queued |
 | Slice 8 | VESign fields across invoicing, quoting, and rental | `PARTIAL` | `QEP_VESIGN_PROVIDER_DECISION_PACKET_2026-05-04.md` | Live VESign contract/API/webhook/status evidence before build, or source-controlled native-signing replacement decision. | Queued |
@@ -23,15 +24,17 @@ No row is closed by this queue document. Rows remain `PARTIAL` / `GAP` until the
 
 ## Execution Order
 
-1. Resolve JD provider scope first because four `GAP` rows depend on it.
-2. Collect OEM Bobcat/Vermeer file/API fixtures before parser/UI implementation.
-3. Resolve VESign and Tethr as live provider integrations or source-controlled replacements before status promotion.
-4. Run Service Mobile UAT with a named technician on production mobile hardware and record the completed result template.
-5. Hold IronGuides business decision: live feed onboarding vs replacement/de-scope.
-6. If a provider is retired, add a decommission/replacement decision and update runtime/provider readiness rows before moving the workbook row to `N_A`.
+1. Resolve equipment reversal finance policy before building the mutation; foundation/readiness lookup is already in place.
+2. Resolve JD provider scope because four `GAP` rows depend on it.
+3. Collect OEM Bobcat/Vermeer file/API fixtures before parser/UI implementation.
+4. Resolve VESign and Tethr as live provider integrations or source-controlled replacements before status promotion.
+5. Run Service Mobile UAT with a named technician on production mobile hardware and record the completed result template.
+6. Hold IronGuides business decision: live feed onboarding vs replacement/de-scope.
+7. If a provider or workflow is retired, add a decommission/replacement decision and update runtime/provider readiness rows before moving the workbook row to `N_A`.
 
 ## Guardrails
 
+- Do not mark equipment reversal `BUILT` from lookup/readiness evidence; it needs atomic credit memo, GL reversal, equipment status, idempotency, and authorization behavior.
 - Do not mark JD rows `BUILT` from generic quote/PO evidence; JD Quote II/JD PO/JD Proactive Jobs need provider-specific proof.
 - Do not mark OEM import rows `BUILT` from canonical tables alone; Bobcat/Vermeer fixture/API-backed import behavior must exist.
 - Do not mark VESign rows `BUILT` from native QEP signing alone; VESign requires provider proof unless replaced/de-scoped.
