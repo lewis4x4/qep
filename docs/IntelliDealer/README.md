@@ -1,6 +1,8 @@
 # QEP OS ↔ IntelliDealer — Ground-Up Parity Framework
 
-This folder holds the complete evidence base and parity framework for replacing IntelliDealer (VitalEdge) with QEP OS. Every IntelliDealer screen, field, action, and business rule is mapped against the current QEP OS codebase (168 Supabase tables, 168 edge functions, 27 feature modules, 343 migrations, ~85% production-ready as of 2026-04-21).
+Current status note, 2026-05-03: `INTELLIDEALER_HANDOFF_CLOSEOUT_CONTROL.md` is the current closeout authority for production import, migrations, UI readiness, deferred integrations, and residual gaps. The original parity framework below is historical planning evidence from 2026-04-21 and contains stale codebase counts.
+
+This folder holds the evidence base and original parity framework for replacing IntelliDealer (VitalEdge) with QEP OS.
 
 ## Primary working documents
 
@@ -18,7 +20,7 @@ Open these in order:
    - QEP Table Catalog (reference)
    - Coverage Legend
 
-2. **`_Manifests/QEP_Codebase_Audit.md`** — 614-line ground-truth audit of the actual QEP OS codebase. What's shipped, what's scaffolded, what's missing. Phase-by-phase breakdown with specific table names, edge functions, feature paths.
+2. **`_Manifests/QEP_Codebase_Audit.md`** — historical 2026-04-21 codebase audit. Use `INTELLIDEALER_HANDOFF_CLOSEOUT_CONTROL.md` for current closeout state.
 
 3. **`_Manifests/QEP_OS_vs_IntelliDealer_Gap_Analysis.docx`** — Prose gap analysis report for Rylee/Ryan review.
 

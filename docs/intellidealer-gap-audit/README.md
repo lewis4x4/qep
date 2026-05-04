@@ -2,7 +2,7 @@
 
 This bundle is the **source of truth** for the IntelliDealer → QEP migration. It enumerates every IntelliDealer field across nine phases, reconciles each against the QEP schema (`apps/web/src/lib/database.types.ts`), and prescribes a concrete migration for every gap.
 
-**Generated:** 2026-04-26
+**Generated:** 2026-04-26; regenerated against the current `Database` type on 2026-05-03
 **Coverage:** 847 fields across 9 phases (23,750 lines of YAML)
 **Source artifacts:** 150 OCR'd UI screenshots, 30+ PDFs, 9 parity-matrix CSVs
 
@@ -131,7 +131,7 @@ Every field entry cites its evidence:
 
 The OCR'd `.txt` files live at `docs/IntelliDealer/_OCR_PNG/` (per-PNG OCR) and `docs/IntelliDealer/_OCR/{Phase}/` (per-PDF OCR). The original PNGs and PDFs live at `docs/IntelliDealer/{Phase}/`.
 
-Source schema reference: `qep/apps/web/src/lib/database.types.ts` (29,398 lines, current as of 2026-04-26).
+Source schema reference: `apps/web/src/lib/database.types.ts`, regenerated from the current Supabase schema during the 2026-05-03 closeout pass.
 
 ---
 

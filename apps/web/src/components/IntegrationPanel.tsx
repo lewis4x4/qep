@@ -586,6 +586,7 @@ export function IntegrationPanel({
 
   const replacement = integration?.replacement ?? null;
   const isReplaced = replacement !== null;
+  const isDeferredExternal = integration?.deferredExternal === true;
   const isHubSpot = integration?.key === "hubspot" && !isReplaced;
   const isOneDrive = integration?.key === "onedrive";
   const resumableHubSpotRuns = hubSpotImportRuns.filter((run) =>
@@ -1407,6 +1408,8 @@ export function IntegrationPanel({
                 <p className="text-sm font-medium text-foreground">
                   {integration.status === "replaced"
                     ? `Replaced by ${replacement?.replacementSurface ?? BRAND_NAME}`
+                    : isDeferredExternal
+                    ? "External provider scope pending"
                     : integration.status === "connected"
                     ? "Connected"
                     : integration.status === "error"
@@ -1424,9 +1427,14 @@ export function IntegrationPanel({
                     <p className="text-xs text-muted-foreground mt-2">{replacement.detail}</p>
                   </>
                 )}
-                {integration.status === "pending_credentials" && (
+                {integration.status === "pending_credentials" && !isDeferredExternal && (
                   <p className="text-xs text-muted-foreground mt-1">
                     Add your credentials below to connect. It'll run in demo mode until you do.
+                  </p>
+                )}
+                {isDeferredExternal && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Provider readiness is registered, but credentials, adapter/webhook code, owner approval, and cutover tests are still required before this can be connected.
                   </p>
                 )}
                 {isHubSpot && (
@@ -2230,6 +2238,13 @@ export function IntegrationPanel({
                     <span className="font-medium text-foreground">{replacement?.replacementSurface ?? BRAND_NAME}</span>.
                   </p>
                 </div>
+              ) : isDeferredExternal ? (
+                <div className="rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="text-sm font-medium text-foreground">Provider readiness only</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    This Wave 5 provider is intentionally parked as `pending_credentials`. Credential entry is disabled until a provider adapter, webhook/test contract, owner, and cutover plan are implemented.
+                  </p>
+                </div>
               ) : isOneDrive ? (
                 <div className="rounded-lg border border-border bg-muted/30 p-3">
                   <p className="text-sm font-medium text-foreground">Microsoft 365 OAuth connection</p>
@@ -2318,7 +2333,7 @@ export function IntegrationPanel({
                   </p>
                 </div>
               )}
-              {!isOneDrive && (
+              {!isOneDrive && !isDeferredExternal && (
                 <div className="space-y-1.5">
                   <Label htmlFor="endpoint-url" className="text-xs font-medium text-[#374151]">
                     Endpoint URL
@@ -2350,6 +2365,13 @@ export function IntegrationPanel({
                 <p className="text-sm font-medium text-foreground">Testing disabled</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   This integration is intentionally retired. There is no live upstream connection to validate anymore.
+                </p>
+              </div>
+            ) : isDeferredExternal ? (
+              <div className="rounded-lg border border-border bg-muted/30 p-3">
+                <p className="text-sm font-medium text-foreground">Testing disabled</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  No provider adapter is implemented for this deferred Wave 5 integration yet, so a connection test would be misleading.
                 </p>
               </div>
             ) : (
@@ -2433,7 +2455,7 @@ export function IntegrationPanel({
           <Separator className="bg-muted/40" />
 
           {/* Section 4: Sync scope toggles */}
-          {scopes.length > 0 && !isReplaced && (
+          {scopes.length > 0 && !isReplaced && !isDeferredExternal && (
             <section>
               <h4 className="text-sm font-semibold text-foreground mb-1">Sync scope</h4>
               <p className="text-xs text-muted-foreground mb-3">
@@ -2625,7 +2647,7 @@ export function IntegrationPanel({
               >
                 Cancel
               </Button>
-            {!isOneDrive && !isReplaced && (
+            {!isOneDrive && !isReplaced && !isDeferredExternal && (
               <>
                 <Button
                   variant="outline"

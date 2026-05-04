@@ -17,7 +17,7 @@ interface IntegrationStatusRow {
 }
 
 function isSupportedIntegrationKey(key: string): boolean {
-  return key === "intellidealer" || key === "sendgrid" || key === "twilio";
+  return /^[a-z0-9_]+$/.test(key) && key.length <= 80;
 }
 
 function isReplacedIntegration(key: string): boolean {
@@ -47,7 +47,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         origin,
         status: 400,
         code: "INVALID_REQUEST",
-        message: "integration_key must be one of: intellidealer, sendgrid, twilio.",
+        message: "integration_key is required and must contain only lowercase letters, numbers, or underscores.",
       });
     }
 
@@ -84,6 +84,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     });
     const replacementLifecycle =
       typeof scopedRow?.config?.lifecycle === "string" ? scopedRow.config.lifecycle : null;
+    const deferredProvider =
+      scopedRow?.config?.provider_scope === "wave_5_deferred_external" ||
+      scopedRow?.config?.implementation_status === "deferred";
     const replaced = isReplacedIntegration(integrationKey) || replacementLifecycle === "replaced";
     const status = replaced ? "replaced" : (scopedRow?.status ?? "pending_credentials");
 
@@ -95,6 +98,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
         connected: replaced ? true : status === "connected",
         refresh_pending: replaced ? false : Boolean(refreshJob),
         safe_mode: replaced ? false : Boolean(refreshJob) || status !== "connected",
+        connectable: !replaced && !deferredProvider,
+        deferred_provider: deferredProvider,
         refresh_job_id: refreshJob?.id ?? null,
       },
       { origin },

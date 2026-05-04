@@ -48,6 +48,7 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
     config.lastSyncAt !== null &&
     new Date().getTime() - new Date(config.lastSyncAt).getTime() > 7 * 86_400_000;
   const isReplaced = config.status === "replaced";
+  const testDisabled = isReplaced || config.deferredExternal;
   const badgeState: DataSourceState = isReplaced
     ? dataSourceState
     : isStale
@@ -123,6 +124,8 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
           <span>
             {config.status === "replaced"
               ? `Replaced by ${config.replacement?.badgeLabel ?? "QEP native"}`
+              : config.deferredExternal
+              ? "External scope pending"
               : config.status === "connected"
               ? "Live data"
               : config.status === "demo_mode"
@@ -135,7 +138,7 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
 
         {/* Actions */}
         <div className="flex items-center gap-1 justify-end">
-          {!isReplaced && (
+          {!testDisabled && (
             <Button
               variant="ghost"
               size="sm"

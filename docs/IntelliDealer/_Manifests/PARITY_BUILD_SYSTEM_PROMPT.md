@@ -1,5 +1,7 @@
 # QEP OS ↔ IntelliDealer Parity Build — System Prompt
 
+> Historical manifest: this prompt was authored from the 2026-04-21 parity baseline. Use `docs/IntelliDealer/INTELLIDEALER_HANDOFF_CLOSEOUT_CONTROL.md` for current IntelliDealer closeout, migration, deployment, and residual-risk status.
+
 Copy everything between the `=== BEGIN ===` and `=== END ===` markers into the target model's system prompt field. Everything outside those markers is setup notes for you (Speedy), not the model.
 
 ---

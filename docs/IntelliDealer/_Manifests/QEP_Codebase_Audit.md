@@ -3,6 +3,8 @@
 **Project:** QEP OS (Equipment + Parts Sales & Rental Platform)  
 **Codebase:** `/sessions/gallant-bold-brown/mnt/qep-knowledge-assistant/`
 
+> Historical manifest: this audit captures the 2026-04-21 codebase state only. Use `docs/IntelliDealer/INTELLIDEALER_HANDOFF_CLOSEOUT_CONTROL.md` for current IntelliDealer closeout, migration, deployment, and residual-risk status.
+
 ---
 
 ## Executive Summary

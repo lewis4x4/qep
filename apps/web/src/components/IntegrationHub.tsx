@@ -27,6 +27,7 @@ export interface IntegrationCardConfig {
   description: string;
   icon: string;
   status: "connected" | "pending_credentials" | "error" | "demo_mode" | "replaced";
+  deferredExternal: boolean;
   lastSyncAt: string | null;
   lastSyncError: string | null;
   syncRecords: number | null;
@@ -205,7 +206,64 @@ const INTEGRATION_DISPLAY: Record<
       "Housing starts, construction spending, timber prices, and macro indicators from FRED and USDA.",
     icon: "FU",
   },
+  avatax: {
+    name: "AvaTax",
+    category: "Wave 5 Deferred",
+    description:
+      "External tax-decision wiring is parked until tenant credentials, exemption policy, and provider adapter scope are approved.",
+    icon: "AX",
+  },
+  vesign: {
+    name: "VESign / VitalEdge eSign",
+    category: "Wave 5 Deferred",
+    description:
+      "Provider envelope send, status, and webhook flows are deferred pending credentials and legal/operations policy.",
+    icon: "VE",
+  },
+  ups_worldship: {
+    name: "UPS WorldShip",
+    category: "Wave 5 Deferred",
+    description:
+      "Shipping label/import automation is deferred pending UPS account context, credentials, and parts/shipping owner decisions.",
+    icon: "UP",
+  },
+  jd_quote_ii: {
+    name: "JD Quote II",
+    category: "Wave 5 Deferred",
+    description:
+      "John Deere quote upload/status import remains parked until dealer scope, license, payload contract, and fixtures are confirmed.",
+    icon: "JD",
+  },
+  oem_base_options_imports: {
+    name: "OEM Base/Options Imports",
+    category: "Wave 5 Deferred",
+    description:
+      "OEM catalog import workflows are deferred pending in-scope OEM decisions, file/API paths, credentials, and parser fixtures.",
+    icon: "OE",
+  },
+  tethr_telematics: {
+    name: "Tethr Telematics",
+    category: "Wave 5 Deferred",
+    description:
+      "Tethr-specific device mapping and webhook/adapter work remains deferred; generic active telematics feeds are available separately.",
+    icon: "TT",
+  },
 };
+
+const DEFERRED_EXTERNAL_PROVIDER_KEYS = new Set([
+  "avatax",
+  "vesign",
+  "ups_worldship",
+  "jd_quote_ii",
+  "oem_base_options_imports",
+  "tethr_telematics",
+]);
+
+function isDeferredExternalProvider(key: string, row: IntegrationStatusRow | null): boolean {
+  return DEFERRED_EXTERNAL_PROVIDER_KEYS.has(key) ||
+    row?.config?.provider_scope === "wave_5_deferred_external" ||
+    row?.config?.implementation_status === "deferred";
+}
 
 function buildHubSpotIntegrationRow(
   existingRow: IntegrationStatusRow | null,
@@ -529,6 +587,7 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
         return {
           key: row.integration_key,
           status: replacement ? "replaced" : row.status,
+          deferredExternal: isDeferredExternalProvider(key, row),
           lastSyncAt: row.last_sync_at,
           syncRecords: row.last_sync_records,
           lastSyncError: replacement ? null : row.last_sync_error,

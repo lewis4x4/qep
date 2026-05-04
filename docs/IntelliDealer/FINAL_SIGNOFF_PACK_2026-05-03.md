@@ -100,7 +100,7 @@ bun run intellidealer:seed:purge -- --apply --confirm-non-parts-seed-purge
 
 ## Gap-Audit Status
 
-Gap-audit Waves 0-4 are implemented and remote-push verified through `506_*` per `docs/intellidealer-gap-audit/_migration_order.md`. The follow-on must-blocker burndown applied migrations `522` through `525` and regenerated the inventory to `0` remaining must-fix blockers. The non-must cleanup applied migrations `526` through `533`, and follow-on UI/audit wiring reduced the remaining non-must inventory to `1` missing and `2` partial rows.
+Gap-audit Waves 0-4 are implemented and remote-push verified through `506_*` per `docs/intellidealer-gap-audit/_migration_order.md`. The follow-on must-blocker burndown applied migrations `522` through `525` and regenerated the inventory to `0` remaining must-fix blockers. The non-must cleanup applied migrations `526` through `533`, and follow-on UI/audit wiring reduced the remaining non-must inventory to `1` missing and `2` partial rows. Migration `535_wave5_deferred_provider_registry_seed.sql` was later applied to seed credential-free Wave 5 `pending_credentials` provider-readiness rows only; it does not mark external integrations connected.
 
 Current regenerated inventory:
 
@@ -160,13 +160,14 @@ Wave 5 external integrations are registered as deferred and are not implemented:
 Evidence:
 
 - `docs/IntelliDealer/WAVE_5_DEFERRED_INTEGRATION_REGISTER_2026-05-03.md`
+- `supabase/migrations/535_wave5_deferred_provider_registry_seed.sql`
 
-These integrations require external credentials, dealer-specific scope, provider contracts, owner decisions, and dedicated test/cutover plans before implementation. They are not blockers for the core customer import.
+These integrations require external credentials, dealer-specific scope, provider contracts, owner decisions, and dedicated test/cutover plans before implementation. The provider-readiness registry rows are intentionally `pending_credentials`; they are not blockers for the core customer import.
 
 ## Known Residuals
 
 - Raw IntelliDealer source files remain intentionally untracked until privacy/retention is decided.
-- Wave 5 integrations are deferred and must not be represented as shipped.
+- Wave 5 integrations are deferred and must not be represented as shipped; only credential-free readiness rows are seeded.
 - The broader gap-audit inventory has `0` remaining must-fix blockers, with `1` non-must missing row and `2` non-must partial rows left for external integration/workflow roadmap prioritization.
 - Old `test-results/agent-gates/*` artifacts referenced by the gap-audit docs are missing from the current working tree and need recovery or replacement with fresh evidence if an auditor requires those original artifacts.
 

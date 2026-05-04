@@ -35,7 +35,7 @@ Read-only production verification returned:
 | Raw A/R card rows | `0` |
 | Redacted A/R card rows | `347` |
 
-The latest local migration is applied remotely:
+The latest customer-import migration range at this reconciliation point was applied remotely:
 
 - `514_intellidealer_customer_import_storage.sql`
 - `515_intellidealer_import_dashboard_metadata.sql`

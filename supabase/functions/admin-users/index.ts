@@ -71,8 +71,46 @@ const INTEGRATION_DEFAULTS = {
     displayName: "FRED / USDA Economic Data",
     authType: "api_key",
     syncFrequency: "daily"
+  },
+  avatax: {
+    displayName: "AvaTax",
+    authType: "api_key",
+    syncFrequency: "manual"
+  },
+  vesign: {
+    displayName: "VESign / VitalEdge eSign",
+    authType: "api_key",
+    syncFrequency: "manual"
+  },
+  ups_worldship: {
+    displayName: "UPS WorldShip",
+    authType: "api_key",
+    syncFrequency: "manual"
+  },
+  jd_quote_ii: {
+    displayName: "JD Quote II",
+    authType: "oauth2",
+    syncFrequency: "manual"
+  },
+  oem_base_options_imports: {
+    displayName: "OEM Base/Options Imports",
+    authType: "api_key",
+    syncFrequency: "manual"
+  },
+  tethr_telematics: {
+    displayName: "Tethr Telematics",
+    authType: "api_key",
+    syncFrequency: "manual"
   }
 };
+const DEFERRED_PROVIDER_KEYS = new Set([
+  "avatax",
+  "vesign",
+  "ups_worldship",
+  "jd_quote_ii",
+  "oem_base_options_imports",
+  "tethr_telematics"
+]);
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 // Admin client — bypasses RLS, can access auth.admin API
@@ -745,7 +783,21 @@ Deno.serve(async (req)=>{
             }
           });
         }
-        let { data: existingRow, error: existErr } = await callerDb.from("integration_status").select("integration_key, workspace_id, auth_type").eq("workspace_id", workspaceId).eq("integration_key", body.integration_key).maybeSingle();
+        if (DEFERRED_PROVIDER_KEYS.has(body.integration_key)) {
+          return new Response(JSON.stringify({
+            error: {
+              code: "DEFERRED_PROVIDER_NOT_CONNECTABLE",
+              message: "This Wave 5 provider is registered for readiness only. Provider adapter, credential contract, owner approval, and cutover tests are required before configuration changes are allowed."
+            }
+          }), {
+            status: 409,
+            headers: {
+              ...ch,
+              "Content-Type": "application/json"
+            }
+          });
+        }
+        let { data: existingRow, error: existErr } = await callerDb.from("integration_status").select("integration_key, workspace_id, auth_type, config").eq("workspace_id", workspaceId).eq("integration_key", body.integration_key).maybeSingle();
         if (existErr) {
           throw existErr;
         }
@@ -758,7 +810,7 @@ Deno.serve(async (req)=>{
             auth_type: integrationDefaults.authType,
             sync_frequency: integrationDefaults.syncFrequency,
             config: {}
-          }).select("integration_key, workspace_id, auth_type").single();
+          }).select("integration_key, workspace_id, auth_type, config").single();
           if (insertError) {
             throw insertError;
           }
@@ -772,6 +824,21 @@ Deno.serve(async (req)=>{
             }
           }), {
             status: 404,
+            headers: {
+              ...ch,
+              "Content-Type": "application/json"
+            }
+          });
+        }
+        const deferredProvider = existingRow.config?.provider_scope === "wave_5_deferred_external" || existingRow.config?.implementation_status === "deferred";
+        if (deferredProvider) {
+          return new Response(JSON.stringify({
+            error: {
+              code: "DEFERRED_PROVIDER_NOT_CONNECTABLE",
+              message: "This Wave 5 provider is registered for readiness only. Provider adapter, credential contract, owner approval, and cutover tests are required before configuration changes are allowed."
+            }
+          }), {
+            status: 409,
             headers: {
               ...ch,
               "Content-Type": "application/json"

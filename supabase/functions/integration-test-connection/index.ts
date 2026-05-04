@@ -39,7 +39,14 @@ interface IntegrationStatusRow {
 }
 
 type CommunicationIntegrationKey = "sendgrid" | "twilio";
-type SupportedIntegrationKey = IntegrationKey | "hubspot" | "onedrive" | CommunicationIntegrationKey;
+type DeferredIntegrationKey =
+  | "avatax"
+  | "vesign"
+  | "ups_worldship"
+  | "jd_quote_ii"
+  | "oem_base_options_imports"
+  | "tethr_telematics";
+type SupportedIntegrationKey = IntegrationKey | "hubspot" | "onedrive" | CommunicationIntegrationKey | DeferredIntegrationKey;
 
 type TestConnectionResult = {
   success: boolean;
@@ -52,6 +59,15 @@ type TestConnectionMode = "live" | "mock";
 const REPLACED_INTEGRATIONS = new Set<SupportedIntegrationKey>([
   "hubspot",
   "intellidealer",
+]);
+
+const DEFERRED_PROVIDER_KEYS = new Set<SupportedIntegrationKey>([
+  "avatax",
+  "vesign",
+  "ups_worldship",
+  "jd_quote_ii",
+  "oem_base_options_imports",
+  "tethr_telematics",
 ]);
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -150,10 +166,20 @@ function resolveIntegrationKey(raw: string | undefined): SupportedIntegrationKey
     case "manufacturer_incentives":
     case "auction_data":
     case "fred_usda":
+    case "avatax":
+    case "vesign":
+    case "ups_worldship":
+    case "jd_quote_ii":
+    case "oem_base_options_imports":
+    case "tethr_telematics":
       return raw;
     default:
       return null;
   }
+}
+
+function isAdapterIntegrationKey(key: SupportedIntegrationKey): key is IntegrationKey {
+  return key in MOCK_ADAPTERS;
 }
 
 function pickCredential(
@@ -514,6 +540,26 @@ Deno.serve(async (req): Promise<Response> => {
       );
     }
 
+    if (
+      DEFERRED_PROVIDER_KEYS.has(integrationKey) ||
+      statusRow.config?.provider_scope === "wave_5_deferred_external" ||
+      statusRow.config?.implementation_status === "deferred"
+    ) {
+      return ok(
+        {
+          success: false,
+          latencyMs: 0,
+          mode: "mock",
+          error: {
+            code: "DEFERRED_PROVIDER_TEST_DISABLED",
+            message:
+              "This Wave 5 provider is registered for readiness only. Add a provider adapter, credentials contract, and cutover test plan before testing.",
+          },
+        },
+        { origin },
+      );
+    }
+
     const tracker = createEventTracker(adminClient, {
       workspaceId,
     });
@@ -573,6 +619,15 @@ Deno.serve(async (req): Promise<Response> => {
 
       mode = "live";
     } else {
+      if (!isAdapterIntegrationKey(integrationKey)) {
+        return fail({
+          origin,
+          status: 400,
+          code: "INTEGRATION_NOT_TESTABLE",
+          message: "No connection-test adapter exists for this integration.",
+        });
+      }
+
       if (!statusRow.credentials_encrypted) {
         result = {
           success: false,
