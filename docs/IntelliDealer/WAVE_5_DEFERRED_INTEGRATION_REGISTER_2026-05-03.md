@@ -8,6 +8,20 @@ This register closes Slice 7 of the IntelliDealer handoff. It does not claim pro
 
 Core customer import and customer handoff UI are production-proven. Gap-audit Waves 0-4 are implemented and remote-push verified through `506_*` per the migration-order evidence. Wave 5 remains deferred by external dependency and dealer/OEM scope. Migration `535_wave5_deferred_provider_registry_seed.sql` only seeds credential-free `pending_credentials` provider-readiness rows in `integration_status`; it does not mark providers connected.
 
+## 2026-05-04 Production Verification
+
+Command: `bun run wave5:provider:verify`
+
+Result: `PASS`
+
+Verified against production workspace `default`:
+
+- All six provider-readiness rows exist for AvaTax, VESign, UPS WorldShip, JD Quote II, OEM base/options imports, and Tethr.
+- Each row remains `pending_credentials`, `sync_frequency = manual`, with no encrypted credentials and no endpoint URL.
+- Each row is flagged with `provider_scope = wave_5_deferred_external`, `implementation_status = deferred`, `external_dependency_required = true`, and `credentials_required = true`.
+- `integration-availability` returns `connected = false`, `safe_mode = true`, `connectable = false`, and `deferred_provider = true` for each provider.
+- `integration-test-connection` returns `success = false`, `mode = mock`, and `DEFERRED_PROVIDER_TEST_DISABLED` for each provider.
+
 ## Register
 
 | Integration | Current Repo Status | Credentials / Owner Needed | Target UI / Workflow | API / Schema Dependency | Test Plan | Cutover Impact |
@@ -23,6 +37,7 @@ Core customer import and customer handoff UI are production-proven. Gap-audit Wa
 
 - Wave 5 defer list: `docs/intellidealer-gap-audit/_migration_order.md`.
 - Provider registry readiness evidence: `supabase/migrations/535_wave5_deferred_provider_registry_seed.sql` seeds `pending_credentials` rows only; no provider connectivity is claimed.
+- Production verifier: `scripts/verify/wave5-deferred-provider-readiness.mjs` validates the DB rows plus `integration-availability` and `integration-test-connection` deferred-provider guardrails.
 - AvaTax schema evidence: `supabase/migrations/472_qrm_company_wave2_columns.sql`, `474_qrm_equipment_wave2_columns.sql`, `477_customer_invoice_wave2_columns.sql`, `supabase/functions/_shared/parts-import-partmast.ts`, `supabase/functions/qb-calculate/index.ts`, `apps/web/src/features/quote-builder/components/TaxBreakdown.tsx`.
 - VESign schema/native-signature evidence: `supabase/migrations/477_customer_invoice_wave2_columns.sql`, `supabase/migrations/087_quote_builder_v2.sql`, `supabase/functions/quote-builder-v2/index.ts`, `supabase/migrations/235_rental_contracts_and_pricing.sql`, `docs/intellidealer-gap-audit/_blockers.csv`.
 - UPS WorldShip evidence: `supabase/migrations/419_shipping_label_runs.sql`, `docs/intellidealer-gap-audit/phase-3-parts.yaml`, `apps/web/src/features/parts/pages/PartsOrderDetailPage.tsx`, `supabase/functions/parts-order-manager/index.ts`.
@@ -32,4 +47,4 @@ Core customer import and customer handoff UI are production-proven. Gap-audit Wa
 
 ## Closeout Gate
 
-PASS for Slice 7. Deferred work is intentionally parked with prerequisites, owners, target surfaces, schema/API dependencies, test plans, and cutover impact. Nothing in this register blocks the already-completed core customer import.
+PASS for Slice 7. Deferred work is intentionally parked with prerequisites, owners, target surfaces, schema/API dependencies, test plans, cutover impact, and production-verifiable API guardrails. Nothing in this register blocks the already-completed core customer import.

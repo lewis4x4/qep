@@ -161,6 +161,7 @@ Evidence:
 
 - `docs/IntelliDealer/WAVE_5_DEFERRED_INTEGRATION_REGISTER_2026-05-03.md`
 - `supabase/migrations/535_wave5_deferred_provider_registry_seed.sql`
+- `bun run wave5:provider:verify` passed on 2026-05-04 against production workspace `default`; it verifies the six registry rows plus `integration-availability` and `integration-test-connection` deferred-provider guardrails.
 
 These integrations require external credentials, dealer-specific scope, provider contracts, owner decisions, and dedicated test/cutover plans before implementation. The provider-readiness registry rows are intentionally `pending_credentials`; they are not blockers for the core customer import.
 

@@ -295,7 +295,7 @@ Current result:
 
 ### Slice 7: Wave 5 Deferred Integration Register
 
-Status: complete 2026-05-03.
+Status: complete 2026-05-03; production guardrail verification added 2026-05-04.
 
 Goal: make deferred external dependencies explicit.
 
@@ -304,15 +304,17 @@ Deliverables:
 - One register row each for AvaTax, VESign, UPS WorldShip, JD Quote II, OEM base/options imports, and Tethr.
 - For each row: credentials needed, owner, target UI, schema status, API dependency, test plan, and cutover impact.
 - Correct stale Wave 5 migration-order language so `507_post_build_security_audit_fixes.sql` is not misread as Wave 5 integration work.
+- Machine-verifiable production guardrail proving each provider stays deferred, not connectable, and not testable until real provider work is approved.
 
 Gate:
 
-- PASS. Deferred work is intentionally parked with owners and prerequisites, not lost.
+- PASS. Deferred work is intentionally parked with owners and prerequisites, not lost. `bun run wave5:provider:verify` passed against production workspace `default` on 2026-05-04.
 
 Result:
 
 - `WAVE_5_DEFERRED_INTEGRATION_REGISTER_2026-05-03.md` records current repo evidence, blockers, prerequisites, target UI, test plan, and cutover impact for all six deferred integrations.
 - Slice 7 registers Wave 5 deferred integrations and seeds credential-free `pending_credentials` provider-readiness rows only. It does not claim provider implementation, credentials, edge adapters, or production connectivity.
+- `scripts/verify/wave5-deferred-provider-readiness.mjs` verifies the six production rows plus `integration-availability` and `integration-test-connection` deferred-provider guardrails.
 
 ### Slice 8: Final Signoff Pack
 
