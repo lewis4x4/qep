@@ -52,7 +52,7 @@ function corsHeaders(origin: string | null) {
 type TelematicsEventKind = "fault" | "idle";
 
 interface TelematicsEventPayload {
-  /** Provider-issued device id; maps to telematics_feeds.telematics_device_id. */
+  /** Provider-issued device id; maps to telematics_feeds.device_id. */
   deviceId: string;
   /** Fault or idle. */
   kind: TelematicsEventKind;
@@ -130,9 +130,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // fix the feed registration rather than blindly insert stray signals.
     const { data: feed, error: feedErr } = await admin
       .from("telematics_feeds")
-      .select("equipment_id, workspace_id, status")
-      .eq("telematics_device_id", payload.deviceId)
-      .eq("status", "active")
+      .select("equipment_id, workspace_id, is_active")
+      .eq("device_id", payload.deviceId)
+      .eq("is_active", true)
       .limit(1)
       .maybeSingle();
 
