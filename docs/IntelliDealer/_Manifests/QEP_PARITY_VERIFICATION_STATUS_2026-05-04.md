@@ -24,6 +24,19 @@ Blocking status evidence:
 - External decision queue rows still queued: 7.
 - Missing live-gate credentials: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `KB_TEST_ADMIN_TOKEN`, `KB_TEST_REP_TOKEN`.
 - Workbook verification sub-check: `PASS`.
+- Decision queue verification sub-check: `PASS`.
+
+### `bun run parity:decision-queue:verify -- --expect-rows=7`
+
+Purpose: verify the external decision queue still has the expected seven rows, each row points to an existing packet, and each row states current status, closure evidence, owner requirement, target, and queue status.
+
+Actual local result in this shell: `PASS`.
+
+Evidence:
+
+- Row count: 7.
+- Queued count: 7.
+- All packet files referenced by the queue exist under `docs/IntelliDealer/_Manifests/`.
 
 ### `bun run parity:closeout:preflight`
 
@@ -122,6 +135,7 @@ bun run parity:closeout:status
 bun run parity:closeout:preflight
 bun run parity:open-rows -- --expect-open=0
 bun run parity:workbook:verify
+bun run parity:decision-queue:verify -- --expect-rows=7
 bun run wave5:provider:verify
 bun run segment:gates --segment parity-closeout --ui --no-chaos
 ```
