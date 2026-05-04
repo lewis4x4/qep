@@ -8,7 +8,11 @@
  *      pattern, used by all dge-style cron migrations from 059 onward
  *      and by manual `supabase functions invoke` calls.
  *
- *   2. `x-internal-service-secret: ${INTERNAL_SERVICE_SECRET}` — modern
+ *   2. `apikey: ${SUPABASE_SERVICE_ROLE_KEY}` — equivalent service-role
+ *      shared-secret path for clients/gateways that do not forward the
+ *      Authorization header to the function body.
+ *
+ *   3. `x-internal-service-secret: ${INTERNAL_SERVICE_SECRET}` — modern
  *      pattern, used by `flow-runner` / `analytics-*` / `morning-briefing`
  *      cron jobs (see migration 205 for the canonical example). This is
  *      the only path that survives on modern Supabase projects, where the
@@ -61,6 +65,7 @@
  */
 export function isServiceRoleCaller(req: Request): boolean {
   const authHeader = (req.headers.get("Authorization") ?? "").trim();
+  const apiKeyHeader = (req.headers.get("apikey") ?? "").trim();
   const internalSecretHeader = (req.headers.get("x-internal-service-secret") ?? "").trim();
 
   const serviceRoleKey = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
@@ -74,7 +79,12 @@ export function isServiceRoleCaller(req: Request): boolean {
     return true;
   }
 
-  // Path 2: modern x-internal-service-secret
+  // Path 2: service_role via apikey header.
+  if (serviceRoleKey.length > 0 && apiKeyHeader === serviceRoleKey) {
+    return true;
+  }
+
+  // Path 3: modern x-internal-service-secret
   if (
     internalServiceSecret.length > 0 &&
     internalSecretHeader.length > 0 &&
