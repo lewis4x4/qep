@@ -96,8 +96,8 @@ phases:
   must_count: 55
   must_missing_count: 0
   qep_status_missing: 0
-  qep_status_partial: 1
-  qep_status_built: 101
+  qep_status_partial: 0
+  qep_status_built: 102
   pdf_count: 2
   png_count: 9
   ocr_count: 13
@@ -108,7 +108,7 @@ totals:
   severity_should: 300
   severity_could: 51
   qep_status_missing: 1
-  qep_status_partial: 3
-  qep_status_built: 843
+  qep_status_partial: 2
+  qep_status_built: 844
   must_fix_blocker_count: 0
 must_fix_blockers:

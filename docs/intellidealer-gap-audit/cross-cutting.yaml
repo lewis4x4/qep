@@ -2404,7 +2404,7 @@ fields:
     intellidealer_purpose: |
       The user who created the record (e.g., "Created By: Rylee McKenzie -
       LAKE CITY"). Universal across all phases.
-    qep_status: "PARTIAL"
+    qep_status: "BUILT"
     qep_table: "(varies)"
     qep_column: "created_by / actor_user_id / requested_by"
     qep_evidence:
@@ -2415,20 +2415,25 @@ fields:
       - "apps/web/src/lib/database.types.ts public.Tables.record_change_history.actor_user_id"
       - "supabase/migrations/533_intellidealer_audit_ldttn_cleanup.sql public.v_audit_record_changes.created_by compatibility alias"
       - "supabase/migrations/533_intellidealer_audit_ldttn_cleanup.sql public.v_record_created_by rollup"
+      - "supabase/migrations/534_intellidealer_universal_created_by_audit.sql broad operational trigger installer"
+      - "apps/web/src/features/admin/lib/audit-api.ts central record_change_history query support"
+      - "apps/web/src/features/admin/pages/AuditLogPage.tsx central record change stream display"
     qep_gap_notes: |
-      Implemented inconsistently: some tables carry first-class created_by
-      or created_by_user_id and migration 526 captures actor_user_id into
-      record_change_history for key operational tables. Migration 533 adds
-      low-risk compatibility views that expose record-change actor_user_id as
-      created_by and extends record_change_history trigger coverage to
-      customer_invoices and parts_invoice_lines, but QEP still does not enforce
-      a universal created_by column on every workspace-scoped table.
+      QEP uses a compatibility model rather than rewriting every table to add
+      a physical created_by column. First-class created_by / created_by_user_id
+      columns remain where already present; record_change_history captures
+      actor_user_id for workspace-scoped operational tables; v_audit_record_changes
+      exposes that actor as created_by; and v_record_created_by rolls up the
+      first insert event per record. Migration 534 broadens trigger coverage
+      across public operational tables with uuid id + workspace_id while
+      excluding audit/history/event/log/run/snapshot tables to avoid recursion
+      and telemetry bloat. The admin Audit Log now reads the central stream.
     severity: "must"
     category: "regulatory"
     migration_hint: |
-      Remaining standardization would require a cross-schema created_by policy
-      for every workspace-scoped table. Current low-risk compatibility path is
-      public.v_audit_record_changes.created_by and public.v_record_created_by.
+      Implemented by compatibility views plus broad operational
+      record_change_history trigger coverage instead of a destructive universal
+      created_by column rewrite.
     ui_surface_hint: "Record header on every detail screen"
     dependencies: []
 

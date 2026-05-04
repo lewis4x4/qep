@@ -1,9 +1,10 @@
 /**
- * Audit log API — read-only admin queries across the 7 qb_*_audit tables
- * (migration 288). Surfaces "who changed what, when" without requiring an
- * engineer to open the DB console.
+ * Audit log API — read-only admin queries across the central
+ * record_change_history compatibility view plus the legacy qb_*_audit tables.
+ * Surfaces "who changed what, when" without requiring an engineer to open the
+ * DB console.
  *
- * Query strategy: 7 parallel SELECTs (one per audit table) merged client-side.
+ * Query strategy: parallel SELECTs (one per audit source) merged client-side.
  * Bun's Promise.all handles the fan-out; result is a single sorted array.
  *
  * Actor resolution: profiles are read in a single second round-trip once we
@@ -15,6 +16,7 @@ import { supabase } from "@/lib/supabase";
 
 /** All audit tables we unify in the log view. Order is the display/filter order. */
 export const AUDIT_TABLES = [
+  "v_audit_record_changes",
   "qb_price_sheets_audit",
   "qb_quotes_audit",
   "qb_deals_audit",
@@ -28,6 +30,7 @@ export type AuditTable = (typeof AUDIT_TABLES)[number];
 
 /** Friendly label for the UI — strips the `qb_` prefix + `_audit` suffix. */
 export function auditTableLabel(t: AuditTable): string {
+  if (t === "v_audit_record_changes") return "record changes";
   const stripped = t.replace(/^qb_/, "").replace(/_audit$/, "");
   return stripped.replace(/_/g, " ");
 }
@@ -37,6 +40,7 @@ export type AuditAction = "insert" | "update" | "delete";
 export interface AuditEvent {
   id: string;
   table: AuditTable;
+  source_table_name: string | null;
   record_id: string;
   action: AuditAction;
   actor_id: string | null;
@@ -76,11 +80,24 @@ function isAuditAction(value: unknown): value is AuditAction {
   return value === "insert" || value === "update" || value === "delete";
 }
 
-function isChangedFields(value: unknown): value is AuditEvent["changed_fields"] {
+function isLegacyChangedFields(value: unknown): value is AuditEvent["changed_fields"] {
   if (value === null) return true;
   if (!isRecord(value)) return false;
   return Object.values(value).every((change) =>
     isRecord(change) && "old" in change && "new" in change
+  );
+}
+
+function normalizeChangedFields(value: unknown, action: AuditAction): AuditEvent["changed_fields"] | undefined {
+  if (isLegacyChangedFields(value)) return value;
+  if (!isRecord(value)) return undefined;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, fieldValue]) => [
+      key,
+      action === "delete"
+        ? { old: fieldValue, new: null }
+        : { old: null, new: fieldValue },
+    ]),
   );
 }
 
@@ -94,19 +111,22 @@ export function normalizeAuditEvents(table: AuditTable, value: unknown): AuditEv
     if (!isRecord(row)) return [];
     const id = requiredString(row.id);
     const recordId = requiredString(row.record_id);
-    const createdAt = requiredString(row.created_at);
-    if (!id || !recordId || !createdAt || !isAuditAction(row.action) || !isChangedFields(row.changed_fields)) {
+    const createdAt = requiredString(row.occurred_at) ?? requiredString(row.created_at);
+    if (!id || !recordId || !createdAt || !isAuditAction(row.action)) {
       return [];
     }
+    const changedFields = normalizeChangedFields(row.changed_fields, row.action);
+    if (changedFields === undefined) return [];
     return [{
       id,
       table,
+      source_table_name: nullableString(row.table_name),
       record_id: recordId,
       action: row.action,
-      actor_id: nullableString(row.actor_id),
+      actor_id: nullableString(row.actor_id) ?? nullableString(row.actor_user_id) ?? nullableString(row.created_by),
       actor_email: null,
-      changed_fields: row.changed_fields,
-      snapshot: snapshotOrNull(row.snapshot),
+      changed_fields: changedFields,
+      snapshot: snapshotOrNull(row.snapshot) ?? snapshotOrNull(row.after_snapshot) ?? snapshotOrNull(row.before_snapshot),
       created_at: createdAt,
     }];
   });
@@ -138,12 +158,19 @@ export async function getRecentAuditEvents(
     opts.tables && opts.tables.length > 0 ? opts.tables : AUDIT_TABLES;
 
   const queries = tables.map(async (t) => {
-    let q = supabase
-      .from(t)
-      .select("id, record_id, action, actor_id, changed_fields, snapshot, created_at")
-      .order("created_at", { ascending: false })
-      .limit(limit);
-    if (cutoff) q = q.gte("created_at", cutoff);
+    const central = t === "v_audit_record_changes";
+    let q = central
+      ? supabase
+          .from(t)
+          .select("id, table_name, record_id, actor_user_id, created_by, action, changed_fields, before_snapshot, after_snapshot, occurred_at, created_at")
+          .order("occurred_at", { ascending: false })
+          .limit(limit)
+      : supabase
+          .from(t)
+          .select("id, record_id, action, actor_id, changed_fields, snapshot, created_at")
+          .order("created_at", { ascending: false })
+          .limit(limit);
+    if (cutoff) q = central ? q.gte("occurred_at", cutoff) : q.gte("created_at", cutoff);
     if (opts.action) q = q.eq("action", opts.action);
     const { data, error } = await q;
     if (error) return [];
@@ -185,10 +212,11 @@ export async function getAuditCountsByTable(
   const daysBack = opts.daysBack === undefined ? DEFAULT_DAYS_BACK : opts.daysBack;
   const cutoff = daysBack != null ? cutoffIso(daysBack) : null;
   const queries = AUDIT_TABLES.map(async (t) => {
+    const central = t === "v_audit_record_changes";
     let q = supabase
       .from(t)
       .select("id", { count: "exact", head: true });
-    if (cutoff) q = q.gte("created_at", cutoff);
+    if (cutoff) q = central ? q.gte("occurred_at", cutoff) : q.gte("created_at", cutoff);
     if (opts.action) q = q.eq("action", opts.action);
     const { count } = await q;
     return [t, count ?? 0] as const;

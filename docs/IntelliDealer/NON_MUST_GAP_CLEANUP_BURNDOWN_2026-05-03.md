@@ -25,21 +25,20 @@ Final regenerated gap-audit inventory:
 | Metric | Count |
 | --- | ---: |
 | Total fields | `847` |
-| Built | `843` |
-| Partial | `3` |
+| Built | `844` |
+| Partial | `2` |
 | Missing | `1` |
 | Must | `496` |
 | Should | `300` |
 | Could | `51` |
 | Remaining must-fix blockers | `0` |
 
-This slice reduced the non-must residual inventory from `40` missing plus `18` partial rows to `1` missing plus `7` partial rows after follow-on migrations `531` through `533`. A later UI wiring pass closed four additional partial rows, leaving `1` missing and `3` partial rows.
+This slice reduced the non-must residual inventory from `40` missing plus `18` partial rows to `1` missing plus `7` partial rows after follow-on migrations `531` through `533`. Later UI/audit wiring passes closed five additional partial rows, leaving `1` missing and `2` partial rows.
 
 ## Remaining Rows
 
 | Status | Severity | Field | Reason |
 | --- | --- | --- | --- |
-| `PARTIAL` | `must` | `audit.created_by` | Field-level actor audit exists, but there is no universal `created_by` column standard across every table. |
 | `MISSING` | `could` | `prospect.jdquote_upload` | JD Quote II remains a Wave 5 external integration pending dealer scope and credentials. |
 | `PARTIAL` | `could` | `parts_invoice.tethr_it_now` | Generic telematics exists; Tethr provider credentials/adapter/UI smoke remain. |
 | `PARTIAL` | `should` | `rental_counter.action_tethr_it` | Generic telematics exists; Tethr provider credentials/adapter/rental UI smoke remain. |
@@ -49,5 +48,5 @@ This slice reduced the non-must residual inventory from `40` missing plus `18` p
 - Migrations `526` through `533` were applied to the remote Supabase project.
 - `bun run db:push` reports `pending to apply: 0`.
 - `apps/web/src/lib/database.types.ts` was regenerated from the remote Supabase project after migration application.
-- `bun run intellidealer:gap-audit:regen` reports `qepStatusBuilt: 843`, `qepStatusMissing: 1`, `qepStatusPartial: 3`, and `must_fix_blocker_count: 0`.
+- `bun run intellidealer:gap-audit:regen` reports `qepStatusBuilt: 844`, `qepStatusMissing: 1`, `qepStatusPartial: 2`, and `must_fix_blocker_count: 0`.
 - `docs/intellidealer-gap-audit/_blockers.csv` contains only the header row.

@@ -36,6 +36,10 @@ function actionVariant(a: AuditAction): "success" | "info" | "destructive" {
   return "destructive";
 }
 
+function eventTableLabel(event: AuditEvent): string {
+  return event.source_table_name?.replace(/_/g, " ") ?? auditTableLabel(event.table);
+}
+
 // ── Filter bar ────────────────────────────────────────────────────────────────
 
 type DaysFilter = "7" | "30" | "all";
@@ -133,8 +137,8 @@ function AuditLogPageInner() {
       <div>
         <h1 className="text-2xl font-semibold">Audit Log</h1>
         <p className="mt-1 text-xs text-muted-foreground">
-          Who edited what, when. Covers price sheets, quotes, deals, brands, equipment models,
-          attachments, and programs. New entries appear automatically as edits land.
+          Who edited what, when. Covers the central IntelliDealer-compatible record change stream
+          plus the legacy quote-builder audit tables. New entries appear automatically as edits land.
         </p>
       </div>
 
@@ -227,7 +231,7 @@ function AuditLogPageInner() {
                             </td>
                             <td className="px-4 py-2 text-xs">{shortActor(e.actor_id, e.actor_email)}</td>
                             <td className="px-4 py-2 text-xs font-medium capitalize">
-                              {auditTableLabel(e.table)}
+                              {eventTableLabel(e)}
                             </td>
                             <td className="px-4 py-2">
                               <Badge variant={actionVariant(e.action)} className="text-[10px] capitalize">
