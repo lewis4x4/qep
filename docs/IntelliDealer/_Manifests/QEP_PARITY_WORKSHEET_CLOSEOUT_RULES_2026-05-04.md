@@ -73,12 +73,12 @@ Examples:
 Run and archive evidence for:
 
 ```bash
+bun run parity:closeout:status
 bun run parity:open-rows -- --expect-open=0
+bun run parity:workbook:verify
 bun run migrations:check
 bun run wave5:provider:verify
 bun run segment:gates --segment parity-closeout --ui
-python3 .omx/tmp/parity-review/update_parity_workbook.py
-bun run parity:workbook:verify
 ```
 
 A final 100% claim is valid only when the worksheet has no remaining `GAP` or `PARTIAL` rows, except rows explicitly changed to `N_A` or closed-by-replacement with source-controlled decision evidence.
