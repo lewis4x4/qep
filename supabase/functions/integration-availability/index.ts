@@ -86,7 +86,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
       typeof scopedRow?.config?.lifecycle === "string" ? scopedRow.config.lifecycle : null;
     const deferredProvider =
       scopedRow?.config?.provider_scope === "wave_5_deferred_external" ||
-      scopedRow?.config?.implementation_status === "deferred";
+      scopedRow?.config?.provider_scope === "parity_external_decision" ||
+      scopedRow?.config?.implementation_status === "deferred" ||
+      scopedRow?.config?.implementation_status === "decision_required" ||
+      scopedRow?.config?.decision_required === true;
     const replaced = isReplacedIntegration(integrationKey) || replacementLifecycle === "replaced";
     const status = replaced ? "replaced" : (scopedRow?.status ?? "pending_credentials");
 

@@ -224,10 +224,12 @@ export function QrmEquipmentDetailPage({ userId: _userId, userRole }: QrmEquipme
         </div>
       )}
 
-      <EquipmentReversalReadinessCard
-        stockNumber={eq.stockNumber}
-        canReadReadiness={canViewReversalReadiness}
-      />
+      {eq.availability === "sold" ? (
+        <EquipmentReversalReadinessCard
+          stockNumber={eq.stockNumber}
+          canReadReadiness={canViewReversalReadiness}
+        />
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="lg:col-span-2">

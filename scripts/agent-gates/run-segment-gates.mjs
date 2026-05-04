@@ -217,6 +217,18 @@ await pushCheck({
 });
 
 await pushCheck({
+  id: "qa.web-tests",
+  command: "bun run test",
+  required: true,
+});
+
+await pushCheck({
+  id: "qa.parity-edge-deno-check",
+  command: "deno check supabase/functions/integration-test-connection/index.ts supabase/functions/portal-api/index.ts",
+  required: true,
+});
+
+await pushCheck({
   id: "qa.service-engine-deno-tests",
   command:
     "deno test supabase/functions/_shared/service-engine-smoke.test.ts supabase/functions/_shared/vendor-inbound-contract.test.ts supabase/functions/_shared/vendor-escalation-resend.test.ts --allow-read --allow-env",

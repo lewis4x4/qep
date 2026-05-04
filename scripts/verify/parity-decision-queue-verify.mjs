@@ -5,8 +5,10 @@ import { resolve } from "node:path";
 const repoRoot = resolve(import.meta.dir, "..", "..");
 const DEFAULT_QUEUE = resolve(repoRoot, "docs/IntelliDealer/_Manifests/QEP_PARITY_EXTERNAL_DECISION_QUEUE_2026-05-04.md");
 const PACKET_DIR = resolve(repoRoot, "docs/IntelliDealer/_Manifests");
-const ALLOWED_CURRENT_STATUSES = new Set(["GAP", "PARTIAL"]);
+const OPEN_CURRENT_STATUSES = new Set(["GAP", "PARTIAL"]);
+const CLOSED_CURRENT_STATUSES = new Set(["BUILT", "N_A"]);
 const ALLOWED_QUEUE_STATUSES = new Set(["QUEUED", "COMPLETE", "BLOCKED"]);
+const EXPECTED_LINEAR_ISSUES = ["JAR-103", "JAR-104", "JAR-105", "JAR-106", "JAR-107", "JAR-108", "JAR-109"];
 
 const args = parseArgs(process.argv.slice(2));
 const queuePath = resolve(process.cwd(), args.queue ?? DEFAULT_QUEUE);
@@ -21,6 +23,9 @@ if (expectedRows !== null) {
   addCheck("expected decision queue row count", queueRows.length === expectedRows, `${queueRows.length}/${expectedRows}`);
 }
 
+const linearIssueIds = queueRows.map((row) => row.linear_issue).filter(Boolean);
+addCheck("expected Linear issue set", sameSet(linearIssueIds, EXPECTED_LINEAR_ISSUES), `${linearIssueIds.join(", ")} / ${EXPECTED_LINEAR_ISSUES.join(", ")}`);
+
 for (const row of queueRows) {
   verifyRow(row);
 }
@@ -33,7 +38,7 @@ const result = {
   row_count: queueRows.length,
   queued_count: queueRows.filter((row) => row.status.toUpperCase() === "QUEUED").length,
   rows: queueRows,
-  linear_issue_ids: queueRows.map((row) => row.linear_issue).filter(Boolean),
+  linear_issue_ids: linearIssueIds,
   checks,
   failed,
 };
@@ -51,8 +56,8 @@ function verifyRow(row) {
   const queueStatus = row.status.toUpperCase();
 
   addCheck(`${prefix} has workbook row`, row.workbook_row.length > 0, row.workbook_row);
-  addCheck(`${prefix} current status allowed`, ALLOWED_CURRENT_STATUSES.has(currentStatus), row.current_status);
   addCheck(`${prefix} queue status allowed`, ALLOWED_QUEUE_STATUSES.has(queueStatus), row.status);
+  addCheck(`${prefix} current status matches queue status`, currentStatusMatchesQueueStatus(currentStatus, queueStatus), `${row.current_status} / ${row.status}`);
   addCheck(`${prefix} packet exists`, existsSync(packetPath), relative(packetPath));
   addCheck(`${prefix} closure evidence stated`, row.closure_evidence_required.length >= 40, row.closure_evidence_required);
   addCheck(`${prefix} owner requirement stated`, row.assigned_to.length >= 10, row.assigned_to);
@@ -64,6 +69,18 @@ function verifyRow(row) {
     addCheck(`${prefix} packet is dated`, packetText.includes("2026-05-04") || packetText.includes("Date:"), row.packet);
     addCheck(`${prefix} packet names closure path`, /decision|evidence|closure|done when|required/i.test(packetText), row.packet);
   }
+}
+
+function currentStatusMatchesQueueStatus(currentStatus, queueStatus) {
+  if (queueStatus === "COMPLETE") {
+    return CLOSED_CURRENT_STATUSES.has(currentStatus);
+  }
+
+  if (queueStatus === "QUEUED" || queueStatus === "BLOCKED") {
+    return OPEN_CURRENT_STATUSES.has(currentStatus);
+  }
+
+  return false;
 }
 
 function parseQueue(filePath) {
@@ -101,6 +118,13 @@ function parseQueue(filePath) {
 function extractLinearIssue(value) {
   const match = String(value ?? "").match(/JAR-\d+/);
   return match?.[0] ?? "";
+}
+
+function sameSet(actual, expected) {
+  if (actual.length !== expected.length) return false;
+  const actualSet = new Set(actual);
+  if (actualSet.size !== actual.length) return false;
+  return expected.every((value) => actualSet.has(value));
 }
 
 function stripMarkdown(value) {

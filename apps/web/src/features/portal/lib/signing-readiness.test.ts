@@ -38,6 +38,21 @@ describe("signing readiness labels", () => {
     expect(summary.detail).toContain("no VESign provider envelope/status should be inferred");
   });
 
+  test("flags accepted quote status when native acceptance timestamp is missing", () => {
+    const summary = summarizeQuoteSigningReadiness({
+      signedAt: null,
+      status: "accepted",
+    });
+
+    expect(summary).toMatchObject({
+      label: "Native QEP signing",
+      value: "Accepted status; timestamp missing",
+      source: "native_qep",
+      vesignReady: false,
+    });
+    expect(summary.detail).toContain("no native acceptance timestamp is present");
+  });
+
   test("labels invoice esign columns as provider-neutral until VESign contract exists", () => {
     const summary = summarizeInvoiceSigningReadiness({
       esignStatus: "partially_signed",

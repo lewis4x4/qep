@@ -2616,7 +2616,9 @@ export function IntegrationPanel({
 
           {/* Section 6: Fallback / demo mode explanation */}
           <section>
-            <h4 className="text-sm font-semibold text-foreground mb-2">Demo mode</h4>
+            <h4 className="text-sm font-semibold text-foreground mb-2">
+              {isDeferredExternal ? "Readiness status" : "Demo mode"}
+            </h4>
             {isReplaced ? (
               <p className="text-sm text-muted-foreground leading-relaxed">
                 This surface is no longer a live external integration. QEP now runs the business flow natively through{" "}
@@ -2625,9 +2627,9 @@ export function IntegrationPanel({
               </p>
             ) : isDeferredExternal ? (
               <p className="text-sm text-muted-foreground leading-relaxed">
-                QEP fallback/blended valuation remains available where implemented, but this provider row is readiness/decision-only.
-                It is not live upstream evidence for <strong className="text-foreground">{integration.name}</strong>. Credentials
-                and testing stay disabled until an approved live feed contract or replacement decision exists.
+                This provider row is readiness/decision-only. It is not live upstream evidence for{" "}
+                <strong className="text-foreground">{integration.name}</strong>. Credentials and connection testing stay disabled
+                until approved provider evidence or a source-controlled replacement decision exists.
               </p>
             ) : (
               <p className="text-sm text-muted-foreground leading-relaxed">

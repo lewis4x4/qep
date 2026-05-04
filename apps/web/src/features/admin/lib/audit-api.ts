@@ -80,19 +80,27 @@ function isAuditAction(value: unknown): value is AuditAction {
   return value === "insert" || value === "update" || value === "delete";
 }
 
+function isChangeTuple(value: unknown): value is { old: unknown; new: unknown } {
+  return isRecord(value) && "old" in value && "new" in value;
+}
+
 function isLegacyChangedFields(value: unknown): value is AuditEvent["changed_fields"] {
   if (value === null) return true;
   if (!isRecord(value)) return false;
-  return Object.values(value).every((change) =>
-    isRecord(change) && "old" in change && "new" in change
-  );
+  return Object.values(value).every(isChangeTuple);
 }
 
 function normalizeChangedFields(value: unknown, action: AuditAction): AuditEvent["changed_fields"] | undefined {
   if (isLegacyChangedFields(value)) return value;
   if (!isRecord(value)) return undefined;
+
+  const entries = Object.entries(value);
+  if (entries.some(([, fieldValue]) => isRecord(fieldValue) && ("old" in fieldValue || "new" in fieldValue))) {
+    return undefined;
+  }
+
   return Object.fromEntries(
-    Object.entries(value).map(([key, fieldValue]) => [
+    entries.map(([key, fieldValue]) => [
       key,
       action === "delete"
         ? { old: fieldValue, new: null }

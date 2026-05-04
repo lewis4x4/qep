@@ -16,6 +16,7 @@ describe("audit-api pure helpers", () => {
         record_id: "quote-1",
         action: "update",
         actor_id: "user-1",
+        source_table_name: null,
         changed_fields: { status: { old: "draft", new: "sent" } },
         snapshot: { quote_number: "Q-1" },
         created_at: "2026-04-19T00:00:00Z",
@@ -43,6 +44,7 @@ describe("audit-api pure helpers", () => {
         record_id: "quote-1",
         action: "update",
         actor_id: "user-1",
+        source_table_name: null,
         actor_email: null,
         changed_fields: { status: { old: "draft", new: "sent" } },
         snapshot: { quote_number: "Q-1" },
@@ -61,8 +63,9 @@ describe("audit-api pure helpers", () => {
     ]);
   });
 
-  test("AUDIT_TABLES covers all 7 qb_*_audit tables from migration 288", () => {
-    expect(AUDIT_TABLES).toHaveLength(7);
+  test("AUDIT_TABLES covers central view plus all 7 qb_*_audit tables from migration 288", () => {
+    expect(AUDIT_TABLES).toHaveLength(8);
+    expect(AUDIT_TABLES).toContain("v_audit_record_changes");
     expect(AUDIT_TABLES).toEqual(expect.arrayContaining([
       "qb_quotes_audit",
       "qb_deals_audit",

@@ -12,8 +12,11 @@ const preflight = runJsonAllowFailure(["bun", "run", "parity:closeout:preflight"
 const queueRows = extractQueueRows(QUEUE_PATH);
 
 const blockerRows = queueRows.filter((row) => row.status && row.status.toLowerCase() !== "complete");
-const credentialFailures = (preflight.data?.failed ?? []).filter((check) => check.name?.startsWith("env present:"));
-const verdict = openRows.ok && workbookVerification.ok && queueVerification.ok && blockerRows.length === 0 && credentialFailures.length === 0
+const preflightFailures = preflight.data?.failed ?? [];
+const credentialFailures = preflightFailures.filter((check) => check.name?.startsWith("env present:"));
+const preflightOk = preflight.ok && preflight.data?.verdict === "PASS";
+const workbookClosed = openRows.ok && openRows.data?.total_open_rows === 0;
+const verdict = workbookClosed && workbookVerification.ok && queueVerification.ok && preflightOk && blockerRows.length === 0
   ? "READY_FOR_FINAL_GATE"
   : "BLOCKED";
 
@@ -29,6 +32,10 @@ const result = {
   closeout_preflight: {
     verdict: preflight.data?.verdict ?? "UNKNOWN",
     missing_env: credentialFailures.map((check) => check.name.replace("env present: ", "")),
+    failed_checks: preflightFailures.map((check) => ({
+      name: check.name,
+      detail: check.detail,
+    })),
   },
   external_decision_queue: {
     path: relative(QUEUE_PATH),
@@ -45,7 +52,7 @@ const result = {
       closure_evidence_required: row.closure_evidence_required,
     })),
   },
-  next_required_actions: buildNextActions(openRows.data, credentialFailures, blockerRows),
+  next_required_actions: buildNextActions(openRows.data, credentialFailures, preflightFailures, blockerRows),
 };
 
 console.log(JSON.stringify(result, null, 2));
@@ -54,7 +61,7 @@ if (result.verdict !== "READY_FOR_FINAL_GATE") {
   process.exitCode = 1;
 }
 
-function buildNextActions(openRowsData, missingEnvChecks, blockers) {
+function buildNextActions(openRowsData, missingEnvChecks, preflightFailureChecks, blockers) {
   const actions = [];
   const totalOpen = openRowsData?.total_open_rows ?? null;
 
@@ -68,6 +75,11 @@ function buildNextActions(openRowsData, missingEnvChecks, blockers) {
 
   if (missingEnvChecks.length > 0) {
     actions.push(`Load missing live gate credentials: ${missingEnvChecks.map((check) => check.name.replace("env present: ", "")).join(", ")}.`);
+  }
+
+  const nonCredentialFailures = preflightFailureChecks.filter((check) => !check.name?.startsWith("env present:"));
+  if (nonCredentialFailures.length > 0) {
+    actions.push(`Resolve closeout preflight failures: ${nonCredentialFailures.map((check) => check.name).join(", ")}.`);
   }
 
   if (actions.length === 0) {

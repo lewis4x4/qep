@@ -44,6 +44,16 @@ export function summarizeQuoteSigningReadiness(input: {
     };
   }
 
+  if (status === "accepted") {
+    return {
+      label: "Native QEP signing",
+      value: "Accepted status; timestamp missing",
+      detail: "Quote is marked accepted, but no native acceptance timestamp is present. No VESign provider envelope/status should be inferred from this native QEP state.",
+      source: "native_qep",
+      vesignReady: false,
+    };
+  }
+
   if (status && !["sent", "viewed"].includes(status)) {
     return {
       label: "Native QEP signing",

@@ -14,6 +14,19 @@ if (!supabaseUrl || !anonKey || !serviceRoleKey) {
   throw new Error("Requires SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY.");
 }
 
+const DECISION_GATED_PROVIDERS = [
+  {
+    key: "ironguides",
+    displayName: "Iron Solutions / IronGuides",
+    authType: "api_key",
+    expectedStatus: "demo_mode",
+    providerScope: "parity_external_decision",
+    implementationStatus: "decision_required",
+    linearIssue: "JAR-109",
+    decisionPacket: "docs/IntelliDealer/_Manifests/QEP_IRONGUIDES_DECISION_PACKET_2026-05-04.md",
+  },
+];
+
 const WAVE5_PROVIDERS = [
   {
     key: "avatax",
@@ -87,8 +100,11 @@ const workspaceId = auditProfile.active_workspace_id ?? "default";
 const checks = [];
 
 await verifyRegistryRows(workspaceId);
+await verifyDecisionGatedRegistryRows(workspaceId);
 await verifyAvailabilityApi(workspaceId);
+await verifyDecisionGatedAvailabilityApi(workspaceId);
 await verifyTestConnectionApi();
+await verifyDecisionGatedTestConnectionApi();
 
 const failed = checks.filter((check) => !check.ok);
 const verdict = failed.length === 0 ? "PASS" : "FAIL";
@@ -100,7 +116,7 @@ const result = {
     email: auditProfile.email,
     role: auditProfile.role,
   },
-  provider_keys: WAVE5_PROVIDERS.map((provider) => provider.key),
+  provider_keys: [...WAVE5_PROVIDERS, ...DECISION_GATED_PROVIDERS].map((provider) => provider.key),
   checks,
   failed,
 };
@@ -172,6 +188,40 @@ async function verifyRegistryRows(targetWorkspaceId) {
     if (provider.key === "jd_quote_ii") {
       verifyJdBlockerMetadata(row.config ?? {});
     }
+  }
+}
+
+async function verifyDecisionGatedRegistryRows(targetWorkspaceId) {
+  const { data, error } = await adminClient
+    .from("integration_status")
+    .select("workspace_id, integration_key, display_name, status, auth_type, credentials_encrypted, endpoint_url, config")
+    .eq("workspace_id", targetWorkspaceId)
+    .in("integration_key", DECISION_GATED_PROVIDERS.map((provider) => provider.key));
+
+  if (error) {
+    addCheck("decision-gated registry query succeeds", false, error.message);
+    return;
+  }
+
+  addCheck("decision-gated registry query succeeds", true, `${data?.length ?? 0} rows`);
+  const rowByKey = new Map((data ?? []).map((row) => [row.integration_key, row]));
+
+  for (const provider of DECISION_GATED_PROVIDERS) {
+    const row = rowByKey.get(provider.key);
+    addCheck(`decision-gated registry row exists: ${provider.key}`, Boolean(row), row ? targetWorkspaceId : "missing");
+    if (!row) continue;
+
+    addCheck(`decision-gated display name matches: ${provider.key}`, row.display_name === provider.displayName, String(row.display_name));
+    addCheck(`decision-gated auth type matches: ${provider.key}`, row.auth_type === provider.authType, String(row.auth_type));
+    addCheck(`decision-gated status matches: ${provider.key}`, row.status === provider.expectedStatus, String(row.status));
+    addCheck(`decision-gated no encrypted credentials: ${provider.key}`, row.credentials_encrypted === null, row.credentials_encrypted ? "present" : "null");
+    addCheck(`decision-gated no endpoint URL: ${provider.key}`, row.endpoint_url === null, row.endpoint_url ?? "null");
+    addCheck(`decision-gated provider scope: ${provider.key}`, row.config?.provider_scope === provider.providerScope, String(row.config?.provider_scope));
+    addCheck(`decision-gated implementation status: ${provider.key}`, row.config?.implementation_status === provider.implementationStatus, String(row.config?.implementation_status));
+    addCheck(`decision required flag: ${provider.key}`, row.config?.decision_required === true, String(row.config?.decision_required));
+    addCheck(`external dependency flagged: ${provider.key}`, row.config?.external_dependency_required === true, String(row.config?.external_dependency_required));
+    addCheck(`decision packet linked: ${provider.key}`, row.config?.decision_packet === provider.decisionPacket, String(row.config?.decision_packet));
+    addCheck(`Linear blocker linked: ${provider.key}`, row.config?.parity_blocker === provider.linearIssue, String(row.config?.parity_blocker));
   }
 }
 
@@ -254,6 +304,26 @@ async function verifyAvailabilityApi(targetWorkspaceId) {
   }
 }
 
+async function verifyDecisionGatedAvailabilityApi(targetWorkspaceId) {
+  for (const provider of DECISION_GATED_PROVIDERS) {
+    const { data, error } = await auditClient.functions.invoke("integration-availability", {
+      body: { integration_key: provider.key },
+    });
+
+    if (error) {
+      addCheck(`decision-gated availability API call succeeds: ${provider.key}`, false, error.message);
+      continue;
+    }
+
+    addCheck(`decision-gated availability workspace: ${provider.key}`, data?.workspace_id === targetWorkspaceId, String(data?.workspace_id));
+    addCheck(`decision-gated availability status: ${provider.key}`, data?.status === provider.expectedStatus, String(data?.status));
+    addCheck(`decision-gated availability not connected: ${provider.key}`, data?.connected === false, String(data?.connected));
+    addCheck(`decision-gated availability safe mode: ${provider.key}`, data?.safe_mode === true, String(data?.safe_mode));
+    addCheck(`decision-gated availability not connectable: ${provider.key}`, data?.connectable === false, String(data?.connectable));
+    addCheck(`decision-gated availability deferred flag: ${provider.key}`, data?.deferred_provider === true, String(data?.deferred_provider));
+  }
+}
+
 async function verifyTestConnectionApi() {
   for (const provider of WAVE5_PROVIDERS) {
     const { data, error } = await auditClient.functions.invoke("integration-test-connection", {
@@ -269,6 +339,27 @@ async function verifyTestConnectionApi() {
     addCheck(`test disabled mode mock: ${provider.key}`, data?.mode === "mock", String(data?.mode));
     addCheck(
       `test disabled code: ${provider.key}`,
+      data?.error?.code === "DEFERRED_PROVIDER_TEST_DISABLED",
+      String(data?.error?.code),
+    );
+  }
+}
+
+async function verifyDecisionGatedTestConnectionApi() {
+  for (const provider of DECISION_GATED_PROVIDERS) {
+    const { data, error } = await auditClient.functions.invoke("integration-test-connection", {
+      body: { integration_key: provider.key },
+    });
+
+    if (error) {
+      addCheck(`decision-gated test API call succeeds: ${provider.key}`, false, error.message);
+      continue;
+    }
+
+    addCheck(`decision-gated test disabled success false: ${provider.key}`, data?.success === false, String(data?.success));
+    addCheck(`decision-gated test disabled mode mock: ${provider.key}`, data?.mode === "mock", String(data?.mode));
+    addCheck(
+      `decision-gated test disabled code: ${provider.key}`,
       data?.error?.code === "DEFERRED_PROVIDER_TEST_DISABLED",
       String(data?.error?.code),
     );

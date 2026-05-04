@@ -8,7 +8,7 @@ import { PortalLayout } from "../components/PortalLayout";
 import { portalApi } from "../lib/portal-api";
 import { downloadInvoiceStatement } from "../lib/invoice-statement";
 import { normalizePortalInvoiceRecord } from "../lib/portal-row-normalizers";
-import { summarizeInvoiceSigningReadiness, vesignRequirementsText } from "../lib/signing-readiness";
+import { summarizeInvoiceSigningReadiness } from "../lib/signing-readiness";
 
 function money(value: number | null | undefined): string {
   if (value == null) return "—";
@@ -35,7 +35,8 @@ export function PortalInvoiceDetailPage() {
   const lines = invoice?.customer_invoice_line_items ?? [];
   const history = invoice?.portal_payment_history ?? [];
   const timeline = invoice?.portal_invoice_timeline ?? [];
-  const signingReadiness = invoice
+  const hasSigningFields = Boolean(invoice?.esign_status || invoice?.esign_envelope_id || invoice?.esign_signed_at);
+  const signingReadiness = invoice && hasSigningFields
     ? summarizeInvoiceSigningReadiness({
       esignStatus: invoice.esign_status,
       esignEnvelopeId: invoice.esign_envelope_id,
@@ -106,15 +107,12 @@ export function PortalInvoiceDetailPage() {
 
           {signingReadiness ? (
             <Card className="border-amber-500/20 bg-amber-500/5 p-5">
-              <h2 className="text-sm font-semibold text-foreground">Signature readiness</h2>
+              <h2 className="text-sm font-semibold text-foreground">Signature status</h2>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <Metric label={signingReadiness.label} value={signingReadiness.value} />
-                <Metric label="VESign status" value={signingReadiness.vesignReady ? "Ready" : "Provider blocked"} />
+                <Metric label="External signing" value={signingReadiness.vesignReady ? "Ready" : "Pending setup"} />
               </div>
               <p className="mt-3 text-xs text-muted-foreground">{signingReadiness.detail}</p>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                Required before VESign parity: {vesignRequirementsText()}.
-              </p>
             </Card>
           ) : null}
 

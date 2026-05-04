@@ -142,12 +142,14 @@ function TechnicianJobListCard({
 function TechnicianDetailSheet({
   jobId,
   onClose,
+  transition,
 }: {
   jobId: string;
   onClose: () => void;
+  transition: ReturnType<typeof useTransitionServiceJob>;
 }) {
   const { data: job, isLoading } = useServiceJob(jobId);
-  const transition = useTransitionServiceJob();
+  const pendingForThisJob = transition.isPending && transition.variables?.id === jobId;
 
   const actions = useMemo(
     () => (job ? getTechnicianStageActions(job.current_stage) : []),
@@ -170,7 +172,12 @@ function TechnicianDetailSheet({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full border border-border/60 px-3 py-1.5 text-xs font-medium text-muted-foreground"
+              disabled={pendingForThisJob}
+              aria-disabled={pendingForThisJob}
+              className={cn(
+                "rounded-full border border-border/60 px-3 py-1.5 text-xs font-medium text-muted-foreground",
+                pendingForThisJob && "cursor-not-allowed opacity-60",
+              )}
             >
               Close
             </button>
@@ -215,7 +222,7 @@ function TechnicianDetailSheet({
 
               <section
                 className="rounded-[1.4rem] border border-border/50 bg-card/90 p-4"
-                aria-busy={transition.isPending}
+                aria-busy={pendingForThisJob}
               >
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                   Quick actions
@@ -230,17 +237,18 @@ function TechnicianDetailSheet({
                       <button
                         key={action.toStage}
                         type="button"
-                        disabled={transition.isPending}
-                        aria-disabled={transition.isPending}
-                        onClick={() =>
+                        disabled={pendingForThisJob}
+                        aria-disabled={pendingForThisJob}
+                        onClick={() => {
+                          if (pendingForThisJob) return;
                           transition.mutate({
                             id: job.id,
                             toStage: action.toStage,
-                          })
-                        }
+                          });
+                        }}
                         className={cn(
                           "rounded-2xl px-4 py-3 text-left text-sm font-semibold transition",
-                          transition.isPending && "cursor-not-allowed opacity-70",
+                          pendingForThisJob && "cursor-not-allowed opacity-70",
                           action.tone === "primary"
                             ? "bg-primary text-primary-foreground"
                             : "border border-border/60 bg-background text-foreground",
@@ -251,7 +259,7 @@ function TechnicianDetailSheet({
                     ))}
                   </div>
                 )}
-                {transition.isPending && (
+                {pendingForThisJob && (
                   <p className="mt-2 text-xs text-muted-foreground" role="status">
                     Sending update — keep this screen open. Actions stay locked to prevent duplicate stage transitions.
                   </p>
@@ -330,6 +338,7 @@ export function ServiceTechnicianMobilePage() {
   const { profile } = useAuth();
   const [filter, setFilter] = useState<TechnicianMobileFilter>("focus");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const transition = useTransitionServiceJob();
 
   const listQuery = useServiceJobList({
     technician_id: profile?.id ?? undefined,
@@ -498,7 +507,14 @@ export function ServiceTechnicianMobilePage() {
       </div>
 
       {selectedJobId ? (
-        <TechnicianDetailSheet jobId={selectedJobId} onClose={() => setSelectedJobId(null)} />
+        <TechnicianDetailSheet
+          jobId={selectedJobId}
+          onClose={() => {
+            if (transition.isPending && transition.variables?.id === selectedJobId) return;
+            setSelectedJobId(null);
+          }}
+          transition={transition}
+        />
       ) : null}
     </div>
   );

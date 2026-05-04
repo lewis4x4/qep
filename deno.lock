@@ -31,7 +31,7 @@
     "npm:@supabase/storage-js@2.100.1": "2.100.1",
     "npm:@supabase/supabase-js@2": "2.100.1",
     "npm:@supabase/supabase-js@^2.49.1": "2.100.1",
-    "npm:@tailwindcss/typography@~0.5.19": "0.5.19_tailwindcss@3.4.19__postcss@8.5.8__jiti@1.21.7",
+    "npm:@tailwindcss/typography@~0.5.19": "0.5.19_tailwindcss@3.4.19__postcss@8.5.14__jiti@1.21.7",
     "npm:@tanstack/react-query@^5.90.2": "5.95.2_react@18.3.1",
     "npm:@testing-library/dom@^10.4.1": "10.4.1",
     "npm:@testing-library/react@^16.3.2": "16.3.2_@testing-library+dom@10.4.1_@types+react@18.3.28_@types+react-dom@18.3.7__@types+react@18.3.28_react@18.3.1_react-dom@18.3.1__react@18.3.1",
@@ -41,7 +41,7 @@
     "npm:@types/react-dom@^18.3.1": "18.3.7_@types+react@18.3.28",
     "npm:@types/react@^18.3.12": "18.3.28",
     "npm:@vitejs/plugin-react@^4.7.0": "4.7.0_vite@6.4.2__@types+node@25.5.0__picomatch@4.0.4_@babel+core@7.29.0_@types+node@25.5.0",
-    "npm:autoprefixer@^10.4.20": "10.4.27_postcss@8.5.8",
+    "npm:autoprefixer@^10.4.20": "10.4.27_postcss@8.5.14",
     "npm:class-variance-authority@~0.7.1": "0.7.1",
     "npm:clsx@^2.1.1": "2.1.1",
     "npm:cmdk@^1.1.1": "1.1.1_react@18.3.1_react-dom@18.3.1__react@18.3.1_@types+react@18.3.28_@types+react-dom@18.3.7__@types+react@18.3.28",
@@ -55,7 +55,7 @@
     "npm:papaparse@^5.5.3": "5.5.3",
     "npm:pdf-parse@1.1.1": "1.1.1",
     "npm:playwright@^1.52.0": "1.59.1",
-    "npm:postcss@^8.4.49": "8.5.8",
+    "npm:postcss@^8.5.14": "8.5.14",
     "npm:react-dom@^18.3.1": "18.3.1_react@18.3.1",
     "npm:react-markdown@^10.1.0": "10.1.0_@types+react@18.3.28_react@18.3.1",
     "npm:react-router-dom@^6.28.0": "6.30.3_react@18.3.1_react-dom@18.3.1__react@18.3.1",
@@ -63,7 +63,7 @@
     "npm:recharts@^3.8.1": "3.8.1_react@18.3.1_react-dom@18.3.1__react@18.3.1_react-is@17.0.2_react-redux@9.2.0__@types+react@18.3.28__react@18.3.1_@types+react@18.3.28",
     "npm:remark-gfm@^4.0.1": "4.0.1",
     "npm:tailwind-merge@^3.5.0": "3.5.0",
-    "npm:tailwindcss@^3.4.16": "3.4.19_postcss@8.5.8_jiti@1.21.7",
+    "npm:tailwindcss@^3.4.16": "3.4.19_postcss@8.5.14_jiti@1.21.7",
     "npm:typescript@^5.7.2": "5.9.3",
     "npm:vite@^6.4.2": "6.4.2_@types+node@25.5.0_picomatch@4.0.4",
     "npm:xlsx@0.18.5": "0.18.5"
@@ -1648,7 +1648,7 @@
         "tslib"
       ]
     },
-    "@tailwindcss/typography@0.5.19_tailwindcss@3.4.19__postcss@8.5.8__jiti@1.21.7": {
+    "@tailwindcss/typography@0.5.19_tailwindcss@3.4.19__postcss@8.5.14__jiti@1.21.7": {
       "integrity": "sha512-w31dd8HOx3k9vPtcQh5QHP9GwKcgbMp87j58qi6xgiBnFFtKEAgCWnDw4qUT8aHwkCp8bKvb/KGKWWHedP0AAg==",
       "dependencies": [
         "postcss-selector-parser@6.0.10",
@@ -1945,7 +1945,7 @@
     "asynckit@0.4.0": {
       "integrity": "sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q=="
     },
-    "autoprefixer@10.4.27_postcss@8.5.8": {
+    "autoprefixer@10.4.27_postcss@8.5.14": {
       "integrity": "sha512-NP9APE+tO+LuJGn7/9+cohklunJsXWiaWEfV3si4Gi/XHDwVNgkwr1J3RQYFIvPy76GmJ9/bW8vyoU1LcxwKHA==",
       "dependencies": [
         "browserslist",
@@ -3434,7 +3434,7 @@
       ],
       "bin": true
     },
-    "postcss-import@15.1.0_postcss@8.5.8": {
+    "postcss-import@15.1.0_postcss@8.5.14": {
       "integrity": "sha512-hpr+J05B2FVYUAXHeK1YyI267J/dDDhMU6B6civm8hSY1jYJnBXxzKDKDswzJmtLHryrjhnDjqqp/49t8FALew==",
       "dependencies": [
         "postcss",
@@ -3443,14 +3443,14 @@
         "resolve"
       ]
     },
-    "postcss-js@4.1.0_postcss@8.5.8": {
+    "postcss-js@4.1.0_postcss@8.5.14": {
       "integrity": "sha512-oIAOTqgIo7q2EOwbhb8UalYePMvYoIeRY2YKntdpFQXNosSu3vLrniGgmH9OKs/qAkfoj5oB3le/7mINW1LCfw==",
       "dependencies": [
         "camelcase-css",
         "postcss"
       ]
     },
-    "postcss-load-config@6.0.1_jiti@1.21.7_postcss@8.5.8": {
+    "postcss-load-config@6.0.1_jiti@1.21.7_postcss@8.5.14": {
       "integrity": "sha512-oPtTM4oerL+UXmx+93ytZVN82RrlY/wPUV8IeDxFrzIjXOLF1pN+EmKPLbubvKHT2HC20xXsCAH2Z+CKV6Oz/g==",
       "dependencies": [
         "jiti",
@@ -3462,7 +3462,7 @@
         "postcss"
       ]
     },
-    "postcss-nested@6.2.0_postcss@8.5.8": {
+    "postcss-nested@6.2.0_postcss@8.5.14": {
       "integrity": "sha512-HQbt28KulC5AJzG+cZtj9kvKB93CFCdLvog1WFLf1D+xmMvPGlBstkpTEZfK5+AN9hfJocyBFCNiqyS48bpgzQ==",
       "dependencies": [
         "postcss",
@@ -3486,8 +3486,8 @@
     "postcss-value-parser@4.2.0": {
       "integrity": "sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ=="
     },
-    "postcss@8.5.8": {
-      "integrity": "sha512-OW/rX8O/jXnm82Ey1k44pObPtdblfiuWnrd8X7GJ7emImCOstunGbXUpp7HdBrFQX6rJzn3sPT397Wp5aCwCHg==",
+    "postcss@8.5.14": {
+      "integrity": "sha512-SoSL4+OSEtR99LHFZQiJLkT59C5B1amGO1NzTwj7TT1qCUgUO6hxOvzkOYxD+vMrXBM3XJIKzokoERdqQq/Zmg==",
       "dependencies": [
         "nanoid",
         "picocolors",
@@ -3916,7 +3916,7 @@
     "tailwind-merge@3.5.0": {
       "integrity": "sha512-I8K9wewnVDkL1NTGoqWmVEIlUcB9gFriAEkXkfCjX5ib8ezGxtR3xD7iZIxrfArjEsH7F1CHD4RFUtxefdqV/A=="
     },
-    "tailwindcss@3.4.19_postcss@8.5.8_jiti@1.21.7": {
+    "tailwindcss@3.4.19_postcss@8.5.14_jiti@1.21.7": {
       "integrity": "sha512-3ofp+LL8E+pK/JuPLPggVAIaEuhvIz4qNcf3nA1Xn2o/7fb7s/TYpHhwGDv1ZU3PkBluUVaF8PyCHcm48cKLWQ==",
       "dependencies": [
         "@alloc/quick-lru",
@@ -4324,7 +4324,7 @@
             "npm:maplibre-gl@^5.22.0",
             "npm:pako@^2.1.0",
             "npm:papaparse@^5.5.3",
-            "npm:postcss@^8.4.49",
+            "npm:postcss@^8.5.14",
             "npm:react-dom@^18.3.1",
             "npm:react-markdown@^10.1.0",
             "npm:react-router-dom@^6.28.0",

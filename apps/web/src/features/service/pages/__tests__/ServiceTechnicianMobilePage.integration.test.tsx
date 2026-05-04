@@ -7,6 +7,7 @@ let transitionState = {
   isPending: false,
   isError: false,
   error: null as Error | null,
+  variables: null as { id: string; toStage: string } | null,
 };
 
 const jobFixtures = [
@@ -130,6 +131,7 @@ describe("ServiceTechnicianMobilePage (integration)", () => {
       isPending: false,
       isError: false,
       error: null,
+      variables: null,
     };
   });
 
@@ -173,6 +175,7 @@ describe("ServiceTechnicianMobilePage (integration)", () => {
       isPending: true,
       isError: false,
       error: null,
+      variables: { id: "job-active", toStage: "blocked_waiting" },
     };
 
     render(
@@ -186,6 +189,7 @@ describe("ServiceTechnicianMobilePage (integration)", () => {
     const action = screen.getByRole("button", { name: "Block / wait" }) as HTMLButtonElement;
     expect(action.disabled).toBe(true);
     expect(screen.getByText(/Actions stay locked to prevent duplicate stage transitions/i)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Close" }) as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.click(action);
     expect(transitionMutate).not.toHaveBeenCalled();
@@ -196,6 +200,7 @@ describe("ServiceTechnicianMobilePage (integration)", () => {
       isPending: false,
       isError: true,
       error: new Error("Network request failed"),
+      variables: null,
     };
 
     render(
