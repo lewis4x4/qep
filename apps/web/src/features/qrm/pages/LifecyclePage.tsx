@@ -12,8 +12,6 @@ import { buildAccountCommandHref } from "../lib/account-command";
 import {
   eventLabel,
   normalizeCustomerLifecycleEventRows,
-  summarizeCustomerTimeline,
-  toCustomerTimelineEvent,
   type CustomerLifecycleEventRow,
 } from "../lib/customer-timeline";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
@@ -57,6 +55,14 @@ export function LifecyclePage() {
     staleTime: 60_000,
   });
 
+  const timelineRows = timelineData ?? [];
+  const counts = useMemo(() => ({
+    firstContactCount: timelineRows.filter((event) => event.event_type === "first_contact").length,
+    firstQuoteCount: timelineRows.filter((event) => event.event_type === "first_quote").length,
+    firstPurchaseCount: timelineRows.filter((event) => event.event_type === "first_purchase").length,
+    firstServiceCount: timelineRows.filter((event) => event.event_type === "first_service").length,
+  }), [timelineRows]);
+
   if (!resolvedCompanyId) {
     return null;
   }
@@ -79,15 +85,6 @@ export function LifecyclePage() {
       </div>
     );
   }
-
-  const timelineRows = timelineData ?? [];
-  const summary = summarizeCustomerTimeline(timelineRows.map(toCustomerTimelineEvent));
-  const counts = useMemo(() => ({
-    firstContactCount: timelineRows.filter((event) => event.event_type === "first_contact").length,
-    firstQuoteCount: timelineRows.filter((event) => event.event_type === "first_quote").length,
-    firstPurchaseCount: timelineRows.filter((event) => event.event_type === "first_purchase").length,
-    firstServiceCount: timelineRows.filter((event) => event.event_type === "first_service").length,
-  }), [timelineRows]);
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
