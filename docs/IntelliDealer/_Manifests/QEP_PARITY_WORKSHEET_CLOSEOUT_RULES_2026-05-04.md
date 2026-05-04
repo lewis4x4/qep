@@ -78,8 +78,7 @@ bun run migrations:check
 bun run wave5:provider:verify
 bun run segment:gates --segment parity-closeout --ui
 python3 .omx/tmp/parity-review/update_parity_workbook.py
-node .omx/tmp/parity-review/verify_workbook.mjs
-shasum -a 256 /Users/brianlewis/Desktop/IntelliDealer/_Manifests/QEP_Parity_Worksheet.xlsx docs/IntelliDealer/_Manifests/QEP_Parity_Worksheet.xlsx
+bun run parity:workbook:verify
 ```
 
 A final 100% claim is valid only when the worksheet has no remaining `GAP` or `PARTIAL` rows, except rows explicitly changed to `N_A` or closed-by-replacement with source-controlled decision evidence.
