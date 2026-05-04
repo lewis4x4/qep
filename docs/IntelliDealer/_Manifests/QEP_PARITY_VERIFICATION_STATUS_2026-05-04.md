@@ -12,6 +12,27 @@ Live credential-gated checks remain blocked because this shell does not have the
 
 ## Commands Run
 
+### `bun run parity:closeout:preflight`
+
+Purpose: fail fast before live closeout gates by checking credential presence, workbook copy parity, and source-controlled closeout packet presence without printing secret values.
+
+Actual local result in this shell: `FAIL` because the five required Supabase/KB test credentials are not loaded. Workbook copy parity and all required closeout packet checks passed.
+
+Passing preflight evidence:
+
+- Repo and desktop workbook copies exist.
+- Workbook SHA-256 copies match: `4024ebe9a526ab952091263966351e6e9f88378d432aec7b13ceb63d0d039f7f`.
+- Workbook byte sizes match: `60152`.
+- All required closeout decision/review/status packets exist in `docs/IntelliDealer/_Manifests/`.
+
+Blocking preflight failures:
+
+- Missing `SUPABASE_URL`
+- Missing `SUPABASE_ANON_KEY`
+- Missing `SUPABASE_SERVICE_ROLE_KEY`
+- Missing `KB_TEST_ADMIN_TOKEN`
+- Missing `KB_TEST_REP_TOKEN`
+
 ### `bun run wave5:provider:verify`
 
 Verdict: blocked before execution.
@@ -84,6 +105,7 @@ export SUPABASE_SERVICE_ROLE_KEY=...
 export KB_TEST_ADMIN_TOKEN=...
 export KB_TEST_REP_TOKEN=...
 
+bun run parity:closeout:preflight
 bun run wave5:provider:verify
 bun run segment:gates --segment parity-closeout --ui --no-chaos
 ```
