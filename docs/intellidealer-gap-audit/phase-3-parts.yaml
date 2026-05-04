@@ -181,8 +181,8 @@ source_artifacts:
 #   * Discount group on parts invoice header.
 #   * Freight Terms on parts invoice header.
 #   * UPS WorldShip Import — integration to push shipping labels to UPS.
-#   * LDTTN (Loose Dead-Track Total Number?) Adjust button — IntelliDealer-
-#     specific bulk-adjust function.
+#   * LDTTN Adjust button — selected-line tax, discount, pricing-level, and
+#     non-stock-code adjustment function.
 #   * Tethr It Now (telematics-driven part lookup) integration button.
 #   * Print Parameters (per-invoice print configuration).
 #   * Customer Parts Purchases sub-screen (drill-into customer's parts
@@ -1774,15 +1774,26 @@ fields:
       Tethr telematics integration — finds parts compatible with a
       machine identified by telematics ID. Speeds up rural/field
       ordering when the operator only has the machine.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "No Tethr integration. Defer to telemetry phase."
+    qep_status: PARTIAL
+    qep_table: telematics_feeds
+    qep_column: "provider, device_id, equipment_id, last_reading_at, last_hours, last_lat, last_lng"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.telematics_feeds"
+      - "supabase/functions/telematics-ingest/index.ts"
+      - "supabase/functions/telematics-signal-ingest/index.ts"
+    qep_gap_notes: |
+      Generic telematics feed storage/ingest exists, but this is not a Tethr
+      It Now integration yet. It remains PARTIAL until Tethr credentials,
+      adapter/webhook mapping, parts-invoice UI action, and production smoke
+      evidence exist.
     severity: could
     category: nice_to_have
-    migration_hint: ""
-    ui_surface_hint: "Parts Invoice — Tethr It Now button"
+    migration_hint: |
+      -- No DDL in this cleanup. Generic telematics_feeds already covers the
+      -- partial status; Wave 5 deferred register owns the Tethr adapter,
+      -- credentials/webhook contract, mapping workflow, UI action, and smoke
+      -- tests before this can become BUILT.
+    ui_surface_hint: "Parts Invoice — Tethr It Now button; fallback target can deeplink to Asset 360 Telematics once a feed is mapped"
     dependencies: []
 
   - id: parts_invoice.ups_worldship_import
@@ -1815,18 +1826,28 @@ fields:
     intellidealer_data_source: "PINVH"
     intellidealer_evidence:
       - docs/IntelliDealer/_OCR_PNG/Phase-3_Parts_Parts-Invoicing__3.20.16.txt
+      - docs/IntelliDealer/_OCR/Phase-3_Parts/Parts Invoicing.txt
     intellidealer_field_type: computed
     intellidealer_purpose: |
-      IntelliDealer-specific bulk-adjust function (Loose Dead-Track
-      Total Number) — likely an inventory adjustment workflow.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
-    qep_gap_notes: "Unclear function — defer pending owner clarification."
+      Opens the Tax, Discount & Level screen and applies changed tax codes,
+      discounts, pricing level, or non-stock codes to invoice lines selected
+      with the LDTTN checkbox.
+    qep_status: BUILT
+    qep_table: parts_invoice_lines
+    qep_column: "ldttn_selected, tax_code_1..tax_code_4, discount_pct, price_level_code, non_stock_code, ldttn_adjusted_by, ldttn_adjusted_at"
+    qep_evidence:
+      - "supabase/migrations/533_intellidealer_audit_ldttn_cleanup.sql public.parts_invoice_lines LDTTN columns"
+      - "supabase/migrations/533_intellidealer_audit_ldttn_cleanup.sql public.adjust_parts_invoice_ldttn(...)"
+    qep_gap_notes: |
+      Resolved as schema/workflow support on canonical parts_invoice_lines.
+      OCR confirms Adjust LDTTN changes selected part lines' tax codes,
+      discounts, pricing level, or non-stock codes; it is not an inventory
+      adjustment. UI wiring remains separate from this schema cleanup.
     severity: could
     category: nice_to_have
-    migration_hint: ""
+    migration_hint: |
+      -- Migration 533 adds LDTTN selection/adjustment columns and an
+      -- RLS-respecting bulk helper for selected parts_invoice_lines.
     ui_surface_hint: "Parts Invoice — Adjust LDTTN button"
     dependencies: []
 

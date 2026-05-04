@@ -132,6 +132,15 @@ verify_jwt = false
 [functions.intellidealer-customer-import]
 verify_jwt = false
 
+[functions.traffic-ticket-bulk-actions]
+verify_jwt = false
+
+[functions.service-wip-report-export]
+verify_jwt = false
+
+[functions.service-payroll-report-export]
+verify_jwt = false
+
 [functions.parts-predictive-failure]
 verify_jwt = false
 

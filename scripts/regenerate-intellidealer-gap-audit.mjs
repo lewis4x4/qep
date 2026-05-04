@@ -28,6 +28,14 @@ const PLACEHOLDER_COLUMNS = new Set([
   "(derived)",
 ]);
 
+const BEHAVIORAL_STATUS_LOCKED_IDS = new Set([
+  "analysis_payroll.print_action",
+  "analysis_wip.create_wip_report_link",
+  "parts_invoice.tethr_it_now",
+  "rental_counter.action_tethr_it",
+  "traffic_ticket.mass_change_print",
+]);
+
 function cleanYamlValue(raw) {
   if (raw == null) return "";
   let value = raw.trim();
@@ -182,6 +190,10 @@ function splitYamlFields(source) {
 }
 
 function canAutoBuild(field, relations) {
+  if (
+    BEHAVIORAL_STATUS_LOCKED_IDS.has(field.id) ||
+    [...BEHAVIORAL_STATUS_LOCKED_IDS].some((id) => field.block.includes(`- id: ${id}`))
+  ) return null;
   if (!field.qepTable) return null;
   const relation = relations.get(field.qepTable);
   if (!relation) return null;
@@ -261,7 +273,8 @@ for (const phase of PHASES) {
     updatedBlocks.push(nextBlock);
   }
 
-  writeFileSync(phasePath, `${prefix}\n${updatedBlocks.join("")}`, "utf8");
+  const separator = prefix.endsWith("\n") ? "" : "\n";
+  writeFileSync(phasePath, `${prefix}${separator}${updatedBlocks.join("")}`, "utf8");
 }
 
 const phases = PHASES.map((phase) => {

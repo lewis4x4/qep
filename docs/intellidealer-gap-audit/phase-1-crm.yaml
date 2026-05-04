@@ -165,6 +165,10 @@ fields:
 
 
 
+
+
+
+
   - id: customer.legacy_customer_number
     intellidealer_label: "Customer Number"
     intellidealer_screen: "Customer Profile (Profile tab) / Customer Listing"
@@ -2546,26 +2550,23 @@ fields:
         docs/intellidealer-gap-audit/_migration_order.md
         prospect_jdquote_upload_runs deferred pending confirmed
         JD-affiliated dealer scope
+      - "supabase/migrations/400_qrm_prospects.sql qrm_prospects foundation only; no JD Quote II upload ledger"
+      - "docs/IntelliDealer/_OCR/Phase-1_CRM/Prospect Board.txt John Deere Quote Upload source evidence"
     qep_gap_notes: |
       True external-integration deferral. Prospect Board foundation exists
       via qrm_prospects, but JD Quote II upload remains intentionally
       unbuilt until JD-affiliated dealer scope, credentials, payload
-      contract, and owner are confirmed.
+      contract, and owner are confirmed. Do not mark this shipped from
+      generic prospect coverage; no JD secrets, portal wiring, upload
+      adapter, run ledger, or status import exists.
     severity: could
     category: nice_to_have
     migration_hint: |
-      -- JD Quote II is an OEM-specific integration, deferred. When built:
-      CREATE TABLE prospect_jdquote_upload_runs (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        prospect_id uuid REFERENCES qrm_prospects(id),
-        request_payload JSONB,
-        response_payload JSONB,
-        jd_quote_id TEXT,
-        status TEXT,
-        error TEXT,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-    ui_surface_hint: "Prospect Board — 'JD Quote Upload' button (per-prospect)"
+      -- No DDL in this cleanup. Wave 5 deferred register owns prerequisites:
+      -- JD-affiliated dealer scope, JD Quote II credentials/license, payload
+      -- contract, credential path, owner, and staging fixtures. Add a run
+      -- ledger only after those prerequisites are confirmed.
+    ui_surface_hint: "Prospect Board — 'JD Quote Upload' button (per-prospect); Sales Support Portal — Access JD POs"
     dependencies: [prospect.status]
 
   # ============================================================================
@@ -2588,14 +2589,20 @@ fields:
     qep_column: null
     qep_evidence:
       - "supabase/migrations/345_crm_company_search_fields.sql public.list_crm_companies_page"
+      - "supabase/migrations/531_intellidealer_traffic_crm_workflow_cleanup.sql public.list_crm_companies_page(..., p_include_extended_fields boolean)"
+      - "supabase/migrations/531_intellidealer_traffic_crm_workflow_cleanup.sql idx_qrm_contacts_primary_company_name_trgm"
+      - "supabase/migrations/531_intellidealer_traffic_crm_workflow_cleanup.sql idx_qrm_company_ship_to_addresses_label_trgm"
+      - "supabase/migrations/531_intellidealer_traffic_crm_workflow_cleanup.sql idx_qrm_company_ship_to_addresses_contact_name_trgm"
       - "apps/web/src/features/qrm/pages/QrmCompaniesPage.tsx search placeholder includes company, IntelliDealer #, Search 1/2, city, state"
       - "apps/web/src/features/quote-builder/lib/customer-search-api.ts unified customer search queries crm_contacts and crm_companies"
       - "apps/web/src/features/sales/lib/customer-search.ts matches primary_contact_name"
     qep_gap_notes: |
-      Partial, not missing. QEP has Search 1/Search 2 and several customer
-      search surfaces include contact/company fields, but the Customer
-      Listing surface does not expose IntelliDealer's explicit Extended
-      Fields toggle and does not prove ship-to-name search on that page.
+      Partial, not missing. Backend support now exists on
+      list_crm_companies_page via p_include_extended_fields=true, extending
+      the customer listing SQL plan to primary contact names and active
+      ship-to label/contact names. This still is not marked BUILT because
+      the owned slice did not change the Customer Listing UI to expose an
+      explicit IntelliDealer-style Extended Fields toggle.
     severity: could
     category: nice_to_have
     migration_hint: ""

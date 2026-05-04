@@ -15435,9 +15435,14 @@ export type Database = {
           discount_pct: number | null
           extended_price_cents: number
           id: string
+          ldttn_adjusted_at: string | null
+          ldttn_adjusted_by: string | null
+          ldttn_selected: boolean
+          non_stock_code: string | null
           ofc: string | null
           part_catalog_id: string | null
           part_number: string
+          price_level_code: string | null
           qty_invoiced: number
           qty_issued: number
           qty_ordered: number
@@ -15445,6 +15450,10 @@ export type Database = {
           sort_order: number
           substituted_part_id: string | null
           tax_applies: boolean
+          tax_code_1: string | null
+          tax_code_2: string | null
+          tax_code_3: string | null
+          tax_code_4: string | null
           unit_price_cents: number
           updated_at: string
           workspace_id: string
@@ -15459,9 +15468,14 @@ export type Database = {
           discount_pct?: number | null
           extended_price_cents: number
           id?: string
+          ldttn_adjusted_at?: string | null
+          ldttn_adjusted_by?: string | null
+          ldttn_selected?: boolean
+          non_stock_code?: string | null
           ofc?: string | null
           part_catalog_id?: string | null
           part_number: string
+          price_level_code?: string | null
           qty_invoiced?: number
           qty_issued?: number
           qty_ordered?: number
@@ -15469,6 +15483,10 @@ export type Database = {
           sort_order?: number
           substituted_part_id?: string | null
           tax_applies?: boolean
+          tax_code_1?: string | null
+          tax_code_2?: string | null
+          tax_code_3?: string | null
+          tax_code_4?: string | null
           unit_price_cents: number
           updated_at?: string
           workspace_id?: string
@@ -15483,9 +15501,14 @@ export type Database = {
           discount_pct?: number | null
           extended_price_cents?: number
           id?: string
+          ldttn_adjusted_at?: string | null
+          ldttn_adjusted_by?: string | null
+          ldttn_selected?: boolean
+          non_stock_code?: string | null
           ofc?: string | null
           part_catalog_id?: string | null
           part_number?: string
+          price_level_code?: string | null
           qty_invoiced?: number
           qty_issued?: number
           qty_ordered?: number
@@ -15493,6 +15516,10 @@ export type Database = {
           sort_order?: number
           substituted_part_id?: string | null
           tax_applies?: boolean
+          tax_code_1?: string | null
+          tax_code_2?: string | null
+          tax_code_3?: string | null
+          tax_code_4?: string | null
           unit_price_cents?: number
           updated_at?: string
           workspace_id?: string
@@ -15518,6 +15545,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "equipment_invoices"
             referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "parts_invoice_lines_ldttn_adjusted_by_fkey"
+            columns: ["ldttn_adjusted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "parts_invoice_lines_part_catalog_id_fkey"
@@ -34271,6 +34305,71 @@ export type Database = {
           },
         ]
       }
+      service_report_export_requests: {
+        Row: {
+          completed_at: string | null
+          content_type: string | null
+          created_at: string
+          deleted_at: string | null
+          error_message: string | null
+          export_format: string
+          file_name: string | null
+          filters: Json
+          generated_by: string | null
+          id: string
+          report_kind: string
+          row_count: number
+          started_at: string
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          content_type?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          error_message?: string | null
+          export_format: string
+          file_name?: string | null
+          filters?: Json
+          generated_by?: string | null
+          id?: string
+          report_kind: string
+          row_count?: number
+          started_at?: string
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          completed_at?: string | null
+          content_type?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          error_message?: string | null
+          export_format?: string
+          file_name?: string | null
+          filters?: Json
+          generated_by?: string | null
+          id?: string
+          report_kind?: string
+          row_count?: number
+          started_at?: string
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_report_export_requests_generated_by_fkey"
+            columns: ["generated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_requests: {
         Row: {
           actual_completion: string | null
@@ -44265,6 +44364,72 @@ export type Database = {
         }
         Relationships: []
       }
+      v_audit_record_changes: {
+        Row: {
+          action: string | null
+          actor_user_id: string | null
+          after_snapshot: Json | null
+          before_snapshot: Json | null
+          changed_fields: Json | null
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string | null
+          occurred_at: string | null
+          record_id: string | null
+          table_name: string | null
+          updated_at: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          action?: string | null
+          actor_user_id?: string | null
+          after_snapshot?: Json | null
+          before_snapshot?: Json | null
+          changed_fields?: Json | null
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string | null
+          occurred_at?: string | null
+          record_id?: string | null
+          table_name?: string | null
+          updated_at?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          action?: string | null
+          actor_user_id?: string | null
+          after_snapshot?: Json | null
+          before_snapshot?: Json | null
+          changed_fields?: Json | null
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string | null
+          occurred_at?: string | null
+          record_id?: string | null
+          table_name?: string | null
+          updated_at?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "record_change_history_actor_user_id_fkey"
+            columns: ["actor_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "record_change_history_actor_user_id_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_branch_stack_ranking: {
         Row: {
           at_reorder_count: number | null
@@ -45728,6 +45893,25 @@ export type Database = {
           },
         ]
       }
+      v_record_created_by: {
+        Row: {
+          audit_event_id: string | null
+          created_at: string | null
+          created_by: string | null
+          record_id: string | null
+          table_name: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "record_change_history_actor_user_id_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_rep_customers: {
         Row: {
           active_quotes: number | null
@@ -46332,6 +46516,21 @@ export type Database = {
           p_workspace_id: string
         }
         Returns: undefined
+      }
+      adjust_parts_invoice_ldttn: {
+        Args: {
+          p_clear_selection?: boolean
+          p_customer_invoice_id: string
+          p_discount_pct?: number
+          p_line_ids?: string[]
+          p_non_stock_code?: string
+          p_price_level_code?: string
+          p_tax_code_1?: string
+          p_tax_code_2?: string
+          p_tax_code_3?: string
+          p_tax_code_4?: string
+        }
+        Returns: number
       }
       analytics_latest_snapshots: {
         Args: { p_metric_keys?: string[]; p_role_scope?: string }
@@ -47132,6 +47331,7 @@ export type Database = {
         Args: {
           p_after_id?: string
           p_after_name?: string
+          p_include_extended_fields?: boolean
           p_limit?: number
           p_search?: string
         }
@@ -47844,6 +48044,32 @@ export type Database = {
       touchpoint_in_my_workspace: {
         Args: { p_cadence_id: string }
         Returns: boolean
+      }
+      traffic_ticket_mark_printed: {
+        Args: { p_ticket_ids: string[] }
+        Returns: {
+          billing_comments: string
+          direction: Database["public"]["Enums"]["traffic_direction"]
+          from_location: string
+          id: string
+          last_printed_at: string
+          make_snapshot: string
+          model_snapshot: string
+          printed_count: number
+          receipt_number: string
+          receipt_type: Database["public"]["Enums"]["traffic_receipt_type"]
+          serial_number_snapshot: string
+          ship_instructions: string
+          shipping_date: string
+          status: string
+          stock_number: string
+          ticket_type: string
+          to_contact_name: string
+          to_contact_phone: string
+          to_location: string
+          unit_description_snapshot: string
+          workspace_id: string
+        }[]
       }
       update_replenish_qty: {
         Args: { p_id: string; p_new_qty: number }

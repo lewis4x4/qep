@@ -1918,22 +1918,25 @@ fields:
     intellidealer_purpose: |
       Bulk action that lets the user change multiple tickets at once and
       print associated delivery receipts.
-    qep_status: "MISSING"
-    qep_table: "(workflow)"
-    qep_column: "(action)"
+    qep_status: PARTIAL
+    qep_table: "traffic_tickets"
+    qep_column: "printed_count, last_printed_at"
     qep_evidence:
       - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.printed_count"
       - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.last_printed_at"
-      - "supabase/migrations/462_record_change_history.sql public.record_change_history"
+      - "supabase/migrations/531_intellidealer_traffic_crm_workflow_cleanup.sql public.traffic_ticket_mark_printed"
+      - "supabase/functions/traffic-ticket-bulk-actions/index.ts"
     qep_gap_notes: |
-      True workflow deferral. QEP has ticket print counters and central
-      audit foundations, but no Traffic Management bulk-edit / receipt-print
-      action surface exists today.
+      Backend support can bulk-update tickets, increment print counters, and
+      return printable receipt fields. This remains PARTIAL until the Traffic
+      Management UI exposes the Mass Change/Print action and a production print
+      rendering path is smoke-tested.
     severity: "should"
     category: "operational"
     migration_hint: |
-      Implemented as a UI action; no schema change required beyond audit
-      events recording the bulk change.
+      Backend support uses public.traffic_ticket_mark_printed(uuid[]) plus
+      the traffic-ticket-bulk-actions edge function. No traffic_tickets table
+      shape change is required beyond existing print counters/audit triggers.
     ui_surface_hint: "Listing tab footer 'Mass Change/Print' button"
     dependencies: [traffic_ticket.receipt_number]
 
@@ -2408,17 +2411,22 @@ fields:
       - "database.types.ts qrm_geofences.created_by"
       - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.created_by_user_id"
       - "apps/web/src/lib/database.types.ts public.Tables.record_change_history.actor_user_id"
+      - "supabase/migrations/533_intellidealer_audit_ldttn_cleanup.sql public.v_audit_record_changes.created_by compatibility alias"
+      - "supabase/migrations/533_intellidealer_audit_ldttn_cleanup.sql public.v_record_created_by rollup"
     qep_gap_notes: |
       Implemented inconsistently: some tables carry first-class created_by
       or created_by_user_id and migration 526 captures actor_user_id into
-      record_change_history for key operational tables, but QEP still does
-      not enforce a universal created_by column on every workspace-scoped
-      table.
+      record_change_history for key operational tables. Migration 533 adds
+      low-risk compatibility views that expose record-change actor_user_id as
+      created_by and extends record_change_history trigger coverage to
+      customer_invoices and parts_invoice_lines, but QEP still does not enforce
+      a universal created_by column on every workspace-scoped table.
     severity: "must"
     category: "regulatory"
     migration_hint: |
-      Standardize: every workspace-scoped table gets created_by uuid
-      references profiles(id) NOT NULL DEFAULT auth.uid().
+      Remaining standardization would require a cross-schema created_by policy
+      for every workspace-scoped table. Current low-risk compatibility path is
+      public.v_audit_record_changes.created_by and public.v_record_created_by.
     ui_surface_hint: "Record header on every detail screen"
     dependencies: []
 

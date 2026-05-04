@@ -1992,19 +1992,22 @@ fields:
     intellidealer_purpose: |
       Link that exports the WIP snapshot to a printable / emailable
       report.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
+    qep_status: PARTIAL
+    qep_table: service_report_export_requests
+    qep_column: report_kind
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_report_export_requests.report_kind"
+      - "supabase/functions/service-wip-report-export/index.ts"
     qep_gap_notes: |
-      True deferral: the WIP data rows are queryable, but there is still
-      no generic WIP report export/print job or Edge function analogous
-      to the billing-run report pipeline.
+      CSV/JSON export backend and request audit rows are built. This remains
+      PARTIAL until the Service Analytics UI exposes the action and the
+      printable/PDF path is implemented or explicitly accepted as browser/CSV
+      export parity.
     severity: should
     category: reporting
     migration_hint: |
-      -- Edge function export-wip-report → PDF + CSV via shared
-      -- reporting infrastructure.
+      -- service-wip-report-export provides CSV/JSON; PDF remains future
+      -- work when shared report rendering infrastructure exists.
     ui_surface_hint: "Service → Analytics → WIP → 'Export report' CTA"
     dependencies:
       - analysis_wip.bucket_total
@@ -2023,11 +2026,8 @@ fields:
     qep_table: v_deal_genome_service_quote_gain_loss_by_technician
     qep_column: technician_id
     qep_evidence:
-      - "supabase/migrations/529_intellidealer_service_deal_genome_non_must.sql public.v_deal_genome_service_quote_gain_loss_by_technician.technician_id"
-    qep_gap_notes: |
-      Resolved by additive migration 529. Quote gain/loss rows are joined
-      to the service efficiency analysis surface by service_job_id, which
-      exposes the technician/profile and employee linkage where present.
+      - "apps/web/src/lib/database.types.ts public.Views.v_deal_genome_service_quote_gain_loss_by_technician.technician_id"
+    qep_gap_notes: "Resolved by shipped IntelliDealer gap-audit migration; current Database type contains v_deal_genome_service_quote_gain_loss_by_technician.technician_id."
     severity: should
     category: reporting
     migration_hint: |
@@ -2307,18 +2307,22 @@ fields:
     intellidealer_field_type: bool
     intellidealer_purpose: |
       Direct-print action for the payroll report.
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
+    qep_status: PARTIAL
+    qep_table: service_report_export_requests
+    qep_column: report_kind
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.service_report_export_requests.report_kind"
+      - "supabase/functions/service-payroll-report-export/index.ts"
     qep_gap_notes: |
-      True deferral: payroll detail and grouping data exist, but there is
-      still no dedicated printable payroll-hours report job or PDF export
-      function.
+      CSV/JSON payroll-hours export backend and request audit rows are built.
+      This remains PARTIAL until the Service Analytics UI exposes the action
+      and the direct-print/PDF path is implemented or explicitly accepted as
+      browser/CSV export parity.
     severity: could
     category: reporting
     migration_hint: |
-      -- Edge function print-payroll-hours → PDF.
+      -- service-payroll-report-export provides CSV/JSON; PDF remains
+      -- future work when shared report rendering infrastructure exists.
     ui_surface_hint: "Service → Analytics → Payroll → print CTA"
     dependencies: []
 

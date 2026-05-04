@@ -1016,20 +1016,26 @@ fields:
       Launch the Tethr It telematics interface to ping a rental unit's
       live location/hours. Used to verify a customer claim that "the
       machine has been off-rent since Friday".
-    qep_status: MISSING
-    qep_table: null
-    qep_column: null
-    qep_evidence: []
+    qep_status: PARTIAL
+    qep_table: telematics_feeds
+    qep_column: "provider, device_id, equipment_id, last_reading_at, last_hours, last_lat, last_lng"
+    qep_evidence:
+      - "apps/web/src/lib/database.types.ts public.Tables.telematics_feeds"
+      - "supabase/functions/telematics-ingest/index.ts"
+      - "supabase/functions/telematics-signal-ingest/index.ts"
     qep_gap_notes: |
-      True deferral. Tethr is an external telematics product/integration,
-      not a missing rental table. QEP can eventually route this action to
-      the existing broader telematics surface if a Tethr connector is licensed
-      and configured; no safe additive schema is warranted in this cleanup.
+      Generic telematics feed storage/ingest exists, but this is not a Tethr It
+      Now rental-counter action yet. It remains PARTIAL until Tethr
+      credentials, adapter/webhook mapping, rental UI action, stale-data
+      behavior, and production smoke evidence exist.
     severity: should
     category: operational
     migration_hint: |
-      -- No DDL. UI deeplink to /equipment/{id}/telematics.
-    ui_surface_hint: "Rental list page — context action 'Live Telematics'"
+      -- No DDL in this cleanup. Generic telematics_feeds already covers the
+      -- partial status; Wave 5 deferred register owns Tethr credentials,
+      -- adapter/webhook, equipment mapping, rental action wiring, stale-data
+      -- behavior, and smoke tests before this can become BUILT.
+    ui_surface_hint: "Rental Counter — Tethr It Now link; fallback target can deeplink to Asset 360 Telematics once a feed is mapped"
     dependencies: []
 
   # ─── INFERRED: RENTAL CONTRACT HEADER (financial-must) ────────────────────
