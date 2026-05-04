@@ -233,8 +233,10 @@ Decision packet:
 Foundation landed:
 
 - Migration `536_equipment_invoice_reversal_foundation.sql` adds direct `customer_invoices.qrm_equipment_id` linkage, customer invoice reversal-chain columns, `reversed` status support, equipment invoice view stock-number evidence, and a read-only `find_equipment_invoice_reversal_candidate(stock_number)` guard.
+- Migration `537_equipment_invoice_reversal_candidate_partial_guard.sql` tightens the guard so `partial` invoice status is blocked until partially paid reversal policy is approved.
+- `apps/web/src/lib/database.types.ts` includes the Slice 6 invoice/view/RPC type contract so future typed Supabase access does not rely on stale schema evidence.
 - QRM router exposes the read-only guard at `GET /qrm/equipment/reversal-candidate?stock_number=...` for elevated callers, with a frontend wrapper `fetchEquipmentInvoiceReversalCandidate`.
-- The candidate guard blocks missing direct invoice linkage, paid/void/reversed invoice status, QuickBooks-posted invoices, missing/hard-closed GL periods, and equipment not marked sold.
+- The candidate guard blocks missing direct invoice linkage, partial/paid/void/reversed invoice status, QuickBooks-posted invoices, missing/hard-closed GL periods, and equipment not marked sold.
 
 Goal: implement the finance-sensitive reversal workflow without assuming existing GL/rental scaffolding proves this IntelliDealer action.
 
@@ -274,6 +276,7 @@ Primary blockers:
 - Credit memo / reversal journal requirements
 - Tax treatment
 - Rental invoice branch behavior
+- Invoice-to-GL-company mapping for company-scoped `gl_periods` before mutation execution
 
 Resolved foundation blocker:
 

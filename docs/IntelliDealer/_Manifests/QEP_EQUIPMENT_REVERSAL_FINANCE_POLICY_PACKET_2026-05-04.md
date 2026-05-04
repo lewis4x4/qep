@@ -1,7 +1,7 @@
 # QEP Equipment Reversal Finance Policy Packet
 
-Date: 2026-05-04  
-Roadmap slice: Slice 6 in `QEP_PARITY_REMAINING_IMPLEMENTATION_SLICES_2026-05-04.md`  
+Date: 2026-05-04
+Roadmap slice: Slice 6 in `QEP_PARITY_REMAINING_IMPLEMENTATION_SLICES_2026-05-04.md`
 Workbook source: `QEP_Parity_Worksheet.xlsx`
 
 ## Row Governed
@@ -19,6 +19,7 @@ Current repo evidence now includes foundation only:
 - `reversed` customer invoice status support.
 - `equipment_invoices` view exposes equipment and stock-number evidence.
 - Read-only readiness guard: `find_equipment_invoice_reversal_candidate(stock_number)`.
+- Follow-up guardrail: migration `537_equipment_invoice_reversal_candidate_partial_guard.sql` blocks `partial` invoice status until partially paid reversal policy is approved.
 - Elevated QRM route: `GET /qrm/equipment/reversal-candidate?stock_number=...`.
 
 This foundation does not reverse invoices and must not be used to promote the workbook row.
@@ -29,6 +30,7 @@ The reversal mutation must not be implemented until these policies are approved:
 
 1. **Paid or partially paid invoices**
    - Decide whether reversal is blocked, requires refund workflow, creates unapplied credit, or requires manager/finance override.
+   - Current readiness guard blocks both `partial` and `paid` statuses until this policy is approved.
 
 2. **QuickBooks/GL posted invoices**
    - Decide whether posted invoices are blocked in QEP, reversed through a linked credit memo, or routed to the accounting system first.
@@ -36,6 +38,7 @@ The reversal mutation must not be implemented until these policies are approved:
 3. **Closed accounting periods**
    - Confirm hard-closed periods are blocked.
    - Decide whether soft-closed periods require override, next-period reversal, or are blocked.
+   - Resolve whether `gl_periods.company_id` must be scoped through a new invoice-to-GL-company mapping before the mutation RPC is built; current readiness lookup is workspace-scoped only because no direct invoice GL-company FK exists.
 
 4. **Credit memo model**
    - Decide whether QEP creates a negative `customer_invoices` row, a dedicated credit memo table, or another AR document type.
@@ -95,4 +98,8 @@ Stop and ask if any of these remain unresolved:
 
 ## Current Queue Status
 
-Queued. No workbook status should change from this packet alone.
+Status: Queued
+Assigned To: Unassigned — finance/accounting owner required before build
+Target Date: TBD before any reversal mutation implementation
+
+No workbook status should change from this packet alone.

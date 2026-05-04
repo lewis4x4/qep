@@ -1,9 +1,9 @@
 # QEP Service Mobile UAT Execution Packet
 
-Date: 2026-05-04  
-Roadmap slice: Slice 10 — Service Mobile Technician UAT  
-Workbook row: Gap Register — `Service Mobile Web UI not production-validated for technicians`  
-Current workbook status: `PARTIAL`  
+Date: 2026-05-04
+Roadmap slice: Slice 10 — Service Mobile Technician UAT
+Workbook row: Gap Register — `Service Mobile Web UI not production-validated for technicians`
+Current workbook status: `PARTIAL`
 Surface: `/m/service`
 
 ## Objective
@@ -29,7 +29,7 @@ Required completion evidence:
 - branch/location
 - production account used
 - normal network result
-- degraded/intermittent network result
+- degraded/intermittent network result, including confirmation that the UI preserves user-entered data, shows a clear loading/offline/retry state, and does not create duplicate stage transitions
 - at least one assigned job opened
 - at least one work-order detail reviewed
 - at least one valid stage transition executed
@@ -43,9 +43,9 @@ Required completion evidence:
 1. Schedule a 30-minute production mobile UAT session with a real service technician.
 2. Open `/m/service` on the technician's actual phone.
 3. Execute the checklist under normal network conditions.
-4. Repeat the stage-transition and persistence portion under degraded/intermittent network conditions.
+4. Repeat the stage-transition and persistence portion under degraded/intermittent network conditions. Acceptable behavior is graceful loading/offline/retry messaging with no data loss and no duplicate stage transitions.
 5. Fill out the result template during the session, not from memory later.
-6. Attach proof that is safe to store in the repo or record where the proof is stored if it contains customer-sensitive data.
+6. Attach proof that is safe to store in the repo or record the controlled evidence location if it contains customer-sensitive data. The evidence location must be named in the result artifact and accessible to the reviewer/manager.
 7. If the result is `PASS`, update the workbook row from `PARTIAL` to `BUILT` with the completed-result artifact cited.
 8. If the result is `FAIL`, keep the workbook row `PARTIAL`, create repair tasks for blockers, and record whether non-blocking issues are follow-up work.
 
@@ -58,6 +58,15 @@ The workbook row may close only when:
 - no blocking issues remain unresolved
 - any waivers include owner, reason, expiration, and remediation link
 
+## Execution Accountability
+
+Assigned To: Unassigned — technician, reviewer/manager, and scheduler required before UAT
+Target Date: TBD after technician/session assignment
+
 ## Current Status
 
-Queued for external field UAT. No workbook status promotion yet.
+Status: Queued for external field UAT
+Assigned To: Unassigned — technician, reviewer/manager, and scheduler required before UAT
+Target Date: TBD after technician/session assignment
+
+No workbook status promotion yet.

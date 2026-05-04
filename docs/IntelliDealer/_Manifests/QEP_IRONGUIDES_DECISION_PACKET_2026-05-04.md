@@ -1,8 +1,8 @@
 # QEP IronGuides Decision Packet
 
-Date: 2026-05-04  
-Roadmap slice: Slice 11 — IronGuides Decision or Feed Onboarding  
-Workbook row: Gap Register — `IronGuides vendor contract pending`  
+Date: 2026-05-04
+Roadmap slice: Slice 11 — IronGuides Decision or Feed Onboarding
+Workbook row: Gap Register — `IronGuides vendor contract pending`
 Current workbook status: `PARTIAL`
 
 ## Objective
@@ -52,12 +52,12 @@ Required decision content:
 - owner approving the replacement decision
 - effective date
 - impact statement for sales, rental, trade-in, and executive reporting
-- runtime/provider readiness update showing IronGuides as non-required/replaced
+- runtime/provider readiness update showing IronGuides as non-required/replaced in `integration_status` for integration key `ironguides`
 
 Closure evidence for workbook:
 
 - source-controlled replacement/decommission decision artifact
-- runtime/provider readiness state updated to non-required/replaced
+- runtime/provider readiness state updated to non-required/replaced in `integration_status` for integration key `ironguides`
 - workbook evidence note cites the decision and replacement policy
 
 Workbook target if complete: `N_A` / replaced, not `BUILT`.
@@ -66,6 +66,19 @@ Workbook target if complete: `N_A` / replaced, not `BUILT`.
 
 If no live IronGuides contract is already available, choose Path B and formally standardize on QEP fallback/blended valuation for this deployment. That avoids keeping the workbook artificially open for a vendor feed that is not necessary to operate QEP.
 
+## Decision Accountability
+
+Assigned To: Unassigned — valuation/business owner required before closure
+Target Date: TBD for live feed onboarding or replacement decision
+
+## Runtime Readiness Target
+
+Runtime/provider readiness means the `integration_status` row for integration key `ironguides`, with config documenting either live-feed readiness or `lifecycle = replaced` plus the approved replacement valuation policy.
+
 ## Current Status
 
-Queued for business decision. No workbook status promotion yet.
+Status: Queued
+Assigned To: Unassigned — valuation/business owner required before closure
+Target Date: TBD for live feed onboarding or replacement decision
+
+No workbook status promotion yet.

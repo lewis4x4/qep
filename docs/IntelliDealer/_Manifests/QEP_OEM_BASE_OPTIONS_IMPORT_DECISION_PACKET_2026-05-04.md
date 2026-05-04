@@ -1,7 +1,7 @@
 # QEP OEM Base & Options Import Decision Packet
 
-Date: 2026-05-04  
-Roadmap slice: Slice 5 in `QEP_PARITY_REMAINING_IMPLEMENTATION_SLICES_2026-05-04.md`  
+Date: 2026-05-04
+Roadmap slice: Slice 5 in `QEP_PARITY_REMAINING_IMPLEMENTATION_SLICES_2026-05-04.md`
 Workbook source: `QEP_Parity_Worksheet.xlsx`
 
 ## Rows Governed
@@ -31,7 +31,8 @@ Build implications:
 - Parser tests with representative fixtures.
 - Import run ledger writes inserted/updated/skipped/error counts.
 - Admin UI exposes import action, status, and history.
-- Imports write canonical `equipment_base_codes`, `equipment_options`, and `equipment_base_codes_import_runs`, or a documented bridge from quote-builder catalog to canonical tables.
+- Imports write canonical `equipment_base_codes`, `equipment_options`, and `equipment_base_codes_import_runs`.
+- Any proposal to keep Bobcat/Vermeer imports only in quote-builder catalog tables must be resolved as a pre-build architecture decision and cannot be treated as workbook completion evidence until a canonical bridge is source-controlled and verified.
 - Re-runs are idempotent.
 
 Workbook target after verified implementation: `BUILT`.
@@ -56,6 +57,11 @@ Required evidence:
 
 Workbook target after evidence: `N_A` / replaced, not `BUILT`.
 
+## Decision Accountability
+
+Assigned To: Unassigned — OEM catalog/import owner required before build
+Target Date: TBD after Bobcat/Vermeer sample files or API contracts are available
+
 ## Stop Conditions
 
 Stop and ask if any of these are unresolved:
@@ -68,4 +74,8 @@ Stop and ask if any of these are unresolved:
 
 ## Current Queue Status
 
-Queued. No workbook status should change from this packet alone.
+Status: Queued
+Assigned To: Unassigned — OEM catalog/import owner required before build
+Target Date: TBD after Bobcat/Vermeer sample files or API contracts are available
+
+No workbook status should change from this packet alone.

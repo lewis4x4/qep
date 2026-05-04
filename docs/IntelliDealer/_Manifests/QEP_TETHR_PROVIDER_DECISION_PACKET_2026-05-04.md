@@ -1,7 +1,7 @@
 # QEP Tethr Provider Decision Packet
 
-Date: 2026-05-04  
-Roadmap slice: Slice 9 in `QEP_PARITY_REMAINING_IMPLEMENTATION_SLICES_2026-05-04.md`  
+Date: 2026-05-04
+Roadmap slice: Slice 9 in `QEP_PARITY_REMAINING_IMPLEMENTATION_SLICES_2026-05-04.md`
 Workbook source: `QEP_Parity_Worksheet.xlsx`
 
 ## Rows Governed
@@ -10,9 +10,11 @@ Workbook source: `QEP_Parity_Worksheet.xlsx`
 - Action & Button Parity: Phase-3_Parts / Parts Invoicing / Tethr It Now
 - Action & Button Parity: Phase-9_Advanced-Intelligence / Customer Portal / Tethr It Now
 
-Related repo-audit residual if still in scope:
+Supplemental repo-audit residual, not a current workbook row:
 
 - Rental Counter / Work Orders / Tethr provider action
+
+This supplemental residual must not affect workbook status. If it becomes live scope, add a separate queue row or roadmap slice before implementation.
 
 ## Current Workbook Position
 
@@ -53,6 +55,11 @@ Required evidence:
 
 Workbook target after evidence: `N_A` / replaced, not `BUILT`.
 
+## Decision Accountability
+
+Assigned To: Unassigned — telematics/provider owner required before build
+Target Date: TBD after Tethr credentials/API/webhook contract or replacement decision
+
 ## Stop Conditions
 
 Stop and ask if any of these are unresolved:
@@ -65,4 +72,8 @@ Stop and ask if any of these are unresolved:
 
 ## Current Queue Status
 
-Queued. No workbook status should change from this packet alone.
+Status: Queued
+Assigned To: Unassigned — telematics/provider owner required before build
+Target Date: TBD after Tethr credentials/API/webhook contract or replacement decision
+
+No workbook status should change from this packet alone.

@@ -3153,6 +3153,17 @@ export type Database = {
           portal_customer_id: string | null
           posted_to_gl_at: string | null
           print_parameters: Json | null
+          qrm_equipment_id: string | null
+          quickbooks_gl_last_error: string | null
+          quickbooks_gl_status: string
+          quickbooks_gl_synced_at: string | null
+          quickbooks_gl_txn_id: string | null
+          reversal_gl_journal_entry_id: string | null
+          reversal_of_invoice_id: string | null
+          reversal_reason: string | null
+          reversed_at: string | null
+          reversed_by: string | null
+          reversed_by_invoice_id: string | null
           salesperson_id: string | null
           service_job_id: string | null
           service_request_id: string | null
@@ -3206,6 +3217,17 @@ export type Database = {
           portal_customer_id?: string | null
           posted_to_gl_at?: string | null
           print_parameters?: Json | null
+          qrm_equipment_id?: string | null
+          quickbooks_gl_last_error?: string | null
+          quickbooks_gl_status?: string
+          quickbooks_gl_synced_at?: string | null
+          quickbooks_gl_txn_id?: string | null
+          reversal_gl_journal_entry_id?: string | null
+          reversal_of_invoice_id?: string | null
+          reversal_reason?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
+          reversed_by_invoice_id?: string | null
           salesperson_id?: string | null
           service_job_id?: string | null
           service_request_id?: string | null
@@ -3259,6 +3281,17 @@ export type Database = {
           portal_customer_id?: string | null
           posted_to_gl_at?: string | null
           print_parameters?: Json | null
+          qrm_equipment_id?: string | null
+          quickbooks_gl_last_error?: string | null
+          quickbooks_gl_status?: string
+          quickbooks_gl_synced_at?: string | null
+          quickbooks_gl_txn_id?: string | null
+          reversal_gl_journal_entry_id?: string | null
+          reversal_of_invoice_id?: string | null
+          reversal_reason?: string | null
+          reversed_at?: string | null
+          reversed_by?: string | null
+          reversed_by_invoice_id?: string | null
           salesperson_id?: string | null
           service_job_id?: string | null
           service_request_id?: string | null
@@ -3493,6 +3526,41 @@ export type Database = {
             columns: ["statement_run_id"]
             isOneToOne: false
             referencedRelation: "ar_statement_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_qrm_equipment_id_fkey"
+            columns: ["qrm_equipment_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_reversal_gl_journal_entry_id_fkey"
+            columns: ["reversal_gl_journal_entry_id"]
+            isOneToOne: false
+            referencedRelation: "gl_journal_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_reversal_of_invoice_id_fkey"
+            columns: ["reversal_of_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "customer_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_reversed_by_fkey"
+            columns: ["reversed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_reversed_by_invoice_id_fkey"
+            columns: ["reversed_by_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "customer_invoices"
             referencedColumns: ["id"]
           },
           {
@@ -42811,7 +42879,12 @@ export type Database = {
           model: string | null
           portal_customer_id: string | null
           reference_number: string | null
+          reversal_gl_journal_entry_id: string | null
+          reversal_of_invoice_id: string | null
+          reversed_at: string | null
+          reversed_by_invoice_id: string | null
           status: string | null
+          stock_number: string | null
           updated_at: string | null
           workspace_id: string | null
         }
@@ -42827,7 +42900,12 @@ export type Database = {
           model?: never
           portal_customer_id?: string | null
           reference_number?: string | null
+          reversal_gl_journal_entry_id?: string | null
+          reversal_of_invoice_id?: string | null
+          reversed_at?: string | null
+          reversed_by_invoice_id?: string | null
           status?: string | null
+          stock_number?: string | null
           updated_at?: string | null
           workspace_id?: string | null
         }
@@ -42843,7 +42921,12 @@ export type Database = {
           model?: never
           portal_customer_id?: string | null
           reference_number?: string | null
+          reversal_gl_journal_entry_id?: string | null
+          reversal_of_invoice_id?: string | null
+          reversed_at?: string | null
+          reversed_by_invoice_id?: string | null
           status?: string | null
+          stock_number?: string | null
           updated_at?: string | null
           workspace_id?: string | null
         }
@@ -46531,6 +46614,21 @@ export type Database = {
           p_tax_code_4?: string
         }
         Returns: number
+      }
+      find_equipment_invoice_reversal_candidate: {
+        Args: { p_stock_number: string }
+        Returns: {
+          blockers: string[]
+          candidate_status: string
+          equipment_id: string | null
+          equipment_in_out_state: string | null
+          invoice_id: string | null
+          invoice_number: string | null
+          invoice_status: string | null
+          posting_period_status: string | null
+          quickbooks_gl_status: string | null
+          stock_number: string | null
+        }[]
       }
       analytics_latest_snapshots: {
         Args: { p_metric_keys?: string[]; p_role_scope?: string }

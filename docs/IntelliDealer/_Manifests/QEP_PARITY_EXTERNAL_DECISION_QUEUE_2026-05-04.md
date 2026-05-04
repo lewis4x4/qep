@@ -12,15 +12,15 @@ No row is closed by this queue document. Rows remain `PARTIAL` / `GAP` until the
 
 ## Queue
 
-| Slice | Workbook row | Current status | Packet | Closure evidence required | Status |
-| --- | --- | --- | --- | --- | --- |
-| Slice 6 | Reverse the sales of a stock number | `GAP` | `QEP_EQUIPMENT_REVERSAL_FINANCE_POLICY_PACKET_2026-05-04.md` | Approved paid/posted/closed-period, credit memo, GL reversal, tax, equipment state, rental-branch, authorization, and idempotency policy before build, or source-controlled external-process decision. | Queued |
-| Slices 1–4 | JD Quote II / JD PO / JD Proactive Jobs rows | `GAP` | `QEP_JD_PROVIDER_DECISION_PACKET_2026-05-04.md` | Live JD scope/contract/fixtures/authorization evidence before build, or source-controlled de-scope/replacement decision. | Queued |
-| Slice 5 | Bobcat and Vermeer Base & Options imports | `PARTIAL` | `QEP_OEM_BASE_OPTIONS_IMPORT_DECISION_PACKET_2026-05-04.md` | OEM sample file/API contracts and canonical table mapping before build, or source-controlled de-scope/replacement decision. | Queued |
-| Slice 8 | VESign fields across invoicing, quoting, and rental | `PARTIAL` | `QEP_VESIGN_PROVIDER_DECISION_PACKET_2026-05-04.md` | Live VESign contract/API/webhook/status evidence before build, or source-controlled native-signing replacement decision. | Queued |
-| Slice 9 | Tethr It Now actions | `PARTIAL` | `QEP_TETHR_PROVIDER_DECISION_PACKET_2026-05-04.md` | Live Tethr credentials/API/webhook/mapping evidence before build, or source-controlled generic-telematics replacement decision. | Queued |
-| Slice 10 | Gap Register: Service Mobile Web UI not production-validated for technicians | `PARTIAL` | `QEP_SERVICE_MOBILE_UAT_EXECUTION_PACKET_2026-05-04.md` | Completed technician UAT result with device/browser/network, pass/fail, screenshots/video or equivalent proof, and blocking issue disposition. | Queued |
-| Slice 11 | Gap Register: IronGuides vendor contract pending | `PARTIAL` | `QEP_IRONGUIDES_DECISION_PACKET_2026-05-04.md` | Either live contract/feed onboarding evidence or a signed/source-controlled replacement decision that retires IronGuides as a live requirement. | Queued |
+| Slice | Workbook row | Current status | Packet | Closure evidence required | Assigned to | Target | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Slice 6 | Reverse the sales of a stock number | `GAP` | `QEP_EQUIPMENT_REVERSAL_FINANCE_POLICY_PACKET_2026-05-04.md` | Approved paid/posted/closed-period, credit memo, GL reversal, tax, equipment state, rental-branch, authorization, and idempotency policy before build, or source-controlled external-process decision. | Unassigned — finance/accounting owner required | TBD before mutation build | Queued |
+| Slices 1–4 | JD Quote II / JD PO / JD Proactive Jobs rows | `GAP` | `QEP_JD_PROVIDER_DECISION_PACKET_2026-05-04.md` | Live JD scope/contract/fixtures/authorization evidence before build, or source-controlled de-scope/replacement decision. | Unassigned — JD business/product owner required | TBD before JD build | Queued |
+| Slice 5 | Bobcat and Vermeer Base & Options imports | `PARTIAL` | `QEP_OEM_BASE_OPTIONS_IMPORT_DECISION_PACKET_2026-05-04.md` | OEM sample file/API contracts and canonical table mapping before build, or source-controlled de-scope/replacement decision. | Unassigned — OEM catalog/import owner required | TBD after sample/API availability | Queued |
+| Slice 8 | VESign fields across invoicing, quoting, and rental | `PARTIAL` | `QEP_VESIGN_PROVIDER_DECISION_PACKET_2026-05-04.md` | Live VESign contract/API/webhook/status evidence before build, or source-controlled native-signing replacement decision. | Unassigned — legal/provider-signature owner required | TBD after contract/API decision | Queued |
+| Slice 9 | Tethr It Now actions | `PARTIAL` | `QEP_TETHR_PROVIDER_DECISION_PACKET_2026-05-04.md` | Live Tethr credentials/API/webhook/mapping evidence before build, or source-controlled generic-telematics replacement decision. | Unassigned — telematics/provider owner required | TBD after provider/replacement decision | Queued |
+| Slice 10 | Gap Register: Service Mobile Web UI not production-validated for technicians | `PARTIAL` | `QEP_SERVICE_MOBILE_UAT_EXECUTION_PACKET_2026-05-04.md` | Completed technician UAT result with device/browser/network, pass/fail, screenshots/video or equivalent proof, and blocking issue disposition. | Unassigned — technician, reviewer, scheduler required | TBD after session assignment | Queued |
+| Slice 11 | Gap Register: IronGuides vendor contract pending | `PARTIAL` | `QEP_IRONGUIDES_DECISION_PACKET_2026-05-04.md` | Either live contract/feed onboarding evidence or a signed/source-controlled replacement decision that retires IronGuides as a live requirement. | Unassigned — valuation/business owner required | TBD for feed/replacement decision | Queued |
 
 ## Execution Order
 

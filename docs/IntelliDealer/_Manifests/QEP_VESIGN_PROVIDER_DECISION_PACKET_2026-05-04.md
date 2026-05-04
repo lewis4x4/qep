@@ -1,7 +1,7 @@
 # QEP VESign Provider Decision Packet
 
-Date: 2026-05-04  
-Roadmap slice: Slice 8 in `QEP_PARITY_REMAINING_IMPLEMENTATION_SLICES_2026-05-04.md`  
+Date: 2026-05-04
+Roadmap slice: Slice 8 in `QEP_PARITY_REMAINING_IMPLEMENTATION_SLICES_2026-05-04.md`
 Workbook source: `QEP_Parity_Worksheet.xlsx`
 
 ## Rows Governed
@@ -49,6 +49,11 @@ Required evidence:
 
 Workbook target after evidence: `N_A` / replaced, not `BUILT`.
 
+## Decision Accountability
+
+Assigned To: Unassigned — legal/provider-signature owner required before build
+Target Date: TBD after VESign contract/API/webhook contract or native-signing replacement decision
+
 ## Stop Conditions
 
 Stop and ask if any of these are unresolved:
@@ -61,4 +66,8 @@ Stop and ask if any of these are unresolved:
 
 ## Current Queue Status
 
-Queued. No workbook status should change from this packet alone.
+Status: Queued
+Assigned To: Unassigned — legal/provider-signature owner required before build
+Target Date: TBD after VESign contract/API/webhook contract or native-signing replacement decision
+
+No workbook status should change from this packet alone.
