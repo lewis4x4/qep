@@ -212,6 +212,13 @@ Primary blockers:
 
 ### Slice 6 — Equipment Sale / Rental Invoice Reversal by Stock Number
 
+Status: foundation started 2026-05-04; workbook row remains GAP until the atomic reversal RPC/edge/UI flow is implemented and verified.
+
+Foundation landed:
+
+- Migration `536_equipment_invoice_reversal_foundation.sql` adds direct `customer_invoices.qrm_equipment_id` linkage, customer invoice reversal-chain columns, `reversed` status support, equipment invoice view stock-number evidence, and a read-only `find_equipment_invoice_reversal_candidate(stock_number)` guard.
+- The candidate guard blocks missing direct invoice linkage, paid/void/reversed invoice status, QuickBooks-posted invoices, missing/hard-closed GL periods, and equipment not marked sold.
+
 Goal: implement the finance-sensitive reversal workflow without assuming existing GL/rental scaffolding proves this IntelliDealer action.
 
 Workbook row covered:
