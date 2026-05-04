@@ -492,12 +492,17 @@ export async function listCrmContactsByIds(contactIds: string[]): Promise<QrmCon
   return normalizeContactRows(data);
 }
 
-export async function listCrmCompanies(search: string, cursor?: string | null): Promise<QrmPageResult<QrmCompanySummary>> {
+export async function listCrmCompanies(
+  search: string,
+  cursor?: string | null,
+  options?: { includeExtendedFields?: boolean },
+): Promise<QrmPageResult<QrmCompanySummary>> {
   const decodedCursor = decodeCompanyCursor(cursor);
   const { data, error } = await crmSupabase.rpc("list_crm_companies_page", {
     p_search: search.trim() || undefined,
     p_after_name: decodedCursor?.name,
     p_after_id: decodedCursor?.id,
+    p_include_extended_fields: options?.includeExtendedFields ?? false,
     p_limit: COMPANIES_PAGE_SIZE + 1,
   });
   if (error) {

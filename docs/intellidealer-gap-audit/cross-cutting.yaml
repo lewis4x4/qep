@@ -1918,7 +1918,7 @@ fields:
     intellidealer_purpose: |
       Bulk action that lets the user change multiple tickets at once and
       print associated delivery receipts.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: "traffic_tickets"
     qep_column: "printed_count, last_printed_at"
     qep_evidence:
@@ -1926,11 +1926,13 @@ fields:
       - "apps/web/src/lib/database.types.ts public.Tables.traffic_tickets.last_printed_at"
       - "supabase/migrations/531_intellidealer_traffic_crm_workflow_cleanup.sql public.traffic_ticket_mark_printed"
       - "supabase/functions/traffic-ticket-bulk-actions/index.ts"
+      - "apps/web/src/features/ops/pages/TrafficTicketsPage.tsx bulk traffic receipts controls"
+      - "apps/web/src/features/ops/pages/TrafficTicketsPage.tsx browser print rendering path"
     qep_gap_notes: |
-      Backend support can bulk-update tickets, increment print counters, and
-      return printable receipt fields. This remains PARTIAL until the Traffic
-      Management UI exposes the Mass Change/Print action and a production print
-      rendering path is smoke-tested.
+      Backend support bulk-updates tickets, increments print counters, and
+      returns printable receipt fields. The Traffic Tickets UI now exposes
+      selected/visible bulk print and mass change/print actions with a browser
+      print rendering path for returned receipt markdown.
     severity: "should"
     category: "operational"
     migration_hint: |

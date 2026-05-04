@@ -1992,17 +1992,17 @@ fields:
     intellidealer_purpose: |
       Link that exports the WIP snapshot to a printable / emailable
       report.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: service_report_export_requests
     qep_column: report_kind
     qep_evidence:
       - "apps/web/src/lib/database.types.ts public.Tables.service_report_export_requests.report_kind"
       - "supabase/functions/service-wip-report-export/index.ts"
+      - "apps/web/src/features/service/pages/ServiceWorkInProcessPage.tsx WIP CSV and print report actions"
     qep_gap_notes: |
-      CSV/JSON export backend and request audit rows are built. This remains
-      PARTIAL until the Service Analytics UI exposes the action and the
-      printable/PDF path is implemented or explicitly accepted as browser/CSV
-      export parity.
+      CSV/JSON export backend and request audit rows are built. The Service
+      WIP UI now exposes WIP CSV export and browser print report actions,
+      using the deployed service-wip-report-export function output.
     severity: should
     category: reporting
     migration_hint: |
@@ -2307,17 +2307,18 @@ fields:
     intellidealer_field_type: bool
     intellidealer_purpose: |
       Direct-print action for the payroll report.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: service_report_export_requests
     qep_column: report_kind
     qep_evidence:
       - "apps/web/src/lib/database.types.ts public.Tables.service_report_export_requests.report_kind"
       - "supabase/functions/service-payroll-report-export/index.ts"
+      - "apps/web/src/features/service/pages/ServiceWorkInProcessPage.tsx payroll CSV and print report actions"
     qep_gap_notes: |
       CSV/JSON payroll-hours export backend and request audit rows are built.
-      This remains PARTIAL until the Service Analytics UI exposes the action
-      and the direct-print/PDF path is implemented or explicitly accepted as
-      browser/CSV export parity.
+      The Service WIP UI now exposes payroll hours CSV export and browser
+      print actions, using the deployed service-payroll-report-export
+      function output.
     severity: could
     category: reporting
     migration_hint: |

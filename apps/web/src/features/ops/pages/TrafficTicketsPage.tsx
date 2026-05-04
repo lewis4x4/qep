@@ -28,6 +28,22 @@ import {
 
 const FILTERS = ["all", "haul_pending", "scheduled", "being_shipped", "completed"] as const;
 const BUCKET = "equipment-photos";
+type TrafficStatusFilter = (typeof FILTERS)[number];
+type TrafficBulkStatus = Exclude<TrafficStatusFilter, "all">;
+
+type PrintableTrafficReceipt = {
+  id: string;
+  receipt_number?: string | null;
+  title?: string | null;
+  delivery_receipt_markdown?: string | null;
+};
+
+type TrafficBulkActionResponse = {
+  requested_count?: number;
+  updated_count?: number;
+  printed_count?: number;
+  printable_receipts?: PrintableTrafficReceipt[];
+};
 
 function asPhotoArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
@@ -47,10 +63,54 @@ async function uploadTicketPhoto(ticketId: string, file: File): Promise<string> 
   return data.publicUrl;
 }
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      case "'":
+        return "&#39;";
+      default:
+        return char;
+    }
+  });
+}
+
+function printTrafficReceipts(receipts: PrintableTrafficReceipt[]) {
+  if (receipts.length === 0) return;
+  const popup = window.open("", "_blank", "width=900,height=700");
+  if (!popup) {
+    throw new Error("Receipt print window was blocked by the browser.");
+  }
+  const receiptHtml = receipts.map((receipt) => {
+    const title = receipt.title ?? `Delivery receipt ${receipt.receipt_number ?? receipt.id}`;
+    const markdown = receipt.delivery_receipt_markdown ?? "";
+    return `<section class="receipt"><h1>${escapeHtml(title)}</h1><pre>${escapeHtml(markdown)}</pre></section>`;
+  }).join("");
+  popup.document.write(`<!doctype html><html><head><title>Traffic receipts</title><style>
+body{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:24px;color:#111827}
+.receipt{break-after:page;margin:0 0 32px}
+h1{font-size:18px;margin:0 0 16px}
+pre{white-space:pre-wrap;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace}
+@media print{body{margin:0}.receipt{break-after:page}}
+</style></head><body>${receiptHtml}</body></html>`);
+  popup.document.close();
+  popup.focus();
+  popup.print();
+}
+
 export function TrafficTicketsPage() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<TrafficStatusFilter>("all");
+  const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<TrafficBulkStatus>("scheduled");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [hourMeterInput, setHourMeterInput] = useState("");
@@ -62,7 +122,7 @@ export function TrafficTicketsPage() {
     queryFn: async () => {
       let query = supabase
         .from("traffic_tickets")
-        .select("id, billing_comments, created_at, delivery_address, delivery_lat, delivery_lng, delivery_photos, delivery_signature_url, department, driver_checklist, driver_id, from_location, hour_meter_reading, locked, problems_reported, shipping_date, status, stock_number, ticket_type, to_contact_name, to_contact_phone, to_location, urgency")
+        .select("id, billing_comments, created_at, delivery_address, delivery_lat, delivery_lng, delivery_photos, delivery_signature_url, department, driver_checklist, driver_id, from_location, hour_meter_reading, last_printed_at, locked, printed_count, problems_reported, receipt_number, shipping_date, status, stock_number, ticket_type, to_contact_name, to_contact_phone, to_location, urgency")
         .order("shipping_date", { ascending: true });
 
       if (statusFilter !== "all") {
@@ -80,6 +140,17 @@ export function TrafficTicketsPage() {
     if (tickets.length === 0) return null;
     return tickets.find((ticket) => ticket.id === selectedId) ?? tickets[0] ?? null;
   }, [tickets, selectedId]);
+  const selectedTicketIdSet = useMemo(() => new Set(selectedTicketIds), [selectedTicketIds]);
+  const visibleTicketIds = useMemo(() => new Set(tickets.map((ticket) => ticket.id)), [tickets]);
+  const selectedVisibleTicketIds = useMemo(
+    () => selectedTicketIds.filter((id) => visibleTicketIds.has(id)),
+    [selectedTicketIds, visibleTicketIds],
+  );
+  const bulkTicketIds = selectedVisibleTicketIds.length > 0
+    ? selectedVisibleTicketIds
+    : selectedTicket
+      ? [selectedTicket.id]
+      : [];
 
   const updateTicketMutation = useMutation({
     mutationFn: async ({ id, patch }: { id: string; patch: Partial<TrafficTicketRow> }) => {
@@ -92,6 +163,37 @@ export function TrafficTicketsPage() {
     },
     onError: (mutationError) => {
       setStatusError(mutationError instanceof Error ? mutationError.message : "Traffic ticket update failed.");
+    },
+  });
+
+  const bulkActionMutation = useMutation({
+    mutationFn: async ({ action, ticketIds, status }: {
+      action: "mass_change_print" | "print_receipts";
+      ticketIds: string[];
+      status?: TrafficBulkStatus;
+    }) => {
+      if (ticketIds.length === 0) {
+        throw new Error("Select at least one traffic ticket before running a bulk action.");
+      }
+      const body = action === "mass_change_print"
+        ? { action, ticket_ids: ticketIds, changes: { status } }
+        : { action, ticket_ids: ticketIds };
+      const { data, error } = await supabase.functions.invoke<TrafficBulkActionResponse>("traffic-ticket-bulk-actions", { body });
+      if (error) throw error;
+      return data ?? {};
+    },
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ["ops", "traffic-tickets"] });
+      setStatusError(null);
+      const receipts = response.printable_receipts ?? [];
+      try {
+        printTrafficReceipts(receipts);
+      } catch (printError) {
+        setStatusError(printError instanceof Error ? printError.message : "Traffic receipts were generated but could not be printed.");
+      }
+    },
+    onError: (mutationError) => {
+      setStatusError(mutationError instanceof Error ? mutationError.message : "Traffic bulk action failed.");
     },
   });
 
@@ -209,6 +311,70 @@ export function TrafficTicketsPage() {
         ))}
       </div>
 
+      <Card className="mb-4 border-border/70 bg-background/80 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="mr-auto min-w-[220px]">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Bulk traffic receipts
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {selectedVisibleTicketIds.length > 0
+                ? `${selectedVisibleTicketIds.length} visible ticket${selectedVisibleTicketIds.length === 1 ? "" : "s"} selected.`
+                : selectedTicket
+                  ? "No boxes selected; actions use the active ticket."
+                  : "Select a ticket to print receipts."}
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setSelectedTicketIds(tickets.map((ticket) => ticket.id))}
+            disabled={tickets.length === 0 || bulkActionMutation.isPending}
+          >
+            Select visible
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setSelectedTicketIds([])}
+            disabled={selectedTicketIds.length === 0 || bulkActionMutation.isPending}
+          >
+            Clear
+          </Button>
+          <select
+            value={bulkStatus}
+            onChange={(event) => setBulkStatus(event.target.value as TrafficBulkStatus)}
+            className="h-9 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+            disabled={bulkActionMutation.isPending}
+          >
+            {FILTERS.filter((filter): filter is TrafficBulkStatus => filter !== "all").map((status) => (
+              <option key={status} value={status}>{TRAFFIC_STATUS_META[status]?.label ?? status}</option>
+            ))}
+          </select>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => bulkActionMutation.mutate({ action: "print_receipts", ticketIds: bulkTicketIds })}
+            disabled={bulkTicketIds.length === 0 || bulkActionMutation.isPending}
+          >
+            {bulkActionMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+            Print receipts
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => bulkActionMutation.mutate({ action: "mass_change_print", ticketIds: bulkTicketIds, status: bulkStatus })}
+            disabled={bulkTicketIds.length === 0 || bulkActionMutation.isPending}
+          >
+            {bulkActionMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+            Mass change / print
+          </Button>
+        </div>
+      </Card>
+
       <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="space-y-2">
           {tickets.length === 0 ? (
@@ -220,47 +386,79 @@ export function TrafficTicketsPage() {
               const active = selectedTicket?.id === ticket.id;
               const statusMeta = TRAFFIC_STATUS_META[ticket.status] ?? TRAFFIC_STATUS_META.haul_pending;
               return (
-                <button
+                <div
                   key={ticket.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedId(ticket.id);
-                    setHourMeterInput(ticket.hour_meter_reading?.toString() ?? "");
-                    setProblemNotes(ticket.problems_reported ?? "");
-                    setSignatureDataUrl(null);
-                    setStatusError(null);
-                  }}
                   className={`w-full rounded-xl border text-left transition ${active ? "border-qep-orange/40 bg-qep-orange/5" : "border-border bg-background hover:border-white/20"}`}
                 >
                   <Card className="border-none bg-transparent p-4 shadow-none">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusMeta.badge}`}>
-                            {statusMeta.label}
-                          </span>
-                          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-                            {ticket.ticket_type.replace(/_/g, " ")}
-                          </span>
-                          {ticket.locked && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] text-red-300">
-                              <Lock className="h-3 w-3" /> Locked
-                            </span>
-                          )}
+                    <div className="flex items-start gap-3">
+                      <label className="mt-1 inline-flex h-5 w-5 shrink-0 items-center justify-center">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border bg-background"
+                          checked={selectedTicketIdSet.has(ticket.id)}
+                          aria-label={`Select traffic ticket ${ticket.stock_number}`}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            setSelectedTicketIds((current) => {
+                              const next = new Set(current);
+                              if (checked) next.add(ticket.id);
+                              else next.delete(ticket.id);
+                              return Array.from(next);
+                            });
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedId(ticket.id);
+                          setHourMeterInput(ticket.hour_meter_reading?.toString() ?? "");
+                          setProblemNotes(ticket.problems_reported ?? "");
+                          setSignatureDataUrl(null);
+                          setStatusError(null);
+                        }}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusMeta.badge}`}>
+                                {statusMeta.label}
+                              </span>
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                                {ticket.ticket_type.replace(/_/g, " ")}
+                              </span>
+                              {ticket.receipt_number && (
+                                <span className="rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] text-sky-300">
+                                  Receipt {ticket.receipt_number}
+                                </span>
+                              )}
+                              {ticket.locked && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] text-red-300">
+                                  <Lock className="h-3 w-3" /> Locked
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-2 text-sm font-semibold text-foreground">Stock #{ticket.stock_number}</p>
+                            <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                              <MapPin className="h-3 w-3" />
+                              {ticket.from_location} → {ticket.to_location}
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Ship: {ticket.shipping_date} • Contact: {ticket.to_contact_name}
+                            </p>
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              Printed {ticket.printed_count} time{ticket.printed_count === 1 ? "" : "s"}
+                              {ticket.last_printed_at ? ` • Last ${new Date(ticket.last_printed_at).toLocaleString()}` : ""}
+                            </p>
+                          </div>
+                          {active && <CheckCircle2 className="h-4 w-4 text-qep-orange" />}
                         </div>
-                        <p className="mt-2 text-sm font-semibold text-foreground">Stock #{ticket.stock_number}</p>
-                        <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                          <MapPin className="h-3 w-3" />
-                          {ticket.from_location} → {ticket.to_location}
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Ship: {ticket.shipping_date} • Contact: {ticket.to_contact_name}
-                        </p>
-                      </div>
-                      {active && <CheckCircle2 className="h-4 w-4 text-qep-orange" />}
+                      </button>
                     </div>
                   </Card>
-                </button>
+                </div>
               );
             })
           )}

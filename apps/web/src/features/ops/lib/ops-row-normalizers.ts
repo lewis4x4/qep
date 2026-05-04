@@ -18,8 +18,11 @@ export interface TrafficTicketRow {
   from_location: string;
   hour_meter_reading: number | null;
   locked: boolean | null;
+  last_printed_at: string | null;
   problems_reported: string | null;
+  printed_count: number;
   proof_of_delivery_complete: boolean | null;
+  receipt_number: string | null;
   shipping_date: string;
   status: string;
   stock_number: string;
@@ -224,8 +227,11 @@ export function normalizeTrafficTicketRows(rows: unknown): TrafficTicketRow[] {
       from_location: stringOrNull(row.from_location) ?? "Unknown origin",
       hour_meter_reading: finiteNumberOrNull(row.hour_meter_reading),
       locked: booleanOrNull(row.locked),
+      last_printed_at: validDateStringOrNull(row.last_printed_at),
       problems_reported: stringOrNull(row.problems_reported),
+      printed_count: integerOrDefault(row.printed_count),
       proof_of_delivery_complete: booleanOrNull(row.proof_of_delivery_complete),
+      receipt_number: stringOrNull(row.receipt_number),
       shipping_date: shippingDate,
       status: stringOrNull(row.status) ?? "haul_pending",
       stock_number: stockNumber,

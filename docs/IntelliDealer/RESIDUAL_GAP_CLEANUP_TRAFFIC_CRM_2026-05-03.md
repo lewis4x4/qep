@@ -4,7 +4,7 @@ Date: 2026-05-03
 
 ## Scope
 
-Worker A changed only the owned Traffic/CRM residual cleanup files:
+Worker A changed only the owned Traffic/CRM residual cleanup files, then a follow-on UI wiring pass completed both rows:
 
 - `traffic_ticket.mass_change_print`
 - `customer.search_extended_fields`
@@ -13,7 +13,7 @@ Worker A changed only the owned Traffic/CRM residual cleanup files:
 
 ## Traffic Mass Change / Print
 
-Status changed from `MISSING` to `PARTIAL`.
+Status changed from `MISSING` to `PARTIAL` in the backend slice, then to `BUILT` in the UI wiring pass.
 
 Implemented backend support:
 
@@ -21,14 +21,14 @@ Implemented backend support:
 - Bulk update is limited to selected operational fields on existing `traffic_tickets`.
 - Print marking uses `public.traffic_ticket_mark_printed(uuid[])` to increment `printed_count`, set `last_printed_at`, and return delivery-receipt fields for caller-side print rendering.
 
-Remaining gap:
+Follow-on UI completion:
 
-- No owned Traffic Management UI button was added.
-- No external printer provider, print queue, or PDF renderer was implemented.
+- `TrafficTicketsPage` exposes selected/visible bulk print and mass change/print controls.
+- Receipt rendering uses the edge function response and opens a browser print window.
 
 ## CRM Extended Search
 
-Status remains `PARTIAL`.
+Status changed from `PARTIAL` to `BUILT` in the UI wiring pass.
 
 Implemented backend support:
 
@@ -36,6 +36,7 @@ Implemented backend support:
 - When enabled, the listing search also matches primary contact full/first/last name and active ship-to label/contact name.
 - Added trigram indexes for the extended-field search plan.
 
-Remaining gap:
+Follow-on UI completion:
 
-- The Customer Listing page still does not expose an explicit IntelliDealer-style Extended Fields toggle in this slice.
+- `QrmCompaniesPage` exposes an explicit Extended IntelliDealer search toggle.
+- `listCrmCompanies` passes `p_include_extended_fields` through to the RPC.

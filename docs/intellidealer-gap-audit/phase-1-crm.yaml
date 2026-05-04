@@ -2584,7 +2584,7 @@ fields:
       Search-form toggle that, when ON, expands the search to include
       contact names + ship-to address names (not just the primary
       company name). Drives a different SQL plan.
-    qep_status: PARTIAL
+    qep_status: BUILT
     qep_table: null
     qep_column: null
     qep_evidence:
@@ -2594,15 +2594,16 @@ fields:
       - "supabase/migrations/531_intellidealer_traffic_crm_workflow_cleanup.sql idx_qrm_company_ship_to_addresses_label_trgm"
       - "supabase/migrations/531_intellidealer_traffic_crm_workflow_cleanup.sql idx_qrm_company_ship_to_addresses_contact_name_trgm"
       - "apps/web/src/features/qrm/pages/QrmCompaniesPage.tsx search placeholder includes company, IntelliDealer #, Search 1/2, city, state"
+      - "apps/web/src/features/qrm/pages/QrmCompaniesPage.tsx Extended IntelliDealer search toggle"
+      - "apps/web/src/features/qrm/lib/qrm-api.ts passes p_include_extended_fields"
       - "apps/web/src/features/quote-builder/lib/customer-search-api.ts unified customer search queries crm_contacts and crm_companies"
       - "apps/web/src/features/sales/lib/customer-search.ts matches primary_contact_name"
     qep_gap_notes: |
-      Partial, not missing. Backend support now exists on
-      list_crm_companies_page via p_include_extended_fields=true, extending
-      the customer listing SQL plan to primary contact names and active
-      ship-to label/contact names. This still is not marked BUILT because
-      the owned slice did not change the Customer Listing UI to expose an
-      explicit IntelliDealer-style Extended Fields toggle.
+      Backend support exists on list_crm_companies_page via
+      p_include_extended_fields=true, extending the customer listing SQL plan
+      to primary contact names and active ship-to label/contact names. The
+      Companies listing UI now exposes an explicit IntelliDealer-style
+      Extended Fields toggle and passes the RPC flag through qrm-api.
     severity: could
     category: nice_to_have
     migration_hint: ""

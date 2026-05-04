@@ -34,6 +34,7 @@ export function QrmCompaniesPage() {
   const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [includeExtendedFields, setIncludeExtendedFields] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [healthDrawerProfileId, setHealthDrawerProfileId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -52,8 +53,8 @@ export function QrmCompaniesPage() {
   }, [searchInput]);
 
   const companiesQuery = useInfiniteQuery({
-    queryKey: ["crm", "companies", debouncedSearch],
-    queryFn: ({ pageParam }) => listCrmCompanies(debouncedSearch, pageParam),
+    queryKey: ["crm", "companies", debouncedSearch, includeExtendedFields],
+    queryFn: ({ pageParam }) => listCrmCompanies(debouncedSearch, pageParam, { includeExtendedFields }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     staleTime: 60_000,
@@ -153,17 +154,32 @@ export function QrmCompaniesPage() {
       <QrmSubNav />
 
       {/* Search */}
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <input
-          id="crm-companies-search"
-          ref={searchRef}
-          value={searchInput}
-          onChange={(event) => setSearchInput(event.target.value)}
-          placeholder="Search company · IntelliDealer # · Search 1/2 · city · state"
-          className="h-10 w-full rounded-sm border border-qep-deck-rule bg-qep-deck-elevated/60 pl-9 pr-3 font-mono text-[13px] text-foreground placeholder:text-muted-foreground/80 focus:border-qep-orange focus:outline-none focus:ring-1 focus:ring-qep-orange/50"
-        />
+      <div className="grid gap-2 lg:grid-cols-[1fr_auto]">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            id="crm-companies-search"
+            ref={searchRef}
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder="Search company · IntelliDealer # · Search 1/2 · city · state"
+            className="h-10 w-full rounded-sm border border-qep-deck-rule bg-qep-deck-elevated/60 pl-9 pr-3 font-mono text-[13px] text-foreground placeholder:text-muted-foreground/80 focus:border-qep-orange focus:outline-none focus:ring-1 focus:ring-qep-orange/50"
+          />
+        </div>
+        <Button
+          type="button"
+          variant={includeExtendedFields ? "default" : "outline"}
+          className="h-10 rounded-sm font-mono text-[11px] uppercase tracking-[0.12em]"
+          onClick={() => setIncludeExtendedFields((enabled) => !enabled)}
+        >
+          Extended IntelliDealer search {includeExtendedFields ? "on" : "off"}
+        </Button>
       </div>
+      {includeExtendedFields && (
+        <p className="-mt-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+          Searching legacy customer fields, Search 1/2, contacts, phones, email, and ship-to aliases.
+        </p>
+      )}
 
       {companiesQuery.isLoading && (
         <div className="space-y-1.5" role="status" aria-label="Loading companies">

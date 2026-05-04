@@ -100,15 +100,15 @@ bun run intellidealer:seed:purge -- --apply --confirm-non-parts-seed-purge
 
 ## Gap-Audit Status
 
-Gap-audit Waves 0-4 are implemented and remote-push verified through `506_*` per `docs/intellidealer-gap-audit/_migration_order.md`. The follow-on must-blocker burndown applied migrations `522` through `525` and regenerated the inventory to `0` remaining must-fix blockers. The non-must cleanup applied migrations `526` through `533` and reduced the remaining non-must inventory to `1` missing and `7` partial rows.
+Gap-audit Waves 0-4 are implemented and remote-push verified through `506_*` per `docs/intellidealer-gap-audit/_migration_order.md`. The follow-on must-blocker burndown applied migrations `522` through `525` and regenerated the inventory to `0` remaining must-fix blockers. The non-must cleanup applied migrations `526` through `533`, and the follow-on UI wiring pass reduced the remaining non-must inventory to `1` missing and `3` partial rows.
 
 Current regenerated inventory:
 
 | Metric | Count |
 | --- | ---: |
 | Total fields | `847` |
-| Built | `839` |
-| Partial | `7` |
+| Built | `843` |
+| Partial | `3` |
 | Missing | `1` |
 | Must | `496` |
 | Should | `300` |
@@ -167,7 +167,7 @@ These integrations require external credentials, dealer-specific scope, provider
 
 - Raw IntelliDealer source files remain intentionally untracked until privacy/retention is decided.
 - Wave 5 integrations are deferred and must not be represented as shipped.
-- The broader gap-audit inventory has `0` remaining must-fix blockers, with `1` non-must missing row and `7` non-must partial rows left for external integration/workflow roadmap prioritization.
+- The broader gap-audit inventory has `0` remaining must-fix blockers, with `1` non-must missing row and `3` non-must partial rows left for external integration/workflow roadmap prioritization.
 - Old `test-results/agent-gates/*` artifacts referenced by the gap-audit docs are missing from the current working tree and need recovery or replacement with fresh evidence if an auditor requires those original artifacts.
 
 ## Closeout Gate
