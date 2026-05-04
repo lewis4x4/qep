@@ -41,6 +41,7 @@ const result = {
       assigned_to: row.assigned_to,
       target: row.target,
       status: row.status,
+      linear_issue: row.linear_issue,
       closure_evidence_required: row.closure_evidence_required,
     })),
   },
@@ -136,10 +137,16 @@ function extractQueueRows(filePath) {
       assigned_to: stripMarkdown(cells[5]),
       target: stripMarkdown(cells[6]),
       status: stripMarkdown(cells[7]),
+      linear_issue: extractLinearIssue(cells[8] ?? ""),
     });
   }
 
   return rows;
+}
+
+function extractLinearIssue(value) {
+  const match = String(value ?? "").match(/JAR-\d+/);
+  return match?.[0] ?? "";
 }
 
 function stripMarkdown(value) {

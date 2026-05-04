@@ -36,6 +36,7 @@ Evidence:
 
 - Row count: 7.
 - Queued count: 7.
+- Linear issue IDs linked: `JAR-103`, `JAR-104`, `JAR-105`, `JAR-106`, `JAR-107`, `JAR-108`, `JAR-109`.
 - All packet files referenced by the queue exist under `docs/IntelliDealer/_Manifests/`.
 
 ### `bun run parity:closeout:preflight`
@@ -110,15 +111,15 @@ Skipped:
 
 No workbook status changed from this verification pass.
 
-The remaining workbook `GAP` / `PARTIAL` rows are still controlled by these source-controlled gates:
+The remaining workbook `GAP` / `PARTIAL` rows are still controlled by these source-controlled gates and Linear issues:
 
-- `QEP_EQUIPMENT_REVERSAL_FINANCE_POLICY_PACKET_2026-05-04.md`
-- `QEP_JD_PROVIDER_DECISION_PACKET_2026-05-04.md`
-- `QEP_OEM_BASE_OPTIONS_IMPORT_DECISION_PACKET_2026-05-04.md`
-- `QEP_VESIGN_PROVIDER_DECISION_PACKET_2026-05-04.md`
-- `QEP_TETHR_PROVIDER_DECISION_PACKET_2026-05-04.md`
-- `QEP_SERVICE_MOBILE_UAT_EXECUTION_PACKET_2026-05-04.md`
-- `QEP_IRONGUIDES_DECISION_PACKET_2026-05-04.md`
+- `JAR-103` — `QEP_EQUIPMENT_REVERSAL_FINANCE_POLICY_PACKET_2026-05-04.md`
+- `JAR-104` — `QEP_JD_PROVIDER_DECISION_PACKET_2026-05-04.md`
+- `JAR-105` — `QEP_OEM_BASE_OPTIONS_IMPORT_DECISION_PACKET_2026-05-04.md`
+- `JAR-106` — `QEP_VESIGN_PROVIDER_DECISION_PACKET_2026-05-04.md`
+- `JAR-107` — `QEP_TETHR_PROVIDER_DECISION_PACKET_2026-05-04.md`
+- `JAR-108` — `QEP_SERVICE_MOBILE_UAT_EXECUTION_PACKET_2026-05-04.md`
+- `JAR-109` — `QEP_IRONGUIDES_DECISION_PACKET_2026-05-04.md`
 
 ## Required Follow-Up To Get A Green Final Gate
 

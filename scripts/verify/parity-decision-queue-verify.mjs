@@ -33,6 +33,7 @@ const result = {
   row_count: queueRows.length,
   queued_count: queueRows.filter((row) => row.status.toUpperCase() === "QUEUED").length,
   rows: queueRows,
+  linear_issue_ids: queueRows.map((row) => row.linear_issue).filter(Boolean),
   checks,
   failed,
 };
@@ -56,6 +57,7 @@ function verifyRow(row) {
   addCheck(`${prefix} closure evidence stated`, row.closure_evidence_required.length >= 40, row.closure_evidence_required);
   addCheck(`${prefix} owner requirement stated`, row.assigned_to.length >= 10, row.assigned_to);
   addCheck(`${prefix} target stated`, row.target.length >= 3, row.target);
+  addCheck(`${prefix} Linear issue linked`, /^JAR-\d+/.test(row.linear_issue), row.linear_issue || "missing");
 
   if (existsSync(packetPath)) {
     const packetText = readFileSync(packetPath, "utf8");
@@ -89,10 +91,16 @@ function parseQueue(filePath) {
       assigned_to: cells[5],
       target: cells[6],
       status: cells[7],
+      linear_issue: extractLinearIssue(cells[8] ?? ""),
     });
   }
 
   return rows;
+}
+
+function extractLinearIssue(value) {
+  const match = String(value ?? "").match(/JAR-\d+/);
+  return match?.[0] ?? "";
 }
 
 function stripMarkdown(value) {
