@@ -21,6 +21,7 @@ import { PartCrossRefPanel } from "../components/PartCrossRefPanel";
 import { OrderTimelineCard } from "../components/OrderTimelineCard";
 import { VoiceOrderBadge, MachineDownBadge } from "../components/VoicePartsOrderButton";
 import { PhotoPartIdentifier } from "../components/PhotoPartIdentifier";
+import { TethrReadinessAction } from "../../telematics/components/TethrReadinessAction";
 import { validNextStatuses } from "../lib/order-status-machine";
 import {
   invokeSubmitInternalOrder,
@@ -199,6 +200,9 @@ export function PartsOrderDetailPage() {
           )}
 
           <Card className="p-4 space-y-2 text-sm">
+            <div className="mb-3">
+              <TethrReadinessAction surface="parts_invoicing" compact />
+            </div>
             <div className="flex flex-wrap gap-2 items-center">
               <OrderStatusBadge status={status} />
               <Badge variant="outline">{orderSource}</Badge>

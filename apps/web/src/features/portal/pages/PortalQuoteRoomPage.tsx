@@ -12,6 +12,7 @@ import {
   buildPortalQuoteChecklist,
   buildPortalQuoteTimeline,
 } from "../lib/portal-quote-room";
+import { summarizeQuoteSigningReadiness, vesignRequirementsText } from "../lib/signing-readiness";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { Check, ExternalLink, PenTool, X, ArrowLeft, Clock3, ClipboardList, Building2 } from "lucide-react";
 import {
@@ -48,6 +49,9 @@ export function PortalQuoteRoomPage() {
   const timeline = quote ? buildPortalQuoteTimeline(quote) : [];
   const actionRail = quote ? buildPortalQuoteActionRail(quote, reviewSummary) : [];
   const checklist = quote ? buildPortalQuoteChecklist(quote, reviewSummary) : [];
+  const signingReadiness = quote
+    ? summarizeQuoteSigningReadiness({ signedAt: quote.signed_at, signerName: quote.signer_name, status: quote.status })
+    : null;
   const revisionHistory = quote?.revision_history ?? [];
   const compare = quote?.compare_to_previous ?? null;
 
@@ -437,8 +441,18 @@ export function PortalQuoteRoomPage() {
           <Card className="p-5">
             <div className="flex items-center gap-2">
               <PenTool className="h-4 w-4 text-qep-orange" />
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Acceptance</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Native QEP acceptance</p>
             </div>
+
+            {signingReadiness ? (
+              <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-amber-300">{signingReadiness.label} · {signingReadiness.value}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{signingReadiness.detail}</p>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  VESign remains blocked pending {vesignRequirementsText()}.
+                </p>
+              </div>
+            ) : null}
 
             {quote.signed_at ? (
               <div className="mt-4 space-y-2">
@@ -453,7 +467,7 @@ export function PortalQuoteRoomPage() {
             ) : canAct ? (
               <div className="mt-4 space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Review the proposal, enter your legal name, and sign below to accept.
+                  Review the proposal, enter your legal name, and sign below to accept in the native QEP portal. This does not send a VESign provider envelope.
                 </p>
                 <label className="block space-y-1 text-sm">
                   Full legal name

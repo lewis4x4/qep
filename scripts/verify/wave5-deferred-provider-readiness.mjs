@@ -54,6 +54,28 @@ const WAVE5_PROVIDERS = [
 ];
 
 const EXPECTED_REGISTER_DOC = "docs/IntelliDealer/WAVE_5_DEFERRED_INTEGRATION_REGISTER_2026-05-03.md";
+const JD_DECISION_PACKET = "docs/IntelliDealer/_Manifests/QEP_JD_PROVIDER_DECISION_PACKET_2026-05-04.md";
+const JD_GOVERNED_WORKBOOK_ROWS = [
+  "Field Parity Matrix: Phase-1_CRM / Prospect Board / JDQuote is selected in this",
+  "Action & Button Parity: Phase-1_CRM / Prospect Board / John Deere Quote Upload",
+  "Action & Button Parity: Phase-2_Sales-Intelligence / Equipment Invoicing / Access JD POs",
+  "Action & Button Parity: Phase-2_Sales-Intelligence / Equipment Invoicing / JD Proactive Jobs",
+];
+const JD_LIVE_SCOPE_BLOCKERS = [
+  "jd_affiliated_dealer_scope",
+  "jd_quote_ii_license_api_sso_xml_pdf_contract",
+  "sandbox_credentials_or_authorized_fixture_exports",
+  "jd_quote_ii_and_po_authorization_model",
+  "jd_proactive_jobs_behavior_decision",
+  "payload_retention_retry_audit_owner_approval",
+];
+const JD_PROVIDER_NEUTRAL_GUARDRAILS = [
+  "do_not_mark_built_from_generic_quote_packages",
+  "do_not_mark_built_from_generic_vendor_purchase_orders",
+  "do_not_mark_built_from_integrationhub_readiness_rows",
+  "do_not_mark_built_from_mock_provider_descriptions",
+  "do_not_store_hardcoded_credentials",
+];
 
 const adminClient = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -146,7 +168,70 @@ async function verifyRegistryRows(targetWorkspaceId) {
       typeof row.config?.deferred_reason === "string" && row.config.deferred_reason.length > 20,
       String(row.config?.deferred_reason ?? ""),
     );
+
+    if (provider.key === "jd_quote_ii") {
+      verifyJdBlockerMetadata(row.config ?? {});
+    }
   }
+}
+
+function verifyJdBlockerMetadata(config) {
+  addCheck("JD decision packet linked", config.decision_packet === JD_DECISION_PACKET, String(config.decision_packet));
+  addCheck("JD Linear blocker linked", config.linear_issue === "JAR-104", String(config.linear_issue));
+  addCheck(
+    "JD workbook rows remain GAP until decision",
+    config.workbook_status_target_until_decision === "GAP",
+    String(config.workbook_status_target_until_decision),
+  );
+  addCheck(
+    "JD governed rows enumerated",
+    arrayIncludesAll(config.governed_workbook_rows, JD_GOVERNED_WORKBOOK_ROWS),
+    summarizeMissing(config.governed_workbook_rows, JD_GOVERNED_WORKBOOK_ROWS),
+  );
+  addCheck(
+    "JD closure paths explicit",
+    arrayIncludesAll(config.jd_closure_paths_required, [
+      "live_provider_scope_with_contracts_and_fixtures",
+      "source_controlled_de_scope_or_replacement_decision",
+    ]),
+    summarizeMissing(config.jd_closure_paths_required, [
+      "live_provider_scope_with_contracts_and_fixtures",
+      "source_controlled_de_scope_or_replacement_decision",
+    ]),
+  );
+  addCheck(
+    "JD live blockers enumerated",
+    arrayIncludesAll(config.live_scope_blockers, JD_LIVE_SCOPE_BLOCKERS),
+    summarizeMissing(config.live_scope_blockers, JD_LIVE_SCOPE_BLOCKERS),
+  );
+  addCheck(
+    "JD false-evidence guardrails enumerated",
+    arrayIncludesAll(config.provider_neutral_guardrails, JD_PROVIDER_NEUTRAL_GUARDRAILS),
+    summarizeMissing(config.provider_neutral_guardrails, JD_PROVIDER_NEUTRAL_GUARDRAILS),
+  );
+  addCheck(
+    "JD PO authorization required",
+    config.access_jd_pos_authorization_required === true,
+    String(config.access_jd_pos_authorization_required),
+  );
+  addCheck(
+    "JD Proactive Jobs decision required",
+    config.proactive_jobs_decision_required === true,
+    String(config.proactive_jobs_decision_required),
+  );
+}
+
+function arrayIncludesAll(value, expected) {
+  if (!Array.isArray(value)) return false;
+  const actual = new Set(value.filter((item) => typeof item === "string"));
+  return expected.every((item) => actual.has(item));
+}
+
+function summarizeMissing(value, expected) {
+  if (!Array.isArray(value)) return "not an array";
+  const actual = new Set(value.filter((item) => typeof item === "string"));
+  const missing = expected.filter((item) => !actual.has(item));
+  return missing.length === 0 ? "complete" : `missing: ${missing.join(", ")}`;
 }
 
 async function verifyAvailabilityApi(targetWorkspaceId) {

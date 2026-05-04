@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { archiveOnOrderEquipment, getEquipmentById, patchEquipment } from "../lib/qrm-router-api";
 import { accountCommandUrl } from "../lib/account-links";
 import { QrmEquipmentFormSheet, draftToPayload } from "../components/QrmEquipmentFormSheet";
+import { EquipmentReversalReadinessCard } from "../components/EquipmentReversalReadinessCard";
 import { EquipmentVision } from "@/components/EquipmentVision";
 import { MachineLifecycleCard } from "../../equipment/components/MachineLifecycleCard";
 
@@ -81,7 +82,7 @@ function SectionCard({ title, children }: { title: string; children: React.React
   );
 }
 
-export function QrmEquipmentDetailPage({ userId: _userId, userRole: _userRole }: QrmEquipmentDetailPageProps) {
+export function QrmEquipmentDetailPage({ userId: _userId, userRole }: QrmEquipmentDetailPageProps) {
   const { equipmentId } = useParams<{ equipmentId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -158,6 +159,7 @@ export function QrmEquipmentDetailPage({ userId: _userId, userRole: _userRole }:
   const hasFinancials = eq.purchasePrice != null || eq.currentMarketValue != null || eq.replacementCost != null;
   const hasRates = eq.dailyRentalRate != null || eq.weeklyRentalRate != null || eq.monthlyRentalRate != null;
   const hasService = !!eq.warrantyExpiresOn || !!eq.lastInspectionAt || !!eq.nextServiceDueAt;
+  const canViewReversalReadiness = userRole === "admin" || userRole === "manager" || userRole === "owner";
 
   const isOverdueInspection = eq.lastInspectionAt && new Date(eq.lastInspectionAt) < new Date(Date.now() - 365 * 86400000);
   const isServiceDueSoon = eq.nextServiceDueAt && new Date(eq.nextServiceDueAt) < new Date(Date.now() + 14 * 86400000);
@@ -221,6 +223,11 @@ export function QrmEquipmentDetailPage({ userId: _userId, userRole: _userRole }:
           )}
         </div>
       )}
+
+      <EquipmentReversalReadinessCard
+        stockNumber={eq.stockNumber}
+        canReadReadiness={canViewReversalReadiness}
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="lg:col-span-2">

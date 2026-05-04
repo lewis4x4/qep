@@ -1434,7 +1434,7 @@ export function IntegrationPanel({
                 )}
                 {isDeferredExternal && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Provider readiness is registered, but credentials, adapter/webhook code, owner approval, and cutover tests are still required before this can be connected.
+                    Provider readiness is registered, but credentials, adapter/feed or webhook code, owner approval, and cutover tests are still required before this can be connected.
                   </p>
                 )}
                 {isHubSpot && (
@@ -2242,7 +2242,7 @@ export function IntegrationPanel({
                 <div className="rounded-lg border border-border bg-muted/30 p-3">
                   <p className="text-sm font-medium text-foreground">Provider readiness only</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    This Wave 5 provider is intentionally parked as `pending_credentials`. Credential entry is disabled until a provider adapter, webhook/test contract, owner, and cutover plan are implemented.
+                    This provider is intentionally parked for readiness or decision tracking only. Credential entry is disabled until a live provider contract, adapter/feed or webhook contract, owner, and cutover plan are approved.
                   </p>
                 </div>
               ) : isOneDrive ? (
@@ -2371,7 +2371,7 @@ export function IntegrationPanel({
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <p className="text-sm font-medium text-foreground">Testing disabled</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  No provider adapter is implemented for this deferred Wave 5 integration yet, so a connection test would be misleading.
+                  No approved live provider contract and adapter/feed test path is implemented for this integration yet, so a connection test would be misleading.
                 </p>
               </div>
             ) : (
@@ -2622,6 +2622,12 @@ export function IntegrationPanel({
                 This surface is no longer a live external integration. QEP now runs the business flow natively through{" "}
                 <strong className="text-foreground">{replacement?.replacementSurface ?? BRAND_NAME}</strong>. Legacy
                 records can stay for audit and migration history, but operators should not reconnect or depend on this vendor.
+              </p>
+            ) : isDeferredExternal ? (
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                QEP fallback/blended valuation remains available where implemented, but this provider row is readiness/decision-only.
+                It is not live upstream evidence for <strong className="text-foreground">{integration.name}</strong>. Credentials
+                and testing stay disabled until an approved live feed contract or replacement decision exists.
               </p>
             ) : (
               <p className="text-sm text-muted-foreground leading-relaxed">

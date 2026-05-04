@@ -169,6 +169,7 @@ interface RentalContractRow {
   deposit_invoice_id: string | null;
   customer_notes: string | null;
   dealer_response: string | null;
+  signed_terms_url: string | null;
 }
 
 interface RentalExtensionRow {
@@ -2428,6 +2429,7 @@ Deno.serve(async (req) => {
               companyId: typeof portalCustomer.crm_company_id === "string" ? portalCustomer.crm_company_id : null,
               dealerResponse: contract.dealer_response,
               customerNotes: contract.customer_notes,
+              signedTermsUrl: typeof contract.signed_terms_url === "string" ? contract.signed_terms_url : null,
               pricingEstimate: {
                 dailyRate: contract.estimate_daily_rate ?? estimate.dailyRate,
                 weeklyRate: contract.estimate_weekly_rate ?? estimate.weeklyRate,
@@ -2485,6 +2487,7 @@ Deno.serve(async (req) => {
               companyId: typeof portalCustomer.crm_company_id === "string" ? portalCustomer.crm_company_id : null,
               dealerResponse: contract.dealer_response,
               customerNotes: contract.customer_notes,
+              signedTermsUrl: typeof contract.signed_terms_url === "string" ? contract.signed_terms_url : null,
               pricingEstimate: null,
               agreedRates: {
                 dailyRate: contract.agreed_daily_rate,

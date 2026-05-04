@@ -320,6 +320,13 @@ function resolveErrorCode(params: {
   return "UPSTREAM_ERROR";
 }
 
+function hasConfiguredReplacementMetadata(config: Record<string, unknown> | null): boolean {
+  return config?.lifecycle === "replaced" &&
+    config.external_dependency_required === false &&
+    typeof config.replacement_surface === "string" &&
+    config.replacement_surface.trim().length > 0;
+}
+
 Deno.serve(async (req): Promise<Response> => {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") {
@@ -527,7 +534,7 @@ Deno.serve(async (req): Promise<Response> => {
 
     if (
       REPLACED_INTEGRATIONS.has(integrationKey) ||
-      statusRow.config?.lifecycle === "replaced"
+      hasConfiguredReplacementMetadata(statusRow.config)
     ) {
       return ok(
         {
@@ -543,7 +550,10 @@ Deno.serve(async (req): Promise<Response> => {
     if (
       DEFERRED_PROVIDER_KEYS.has(integrationKey) ||
       statusRow.config?.provider_scope === "wave_5_deferred_external" ||
-      statusRow.config?.implementation_status === "deferred"
+      statusRow.config?.provider_scope === "parity_external_decision" ||
+      statusRow.config?.implementation_status === "deferred" ||
+      statusRow.config?.implementation_status === "decision_required" ||
+      statusRow.config?.decision_required === true
     ) {
       return ok(
         {
@@ -553,7 +563,7 @@ Deno.serve(async (req): Promise<Response> => {
           error: {
             code: "DEFERRED_PROVIDER_TEST_DISABLED",
             message:
-              "This Wave 5 provider is registered for readiness only. Add a provider adapter, credentials contract, and cutover test plan before testing.",
+              "This provider is registered for readiness or decision tracking only. Add an approved live provider contract, adapter/feed test path, credentials policy, and cutover test plan before testing.",
           },
         },
         { origin },

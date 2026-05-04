@@ -852,6 +852,7 @@ export interface PortalRentalContractView {
   companyId: string | null;
   dealerResponse: string | null;
   customerNotes: string | null;
+  signedTermsUrl: string | null;
   pricingEstimate: PortalRentalPricingEstimate | null;
   agreedRates: PortalRentalPricingEstimate | null;
   paymentStatusView: PortalRentalPaymentStatusView | null;

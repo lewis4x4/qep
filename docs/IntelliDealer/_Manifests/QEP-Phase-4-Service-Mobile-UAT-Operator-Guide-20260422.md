@@ -34,6 +34,8 @@ Have these ready:
 - at least one assigned work order
 - one work order where a stage transition is valid
 - both good signal and degraded signal conditions if possible
+- device model, OS, browser, branch / location, and production account name for the result template
+- a source-control-safe way to capture screenshots/video, or a controlled evidence location for customer-sensitive proof
 
 ## Technician Script
 
@@ -49,8 +51,10 @@ Have these ready:
 6. Execute one valid stage transition.
 7. Confirm the action succeeds and the job state updates correctly.
 8. Reopen the same job or check the main service surface to confirm the update persisted.
-9. Repeat one action under weaker connectivity if available.
-10. Confirm the technician would use this flow instead of calling dispatch for a routine status update.
+9. Repeat the transition and persistence check under weaker connectivity or a temporary disconnect.
+10. During slow or failed saves, confirm the UI gives clear loading/offline/retry feedback, preserves field context, and prevents duplicate stage transitions from repeated taps.
+11. Capture source-control-safe proof for the normal and degraded-network portions, or record the controlled evidence location if proof contains customer or job-sensitive data.
+12. Confirm the technician would use this flow instead of calling dispatch for a routine status update.
 
 ## What To Watch For
 
@@ -59,6 +63,8 @@ Have these ready:
 - confusing stage names
 - missing customer or machine context
 - duplicate transitions
+- missing loading/offline/retry feedback under degraded signal
+- lost field notes or in-progress context after reconnect
 - state not persisting after reconnect
 - need to go back to desktop for basic technician work
 
@@ -70,7 +76,10 @@ Mark the session `PASS` only if:
 - a work order can be opened reliably
 - at least one transition succeeds
 - transition persists correctly
+- degraded-network behavior is understandable and does not lose field context
+- duplicate taps do not create duplicate stage transitions
 - no blocker forces a return to desktop for basic status handling
+- result template includes technician, reviewer, device/browser/network, production account, evidence location, and blocker disposition
 
 ## Fail Criteria
 
@@ -79,9 +88,12 @@ Mark the session `FAIL` if:
 - technician cannot reliably load or use the queue
 - primary actions are unclear
 - a transition fails or creates inconsistent state
+- degraded-network behavior loses context, hides retry state, or allows duplicate transitions
 - a core field workflow is missing on mobile
+- proof or blocker disposition is missing
 
 ## Related Files
 
-- [QEP-Phase-4-Service-Mobile-UAT-Checklist-20260422.md](/Users/brianlewis/Projects/qep-knowledge-assistant-qb-gl/docs/IntelliDealer/_Manifests/QEP-Phase-4-Service-Mobile-UAT-Checklist-20260422.md:1)
-- [QEP-Phase-4-Service-Mobile-Validation-Ship-Report-20260422.md](/Users/brianlewis/Projects/qep-knowledge-assistant-qb-gl/docs/IntelliDealer/_Manifests/QEP-Phase-4-Service-Mobile-Validation-Ship-Report-20260422.md:1)
+- [QEP-Phase-4-Service-Mobile-UAT-Checklist-20260422.md](QEP-Phase-4-Service-Mobile-UAT-Checklist-20260422.md)
+- [QEP-Phase-4-Service-Mobile-UAT-Result-Template-20260422.md](QEP-Phase-4-Service-Mobile-UAT-Result-Template-20260422.md)
+- [QEP-Phase-4-Service-Mobile-Validation-Ship-Report-20260422.md](QEP-Phase-4-Service-Mobile-Validation-Ship-Report-20260422.md)

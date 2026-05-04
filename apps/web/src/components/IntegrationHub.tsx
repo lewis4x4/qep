@@ -231,7 +231,7 @@ const INTEGRATION_DISPLAY: Record<
     name: "JD Quote II",
     category: "Wave 5 Deferred",
     description:
-      "John Deere quote upload/status import remains parked until dealer scope, license, payload contract, and fixtures are confirmed.",
+      "JD Quote II upload, accepted JD PO access, and JD Proactive Jobs remain parked until dealer scope, license, payload contract, fixtures, authorization, and owner decisions are confirmed.",
     icon: "JD",
   },
   oem_base_options_imports: {
@@ -262,7 +262,10 @@ const DEFERRED_EXTERNAL_PROVIDER_KEYS = new Set([
 function isDeferredExternalProvider(key: string, row: IntegrationStatusRow | null): boolean {
   return DEFERRED_EXTERNAL_PROVIDER_KEYS.has(key) ||
     row?.config?.provider_scope === "wave_5_deferred_external" ||
-    row?.config?.implementation_status === "deferred";
+    row?.config?.provider_scope === "parity_external_decision" ||
+    row?.config?.implementation_status === "deferred" ||
+    row?.config?.implementation_status === "decision_required" ||
+    row?.config?.decision_required === true;
 }
 
 function buildHubSpotIntegrationRow(
@@ -582,7 +585,7 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
           endpoint_url: null,
           config: {},
         };
-        const replacement = getReplacedIntegrationDescriptor(key);
+        const replacement = getReplacedIntegrationDescriptor(key, row.config);
 
         return {
           key: row.integration_key,

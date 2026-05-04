@@ -213,7 +213,10 @@ function TechnicianDetailSheet({
                 ) : null}
               </section>
 
-              <section className="rounded-[1.4rem] border border-border/50 bg-card/90 p-4">
+              <section
+                className="rounded-[1.4rem] border border-border/50 bg-card/90 p-4"
+                aria-busy={transition.isPending}
+              >
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                   Quick actions
                 </p>
@@ -228,6 +231,7 @@ function TechnicianDetailSheet({
                         key={action.toStage}
                         type="button"
                         disabled={transition.isPending}
+                        aria-disabled={transition.isPending}
                         onClick={() =>
                           transition.mutate({
                             id: job.id,
@@ -236,6 +240,7 @@ function TechnicianDetailSheet({
                         }
                         className={cn(
                           "rounded-2xl px-4 py-3 text-left text-sm font-semibold transition",
+                          transition.isPending && "cursor-not-allowed opacity-70",
                           action.tone === "primary"
                             ? "bg-primary text-primary-foreground"
                             : "border border-border/60 bg-background text-foreground",
@@ -246,9 +251,15 @@ function TechnicianDetailSheet({
                     ))}
                   </div>
                 )}
+                {transition.isPending && (
+                  <p className="mt-2 text-xs text-muted-foreground" role="status">
+                    Sending update — keep this screen open. Actions stay locked to prevent duplicate stage transitions.
+                  </p>
+                )}
                 {transition.isError && (
-                  <p className="mt-2 text-xs text-destructive">
-                    {(transition.error as Error).message}
+                  <p className="mt-2 text-xs text-destructive" role="alert">
+                    Update did not save. Check signal and retry; no stage transition is recorded until service confirms
+                    the change. {(transition.error as Error).message}
                   </p>
                 )}
               </section>

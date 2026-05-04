@@ -1,10 +1,12 @@
 export interface ReplacedIntegrationDescriptor {
-  key: "hubspot" | "intellidealer";
+  key: string;
   badgeLabel: string;
   replacementSurface: string;
   summary: string;
   detail: string;
 }
+
+type JsonRecord = Record<string, unknown>;
 
 const REPLACED_INTEGRATIONS: Record<string, ReplacedIntegrationDescriptor> = {
   hubspot: {
@@ -26,15 +28,47 @@ const REPLACED_INTEGRATIONS: Record<string, ReplacedIntegrationDescriptor> = {
   },
 };
 
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getConfiguredReplacementDescriptor(
+  integrationKey: string,
+  config: JsonRecord | null | undefined,
+): ReplacedIntegrationDescriptor | null {
+  if (!config || config.lifecycle !== "replaced") return null;
+  if (config.external_dependency_required !== false) return null;
+
+  const replacementSurface = nonEmptyString(config.replacement_surface);
+  if (!replacementSurface) return null;
+
+  const badgeLabel = nonEmptyString(config.replacement_label) ?? "QEP Native";
+  const summary = nonEmptyString(config.replacement_summary) ??
+    `${integrationKey} is retired as a live external dependency.`;
+  const detail = nonEmptyString(config.replacement_detail) ??
+    "A source-controlled decision and runtime readiness metadata mark this integration as replaced. Operators should not reconnect or depend on this vendor unless a new product decision reverses that lifecycle.";
+
+  return {
+    key: integrationKey,
+    badgeLabel,
+    replacementSurface,
+    summary,
+    detail,
+  };
+}
+
 export function getReplacedIntegrationDescriptor(
   integrationKey: string | null | undefined,
+  config?: JsonRecord | null,
 ): ReplacedIntegrationDescriptor | null {
   if (!integrationKey) return null;
-  return REPLACED_INTEGRATIONS[integrationKey] ?? null;
+  return REPLACED_INTEGRATIONS[integrationKey] ??
+    getConfiguredReplacementDescriptor(integrationKey, config);
 }
 
 export function isReplacedIntegration(
   integrationKey: string | null | undefined,
+  config?: JsonRecord | null,
 ): boolean {
-  return getReplacedIntegrationDescriptor(integrationKey) !== null;
+  return getReplacedIntegrationDescriptor(integrationKey, config) !== null;
 }

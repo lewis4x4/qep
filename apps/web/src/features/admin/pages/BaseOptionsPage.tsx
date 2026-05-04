@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Copy, Pencil, Plus, Save, Settings2, Wand2 } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Copy, History, Pencil, Plus, Save, Settings2, Wand2 } from "lucide-react";
 import { RequireAdmin } from "@/components/RequireAdmin";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,14 @@ import {
   type BaseOptionModelRecord,
   type BaseOptionsFilters,
 } from "../lib/base-options-api";
+import {
+  OEM_BASE_OPTIONS_MANUFACTURERS,
+  evaluateOemBaseOptionsImportReadiness,
+  getOemBaseOptionsImportRequirements,
+  listOemBaseOptionsImportRuns,
+  oemBaseOptionsManufacturerLabel,
+  type OemBaseOptionsImportRun,
+} from "../lib/oem-base-options-import-api";
 
 const EMPTY_FILTERS: BaseOptionsFilters = {
   baseNumber: "",
@@ -65,6 +73,20 @@ function toEditorState(model: BaseOptionModelRecord): ModelEditorState {
   };
 }
 
+function formatRunDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown date";
+  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+function formatRunCounts(run: OemBaseOptionsImportRun): string {
+  return `${run.rowsInserted} inserted · ${run.rowsUpdated} updated · ${run.rowsSkipped} skipped`;
+}
+
+function statusBadgeVariant(status: OemBaseOptionsImportRun["runStatus"]): "default" | "outline" | "destructive" {
+  return status === "failed" ? "destructive" : status === "completed" ? "default" : "outline";
+}
+
 export function BaseOptionsPage() {
   return (
     <RequireAdmin>
@@ -88,6 +110,12 @@ function BaseOptionsPageInner() {
     queryKey: ["admin", "base-options", filters],
     queryFn: () => listBaseOptionModels(filters),
     staleTime: 15_000,
+  });
+
+  const importRunsQuery = useQuery({
+    queryKey: ["admin", "base-options", "oem-import-runs"],
+    queryFn: () => listOemBaseOptionsImportRuns(),
+    staleTime: 30_000,
   });
 
   const models = modelsQuery.data ?? [];
@@ -298,6 +326,91 @@ function BaseOptionsPageInner() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-amber-500/40 bg-amber-500/5">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            Bobcat / Vermeer OEM import readiness
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm">
+          <p className="text-muted-foreground">
+            This admin page currently edits quote-builder catalog tables. Bobcat and Vermeer imports remain blocked from execution until OEM sample files or API contracts define the canonical mapping into <code>equipment_base_codes</code>, <code>equipment_options</code>, and <code>equipment_base_codes_import_runs</code>.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {OEM_BASE_OPTIONS_MANUFACTURERS.map((manufacturer) => {
+              const fileReadiness = evaluateOemBaseOptionsImportReadiness({ manufacturer, path: "file" });
+              const apiReadiness = evaluateOemBaseOptionsImportReadiness({ manufacturer, path: "api" });
+              return (
+                <div key={manufacturer} className="rounded-lg border border-border bg-background/70 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-semibold text-foreground">{oemBaseOptionsManufacturerLabel(manufacturer)}</p>
+                    <Badge variant="outline">Blocked pending OEM evidence</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">File path needs</p>
+                      <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                        {getOemBaseOptionsImportRequirements("file").map((requirement) => (
+                          <li key={requirement}>{requirement}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">API path needs</p>
+                      <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                        {getOemBaseOptionsImportRequirements("api").map((requirement) => (
+                          <li key={requirement}>{requirement}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Current repo-only readiness: file path has {fileReadiness.blockers.length} blockers; API path has {apiReadiness.blockers.length} blockers. Parser/upload buttons are intentionally not enabled.
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <History className="h-4 w-4" />
+            Canonical import run history
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {importRunsQuery.isLoading ? (
+            <p className="text-sm text-muted-foreground">Loading Bobcat and Vermeer import-run ledger…</p>
+          ) : importRunsQuery.isError ? (
+            <p className="text-sm text-destructive">Could not load the canonical import-run ledger.</p>
+          ) : (importRunsQuery.data?.length ?? 0) === 0 ? (
+            <p className="text-sm text-muted-foreground">No Bobcat or Vermeer canonical import runs have been recorded yet.</p>
+          ) : (
+            importRunsQuery.data?.map((run) => (
+              <div key={run.id} className="rounded-lg border border-border p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="font-medium text-foreground">
+                      {oemBaseOptionsManufacturerLabel(run.manufacturer)} · {run.importFormat ?? "format pending"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatRunDate(run.ranAt)} · {run.sourceFilename ?? run.sourceStoragePath ?? "no source file recorded"}
+                    </p>
+                  </div>
+                  <Badge variant={statusBadgeVariant(run.runStatus)}>{run.runStatus}</Badge>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{formatRunCounts(run)}</p>
+                {run.error ? <p className="mt-1 text-xs text-destructive">{run.error}</p> : null}
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

@@ -16,6 +16,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AssetCountdownStack, AskIronAdvisorButton, StatusChipStack } from "@/components/primitives";
 import { PortalLayout } from "../components/PortalLayout";
+import { TethrReadinessAction } from "../../telematics/components/TethrReadinessAction";
 import { portalApi } from "../lib/portal-api";
 import { derivePortalAssetLifecycleState } from "../lib/portal-asset-360";
 import { normalizePortalFleetDetailItems } from "../lib/portal-row-normalizers";
@@ -203,6 +204,7 @@ export function PortalEquipmentDetailPage() {
         <Card className="p-5">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Action rail</p>
           <div className="mt-4 space-y-3">
+            <TethrReadinessAction surface="customer_portal" compact fallbackHref="/portal/fleet" />
             <div className="rounded-xl border border-border/60 p-3">
               <p className="text-sm font-semibold text-foreground">Next service due</p>
               <p className="mt-1 text-xs text-muted-foreground">{formatDate(item.next_service_due)}</p>

@@ -44,6 +44,7 @@ const baseContract: PortalRentalContractView = {
   companyId: "company-1",
   dealerResponse: null,
   customerNotes: null,
+  signedTermsUrl: null,
   pricingEstimate: null,
   agreedRates: null,
   paymentStatusView: null,

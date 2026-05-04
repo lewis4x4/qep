@@ -16,6 +16,7 @@ import {
 import { fetchAsset360, type Asset360Response } from "../lib/asset-360-api";
 import { CommercialActionTab } from "../components/CommercialActionTab";
 import { MachineLifecycleCard } from "../components/MachineLifecycleCard";
+import { TethrReadinessAction } from "../../telematics/components/TethrReadinessAction";
 import { supabase } from "@/lib/supabase";
 import {
   normalizeEquipmentDocumentRows,
@@ -326,6 +327,9 @@ function TelematicsTab({ equipmentId }: { equipmentId: string }) {
 
   return (
     <Card className="p-4">
+      <div className="mb-3">
+        <TethrReadinessAction surface="equipment_invoicing" compact fallbackHref="/fleet" />
+      </div>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold text-foreground">Telematics lookup</p>

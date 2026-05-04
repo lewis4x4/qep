@@ -14,6 +14,7 @@ import {
 } from "../lib/portal-rentals";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { RentalPaymentStatusCard } from "../components/RentalPaymentStatusCard";
+import { summarizeRentalSigningReadiness, vesignRequirementsText } from "../lib/signing-readiness";
 import type {
   PortalRentalBookingDraft,
   PortalRentalContractView,
@@ -331,6 +332,7 @@ export function PortalRentalsPage() {
           items={bookings}
           renderItem={(contract) => {
             const contractStage = getPortalRentalContractStage(contract);
+            const signingReadiness = summarizeRentalSigningReadiness({ signedTermsUrl: contract.signedTermsUrl });
             return (
               <Card key={contract.id} className="border-white/10 bg-white/[0.04] p-5 text-white">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -396,7 +398,12 @@ export function PortalRentalsPage() {
                 <Metric label="Estimate" value={formatCurrency(contract.pricingEstimate?.dailyRate ?? null)} detail={contract.pricingEstimate?.sourceLabel ?? "base rate"} />
                   <Metric label="Deposit" value={formatCurrency(contract.depositAmount)} detail={contract.depositStatus ?? "not required"} />
                   <Metric label="Delivery" value={contract.deliveryMode} detail={contract.branchLabel ?? "branch pending"} />
+                  <Metric label={signingReadiness.label} value={signingReadiness.value} detail={signingReadiness.detail} />
                 </div>
+
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  VESign provider status is still blocked pending {vesignRequirementsText()}.
+                </p>
 
                 <RentalPaymentStatusCard
                   payment={contract.paymentStatusView}
@@ -462,6 +469,7 @@ export function PortalRentalsPage() {
           renderItem={(contract) => {
             const relatedExtensions = extensionRequests.filter((item) => item.rentalContractId === contract.id);
             const pendingExtension = relatedExtensions.find((item) => ["submitted", "reviewing"].includes(item.status));
+            const signingReadiness = summarizeRentalSigningReadiness({ signedTermsUrl: contract.signedTermsUrl });
             return (
               <Card key={contract.id} className="border-white/10 bg-white/[0.04] p-5 text-white">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -499,8 +507,12 @@ export function PortalRentalsPage() {
                   <Metric label="Deposit" value={formatCurrency(contract.depositAmount)} detail={contract.depositStatus ?? "not required"} />
                   <Metric label="Agreed daily" value={formatCurrency(contract.agreedRates?.dailyRate ?? null)} detail={contract.agreedRates?.sourceLabel ?? "pending"} />
                   <Metric label="Delivery" value={contract.deliveryMode} detail={contract.branchLabel ?? "branch pending"} />
-                  <Metric label="Estimate" value={formatCurrency(contract.pricingEstimate?.dailyRate ?? null)} detail={contract.pricingEstimate?.sourceLabel ?? "base rate"} />
+                  <Metric label={signingReadiness.label} value={signingReadiness.value} detail={signingReadiness.detail} />
                 </div>
+
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  VESign provider status is still blocked pending {vesignRequirementsText()}.
+                </p>
 
                 <div className="mt-4 rounded-lg border border-border/60 bg-background/60 p-3">
                   <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Request extension</p>

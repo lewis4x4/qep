@@ -1,8 +1,13 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 const transitionMutate = mock(() => undefined);
+let transitionState = {
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+};
 
 const jobFixtures = [
   {
@@ -107,9 +112,7 @@ mock.module("../../hooks/useServiceJobs", () => ({
 mock.module("../../hooks/useServiceJobMutation", () => ({
   useTransitionServiceJob: () => ({
     mutate: transitionMutate,
-    isPending: false,
-    isError: false,
-    error: null,
+    ...transitionState,
   }),
 }));
 
@@ -120,6 +123,16 @@ mock.module("../../components/VoiceFieldNotes", () => ({
 const { ServiceTechnicianMobilePage } = await import("../ServiceTechnicianMobilePage");
 
 describe("ServiceTechnicianMobilePage (integration)", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+    transitionMutate.mockClear();
+    transitionState = {
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+  });
+
   test("renders technician queue stats and opens the selected work order", () => {
     render(
       <MemoryRouter>
@@ -153,5 +166,48 @@ describe("ServiceTechnicianMobilePage (integration)", () => {
       id: "job-active",
       toStage: "blocked_waiting",
     });
+  });
+
+  test("locks technician actions while a transition is pending to prevent duplicate taps", () => {
+    transitionState = {
+      isPending: true,
+      isError: false,
+      error: null,
+    };
+
+    render(
+      <MemoryRouter>
+        <ServiceTechnicianMobilePage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByText("Blue River Ag"));
+
+    const action = screen.getByRole("button", { name: "Block / wait" }) as HTMLButtonElement;
+    expect(action.disabled).toBe(true);
+    expect(screen.getByText(/Actions stay locked to prevent duplicate stage transitions/i)).toBeTruthy();
+
+    fireEvent.click(action);
+    expect(transitionMutate).not.toHaveBeenCalled();
+  });
+
+  test("shows field-safe retry guidance when a transition fails", () => {
+    transitionState = {
+      isPending: false,
+      isError: true,
+      error: new Error("Network request failed"),
+    };
+
+    render(
+      <MemoryRouter>
+        <ServiceTechnicianMobilePage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByText("Blue River Ag"));
+
+    expect(screen.getByRole("alert").textContent).toContain("Update did not save");
+    expect(screen.getByRole("alert").textContent).toContain("no stage transition is recorded until service confirms");
+    expect(screen.getByRole("alert").textContent).toContain("Network request failed");
   });
 });
