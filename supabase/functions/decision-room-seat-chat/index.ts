@@ -211,7 +211,7 @@ Deno.serve(async (req) => {
   }
 
   // Workspace isolation — verify the caller actually has access to this deal
-  // via RLS. A caller client hits the same policies as any other read; if
+  // via RLS. A caller client hits the same policies as every other read; if
   // the user isn't entitled, maybeSingle returns null and we 404.
   if (!caller.authHeader) {
     return safeJsonError("Unauthorized", 401, origin);

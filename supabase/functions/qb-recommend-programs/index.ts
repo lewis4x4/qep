@@ -32,7 +32,53 @@ import {
 import { recommendPrograms } from "../../../apps/web/src/lib/programs/recommender.ts";
 import { buildScenarios } from "../../../apps/web/src/lib/programs/scenarios.ts";
 import { validateStackingFromDB } from "../../../apps/web/src/lib/programs/stacking-db.ts";
-import type { QuoteContext } from "../../../apps/web/src/lib/programs/types.ts";
+import type {
+  ProgramRecommendation,
+  QuoteContext,
+} from "../../../apps/web/src/lib/programs/types.ts";
+
+type SupabaseLike =
+  & Parameters<typeof recommendPrograms>[1]
+  & Parameters<typeof validateStackingFromDB>[1];
+
+interface RecommendProgramsRequestBody {
+  brandId?: unknown;
+  equipmentModelId?: unknown;
+  modelCode?: unknown;
+  modelYear?: unknown;
+  customerType?: unknown;
+  gmuDetails?: unknown;
+  isRentalFleetPurchase?: unknown;
+  dealDate?: unknown;
+  listPriceCents?: unknown;
+  equipmentCostCents?: unknown;
+  baselineSalesPriceCents?: unknown;
+  markupPct?: unknown;
+}
+
+function isRequestBody(value: unknown): value is RecommendProgramsRequestBody {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isCustomerType(value: unknown): value is QuoteContext["customerType"] {
+  return value === "standard" || value === "gmu";
+}
+
+function toDateInput(value: unknown): string | number | Date {
+  if (value instanceof Date || typeof value === "string" || typeof value === "number") {
+    return value;
+  }
+  return String(value);
+}
+
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    const message = err.message;
+    if (typeof message === "string") return message;
+  }
+  return "Unknown error";
+}
 
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get("origin");
@@ -47,9 +93,10 @@ Deno.serve(async (req: Request) => {
   if (!auth.ok) return auth.response;
 
   // ── Parse body ───────────────────────────────────────────────────────────────
-  let body: Record<string, unknown>;
+  let body: RecommendProgramsRequestBody;
   try {
-    body = await req.json();
+    const parsed: unknown = await req.json();
+    body = isRequestBody(parsed) ? parsed : {};
   } catch {
     return safeJsonError("Request body must be valid JSON", 400, origin);
   }
@@ -69,7 +116,7 @@ Deno.serve(async (req: Request) => {
     equipmentCostCents,
     baselineSalesPriceCents,
     markupPct,
-  } = body as Record<string, any>;
+  } = body;
 
   if (!brandId || !equipmentModelId || !modelCode || !customerType || !dealDateRaw || !listPriceCents) {
     return safeJsonError(
@@ -79,13 +126,13 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  if (!["standard", "gmu"].includes(customerType)) {
+  if (!isCustomerType(customerType)) {
     return safeJsonError("customerType must be 'standard' or 'gmu'", 400, origin);
   }
 
   let dealDate: Date;
   try {
-    dealDate = new Date(dealDateRaw);
+    dealDate = new Date(toDateInput(dealDateRaw));
     if (isNaN(dealDate.getTime())) throw new Error("invalid");
   } catch {
     return safeJsonError("dealDate must be a valid ISO date string (e.g. '2026-02-15')", 400, origin);
@@ -96,7 +143,7 @@ Deno.serve(async (req: Request) => {
     equipmentModelId: String(equipmentModelId),
     modelCode: String(modelCode),
     modelYear: modelYear != null ? Number(modelYear) : null,
-    customerType: customerType as "standard" | "gmu",
+    customerType,
     gmuDetails: gmuDetails as QuoteContext["gmuDetails"],
     isRentalFleetPurchase: Boolean(isRentalFleetPurchase),
     dealDate,
@@ -104,12 +151,13 @@ Deno.serve(async (req: Request) => {
   };
 
   // ── Recommend ───────────────────────────────────────────────────────────────
-  let recommendations;
+  const supabase = auth.supabase as unknown as SupabaseLike;
+  let recommendations: ProgramRecommendation[];
   try {
-    recommendations = await recommendPrograms(context, auth.supabase as any);
-  } catch (err: any) {
+    recommendations = await recommendPrograms(context, supabase);
+  } catch (err: unknown) {
     console.error("[qb-recommend-programs] recommendPrograms error:", err);
-    return safeJsonError(`Failed to load programs: ${err.message}`, 500, origin);
+    return safeJsonError(`Failed to load programs: ${getErrorMessage(err)}`, 500, origin);
   }
 
   // ── Stacking — check the eligible program IDs ────────────────────────────────
@@ -119,7 +167,7 @@ Deno.serve(async (req: Request) => {
 
   const stackingResult = await validateStackingFromDB(
     { programIds: eligibleIds, customerType: context.customerType },
-    auth.supabase as any,
+    supabase,
   );
 
   // ── Scenarios ────────────────────────────────────────────────────────────────

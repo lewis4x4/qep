@@ -15,6 +15,25 @@ import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors
 import { requireServiceUser } from "../_shared/service-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
+
+type JsonRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function numberOrDefault(value: unknown, fallback: number): number {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function getDealStageSortOrder(deal: unknown): number {
+  if (!isRecord(deal)) return 0;
+  const stage = deal.crm_deal_stages;
+  if (!isRecord(stage)) return 0;
+  return numberOrDefault(stage.sort_order, 0);
+}
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
 
@@ -90,7 +109,7 @@ Deno.serve(async (req) => {
         .eq("id", body.deal_id)
         .single();
 
-      const sortOrder = (deal as any)?.crm_deal_stages?.sort_order ?? 0;
+      const sortOrder = getDealStageSortOrder(deal);
       prerequisites.quote_presented = sortOrder >= 8;
       prerequisites.buying_intent_confirmed = body.buying_intent_confirmed ?? false;
 

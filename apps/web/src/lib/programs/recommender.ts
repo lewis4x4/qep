@@ -10,13 +10,58 @@
  * No LLM calls. Pure DB + deterministic eligibility logic.
  */
 
-import type { QuoteContext, ProgramRecommendation } from "./types.ts";
+import type { QbProgram, QbProgramType, QuoteContext, ProgramRecommendation } from "./types.ts";
 
 /** Minimal duck-type for a Supabase client — avoids a bare npm import in Deno. */
 interface SupabaseLike {
-  from: (table: string) => any;
+  from: <Row>(table: string) => SupabaseQueryBuilder<Row>;
 }
 import { isEligible } from "./eligibility.ts";
+
+interface SupabaseQueryResult<Data> {
+  data: Data | null;
+  error: { message: string } | null;
+}
+
+interface SupabaseQueryBuilder<Row> extends PromiseLike<SupabaseQueryResult<Row[]>> {
+  select(columns: string): SupabaseQueryBuilder<Row>;
+  eq(column: string, value: unknown): SupabaseQueryBuilder<Row>;
+  lte(column: string, value: unknown): SupabaseQueryBuilder<Row>;
+  or(filters: string): SupabaseQueryBuilder<Row>;
+}
+
+type ProgramRow = Omit<QbProgram, "program_type"> & {
+  program_type: QbProgramType;
+};
+
+interface FinancingTerm {
+  months: number;
+  rate_pct: number;
+  dealer_participation_pct: number;
+}
+
+function isFinancingTerm(value: unknown): value is FinancingTerm {
+  if (typeof value !== "object" || value === null) return false;
+  const term = value as Record<string, unknown>;
+  return (
+    typeof term.months === "number" &&
+    typeof term.rate_pct === "number" &&
+    typeof term.dealer_participation_pct === "number"
+  );
+}
+
+function financingTerms(details: Record<string, unknown>): FinancingTerm[] {
+  const terms = details.terms;
+  return Array.isArray(terms) ? terms.filter(isFinancingTerm) : [];
+}
+
+function lowestDealerParticipationTerm(terms: FinancingTerm[]): FinancingTerm | undefined {
+  return terms.reduce<FinancingTerm | undefined>(
+    (min, term) =>
+      min === undefined || term.dealer_participation_pct < min.dealer_participation_pct ? term : min,
+    undefined,
+  );
+}
 
 export async function recommendPrograms(
   context: QuoteContext,
@@ -28,7 +73,7 @@ export async function recommendPrograms(
   const dealIso = context.dealDate.toISOString().split("T")[0];
 
   const { data: programs, error } = await supabase
-    .from("qb_programs")
+    .from<ProgramRow>("qb_programs")
     .select("*")
     .eq("brand_id", context.brandId)
     .eq("active", true)
@@ -42,7 +87,7 @@ export async function recommendPrograms(
   const recommendations: ProgramRecommendation[] = [];
 
   for (const program of programs ?? []) {
-    const eligibility = isEligible(program as any, context);
+    const eligibility = isEligible(program, context);
 
     let estimatedCustomerBenefitCents: number | undefined;
     let estimatedDealerCostCents: number | undefined;
@@ -53,16 +98,7 @@ export async function recommendPrograms(
 
     // For financing: dealer participation cost at the lowest-participation term
     if (program.program_type === "low_rate_financing" && eligibility.eligible) {
-      const details = program.details as any;
-      const terms = (details?.terms ?? []) as Array<{
-        months: number;
-        rate_pct: number;
-        dealer_participation_pct: number;
-      }>;
-      const minDealerCostTerm = terms.reduce(
-        (min: any, t: any) => (min === null || t.dealer_participation_pct < min.dealer_participation_pct ? t : min),
-        null as any,
-      );
+      const minDealerCostTerm = lowestDealerParticipationTerm(financingTerms(program.details));
       if (minDealerCostTerm && minDealerCostTerm.dealer_participation_pct > 0) {
         estimatedDealerCostCents = Math.round(
           context.listPriceCents * minDealerCostTerm.dealer_participation_pct,
@@ -79,7 +115,7 @@ export async function recommendPrograms(
       programId: program.id,
       programCode: program.program_code,
       name: program.name,
-      programType: program.program_type as any,
+      programType: program.program_type,
       eligibility,
       estimatedCustomerBenefitCents,
       estimatedDealerCostCents,

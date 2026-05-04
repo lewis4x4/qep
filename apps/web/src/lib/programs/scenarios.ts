@@ -19,6 +19,12 @@
 
 import type { ProgramRecommendation, QuoteContext, QuoteScenario } from "./types.ts";
 
+interface FinancingTerm {
+  months: number;
+  rate_pct: number;
+  dealer_participation_pct: number;
+}
+
 interface ScenarioInput {
   context: QuoteContext;
   recommendations: ProgramRecommendation[];
@@ -61,6 +67,29 @@ export function buildScenarios(input: ScenarioInput): QuoteScenario[] {
     return Math.round(financedCents * factor);
   }
 
+  function isFinancingTerm(value: unknown): value is FinancingTerm {
+    if (typeof value !== "object" || value === null) return false;
+    const term = value as Record<string, unknown>;
+    return (
+      typeof term.months === "number" &&
+      typeof term.rate_pct === "number" &&
+      typeof term.dealer_participation_pct === "number"
+    );
+  }
+
+  function financingTerms(metadata: Record<string, unknown> | undefined): FinancingTerm[] {
+    const terms = metadata?.terms;
+    return Array.isArray(terms) ? terms.filter(isFinancingTerm) : [];
+  }
+
+  function chooseBestFinancingTerm(terms: FinancingTerm[]): FinancingTerm | undefined {
+    return terms.find((t) => t.rate_pct === 0 && t.dealer_participation_pct === 0)
+      ?? terms.reduce<FinancingTerm | undefined>(
+        (best, term) => best === undefined || term.rate_pct < best.rate_pct ? term : best,
+        undefined,
+      );
+  }
+
   // ── Scenario A: Cash + CIL rebate ────────────────────────────────────────
   if (cilRec && context.customerType === "standard") {
     const rebateCents = cilRec.estimatedCustomerBenefitCents ?? 0;
@@ -92,15 +121,8 @@ export function buildScenarios(input: ScenarioInput): QuoteScenario[] {
 
   // ── Scenario B: 0% financing ──────────────────────────────────────────────
   if (financingRec && context.customerType === "standard") {
-    const details = financingRec.eligibility.metadata as any;
-    const terms: Array<{ months: number; rate_pct: number; dealer_participation_pct: number }> =
-      details?.terms ?? [];
-
     // Pick the best 0% term with no dealer cost first; fall back to lowest rate
-    const bestTerm =
-      terms.find((t) => t.rate_pct === 0 && t.dealer_participation_pct === 0) ??
-      terms.reduce((best: any, t) =>
-        best === null || t.rate_pct < best.rate_pct ? t : best, null as any);
+    const bestTerm = chooseBestFinancingTerm(financingTerms(financingRec.eligibility.metadata));
 
     if (bestTerm) {
       const financedCents = baselineSalesPriceCents;

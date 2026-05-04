@@ -264,3 +264,13 @@ Results:
 - `parts-network-optimizer` now tolerates Supabase joined-row object-or-array shapes for `parts_orders` and `portal_customers` instead of direct casting.
 - Targeted scan for `as any`, `any[]`, `catch (...: any)`, `Record<string, any>`, `@ts-ignore`, and `@ts-expect-error` is clear across the three hardened edge functions.
 - Targeted Deno checks passed for all three hardened edge functions.
+
+## 2026-05-04 Follow-On Active-Code Cleanup Batch 2
+
+- Hardened the remaining active edge-function raw-cast hits in `ai-parts-lookup`, `demo-manager`, `qb-rebate-deadlines-cron`, `qb-recommend-programs`, and `qrm-honesty-scan`.
+- `ai-parts-lookup` now normalizes catalog rows, hybrid RPC hits, cross references, machine compatibility, and KB evidence before ranking/response assembly.
+- `demo-manager` now reads joined deal-stage sort order through a guarded helper.
+- QuickBooks rebate/recommendation edge functions now use typed request parsing, shared Supabase-like aliases, and `unknown` error handling instead of raw `any` casts.
+- Program helper cleanup removed raw casts from rebate tracking, recommendation scoring, and scenario financing-term selection while preserving the existing 30-test program suite.
+- `qrm-honesty-scan` now stores query results as typed/unknown rows and normalizes joined stage shapes before scorer dispatch.
+- Targeted Deno checks passed for the changed edge functions; program helper tests and web typecheck passed.

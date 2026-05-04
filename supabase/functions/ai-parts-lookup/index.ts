@@ -93,6 +93,125 @@ interface SearchResponse {
   };
 }
 
+type JsonRecord = Record<string, unknown>;
+
+interface CatalogRow {
+  id: string;
+  part_number: string;
+  description: string | null;
+  manufacturer: string | null;
+  category: string | null;
+  cross_references: PartSearchResult["cross_references"];
+  compatible_machines: string[];
+}
+
+interface HybridPartHit {
+  part_id: string;
+  hybrid_score: number;
+  match_source: string | null;
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function rowsFromData(data: unknown): unknown[] {
+  return Array.isArray(data) ? data : [];
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function numberOrDefault(value: unknown, fallback: number): number {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function normalizeCrossReferences(
+  value: unknown,
+): PartSearchResult["cross_references"] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    const partNumber = stringOrNull(item.part_number);
+    if (!partNumber) return [];
+
+    return [{
+      source: stringOrNull(item.source) ?? "",
+      part_number: partNumber,
+      verified: item.verified === true,
+    }];
+  });
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function normalizeCatalogRow(row: unknown): CatalogRow | null {
+  if (!isRecord(row)) return null;
+
+  const id = stringOrNull(row.id);
+  const partNumber = stringOrNull(row.part_number);
+  if (!id || !partNumber) return null;
+
+  return {
+    id,
+    part_number: partNumber,
+    description: stringOrNull(row.description),
+    manufacturer: stringOrNull(row.manufacturer),
+    category: stringOrNull(row.category),
+    cross_references: normalizeCrossReferences(row.cross_references),
+    compatible_machines: normalizeStringArray(row.compatible_machines),
+  };
+}
+
+function normalizeHybridPartHit(row: unknown): HybridPartHit | null {
+  if (!isRecord(row)) return null;
+
+  const partId = stringOrNull(row.part_id);
+  if (!partId) return null;
+
+  return {
+    part_id: partId,
+    hybrid_score: numberOrDefault(row.hybrid_score, 0),
+    match_source: stringOrNull(row.match_source),
+  };
+}
+
+function normalizeKbEvidenceRow(row: unknown): KbEvidenceRow | null {
+  if (!isRecord(row)) return null;
+
+  const sourceId = stringOrNull(row.document_id) ?? stringOrNull(row.id);
+
+  return {
+    source_type: "document",
+    source_id: sourceId ?? "",
+    source_title: stringOrNull(row.title) ??
+      stringOrNull(row.document_title) ??
+      "Manufacturer Document",
+    excerpt: stringOrNull(row.content) ?? stringOrNull(row.chunk_text) ?? "",
+    confidence: numberOrDefault(row.similarity, 0.5),
+    access_class: null,
+    section_title: stringOrNull(row.section_title),
+    page_number: numberOrNull(row.page_number),
+  };
+}
+
+function isNonNullable<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined;
+}
+
 // ── Circuit Breaker (for embedding + KB RAG) ────────────────
 // In serverless each cold start resets counters — the embedding timeout is
 // the primary protection. This breaker prevents repeated timeouts within
@@ -204,9 +323,11 @@ async function searchExact(
 
   const { data } = await q;
   const out: PartSearchResult[] = [];
-  for (const row of data ?? []) {
-    const isExact = row.part_number.toLowerCase() === query.toLowerCase();
-    out.push(catalogRowToResult(row, isExact ? 1.0 : 0.85, "exact"));
+  for (const row of rowsFromData(data)) {
+    const catalogRow = normalizeCatalogRow(row);
+    if (!catalogRow) continue;
+    const isExact = catalogRow.part_number.toLowerCase() === query.toLowerCase();
+    out.push(catalogRowToResult(catalogRow, isExact ? 1.0 : 0.85, "exact"));
   }
   return out;
 }
@@ -231,16 +352,16 @@ async function searchCrossRef(
 
   const { data } = await q;
   const out: PartSearchResult[] = [];
-  for (const row of data ?? []) {
-    const refs = (row.cross_references ?? []) as Array<{
-      part_number?: string;
-      verified?: boolean;
-    }>;
+  for (const row of rowsFromData(data)) {
+    const catalogRow = normalizeCatalogRow(row);
+    if (!catalogRow) continue;
+
+    const refs = catalogRow.cross_references;
     const match = refs.find((r) =>
-      r.part_number?.toLowerCase().includes(query.toLowerCase()),
+      r.part_number.toLowerCase().includes(query.toLowerCase()),
     );
     if (match) {
-      out.push(catalogRowToResult(row, match.verified ? 0.92 : 0.75, "cross_ref"));
+      out.push(catalogRowToResult(catalogRow, match.verified ? 0.92 : 0.75, "cross_ref"));
     }
     if (out.length >= limit) break;
   }
@@ -279,32 +400,37 @@ async function searchHybrid(
     return searchFtsFallback(supabase, query, filters, limit);
   }
 
-  if (!data || data.length === 0) {
+  const rawHits = rowsFromData(data);
+  if (rawHits.length === 0) {
     return searchFtsFallback(supabase, query, filters, limit);
   }
 
+  const hits = rawHits.map(normalizeHybridPartHit).filter(isNonNullable);
+
   // Hydrate the missing fields (RPC returns a subset). Batched lookup on part_id.
-  const ids = data.map((r: any) => r.part_id);
+  const ids = hits.map((hit) => hit.part_id);
   const { data: rows } = await supabase
     .from("parts_catalog")
     .select("*")
     .in("id", ids)
     .is("deleted_at", null);
 
-  const rowById = new Map<string, any>();
-  for (const r of rows ?? []) rowById.set(r.id, r);
+  const rowById = new Map<string, CatalogRow>();
+  for (const row of rowsFromData(rows)) {
+    const catalogRow = normalizeCatalogRow(row);
+    if (catalogRow) rowById.set(catalogRow.id, catalogRow);
+  }
 
   const out: PartSearchResult[] = [];
-  for (const hit of data as any[]) {
+  for (const hit of hits) {
     const row = rowById.get(hit.part_id);
     if (!row) continue;
-    const hybridScore = Number(hit.hybrid_score) || 0;
     const matchType: MatchType = hit.match_source === "both"
       ? "hybrid"
       : hit.match_source === "semantic"
         ? "semantic"
         : "fts";
-    out.push(catalogRowToResult(row, hybridScore, matchType));
+    out.push(catalogRowToResult(row, hit.hybrid_score, matchType));
     if (out.length >= limit) break;
   }
   return out;
@@ -333,14 +459,16 @@ async function searchFtsFallback(
 
   const { data } = await q;
   const out: PartSearchResult[] = [];
-  for (const row of data ?? []) {
-    out.push(catalogRowToResult(row, 0.65, "fts"));
+  for (const row of rowsFromData(data)) {
+    const catalogRow = normalizeCatalogRow(row);
+    if (!catalogRow) continue;
+    out.push(catalogRowToResult(catalogRow, 0.65, "fts"));
   }
   return out;
 }
 
 function catalogRowToResult(
-  row: any,
+  row: CatalogRow,
   confidence: number,
   matchType: MatchType,
 ): PartSearchResult {
@@ -352,9 +480,9 @@ function catalogRowToResult(
     category: row.category,
     confidence: Math.max(0, Math.min(1, confidence)),
     match_type: matchType,
-    cross_references: row.cross_references || [],
+    cross_references: row.cross_references,
     frequently_ordered_with: [],
-    compatible_machines: row.compatible_machines || [],
+    compatible_machines: row.compatible_machines,
     intellidealer_status: "not_connected",
     notes: null,
     source: "catalog",
@@ -420,15 +548,9 @@ async function searchRag(
       return { evidence: [], parts: [] };
     }
 
-    const evidenceRows: KbEvidenceRow[] = chunks.map((c: any) => ({
-      source_type: "document",
-      source_id: c.document_id || c.id,
-      source_title: c.title || c.document_title || "Manufacturer Document",
-      excerpt: c.content || c.chunk_text || "",
-      confidence: c.similarity || 0.5,
-      section_title: c.section_title || null,
-      page_number: c.page_number || null,
-    }));
+    const evidenceRows = rowsFromData(chunks)
+      .map(normalizeKbEvidenceRow)
+      .filter(isNonNullable);
 
     const reranked = await rerankKbEvidence(query, evidenceRows, {
       loggerTag: "ai-parts-lookup",
@@ -547,11 +669,10 @@ Deno.serve(async (req) => {
       .eq("is_active", true)
       .limit(limit);
 
-    if (machineParts) {
-      machinePartResults = machineParts.map((row: any) =>
-        catalogRowToResult(row, 0.8, "machine_compat"),
-      );
-    }
+    machinePartResults = rowsFromData(machineParts)
+      .map(normalizeCatalogRow)
+      .filter(isNonNullable)
+      .map((row) => catalogRowToResult(row, 0.8, "machine_compat"));
   }
 
   // Merge + dedupe

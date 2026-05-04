@@ -40,6 +40,10 @@ import type { RebateDeadline } from "../../../apps/web/src/lib/programs/types.ts
 /** Alert window: notify when the deadline is within this many days */
 const ALERT_DAYS_AHEAD = 14;
 
+type SupabaseLike =
+  & Parameters<typeof getUpcomingRebateDeadlines>[1]
+  & Parameters<typeof enrichWithProgramDetails>[1];
+
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get("origin");
 
@@ -59,13 +63,14 @@ Deno.serve(async (req: Request) => {
 
   // Service-role client — bypasses RLS so the cron can see all workspaces
   const supabase = createClient(supabaseUrl, serviceRoleKey);
+  const programSupabase = supabase as unknown as SupabaseLike;
 
   // ── Fetch deadlines ──────────────────────────────────────────────────────────
   let deadlines: RebateDeadline[];
   try {
-    const raw = await getUpcomingRebateDeadlines({ daysAhead: ALERT_DAYS_AHEAD }, supabase as any);
-    deadlines = await enrichWithProgramDetails(raw, supabase as any);
-  } catch (err: any) {
+    const raw = await getUpcomingRebateDeadlines({ daysAhead: ALERT_DAYS_AHEAD }, programSupabase);
+    deadlines = await enrichWithProgramDetails(raw, programSupabase);
+  } catch (err: unknown) {
     console.error("[qb-rebate-deadlines-cron] fetch error:", err);
     return safeJsonError("Failed to load deadlines", 500, origin);
   }

@@ -33,7 +33,12 @@ import {
   scoreHighProbNoActivity,
   scoreMarginPassedNoPct,
   scoreRetroactiveActivity,
+  type ClosedLostDealRow,
+  type DealWithStageRow,
+  type DepositMismatchRow,
   type HonestyObservation,
+  type MarginMismatchRow,
+  type RetroactiveActivityRow,
 } from "../_shared/qrm-honesty/probes.ts";
 
 const FN_NAME = "qrm-honesty-scan";
@@ -42,6 +47,19 @@ interface ProbeRow {
   id: string;
   probe_name: string;
   is_enabled: boolean;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeJoinedRecord(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) {
+    const [first] = value;
+    return isRecord(first) ? first : null;
+  }
+
+  return isRecord(value) ? value : null;
 }
 
 Deno.serve(async (req) => {
@@ -93,8 +111,7 @@ Deno.serve(async (req) => {
 
     // Run each query group's DB query once. The results are fanned to all
     // probes in that group by the scorer dispatch below.
-    // deno-lint-ignore no-explicit-any
-    const queryResults = new Map<string, any[]>();
+    const queryResults = new Map<string, unknown[]>();
 
     // Query group: deals_with_stages (probes 1, 2)
     if (probesByGroup.has("deals_with_stages")) {
@@ -108,15 +125,18 @@ Deno.serve(async (req) => {
         .is("closed_at", null)
         .eq("workspace_id", workspaceId);
 
-      const rows = (data ?? []).map((d: Record<string, unknown>) => ({
+      const rows: DealWithStageRow[] = (data ?? []).filter(isRecord).map((d) => {
+        const stage = normalizeJoinedRecord(d.crm_deal_stages);
+        return {
         id: d.id as string,
         name: d.name as string,
         last_activity_at: d.last_activity_at as string | null,
         expected_close_on: d.expected_close_on as string | null,
         assigned_rep_id: d.assigned_rep_id as string | null,
-        stage_probability: (d.crm_deal_stages as Record<string, unknown>)?.probability as number | null,
+          stage_probability: typeof stage?.probability === "number" ? stage.probability : null,
         workspace_id: d.workspace_id as string,
-      }));
+        };
+      });
       queryResults.set("deals_with_stages", rows);
     }
 
@@ -132,13 +152,14 @@ Deno.serve(async (req) => {
         .eq("crm_deal_stages.is_closed_lost", true)
         .eq("workspace_id", workspaceId);
 
-      queryResults.set("closed_lost_deals", (data ?? []).map((d: Record<string, unknown>) => ({
+      const rows: ClosedLostDealRow[] = (data ?? []).filter(isRecord).map((d) => ({
         id: d.id as string,
         name: d.name as string,
         loss_reason: d.loss_reason as string | null,
         assigned_rep_id: d.assigned_rep_id as string | null,
         workspace_id: d.workspace_id as string,
-      })));
+      }));
+      queryResults.set("closed_lost_deals", rows);
     }
 
     // Query group: deposit_mismatch (probe 4)
@@ -150,7 +171,15 @@ Deno.serve(async (req) => {
         .is("deleted_at", null)
         .eq("workspace_id", workspaceId);
 
-      const deals = (data ?? []) as Array<{ id: string; name: string; deposit_status: string; assigned_rep_id: string | null; workspace_id: string }>;
+      const deals: Array<Omit<DepositMismatchRow, "has_verified_deposit">> = (data ?? [])
+        .filter(isRecord)
+        .map((d) => ({
+          id: d.id as string,
+          name: d.name as string,
+          deposit_status: d.deposit_status as string,
+          assigned_rep_id: d.assigned_rep_id as string | null,
+          workspace_id: d.workspace_id as string,
+        }));
 
       // For each verified deal, check if a matching deposits row exists
       const dealIds = deals.map((d) => d.id);
@@ -164,10 +193,11 @@ Deno.serve(async (req) => {
         verifiedDepositDealIds = new Set((deposits ?? []).map((d: Record<string, unknown>) => d.deal_id as string));
       }
 
-      queryResults.set("deposit_mismatch", deals.map((d) => ({
+      const rows: DepositMismatchRow[] = deals.map((d) => ({
         ...d,
         has_verified_deposit: verifiedDepositDealIds.has(d.id),
-      })));
+      }));
+      queryResults.set("deposit_mismatch", rows);
     }
 
     // Query group: margin_mismatch (probe 5)
@@ -180,7 +210,15 @@ Deno.serve(async (req) => {
         .is("deleted_at", null)
         .eq("workspace_id", workspaceId);
 
-      queryResults.set("margin_mismatch", data ?? []);
+      const rows: MarginMismatchRow[] = (data ?? []).filter(isRecord).map((d) => ({
+        id: d.id as string,
+        name: d.name as string,
+        margin_check_status: d.margin_check_status as string,
+        margin_pct: typeof d.margin_pct === "number" ? d.margin_pct : null,
+        assigned_rep_id: d.assigned_rep_id as string | null,
+        workspace_id: d.workspace_id as string,
+      }));
+      queryResults.set("margin_mismatch", rows);
     }
 
     // Query group: retroactive_activities (probe 6)
@@ -194,7 +232,15 @@ Deno.serve(async (req) => {
         .gte("created_at", yesterday)
         .eq("workspace_id", workspaceId);
 
-      queryResults.set("retroactive_activities", data ?? []);
+      const rows: RetroactiveActivityRow[] = (data ?? []).filter(isRecord).map((d) => ({
+        id: d.id as string,
+        occurred_at: d.occurred_at as string,
+        created_at: d.created_at as string,
+        created_by: d.created_by as string | null,
+        deal_id: d.deal_id as string | null,
+        workspace_id: d.workspace_id as string,
+      }));
+      queryResults.set("retroactive_activities", rows);
     }
 
     // ── 3. Run scorers and collect observations ─────────────────────────
@@ -212,22 +258,22 @@ Deno.serve(async (req) => {
 
         switch (probe.probe_name) {
           case "high_prob_no_activity_14d":
-            observations = scoreHighProbNoActivity(rows, nowMs);
+            observations = scoreHighProbNoActivity(rows as DealWithStageRow[], nowMs);
             break;
           case "close_imminent_no_activity":
-            observations = scoreCloseImminentNoActivity(rows, nowMs);
+            observations = scoreCloseImminentNoActivity(rows as DealWithStageRow[], nowMs);
             break;
           case "closed_lost_no_reason":
-            observations = scoreClosedLostNoReason(rows);
+            observations = scoreClosedLostNoReason(rows as ClosedLostDealRow[]);
             break;
           case "deposit_state_mismatch":
-            observations = scoreDepositStateMismatch(rows);
+            observations = scoreDepositStateMismatch(rows as DepositMismatchRow[]);
             break;
           case "margin_passed_no_pct":
-            observations = scoreMarginPassedNoPct(rows);
+            observations = scoreMarginPassedNoPct(rows as MarginMismatchRow[]);
             break;
           case "retroactive_activity":
-            observations = scoreRetroactiveActivity(rows);
+            observations = scoreRetroactiveActivity(rows as RetroactiveActivityRow[]);
             break;
           default:
             // Unknown probe name — skip gracefully

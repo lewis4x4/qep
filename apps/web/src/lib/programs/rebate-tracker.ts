@@ -20,7 +20,91 @@ import type { RebateDeadline } from "./types.ts";
 
 /** Minimal duck-type for a Supabase client — avoids a bare npm import in Deno. */
 interface SupabaseLike {
-  from: (table: string) => any;
+  from: <Row>(table: string) => SupabaseQueryBuilder<Row>;
+}
+
+interface SupabaseQueryResult<Data> {
+  data: Data | null;
+  error: { message: string } | null;
+}
+
+interface SupabaseQueryBuilder<Row> extends PromiseLike<SupabaseQueryResult<Row[]>> {
+  select(columns: string): SupabaseQueryBuilder<Row>;
+  is(column: string, value: unknown): SupabaseQueryBuilder<Row>;
+  not(column: string, operator: string, value: unknown): SupabaseQueryBuilder<Row>;
+  lte(column: string, value: unknown): SupabaseQueryBuilder<Row>;
+  eq(column: string, value: unknown): SupabaseQueryBuilder<Row>;
+  in(column: string, values: readonly unknown[]): SupabaseQueryBuilder<Row>;
+}
+
+interface CompanyJoin {
+  id: string;
+  name: string | null;
+}
+
+interface SalesmanJoin {
+  id: string;
+  raw_user_meta_data: Record<string, unknown> | null;
+}
+
+interface DealRow {
+  id: string;
+  deal_number: string;
+  workspace_id: string | null;
+  salesman_id: string | null;
+  applied_program_ids: unknown;
+  warranty_registration_date: string;
+  rebate_filing_due_date: string;
+  total_revenue_cents: number | null;
+  company: CompanyJoin | CompanyJoin[] | null;
+  salesman: SalesmanJoin | SalesmanJoin[] | null;
+}
+
+interface ProgramDetailsRow {
+  id: string;
+  name: string;
+  program_type: string;
+  program_code: string;
+  details: Record<string, unknown>;
+}
+
+interface RebateDetail {
+  amount_cents?: number;
+}
+
+type EnrichedDeadlineProgram = RebateDeadline["programs"][number] & {
+  _estimatedTotalCents?: number;
+};
+
+function firstJoin<T>(value: T | T[] | null): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function joinedSalesmanName(salesman: SalesmanJoin | null): string {
+  const fullName = salesman?.raw_user_meta_data?.full_name;
+  if (typeof fullName === "string" && fullName.length > 0) return fullName;
+
+  const name = salesman?.raw_user_meta_data?.name;
+  return typeof name === "string" && name.length > 0 ? name : "Unknown Rep";
+}
+
+function isRebateDetail(value: unknown): value is RebateDetail {
+  if (typeof value !== "object" || value === null) return false;
+  const amountCents = (value as Record<string, unknown>).amount_cents;
+  return amountCents === undefined || typeof amountCents === "number";
+}
+
+function rebateTotalCents(details: Record<string, unknown>): number {
+  const rebates = details.rebates;
+  if (!Array.isArray(rebates)) return 0;
+
+  return rebates
+    .filter(isRebateDetail)
+    .reduce((sum, rebate) => sum + (rebate.amount_cents ?? 0), 0);
 }
 
 interface GetDeadlinesParams {
@@ -44,7 +128,7 @@ export async function getUpcomingRebateDeadlines(
   // Fetch deals within the window (include overdue — past due_date but unfiled)
   // workspace_id is required so the cron can scope fan-out to the owning tenant.
   let query = supabase
-    .from("qb_deals")
+    .from<DealRow>("qb_deals")
     .select(
       `
       id,
@@ -77,7 +161,7 @@ export async function getUpcomingRebateDeadlines(
   const results: RebateDeadline[] = [];
 
   for (const deal of deals ?? []) {
-    const dueDate = new Date(deal.rebate_filing_due_date as string);
+    const dueDate = new Date(deal.rebate_filing_due_date);
     const diffMs = dueDate.getTime() - today.getTime();
     const daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
@@ -89,20 +173,18 @@ export async function getUpcomingRebateDeadlines(
 
     // Program details — we resolve names from applied_program_ids if present
     // For now we surface the program IDs; the edge function enriches with names.
-    const programIds: string[] = (deal.applied_program_ids as string[] | null) ?? [];
+    const programIds = isStringArray(deal.applied_program_ids) ? deal.applied_program_ids : [];
 
     // Company and salesman names from joins
-    const companyAny = deal.company as any;
-    const salesmanAny = deal.salesman as any;
-    const companyName  = companyAny?.name ?? "Unknown Company";
-    const salesmanName = salesmanAny?.raw_user_meta_data?.full_name
-      ?? salesmanAny?.raw_user_meta_data?.name
-      ?? "Unknown Rep";
+    const company = firstJoin(deal.company);
+    const salesman = firstJoin(deal.salesman);
+    const companyName  = company?.name ?? "Unknown Company";
+    const salesmanName = joinedSalesmanName(salesman);
 
     results.push({
       dealId: deal.id,
       dealNumber: deal.deal_number,
-      workspaceId: (deal.workspace_id as string | null) ?? "default",
+      workspaceId: deal.workspace_id ?? "default",
       companyName,
       salesmanName,
       programs: programIds.map((id) => ({
@@ -110,8 +192,8 @@ export async function getUpcomingRebateDeadlines(
         programType: "unknown",
         programCode: id,
       })),
-      warrantyRegistrationDate: deal.warranty_registration_date as string,
-      filingDueDate: deal.rebate_filing_due_date as string,
+      warrantyRegistrationDate: deal.warranty_registration_date,
+      filingDueDate: deal.rebate_filing_due_date,
       daysRemaining,
       urgency,
       totalRebateAmountCents: 0, // enriched by edge function from program details
@@ -144,29 +226,22 @@ export async function enrichWithProgramDetails(
   if (allIds.length === 0) return deadlines;
 
   const { data: programRows } = await supabase
-    .from("qb_programs")
+    .from<ProgramDetailsRow>("qb_programs")
     .select("id, name, program_type, program_code, details")
     .in("id", allIds);
 
   const programMap = new Map(
-    ((programRows ?? []) as any[]).map((p) => [p.id, p]),
+    (programRows ?? []).map((p): [string, ProgramDetailsRow] => [p.id, p]),
   );
 
   return deadlines.map((d) => {
-    const enrichedPrograms = d.programs.map((p) => {
+    const enrichedPrograms: EnrichedDeadlineProgram[] = d.programs.map((p) => {
       const row = programMap.get(p.name);
       if (!row) return p;
 
       // Estimate rebate amount from the program details
       // CIL and aged_inventory have per-model rebate arrays; sum them for a total
-      let totalCents = 0;
-      const details = row.details as any;
-      if (details?.rebates && Array.isArray(details.rebates)) {
-        totalCents = details.rebates.reduce(
-          (sum: number, r: { amount_cents: number }) => sum + (r.amount_cents ?? 0),
-          0,
-        );
-      }
+      const totalCents = rebateTotalCents(row.details);
 
       return {
         name: row.name,
@@ -177,7 +252,7 @@ export async function enrichWithProgramDetails(
     });
 
     const totalRebateAmountCents = enrichedPrograms.reduce(
-      (sum: number, p: any) => sum + (p._estimatedTotalCents ?? 0),
+      (sum, p) => sum + (p._estimatedTotalCents ?? 0),
       0,
     );
 
