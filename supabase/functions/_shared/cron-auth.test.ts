@@ -67,6 +67,23 @@ Deno.test("isServiceRoleCaller: accepts legacy Bearer service_role_key match", (
   );
 });
 
+Deno.test("isServiceRoleCaller: accepts Bearer service_role_key with surrounding whitespace", () => {
+  withEnv(
+    {
+      SUPABASE_SERVICE_ROLE_KEY: `  ${TEST_SERVICE_KEY}  `,
+      INTERNAL_SERVICE_SECRET: undefined,
+      DGE_INTERNAL_SERVICE_SECRET: undefined,
+    },
+    () => {
+      const req = new Request(TEST_URL, {
+        method: "POST",
+        headers: { Authorization: `  Bearer ${TEST_SERVICE_KEY}  ` },
+      });
+      assertEquals(isServiceRoleCaller(req), true);
+    },
+  );
+});
+
 Deno.test("isServiceRoleCaller: rejects wrong Bearer token", () => {
   withEnv(
     {
@@ -84,7 +101,43 @@ Deno.test("isServiceRoleCaller: rejects wrong Bearer token", () => {
   );
 });
 
-// ─── Path 2: modern x-internal-service-secret ────────────────────────────
+// ─── Path 2: apikey service_role_key ────────────────────────────────────
+
+Deno.test("isServiceRoleCaller: accepts apikey service_role_key match", () => {
+  withEnv(
+    {
+      SUPABASE_SERVICE_ROLE_KEY: TEST_SERVICE_KEY,
+      INTERNAL_SERVICE_SECRET: undefined,
+      DGE_INTERNAL_SERVICE_SECRET: undefined,
+    },
+    () => {
+      const req = new Request(TEST_URL, {
+        method: "POST",
+        headers: { apikey: TEST_SERVICE_KEY },
+      });
+      assertEquals(isServiceRoleCaller(req), true);
+    },
+  );
+});
+
+Deno.test("isServiceRoleCaller: rejects wrong apikey", () => {
+  withEnv(
+    {
+      SUPABASE_SERVICE_ROLE_KEY: TEST_SERVICE_KEY,
+      INTERNAL_SERVICE_SECRET: undefined,
+      DGE_INTERNAL_SERVICE_SECRET: undefined,
+    },
+    () => {
+      const req = new Request(TEST_URL, {
+        method: "POST",
+        headers: { apikey: "wrong-key" },
+      });
+      assertEquals(isServiceRoleCaller(req), false);
+    },
+  );
+});
+
+// ─── Path 3: modern x-internal-service-secret ────────────────────────────
 
 Deno.test("isServiceRoleCaller: accepts INTERNAL_SERVICE_SECRET header match", () => {
   withEnv(
@@ -97,6 +150,23 @@ Deno.test("isServiceRoleCaller: accepts INTERNAL_SERVICE_SECRET header match", (
       const req = new Request(TEST_URL, {
         method: "POST",
         headers: { "x-internal-service-secret": TEST_INTERNAL_SECRET },
+      });
+      assertEquals(isServiceRoleCaller(req), true);
+    },
+  );
+});
+
+Deno.test("isServiceRoleCaller: accepts INTERNAL_SERVICE_SECRET with surrounding whitespace", () => {
+  withEnv(
+    {
+      SUPABASE_SERVICE_ROLE_KEY: undefined,
+      INTERNAL_SERVICE_SECRET: `  ${TEST_INTERNAL_SECRET}  `,
+      DGE_INTERNAL_SERVICE_SECRET: undefined,
+    },
+    () => {
+      const req = new Request(TEST_URL, {
+        method: "POST",
+        headers: { "x-internal-service-secret": `  ${TEST_INTERNAL_SECRET}  ` },
       });
       assertEquals(isServiceRoleCaller(req), true);
     },

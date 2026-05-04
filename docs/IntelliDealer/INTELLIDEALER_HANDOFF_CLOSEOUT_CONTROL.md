@@ -20,7 +20,7 @@ If another document conflicts with this one, treat this document as the current 
 | Account 360 / Companies / editors / admin import UI | Complete for the customer handoff | `CUSTOMER_IMPORT_FINAL_RECONCILIATION.md`, production smoke screenshots | Operators can find, review, maintain safe imported fields, export safe staged rows, and audit import runs. |
 | Gap-audit Waves 0-4 | Implemented and remote-push verified through `506_*` by the 2026-04-27 cutover gate | `docs/intellidealer-gap-audit/_migration_order.md` | Core schema, reporting views, sensitive-field hardening, and computed/reporting surfaces were shipped for the gap-audit waves. |
 | Customer import migrations `508_*`-`519_*` | Applied remotely per the final reconciliation | `CUSTOMER_IMPORT_FINAL_RECONCILIATION.md` | Customer import staging, dashboard, storage, redaction, counts RPC, and commit transition guard are part of the production baseline. |
-| Latest local migration range | Present locally and applied remotely through `534_intellidealer_universal_created_by_audit.sql` | `supabase/migrations/`, `GAP_AUDIT_MUST_BLOCKER_BURNDOWN_2026-05-03.md`, `NON_MUST_GAP_CLEANUP_BURNDOWN_2026-05-03.md` | Migrations after `519_*` are gap-audit/product hardening gates; they are not required to prove the core customer import. |
+| Latest local migration range | Present locally through `535_wave5_deferred_provider_registry_seed.sql` | `supabase/migrations/`, `GAP_AUDIT_MUST_BLOCKER_BURNDOWN_2026-05-03.md`, `NON_MUST_GAP_CLEANUP_BURNDOWN_2026-05-03.md` | Migrations after `519_*` are gap-audit/product hardening gates; they are not required to prove the core customer import. Migration `535` seeds deferred provider-readiness rows only; it does not mark external integrations connected. |
 | Wave 5 external integrations | Registered deferred, not implemented | `WAVE_5_DEFERRED_INTEGRATION_REGISTER_2026-05-03.md`, `_migration_order.md` Wave 5 status | AvaTax live wiring, VESign, UPS WorldShip, JD Quote II, OEM imports, and Tethr are intentionally parked with prerequisites and are not marked complete. |
 | Audit manifest / YAML inventory | Regenerated 2026-05-03 | `docs/intellidealer-gap-audit/manifest.yaml`, `_blockers.csv`, phase YAMLs, `GAP_AUDIT_MUST_BLOCKER_BURNDOWN_2026-05-03.md`, `NON_MUST_GAP_CLEANUP_BURNDOWN_2026-05-03.md` | The inventory now reflects the current `Database` type under a conservative table/column-exists rule plus explicit behavior-row locks. Remaining must-fix blocker count is `0`; non-must residuals are `1` missing and `2` partial. |
 | Raw source file custody | Manifested 2026-05-03 | `SOURCE_FILE_CUSTODY_MANIFEST.md` | The raw files remain untracked, but filename, size, SHA-256, page counts, workbook row counts, and import run binding are now committed and script-verifiable. |
@@ -105,8 +105,8 @@ Gate:
 Result:
 
 - Total fields: `847`.
-- Built fields: `839`.
-- Partial fields: `7`.
+- Built fields: `844`.
+- Partial fields: `2`.
 - Missing fields: `1`.
 - Remaining must-fix blockers: `0`.
 
@@ -312,7 +312,7 @@ Gate:
 Result:
 
 - `WAVE_5_DEFERRED_INTEGRATION_REGISTER_2026-05-03.md` records current repo evidence, blockers, prerequisites, target UI, test plan, and cutover impact for all six deferred integrations.
-- Slice 7 is documentation-only. It registers Wave 5 deferred integrations and does not claim implementation, deployment, credentials, migrations, edge functions, or production connectivity.
+- Slice 7 registers Wave 5 deferred integrations and seeds credential-free `pending_credentials` provider-readiness rows only. It does not claim provider implementation, credentials, edge adapters, or production connectivity.
 
 ### Slice 8: Final Signoff Pack
 

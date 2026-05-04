@@ -4,9 +4,9 @@ Date: 2026-05-03
 
 ## Scope
 
-This register closes Slice 7 of the IntelliDealer handoff. It is documentation-only. It does not claim implementation, deployment, credentials, migrations, edge functions, or production connectivity for Wave 5 integrations.
+This register closes Slice 7 of the IntelliDealer handoff. It does not claim provider implementation, credentials, edge adapters, or production connectivity for Wave 5 integrations.
 
-Core customer import and customer handoff UI are production-proven. Gap-audit Waves 0-4 are implemented and remote-push verified through `506_*` per the migration-order evidence. Wave 5 remains deferred by external dependency and dealer/OEM scope.
+Core customer import and customer handoff UI are production-proven. Gap-audit Waves 0-4 are implemented and remote-push verified through `506_*` per the migration-order evidence. Wave 5 remains deferred by external dependency and dealer/OEM scope. Migration `535_wave5_deferred_provider_registry_seed.sql` only seeds credential-free `pending_credentials` provider-readiness rows in `integration_status`; it does not mark providers connected.
 
 ## Register
 
@@ -22,12 +22,13 @@ Core customer import and customer handoff UI are production-proven. Gap-audit Wa
 ## Evidence References
 
 - Wave 5 defer list: `docs/intellidealer-gap-audit/_migration_order.md`.
+- Provider registry readiness evidence: `supabase/migrations/535_wave5_deferred_provider_registry_seed.sql` seeds `pending_credentials` rows only; no provider connectivity is claimed.
 - AvaTax schema evidence: `supabase/migrations/472_qrm_company_wave2_columns.sql`, `474_qrm_equipment_wave2_columns.sql`, `477_customer_invoice_wave2_columns.sql`, `supabase/functions/_shared/parts-import-partmast.ts`, `supabase/functions/qb-calculate/index.ts`, `apps/web/src/features/quote-builder/components/TaxBreakdown.tsx`.
 - VESign schema/native-signature evidence: `supabase/migrations/477_customer_invoice_wave2_columns.sql`, `supabase/migrations/087_quote_builder_v2.sql`, `supabase/functions/quote-builder-v2/index.ts`, `supabase/migrations/235_rental_contracts_and_pricing.sql`, `docs/intellidealer-gap-audit/_blockers.csv`.
 - UPS WorldShip evidence: `supabase/migrations/419_shipping_label_runs.sql`, `docs/intellidealer-gap-audit/phase-3-parts.yaml`, `apps/web/src/features/parts/pages/PartsOrderDetailPage.tsx`, `supabase/functions/parts-order-manager/index.ts`.
 - JD Quote II evidence: `docs/intellidealer-gap-audit/phase-1-crm.yaml` (`prospect.jdquote_upload` remains `MISSING`), `supabase/migrations/400_qrm_prospects.sql`, `docs/IntelliDealer/_OCR/Phase-1_CRM/Prospect Board.txt`.
 - OEM base/options evidence: `supabase/migrations/405_equipment_base_codes.sql`, `406_equipment_options.sql`, `407_equipment_selected_options.sql`, `474_qrm_equipment_wave2_columns.sql`, `docs/intellidealer-gap-audit/phase-2-sales-intelligence.yaml`, `apps/web/src/features/admin/pages/BaseOptionsPage.tsx`, `apps/web/src/features/admin/lib/base-options-api.ts`.
-- Tethr evidence: `docs/intellidealer-gap-audit/phase-3-parts.yaml` (`parts_invoice.tethr_it_now` is `PARTIAL` for generic telematics only), `docs/intellidealer-gap-audit/phase-6-rental.yaml` (`rental_counter.action_tethr_it` is `PARTIAL` for generic telematics only), `supabase/migrations/090_social_telematics.sql`, `supabase/migrations/093_schema_hardening.sql`, `apps/web/src/lib/database.types.ts`, `supabase/functions/telematics-ingest/index.ts`, `supabase/functions/telematics-signal-ingest/index.ts`, `apps/web/src/features/equipment/pages/AssetDetailPage.tsx`, `apps/web/src/features/fleet/pages/FleetMapPage.tsx`.
+- Tethr evidence: `docs/intellidealer-gap-audit/phase-3-parts.yaml` (`parts_invoice.tethr_it_now` is `PARTIAL` for generic telematics only), `docs/intellidealer-gap-audit/phase-6-rental.yaml` (`rental_counter.action_tethr_it` is `PARTIAL` for generic telematics only), `supabase/migrations/090_social_telematics.sql`, `supabase/migrations/093_schema_hardening.sql`, `supabase/migrations/535_wave5_deferred_provider_registry_seed.sql`, `apps/web/src/lib/database.types.ts`, `supabase/functions/telematics-ingest/index.ts`, `supabase/functions/telematics-signal-ingest/index.ts`, `apps/web/src/features/equipment/pages/AssetDetailPage.tsx`, `apps/web/src/features/fleet/pages/FleetMapPage.tsx`.
 
 ## Closeout Gate
 

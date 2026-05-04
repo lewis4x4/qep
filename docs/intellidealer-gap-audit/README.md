@@ -14,7 +14,7 @@ Read in this order:
 
 1. **`manifest.yaml`** — the index. Per-phase counts, totals, and the top-50 must-fix blocker list.
 2. **`_schema/manifest-schema.md`** — the schema every phase YAML conforms to (field shape, severity definitions, qep_status values, naming convention).
-3. **`_blockers.csv`** — regenerated CSV of every current `severity=must` + `qep_status=MISSING` field, sortable in any spreadsheet. Current blocker count: 91.
+3. **`_blockers.csv`** — regenerated CSV of every current `severity=must` + `qep_status=MISSING` field, sortable in any spreadsheet. Current blocker count: 0.
 4. **`_migration_order.md`** — dependency-respecting migration sequence (which DDL comes first because of foreign-key dependencies).
 5. **The 9 phase YAMLs** — open the one(s) for your scope.
 
@@ -55,16 +55,16 @@ docs/intellidealer-gap-audit/
 
 | Phase | YAML | Fields | Must | Should | Could | MISSING | PARTIAL | BUILT |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| Phase-1 CRM | `phase-1-crm.yaml` | 93 | 39 | 48 | 6 | 3 | 2 | 88 |
-| Phase-2 Sales Intelligence | `phase-2-sales-intelligence.yaml` | 102 | 54 | 46 | 2 | 5 | 1 | 96 |
-| Phase-3 Parts | `phase-3-parts.yaml` | 106 | 66 | 37 | 3 | 9 | 5 | 92 |
-| Phase-4 Service | `phase-4-service.yaml` | 101 | 58 | 42 | 1 | 8 | 0 | 93 |
-| Phase-5 Deal Genome | `phase-5-deal-genome.yaml` | 100 | 57 | 32 | 11 | 64 | 0 | 36 |
-| Phase-6 Rental | `phase-6-rental.yaml` | 76 | 60 | 14 | 2 | 43 | 2 | 31 |
-| Phase-8 Financial Operations | `phase-8-financial-operations.yaml` | 92 | 60 | 22 | 10 | 9 | 0 | 83 |
-| Phase-9 Advanced Intelligence | `phase-9-advanced-intelligence.yaml` | 75 | 47 | 18 | 10 | 6 | 6 | 63 |
-| Cross-Cutting | `cross-cutting.yaml` | 102 | 55 | 41 | 6 | 4 | 2 | 96 |
-| **Totals** | — | **847** | **496** | **300** | **51** | **151** | **18** | **678** |
+| Phase-1 CRM | `phase-1-crm.yaml` | 93 | 39 | 48 | 6 | 1 | 0 | 92 |
+| Phase-2 Sales Intelligence | `phase-2-sales-intelligence.yaml` | 102 | 54 | 46 | 2 | 0 | 0 | 102 |
+| Phase-3 Parts | `phase-3-parts.yaml` | 106 | 66 | 37 | 3 | 0 | 1 | 105 |
+| Phase-4 Service | `phase-4-service.yaml` | 101 | 58 | 42 | 1 | 0 | 0 | 101 |
+| Phase-5 Deal Genome | `phase-5-deal-genome.yaml` | 100 | 57 | 32 | 11 | 0 | 0 | 100 |
+| Phase-6 Rental | `phase-6-rental.yaml` | 76 | 60 | 14 | 2 | 0 | 1 | 75 |
+| Phase-8 Financial Operations | `phase-8-financial-operations.yaml` | 92 | 60 | 22 | 10 | 0 | 0 | 92 |
+| Phase-9 Advanced Intelligence | `phase-9-advanced-intelligence.yaml` | 75 | 47 | 18 | 10 | 0 | 0 | 75 |
+| Cross-Cutting | `cross-cutting.yaml` | 102 | 55 | 41 | 6 | 0 | 0 | 102 |
+| **Totals** | — | **847** | **496** | **300** | **51** | **1** | **2** | **844** |
 
 Exact per-phase counts live in `manifest.yaml`. Counts were regenerated on 2026-05-03 from `apps/web/src/lib/database.types.ts` using `bun run intellidealer:gap-audit:regen`.
 

@@ -38,6 +38,8 @@ const TABS: Array<{ key: TabKey; label: string; icon: React.ReactNode }> = [
   { key: "photos",     label: "Photos",            icon: <ImageIcon className="h-3 w-3" /> },
 ];
 
+const TELEMATICS_FRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
 export function AssetDetailPage() {
   const { equipmentId } = useParams<{ equipmentId: string }>();
   const [activeTab, setActiveTab] = useState<TabKey>("commercial");
@@ -106,6 +108,10 @@ export function AssetDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setActiveTab("telematics")}>
+              <Activity className="mr-1 h-3 w-3" aria-hidden />
+              Telematics lookup
+            </Button>
             <Button size="sm" variant="outline" onClick={() => setActiveTab("commercial")}>
               Recommend Trade-Up
             </Button>
@@ -299,6 +305,7 @@ function TelematicsTab({ equipmentId }: { equipmentId: string }) {
         .from("telematics_feeds")
         .select("provider, device_serial, last_hours, last_lat, last_lng, last_reading_at, is_active")
         .eq("equipment_id", equipmentId)
+        .eq("is_active", true)
         .order("updated_at", { ascending: false })
         .limit(5);
       if (error) throw error;
@@ -307,37 +314,76 @@ function TelematicsTab({ equipmentId }: { equipmentId: string }) {
     staleTime: 60_000,
   });
 
+  const activeFeeds = telematicsQuery.data ?? [];
+  const freshFeedCount = activeFeeds.filter(isFreshTelematicsRow).length;
+  const statusLabel = telematicsQuery.isLoading
+    ? "Checking"
+    : freshFeedCount > 0
+      ? "Fresh feed"
+      : activeFeeds.length > 0
+        ? "Stale feed"
+        : "Setup needed";
+
   return (
     <Card className="p-4">
-      <p className="text-xs font-semibold text-foreground">Telematics</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-foreground">Telematics lookup</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Tethr-ready fallback: shows linked feed data only; no live Tethr connection is configured here.
+          </p>
+        </div>
+        <span className="rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {statusLabel}
+        </span>
+      </div>
       {telematicsQuery.isLoading ? (
         <p className="mt-3 text-xs text-muted-foreground">Loading telematics…</p>
-      ) : (telematicsQuery.data?.length ?? 0) === 0 ? (
-        <p className="mt-3 text-xs text-muted-foreground">No telematics feed is linked to this machine yet.</p>
+      ) : activeFeeds.length === 0 ? (
+        <div className="mt-3 rounded-lg border border-dashed border-border/70 bg-muted/10 p-3">
+          <p className="text-sm font-medium text-foreground">Setup needed before Tethr fallback can show data.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Link an active provider-neutral telematics feed to this machine first. Once active feed rows exist, this lookup will surface hours, location, and last-reading data without claiming live Tethr integration.
+          </p>
+        </div>
       ) : (
         <div className="mt-3 space-y-2">
-          {telematicsQuery.data?.map((row, index) => (
-            <div key={`${row.provider}-${index}`} className="rounded-lg border border-border/60 bg-muted/10 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-foreground">{row.provider}</p>
-                <span className={`text-xs ${row.is_active ? "text-emerald-400" : "text-muted-foreground"}`}>
-                  {row.is_active ? "active" : "inactive"}
-                </span>
+          {activeFeeds.map((row, index) => {
+            const isFresh = isFreshTelematicsRow(row);
+            return (
+              <div key={`${row.provider}-${index}`} className="rounded-lg border border-border/60 bg-muted/10 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{row.provider}</p>
+                    <p className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      Active feed data
+                    </p>
+                  </div>
+                  <span className={`text-xs ${isFresh ? "text-emerald-400" : "text-amber-400"}`}>
+                    {isFresh ? "fresh" : "stale"}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {row.device_serial ? `Device ${row.device_serial}` : "No device serial"}
+                  {row.last_hours != null ? ` · ${row.last_hours.toLocaleString()}h` : ""}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {row.last_reading_at ? `Last reading ${new Date(row.last_reading_at).toLocaleString()}` : "No recent reading"}
+                  {row.last_lat != null && row.last_lng != null ? ` · ${row.last_lat}, ${row.last_lng}` : ""}
+                </p>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {row.device_serial ? `Device ${row.device_serial}` : "No device serial"}
-                {row.last_hours != null ? ` · ${row.last_hours.toLocaleString()}h` : ""}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {row.last_reading_at ? `Last reading ${new Date(row.last_reading_at).toLocaleString()}` : "No recent reading"}
-                {row.last_lat != null && row.last_lng != null ? ` · ${row.last_lat}, ${row.last_lng}` : ""}
-              </p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </Card>
   );
+}
+
+function isFreshTelematicsRow(row: EquipmentTelematicsRow): boolean {
+  if (!row.last_reading_at) return false;
+  const lastReadingMs = new Date(row.last_reading_at).getTime();
+  return Number.isFinite(lastReadingMs) && Date.now() - lastReadingMs <= TELEMATICS_FRESH_WINDOW_MS;
 }
 
 function DocsTab({ equipmentId }: { equipmentId: string }) {

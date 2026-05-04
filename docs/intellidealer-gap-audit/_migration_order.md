@@ -191,7 +191,7 @@ Then immediately ship a UI surface in Customer Profile (Details) — Tax/Regulat
 
 ## Wave 4 — Materialized views, computed views, indexes
 
-**Files:** `517_*` through `536_*` (planned; follows Wave 3).
+**Files:** shipped as `502_*` through `506_*`. Later `507_*` through `535_*` files are post-cutover security, customer-import, gap-audit, UI, or provider-readiness hardening and should not be counted as Wave 4 reporting work.
 
 **Why fourth:** these read from the schema established in Waves 1-3.
 
@@ -230,7 +230,7 @@ Then immediately ship a UI surface in Customer Profile (Details) — Tax/Regulat
 
 ## Wave 5 — Defer / OEM-specific / phase-by-phase rollout
 
-**Files:** `537+` (planned; follows Wave 4).
+**Files:** `535+` (planned/applied as dealer scope is confirmed).
 
 **These are MUST-but-defer-by-dealer:** ship when the first dealer needs them. Don't block cutover for any of these unless that dealer has the corresponding integration.
 
@@ -241,7 +241,9 @@ Then immediately ship a UI surface in Customer Profile (Details) — Tax/Regulat
 - UPS WorldShip Import — requires UPS credentials
 - Tethr telematics integration — defer to telematics phase
 
-**Should-tier work:** the 300 `should` fields not yet covered. Prioritize the top 50 by visit-count from rep usage logs.
+Migration `535_wave5_deferred_provider_registry_seed.sql` only seeds `pending_credentials` provider-readiness rows for these integrations in `integration_status`. It does not add credentials, adapters, provider webhooks, or mark any external workflow connected.
+
+**Should-tier residual:** only `rental_counter.action_tethr_it` remains `PARTIAL` in the current regenerated inventory. The `300` should count is the total should-severity population, not uncovered work.
 
 ---
 
@@ -299,7 +301,7 @@ Then immediately ship a UI surface in Customer Profile (Details) — Tax/Regulat
 - Wave 2: ✅ implemented and remote-push verified 2026-04-27 (column-extension migrations `472_*`–`496_*`; 25 target-group migrations, 314 additive column operations, canonical `crm_companies`→`qrm_companies` and `parts_invoices`→`customer_invoices` mappings; segment gate `wave2-column-extensions` PASS was recorded at `test-results/agent-gates/20260427T042748Z-wave2-column-extensions.json`).
 - Wave 3: ✅ implemented and remote-push verified 2026-04-27 (schema-hardening migrations `497_*`–`501_*`; cross-table FK guards, safe enum/status tightening, sensitive-column RLS/write guards/masking, service request-type GL routing, customer invoice payment terms FK; segment gate `wave3-schema-hardening` PASS was recorded at `test-results/agent-gates/20260427T044330Z-wave3-schema-hardening.json`).
 - Wave 4: ✅ implemented and remote-push verified 2026-04-27 (reporting migrations `502_*`–`506_*`; customer/parts computed views, service WIP materialized views and aging buckets, AR/AP/customer profitability/credit/fiscal reporting surfaces, purposeful report indexes, safe SQL-only refresh function + pg_cron schedule; segment gate `wave4-reporting` PASS was recorded at `test-results/agent-gates/20260427T050848Z-wave4-reporting.json`).
-- Wave 5: ⏸ deferred-by-external-dependency 2026-04-27. No Wave 5 integration migration has shipped. Note: `507_post_build_security_audit_fixes.sql` exists, but it is post-build security hardening and must not be counted as Wave 5 integration work. Dealer/OEM credentialed integrations remain gated.
+- Wave 5: ⏸ deferred-by-external-dependency 2026-04-27, with provider-readiness registry seeded later by `535_wave5_deferred_provider_registry_seed.sql`. No credentialed provider adapter, webhook, secret, or live Wave 5 integration migration has shipped. Note: `507_post_build_security_audit_fixes.sql` exists, but it is post-build security hardening and must not be counted as Wave 5 integration work. Dealer/OEM credentialed integrations remain gated.
   - Final cutover gate: ✅ PASS 2026-04-27 after release-blocker review + remote-push remediation (`test-results/agent-gates/20260427T054017Z-intellidealer-cutover.json`); `supabase db push --dry-run --linked` reports the remote database is up to date through `506_*`.
   - JD Quote II (`prospect_jdquote_upload_runs`): deferred pending confirmed JD-affiliated dealer scope; no secrets/portal wiring created.
   - OEM Base & Options imports (`equipment_base_codes_import_runs` for Bobcat/Vermeer/Yanmar/Prinoth/JD): deferred pending in-scope dealer OEM + import credential path; Wave 1/2 foundations already shipped (`405_*`–`407_*`, `474_*`).

@@ -20,14 +20,14 @@ It does not change the raw source-file custody policy. Raw IntelliDealer files r
 
 ## Result
 
-Final regenerated gap-audit inventory:
+Final regenerated must-blocker inventory from this burndown pass. Later non-must cleanup and audit-readiness passes supersede these built/partial/missing totals; the current authoritative totals are in `docs/intellidealer-gap-audit/manifest.yaml` (`844` built, `2` partial, `1` missing, `0` must blockers).
 
 | Metric | Count |
 | --- | ---: |
 | Total fields | `847` |
-| Built | `789` |
+| Built after this pass | `789` |
 | Partial | `18` |
-| Missing | `40` |
+| Missing after this pass | `40` |
 | Must | `496` |
 | Should | `300` |
 | Could | `51` |

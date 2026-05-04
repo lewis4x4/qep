@@ -22,11 +22,11 @@
  * ────────────────────────────────────────────────────────────────────────
  * CRITICAL OPS NOTE — Functions Gateway verify_jwt flag
  * ────────────────────────────────────────────────────────────────────────
- * Every edge function that is cron-invoked via path #2 MUST be deployed
+ * Every edge function that is cron-invoked via path #3 MUST be deployed
  * with `verify_jwt = false` on the function gateway. The gateway's JWT
  * verification only accepts anon-key / user-JWT / service-role-key in
  * the `Authorization: Bearer` header — it does NOT inspect the
- * `x-internal-service-secret` header. A cron request using path #2 with
+ * `x-internal-service-secret` header. A cron request using path #3 with
  * verify_jwt=true hits the gateway's `{"code":"UNAUTHORIZED_NO_AUTH_HEADER"}`
  * reject before reaching our code. Deploy with
  * `supabase functions deploy <name> --no-verify-jwt`, or pass
@@ -45,7 +45,7 @@
  * — `requireServiceUser()` for JWT-based service-engine endpoints. The
  * two are unrelated despite the naming overlap; do not confuse them.
  *
- * Either env var name is accepted for the second path:
+ * Either env var name is accepted for the internal-secret path:
  *   - `INTERNAL_SERVICE_SECRET`     — used by flow-runner / analytics-*
  *   - `DGE_INTERNAL_SERVICE_SECRET` — used by dge-auth.ts
  *
@@ -54,7 +54,7 @@
  * never have to care which env var name happens to be set in their
  * runtime.
  *
- * Returns true on first successful match. Order is irrelevant — both
+ * Returns true on first successful match. Order is irrelevant — all
  * checks run cheaply against headers the request already carries.
  *
  * Empty env vars: if SERVICE_ROLE_KEY is empty (or unset) AND both
