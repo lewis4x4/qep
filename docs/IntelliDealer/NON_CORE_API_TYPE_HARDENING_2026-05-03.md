@@ -255,3 +255,12 @@ Results:
 - Active-code Slice 6 inventory is clear except for `qrm-supabase`, which is the central structural typed-client adapter used to bind QRM-specific generated types to the shared Supabase client.
 - Remaining scan matches are test fixtures that intentionally inject malformed types and `Customer-strategist.tsx.backup`, which is excluded unless restored into active code.
 - If the backup file is no longer needed, remove it in a separate cleanup commit rather than treating it as an active-code blocker.
+
+## 2026-05-04 Follow-On Edge Hardening
+
+- Hardened `extract-price-sheet`, `publish-price-sheet`, and `parts-network-optimizer` after the Wave 5 readiness pass found remaining raw JSON/join-shape risk surfaces outside the original feature-scan inventory.
+- `extract-price-sheet` now routes Claude JSON through `unknown`-based model, attachment, freight, and program normalizers before writing staging rows.
+- `publish-price-sheet` now reads item/program extraction payloads through object guards and typed array helpers before applying catalog changes.
+- `parts-network-optimizer` now tolerates Supabase joined-row object-or-array shapes for `parts_orders` and `portal_customers` instead of direct casting.
+- Targeted scan for `as any`, `any[]`, `catch (...: any)`, `Record<string, any>`, `@ts-ignore`, and `@ts-expect-error` is clear across the three hardened edge functions.
+- Targeted Deno checks passed for all three hardened edge functions.

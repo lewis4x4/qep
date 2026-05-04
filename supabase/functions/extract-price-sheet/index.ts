@@ -129,6 +129,140 @@ function fileTypeFromUrl(fileUrl: string): string {
   return "pdf";
 }
 
+type JsonRecord = Record<string, unknown>;
+
+type ExtractedProgram = JsonRecord & {
+  program_code: string;
+  program_type?: string;
+  name?: string;
+  details?: JsonRecord;
+  program_rules_notes?: string;
+};
+
+type PriceBookExtraction = {
+  models: ExtractedModel[];
+  attachments: ExtractedAttachment[];
+  freight_zones: ExtractedFreightZone[];
+  notes: string[];
+};
+
+type ProgramsExtraction = {
+  programs: ExtractedProgram[];
+  stacking_notes: string[];
+};
+
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isDefined<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function errorRawResponse(error: unknown): unknown {
+  return isJsonRecord(error) ? error.rawResponse : undefined;
+}
+
+function stringArrayField(record: JsonRecord, key: string): string[] {
+  const value = record[key];
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function arrayField(record: JsonRecord, key: string): unknown[] {
+  const value = record[key];
+  return Array.isArray(value) ? value : [];
+}
+
+function normalizeExtractedModel(value: unknown): ExtractedModel | null {
+  if (!isJsonRecord(value)) return null;
+  const { model_code, family, name_display, standard_config, list_price_cents, specs, notes, ...extra } = value;
+  return {
+    ...extra,
+    model_code: typeof model_code === "string" ? model_code : "",
+    list_price_cents: typeof list_price_cents === "number" ? list_price_cents : 0,
+    ...(typeof family === "string" ? { family } : {}),
+    ...(typeof name_display === "string" ? { name_display } : {}),
+    ...(typeof standard_config === "string" ? { standard_config } : {}),
+    ...(isJsonRecord(specs) ? { specs } : {}),
+    ...(typeof notes === "string" ? { notes } : {}),
+  };
+}
+
+function normalizeExtractedAttachment(value: unknown): ExtractedAttachment | null {
+  if (!isJsonRecord(value)) return null;
+  const {
+    part_number,
+    name,
+    category,
+    list_price_cents,
+    compatible_model_codes,
+    attachment_type,
+    ...extra
+  } = value;
+  return {
+    ...extra,
+    part_number: typeof part_number === "string" ? part_number : "",
+    name: typeof name === "string" ? name : "",
+    list_price_cents: typeof list_price_cents === "number" ? list_price_cents : 0,
+    ...(typeof category === "string" ? { category } : {}),
+    ...(Array.isArray(compatible_model_codes)
+      ? { compatible_model_codes: compatible_model_codes.filter((item): item is string => typeof item === "string") }
+      : {}),
+    ...(attachment_type === "factory_option" ||
+        attachment_type === "field_install" ||
+        attachment_type === "recommended_bucket"
+      ? { attachment_type }
+      : {}),
+  };
+}
+
+function normalizeExtractedFreightZone(value: unknown): ExtractedFreightZone | null {
+  if (!isJsonRecord(value)) return null;
+  const { state_codes, zone_name, freight_large_cents, freight_small_cents, ...extra } = value;
+  return {
+    ...extra,
+    state_codes: Array.isArray(state_codes) ? state_codes.filter((item): item is string => typeof item === "string") : [],
+    freight_large_cents: typeof freight_large_cents === "number" ? freight_large_cents : 0,
+    freight_small_cents: typeof freight_small_cents === "number" ? freight_small_cents : 0,
+    ...(typeof zone_name === "string" ? { zone_name } : {}),
+  };
+}
+
+function normalizeExtractedProgram(value: unknown): ExtractedProgram | null {
+  if (!isJsonRecord(value)) return null;
+  const { program_code, program_type, name, details, program_rules_notes, ...extra } = value;
+  return {
+    ...extra,
+    program_code: typeof program_code === "string" ? program_code : "",
+    ...(typeof program_type === "string" ? { program_type } : {}),
+    ...(typeof name === "string" ? { name } : {}),
+    ...(isJsonRecord(details) ? { details } : {}),
+    ...(typeof program_rules_notes === "string" ? { program_rules_notes } : {}),
+  };
+}
+
+function normalizePriceBookExtraction(parsed: unknown): PriceBookExtraction {
+  const data = isJsonRecord(parsed) ? parsed : {};
+  return {
+    models: arrayField(data, "models").map(normalizeExtractedModel).filter(isDefined),
+    attachments: arrayField(data, "attachments").map(normalizeExtractedAttachment).filter(isDefined),
+    freight_zones: arrayField(data, "freight_zones").map(normalizeExtractedFreightZone).filter(isDefined),
+    notes: stringArrayField(data, "notes"),
+  };
+}
+
+function normalizeProgramsExtraction(parsed: unknown): ProgramsExtraction {
+  const data = isJsonRecord(parsed) ? parsed : {};
+  return {
+    programs: arrayField(data, "programs").map(normalizeExtractedProgram).filter(isDefined),
+    stacking_notes: stringArrayField(data, "stacking_notes"),
+  };
+}
+
 async function callClaude(
   anthropic: Anthropic,
   systemPrompt: string,
@@ -146,7 +280,7 @@ async function callClaude(
     const base64 = btoa(
       new Uint8Array(fileBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ""),
     );
-    userContent = [
+    const pdfContent = [
       {
         type: "document" as const,
         source: { type: "base64" as const, media_type: "application/pdf" as const, data: base64 },
@@ -156,6 +290,7 @@ async function callClaude(
         text: `${actionLabel} from this ${brandName} document. Return the JSON structure described in the system prompt.`,
       },
     ];
+    userContent = pdfContent as unknown as Anthropic.MessageParam["content"];
   } else {
     // Excel/CSV: decode as text
     const text = new TextDecoder().decode(fileBuffer);
@@ -200,10 +335,10 @@ Deno.serve(async (req: Request) => {
   let priceSheetId: string;
   try {
     const body = await req.json();
-    priceSheetId = body?.priceSheetId;
+    priceSheetId = isJsonRecord(body) && typeof body.priceSheetId === "string" ? body.priceSheetId : "";
     if (!priceSheetId) throw new Error("priceSheetId required");
-  } catch (e: any) {
-    return safeJsonError(`Invalid request body: ${e.message}`, 400, origin);
+  } catch (e: unknown) {
+    return safeJsonError(`Invalid request body: ${errorMessage(e)}`, 400, origin);
   }
 
   // ── Load price sheet record ───────────────────────────────────────────────
@@ -239,6 +374,7 @@ Deno.serve(async (req: Request) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const serviceClient = createClient(supabaseUrl, serviceRoleKey);
+  const pricingClient = serviceClient as unknown as Parameters<typeof detectModelAction>[2];
 
   // ── Download file from Storage ────────────────────────────────────────────
   // file_url is like: price-sheets/asv/2026-q1/file.pdf
@@ -310,9 +446,9 @@ Deno.serve(async (req: Request) => {
     let callResult: Awaited<ReturnType<typeof callClaude>>;
     try {
       callResult = await callClaude(anthropic, systemPrompt, fileBuffer, fileType, brandName, passType);
-    } catch (parseErr: any) {
+    } catch (parseErr: unknown) {
       // Retry once with a stricter prompt
-      console.warn(`[extract-price-sheet] First parse failed (${passType}), retrying:`, parseErr.message);
+      console.warn(`[extract-price-sheet] First parse failed (${passType}), retrying:`, errorMessage(parseErr));
       try {
         callResult = await callClaude(
           anthropic,
@@ -322,15 +458,17 @@ Deno.serve(async (req: Request) => {
           brandName,
           passType,
         );
-      } catch (retryErr: any) {
+      } catch (retryErr: unknown) {
+        const retryMessage = errorMessage(retryErr);
+        const rawResponse = errorRawResponse(retryErr);
         await supabase
           .from("qb_price_sheets")
           .update({
             status: "rejected",
             extraction_metadata: {
-              error: `JSON parse failed after retry: ${retryErr.message}`,
+              error: `JSON parse failed after retry: ${retryMessage}`,
               passType,
-              rawResponse: retryErr.rawResponse ?? null,
+              rawResponse: rawResponse ?? null,
             },
           })
           .eq("id", priceSheetId);
@@ -339,8 +477,8 @@ Deno.serve(async (req: Request) => {
           priceSheetId,
           brandId: sheet.brand_id,
           phase: "parse",
-          message: `JSON parse failed after retry: ${retryErr.message}`,
-          extra: { passType, rawResponseTruncated: String(retryErr.rawResponse ?? "").slice(0, 500) },
+          message: `JSON parse failed after retry: ${retryMessage}`,
+          extra: { passType, rawResponseTruncated: String(rawResponse ?? "").slice(0, 500) },
         });
         return safeJsonError(`Extraction failed: could not parse Claude response as JSON`, 422, origin);
       }
@@ -350,11 +488,11 @@ Deno.serve(async (req: Request) => {
     const perItemMeta = { raw_response: rawResponse, model: "claude-sonnet-4-6", input_tokens: inputTokens, output_tokens: outputTokens };
 
     if (passType === "price_book") {
-      const data = parsed as any;
+      const data = normalizePriceBookExtraction(parsed);
 
       // Models
-      for (const item of (data.models ?? []) as ExtractedModel[]) {
-        const actionResult = await detectModelAction(item, sheet.brand_id, serviceClient as any);
+      for (const item of data.models) {
+        const actionResult = await detectModelAction(item, sheet.brand_id, pricingClient);
         await serviceClient.from("qb_price_sheet_items").insert({
           workspace_id: sheet.workspace_id as string,
           price_sheet_id: priceSheetId,
@@ -371,8 +509,8 @@ Deno.serve(async (req: Request) => {
       }
 
       // Attachments
-      for (const item of (data.attachments ?? []) as ExtractedAttachment[]) {
-        const actionResult = await detectAttachmentAction(item, sheet.brand_id, serviceClient as any);
+      for (const item of data.attachments) {
+        const actionResult = await detectAttachmentAction(item, sheet.brand_id, pricingClient);
         await serviceClient.from("qb_price_sheet_items").insert({
           workspace_id: sheet.workspace_id as string,
           price_sheet_id: priceSheetId,
@@ -389,8 +527,8 @@ Deno.serve(async (req: Request) => {
       }
 
       // Freight zones
-      for (const item of (data.freight_zones ?? []) as ExtractedFreightZone[]) {
-        const actionResult = await detectFreightZoneAction(item, sheet.brand_id, serviceClient as any);
+      for (const item of data.freight_zones) {
+        const actionResult = await detectFreightZoneAction(item, sheet.brand_id, pricingClient);
         await serviceClient.from("qb_price_sheet_items").insert({
           workspace_id: sheet.workspace_id as string,
           price_sheet_id: priceSheetId,
@@ -406,7 +544,7 @@ Deno.serve(async (req: Request) => {
       }
 
       // Notes
-      for (const note of (data.notes ?? []) as string[]) {
+      for (const note of data.notes) {
         await serviceClient.from("qb_price_sheet_items").insert({
           workspace_id: sheet.workspace_id as string,
           price_sheet_id: priceSheetId,
@@ -422,18 +560,18 @@ Deno.serve(async (req: Request) => {
 
       extractionSummary.push({
         pass: "price_book",
-        models: data.models?.length ?? 0,
-        attachments: data.attachments?.length ?? 0,
-        freight_zones: data.freight_zones?.length ?? 0,
-        notes: data.notes?.length ?? 0,
+        models: data.models.length,
+        attachments: data.attachments.length,
+        freight_zones: data.freight_zones.length,
+        notes: data.notes.length,
         input_tokens: inputTokens,
         output_tokens: outputTokens,
       });
     } else {
       // retail_programs pass
-      const data = parsed as any;
+      const data = normalizeProgramsExtraction(parsed);
 
-      for (const prog of (data.programs ?? []) as any[]) {
+      for (const prog of data.programs) {
         // Check if program already exists
         const { data: existingProg } = await serviceClient
           .from("qb_programs")
@@ -461,8 +599,8 @@ Deno.serve(async (req: Request) => {
 
       extractionSummary.push({
         pass: "retail_programs",
-        programs: data.programs?.length ?? 0,
-        stacking_notes: data.stacking_notes?.length ?? 0,
+        programs: data.programs.length,
+        stacking_notes: data.stacking_notes.length,
         input_tokens: inputTokens,
         output_tokens: outputTokens,
       });

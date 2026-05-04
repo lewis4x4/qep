@@ -35,7 +35,7 @@
  * No @/ path aliases — they don't resolve in Deno.
  */
 
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { optionsResponse, safeJsonOk, safeJsonError } from "../_shared/safe-cors.ts";
 import { emitAdminFlare } from "../_shared/admin-flare.ts";
@@ -55,7 +55,7 @@ interface PriceSheetRow {
 interface PriceSheetItem {
   id: string;
   item_type: "model" | "attachment" | "freight" | "note";
-  extracted: Record<string, unknown>;
+  extracted: unknown;
   proposed_model_id: string | null;
   proposed_attachment_id: string | null;
   action: "create" | "update" | "no_change" | "skip";
@@ -66,7 +66,7 @@ interface PriceSheetProgram {
   id: string;
   program_code: string;
   program_type: string;
-  extracted: Record<string, unknown>;
+  extracted: unknown;
   proposed_program_id: string | null;
   action: "create" | "update" | "no_change" | "skip";
   review_status: string;
@@ -74,11 +74,47 @@ interface PriceSheetProgram {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+type ExtractedPayload = Record<string, unknown>;
+type ApplyResult = { ok: boolean; catalogId?: string; error?: string };
+type ServiceClient = SupabaseClient<any, "public", any>;
+
+function isExtractedPayload(value: unknown): value is ExtractedPayload {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getExtractedPayload(
+  value: unknown,
+  label: string,
+): { ok: true; payload: ExtractedPayload } | { ok: false; error: string } {
+  if (isExtractedPayload(value)) return { ok: true, payload: value };
+  return { ok: false, error: `${label} extracted payload must be an object` };
+}
+
+function getStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : [];
+}
+
+function formatStateCodes(value: unknown): string {
+  const stateCodes = getStringArray(value);
+  return stateCodes.length > 0 ? stateCodes.join("/") : "Unknown";
+}
+
+function getContainsValue(value: unknown): string | Record<string, unknown> | readonly unknown[] {
+  if (typeof value === "string" || Array.isArray(value) || isExtractedPayload(value)) return value;
+  return [];
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** Resolve model codes to their UUID catalog IDs for compatible_model_ids. */
 async function resolveModelIds(
   modelCodes: string[],
   brandId: string,
-  serviceClient: ReturnType<typeof createClient>,
+  serviceClient: ServiceClient,
 ): Promise<string[]> {
   if (!modelCodes?.length) return [];
   const { data } = await serviceClient
@@ -86,16 +122,18 @@ async function resolveModelIds(
     .select("id, model_code")
     .eq("brand_id", brandId)
     .in("model_code", modelCodes);
-  return (data ?? []).map((r: any) => r.id);
+  return (data ?? []).map((r: { id: string }) => r.id);
 }
 
 /** Apply a single model item to the catalog. Returns the catalog row id. */
 async function applyModel(
   item: PriceSheetItem,
   sheet: PriceSheetRow,
-  serviceClient: ReturnType<typeof createClient>,
-): Promise<{ ok: boolean; catalogId?: string; error?: string }> {
-  const ext = item.extracted as any;
+  serviceClient: ServiceClient,
+): Promise<ApplyResult> {
+  const extracted = getExtractedPayload(item.extracted, `Item ${item.id}`);
+  if (!extracted.ok) return extracted;
+  const ext = extracted.payload;
 
   if (item.action === "create") {
     const { data, error } = await serviceClient
@@ -141,13 +179,15 @@ async function applyModel(
 async function applyAttachment(
   item: PriceSheetItem,
   sheet: PriceSheetRow,
-  serviceClient: ReturnType<typeof createClient>,
-): Promise<{ ok: boolean; catalogId?: string; error?: string }> {
-  const ext = item.extracted as any;
+  serviceClient: ServiceClient,
+): Promise<ApplyResult> {
+  const extracted = getExtractedPayload(item.extracted, `Item ${item.id}`);
+  if (!extracted.ok) return extracted;
+  const ext = extracted.payload;
 
   if (item.action === "create") {
     const compatibleIds = await resolveModelIds(
-      ext.compatible_model_codes ?? [],
+      getStringArray(ext.compatible_model_codes),
       sheet.brand_id,
       serviceClient,
     );
@@ -177,9 +217,10 @@ async function applyAttachment(
     if (ext.category !== undefined) updates.category = ext.category;
     if (ext.attachment_type !== undefined) updates.attachment_type = ext.attachment_type;
 
-    if (ext.compatible_model_codes?.length) {
+    const compatibleModelCodes = getStringArray(ext.compatible_model_codes);
+    if (compatibleModelCodes.length) {
       const compatibleIds = await resolveModelIds(
-        ext.compatible_model_codes,
+        compatibleModelCodes,
         sheet.brand_id,
         serviceClient,
       );
@@ -201,9 +242,11 @@ async function applyAttachment(
 async function applyFreight(
   item: PriceSheetItem,
   sheet: PriceSheetRow,
-  serviceClient: ReturnType<typeof createClient>,
-): Promise<{ ok: boolean; catalogId?: string; error?: string }> {
-  const ext = item.extracted as any;
+  serviceClient: ServiceClient,
+): Promise<ApplyResult> {
+  const extracted = getExtractedPayload(item.extracted, `Item ${item.id}`);
+  if (!extracted.ok) return extracted;
+  const ext = extracted.payload;
 
   if (item.action === "create") {
     const { data, error } = await serviceClient
@@ -211,7 +254,7 @@ async function applyFreight(
       .insert({
         workspace_id: sheet.workspace_id,
         brand_id: sheet.brand_id,
-        zone_name: ext.zone_name ?? ext.state_codes?.join("/") ?? "Unknown",
+        zone_name: ext.zone_name ?? formatStateCodes(ext.state_codes),
         state_codes: ext.state_codes,
         freight_large_cents: ext.freight_large_cents,
         freight_small_cents: ext.freight_small_cents,
@@ -228,9 +271,9 @@ async function applyFreight(
     // Re-lookup existing zone by brand + overlapping state_codes
     const { data: existing, error: lookupErr } = await serviceClient
       .from("qb_freight_zones")
-      .select("id")
+      .select("id, zone_name")
       .eq("brand_id", sheet.brand_id)
-      .contains("state_codes", ext.state_codes)
+      .contains("state_codes", getContainsValue(ext.state_codes))
       .maybeSingle();
 
     if (lookupErr || !existing) {
@@ -240,7 +283,7 @@ async function applyFreight(
         .insert({
           workspace_id: sheet.workspace_id,
           brand_id: sheet.brand_id,
-          zone_name: ext.zone_name ?? ext.state_codes?.join("/") ?? "Unknown",
+          zone_name: ext.zone_name ?? formatStateCodes(ext.state_codes),
           state_codes: ext.state_codes,
           freight_large_cents: ext.freight_large_cents,
           freight_small_cents: ext.freight_small_cents,
@@ -318,9 +361,11 @@ function normalizeFinancingDetails(raw: Record<string, unknown>): Record<string,
 async function applyProgram(
   prog: PriceSheetProgram,
   sheet: PriceSheetRow,
-  serviceClient: ReturnType<typeof createClient>,
-): Promise<{ ok: boolean; catalogId?: string; error?: string }> {
-  const ext = prog.extracted as any;
+  serviceClient: ServiceClient,
+): Promise<ApplyResult> {
+  const extracted = getExtractedPayload(prog.extracted, `Program ${prog.id}`);
+  if (!extracted.ok) return extracted;
+  const ext = extracted.payload;
   // Dates: prefer sheet-level dates, fall back to today / +90 days
   const effectiveFrom = sheet.effective_from ?? new Date().toISOString().slice(0, 10);
   const effectiveTo =
@@ -328,8 +373,8 @@ async function applyProgram(
     new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   // Normalize details: flatten financing term arrays → scalar fields the calculator needs
-  let details: Record<string, unknown> = ext.details ?? {};
-  if (prog.program_type === "low_rate_financing") {
+  let details: unknown = ext.details ?? {};
+  if (prog.program_type === "low_rate_financing" && isExtractedPayload(details)) {
     details = normalizeFinancingDetails(details);
   }
 
@@ -397,8 +442,8 @@ Deno.serve(async (req: Request) => {
     priceSheetId = body?.priceSheetId;
     autoApprove  = body?.auto_approve === true;
     if (!priceSheetId) throw new Error("priceSheetId required");
-  } catch (e: any) {
-    return safeJsonError(`Invalid request body: ${e.message}`, 400, origin);
+  } catch (e: unknown) {
+    return safeJsonError(`Invalid request body: ${errorMessage(e)}`, 400, origin);
   }
 
   // ── Load sheet ────────────────────────────────────────────────────────────

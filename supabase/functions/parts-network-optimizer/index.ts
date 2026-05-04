@@ -22,6 +22,59 @@ const ESTIMATED_TRANSFER_COST_PER_UNIT = 5;
 const STOCKOUT_COST_MULTIPLIER = 20;
 const DEAD_STOCK_DAYS = 180;
 
+type PartsOrderJoin = {
+  workspace_id: string;
+  order_source: string;
+  crm_company_id: string | null;
+  created_at: string;
+};
+
+type PortalCustomerJoin = {
+  crm_company_id: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeJoinedRecord(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) {
+    const [first] = value;
+    return isRecord(first) ? first : null;
+  }
+
+  return isRecord(value) ? value : null;
+}
+
+function normalizePartsOrderJoin(value: unknown): PartsOrderJoin | null {
+  const record = normalizeJoinedRecord(value);
+  if (!record) return null;
+
+  const { workspace_id, order_source, crm_company_id, created_at } = record;
+  if (
+    typeof workspace_id !== "string" ||
+    typeof order_source !== "string" ||
+    typeof created_at !== "string" ||
+    (crm_company_id !== null && crm_company_id !== undefined && typeof crm_company_id !== "string")
+  ) {
+    return null;
+  }
+
+  return {
+    workspace_id,
+    order_source,
+    crm_company_id: crm_company_id ?? null,
+    created_at,
+  };
+}
+
+function normalizePortalCustomerJoin(value: unknown): PortalCustomerJoin | null {
+  const record = normalizeJoinedRecord(value);
+  if (!record || typeof record.crm_company_id !== "string") return null;
+
+  return { crm_company_id: record.crm_company_id };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { status: 200 });
 
@@ -232,7 +285,9 @@ Deno.serve(async (req) => {
       const wsAgg = new Map<string, WsAgg>();
 
       for (const line of orderLines ?? []) {
-        const order = (line as unknown as { parts_orders: { workspace_id: string; order_source: string; crm_company_id: string | null; created_at: string } }).parts_orders;
+        const order = normalizePartsOrderJoin(isRecord(line) ? line.parts_orders : null);
+        if (!order) continue;
+
         const wsId = order.workspace_id;
 
         if (!wsAgg.has(wsId)) {
@@ -430,8 +485,9 @@ Deno.serve(async (req) => {
       type FleetAgg = { count: number; approaching: number };
       const fleetByCompany = new Map<string, FleetAgg>();
       for (const f of fleetData ?? []) {
-        const co = (f as unknown as { portal_customers: { crm_company_id: string } }).portal_customers;
-        if (!co?.crm_company_id) continue;
+        const co = normalizePortalCustomerJoin(isRecord(f) ? f.portal_customers : null);
+        if (!co) continue;
+
         if (!fleetByCompany.has(co.crm_company_id)) fleetByCompany.set(co.crm_company_id, { count: 0, approaching: 0 });
         const agg = fleetByCompany.get(co.crm_company_id)!;
         agg.count++;
