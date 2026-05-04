@@ -58,7 +58,7 @@ Evidence:
 
 ## Source Custody
 
-Raw IntelliDealer files remain local and untracked by policy. They are not committed and should not be treated as centrally retained until a privacy/retention decision approves a controlled storage path.
+Raw IntelliDealer files remain local-only and untracked by policy. They are not committed and should not be treated as centrally retained until a privacy/retention decision approves a controlled storage path. As of 2026-05-04, `.gitignore` explicitly blocks the five raw source files and `COL/` from accidental staging.
 
 Committed custody evidence is sufficient to prove the production import lineage:
 

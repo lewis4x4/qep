@@ -34,6 +34,15 @@ supabase/.temp/
 # Working documents — local only, never pushed to GitHub
 _workspace/
 
+# IntelliDealer raw source evidence — local/private custody only.
+# The committed manifest records hashes and shape; do not commit raw customer files.
+/docs/IntelliDealer/CMASTR.pdf
+/docs/IntelliDealer/Customer Master.xlsx
+/docs/IntelliDealer/CUST CONTACTS.pdf
+/docs/IntelliDealer/CUST AR AGENCY.pdf
+/docs/IntelliDealer/CUST PROFITABILITY.pdf
+/COL/
+
 # Local planning artifacts / nested copies (sign-off hygiene; adjust if you need these tracked)
 /QEP-OS-*.pdf
 /QEP-OS-*.docx

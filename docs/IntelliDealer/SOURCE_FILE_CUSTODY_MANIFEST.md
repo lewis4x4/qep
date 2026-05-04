@@ -2,11 +2,13 @@
 
 Date: 2026-05-03
 
+Custody decision updated: 2026-05-04
+
 ## Purpose
 
 This manifest records the local source files used to audit and import the IntelliDealer customer handoff without committing the raw customer data files to Git.
 
-The raw files remain local/untracked unless a separate privacy and retention decision approves committing or moving them to controlled private storage.
+The raw files remain local-only and untracked. `.gitignore` now explicitly blocks these files and `COL/` from accidental Git staging. Do not move them to central/private storage until a separate privacy and retention decision approves the target, owner, access rules, and deletion/retention window.
 
 ## Production Binding
 
@@ -38,7 +40,15 @@ The raw files remain local/untracked unless a separate privacy and retention dec
 
 ## Custody Policy
 
-- Do not commit the raw source files unless explicitly approved.
+- Do not commit the raw source files unless explicitly approved in a later privacy/retention decision.
+- Keep the current raw files local-only under `docs/IntelliDealer/`; `.gitignore` blocks the five raw source files and `COL/`.
 - Do not alter the raw source files in place.
 - If a replacement file is received, store it separately and update this manifest only after `bun run intellidealer:source:custody` is updated and rerun.
 - The production import baseline remains bound to workbook hash `ade4fbb59632c8dc3bc266b86d80a43c6ecc68476f1e453654cc65cd96ba69f5`; a different workbook hash is a new import candidate, not the signed-off production source.
+
+## 2026-05-04 Verification
+
+- Custody verifier: `bun run intellidealer:source:custody`
+- Result: `PASS`
+- Git policy: `.gitignore` blocks the five raw IntelliDealer source files and `COL/`.
+- Retention decision: local-only custody; no central retention path approved yet.
