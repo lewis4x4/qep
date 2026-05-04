@@ -24,6 +24,7 @@ describe("buildInventoryPressureBoard", () => {
       [
         ASSET({ id: "aged", createdAt: "2025-12-01T00:00:00Z" }),
         ASSET({ id: "hot", openQuotes: 2, photoUrls: ["x"] }),
+        ASSET({ id: "on-order", availability: "on_order", photoUrls: ["x"] }),
         ASSET({ id: "under", currentMarketValue: null, photoUrls: [] }),
         ASSET({ id: "mis", currentMarketValue: 200000, latestEstimatedFmv: 140000, photoUrls: ["x"] }),
         ASSET({ id: "customer", ownership: "customer_owned" }),
@@ -33,6 +34,7 @@ describe("buildInventoryPressureBoard", () => {
 
     expect(board.aged.map((row) => row.id)).toContain("aged");
     expect(board.hot.map((row) => row.id)).toContain("hot");
+    expect(board.hot.map((row) => row.id)).toContain("on-order");
     expect(board.underMarketed.map((row) => row.id)).toContain("under");
     expect(board.priceMisaligned.map((row) => row.id)).toContain("mis");
     expect(board.aged.map((row) => row.id)).not.toContain("customer");

@@ -16,7 +16,7 @@ export interface IronInMotionAsset {
   make: string | null;
   model: string | null;
   year: number | null;
-  availability: "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned";
+  availability: "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned" | "on_order";
   ownership: "owned" | "leased" | "customer_owned" | "rental_fleet" | "consignment";
   locationDescription: string | null;
   createdAt: string;

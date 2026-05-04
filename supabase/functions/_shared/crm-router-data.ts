@@ -39,15 +39,16 @@ export type EquipmentCategory =
   | "other";
 
 export type EquipmentCondition = "new" | "excellent" | "good" | "fair" | "poor" | "salvage";
-export type EquipmentAvailability = "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned";
+export type EquipmentAvailability = "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned" | "on_order";
 export type EquipmentOwnership = "owned" | "leased" | "customer_owned" | "rental_fleet" | "consignment";
 export type DealEquipmentRole = "subject" | "trade_in" | "rental" | "part_exchange";
 
 export interface EquipmentPayload {
-  companyId: string;
+  companyId?: string;
   name: string;
   assetTag?: string | null;
   serialNumber?: string | null;
+  stockNumber?: string | null;
   primaryContactId?: string | null;
   metadata?: Record<string, unknown>;
   make?: string | null;
@@ -78,6 +79,14 @@ export interface EquipmentPayload {
   notes?: string | null;
   photoUrls?: string[];
 }
+
+type OnOrderEquipmentPayload = Partial<EquipmentPayload> & {
+  name?: string;
+  stockNumber?: string | null;
+};
+
+const ON_ORDER_INVENTORY_COMPANY_NAME = "QEP On-Order Inventory";
+const ON_ORDER_INVENTORY_COMPANY_KEY = "qep_on_order_inventory";
 
 export interface DealEquipmentPayload {
   dealId: string;
@@ -494,7 +503,7 @@ export async function listEquipment(
   companyId: string | null,
 ): Promise<unknown[]> {
   let query = getEquipmentReadClient(ctx)
-    .from("crm_equipment")
+    .from("qrm_equipment")
     .select(getEquipmentSelectCols(ctx))
     .eq("workspace_id", ctx.workspaceId)
     .is("deleted_at", null)
@@ -528,7 +537,7 @@ export async function listEquipmentForCompanySubtree(
 
   const equipmentReadClient = getEquipmentReadClient(ctx);
   const { data, error } = await equipmentReadClient
-    .from("crm_equipment")
+    .from("qrm_equipment")
     .select(getEquipmentSelectCols(ctx))
     .eq("workspace_id", ctx.workspaceId)
     .is("deleted_at", null)
@@ -1908,6 +1917,7 @@ function applyEquipmentFields(
   }
   if (payload.category !== undefined) target.category = payload.category;
   if (payload.vinPin !== undefined) target.vin_pin = cleanText(payload.vinPin ?? null);
+  if (payload.stockNumber !== undefined) target.stock_number = cleanText(payload.stockNumber ?? null);
   if (payload.condition !== undefined) target.condition = payload.condition;
   if (payload.availability !== undefined) target.availability = payload.availability;
   if (payload.ownership !== undefined) target.ownership = payload.ownership;
@@ -1975,12 +1985,13 @@ export async function createEquipment(
     name,
     asset_tag: cleanText(payload.assetTag ?? null),
     serial_number: cleanText(payload.serialNumber ?? null),
+    stock_number: cleanText(payload.stockNumber ?? null),
     metadata: payload.metadata ?? {},
   };
   applyEquipmentFields(insertPayload, payload);
 
   const { data, error } = await ctx.callerDb
-    .from("crm_equipment")
+    .from("qrm_equipment")
     .insert(insertPayload)
     .select("id")
     .single();
@@ -1997,12 +2008,75 @@ export async function createEquipment(
   return getEquipment(ctx, String(data.id));
 }
 
+async function getOrCreateOnOrderInventoryCompanyId(ctx: RouterCtx): Promise<string> {
+  const { data: existing, error: existingError } = await ctx.callerDb
+    .from("crm_companies")
+    .select("id")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("name", ON_ORDER_INVENTORY_COMPANY_NAME)
+    .is("deleted_at", null)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+  if (existing?.id) return String(existing.id);
+
+  const { data, error } = await ctx.callerDb
+    .from("crm_companies")
+    .insert({
+      workspace_id: ctx.workspaceId,
+      name: ON_ORDER_INVENTORY_COMPANY_NAME,
+      assigned_rep_id: ctx.caller.userId,
+      status: "active",
+      product_category: "internal",
+      metadata: {
+        qep_system_key: ON_ORDER_INVENTORY_COMPANY_KEY,
+        purpose: "Holds floating dealer inventory created by Quick Add On Order Unit.",
+      },
+    })
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return String(data.id);
+}
+
+export async function quickAddOnOrderEquipment(
+  ctx: RouterCtx,
+  payload: OnOrderEquipmentPayload,
+): Promise<unknown> {
+  const stockNumber = cleanText(payload.stockNumber ?? null);
+  if (!stockNumber) throw new Error("VALIDATION_STOCK_NUMBER_REQUIRED");
+
+  const companyId = cleanText(payload.companyId ?? null) ?? await getOrCreateOnOrderInventoryCompanyId(ctx);
+  const name = cleanText(payload.name) ?? `On-order unit ${stockNumber}`;
+  const metadata = payload.metadata && typeof payload.metadata === "object" && !Array.isArray(payload.metadata)
+    ? { ...payload.metadata }
+    : {};
+
+  return createEquipment(ctx, {
+    ...payload,
+    companyId,
+    name,
+    stockNumber,
+    availability: "on_order",
+    ownership: "owned",
+    condition: payload.condition ?? "new",
+    metadata: {
+      ...metadata,
+      qep_quick_add_kind: "on_order_unit",
+      quick_added_at: new Date().toISOString(),
+      quick_added_by: ctx.caller.userId,
+    },
+  });
+}
+
 export async function getEquipment(
   ctx: RouterCtx,
   equipmentId: string,
 ): Promise<unknown> {
   const { data, error } = await getEquipmentReadClient(ctx)
-    .from("crm_equipment")
+    .from("qrm_equipment")
     .select(getEquipmentSelectCols(ctx))
     .eq("workspace_id", ctx.workspaceId)
     .eq("id", equipmentId)
@@ -2012,6 +2086,50 @@ export async function getEquipment(
   if (error) throw error;
   if (!data) throw new Error("NOT_FOUND");
   return mapEquipmentRow(data as unknown as Record<string, unknown>);
+}
+
+export async function archiveOnOrderEquipment(
+  ctx: RouterCtx,
+  equipmentId: string,
+): Promise<void> {
+  const id = cleanText(equipmentId);
+  if (!id) throw new Error("VALIDATION_EQUIPMENT_ID_REQUIRED");
+
+  const { data: existing, error: existingError } = await ctx.callerDb
+    .from("qrm_equipment")
+    .select("id, availability, metadata")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+  if (!existing) throw new Error("NOT_FOUND");
+
+  const metadata = existing.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
+    ? existing.metadata as Record<string, unknown>
+    : {};
+  const isQuickAddOnOrder = metadata.qep_quick_add_kind === "on_order_unit";
+  if (!isQuickAddOnOrder) throw new Error("VALIDATION_ON_ORDER_ARCHIVE_ONLY");
+
+  const { error, count } = await ctx.callerDb
+    .from("qrm_equipment")
+    .update({
+      availability: "decommissioned",
+      deleted_at: new Date().toISOString(),
+      metadata: {
+        ...metadata,
+        archived_from_quick_add: true,
+        archived_at: new Date().toISOString(),
+        archived_by: ctx.caller.userId,
+      },
+    }, { count: "exact" })
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", id)
+    .is("deleted_at", null);
+
+  if (error) throw error;
+  if (count === 0) throw new Error("NOT_FOUND");
 }
 
 export async function listDealEquipment(
@@ -2137,6 +2255,9 @@ export async function patchEquipment(
   if (payload.serialNumber !== undefined) {
     updates.serial_number = cleanText(payload.serialNumber ?? null);
   }
+  if (payload.stockNumber !== undefined) {
+    updates.stock_number = cleanText(payload.stockNumber ?? null);
+  }
   if (payload.metadata !== undefined) updates.metadata = payload.metadata ?? {};
   applyEquipmentFields(updates, payload);
 
@@ -2145,7 +2266,7 @@ export async function patchEquipment(
   }
 
   const { data, error } = await ctx.callerDb
-    .from("crm_equipment")
+    .from("qrm_equipment")
     .update(updates)
     .eq("workspace_id", ctx.workspaceId)
     .eq("id", equipmentId)

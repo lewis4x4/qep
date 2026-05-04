@@ -66,6 +66,7 @@ const AVAILABILITY_OPTIONS: { value: QrmEquipmentAvailability; label: string }[]
   { value: "in_transit", label: "In Transit" },
   { value: "reserved", label: "Reserved" },
   { value: "decommissioned", label: "Decommissioned" },
+  { value: "on_order", label: "On Order" },
 ];
 
 const OWNERSHIP_OPTIONS: { value: QrmEquipmentOwnership; label: string }[] = [
@@ -87,6 +88,7 @@ interface EquipmentDraft {
   category: QrmEquipmentCategory | "";
   assetTag: string;
   serialNumber: string;
+  stockNumber: string;
   vinPin: string;
   condition: QrmEquipmentCondition | "";
   availability: QrmEquipmentAvailability;
@@ -109,7 +111,8 @@ interface EquipmentDraft {
   notes: string;
 }
 
-function emptyDraft(): EquipmentDraft {
+function emptyDraft(mode: QrmEquipmentFormSheetMode = "standard"): EquipmentDraft {
+  const onOrder = mode === "on_order";
   return {
     name: "",
     make: "",
@@ -118,10 +121,11 @@ function emptyDraft(): EquipmentDraft {
     category: "",
     assetTag: "",
     serialNumber: "",
+    stockNumber: "",
     vinPin: "",
-    condition: "",
-    availability: "available",
-    ownership: "customer_owned",
+    condition: onOrder ? "new" : "",
+    availability: onOrder ? "on_order" : "available",
+    ownership: onOrder ? "owned" : "customer_owned",
     engineHours: "",
     mileage: "",
     fuelType: "",
@@ -150,6 +154,7 @@ function draftFromEquipment(eq: QrmEquipment): EquipmentDraft {
     category: eq.category ?? "",
     assetTag: eq.assetTag ?? "",
     serialNumber: eq.serialNumber ?? "",
+    stockNumber: eq.stockNumber ?? "",
     vinPin: eq.vinPin ?? "",
     condition: eq.condition ?? "",
     availability: eq.availability,
@@ -188,6 +193,7 @@ export function draftToPayload(draft: EquipmentDraft) {
     category: draft.category || null,
     assetTag: draft.assetTag.trim() || null,
     serialNumber: draft.serialNumber.trim() || null,
+    stockNumber: draft.stockNumber.trim() || null,
     vinPin: draft.vinPin.trim() || null,
     condition: draft.condition || null,
     availability: draft.availability,
@@ -223,10 +229,13 @@ function FieldRow({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-2 gap-3">{children}</div>;
 }
 
+type QrmEquipmentFormSheetMode = "standard" | "on_order";
+
 interface QrmEquipmentFormSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   existing?: QrmEquipment | null;
+  mode?: QrmEquipmentFormSheetMode;
   isPending: boolean;
   onSubmit: (payload: ReturnType<typeof draftToPayload>) => void;
 }
@@ -235,21 +244,23 @@ export function QrmEquipmentFormSheet({
   open,
   onOpenChange,
   existing,
+  mode = "standard",
   isPending,
   onSubmit,
 }: QrmEquipmentFormSheetProps) {
   const [draft, setDraft] = useState<EquipmentDraft>(() =>
-    existing ? draftFromEquipment(existing) : emptyDraft(),
+    existing ? draftFromEquipment(existing) : emptyDraft(mode),
   );
 
   useEffect(() => {
     if (open) {
-      setDraft(existing ? draftFromEquipment(existing) : emptyDraft());
+      setDraft(existing ? draftFromEquipment(existing) : emptyDraft(mode));
     }
-  }, [open, existing?.id]);
+  }, [open, existing?.id, mode]);
 
   const isEdit = !!existing;
-  const canSave = draft.name.trim().length > 0;
+  const isOnOrder = mode === "on_order" && !isEdit;
+  const canSave = draft.name.trim().length > 0 && (!isOnOrder || draft.stockNumber.trim().length > 0);
 
   const update = <K extends keyof EquipmentDraft>(key: K, value: EquipmentDraft[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -258,7 +269,7 @@ export function QrmEquipmentFormSheet({
     <Sheet
       open={open}
       onOpenChange={(v) => {
-        if (!v) setDraft(existing ? draftFromEquipment(existing) : emptyDraft());
+        if (!v) setDraft(existing ? draftFromEquipment(existing) : emptyDraft(mode));
         onOpenChange(v);
       }}
     >
@@ -266,12 +277,14 @@ export function QrmEquipmentFormSheet({
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <Wrench className="h-5 w-5 text-primary" />
-            {isEdit ? "Edit Equipment" : "Add Equipment"}
+            {isEdit ? "Edit Equipment" : isOnOrder ? "Quick Add On Order Unit" : "Add Equipment"}
           </SheetTitle>
           <SheetDescription>
-            {isEdit
-              ? "Update the equipment record with current information."
-              : "Full equipment profile — fill in what you know now, add the rest later."}
+            {isOnOrder
+              ? "Create a dealer-owned on-order unit with stock number evidence for the Equipment Listing workflow."
+              : isEdit
+                ? "Update the equipment record with current information."
+                : "Full equipment profile — fill in what you know now, add the rest later."}
           </SheetDescription>
         </SheetHeader>
 
@@ -310,18 +323,29 @@ export function QrmEquipmentFormSheet({
           <SectionHeading>Identification</SectionHeading>
           <FieldRow>
             <div>
+              <Label htmlFor="eq-stock-number">Stock Number{isOnOrder ? " *" : ""}</Label>
+              <Input
+                id="eq-stock-number"
+                value={draft.stockNumber}
+                onChange={(e) => update("stockNumber", e.target.value)}
+                placeholder={isOnOrder ? "Required for on-order unit" : "EMASTR stock #"}
+              />
+            </div>
+            <div>
               <Label htmlFor="eq-asset-tag">Asset Tag</Label>
               <Input id="eq-asset-tag" value={draft.assetTag} onChange={(e) => update("assetTag", e.target.value)} placeholder="QEP-EX-1003" />
             </div>
+          </FieldRow>
+          <FieldRow>
             <div>
               <Label htmlFor="eq-serial">Serial Number</Label>
               <Input id="eq-serial" value={draft.serialNumber} onChange={(e) => update("serialNumber", e.target.value)} placeholder="SN12345" />
             </div>
+            <div>
+              <Label htmlFor="eq-vin">VIN / PIN</Label>
+              <Input id="eq-vin" value={draft.vinPin} onChange={(e) => update("vinPin", e.target.value)} placeholder="Vehicle or Product ID Number" />
+            </div>
           </FieldRow>
-          <div>
-            <Label htmlFor="eq-vin">VIN / PIN</Label>
-            <Input id="eq-vin" value={draft.vinPin} onChange={(e) => update("vinPin", e.target.value)} placeholder="Vehicle or Product ID Number" />
-          </div>
 
           {/* ─── Status ────────────────────────────────── */}
           <SectionHeading>Status &amp; Ownership</SectionHeading>
@@ -458,7 +482,7 @@ export function QrmEquipmentFormSheet({
               ) : (
                 <Plus className="mr-1 h-4 w-4" />
               )}
-              {isEdit ? "Save Changes" : "Add Equipment"}
+              {isEdit ? "Save Changes" : isOnOrder ? "Quick Add On Order Unit" : "Add Equipment"}
             </Button>
           </div>
         </div>

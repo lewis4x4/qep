@@ -30,6 +30,7 @@ const availabilityColor: Record<string, string> = {
   in_transit: "bg-sky-500/15 text-sky-400",
   reserved: "bg-indigo-500/15 text-indigo-400",
   decommissioned: "bg-red-500/15 text-red-400",
+  on_order: "bg-qep-orange/15 text-qep-orange",
 };
 
 function formatLabel(value: string) {

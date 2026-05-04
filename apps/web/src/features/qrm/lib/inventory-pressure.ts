@@ -5,7 +5,7 @@ export interface InventoryPressureAsset {
   model: string | null;
   year: number | null;
   ownership: "owned" | "leased" | "customer_owned" | "rental_fleet" | "consignment";
-  availability: "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned";
+  availability: "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned" | "on_order";
   condition: "new" | "excellent" | "good" | "fair" | "poor" | "salvage" | null;
   createdAt: string;
   currentMarketValue: number | null;
@@ -63,10 +63,11 @@ export function buildInventoryPressureBoard(
       aged.push({ ...asset, pressureReasons: [...reasons] });
     }
 
-    if (asset.openQuotes > 0 || asset.availability === "reserved") {
+    if (asset.openQuotes > 0 || asset.availability === "reserved" || asset.availability === "on_order") {
       const hotReasons = [];
       if (asset.openQuotes > 0) hotReasons.push(`${asset.openQuotes} open quote${asset.openQuotes === 1 ? "" : "s"}`);
       if (asset.availability === "reserved") hotReasons.push("reserved for live sales motion");
+      if (asset.availability === "on_order") hotReasons.push("on-order unit awaiting stocking");
       hot.push({ ...asset, pressureReasons: hotReasons });
     }
 

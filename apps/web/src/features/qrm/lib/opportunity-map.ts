@@ -3,7 +3,7 @@ export interface OpportunityMapEquipment {
   companyId: string | null;
   companyName: string | null;
   ownership: "owned" | "leased" | "customer_owned" | "rental_fleet" | "consignment";
-  availability: "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned";
+  availability: "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned" | "on_order";
   name: string;
   lat: number | null;
   lng: number | null;

@@ -10,7 +10,7 @@ interface MachineLifecycleCardProps {
   equipmentId: string;
   serialNumber: string | null | undefined;
   ownership: "owned" | "leased" | "customer_owned" | "rental_fleet" | "consignment";
-  availability: "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned";
+  availability: "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned" | "on_order";
 }
 
 function currency(value: number): string {

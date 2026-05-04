@@ -11,6 +11,7 @@ import {
   Ruler,
   Shield,
   Tag,
+  Trash2,
   Wrench,
 } from "lucide-react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
@@ -19,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
 import { useToast } from "@/hooks/use-toast";
-import { getEquipmentById, patchEquipment } from "../lib/qrm-router-api";
+import { archiveOnOrderEquipment, getEquipmentById, patchEquipment } from "../lib/qrm-router-api";
 import { accountCommandUrl } from "../lib/account-links";
 import { QrmEquipmentFormSheet, draftToPayload } from "../components/QrmEquipmentFormSheet";
 import { EquipmentVision } from "@/components/EquipmentVision";
@@ -47,6 +48,7 @@ const availabilityColor: Record<string, string> = {
   in_transit: "bg-sky-500/15 text-sky-400",
   reserved: "bg-indigo-500/15 text-indigo-400",
   decommissioned: "bg-red-500/15 text-red-400",
+  on_order: "bg-qep-orange/15 text-qep-orange",
 };
 
 function fmt(v: string) {
@@ -110,6 +112,22 @@ export function QrmEquipmentDetailPage({ userId: _userId, userRole: _userRole }:
     },
   });
 
+  const archiveMutation = useMutation({
+    mutationFn: () => archiveOnOrderEquipment(equipmentId!),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["inventory-pressure"] });
+      toast({ title: "On-order unit archived" });
+      navigate("/qrm/inventory-pressure");
+    },
+    onError: (error) => {
+      toast({
+        title: "Archive failed",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (!equipmentId) return <Navigate to="/qrm/companies" replace />;
 
   if (equipmentQuery.isLoading) {
@@ -136,6 +154,7 @@ export function QrmEquipmentDetailPage({ userId: _userId, userRole: _userRole }:
 
   const eq = equipmentQuery.data;
   const subtitle = [eq.year, eq.make, eq.model].filter(Boolean).join(" ");
+  const isQuickAddOnOrder = eq.metadata.qep_quick_add_kind === "on_order_unit";
   const hasFinancials = eq.purchasePrice != null || eq.currentMarketValue != null || eq.replacementCost != null;
   const hasRates = eq.dailyRentalRate != null || eq.weeklyRentalRate != null || eq.monthlyRentalRate != null;
   const hasService = !!eq.warrantyExpiresOn || !!eq.lastInspectionAt || !!eq.nextServiceDueAt;
@@ -168,6 +187,20 @@ export function QrmEquipmentDetailPage({ userId: _userId, userRole: _userRole }:
           <Button size="sm" variant="outline" onClick={() => setEditorOpen(true)}>
             <Edit className="mr-1 h-4 w-4" /> Edit
           </Button>
+          {isQuickAddOnOrder && (
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={archiveMutation.isPending}
+              onClick={() => {
+                if (window.confirm("Archive this on-order quick-add unit? This hides it from active inventory.")) {
+                  archiveMutation.mutate();
+                }
+              }}
+            >
+              <Trash2 className="mr-1 h-4 w-4" /> Archive
+            </Button>
+          )}
         </div>
       </div>
 
@@ -205,6 +238,7 @@ export function QrmEquipmentDetailPage({ userId: _userId, userRole: _userRole }:
             <InfoRow label="Category" value={eq.category ? fmt(eq.category) : null} icon={<Wrench className="h-4 w-4" />} />
             <InfoRow label="Ownership" value={fmt(eq.ownership)} />
             <InfoRow label="Asset Tag" value={eq.assetTag} icon={<Tag className="h-4 w-4" />} />
+            <InfoRow label="Stock Number" value={eq.stockNumber} />
             <InfoRow label="Serial Number" value={eq.serialNumber} />
             <InfoRow label="VIN / PIN" value={eq.vinPin} />
             {eq.companyId && (

@@ -1,5 +1,5 @@
 export const EQUIPMENT_SAFE_SELECT_COLS = [
-  "id", "company_id", "primary_contact_id", "name", "asset_tag", "serial_number",
+  "id", "company_id", "primary_contact_id", "name", "asset_tag", "serial_number", "stock_number",
   "make", "model", "year", "category", "vin_pin",
   "condition", "availability", "ownership",
   "engine_hours", "mileage", "fuel_type", "weight_class", "operating_capacity",
@@ -27,6 +27,7 @@ export function mapEquipmentRow(row: Record<string, unknown>) {
     name: row.name,
     assetTag: row.asset_tag,
     serialNumber: row.serial_number,
+    stockNumber: row.stock_number ?? null,
     make: row.make ?? null,
     model: row.model ?? null,
     year: row.year ?? null,

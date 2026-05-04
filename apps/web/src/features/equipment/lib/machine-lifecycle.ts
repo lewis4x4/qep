@@ -9,7 +9,7 @@ export type MachineLifecyclePhase =
 
 export interface MachineLifecycleInput {
   ownership: "owned" | "leased" | "customer_owned" | "rental_fleet" | "consignment";
-  availability: "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned";
+  availability: "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned" | "on_order";
   openWorkOrders: number;
   openQuotes: number;
   pendingPartsOrders: number;

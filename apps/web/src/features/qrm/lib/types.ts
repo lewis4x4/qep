@@ -490,7 +490,7 @@ export type QrmEquipmentCategory =
   | "other";
 
 export type QrmEquipmentCondition = "new" | "excellent" | "good" | "fair" | "poor" | "salvage";
-export type QrmEquipmentAvailability = "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned";
+export type QrmEquipmentAvailability = "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned" | "on_order";
 export type QrmEquipmentOwnership = "owned" | "leased" | "customer_owned" | "rental_fleet" | "consignment";
 export type QrmDealEquipmentRole = "subject" | "trade_in" | "rental" | "part_exchange";
 
@@ -501,6 +501,7 @@ export interface QrmEquipment {
   name: string;
   assetTag: string | null;
   serialNumber: string | null;
+  stockNumber: string | null;
   make: string | null;
   model: string | null;
   year: number | null;
@@ -551,6 +552,7 @@ export interface QrmDealEquipmentLink {
     category: QrmEquipmentCategory | null;
     assetTag: string | null;
     serialNumber: string | null;
+    stockNumber: string | null;
     availability: QrmEquipmentAvailability;
     condition: QrmEquipmentCondition | null;
   } | null;

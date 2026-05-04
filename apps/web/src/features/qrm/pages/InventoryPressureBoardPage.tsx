@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { useQueries } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
@@ -8,6 +8,7 @@ import {
   Clock,
   DollarSign,
   Flame,
+  PackagePlus,
   Tag,
   Zap,
 } from "lucide-react";
@@ -24,8 +25,12 @@ import {
   type InventoryPressureAsset,
   type InventoryPressureBucketItem,
 } from "../lib/inventory-pressure";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
+import { QrmEquipmentFormSheet, draftToPayload } from "../components/QrmEquipmentFormSheet";
+import { quickAddOnOrderEquipment } from "../lib/qrm-router-api";
 
 type EquipmentSeed = Omit<InventoryPressureAsset, "openQuotes" | "latestEstimatedFmv">;
 
@@ -153,6 +158,7 @@ function normalizeAvailability(value: unknown): InventoryPressureAsset["availabi
     case "in_transit":
     case "reserved":
     case "decommissioned":
+    case "on_order":
       return value;
     default:
       return null;
@@ -240,7 +246,34 @@ function errorMessage(error: unknown): string {
 }
 
 export function InventoryPressureBoardPage() {
-  const [equipmentQuery, quoteQuery, valuationQuery] = useQueries({
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+
+  const quickAddMutation = useMutation({
+    mutationFn: (payload: ReturnType<typeof draftToPayload>) =>
+      quickAddOnOrderEquipment({
+        ...payload,
+        stockNumber: payload.stockNumber ?? "",
+      }),
+    onSuccess: async (equipment) => {
+      setQuickAddOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ["inventory-pressure"] });
+      toast({
+        title: "On-order unit added",
+        description: `${equipment.stockNumber ?? equipment.name} is now tracked as on-order inventory.`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Unable to quick add on-order unit",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const [equipmentQuery, quoteQuery, valuationQuery] = useQueries({ 
     queries: [
       {
         queryKey: ["inventory-pressure", "equipment"],
@@ -396,6 +429,22 @@ export function InventoryPressureBoardPage() {
       />
       <QrmSubNav />
 
+      <DeckSurface className="flex flex-wrap items-center justify-between gap-3 border-qep-orange/30 bg-qep-orange/[0.04] p-4">
+        <div>
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange">
+            Equipment Listing action
+          </p>
+          <h2 className="mt-1 text-sm font-semibold text-foreground">Quick Add On Order Unit</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Create a dealer-owned on-order unit with a required stock number, then track it on this inventory board.
+          </p>
+        </div>
+        <Button size="sm" onClick={() => setQuickAddOpen(true)}>
+          <PackagePlus className="mr-1 h-4 w-4" />
+          Quick Add On Order Unit
+        </Button>
+      </DeckSurface>
+
       {isLoading ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -445,6 +494,14 @@ export function InventoryPressureBoardPage() {
           <PressureLane lane={LANES.price} items={board.priceMisaligned} />
         </div>
       )}
+
+      <QrmEquipmentFormSheet
+        open={quickAddOpen}
+        onOpenChange={setQuickAddOpen}
+        mode="on_order"
+        isPending={quickAddMutation.isPending}
+        onSubmit={(payload) => quickAddMutation.mutate(payload)}
+      />
     </div>
   );
 }

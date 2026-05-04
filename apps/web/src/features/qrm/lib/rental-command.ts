@@ -4,7 +4,7 @@ export interface RentalFleetUnit {
   make: string | null;
   model: string | null;
   year: number | null;
-  availability: "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned";
+  availability: "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned" | "on_order";
   locationDescription: string | null;
   dailyRentalRate: number | null;
   currentMarketValue: number | null;

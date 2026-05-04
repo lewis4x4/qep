@@ -43,6 +43,7 @@ import {
   type SignalIngestPayload,
 } from "../_shared/qrm-signals.ts";
 import {
+  archiveOnOrderEquipment,
   createActivity,
   createCompany,
   createCompanyShipTo,
@@ -62,6 +63,7 @@ import {
   listDuplicateCandidates,
   listEquipment,
   listEquipmentForCompanySubtree,
+  quickAddOnOrderEquipment,
   listDealEquipment,
   linkDealEquipment,
   unlinkDealEquipment,
@@ -248,6 +250,15 @@ function mapError(origin: string | null, error: unknown): Response {
       status: 409,
       code: "VALIDATION_ERROR",
       message: "This equipment is already linked to this deal.",
+    });
+  }
+
+  if (message === "VALIDATION_ON_ORDER_ARCHIVE_ONLY") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "Only on-order quick-add equipment can be archived from this action.",
     });
   }
 
@@ -690,6 +701,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
         return crmOk({ equipment }, { origin, status: 201 });
       }
 
+      if (req.method === "POST" && segments.length === 3 && segments[2] === "quick-add-on-order") {
+        const body = await readJsonBody<Partial<EquipmentPayload>>(req);
+        const equipment = await quickAddOnOrderEquipment(ctx, body);
+        return crmOk({ equipment }, { origin, status: 201 });
+      }
+
       if (req.method === "GET" && segments.length === 3) {
         try {
           const equipment = await getEquipment(ctx, segments[2]);
@@ -706,6 +723,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const body = await readJsonBody<Partial<EquipmentPayload>>(req);
         const equipment = await patchEquipment(ctx, segments[2], body);
         return crmOk({ equipment }, { origin });
+      }
+
+      if (req.method === "DELETE" && segments.length === 3) {
+        await archiveOnOrderEquipment(ctx, segments[2]);
+        return crmOk({ archived: true }, { origin });
       }
     }
 

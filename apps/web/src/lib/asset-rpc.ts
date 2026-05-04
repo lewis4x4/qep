@@ -14,7 +14,7 @@ export interface Asset360Equipment {
   model: string | null;
   year: number | null;
   condition: "new" | "excellent" | "good" | "fair" | "poor" | "salvage" | null;
-  availability: "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned";
+  availability: "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned" | "on_order";
   ownership: "owned" | "leased" | "customer_owned" | "rental_fleet" | "consignment";
   engine_hours: number | null;
   warranty_expires_on: string | null;

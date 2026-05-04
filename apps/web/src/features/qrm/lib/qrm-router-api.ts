@@ -389,8 +389,18 @@ export async function fetchCompanySubtreeEquipment(companyId: string): Promise<Q
   return requireRouterArrayPayload<QrmEquipment>(payload, "items");
 }
 
-export async function createCompanyEquipment(input: Omit<Partial<QrmEquipment>, "id" | "createdAt" | "updatedAt" | "companyName"> & { companyId: string; name: string }): Promise<QrmEquipment> {
+type EquipmentCreateInput = Omit<Partial<QrmEquipment>, "id" | "createdAt" | "updatedAt" | "companyName"> & { name: string };
+
+export async function createCompanyEquipment(input: EquipmentCreateInput & { companyId: string }): Promise<QrmEquipment> {
   const payload = await requestRouter("/qrm/equipment", {
+    method: "POST",
+    body: input,
+  });
+  return requireRouterObjectPayload<QrmEquipment>(payload, "equipment");
+}
+
+export async function quickAddOnOrderEquipment(input: EquipmentCreateInput & { stockNumber: string }): Promise<QrmEquipment> {
+  const payload = await requestRouter("/qrm/equipment/quick-add-on-order", {
     method: "POST",
     body: input,
   });
@@ -411,6 +421,12 @@ export async function patchEquipment(
     body: input,
   });
   return requireRouterObjectPayload<QrmEquipment>(payload, "equipment");
+}
+
+export async function archiveOnOrderEquipment(equipmentId: string): Promise<void> {
+  await requestRouter(`/qrm/equipment/${equipmentId}`, {
+    method: "DELETE",
+  });
 }
 
 export async function fetchDealEquipment(dealId: string): Promise<QrmDealEquipmentLink[]> {
