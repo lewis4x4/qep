@@ -85,6 +85,19 @@ type OnOrderEquipmentPayload = Partial<EquipmentPayload> & {
   stockNumber?: string | null;
 };
 
+export interface EquipmentInvoiceReversalCandidate {
+  stockNumber: string | null;
+  equipmentId: string | null;
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  invoiceStatus: string | null;
+  quickbooksGlStatus: string | null;
+  postingPeriodStatus: string | null;
+  equipmentInOutState: string | null;
+  candidateStatus: "ready" | "blocked";
+  blockers: string[];
+}
+
 const ON_ORDER_INVENTORY_COMPANY_NAME = "QEP On-Order Inventory";
 const ON_ORDER_INVENTORY_COMPANY_KEY = "qep_on_order_inventory";
 
@@ -2069,6 +2082,37 @@ export async function quickAddOnOrderEquipment(
       quick_added_by: ctx.caller.userId,
     },
   });
+}
+
+function mapEquipmentInvoiceReversalCandidate(row: Record<string, unknown>): EquipmentInvoiceReversalCandidate {
+  return {
+    stockNumber: typeof row.stock_number === "string" ? row.stock_number : null,
+    equipmentId: typeof row.equipment_id === "string" ? row.equipment_id : null,
+    invoiceId: typeof row.invoice_id === "string" ? row.invoice_id : null,
+    invoiceNumber: typeof row.invoice_number === "string" ? row.invoice_number : null,
+    invoiceStatus: typeof row.invoice_status === "string" ? row.invoice_status : null,
+    quickbooksGlStatus: typeof row.quickbooks_gl_status === "string" ? row.quickbooks_gl_status : null,
+    postingPeriodStatus: typeof row.posting_period_status === "string" ? row.posting_period_status : null,
+    equipmentInOutState: typeof row.equipment_in_out_state === "string" ? row.equipment_in_out_state : null,
+    candidateStatus: row.candidate_status === "ready" ? "ready" : "blocked",
+    blockers: Array.isArray(row.blockers) ? row.blockers.filter((item): item is string => typeof item === "string") : [],
+  };
+}
+
+export async function findEquipmentInvoiceReversalCandidate(
+  ctx: RouterCtx,
+  stockNumberInput: string | null | undefined,
+): Promise<EquipmentInvoiceReversalCandidate> {
+  const stockNumber = cleanText(stockNumberInput ?? null);
+  if (!stockNumber) throw new Error("VALIDATION_STOCK_NUMBER_REQUIRED");
+
+  const { data, error } = await ctx.callerDb
+    .rpc("find_equipment_invoice_reversal_candidate", { p_stock_number: stockNumber })
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("NOT_FOUND");
+  return mapEquipmentInvoiceReversalCandidate(data as Record<string, unknown>);
 }
 
 export async function getEquipment(

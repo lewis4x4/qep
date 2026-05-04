@@ -55,6 +55,7 @@ import {
   createDeal,
   createEquipment,
   getEquipment,
+  findEquipmentInvoiceReversalCandidate,
   dismissDuplicateCandidate,
   getCommunicationTarget,
   getRecordCustomFields,
@@ -705,6 +706,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const body = await readJsonBody<Partial<EquipmentPayload>>(req);
         const equipment = await quickAddOnOrderEquipment(ctx, body);
         return crmOk({ equipment }, { origin, status: 201 });
+      }
+
+      if (req.method === "GET" && segments.length === 3 && segments[2] === "reversal-candidate") {
+        requireElevated(ctx);
+        const candidate = await findEquipmentInvoiceReversalCandidate(ctx, safeText(url.searchParams.get("stock_number")));
+        return crmOk({ candidate }, { origin });
       }
 
       if (req.method === "GET" && segments.length === 3) {

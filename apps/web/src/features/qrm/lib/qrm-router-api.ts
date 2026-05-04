@@ -407,6 +407,27 @@ export async function quickAddOnOrderEquipment(input: EquipmentCreateInput & { s
   return requireRouterObjectPayload<QrmEquipment>(payload, "equipment");
 }
 
+export interface EquipmentInvoiceReversalCandidate {
+  stockNumber: string | null;
+  equipmentId: string | null;
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  invoiceStatus: string | null;
+  quickbooksGlStatus: string | null;
+  postingPeriodStatus: string | null;
+  equipmentInOutState: string | null;
+  candidateStatus: "ready" | "blocked";
+  blockers: string[];
+}
+
+export async function fetchEquipmentInvoiceReversalCandidate(
+  stockNumber: string,
+): Promise<EquipmentInvoiceReversalCandidate> {
+  const params = new URLSearchParams({ stock_number: stockNumber });
+  const payload = await requestRouter(`/qrm/equipment/reversal-candidate?${params.toString()}`);
+  return requireRouterObjectPayload<EquipmentInvoiceReversalCandidate>(payload, "candidate");
+}
+
 export async function getEquipmentById(equipmentId: string): Promise<QrmEquipment> {
   const payload = await requestRouter(`/qrm/equipment/${equipmentId}`);
   return requireRouterObjectPayload<QrmEquipment>(payload, "equipment");
