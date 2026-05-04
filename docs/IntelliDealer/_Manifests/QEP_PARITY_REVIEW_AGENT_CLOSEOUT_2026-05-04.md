@@ -60,9 +60,13 @@ All 15 current open residual rows are represented by the roadmap and have a pack
 
 ## Verification Notes
 
-- The workbook verifier scripts exist under `.omx/tmp/parity-review/` and were run successfully in the implementation session.
-- `.omx/tmp/parity-review/completion_roadmap_review_brief.md` is superseded by the current roadmap and should not be used as source of truth.
-- Source of truth is `QEP_PARITY_REMAINING_IMPLEMENTATION_SLICES_2026-05-04.md` plus the decision packets listed above.
+- Source-controlled verification commands now cover the workbook and closeout state:
+  - `bun run parity:open-rows`
+  - `bun run parity:workbook:verify`
+  - `bun run parity:closeout:preflight`
+  - `bun run parity:closeout:status`
+- Temporary `.omx/tmp/parity-review/*` review artifacts are superseded and should not be used as source of truth.
+- Source of truth is `QEP_Parity_Worksheet.xlsx`, `QEP_PARITY_REMAINING_IMPLEMENTATION_SLICES_2026-05-04.md`, and the decision packets listed above.
 
 ## Remaining Blockers
 

@@ -1,7 +1,7 @@
 # QEP Parity Verification Status
 
 Date: 2026-05-04  
-Repo HEAD at run: `440fe56`  
+Repo HEAD at run: `5851009`
 Workbook: `docs/IntelliDealer/_Manifests/QEP_Parity_Worksheet.xlsx` and `/Users/brianlewis/Desktop/IntelliDealer/_Manifests/QEP_Parity_Worksheet.xlsx`
 
 ## Summary
@@ -11,6 +11,19 @@ The repo-local verification surface is passing for migrations, static parity gua
 Live credential-gated checks remain blocked because this shell does not have the required Supabase/auth environment variables. These failures are environment prerequisites, not evidence that the parity decision packets or workbook metadata are wrong.
 
 ## Commands Run
+
+### `bun run parity:closeout:status`
+
+Purpose: consolidate durable closeout checks across workbook open rows, workbook structural verification, live credential preflight, and the external decision queue.
+
+Actual local result in this shell: `BLOCKED`.
+
+Blocking status evidence:
+
+- Workbook open rows: 15 (`GAP`: 5, `PARTIAL`: 10).
+- External decision queue rows still queued: 7.
+- Missing live-gate credentials: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `KB_TEST_ADMIN_TOKEN`, `KB_TEST_REP_TOKEN`.
+- Workbook verification sub-check: `PASS`.
 
 ### `bun run parity:closeout:preflight`
 
@@ -105,7 +118,10 @@ export SUPABASE_SERVICE_ROLE_KEY=...
 export KB_TEST_ADMIN_TOKEN=...
 export KB_TEST_REP_TOKEN=...
 
+bun run parity:closeout:status
 bun run parity:closeout:preflight
+bun run parity:open-rows -- --expect-open=0
+bun run parity:workbook:verify
 bun run wave5:provider:verify
 bun run segment:gates --segment parity-closeout --ui --no-chaos
 ```
