@@ -60,6 +60,7 @@
     "wave5:provider:verify": "bun ./scripts/verify/wave5-deferred-provider-readiness.mjs",
     "parity:open-rows": "bun ./scripts/verify/parity-open-rows.mjs",
     "parity:workbook:verify": "bun ./scripts/verify/parity-workbook-verify.mjs",
+    "parity:decision-queue:verify": "bun ./scripts/verify/parity-decision-queue-verify.mjs",
     "parity:closeout:preflight": "bun ./scripts/verify/parity-closeout-preflight.mjs",
     "parity:closeout:status": "bun ./scripts/verify/parity-closeout-status.mjs"
   },

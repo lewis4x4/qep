@@ -76,6 +76,7 @@ Run and archive evidence for:
 bun run parity:closeout:status
 bun run parity:open-rows -- --expect-open=0
 bun run parity:workbook:verify
+bun run parity:decision-queue:verify -- --expect-rows=7
 bun run migrations:check
 bun run wave5:provider:verify
 bun run segment:gates --segment parity-closeout --ui

@@ -7,12 +7,13 @@ const repoRoot = resolve(import.meta.dir, "..", "..");
 const QUEUE_PATH = resolve(repoRoot, "docs/IntelliDealer/_Manifests/QEP_PARITY_EXTERNAL_DECISION_QUEUE_2026-05-04.md");
 const openRows = runJson(["bun", "run", "parity:open-rows"]);
 const workbookVerification = runJson(["bun", "run", "parity:workbook:verify"]);
+const queueVerification = runJson(["bun", "run", "parity:decision-queue:verify", "--", "--expect-rows=7"]);
 const preflight = runJsonAllowFailure(["bun", "run", "parity:closeout:preflight"]);
 const queueRows = extractQueueRows(QUEUE_PATH);
 
 const blockerRows = queueRows.filter((row) => row.status && row.status.toLowerCase() !== "complete");
 const credentialFailures = (preflight.data?.failed ?? []).filter((check) => check.name?.startsWith("env present:"));
-const verdict = openRows.ok && workbookVerification.ok && blockerRows.length === 0 && credentialFailures.length === 0
+const verdict = openRows.ok && workbookVerification.ok && queueVerification.ok && blockerRows.length === 0 && credentialFailures.length === 0
   ? "READY_FOR_FINAL_GATE"
   : "BLOCKED";
 
@@ -31,6 +32,7 @@ const result = {
   },
   external_decision_queue: {
     path: relative(QUEUE_PATH),
+    verification_verdict: queueVerification.data?.verdict ?? "UNKNOWN",
     queued_count: blockerRows.length,
     rows: blockerRows.map((row) => ({
       slice: row.slice,

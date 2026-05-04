@@ -63,6 +63,7 @@ All 15 current open residual rows are represented by the roadmap and have a pack
 - Source-controlled verification commands now cover the workbook and closeout state:
   - `bun run parity:open-rows`
   - `bun run parity:workbook:verify`
+  - `bun run parity:decision-queue:verify`
   - `bun run parity:closeout:preflight`
   - `bun run parity:closeout:status`
 - Temporary `.omx/tmp/parity-review/*` review artifacts are superseded and should not be used as source of truth.
