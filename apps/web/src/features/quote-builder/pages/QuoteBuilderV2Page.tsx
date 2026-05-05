@@ -2687,6 +2687,56 @@ export function QuoteBuilderV2Page() {
             <p className="mt-1 text-sm text-muted-foreground">Search first, then add a new customer only if there is no match. Keep the rest of the quote out of view until this is clear.</p>
           </div>
 
+          <CustomerSection
+            draft={draft}
+            onPick={(picked) => setDraft((cur) => ({
+              ...cur,
+              contactId:       picked.contactId ?? undefined,
+              companyId:       picked.companyId ?? undefined,
+              customerName:    picked.customerName,
+              customerCompany: picked.customerCompany,
+              customerPhone:   picked.customerPhone,
+              customerEmail:   picked.customerEmail,
+              customerSignals: picked.signals ?? null,
+              customerWarmth:  picked.warmth ?? null,
+            }))}
+            onManualChange={(field, value) => setDraft((cur) => {
+              // Preserve signals on typo fixes (phone, email, name punctuation)
+              // but *clear* them when the company name is materially rewritten —
+              // keeping Acme's open-deal count attached to "Smith Excavation"
+              // would poison the intel panel and the saved quote. Heuristic:
+              // clear when the field is customerCompany, a snapshot exists,
+              // and the new value is clearly a different company (not a
+              // prefix / not a case variation of the old).
+              const next = { ...cur, [field]: value };
+              if (
+                field === "customerCompany" &&
+                cur.customerSignals &&
+                cur.customerCompany &&
+                !isTypoLikeRewrite(cur.customerCompany, value)
+              ) {
+                next.customerSignals = null;
+                next.customerWarmth  = null;
+                // The companyId/contactId referred to the prior customer;
+                // drop them so downstream reads don't cross-attribute.
+                next.companyId = undefined;
+                next.contactId = undefined;
+              }
+              return next;
+            })}
+            onClear={() => setDraft((cur) => ({
+              ...cur,
+              contactId:       undefined,
+              companyId:       undefined,
+              customerName:    "",
+              customerCompany: "",
+              customerPhone:   "",
+              customerEmail:   "",
+              customerSignals: null,
+              customerWarmth:  null,
+            }))}
+          />
+
           <Card className="p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Fast intake</p>
             <div className="mt-3 grid gap-2 sm:grid-cols-4">
@@ -2767,56 +2817,6 @@ export function QuoteBuilderV2Page() {
               {intelligencePanel}
             </div>
           )}
-
-          <CustomerSection
-            draft={draft}
-            onPick={(picked) => setDraft((cur) => ({
-              ...cur,
-              contactId:       picked.contactId ?? undefined,
-              companyId:       picked.companyId ?? undefined,
-              customerName:    picked.customerName,
-              customerCompany: picked.customerCompany,
-              customerPhone:   picked.customerPhone,
-              customerEmail:   picked.customerEmail,
-              customerSignals: picked.signals ?? null,
-              customerWarmth:  picked.warmth ?? null,
-            }))}
-            onManualChange={(field, value) => setDraft((cur) => {
-              // Preserve signals on typo fixes (phone, email, name punctuation)
-              // but *clear* them when the company name is materially rewritten —
-              // keeping Acme's open-deal count attached to "Smith Excavation"
-              // would poison the intel panel and the saved quote. Heuristic:
-              // clear when the field is customerCompany, a snapshot exists,
-              // and the new value is clearly a different company (not a
-              // prefix / not a case variation of the old).
-              const next = { ...cur, [field]: value };
-              if (
-                field === "customerCompany" &&
-                cur.customerSignals &&
-                cur.customerCompany &&
-                !isTypoLikeRewrite(cur.customerCompany, value)
-              ) {
-                next.customerSignals = null;
-                next.customerWarmth  = null;
-                // The companyId/contactId referred to the prior customer;
-                // drop them so downstream reads don't cross-attribute.
-                next.companyId = undefined;
-                next.contactId = undefined;
-              }
-              return next;
-            })}
-            onClear={() => setDraft((cur) => ({
-              ...cur,
-              contactId:       undefined,
-              companyId:       undefined,
-              customerName:    "",
-              customerCompany: "",
-              customerPhone:   "",
-              customerEmail:   "",
-              customerSignals: null,
-              customerWarmth:  null,
-            }))}
-          />
 
           <Card className="border-blue-500/20 bg-blue-500/5 p-4">
             <p className="text-sm font-semibold text-blue-200">New-customer guardrails</p>
