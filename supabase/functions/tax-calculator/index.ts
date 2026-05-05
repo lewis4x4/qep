@@ -87,7 +87,6 @@ Deno.serve(async (req) => {
         .select("slug, state_province")
         .eq("workspace_id", workspaceId)
         .eq("slug", branchSlug)
-        .eq("is_active", true)
         .is("deleted_at", null)
         .maybeSingle();
       branchState = typeof branch?.state_province === "string" ? branch.state_province : null;

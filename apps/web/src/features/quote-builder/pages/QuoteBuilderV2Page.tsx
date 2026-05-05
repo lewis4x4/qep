@@ -94,7 +94,7 @@ import {
   loadLocalDraft,
   saveLocalDraft,
 } from "../lib/local-draft";
-import { useActiveBranches } from "@/hooks/useBranches";
+import { useActiveBranches, useBranchBySlug } from "@/hooks/useBranches";
 import { useQuotePDF } from "../hooks/useQuotePDF";
 import { useQuoteFinancingPreview } from "../hooks/useQuoteFinancingPreview";
 import { useQuoteTaxPreview } from "../hooks/useQuoteTaxPreview";
@@ -508,7 +508,10 @@ export function QuoteBuilderV2Page() {
 
   const branchesQ = useActiveBranches();
   const branches = branchesQ.data ?? [];
-  const selectedBranch = branches.find((branch) => branch.slug === draft.branchSlug);
+  const selectedBranchQuery = useBranchBySlug(draft.branchSlug || null);
+  const selectedBranch = branches.find((branch) => branch.slug === draft.branchSlug)
+    ?? selectedBranchQuery.data
+    ?? undefined;
   const {
     equipmentTotal,
     attachmentTotal,
