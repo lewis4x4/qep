@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
@@ -393,7 +393,8 @@ function dateInputValue(value: string | null | undefined): string {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toISOString().slice(0, 10);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 function dateTimeInputValue(value: string | null | undefined): string {
@@ -1011,11 +1012,18 @@ export function QuoteBuilderV2Page() {
     return `${quoteId ?? "new"}|${Math.round(marginPctValue * 10) / 10}`;
   }
 
-  async function handleSaveClick() {
+  const handleSaveClick = useCallback(async () => {
     // Resolve threshold just-in-time so a new workspace-default created
-    // in a sibling tab applies to this session without a refresh.
-    const { threshold } = await getApplicableThreshold(null);
-    const thresholdPct = threshold ? Number(threshold.min_margin_pct) : null;
+    // in a sibling tab applies to this session without a refresh. If the
+    // admin lookup flakes, don't silently drop the user's save — save the
+    // draft and let server-side approval/readiness gates stay authoritative.
+    let thresholdPct: number | null = null;
+    try {
+      const { threshold } = await getApplicableThreshold(null);
+      thresholdPct = threshold ? Number(threshold.min_margin_pct) : null;
+    } catch (error) {
+      console.warn("quote-builder threshold lookup failed; saving without margin gate", error);
+    }
     const key = marginKeyFor(
       (saveMutation.data?.quote?.id as string | undefined)
         ?? (typeof existingQuote?.id === "string" ? existingQuote.id : null),
@@ -1029,7 +1037,7 @@ export function QuoteBuilderV2Page() {
       return;
     }
     saveMutation.mutate();
-  }
+  }, [existingQuote?.id, marginPct, marginReasonCaptured, saveMutation.data?.quote?.id, saveMutation.mutate]);
 
   async function handleMarginReasonConfirm(payload: {
     reason: string;
@@ -1111,6 +1119,10 @@ export function QuoteBuilderV2Page() {
       whyThisMachineConfirmed: current.whyThisMachineConfirmed ?? false,
     }));
   }, [step]);
+
+  const handleQuoteStatusChange = useCallback((status: QuoteWorkspaceDraft["quoteStatus"]) => {
+    setDraft((current) => ({ ...current, quoteStatus: status }));
+  }, []);
 
   const quoteStatus = draft.quoteStatus ?? "draft";
   const approvalPending = quoteStatus === "pending_approval";
@@ -1272,7 +1284,7 @@ export function QuoteBuilderV2Page() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  });
+  }, [handleSaveClick, packetReadiness.draft.ready, saveMutation.isPending]);
 
   const voiceMutation = useMutation({
     mutationFn: async (payload: { blob: Blob; fileName: string }) => {
@@ -2349,7 +2361,7 @@ export function QuoteBuilderV2Page() {
                     taxBreakdown={taxPreviewQuery.data}
                     taxLoading={taxPreviewQuery.isLoading}
                     taxError={taxPreviewQuery.isError}
-                    taxEnabled={Boolean(draft.branchSlug)}
+                    taxEnabled={Boolean(draft.branchSlug || draft.deliveryState)}
                     financeScenarios={allFinanceScenarios}
                     financeLoading={financingPreviewQuery.isLoading}
                     financeError={financingPreviewQuery.isError}
@@ -3755,7 +3767,7 @@ export function QuoteBuilderV2Page() {
               requiresManagerApproval={approvalState.requiresManagerApproval}
               userRole={userRoleQuery.data ?? null}
               quoteStatus={quoteStatus}
-              onQuoteStatusChange={(status) => setDraft((current) => ({ ...current, quoteStatus: status }))}
+              onQuoteStatusChange={handleQuoteStatusChange}
               showSendSection={false}
             />
           ) : (

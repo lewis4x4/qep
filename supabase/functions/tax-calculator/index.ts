@@ -219,8 +219,11 @@ Deno.serve(async (req) => {
 
       section179 = computeSection179(section179Base, taxYear, effectiveRate);
 
-      // Save scenario
-      await supabaseAdmin.from("section_179_scenarios").insert({
+      // Save scenario best-effort; preview correctness must not depend on
+      // audit-row persistence, but rows must stay scoped to the caller's
+      // workspace when they do persist.
+      const { error: section179InsertError } = await supabaseAdmin.from("section_179_scenarios").insert({
+        workspace_id: workspaceId,
         deal_id: dealId,
         tax_year: taxYear,
         equipment_cost: section179Base,
@@ -233,6 +236,9 @@ Deno.serve(async (req) => {
         net_cost_after_tax: section179.net_cost,
         assumptions: { effective_rate: effectiveRate, limit_179: 1_220_000 },
       });
+      if (section179InsertError) {
+        console.error("section_179_scenarios insert failed", section179InsertError);
+      }
     }
 
     return safeJsonOk({

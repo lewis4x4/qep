@@ -18,6 +18,7 @@
     "audit:rls-initplan": "node ./scripts/check-rls-initplan.mjs",
     "audit:edges": "bun ./scripts/check-edge-function-auth.mjs",
     "pressure:parts": "bun ./scripts/parts-service-pressure/run.mjs",
+    "test:edge:tax": "deno test supabase/functions/tax-calculator/tax-logic.test.ts --allow-env",
     "test:edge:dge": "deno test supabase/functions/_shared/market-valuation-logic.test.ts supabase/functions/_shared/dge-refresh-state.test.ts supabase/functions/_shared/dge-refresh-jobs.test.ts supabase/functions/_shared/dge-auth.test.ts",
     "dge:mixed-load": "bun ./scripts/dge/mixed-load.ts",
     "test": "bun run test:unit && bun run test:integration",
