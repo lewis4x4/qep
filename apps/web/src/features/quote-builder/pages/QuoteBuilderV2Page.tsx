@@ -1887,6 +1887,32 @@ export function QuoteBuilderV2Page() {
     saveMutation.isPending
     || submitApprovalMutation.isPending
     || (!packetReadiness.draft.ready && primaryActionLabel !== "Review & Send");
+  const previousWizardStep = WIZARD_STEPS[currentWizardStepNumber - 2]?.id ?? null;
+  const nextWizardStep = WIZARD_STEPS[currentWizardStepNumber]?.id ?? null;
+  const nextWizardLabel = nextWizardStep ? STEP_LABELS[nextWizardStep] : null;
+  const wizardNextDisabled =
+    !nextWizardStep
+    || (step === "customer" && !hasCustomer)
+    || (step === "equipment" && !equipmentCanContinue)
+    || (step === "document" && !documentReady);
+  const wizardNextHelp = step === "customer" && !hasCustomer
+    ? "Pick a customer or use Quote for prospect first."
+    : step === "equipment" && !equipmentCanContinue
+      ? "Select equipment and resolve source-required availability first."
+      : step === "document" && !documentReady
+        ? "Generate the document preview before send/log."
+        : "Completed steps stay editable — click any finished step below to jump back.";
+
+  function handleQuoteForProspect(): void {
+    setDraft((cur) => ({
+      ...cur,
+      customerName:    cur.customerName    || "Walk-in prospect",
+      customerCompany: cur.customerCompany || "Walk-in prospect",
+      customerSignals: null,
+      customerWarmth:  null,
+    }));
+    setStep("equipment");
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
@@ -2602,6 +2628,52 @@ export function QuoteBuilderV2Page() {
           </Card>
         )}
 
+        <Card className="border-border/70 bg-card/80 p-4">
+          <div className="grid gap-4 lg:grid-cols-[minmax(18rem,1fr)_auto] lg:items-end">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-qep-orange/10 px-3 py-1 text-xs font-semibold text-qep-orange">
+                  Step {currentWizardStepNumber} of {WIZARD_STEPS.length}
+                </span>
+                <span className="text-sm font-semibold text-foreground">{STEP_LABELS[step]}</span>
+              </div>
+              {branches.length > 0 && (
+                <label className="block max-w-xl space-y-1 text-sm">
+                  <span className="text-xs font-medium text-muted-foreground">Quoting branch</span>
+                  <select
+                    value={draft.branchSlug}
+                    onChange={(event) => setDraft((current) => ({ ...current, branchSlug: event.target.value }))}
+                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-qep-orange focus:outline-none focus:ring-2 focus:ring-qep-orange/30"
+                  >
+                    <option value="">Select quoting branch…</option>
+                    {branches.map((branch) => (
+                      <option key={branch.id} value={branch.slug}>{branch.display_name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <p className="text-xs text-muted-foreground">{wizardNextHelp}</p>
+            </div>
+            <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
+              {previousWizardStep && (
+                <Button variant="outline" onClick={() => setStep(previousWizardStep)}>
+                  <ArrowLeft className="mr-1 h-4 w-4" /> Back
+                </Button>
+              )}
+              {step === "customer" && !hasCustomer && (
+                <Button variant="ghost" onClick={handleQuoteForProspect}>
+                  Quote for prospect
+                </Button>
+              )}
+              {nextWizardStep && (
+                <Button onClick={() => setStep(nextWizardStep)} disabled={wizardNextDisabled}>
+                  {nextWizardLabel} <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </Card>
+
       <QuoteWizardProgress
         steps={WIZARD_STEPS}
         currentStep={step}
@@ -2756,22 +2828,6 @@ export function QuoteBuilderV2Page() {
             </div>
           </Card>
 
-          {branches.length > 0 && (
-            <label className="block space-y-1 text-sm">
-              <span className="text-xs font-medium text-muted-foreground">Quoting branch</span>
-              <select
-                value={draft.branchSlug}
-                onChange={(event) => setDraft((current) => ({ ...current, branchSlug: event.target.value }))}
-                className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
-              >
-                <option value="">Select quoting branch…</option>
-                {branches.map((branch) => (
-                  <option key={branch.id} value={branch.slug}>{branch.display_name}</option>
-                ))}
-              </select>
-            </label>
-          )}
-
           <CustomerIntelPanel
             customerCompany={draft.customerCompany ?? ""}
             companyId={draft.companyId ?? null}
@@ -2779,39 +2835,9 @@ export function QuoteBuilderV2Page() {
             warmth={draft.customerWarmth ?? null}
           />
 
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-muted-foreground">Step 1 of 11</span>
-            <div className="flex items-center gap-2">
-              {/* "Quote for prospect" escape hatch — seeds a placeholder
-                  so reps can build a spec quote for a walk-in without a
-                  real CRM match. Rep can edit the name later on this
-                  step; the save path stores it as a normal quote. */}
-              {!hasCustomer && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setDraft((cur) => ({
-                      ...cur,
-                      customerName:    cur.customerName    || "Walk-in prospect",
-                      customerCompany: cur.customerCompany || "Walk-in prospect",
-                      customerSignals: null,
-                      customerWarmth:  null,
-                    }));
-                    setStep("equipment");
-                  }}
-                >
-                  Quote for prospect
-                </Button>
-              )}
-              <Button onClick={() => setStep("equipment")} disabled={!hasCustomer}>
-                Equipment <ArrowRight className="ml-1 h-4 w-4" />
-              </Button>
-            </div>
-          </div>
           {!hasCustomer && (
-            <p className="text-right text-[11px] text-muted-foreground">
-              Select or add a customer, or use "Quote for prospect" for a walk-in.
+            <p className="text-[11px] text-muted-foreground">
+              Select or add a customer, or use "Quote for prospect" from the controls above for a walk-in.
             </p>
           )}
         </div>
@@ -4328,7 +4354,10 @@ function QuoteWizardProgress({
           Step {Math.max(1, currentIndex + 1)} of {steps.length}
         </span>
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-4 xl:grid-cols-11">
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Finished steps remain editable. Use the green buttons to jump back without losing later draft work.
+      </p>
+      <div className="mt-3 grid grid-flow-col gap-2 overflow-x-auto pb-1 [grid-auto-columns:minmax(7.5rem,1fr)]">
         {steps.map((item, index) => {
           const isCurrent = item.id === currentStep;
           const isComplete = index < currentIndex;
@@ -4339,17 +4368,18 @@ function QuoteWizardProgress({
               type="button"
               onClick={() => { if (!isFuture) onJumpBack(item.id); }}
               disabled={isFuture}
-              className={`rounded-lg border px-2 py-2 text-left text-[11px] transition ${
+              className={`min-h-[4.25rem] rounded-lg border px-3 py-2 text-left text-[11px] leading-tight transition ${
                 isCurrent
-                  ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
+                  ? "border-qep-orange bg-qep-orange/10 text-qep-orange shadow-[0_0_0_1px_rgba(249,115,22,0.25)]"
                   : isComplete
                     ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-300 hover:border-emerald-400/60"
                     : "border-border/60 bg-muted/20 text-muted-foreground"
               }`}
             >
-              <span className="block font-semibold">{item.number}. {item.shortLabel}</span>
-              <span className="mt-0.5 block text-[10px] opacity-80">
-                {isCurrent ? "Now" : isComplete ? "Jump back" : item.owner === "placeholder" ? "Later" : "Locked"}
+              <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] opacity-80">{item.number}.</span>
+              <span className="mt-1 block whitespace-normal break-words font-semibold">{item.shortLabel}</span>
+              <span className="mt-1 block text-[10px] opacity-80">
+                {isCurrent ? "Now" : isComplete ? "Edit" : item.owner === "placeholder" ? "Later" : "Locked"}
               </span>
             </button>
           );
