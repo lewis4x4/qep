@@ -508,6 +508,8 @@ export function normalizeQuoteApprovalPolicy(value: unknown): QuoteApprovalPolic
     branchManagerMinMarginPct: numOrNull(record.branchManagerMinMarginPct ?? record.branch_manager_min_margin_pct) ?? 0,
     standardMarginFloorPct: numOrNull(record.standardMarginFloorPct ?? record.standard_margin_floor_pct) ?? 0,
     branchManagerMaxQuoteAmount: numOrNull(record.branchManagerMaxQuoteAmount ?? record.branch_manager_max_quote_amount) ?? 0,
+    tradeCreditMax: numOrNull(record.tradeCreditMax ?? record.trade_credit_max),
+    repDiscountMaxPct: numOrNull(record.repDiscountMaxPct ?? record.rep_discount_max_pct),
     submitSlaHours: numOrNull(record.submitSlaHours ?? record.submit_sla_hours) ?? 0,
     escalationSlaHours: numOrNull(record.escalationSlaHours ?? record.escalation_sla_hours) ?? 0,
     ownerEscalationRole: record.ownerEscalationRole === "admin" || record.owner_escalation_role === "admin"
@@ -855,8 +857,21 @@ function normalizeQuoteScenarioType(value: unknown): QuoteFinanceScenario["type"
   return value === "lease" ? "lease" : value === "finance" ? "finance" : "cash";
 }
 
+function normalizeQuoteScenarioKind(value: unknown): QuoteFinanceScenario["kind"] {
+  return value === "lease_fmv" || value === "lease_fppo" || value === "finance" || value === "cash"
+    ? value
+    : undefined;
+}
+
 export function normalizeQuoteFinanceScenario(raw: Record<string, unknown>): QuoteFinanceScenario {
-  const type = normalizeQuoteScenarioType(firstString(raw.type, "cash"));
+  const kind = normalizeQuoteScenarioKind(raw.kind);
+  const type = raw.type == null && kind
+    ? kind === "finance"
+      ? "finance"
+      : kind === "lease_fmv" || kind === "lease_fppo"
+        ? "lease"
+        : "cash"
+    : normalizeQuoteScenarioType(firstString(raw.type, "cash"));
   const termMonths = numOrNull(raw.termMonths ?? raw.term_months);
   const rate = numOrNull(raw.rate ?? raw.apr);
   const monthlyPayment = numOrNull(raw.monthlyPayment ?? raw.monthly_payment);
@@ -875,6 +890,7 @@ export function normalizeQuoteFinanceScenario(raw: Record<string, unknown>): Quo
 
   return {
     type: type === "lease" ? "lease" : type === "finance" ? "finance" : "cash",
+    kind,
     label,
     monthlyPayment,
     apr: rate,
@@ -882,6 +898,10 @@ export function normalizeQuoteFinanceScenario(raw: Record<string, unknown>): Quo
     totalCost,
     rate,
     lender,
+    downPayment: numOrNull(raw.downPayment ?? raw.down_payment),
+    residualAmount: numOrNull(raw.residualAmount ?? raw.residual_amount),
+    moneyFactor: numOrNull(raw.moneyFactor ?? raw.money_factor),
+    isDefault: raw.isDefault === true || raw.is_default === true,
   };
 }
 
@@ -969,6 +989,50 @@ export async function sendQuotePackage(quotePackageId: string): Promise<{ sent: 
   return normalizeSendQuotePackageResponse(await res.json().catch(() => ({})));
 }
 
+export type QuoteDeliveryEventChannel = "preview" | "email" | "text" | "link" | "print";
+export type QuoteDeliveryEventStatus = "draft" | "attempted" | "sent" | "failed";
+
+export interface QuoteDeliveryEventInput {
+  quotePackageId: string;
+  documentArtifactId?: string | null;
+  channel: QuoteDeliveryEventChannel;
+  status: QuoteDeliveryEventStatus;
+  recipient?: string | null;
+  subject?: string | null;
+  messageBody?: string | null;
+  provider?: string | null;
+  providerMessageId?: string | null;
+  errorMessage?: string | null;
+  followUpAt?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export async function logQuoteDeliveryEvent(input: QuoteDeliveryEventInput): Promise<{ id: string | null }> {
+  const row = {
+    quote_package_id: input.quotePackageId,
+    document_artifact_id: input.documentArtifactId ?? null,
+    channel: input.channel,
+    status: input.status,
+    recipient: input.recipient ?? null,
+    subject: input.subject ?? null,
+    message_body: input.messageBody ?? null,
+    provider: input.provider ?? null,
+    provider_message_id: input.providerMessageId ?? null,
+    error_message: input.errorMessage ?? null,
+    follow_up_at: input.followUpAt ?? null,
+    metadata: input.metadata ?? {},
+  };
+  const { data, error } = await supabase
+    .from("quote_delivery_events")
+    .insert(row)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    throw new Error(error.message || "Failed to log quote delivery event");
+  }
+  return { id: typeof data?.id === "string" ? data.id : null };
+}
+
 export async function submitQuoteForApproval(quotePackageId: string): Promise<QuoteApprovalSubmitResult> {
   const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/submit-approval`, {
     method: "POST",
@@ -1031,6 +1095,8 @@ export async function saveQuoteApprovalPolicy(policy: Partial<QuoteApprovalPolic
       branch_manager_min_margin_pct: policy.branchManagerMinMarginPct,
       standard_margin_floor_pct: policy.standardMarginFloorPct,
       branch_manager_max_quote_amount: policy.branchManagerMaxQuoteAmount,
+      trade_credit_max: policy.tradeCreditMax,
+      rep_discount_max_pct: policy.repDiscountMaxPct,
       submit_sla_hours: policy.submitSlaHours,
       escalation_sla_hours: policy.escalationSlaHours,
       owner_escalation_role: policy.ownerEscalationRole,
@@ -1135,6 +1201,15 @@ export async function publishPortalRevision(data: {
   return normalizePortalRevisionPublishResponse(await res.json().catch(() => ({})));
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const LINE_DISCOUNT_REASON_CODES = new Set(["competitive_match", "volume_buyer", "aged_inventory", "loyalty", "other"]);
+
+function safeLineReasonCode(item: QuoteWorkspaceDraft["equipment"][number]): string | undefined {
+  return item.kind === "discount" && item.reasonCode && LINE_DISCOUNT_REASON_CODES.has(String(item.reasonCode))
+    ? String(item.reasonCode)
+    : undefined;
+}
+
 export function buildQuoteSavePayload(
   draft: QuoteWorkspaceDraft,
   computed: {
@@ -1162,6 +1237,16 @@ export function buildQuoteSavePayload(
     saveMode?: "manual" | "autosave";
   },
 ): Record<string, unknown> {
+  const pricingLines = draft.pricingLines ?? [];
+  const financeScenarioSource = draft.savedFinanceScenarios?.length
+    ? draft.savedFinanceScenarios
+    : financeScenarios;
+  const buildLineMetadata = (item: QuoteWorkspaceDraft["equipment"][number], defaults: Record<string, unknown>) => ({
+    ...defaults,
+    ...(item.metadata ?? {}),
+    source_catalog: item.sourceCatalog ?? defaults.source_catalog,
+    source_id: item.sourceId ?? item.id ?? defaults.source_id ?? null,
+  });
   const lineItems = [
     ...draft.equipment.map((item, index) => ({
       id: item.id,
@@ -1176,10 +1261,12 @@ export function buildQuoteSavePayload(
       extended_price: item.unitPrice * item.quantity,
       quoted_dealer_cost: item.dealerCost ?? undefined,
       display_order: index,
-      metadata: {
+      reason_code: safeLineReasonCode(item),
+      approval_required: item.approvalRequired === true,
+      metadata: buildLineMetadata(item, {
         source_catalog: item.sourceCatalog ?? "qb_equipment_models",
         source_id: item.sourceId ?? item.id ?? null,
-      },
+      }),
     })),
     ...draft.attachments.map((item, index) => ({
       id: item.id,
@@ -1194,10 +1281,32 @@ export function buildQuoteSavePayload(
       extended_price: item.unitPrice * item.quantity,
       quoted_dealer_cost: item.dealerCost ?? undefined,
       display_order: draft.equipment.length + index,
-      metadata: {
+      reason_code: safeLineReasonCode(item),
+      approval_required: item.approvalRequired === true,
+      metadata: buildLineMetadata(item, {
         source_catalog: item.sourceCatalog ?? (item.kind === "attachment" ? "qb_attachments" : "manual"),
         source_id: item.sourceId ?? item.id ?? null,
-      },
+      }),
+    })),
+    ...pricingLines.map((item, index) => ({
+      id: item.id,
+      catalog_entry_id: item.sourceCatalog === "catalog_entries" ? item.sourceId ?? item.id : undefined,
+      line_type: item.kind,
+      description: item.title,
+      make: item.make,
+      model: item.model,
+      year: item.year,
+      quantity: item.quantity,
+      unit_price: item.unitPrice,
+      extended_price: item.unitPrice * item.quantity,
+      quoted_dealer_cost: item.dealerCost ?? undefined,
+      display_order: draft.equipment.length + draft.attachments.length + index,
+      reason_code: safeLineReasonCode(item),
+      approval_required: item.approvalRequired === true,
+      metadata: buildLineMetadata(item, {
+        source_catalog: item.sourceCatalog ?? "manual",
+        source_id: item.sourceId ?? item.id ?? null,
+      }),
     })),
   ];
   const recommendationTrigger = draft.recommendation
@@ -1251,14 +1360,19 @@ export function buildQuoteSavePayload(
     line_items: lineItems,
     trade_in_valuation_id: draft.tradeValuationId,
     trade_allowance: draft.tradeAllowance,
-    financing_scenarios: financeScenarios.map((scenario) => ({
+    financing_scenarios: financeScenarioSource.map((scenario) => ({
       type: scenario.type,
+      kind: scenario.kind ?? scenario.type,
       label: scenario.label,
       term_months: scenario.termMonths ?? null,
       apr: scenario.apr ?? scenario.rate ?? null,
+      down_payment: scenario.downPayment ?? null,
+      residual_amount: scenario.residualAmount ?? null,
+      money_factor: scenario.moneyFactor ?? null,
       monthly_payment: scenario.monthlyPayment ?? null,
       total_cost: scenario.totalCost ?? null,
       lender: scenario.lender ?? null,
+      is_default: scenario.isDefault === true || scenario.label === draft.selectedFinanceScenario,
     })),
     equipment_total: computed.equipmentTotal,
     attachment_total: computed.attachmentTotal,
@@ -1276,6 +1390,20 @@ export function buildQuoteSavePayload(
     cash_down: computed.cashDown,
     amount_financed: computed.amountFinanced,
     selected_finance_scenario: draft.selectedFinanceScenario,
+    wizard_step: draft.wizardStep ?? null,
+    expires_at: draft.expiresAt ?? null,
+    follow_up_at: draft.followUpAt ?? null,
+    deposit_required_amount: draft.depositRequiredAmount ?? null,
+    delivery_eta: draft.deliveryEta ?? null,
+    delivery_state: draft.deliveryState ?? null,
+    delivery_county: draft.deliveryCounty ?? null,
+    special_terms: draft.specialTerms ?? null,
+    why_this_machine: draft.whyThisMachine ?? null,
+    why_this_machine_confirmed: draft.whyThisMachineConfirmed === true,
+    tax_jurisdiction_id: draft.taxJurisdictionId ?? null,
+    tax_override_amount: draft.taxOverrideAmount ?? null,
+    tax_override_reason: draft.taxOverrideReason ?? null,
+    selected_promotion_ids: (draft.selectedPromotionIds ?? []).filter((id) => UUID_RE.test(id)),
     margin_amount: computed.marginAmount,
     margin_pct: computed.marginPct,
     ai_recommendation: recommendation,

@@ -1,6 +1,36 @@
 export type QuoteEntryMode = "voice" | "ai_chat" | "manual" | "trade_photo";
 export type QuoteCommercialDiscountType = "flat" | "percent";
-export type QuoteLineItemKind = "equipment" | "attachment" | "warranty" | "financing" | "custom";
+export type QuoteLineItemKind =
+  | "equipment"
+  | "attachment"
+  | "option"
+  | "accessory"
+  | "warranty"
+  | "financing"
+  | "pdi"
+  | "freight"
+  | "good_faith"
+  | "doc_fee"
+  | "title"
+  | "tag"
+  | "registration"
+  | "discount"
+  | "trade_allowance"
+  | "rebate_mfg"
+  | "rebate_dealer"
+  | "loyalty_discount"
+  | "tax_state"
+  | "tax_county"
+  | "custom";
+export type QuoteFinanceScenarioKind = "cash" | "finance" | "lease_fmv" | "lease_fppo";
+export type QuoteSendChannel = "preview" | "email" | "text" | "link" | "print";
+export type QuoteDocumentArtifactType = "customer_quote_pdf";
+export type QuoteLineDiscountReason =
+  | "competitive_match"
+  | "volume_buyer"
+  | "aged_inventory"
+  | "loyalty"
+  | "other";
 export type QuoteTaxProfile =
   | "standard"
   | "agriculture_exempt"
@@ -20,6 +50,9 @@ export interface QuoteLineItemDraft {
   year?: number | null;
   quantity: number;
   unitPrice: number;
+  reasonCode?: QuoteLineDiscountReason | string | null;
+  approvalRequired?: boolean;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface QuoteRecommendation {
@@ -70,6 +103,7 @@ export interface CompetitorListing {
 
 export interface QuoteFinanceScenario {
   type: "cash" | "finance" | "lease";
+  kind?: QuoteFinanceScenarioKind;
   label: string;
   monthlyPayment?: number | null;
   apr?: number | null;
@@ -77,6 +111,15 @@ export interface QuoteFinanceScenario {
   totalCost?: number | null;
   rate?: number | null;
   lender?: string | null;
+  downPayment?: number | null;
+  residualAmount?: number | null;
+  moneyFactor?: number | null;
+  isDefault?: boolean;
+}
+
+export interface QuoteFinanceScenarioDraft extends QuoteFinanceScenario {
+  id?: string | null;
+  quotePackageId?: string | null;
 }
 
 export interface QuoteFinancingPreview {
@@ -137,6 +180,7 @@ export interface QuoteWorkspaceDraft {
   voiceSummary: string | null;
   equipment: QuoteLineItemDraft[];
   attachments: QuoteLineItemDraft[];
+  pricingLines?: QuoteLineItemDraft[];
   tradeAllowance: number;
   tradeValuationId: string | null;
   commercialDiscountType: QuoteCommercialDiscountType;
@@ -146,6 +190,21 @@ export interface QuoteWorkspaceDraft {
   taxTotal: number;
   amountFinanced: number;
   selectedFinanceScenario: string | null;
+  savedFinanceScenarios?: QuoteFinanceScenarioDraft[];
+  wizardStep?: number | null;
+  expiresAt?: string | null;
+  followUpAt?: string | null;
+  depositRequiredAmount?: number | null;
+  deliveryEta?: string | null;
+  deliveryState?: string | null;
+  deliveryCounty?: string | null;
+  specialTerms?: string | null;
+  whyThisMachine?: string | null;
+  whyThisMachineConfirmed?: boolean;
+  taxJurisdictionId?: string | null;
+  taxOverrideAmount?: number | null;
+  taxOverrideReason?: string | null;
+  selectedPromotionIds?: string[];
   customerName?: string;
   customerCompany?: string;
   customerPhone?: string;
@@ -250,6 +309,8 @@ export interface QuoteApprovalPolicy {
   branchManagerMinMarginPct: number;
   standardMarginFloorPct: number;
   branchManagerMaxQuoteAmount: number;
+  tradeCreditMax: number | null;
+  repDiscountMaxPct: number | null;
   submitSlaHours: number;
   escalationSlaHours: number;
   ownerEscalationRole: "owner" | "admin";

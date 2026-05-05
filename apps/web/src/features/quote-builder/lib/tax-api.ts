@@ -8,6 +8,8 @@ export interface TaxLine {
   rate: number;
   amount: number;
   applies_to: string;
+  jurisdiction_id?: string | null;
+  cap_applied?: number | null;
 }
 
 export interface Section179Result {
@@ -21,7 +23,11 @@ export interface Section179Result {
 export interface TaxCalculation {
   tax_lines: TaxLine[];
   total_tax: number;
+  state_tax: number;
+  county_tax: number;
+  taxable_basis: number;
   exemptions_applied: string[];
+  manual_override_applied?: boolean;
   section_179: Section179Result | null;
   equipment_cost: number;
 }
@@ -34,6 +40,10 @@ export async function calculateTax(params: {
   discount_total: number;
   trade_allowance: number;
   tax_profile: QuoteTaxProfile;
+  delivery_state?: string;
+  delivery_county?: string;
+  tax_override_amount?: number | null;
+  tax_override_reason?: string | null;
   include_179?: boolean;
   tax_year?: number;
   effective_tax_rate?: number;

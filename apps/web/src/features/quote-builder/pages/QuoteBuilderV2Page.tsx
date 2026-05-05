@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
@@ -51,7 +51,10 @@ import { IntelligencePanel } from "../components/IntelligencePanel";
 import { EquipmentSelector } from "../components/EquipmentSelector";
 import { FinancingCalculator } from "../components/FinancingCalculator";
 import { DealCoachSidebar } from "../components/DealCoachSidebar";
+import { IncentiveStack } from "../components/IncentiveStack";
+import { QuoteReviewWorkflowPanels } from "../components/QuoteReviewWorkflowPanels";
 import { SendQuoteSection } from "../components/SendQuoteSection";
+import { TaxBreakdown } from "../components/TaxBreakdown";
 import { MarginFloorGate } from "../components/MarginFloorGate";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -61,20 +64,27 @@ import {
 } from "@/features/admin/lib/pricing-discipline-api";
 import { MarginCheckBanner } from "../components/MarginCheckBanner";
 import { TradeInSection } from "../components/TradeInSection";
-import { TaxBreakdown } from "../components/TaxBreakdown";
 import {
   buildQuoteSavePayload,
   getAiEquipmentRecommendation,
   getClosedDealsAudit,
   getFactorVerdicts,
+  getQuoteApprovalCase,
   getSavedQuotePackage,
+  logQuoteDeliveryEvent,
   saveQuotePackage,
   searchCatalog,
   submitQuoteForApproval,
   type QuotePackageSaveResponse,
   type QuoteFinancingRequest,
 } from "../lib/quote-api";
-import { computeQuoteWorkspace } from "../lib/quote-workspace";
+import {
+  computeQuoteSendActionReadiness,
+  computeQuoteWorkspace,
+  isQuoteWhyThisMachineConfirmationRequired,
+  isTaxProfileExempt,
+  type QuoteSendActionChannel,
+} from "../lib/quote-workspace";
 import { hydrateDraftFromSavedQuote } from "../lib/saved-quote-draft";
 import { buildCatalogQueryCandidates } from "../lib/catalog-query-candidates";
 import {
@@ -85,7 +95,6 @@ import {
   saveLocalDraft,
 } from "../lib/local-draft";
 import { useActiveBranches } from "@/hooks/useBranches";
-import { BranchDocumentHeader, BranchDocumentFooter } from "@/components/BranchDocumentHeader";
 import { useQuotePDF } from "../hooks/useQuotePDF";
 import { useQuoteFinancingPreview } from "../hooks/useQuoteFinancingPreview";
 import { useQuoteTaxPreview } from "../hooks/useQuoteTaxPreview";
@@ -112,15 +121,47 @@ import type {
   QuoteWorkspaceDraft,
 } from "../../../../../../shared/qep-moonshot-contracts";
 
-// Slice 20a: customer is its own step between intake and equipment. Before
-// this change the CustomerSection lived on the entry screen alongside the
-// intake-mode picker, and AI/Voice mutations auto-advanced straight to
-// equipment — so reps submitting via AI chat were jumping past customer
-// selection entirely. Splitting the step makes "who is this quote for?"
-// explicit and is the anchor for the Customer Digital Twin intel panel.
-type Step = "entry" | "customer" | "equipment" | "tradeIn" | "financing" | "review";
+// Item 2: the salesperson-facing flow is now the QRM 11-step wizard.
+// Steps 10–11 intentionally reuse local PDF/preview delivery while backend
+// persisted document and Graph/Twilio provider artifacts are still gated.
+type Step =
+  | "customer"
+  | "equipment"
+  | "configure"
+  | "tradeIn"
+  | "pricing"
+  | "promotions"
+  | "financing"
+  | "details"
+  | "review"
+  | "document"
+  | "send";
 type BuilderMode = "workspace" | "guided";
 type AutoSaveState = "idle" | "local" | "saving" | "saved" | "error";
+
+interface WizardStepMeta {
+  id: Step;
+  number: number;
+  label: string;
+  shortLabel: string;
+  owner: "item-2" | "item-3" | "placeholder";
+}
+
+const WIZARD_STEPS: WizardStepMeta[] = [
+  { id: "customer", number: 1, label: "Customer", shortLabel: "Customer", owner: "item-2" },
+  { id: "equipment", number: 2, label: "Equipment", shortLabel: "Equipment", owner: "item-2" },
+  { id: "configure", number: 3, label: "Configure", shortLabel: "Configure", owner: "item-2" },
+  { id: "tradeIn", number: 4, label: "Trade-in", shortLabel: "Trade", owner: "item-2" },
+  { id: "pricing", number: 5, label: "Pricing build", shortLabel: "Pricing", owner: "item-3" },
+  { id: "promotions", number: 6, label: "Rebates & promos", shortLabel: "Promos", owner: "item-3" },
+  { id: "financing", number: 7, label: "Financing", shortLabel: "Finance", owner: "item-3" },
+  { id: "details", number: 8, label: "Quote details", shortLabel: "Details", owner: "item-3" },
+  { id: "review", number: 9, label: "Review & approval", shortLabel: "Review", owner: "item-3" },
+  { id: "document", number: 10, label: "Document", shortLabel: "Document", owner: "item-3" },
+  { id: "send", number: 11, label: "Send & log", shortLabel: "Send", owner: "item-3" },
+];
+
+const WIZARD_STEP_IDS = WIZARD_STEPS.map((item) => item.id);
 
 function readinessChipLabel(missing: string): string {
   if (missing.includes("customer")) return "Customer";
@@ -131,14 +172,38 @@ function readinessChipLabel(missing: string): string {
 }
 
 const STEP_STORAGE_PREFIX = "qep.quote-builder.last-step.";
-const STEP_LABELS: Record<Step, string> = {
-  entry: "Entry",
-  customer: "Customer",
-  equipment: "Equipment",
-  tradeIn: "Trade-In",
-  financing: "Financing",
-  review: "Review",
-};
+const STEP_LABELS: Record<Step, string> = WIZARD_STEPS.reduce((labels, item) => {
+  labels[item.id] = item.label;
+  return labels;
+}, {} as Record<Step, string>);
+
+type EquipmentAvailabilityStatus = "in_stock" | "in_transit" | "source_required";
+type FinanceStepTab = "cash" | "finance" | "lease";
+type PricingLineKind = Extract<QuoteLineItemDraft["kind"], "pdi" | "freight" | "good_faith" | "doc_fee" | "title" | "tag" | "registration" | "discount" | "rebate_mfg" | "rebate_dealer" | "loyalty_discount">;
+
+const PRICING_ADDER_FIELDS: Array<{ kind: PricingLineKind; title: string; helper: string; step: number }> = [
+  { kind: "freight", title: "Freight", helper: "Shipping or transfer cost", step: 100 },
+  { kind: "pdi", title: "PDI", helper: "Prep / delivery inspection", step: 100 },
+  { kind: "good_faith", title: "1% good faith", helper: "Use when QEP policy supports it", step: 100 },
+  { kind: "doc_fee", title: "Doc fee", helper: "Dealer paperwork fee", step: 25 },
+  { kind: "title", title: "Title", helper: "Title processing", step: 25 },
+  { kind: "tag", title: "Tag", helper: "Tag / plate fee", step: 25 },
+  { kind: "registration", title: "Registration", helper: "Registration support", step: 25 },
+];
+
+const DISCOUNT_REASON_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "competitive_match", label: "Competitive match" },
+  { value: "volume_buyer", label: "Volume buyer" },
+  { value: "aged_inventory", label: "Aged inventory" },
+  { value: "loyalty", label: "Loyalty" },
+  { value: "other", label: "Other" },
+];
+
+const PROMOTION_PLACEHOLDERS: Array<{ id: string; title: string; kind: PricingLineKind; amount: number; source: string; detail: string }> = [
+  { id: "seed-mfg-support", title: "Manufacturer retail support", kind: "rebate_mfg", amount: 1000, source: "Manufacturer", detail: "Clear starter row until seeded OEM programs resolve." },
+  { id: "seed-dealer-match", title: "Dealer close-the-gap promo", kind: "rebate_dealer", amount: 500, source: "Dealer", detail: "Use only when manager policy allows dealer-funded support." },
+  { id: "seed-loyalty-owner", title: "Returning owner loyalty", kind: "loyalty_discount", amount: 750, source: "Loyalty", detail: "Placeholder for customer loyalty program selection." },
+];
 
 interface CatalogEntryMatch {
   id?: string;
@@ -149,7 +214,33 @@ interface CatalogEntryMatch {
   model: string;
   year: number | null;
   list_price?: number;
+  stock_number?: string | null;
+  condition?: string | null;
+  availabilityStatus?: EquipmentAvailabilityStatus;
+  availability_status?: EquipmentAvailabilityStatus;
   attachments?: Array<{ id: string; name: string; price: number }>;
+}
+
+function availabilityStatusForEntry(entry: Pick<CatalogEntryMatch, "stock_number" | "condition" | "availabilityStatus" | "availability_status">): EquipmentAvailabilityStatus {
+  if (entry.availabilityStatus) return entry.availabilityStatus;
+  if (entry.availability_status) return entry.availability_status;
+  const condition = entry.condition?.toLowerCase() ?? "";
+  if (condition.includes("transit")) return "in_transit";
+  if (entry.stock_number) return "in_stock";
+  return "source_required";
+}
+
+function availabilityStatusForLine(item: QuoteLineItemDraft): EquipmentAvailabilityStatus {
+  const raw = item.metadata?.availability_status;
+  return raw === "in_stock" || raw === "in_transit" || raw === "source_required"
+    ? raw
+    : "source_required";
+}
+
+function availabilityLabel(status: EquipmentAvailabilityStatus): string {
+  if (status === "in_stock") return "In stock";
+  if (status === "in_transit") return "In transit";
+  return "Source required";
 }
 
 /**
@@ -206,6 +297,10 @@ function buildEquipmentLine(entry: CatalogEntryMatch): QuoteLineItemDraft {
     year: entry.year,
     quantity: 1,
     unitPrice: entry.list_price ?? 0,
+    metadata: {
+      availability_status: availabilityStatusForEntry(entry),
+      stock_number: entry.stock_number ?? null,
+    },
   };
 }
 
@@ -255,13 +350,23 @@ function equipmentKeyForLine(item: Pick<QuoteLineItemDraft, "id" | "title" | "ma
   ].join("|");
 }
 
+function isWizardStepId(value: string | null): value is Step {
+  return Boolean(value && WIZARD_STEP_IDS.includes(value as Step));
+}
+
+function wizardIndexForStep(step: Step): number {
+  return WIZARD_STEPS.find((item) => item.id === step)?.number ?? 1;
+}
+
+function stepForWizardIndex(index: number | null | undefined): Step | null {
+  if (!Number.isFinite(index ?? NaN)) return null;
+  return WIZARD_STEPS.find((item) => item.number === Number(index))?.id ?? null;
+}
+
 function readPersistedStep(quotePackageId: string | null): Step | null {
   if (!quotePackageId || typeof window === "undefined") return null;
   const raw = window.sessionStorage.getItem(`${STEP_STORAGE_PREFIX}${quotePackageId}`);
-  if (raw === "entry" || raw === "customer" || raw === "equipment" || raw === "tradeIn" || raw === "financing" || raw === "review") {
-    return raw;
-  }
-  return null;
+  return isWizardStepId(raw) ? raw : null;
 }
 
 function persistStep(quotePackageId: string | null, step: Step): void {
@@ -284,23 +389,54 @@ function shortDateTime(value: string | null): string | null {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+function dateInputValue(value: string | null | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+}
+
+function dateTimeInputValue(value: string | null | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function isoFromDateInput(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function isoFromDateTimeInput(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function addDaysIso(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString();
+}
+
 function statusLabel(status: string | null | undefined): string {
   return (status ?? "draft").replace(/_/g, " ");
 }
 
-const QuoteReviewWorkflowPanels = lazy(() =>
-  import("../components/QuoteReviewWorkflowPanels").then((module) => ({
-    default: module.QuoteReviewWorkflowPanels,
-  }))
-);
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
 
 export function QuoteBuilderV2Page() {
   const [searchParams] = useSearchParams();
   const packageId = searchParams.get("package_id") || "";
   const dealId = searchParams.get("deal_id") || searchParams.get("crm_deal_id") || "";
   const contactId = searchParams.get("contact_id") || searchParams.get("crm_contact_id") || "";
-  const [step, setStep] = useState<Step>("entry");
-  const [builderMode, setBuilderMode] = useState<BuilderMode>("workspace");
+  const [step, setStep] = useState<Step>("customer");
+  const [builderMode] = useState<BuilderMode>("guided");
   const [reviewSendOpen, setReviewSendOpen] = useState(false);
   const [tradeExpanded, setTradeExpanded] = useState(false);
   const [termsExpanded, setTermsExpanded] = useState(false);
@@ -315,10 +451,17 @@ export function QuoteBuilderV2Page() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [documentFallbackGeneratedAt, setDocumentFallbackGeneratedAt] = useState<string | null>(null);
+  const [documentActionError, setDocumentActionError] = useState<string | null>(null);
+  const [deliveryActionMessage, setDeliveryActionMessage] = useState<string | null>(null);
+  const [deliveryActionError, setDeliveryActionError] = useState<string | null>(null);
+  const [deliveryActionBusy, setDeliveryActionBusy] = useState<QuoteSendActionChannel | null>(null);
   const lastAutoSaveSignatureRef = useRef<string>("");
+  const documentDraftSignatureRef = useRef<string>("");
   const [customFinanceEnabled, setCustomFinanceEnabled] = useState(false);
   const [customFinanceRate, setCustomFinanceRate] = useState<number | null>(null);
   const [customFinanceTermMonths, setCustomFinanceTermMonths] = useState<number | null>(null);
+  const [financeStepTab, setFinanceStepTab] = useState<FinanceStepTab>("cash");
   const [draft, setDraft] = useState<QuoteWorkspaceDraft>({
     dealId: dealId || undefined,
     contactId: contactId || undefined,
@@ -337,6 +480,8 @@ export function QuoteBuilderV2Page() {
     taxTotal: 0,
     amountFinanced: 0,
     selectedFinanceScenario: null,
+    pricingLines: [],
+    wizardStep: 1,
     customerName: "",
     customerCompany: "",
     customerPhone: "",
@@ -349,6 +494,15 @@ export function QuoteBuilderV2Page() {
   const [dealAssistantOpen, setDealAssistantOpen] = useState(false);
   const [availableOptions, setAvailableOptions] = useState<Array<{ id: string; name: string; price: number }>>([]);
   const [availableOptionsLabel, setAvailableOptionsLabel] = useState<string | null>(null);
+  const [configureTab, setConfigureTab] = useState<"attachment" | "option" | "accessory" | "warranty">("attachment");
+  const [tradeChecklist, setTradeChecklist] = useState({
+    hourMeter: false,
+    undercarriage: false,
+    hydraulicLeaks: false,
+    serviceHours: false,
+    tiresTracks: false,
+    photos: false,
+  });
   const queryClient = useQueryClient();
 
   const branchesQ = useActiveBranches();
@@ -357,6 +511,8 @@ export function QuoteBuilderV2Page() {
   const {
     equipmentTotal,
     attachmentTotal,
+    pricingLineTotal,
+    taxableBasis,
     subtotal,
     discountTotal,
     discountedSubtotal,
@@ -507,8 +663,9 @@ export function QuoteBuilderV2Page() {
       || "__saved_quote__";
     if (existingQuoteHydrationKeyRef.current === nextKey) return;
     existingQuoteHydrationKeyRef.current = nextKey;
-    setDraft((current) => ({ ...current, ...hydrateDraftFromSavedQuote(existingQuote) }));
-    setStep(readPersistedStep(nextKey) ?? "review");
+    const hydratedDraft = hydrateDraftFromSavedQuote(existingQuote);
+    setDraft((current) => ({ ...current, ...hydratedDraft }));
+    setStep(readPersistedStep(nextKey) ?? stepForWizardIndex(hydratedDraft.wizardStep) ?? "review");
   }, [dealId, existingQuote, packageId]);
 
   // Local draft persistence: lets a rep leave the builder mid-entry and
@@ -610,14 +767,44 @@ export function QuoteBuilderV2Page() {
     discountTotal,
     tradeAllowance: draft.tradeAllowance,
     taxProfile: draft.taxProfile,
+    deliveryState: draft.deliveryState ?? undefined,
+    deliveryCounty: draft.deliveryCounty ?? undefined,
+    taxOverrideAmount: draft.taxOverrideAmount ?? null,
+    taxOverrideReason: draft.taxOverrideReason ?? null,
   });
 
+  const manualTaxOverrideReady = draft.taxOverrideAmount != null && Boolean(draft.taxOverrideReason?.trim());
+  const taxPreviewRequiresSuccessfulCalculation =
+    !isTaxProfileExempt(draft.taxProfile)
+    && Boolean(draft.branchSlug || draft.deliveryState)
+    && subtotal > 0
+    && !manualTaxOverrideReady;
+  const taxResolved = !taxPreviewRequiresSuccessfulCalculation || taxPreviewQuery.isSuccess;
+  const taxResolutionBlocker = taxResolved
+    ? null
+    : taxPreviewQuery.isError
+      ? "Tax preview failed. Resolve the jurisdiction or enter a manual tax override with a reason before customer-facing document/send."
+      : "Tax preview must complete before customer-facing document/send.";
+
   useEffect(() => {
-    const nextTaxTotal = draft.branchSlug ? Math.round((taxPreviewQuery.data?.total_tax ?? 0) * 100) / 100 : 0;
+    const hasTaxJurisdiction = Boolean(draft.branchSlug || draft.deliveryState);
+    if (!hasTaxJurisdiction) {
+      setDraft((current) => current.taxTotal === 0 ? current : { ...current, taxTotal: 0 });
+      return;
+    }
+    if (manualTaxOverrideReady && typeof draft.taxOverrideAmount === "number") {
+      const nextTaxTotal = Math.round(draft.taxOverrideAmount * 100) / 100;
+      setDraft((current) => current.taxTotal === nextTaxTotal
+        ? current
+        : { ...current, taxTotal: nextTaxTotal });
+      return;
+    }
+    if (typeof taxPreviewQuery.data?.total_tax !== "number") return;
+    const nextTaxTotal = Math.round(taxPreviewQuery.data.total_tax * 100) / 100;
     setDraft((current) => current.taxTotal === nextTaxTotal
       ? current
       : { ...current, taxTotal: nextTaxTotal });
-  }, [draft.branchSlug, taxPreviewQuery.data?.total_tax]);
+  }, [draft.branchSlug, draft.deliveryState, draft.taxOverrideAmount, manualTaxOverrideReady, taxPreviewQuery.data?.total_tax]);
 
   useEffect(() => {
     if (allFinanceScenarios.length === 0) {
@@ -893,9 +1080,37 @@ export function QuoteBuilderV2Page() {
       ? activeQuoteRecord.created_at
       : null;
 
+  const activeApprovalCaseQuery = useQuery({
+    queryKey: ["quote-builder", "approval-case", activeQuotePackageId],
+    queryFn: () => getQuoteApprovalCase(activeQuotePackageId!),
+    enabled: Boolean(activeQuotePackageId),
+    staleTime: 5_000,
+  });
+  const activeApprovalCase = activeApprovalCaseQuery.data ?? null;
+  const approvalCaseCanSend = activeApprovalCase?.canSend === true;
+
+  const currentWizardStepNumber = wizardIndexForStep(step);
+
   useEffect(() => {
     persistStep(activeQuotePackageId, step);
-  }, [activeQuotePackageId, step]);
+    setDraft((current) => current.wizardStep === currentWizardStepNumber
+      ? current
+      : { ...current, wizardStep: currentWizardStepNumber });
+  }, [activeQuotePackageId, currentWizardStepNumber, step]);
+
+  useEffect(() => {
+    if (step !== "details" && step !== "send") return;
+    setDraft((current) => ({
+      ...current,
+      expiresAt: current.expiresAt ?? addDaysIso(30),
+      followUpAt: current.followUpAt ?? addDaysIso(3),
+      whyThisMachine: current.whyThisMachine
+        ?? current.recommendation?.reasoning
+        ?? current.voiceSummary
+        ?? "",
+      whyThisMachineConfirmed: current.whyThisMachineConfirmed ?? false,
+    }));
+  }, [step]);
 
   const quoteStatus = draft.quoteStatus ?? "draft";
   const approvalPending = quoteStatus === "pending_approval";
@@ -918,7 +1133,6 @@ export function QuoteBuilderV2Page() {
     && quoteStatus !== "approved"
     && quoteStatus !== "approved_with_conditions";
   void approvalState.requiresManagerApproval; // retained in state; not used for gating
-  const showQuoteActions = Boolean(activeQuotePackageId);
   const displayedSavedAt = lastSavedAt ?? activeQuoteUpdatedAt;
   const displayedSavedLabel = shortDateTime(displayedSavedAt);
   const financeMethodLabel =
@@ -928,6 +1142,61 @@ export function QuoteBuilderV2Page() {
   const quoteTitle =
     activeQuoteNumber
     ?? (activeQuotePackageId ? `Quote ${activeQuotePackageId.slice(0, 8)}` : "New quote");
+  const quotePdfData = useMemo(() => ({
+    dealName: draft.dealId || draft.customerCompany || draft.customerName || "Quote",
+    customerName: draft.customerName || draft.customerCompany || "Customer",
+    preparedBy: "QEP Sales Team",
+    preparedDate: new Date().toLocaleDateString(),
+    aiRecommendationSummary: draft.recommendation?.reasoning ?? null,
+    equipment: draft.equipment.map((item) => ({
+      make: item.make ?? "",
+      model: item.model ?? item.title,
+      year: item.year ?? null,
+      price: item.unitPrice,
+    })),
+    attachments: draft.attachments.map((item) => ({ name: item.title, price: item.unitPrice })),
+    equipmentTotal,
+    attachmentTotal,
+    subtotal,
+    discountTotal,
+    tradeAllowance: draft.tradeAllowance,
+    taxTotal,
+    customerTotal,
+    cashDown,
+    amountFinanced,
+    netTotal,
+    financing: allFinanceScenarios.map((scenario) => ({
+      type: scenario.type,
+      label: scenario.label,
+      termMonths: scenario.termMonths ?? 0,
+      rate: scenario.rate ?? scenario.apr ?? 0,
+      monthlyPayment: scenario.monthlyPayment ?? 0,
+      totalCost: scenario.totalCost ?? 0,
+      lender: scenario.lender ?? "Preferred lender",
+    })),
+    selectedFinancingLabel: draft.selectedFinanceScenario,
+    branch: buildQuotePdfBranch(selectedBranch),
+  }), [
+    allFinanceScenarios,
+    amountFinanced,
+    attachmentTotal,
+    cashDown,
+    customerTotal,
+    discountTotal,
+    draft.attachments,
+    draft.customerCompany,
+    draft.customerName,
+    draft.dealId,
+    draft.equipment,
+    draft.recommendation?.reasoning,
+    draft.selectedFinanceScenario,
+    draft.tradeAllowance,
+    equipmentTotal,
+    netTotal,
+    selectedBranch,
+    subtotal,
+    taxTotal,
+  ]);
   const draftSaveSignature = useMemo(() => JSON.stringify({
     draft,
     computed: {
@@ -985,6 +1254,13 @@ export function QuoteBuilderV2Page() {
     saveMutation.mutateAsync,
     submitApprovalMutation.isPending,
   ]);
+
+  useEffect(() => {
+    if (!documentFallbackGeneratedAt) return;
+    if (documentDraftSignatureRef.current === draftSaveSignature) return;
+    documentDraftSignatureRef.current = "";
+    setDocumentFallbackGeneratedAt(null);
+  }, [documentFallbackGeneratedAt, draftSaveSignature]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -1156,41 +1432,138 @@ export function QuoteBuilderV2Page() {
   }
 
   function handleDownloadPdf() {
-    void downloadPDF({
-      dealName: draft.dealId || draft.customerCompany || draft.customerName || "Quote",
-      customerName: draft.customerName || draft.customerCompany || "Customer",
-      preparedBy: "QEP Sales Team",
-      preparedDate: new Date().toLocaleDateString(),
-      aiRecommendationSummary: draft.recommendation?.reasoning ?? null,
-      equipment: draft.equipment.map((item) => ({
-        make: item.make ?? "",
-        model: item.model ?? item.title,
-        year: item.year ?? null,
-        price: item.unitPrice,
-      })),
-      attachments: draft.attachments.map((item) => ({ name: item.title, price: item.unitPrice })),
-      equipmentTotal,
-      attachmentTotal,
-      subtotal,
-      discountTotal,
-      tradeAllowance: draft.tradeAllowance,
-      taxTotal,
-      customerTotal,
-      cashDown,
-      amountFinanced,
-      netTotal,
-      financing: allFinanceScenarios.map((scenario) => ({
-        type: scenario.type,
-        label: scenario.label,
-        termMonths: scenario.termMonths ?? 0,
-        rate: scenario.rate ?? scenario.apr ?? 0,
-        monthlyPayment: scenario.monthlyPayment ?? 0,
-        totalCost: scenario.totalCost ?? 0,
-        lender: scenario.lender ?? "Preferred lender",
-      })),
-      selectedFinancingLabel: draft.selectedFinanceScenario,
-      branch: buildQuotePdfBranch(selectedBranch),
+    void downloadPDF(quotePdfData);
+  }
+
+  function approvalBlockerMessage(): string | null {
+    if (!activeQuotePackageId) return "Save the quote package before generating customer-facing documents.";
+    if (activeApprovalCaseQuery.isLoading) return "Checking the approval case before customer-facing actions unlock.";
+    if (!activeApprovalCase) return "Submit this quote for owner approval before generating or sending customer-facing material.";
+    if (activeApprovalCase.canSend) return null;
+    if (activeApprovalCase.status === "pending" || activeApprovalCase.status === "escalated") {
+      return activeApprovalCase.assignedToName
+        ? `Waiting on ${activeApprovalCase.assignedToName} to approve this quote.`
+        : "Approval is still pending in Approval Center.";
+    }
+    if (activeApprovalCase.status === "changes_requested") return "Approval requested changes. Revise and resubmit before sending.";
+    if (activeApprovalCase.status === "rejected") return "Approval rejected this quote. It cannot be sent until revised and approved.";
+    if (activeApprovalCase.status === "approved_with_conditions") {
+      const unmet = activeApprovalCase.evaluations.filter((evaluation) => !evaluation.satisfied).map((evaluation) => evaluation.label);
+      return unmet.length > 0
+        ? `Approval has unmet conditions: ${unmet.join(", ")}.`
+        : "Conditional approval is not clean yet. Recheck the approval case before sending.";
+    }
+    return "Approval is not clean. Ryan/Rylee approval-case canSend must be true before customer-facing actions.";
+  }
+
+  async function ensureCleanApprovalForCustomerFacing(): Promise<string | null> {
+    if (!packetReadiness.draft.ready) return "Save the quote package before customer-facing actions.";
+    if (draftSaveSignature !== lastAutoSaveSignatureRef.current) {
+      await saveMutation.mutateAsync();
+      lastAutoSaveSignatureRef.current = draftSaveSignature;
+    }
+    const refreshed = await activeApprovalCaseQuery.refetch();
+    if (refreshed.error) return "Could not recheck owner approval after saving. Try again before customer-facing actions.";
+    return refreshed.data?.canSend === true
+      ? null
+      : "Approval case is no longer clean after saving the latest quote changes. Resubmit or wait for owner approval before customer-facing actions.";
+  }
+
+  async function handleGenerateFallbackDocument() {
+    setDocumentActionError(null);
+    const blocker = customerFacingDocumentBlocker;
+    if (blocker) {
+      setDocumentActionError(blocker);
+      return;
+    }
+    try {
+      const approvalRefreshBlocker = await ensureCleanApprovalForCustomerFacing();
+      if (approvalRefreshBlocker) {
+        setDocumentActionError(approvalRefreshBlocker);
+        return;
+      }
+      await downloadPDF(quotePdfData);
+      const generatedAt = new Date().toISOString();
+      documentDraftSignatureRef.current = draftSaveSignature;
+      setDocumentFallbackGeneratedAt(generatedAt);
+      if (activeQuotePackageId) {
+        await logQuoteDeliveryEvent({
+          quotePackageId: activeQuotePackageId,
+          channel: "preview",
+          status: "draft",
+          provider: "local_preview",
+          recipient: draft.customerEmail || draft.customerPhone || draft.customerName || draft.customerCompany || null,
+          followUpAt: draft.followUpAt ?? null,
+          metadata: {
+            step: 10,
+            fallback_document: true,
+            generated_at: generatedAt,
+            note: "Local PDF/print fallback only; no stored final artifact was created.",
+          },
+        });
+      }
+    } catch (error) {
+      setDocumentActionError(error instanceof Error ? error.message : "Failed to generate document preview.");
+    }
+  }
+
+  async function handleQuoteSendAction(channel: QuoteSendActionChannel) {
+    setDeliveryActionMessage(null);
+    setDeliveryActionError(null);
+    const readiness = computeQuoteSendActionReadiness({
+      channel,
+      quotePackageId: activeQuotePackageId,
+      approvalCaseCanSend,
+      followUpAt: draft.followUpAt ?? null,
+      customerEmail: draft.customerEmail ?? null,
+      customerPhone: draft.customerPhone ?? null,
+      documentReady: Boolean(documentFallbackGeneratedAt),
+      taxResolved,
+      whyThisMachineRequired,
+      whyThisMachineConfirmed: draft.whyThisMachineConfirmed === true,
     });
+    if (!readiness.ready) {
+      setDeliveryActionError(`Blocked: ${readiness.missing.join(", ")}.`);
+      return;
+    }
+    const approvalRefreshBlocker = await ensureCleanApprovalForCustomerFacing();
+    if (approvalRefreshBlocker) {
+      setDeliveryActionError(`Blocked: ${approvalRefreshBlocker}`);
+      return;
+    }
+    if (!activeQuotePackageId) return;
+    setDeliveryActionBusy(channel);
+    try {
+      if (channel === "preview") {
+        await downloadPDF(quotePdfData);
+        await logQuoteDeliveryEvent({
+          quotePackageId: activeQuotePackageId,
+          channel: "preview",
+          status: "draft",
+          provider: "local_preview",
+          recipient: draft.customerEmail || draft.customerPhone || draft.customerName || draft.customerCompany || null,
+          followUpAt: draft.followUpAt ?? null,
+          metadata: { step: 11, fallback_document: true },
+        });
+        setDeliveryActionMessage("Preview opened and logged. This does not mark the quote sent.");
+        return;
+      }
+
+      const graphEnabled = import.meta.env.VITE_FEATURE_QRM_GRAPH_EMAIL === "true";
+      const textEnabled = import.meta.env.VITE_FEATURE_QRM_TEXT_QUOTE === "true";
+      const providerReady = channel === "email" ? graphEnabled : textEnabled;
+      const providerName = channel === "email" ? "Microsoft Graph" : "Twilio";
+      if (!providerReady) {
+        setDeliveryActionMessage(`${providerName} is not configured. No customer message was sent and no delivery event was logged.`);
+        return;
+      }
+
+      setDeliveryActionError(`${providerName} flag is enabled, but the send endpoint is not implemented yet. No customer message was sent or logged.`);
+    } catch (error) {
+      setDeliveryActionError(error instanceof Error ? error.message : "Quote delivery action failed.");
+    } finally {
+      setDeliveryActionBusy(null);
+    }
   }
 
   function handleAddCustomLine(kindLabel: "Warranty" | "Financing" | "Custom") {
@@ -1223,8 +1596,8 @@ export function QuoteBuilderV2Page() {
       void handleSaveClick();
       return;
     }
-    if (approvalGranted && packetReadiness.send.ready) {
-      setReviewSendOpen(true);
+    if (approvalCaseCanSend && packetReadiness.send.ready) {
+      setStep("document");
       return;
     }
     if (canSubmitForApproval) {
@@ -1266,7 +1639,208 @@ export function QuoteBuilderV2Page() {
     draft.companyId,
   );
   const hasEquipmentLine = draft.equipment.length > 0;
+  const sourceRequiredEquipment = draft.equipment.filter((item) => availabilityStatusForLine(item) === "source_required");
+  const sourceRequiredAwaitingConfirmation = sourceRequiredEquipment.filter((item) => !item.metadata?.availability_confirmation_requested_at);
+  const equipmentCanContinue = hasEquipmentLine && sourceRequiredAwaitingConfirmation.length === 0;
+  const tradeChecklistComplete = Object.values(tradeChecklist).every(Boolean);
+  const tradeManagerApprovalRequired = draft.tradeAllowance > 0 && !tradeChecklistComplete;
   const signalsReady = hasCustomer && hasEquipmentLine;
+
+  function markAvailabilityConfirmationRequested(index: number): void {
+    setDraft((current) => ({
+      ...current,
+      equipment: current.equipment.map((item, rowIndex) => rowIndex === index
+        ? {
+            ...item,
+            metadata: {
+              ...(item.metadata ?? {}),
+              availability_status: availabilityStatusForLine(item),
+              availability_confirmation_requested_at: new Date().toISOString(),
+            },
+          }
+        : item),
+    }));
+  }
+
+  function markAllAvailabilityConfirmationRequested(): void {
+    setDraft((current) => ({
+      ...current,
+      equipment: current.equipment.map((item) => availabilityStatusForLine(item) === "source_required" && !item.metadata?.availability_confirmation_requested_at
+        ? {
+            ...item,
+            metadata: {
+              ...(item.metadata ?? {}),
+              availability_status: "source_required",
+              availability_confirmation_requested_at: new Date().toISOString(),
+            },
+          }
+        : item),
+    }));
+  }
+
+  function addConfigLine(kind: "attachment" | "option" | "accessory" | "warranty", input?: { id?: string; title: string; unitPrice: number }): void {
+    const title = input?.title?.trim() || `${kind[0]!.toUpperCase()}${kind.slice(1)} line`;
+    const line: QuoteLineItemDraft = {
+      kind,
+      id: input?.id ?? `${kind}-${Date.now()}`,
+      sourceCatalog: input?.id ? "qb_attachments" : "manual",
+      sourceId: input?.id ?? null,
+      dealerCost: null,
+      title,
+      quantity: 1,
+      unitPrice: input?.unitPrice ?? 0,
+    };
+    setDraft((current) => ({
+      ...current,
+      attachments: current.attachments.some((item) => item.id === line.id)
+        ? current.attachments
+        : [...current.attachments, line],
+    }));
+  }
+
+  function pricingLine(kind: PricingLineKind): QuoteLineItemDraft | undefined {
+    return draft.pricingLines?.find((item) => item.kind === kind);
+  }
+
+  function upsertPricingLine(kind: PricingLineKind, title: string, amount: number, patch: Partial<QuoteLineItemDraft> = {}): void {
+    const safeAmount = Number.isFinite(amount) ? Math.max(0, amount) : 0;
+    setDraft((current) => {
+      const existing = current.pricingLines ?? [];
+      const nextLine: QuoteLineItemDraft = {
+        kind,
+        id: existing.find((item) => item.kind === kind)?.id ?? `${kind}-${Date.now()}`,
+        sourceCatalog: "manual",
+        sourceId: null,
+        dealerCost: null,
+        title,
+        quantity: 1,
+        unitPrice: safeAmount,
+        ...patch,
+      };
+      return {
+        ...current,
+        pricingLines: safeAmount <= 0
+          ? existing.filter((item) => item.kind !== kind)
+          : existing.some((item) => item.kind === kind)
+            ? existing.map((item) => item.kind === kind ? { ...item, ...nextLine } : item)
+            : [...existing, nextLine],
+      };
+    });
+  }
+
+  function promotionPlaceholderSelected(promo: typeof PROMOTION_PLACEHOLDERS[number]): boolean {
+    return draft.pricingLines?.some((line) =>
+      line.kind === promo.kind && line.metadata?.promotion_placeholder_id === promo.id) ?? false;
+  }
+
+  function togglePromotion(promo: typeof PROMOTION_PLACEHOLDERS[number]): void {
+    const selected = promotionPlaceholderSelected(promo);
+    setDraft((current) => {
+      const existing = current.pricingLines ?? [];
+      const selectedPromotionIds = (current.selectedPromotionIds ?? []).filter(isUuid);
+      if (selected) {
+        return {
+          ...current,
+          selectedPromotionIds,
+          pricingLines: existing.filter((line) => line.metadata?.promotion_placeholder_id !== promo.id),
+        };
+      }
+      const currentLine = existing.find((line) => line.metadata?.promotion_placeholder_id === promo.id);
+      const nextLine: QuoteLineItemDraft = {
+        kind: promo.kind,
+        id: currentLine?.id ?? `${promo.kind}-${Date.now()}`,
+        sourceCatalog: "manual",
+        sourceId: null,
+        dealerCost: null,
+        title: promo.title,
+        quantity: 1,
+        unitPrice: promo.amount,
+        metadata: {
+          ...(currentLine?.metadata ?? {}),
+          promotion_placeholder_id: promo.id,
+          promotion_source: promo.source,
+        },
+      };
+      return {
+        ...current,
+        selectedPromotionIds,
+        pricingLines: currentLine
+          ? existing.map((line) => line.metadata?.promotion_placeholder_id === promo.id ? nextLine : line)
+          : [...existing, nextLine],
+      };
+    });
+  }
+
+  function saveSelectedFinanceScenario(scenario: QuoteFinanceScenario): void {
+    setDraft((current) => {
+      const saved = current.savedFinanceScenarios ?? [];
+      const nextScenario = {
+        ...scenario,
+        kind: scenario.kind ?? (scenario.type === "lease" ? "lease_fmv" : scenario.type),
+        isDefault: scenario.label === current.selectedFinanceScenario,
+      } satisfies QuoteFinanceScenario;
+      return {
+        ...current,
+        savedFinanceScenarios: saved.some((item) => item.label === nextScenario.label)
+          ? saved.map((item) => item.label === nextScenario.label
+            ? { ...item, ...nextScenario, isDefault: true }
+            : { ...item, isDefault: false })
+          : [...saved.map((item) => ({ ...item, isDefault: false })), { ...nextScenario, isDefault: true }],
+      };
+    });
+  }
+
+  const discountLine = pricingLine("discount");
+  const leaseQuotingEnabled = import.meta.env.VITE_FEATURE_LEASE_QUOTING === "true";
+  const financeTabScenarios = allFinanceScenarios.filter((scenario) => (
+    financeStepTab === "cash"
+      ? scenario.type === "cash" || scenario.kind === "cash"
+      : financeStepTab === "lease"
+        ? scenario.type === "lease" || scenario.kind === "lease_fmv" || scenario.kind === "lease_fppo"
+        : scenario.type === "finance" || scenario.kind === "finance"
+  ));
+
+  const documentReady = Boolean(documentFallbackGeneratedAt);
+  const graphEmailEnabled = import.meta.env.VITE_FEATURE_QRM_GRAPH_EMAIL === "true";
+  const textQuoteEnabled = import.meta.env.VITE_FEATURE_QRM_TEXT_QUOTE === "true";
+  const approvalBlocker = approvalBlockerMessage();
+  const whyThisMachineRequired = isQuoteWhyThisMachineConfirmationRequired(draft);
+  const whyThisMachineBlocker = whyThisMachineRequired && draft.whyThisMachineConfirmed !== true
+    ? "Confirm the Why this machine narrative before customer-facing document/send."
+    : null;
+  const customerFacingDocumentBlocker = approvalBlocker ?? taxResolutionBlocker ?? whyThisMachineBlocker;
+  const previewReadiness = computeQuoteSendActionReadiness({
+    channel: "preview",
+    quotePackageId: activeQuotePackageId,
+    approvalCaseCanSend,
+    followUpAt: draft.followUpAt ?? null,
+    documentReady,
+    taxResolved,
+    whyThisMachineRequired,
+    whyThisMachineConfirmed: draft.whyThisMachineConfirmed === true,
+  });
+  const emailReadiness = computeQuoteSendActionReadiness({
+    channel: "email",
+    quotePackageId: activeQuotePackageId,
+    approvalCaseCanSend,
+    followUpAt: draft.followUpAt ?? null,
+    customerEmail: draft.customerEmail ?? null,
+    documentReady,
+    taxResolved,
+    whyThisMachineRequired,
+    whyThisMachineConfirmed: draft.whyThisMachineConfirmed === true,
+  });
+  const textReadiness = computeQuoteSendActionReadiness({
+    channel: "text",
+    quotePackageId: activeQuotePackageId,
+    approvalCaseCanSend,
+    followUpAt: draft.followUpAt ?? null,
+    customerPhone: draft.customerPhone ?? null,
+    documentReady,
+    taxResolved,
+    whyThisMachineRequired,
+    whyThisMachineConfirmed: draft.whyThisMachineConfirmed === true,
+  });
 
   const intelligencePanel = (
     <IntelligencePanel
@@ -1292,7 +1866,7 @@ export function QuoteBuilderV2Page() {
       ? "Working..."
       : quoteStatus === "sent" || quoteStatus === "accepted"
         ? "Update"
-        : approvalGranted && packetReadiness.send.ready
+        : approvalCaseCanSend && packetReadiness.send.ready
           ? "Review & Send"
           : canSubmitForApproval
             ? "Submit Approval"
@@ -1357,26 +1931,13 @@ export function QuoteBuilderV2Page() {
               </p>
               <p className="text-[11px] text-muted-foreground">{financeMethodLabel}</p>
             </div>
-            <div className="flex rounded-lg border border-border bg-muted/30 p-1">
-              {(["workspace", "guided"] as BuilderMode[]).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setBuilderMode(mode)}
-                  className={`rounded-md px-3 py-1.5 text-xs font-semibold capitalize transition ${
-                    builderMode === mode
-                      ? "bg-qep-orange text-white"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {mode === "workspace" ? "Workspace" : "Guided"}
-                </button>
-              ))}
-            </div>
+            <span className="rounded-lg border border-qep-orange/30 bg-qep-orange/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-qep-orange">
+              Guided wizard
+            </span>
             <Button onClick={handlePrimaryAction} disabled={primaryActionDisabled}>
               {saveMutation.isPending || submitApprovalMutation.isPending ? (
                 <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : approvalGranted && packetReadiness.send.ready ? (
+              ) : approvalCaseCanSend && packetReadiness.send.ready ? (
                 <Send className="mr-1 h-4 w-4" />
               ) : (
                 <Save className="mr-1 h-4 w-4" />
@@ -1626,6 +2187,10 @@ export function QuoteBuilderV2Page() {
                         year: entry.year,
                         quantity: 1,
                         unitPrice: entry.list_price || 0,
+                        metadata: {
+                          availability_status: availabilityStatusForEntry(entry),
+                          stock_number: entry.stock_number ?? null,
+                        },
                       };
                       const nextKey = equipmentKeyForLine(nextLine);
                       setDraft((current) => ({
@@ -2025,154 +2590,99 @@ export function QuoteBuilderV2Page() {
           </Card>
         )}
 
-      <div className="flex gap-2">
-        {([
-          { id: "entry", label: "Entry" },
-          { id: "customer", label: "Customer" },
-          { id: "equipment", label: "Equipment" },
-          { id: "tradeIn", label: "Trade-In" },
-          { id: "financing", label: "Financing" },
-          { id: "review", label: "Review" },
-        ] as Array<{ id: Step; label: string }>).map((currentStep, index) => (
-          <button
-            key={currentStep.id}
-            onClick={() => setStep(currentStep.id)}
-            className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition ${
-              step === currentStep.id
-                ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
-                : "border-border text-muted-foreground hover:border-foreground/20"
-            }`}
-          >
-            {index + 1}. {currentStep.label}
-          </button>
-        ))}
-      </div>
-
-      {step === "entry" && (
-        <div className="space-y-4">
-          {branches.length > 0 && (
-            <div className="flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
-              <select
-                value={draft.branchSlug}
-                onChange={(event) => setDraft((current) => ({ ...current, branchSlug: event.target.value }))}
-                className="rounded border px-2 py-1.5 text-sm bg-background"
-              >
-                <option value="">Select quoting branch…</option>
-                {branches.map((branch) => (
-                  <option key={branch.id} value={branch.slug}>{branch.display_name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          <h2 className="text-sm font-semibold text-foreground">How would you like to build this quote?</h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-            {([
-              { mode: "voice" as QuoteEntryMode, icon: Mic, label: "Voice", desc: "Record a deal description — AI populates the quote workspace" },
-              { mode: "ai_chat" as QuoteEntryMode, icon: MessageSquare, label: "AI Chat", desc: "Type the opportunity — AI recommends the setup" },
-              { mode: "manual" as QuoteEntryMode, icon: FileText, label: "Manual", desc: "Build the quote directly from the commercial workspace" },
-              { mode: "trade_photo" as QuoteEntryMode, icon: Camera, label: "Trade Photo", desc: "Start with Point-Shoot-Trade, then finish the quote" },
-            ]).map(({ mode, icon: Icon, label, desc }) => (
-              <button
-                key={mode}
-                onClick={() => {
-                  setDraft((current) => ({ ...current, entryMode: mode }));
-                  // Slice 20a: manual mode now advances to the Customer
-                  // step (not equipment) so "who is this for?" happens
-                  // before the rep builds line items.
-                  if (mode === "manual") {
-                    setStep("customer");
-                  } else if (mode === "trade_photo") {
-                    setStep("tradeIn");
-                  }
-                }}
-                className={`rounded-xl border p-4 text-left transition hover:border-qep-orange/50 ${
-                  draft.entryMode === mode ? "border-qep-orange bg-qep-orange/5" : "border-border"
-                }`}
-              >
-                <Icon className="h-6 w-6 text-qep-orange" />
-                <p className="mt-2 font-semibold text-foreground">{label}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{desc}</p>
-              </button>
-            ))}
-          </div>
-
-          {draft.entryMode === "voice" && (
-            <Card className="p-4 space-y-3">
-              <p className="text-sm font-medium text-foreground">Voice intake</p>
-              <p className="text-xs text-muted-foreground">
-                Record the customer need and let the voice-to-QRM pipeline seed the commercial workspace with usable field intelligence.
-              </p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-border/70 bg-background/70 p-3">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">What to listen for</p>
-                  <p className="mt-1 text-sm text-foreground">Decision timing, equipment intent, budget friction, and the next promised follow-up.</p>
-                </div>
-                <div className="rounded-lg border border-border/70 bg-background/70 p-3">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Why it matters</p>
-                  <p className="mt-1 text-sm text-foreground">A strong voice note should reduce manual entry and sharpen the next pipeline move.</p>
-                </div>
-              </div>
-              <VoiceRecorder
-                onRecorded={(audioBlob, fileName) => {
-                  voiceMutation.mutate({ blob: audioBlob, fileName });
-                }}
-                disabled={voiceMutation.isPending}
-              />
-              {voiceMutation.isPending && (
-                <p className="text-xs text-muted-foreground">Processing voice note and commercial recommendation…</p>
-              )}
-              {voiceMutation.isError && (
-                <p className="text-xs text-red-400">
-                  {voiceMutation.error instanceof Error ? voiceMutation.error.message : "Voice processing failed"}
-                </p>
-              )}
-            </Card>
-          )}
-
-          {draft.entryMode === "ai_chat" && (
-            <Card className="space-y-3 p-4">
-              <p className="text-sm font-medium text-foreground">AI chat intake</p>
-              <p className="text-xs text-muted-foreground">
-                Describe the customer need in plain language. QEP will recommend the machine setup and seed the commercial workspace.
-              </p>
-              <textarea
-                value={aiPrompt}
-                onChange={(event) => setAiPrompt(event.target.value)}
-                placeholder="Example: Customer needs a compact track loader for land clearing with mulching attachment and financing options under $2,500/month."
-                className="min-h-[120px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
-              />
-              {aiIntakeMutation.isError && (
-                <p className="text-xs text-red-400">
-                  {aiIntakeMutation.error instanceof Error ? aiIntakeMutation.error.message : "AI intake failed"}
-                </p>
-              )}
-              <div className="flex justify-end">
-                <Button
-                  onClick={() => aiIntakeMutation.mutate(aiPrompt.trim())}
-                  disabled={aiIntakeMutation.isPending || aiPrompt.trim().length < 12}
-                >
-                  {aiIntakeMutation.isPending ? "Building workspace..." : "Build with AI"}
-                </Button>
-              </div>
-            </Card>
-          )}
-        </div>
-      )}
+      <QuoteWizardProgress
+        steps={WIZARD_STEPS}
+        currentStep={step}
+        onJumpBack={setStep}
+      />
 
       {step === "customer" && (
         <div className="space-y-4">
           <div>
-            <h2 className="text-sm font-semibold text-foreground">Who is this quote for?</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Pick an existing customer for Digital Twin signals, or add a brand-new one. Quotes for walk-in prospects can use a placeholder name.
-            </p>
+            <h2 className="text-lg font-semibold text-foreground">Step 1: Choose the customer</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Search first, then add a new customer only if there is no match. Keep the rest of the quote out of view until this is clear.</p>
           </div>
+
+          <Card className="p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Fast intake</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-4">
+              {([
+                { mode: "manual" as QuoteEntryMode, label: "Manual", body: "Use search and simple fields." },
+                { mode: "voice" as QuoteEntryMode, label: "Voice", body: "Record the need, then confirm." },
+                { mode: "ai_chat" as QuoteEntryMode, label: "AI chat", body: "Describe the job in plain English." },
+                { mode: "trade_photo" as QuoteEntryMode, label: "Trade photo", body: "Start with trade context." },
+              ]).map((option) => (
+                <button
+                  key={option.mode}
+                  type="button"
+                  onClick={() => setDraft((current) => ({ ...current, entryMode: option.mode }))}
+                  className={`rounded-lg border p-3 text-left transition ${
+                    draft.entryMode === option.mode
+                      ? "border-qep-orange bg-qep-orange/5"
+                      : "border-border bg-card/40 hover:border-qep-orange/40"
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-foreground">{option.label}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{option.body}</p>
+                </button>
+              ))}
+            </div>
+
+            {draft.entryMode === "voice" && (
+              <div className="mt-4 space-y-2 rounded-lg border border-border/70 bg-background/60 p-3">
+                <p className="text-sm font-medium text-foreground">Record the customer need</p>
+                <VoiceRecorder
+                  onRecorded={(audioBlob, fileName) => {
+                    setDraft((current) => ({ ...current, entryMode: "voice" }));
+                    voiceMutation.mutate({ blob: audioBlob, fileName });
+                  }}
+                  disabled={voiceMutation.isPending}
+                />
+                {voiceMutation.isPending && <p className="text-xs text-muted-foreground">Processing voice note…</p>}
+              </div>
+            )}
+
+            {draft.entryMode === "ai_chat" && (
+              <div className="mt-4 space-y-2 rounded-lg border border-border/70 bg-background/60 p-3">
+                <textarea
+                  value={aiPrompt}
+                  onChange={(event) => setAiPrompt(event.target.value)}
+                  placeholder="Example: Customer needs a compact track loader for land clearing with a mulcher."
+                  className="min-h-[88px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                />
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    onClick={() => aiIntakeMutation.mutate(aiPrompt.trim())}
+                    disabled={aiIntakeMutation.isPending || aiPrompt.trim().length < 12}
+                  >
+                    {aiIntakeMutation.isPending ? "Building…" : "Build with AI"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <label className="mt-4 block space-y-1 text-sm">
+              <span className="text-xs font-medium text-muted-foreground">Opportunity note</span>
+              <textarea
+                value={draft.voiceSummary ?? ""}
+                onChange={(event) => setDraft((current) => ({ ...current, voiceSummary: event.target.value }))}
+                placeholder="What is the customer trying to accomplish?"
+                rows={3}
+                className="w-full resize-y rounded border border-input bg-card px-3 py-2 text-sm"
+              />
+            </label>
+          </Card>
 
           {/* Slice 20c: always-on win-probability strip. Rule-based today;
               becomes the rule-baseline for Move 2's counterfactual engine. */}
           <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} shadowCalibration={shadowCalibration} />
+
+          {draft.recommendation?.machine && (
+            <div className="lg:hidden">
+              {intelligencePanel}
+            </div>
+          )}
 
           <CustomerSection
             draft={draft}
@@ -2224,6 +2734,32 @@ export function QuoteBuilderV2Page() {
             }))}
           />
 
+          <Card className="border-blue-500/20 bg-blue-500/5 p-4">
+            <p className="text-sm font-semibold text-blue-200">New-customer guardrails</p>
+            <p className="mt-1 text-xs text-blue-100/90">If phone + last name match an existing customer, pick that record from search instead of creating a duplicate. Tax certificate upload stays “attach later” until document storage is wired.</p>
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-blue-100/90">
+              <span className="rounded-full border border-blue-400/30 px-2 py-1">Search before create</span>
+              <span className="rounded-full border border-blue-400/30 px-2 py-1">Phone + last name dedupe</span>
+              <span className="rounded-full border border-blue-400/30 px-2 py-1">Resale certificate: attach later</span>
+            </div>
+          </Card>
+
+          {branches.length > 0 && (
+            <label className="block space-y-1 text-sm">
+              <span className="text-xs font-medium text-muted-foreground">Quoting branch</span>
+              <select
+                value={draft.branchSlug}
+                onChange={(event) => setDraft((current) => ({ ...current, branchSlug: event.target.value }))}
+                className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+              >
+                <option value="">Select quoting branch…</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.slug}>{branch.display_name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+
           <CustomerIntelPanel
             customerCompany={draft.customerCompany ?? ""}
             companyId={draft.companyId ?? null}
@@ -2232,9 +2768,7 @@ export function QuoteBuilderV2Page() {
           />
 
           <div className="flex items-center justify-between gap-3">
-            <Button variant="outline" onClick={() => setStep("entry")}>
-              <ArrowLeft className="mr-1 h-4 w-4" /> Back
-            </Button>
+            <span className="text-xs text-muted-foreground">Step 1 of 11</span>
             <div className="flex items-center gap-2">
               {/* "Quote for prospect" escape hatch — seeds a placeholder
                   so reps can build a spec quote for a walk-in without a
@@ -2273,26 +2807,39 @@ export function QuoteBuilderV2Page() {
 
       {step === "equipment" && (
         <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-foreground">Commercial workspace</h2>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Step 2: Pick the machine</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Search first. Add one machine, confirm whether it is ready to sell, then move on.</p>
+          </div>
 
           <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} shadowCalibration={shadowCalibration} />
+
+          {draft.recommendation?.machine && (
+            <div className="lg:hidden">
+              {intelligencePanel}
+            </div>
+          )}
 
           <EquipmentSelector
             onSelect={(entry) => {
               setAvailableOptions(entry.attachments ?? []);
               setAvailableOptionsLabel(`${entry.make} ${entry.model}`);
-              const nextLine = {
-                kind: "equipment" as const,
+              const nextLine: QuoteLineItemDraft = {
+                kind: "equipment",
                 id: entry.id,
                 sourceCatalog: entry.sourceCatalog ?? "qb_equipment_models",
                 sourceId: entry.sourceId ?? entry.id ?? null,
                 dealerCost: entry.dealerCost ?? null,
-                title: `${entry.make} ${entry.model}`,
+                title: `${entry.make} ${entry.model}`.trim(),
                 make: entry.make,
                 model: entry.model,
                 year: entry.year,
                 quantity: 1,
                 unitPrice: entry.list_price || 0,
+                metadata: {
+                  availability_status: availabilityStatusForEntry(entry),
+                  stock_number: entry.stock_number ?? null,
+                },
               };
               const nextKey = equipmentKeyForLine(nextLine);
               setDraft((current) => ({
@@ -2307,173 +2854,256 @@ export function QuoteBuilderV2Page() {
             }}
           />
 
-          {/* Mobile-only intelligence panel + Deal Coach (desktop shows in right column) */}
-          <div className="space-y-3 lg:hidden">
-            {intelligencePanel}
-            {draft.equipment.length > 0 && (
-              <DealCoachSidebar
-                draft={draft}
-                computed={{ equipmentTotal, attachmentTotal, subtotal, netTotal, marginAmount, marginPct }}
-                quotePackageId={activeQuotePackageId}
-              />
-            )}
-          </div>
-
-          {draft.equipment.length > 0 && (
-            <Card className="p-4">
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Selected Equipment</p>
-              {draft.equipment.map((equipment, index) => (
-                <div key={`${equipment.title}-${index}`} className="mt-2 flex items-center justify-between border-t border-border pt-2">
-                  <div>
-                    <span className="text-sm font-medium">
-                      {equipment.make} {equipment.model} {equipment.year ? `(${equipment.year})` : ""}
-                    </span>
-                    <div className="mt-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-auto px-0 py-0 text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() => {
-                          const removedLabel = `${equipment.make ?? ""} ${equipment.model ?? ""}`.trim();
-                          if (removedLabel.length > 0 && availableOptionsLabel === removedLabel) {
-                            setAvailableOptions([]);
-                            setAvailableOptionsLabel(null);
-                          }
-                          setDraft((current) => ({
-                            ...current,
-                            equipment: current.equipment.filter((_, rowIndex) => rowIndex !== index),
-                          }));
-                        }}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  </div>
-                  <label className="flex items-center gap-1 font-semibold text-foreground">
-                    <span className="text-muted-foreground">$</span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      step={100}
-                      value={equipment.unitPrice}
-                      onChange={(event) => {
-                        const nextValue = event.target.value;
-                        const parsed = nextValue === "" ? 0 : Number(nextValue);
-                        if (!Number.isFinite(parsed) || parsed < 0) return;
-                        setDraft((current) => ({
-                          ...current,
-                          equipment: current.equipment.map((item, rowIndex) =>
-                            rowIndex === index
-                              ? { ...item, unitPrice: parsed }
-                              : item,
-                          ),
-                        }));
-                      }}
-                      aria-label={`Unit price for ${equipment.make ?? ""} ${equipment.model ?? ""}`.trim()}
-                      className="w-28 rounded border border-input bg-card px-2 py-1 text-right text-sm focus:border-primary focus:outline-none"
-                    />
-                  </label>
-                </div>
-              ))}
-            </Card>
-          )}
-
-          {availableOptions.length > 0 && (
+          {draft.equipment.length > 0 ? (
             <Card className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Base &amp; Options</p>
-                  <p className="mt-1 text-sm text-foreground">
-                    Compatible options for {availableOptionsLabel ?? "the selected base"}.
-                  </p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Selected equipment</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Availability is a simple placeholder until inventory sourcing is fully automated.</p>
                 </div>
+                {sourceRequiredAwaitingConfirmation.length > 0 && (
+                  <Button size="sm" variant="outline" onClick={markAllAvailabilityConfirmationRequested}>
+                    Request availability check
+                  </Button>
+                )}
               </div>
               <div className="mt-3 space-y-2">
-                {availableOptions.map((option) => {
-                  const selected = draft.attachments.some((attachment) => attachment.id === option.id);
+                {draft.equipment.map((equipment, index) => {
+                  const status = availabilityStatusForLine(equipment);
+                  const confirmationRequested = Boolean(equipment.metadata?.availability_confirmation_requested_at);
                   return (
-                    <div
-                      key={option.id}
-                      className="flex items-center justify-between rounded-lg border border-border/70 bg-card/50 p-3"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{option.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          ${option.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </p>
+                    <div key={`${equipment.title}-${index}`} className="rounded-lg border border-border/70 bg-card/50 p-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">
+                            {equipment.title || `${equipment.make ?? ""} ${equipment.model ?? ""}`.trim() || "Equipment"}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {equipment.year ? `${equipment.year} · ` : ""}{equipment.metadata?.stock_number ? `Stock #${equipment.metadata.stock_number}` : "No stock number on file"}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${
+                            status === "source_required"
+                              ? "bg-amber-500/10 text-amber-300"
+                              : "bg-emerald-500/10 text-emerald-400"
+                          }`}>
+                            {confirmationRequested ? "Request sent" : availabilityLabel(status)}
+                          </span>
+                          {status === "source_required" && !confirmationRequested && (
+                            <Button size="sm" variant="outline" onClick={() => markAvailabilityConfirmationRequested(index)}>
+                              Request availability check
+                            </Button>
+                          )}
+                          <label className="flex items-center gap-1 rounded border border-input bg-background px-2 py-1 font-semibold text-foreground">
+                            <span className="text-muted-foreground">$</span>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              step={100}
+                              value={equipment.unitPrice}
+                              onChange={(event) => {
+                                const parsed = event.target.value === "" ? 0 : Number(event.target.value);
+                                if (!Number.isFinite(parsed) || parsed < 0) return;
+                                setDraft((current) => ({
+                                  ...current,
+                                  equipment: current.equipment.map((item, rowIndex) => rowIndex === index ? { ...item, unitPrice: parsed } : item),
+                                }));
+                              }}
+                              className="w-24 bg-transparent text-right text-sm outline-none"
+                              aria-label={`Unit price for ${equipment.title}`}
+                            />
+                          </label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const removedLabel = `${equipment.make ?? ""} ${equipment.model ?? ""}`.trim();
+                              if (removedLabel.length > 0 && availableOptionsLabel === removedLabel) {
+                                setAvailableOptions([]);
+                                setAvailableOptionsLabel(null);
+                              }
+                              setDraft((current) => ({
+                                ...current,
+                                equipment: current.equipment.filter((_, rowIndex) => rowIndex !== index),
+                              }));
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </div>
                       </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={selected ? "outline" : "default"}
-                        onClick={() =>
-                          setDraft((current) => ({
-                            ...current,
-                            attachments: selected
-                              ? current.attachments.filter((attachment) => attachment.id !== option.id)
-                              : [
-                                  ...current.attachments,
-                                  {
-                                    kind: "attachment",
-                                    id: option.id,
-                                    sourceCatalog: "qb_attachments",
-                                    sourceId: option.id,
-                                    dealerCost: null,
-                                    title: option.name,
-                                    quantity: 1,
-                                    unitPrice: option.price,
-                                  },
-                                ],
-                          }))
-                        }
-                      >
-                        {selected ? "Remove" : "Add"}
-                      </Button>
                     </div>
                   );
                 })}
               </div>
             </Card>
+          ) : (
+            <Card className="border-dashed p-4 text-sm text-muted-foreground">Select equipment to unlock configuration.</Card>
           )}
 
-          <Card className="border-qep-orange/20 bg-qep-orange/5 p-4">
-            <p className="text-xs font-bold uppercase tracking-wider text-qep-orange">Commercial Readiness</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-lg border border-border/70 bg-background/60 p-3">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Quote Workspace</p>
-                <p className="mt-1 text-sm font-medium text-foreground">
-                  {draft.equipment.length > 0 ? "Machine selected" : "Select a machine to continue"}
-                </p>
-              </div>
-              <div className="rounded-lg border border-border/70 bg-background/60 p-3">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Decision Rail</p>
-                <p className="mt-1 text-sm font-medium text-foreground">
-                  {approvalState.requiresManagerApproval ? "Manager review likely" : "Commercially clear so far"}
-                </p>
+          {sourceRequiredAwaitingConfirmation.length > 0 && (
+            <Card className="border-amber-500/20 bg-amber-500/5 p-4">
+              <p className="text-sm font-semibold text-amber-300">Availability needs one click.</p>
+              <p className="mt-1 text-xs text-amber-200">This machine must be sourced. Send the availability request before moving forward; verified sourcing will be wired by a later slice.</p>
+            </Card>
+          )}
+
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={() => setStep("customer")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
+            <Button onClick={() => setStep("configure")} disabled={!equipmentCanContinue}>
+              Configure <ArrowRight className="ml-1 h-4 w-4" />
+            </Button>
+          </div>
+          {!equipmentCanContinue && (
+            <p className="text-right text-[11px] text-muted-foreground">Select equipment and resolve any source-required availability note.</p>
+          )}
+        </div>
+      )}
+
+      {step === "configure" && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Step 3: Configure the package</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Attachments, options, accessories, and warranty stay separated so reps do not scroll through one overloaded list.</p>
+          </div>
+
+          <Card className="p-4">
+            <div className="flex flex-wrap gap-2">
+              {([
+                { id: "attachment", label: "Attachments" },
+                { id: "option", label: "Options" },
+                { id: "accessory", label: "Accessories" },
+                { id: "warranty", label: "Warranty" },
+              ] as Array<{ id: typeof configureTab; label: string }>).map((tab) => {
+                const count = draft.attachments.filter((item) => item.kind === tab.id).length;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setConfigureTab(tab.id)}
+                    className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                      configureTab === tab.id
+                        ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
+                        : "border-border text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {tab.label}{count > 0 ? ` (${count})` : ""}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {configureTab === "attachment" && availableOptions.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Compatible for {availableOptionsLabel ?? "selected equipment"}</p>
+                  {availableOptions.map((option) => {
+                    const selected = draft.attachments.some((attachment) => attachment.id === option.id);
+                    return (
+                      <div key={option.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-card/50 p-3">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{option.name}</p>
+                          <p className="text-xs text-muted-foreground">{money(option.price)}</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={selected ? "outline" : "default"}
+                          onClick={() => setDraft((current) => ({
+                            ...current,
+                            attachments: selected
+                              ? current.attachments.filter((attachment) => attachment.id !== option.id)
+                              : [...current.attachments, {
+                                  kind: "attachment",
+                                  id: option.id,
+                                  sourceCatalog: "qb_attachments",
+                                  sourceId: option.id,
+                                  dealerCost: null,
+                                  title: option.name,
+                                  quantity: 1,
+                                  unitPrice: option.price,
+                                }],
+                          }))}
+                        >
+                          {selected ? "Remove" : "Add"}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {draft.attachments.filter((item) => item.kind === configureTab).map((item, index) => {
+                const realIndex = draft.attachments.findIndex((candidate) => candidate === item);
+                return (
+                  <QuoteWorkspaceLineRow
+                    key={`${item.kind}-${item.id ?? item.title}-${index}`}
+                    label={configureTab}
+                    item={item}
+                    onPriceChange={(value) => setDraft((current) => ({
+                      ...current,
+                      attachments: current.attachments.map((line, rowIndex) => rowIndex === realIndex ? { ...line, unitPrice: value } : line),
+                    }))}
+                    onRemove={() => setDraft((current) => ({
+                      ...current,
+                      attachments: current.attachments.filter((_, rowIndex) => rowIndex !== realIndex),
+                    }))}
+                  />
+                );
+              })}
+
+              {configureTab !== "attachment" || availableOptions.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+                  {configureTab === "attachment"
+                    ? "No compatible attachment list is loaded yet. Add a manual item below if needed."
+                    : `${STEP_LABELS.configure} supports manual ${configureTab} rows until catalog data is seeded.`}
+                </div>
+              ) : null}
+
+              <div className="grid gap-2 md:grid-cols-[1fr_140px_auto]">
+                <input
+                  value={customLineTitle}
+                  onChange={(event) => setCustomLineTitle(event.target.value)}
+                  placeholder={`Add ${configureTab} name`}
+                  className="rounded border border-input bg-card px-3 py-2 text-sm"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  step={100}
+                  value={customLinePrice}
+                  onChange={(event) => setCustomLinePrice(Number(event.target.value) || 0)}
+                  className="rounded border border-input bg-card px-3 py-2 text-sm"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    addConfigLine(configureTab, { title: customLineTitle, unitPrice: customLinePrice });
+                    setCustomLineTitle("");
+                    setCustomLinePrice(0);
+                  }}
+                >
+                  Add {configureTab}
+                </Button>
               </div>
             </div>
           </Card>
 
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("customer")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
-            <Button
-              onClick={() => setStep("tradeIn")}
-              disabled={draft.equipment.length === 0}
-            >
-              Trade-In <ArrowRight className="ml-1 h-4 w-4" />
-            </Button>
+            <Button variant="outline" onClick={() => setStep("equipment")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
+            <Button onClick={() => setStep("tradeIn")}>Trade-in <ArrowRight className="ml-1 h-4 w-4" /></Button>
           </div>
         </div>
       )}
 
       {step === "tradeIn" && (
         <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-foreground">Trade-In</h2>
-          <p className="text-xs text-muted-foreground">
-            Capture the customer trade once here. This is the only trade-in source used by financing, review, and save.
-          </p>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Step 4: Trade-in</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Capture the trade once. If the provisional checklist is not complete, this screen shows manager-approval-required messaging for the handoff.</p>
+          </div>
 
           {draft.dealId && (
             <TradeInSection
@@ -2512,8 +3142,310 @@ export function QuoteBuilderV2Page() {
             }))}
           />
 
+          <Card className="p-4">
+            <p className="text-sm font-semibold text-foreground">Provisional trade checklist</p>
+            <p className="mt-1 text-xs text-muted-foreground">This is the temporary SOP surface. Complete what you know; persistence and approval routing for checklist details land in a later slice.</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {([
+                ["hourMeter", "Hour meter captured"],
+                ["undercarriage", "Undercarriage / frame checked"],
+                ["hydraulicLeaks", "Hydraulic leaks checked"],
+                ["serviceHours", "Engine hours / service noted"],
+                ["tiresTracks", "Tires or tracks condition noted"],
+                ["photos", "Visible damage photos captured"],
+              ] as Array<[keyof typeof tradeChecklist, string]>).map(([key, label]) => (
+                <label key={key} className="flex items-center gap-2 rounded border border-border/70 bg-card/50 px-3 py-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={tradeChecklist[key]}
+                    onChange={(event) => setTradeChecklist((current) => ({ ...current, [key]: event.target.checked }))}
+                    className="h-4 w-4"
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+          </Card>
+
+          {tradeManagerApprovalRequired && (
+            <Card className="border-amber-500/20 bg-amber-500/5 p-4">
+              <p className="text-sm font-semibold text-amber-300">Manager approval required for trade allowance.</p>
+              <p className="mt-1 text-xs text-amber-200">The trade value stays in the quote; this checklist note is a provisional handoff until the Trade SOP is finalized.</p>
+            </Card>
+          )}
+
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("equipment")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
+            <Button variant="outline" onClick={() => setStep("configure")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
+            <Button onClick={() => setStep("pricing")}>Pricing placeholder <ArrowRight className="ml-1 h-4 w-4" /></Button>
+          </div>
+        </div>
+      )}
+
+      {step === "pricing" && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Step 5: Build the price</h2>
+            <p className="mt-1 text-sm text-muted-foreground">A simple waterfall: machine, configuration, adders, discount, trade, tax, and customer total.</p>
+          </div>
+
+          <Card className="overflow-hidden border-qep-orange/20">
+            <div className="bg-qep-orange/5 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pricing waterfall</p>
+              <div className="mt-3 space-y-2 text-sm">
+                <SummaryRow label="Equipment" value={money(equipmentTotal)} />
+                <SummaryRow label="Configuration" value={money(attachmentTotal)} />
+                <SummaryRow label="Freight / PDI / fees" value={money(pricingLineTotal)} />
+                <SummaryRow label="Subtotal" value={money(subtotal)} emphasize />
+                <SummaryRow label="Discounts + promos" value={`-${money(discountTotal)}`} positive />
+                <SummaryRow label="Trade allowance" value={`-${money(draft.tradeAllowance)}`} positive />
+                <SummaryRow label="Taxable basis" value={money(taxableBasis)} emphasize />
+                <SummaryRow label="Estimated tax" value={money(taxTotal)} />
+                <SummaryRow label="Customer total" value={money(customerTotal)} emphasize />
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Price adders</p>
+                <p className="mt-1 text-xs text-muted-foreground">Only fill what applies. Empty rows stay out of the quote payload.</p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => upsertPricingLine("good_faith", "1% good faith", Math.round(subtotal * 0.01))}
+              >
+                Set 1% good faith
+              </Button>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {PRICING_ADDER_FIELDS.map((field) => {
+                const line = pricingLine(field.kind);
+                return (
+                  <label key={field.kind} className="rounded-lg border border-border/70 bg-card/50 p-3 text-sm">
+                    <span className="font-medium text-foreground">{field.title}</span>
+                    <span className="mt-0.5 block text-[11px] text-muted-foreground">{field.helper}</span>
+                    <div className="mt-2 flex items-center gap-1 rounded border border-input bg-background px-2 py-1">
+                      <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                      <input
+                        type="number"
+                        min={0}
+                        step={field.step}
+                        value={line?.unitPrice ?? ""}
+                        onChange={(event) => upsertPricingLine(field.kind, field.title, Number(event.target.value) || 0)}
+                        placeholder="0"
+                        className="w-full bg-transparent text-right text-sm font-semibold outline-none"
+                      />
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <p className="text-sm font-semibold text-foreground">Discount with reason code</p>
+            <p className="mt-1 text-xs text-muted-foreground">A manual discount requires a reason so approval and future review do not guess why margin changed.</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-[160px_minmax(0,1fr)_auto]">
+              <label className="space-y-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">Legacy type</span>
+                <select
+                  value={draft.commercialDiscountType}
+                  onChange={(event) => setDraft((current) => ({ ...current, commercialDiscountType: event.target.value as typeof current.commercialDiscountType }))}
+                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                >
+                  <option value="flat">Flat</option>
+                  <option value="percent">Percent</option>
+                </select>
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">Existing quote discount</span>
+                <div className="flex items-center gap-1 rounded border border-input bg-background px-2 py-1">
+                  <span className="text-sm text-muted-foreground">{draft.commercialDiscountType === "percent" ? "%" : "$"}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={draft.commercialDiscountType === "percent" ? 0.5 : 100}
+                    value={draft.commercialDiscountValue || ""}
+                    onChange={(event) => setDraft((current) => ({ ...current, commercialDiscountValue: Number(event.target.value) || 0 }))}
+                    placeholder="0"
+                    className="w-full bg-transparent text-right text-sm font-semibold outline-none"
+                  />
+                </div>
+              </label>
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDraft((current) => ({ ...current, commercialDiscountValue: 0 }))}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">Saved legacy quote-level discounts remain editable here so older drafts do not hide a margin change. New manual discounts below carry a reason code.</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+              <label className="space-y-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">Discount amount</span>
+                <div className="flex items-center gap-1 rounded border border-input bg-background px-2 py-1">
+                  <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                  <input
+                    type="number"
+                    min={0}
+                    step={100}
+                    value={discountLine?.unitPrice ?? ""}
+                    onChange={(event) => upsertPricingLine(
+                      "discount",
+                      "Manual discount",
+                      Number(event.target.value) || 0,
+                      { reasonCode: discountLine?.reasonCode ?? "competitive_match" },
+                    )}
+                    placeholder="0"
+                    className="w-full bg-transparent text-right text-sm font-semibold outline-none"
+                  />
+                </div>
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">Reason code</span>
+                <select
+                  value={discountLine?.reasonCode ?? "competitive_match"}
+                  onChange={(event) => upsertPricingLine(
+                    "discount",
+                    "Manual discount",
+                    discountLine?.unitPrice ?? 0,
+                    { reasonCode: event.target.value },
+                  )}
+                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                >
+                  {DISCOUNT_REASON_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <p className="text-sm font-semibold text-foreground">Tax preview</p>
+            <p className="mt-1 text-xs text-muted-foreground">Florida delivery uses delivery county/state when provided. Override only with a clear reason.</p>
+            <div className="mt-3 grid gap-2">
+              {taxProfiles.map((profile) => {
+                const selected = profile.value === draft.taxProfile;
+                return (
+                  <button
+                    key={profile.value}
+                    type="button"
+                    onClick={() => setDraft((current) => ({ ...current, taxProfile: profile.value }))}
+                    className={`rounded-lg border p-3 text-left transition ${selected ? "border-qep-orange bg-qep-orange/5" : "border-border bg-card/40 hover:border-qep-orange/40"}`}
+                  >
+                    <p className="text-sm font-medium text-foreground">{profile.label}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{profile.detail}</p>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">Delivery state</span>
+                <input
+                  value={draft.deliveryState ?? ""}
+                  onChange={(event) => setDraft((current) => ({ ...current, deliveryState: event.target.value.toUpperCase() || null }))}
+                  placeholder={selectedBranch?.state_province ?? "FL"}
+                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">Delivery county</span>
+                <input
+                  value={draft.deliveryCounty ?? ""}
+                  onChange={(event) => setDraft((current) => ({ ...current, deliveryCounty: event.target.value || null }))}
+                  placeholder="County for FL surtax preview"
+                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">Tax override amount</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={25}
+                  value={draft.taxOverrideAmount ?? ""}
+                  onChange={(event) => setDraft((current) => ({ ...current, taxOverrideAmount: event.target.value === "" ? null : Number(event.target.value) || 0 }))}
+                  placeholder="Leave blank for calculated tax"
+                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">Override reason</span>
+                <input
+                  value={draft.taxOverrideReason ?? ""}
+                  onChange={(event) => setDraft((current) => ({ ...current, taxOverrideReason: event.target.value || null }))}
+                  placeholder="Required when overriding tax"
+                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+            <div className="mt-4">
+              <TaxBreakdown
+                data={taxPreviewQuery.data}
+                isLoading={taxPreviewQuery.isLoading}
+                isError={taxPreviewQuery.isError}
+                enabled={Boolean(draft.branchSlug || draft.deliveryState)}
+              />
+            </div>
+          </Card>
+
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={() => setStep("tradeIn")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
+            <Button onClick={() => setStep("promotions")}>Promotions <ArrowRight className="ml-1 h-4 w-4" /></Button>
+          </div>
+        </div>
+      )}
+
+      {step === "promotions" && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Step 6: Rebates & promotions</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Use seeded incentives when they exist. If no program data is present, these clear starter rows keep the skeleton moving.</p>
+          </div>
+
+          {activeQuotePackageId ? (
+            <IncentiveStack quotePackageId={activeQuotePackageId} />
+          ) : (
+            <Card className="border-dashed p-4 text-sm text-muted-foreground">Save the draft to run the existing incentive resolver against this quote.</Card>
+          )}
+
+          <Card className="p-4">
+            <p className="text-sm font-semibold text-foreground">Manual promotion choices</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              {PROMOTION_PLACEHOLDERS.map((promo) => {
+                const selected = promotionPlaceholderSelected(promo);
+                return (
+                  <button
+                    key={promo.id}
+                    type="button"
+                    onClick={() => togglePromotion(promo)}
+                    className={`rounded-lg border p-3 text-left transition ${
+                      selected ? "border-emerald-500/50 bg-emerald-500/10" : "border-border bg-card/40 hover:border-qep-orange/40"
+                    }`}
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-qep-orange">{promo.source}</p>
+                    <p className="mt-2 text-sm font-semibold text-foreground">{promo.title}</p>
+                    <p className="mt-1 text-lg font-bold text-emerald-400">−{money(promo.amount)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{promo.detail}</p>
+                    <span className="mt-3 inline-flex rounded-full border border-border/70 px-2 py-1 text-[11px] text-muted-foreground">
+                      {selected ? "Selected" : "Tap to apply"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={() => setStep("pricing")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
             <Button onClick={() => setStep("financing")}>Financing <ArrowRight className="ml-1 h-4 w-4" /></Button>
           </div>
         </div>
@@ -2521,68 +3453,231 @@ export function QuoteBuilderV2Page() {
 
       {step === "financing" && (
         <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-foreground">Financing</h2>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Step 7: Financing scenarios</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Pick cash, finance, or view the disabled lease path. Payment math is an estimate and includes TILA guidance.</p>
+          </div>
 
-          {branches.length > 1 && !draft.branchSlug && (
-            <Card className="border-amber-500/20 bg-amber-500/5 p-4">
-              <p className="text-sm font-medium text-amber-400">Select a quoting branch to calculate tax</p>
-              <p className="mt-1 text-xs text-amber-300">
-                Draft save stays enabled, but tax and send readiness remain unresolved until a branch is selected.
-              </p>
-              <div className="mt-3 flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-amber-300" />
-                <select
-                  value={draft.branchSlug}
-                  onChange={(event) => setDraft((current) => ({ ...current, branchSlug: event.target.value }))}
-                  className="rounded border border-input bg-card px-3 py-2 text-sm"
-                >
-                  <option value="">Select quoting branch…</option>
-                  {branches.map((branch) => (
-                    <option key={branch.id} value={branch.slug}>{branch.display_name}</option>
-                  ))}
-                </select>
+          <Card className="p-4">
+            <div className="flex flex-wrap gap-2">
+              {([
+                ["cash", "Cash"],
+                ["finance", "Finance"],
+                ["lease", "Lease"],
+              ] as Array<[FinanceStepTab, string]>).map(([tab, label]) => {
+                const disabled = tab === "lease" && !leaseQuotingEnabled;
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      setFinanceStepTab(tab);
+                      if (tab === "cash") {
+                        const cashScenario = allFinanceScenarios.find((scenario) => scenario.type === "cash" || scenario.kind === "cash");
+                        setDraft((current) => ({ ...current, selectedFinanceScenario: cashScenario?.label ?? null }));
+                      }
+                    }}
+                    className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
+                      financeStepTab === tab
+                        ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
+                        : disabled
+                          ? "border-border/60 bg-muted/30 text-muted-foreground"
+                          : "border-border text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {label}{disabled ? " — unavailable" : ""}
+                  </button>
+                );
+              })}
+            </div>
+
+            {financeStepTab === "cash" && (
+              <div className="mt-4 rounded-lg border border-border/70 bg-card/50 p-4">
+                <p className="text-sm font-semibold text-foreground">Cash quote</p>
+                <p className="mt-1 text-xs text-muted-foreground">Customer total due at delivery: {money(customerTotal)}. Down payment remains optional for internal tracking.</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <SummaryRow label="Customer total" value={money(customerTotal)} emphasize />
+                  <SummaryRow label="Deposit / cash down" value={money(cashDown)} />
+                </div>
               </div>
-            </Card>
-          )}
+            )}
 
-          <FinancingCalculator
-            discountType={draft.commercialDiscountType}
-            discountValue={draft.commercialDiscountValue}
-            cashDown={draft.cashDown}
-            tradeAllowance={draft.tradeAllowance}
-            taxProfile={draft.taxProfile}
-            packageSubtotal={subtotal}
-            discountTotal={discountTotal}
-            discountedSubtotal={discountedSubtotal}
-            netTotal={netTotal}
-            taxTotal={taxTotal}
-            customerTotal={customerTotal}
-            amountFinanced={amountFinanced}
-            taxBreakdown={taxPreviewQuery.data}
-            taxLoading={taxPreviewQuery.isLoading}
-            taxError={taxPreviewQuery.isError}
-            taxEnabled={Boolean(draft.branchSlug)}
-            financeScenarios={allFinanceScenarios}
-            financeLoading={financingPreviewQuery.isLoading}
-            financeError={financingPreviewQuery.isError}
-            selectedScenario={draft.selectedFinanceScenario}
-            customFinanceEnabled={customFinanceEnabled}
-            customFinanceRate={customFinanceRate}
-            customFinanceTermMonths={customFinanceTermMonths}
-            customFinancePreview={customFinanceScenario}
-            taxProfiles={taxProfiles}
-            onDiscountTypeChange={(value) => setDraft((current) => ({ ...current, commercialDiscountType: value }))}
-            onDiscountValueChange={(value) => setDraft((current) => ({ ...current, commercialDiscountValue: value }))}
-            onCashDownChange={(value) => setDraft((current) => ({ ...current, cashDown: value }))}
-            onTaxProfileChange={(value) => setDraft((current) => ({ ...current, taxProfile: value }))}
-            onSelectScenario={(label) => setDraft((current) => ({ ...current, selectedFinanceScenario: label }))}
-            onCustomFinanceEnabledChange={setCustomFinanceEnabled}
-            onCustomFinanceRateChange={setCustomFinanceRate}
-            onCustomFinanceTermMonthsChange={setCustomFinanceTermMonths}
-          />
+            {financeStepTab === "finance" && (
+              <div className="mt-4 space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1 text-sm">
+                    <span className="text-xs font-medium text-muted-foreground">Cash down</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={500}
+                      value={draft.cashDown || ""}
+                      onChange={(event) => setDraft((current) => ({ ...current, cashDown: Number(event.target.value) || 0 }))}
+                      className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <div className="rounded-lg border border-border/70 bg-card/50 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Amount financed</p>
+                    <p className="mt-1 text-xl font-semibold text-qep-orange">{money(amountFinanced)}</p>
+                  </div>
+                </div>
+
+                {financingPreviewQuery.isLoading && <p className="text-xs text-muted-foreground">Calculating scenarios…</p>}
+                {financingPreviewQuery.isError && <p className="text-xs text-red-400">Financing preview failed. Continue with cash or try again.</p>}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {financeTabScenarios.length > 0 ? financeTabScenarios.map((scenario) => {
+                    const selected = draft.selectedFinanceScenario === scenario.label;
+                    return (
+                      <button
+                        key={scenario.label}
+                        type="button"
+                        onClick={() => setDraft((current) => ({ ...current, selectedFinanceScenario: scenario.label }))}
+                        className={`rounded-lg border p-3 text-left transition ${selected ? "border-qep-orange bg-qep-orange/5" : "border-border bg-card/40 hover:border-qep-orange/40"}`}
+                      >
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-qep-orange">{scenario.label}</p>
+                        <p className="mt-2 text-lg font-semibold text-foreground">
+                          {scenario.monthlyPayment == null ? money(scenario.totalCost ?? customerTotal) : `${money(scenario.monthlyPayment)}/mo`}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          {scenario.termMonths ?? 0} months · {(scenario.apr ?? scenario.rate ?? 0).toFixed(2)}% APR · {scenario.lender ?? "Preferred lender"}
+                        </p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="mt-3"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            saveSelectedFinanceScenario(scenario);
+                          }}
+                        >
+                          Save scenario
+                        </Button>
+                      </button>
+                    );
+                  }) : (
+                    <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">No finance scenario seed is available yet. The quote can still proceed as cash/TBD.</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {financeStepTab === "lease" && (
+              <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/20 p-4">
+                <p className="text-sm font-semibold text-foreground">Lease quoting is not enabled yet</p>
+                <p className="mt-1 text-xs text-muted-foreground">FMV and FPPO lease cards stay disabled until feature flag, OEM list, lease rate sheets, and residual tables are seeded.</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg border border-border/60 bg-card/40 p-3 opacity-70">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">FMV lease</p>
+                    <p className="mt-2 text-sm text-muted-foreground">Awaiting residual table.</p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-card/40 p-3 opacity-70">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">FPPO lease</p>
+                    <p className="mt-2 text-sm text-muted-foreground">Awaiting purchase option rules.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          <Card className="border-blue-500/20 bg-blue-500/5 p-4">
+            <p className="text-sm font-semibold text-blue-200">TILA estimate disclaimer</p>
+            <p className="mt-1 text-xs text-blue-100/90">Payment examples are estimates for discussion only, not a commitment to lend. Final APR, fees, approval, and disclosures come from the lender.</p>
+          </Card>
 
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("tradeIn")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
+            <Button variant="outline" onClick={() => setStep("promotions")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
+            <Button onClick={() => setStep("details")}>Quote details <ArrowRight className="ml-1 h-4 w-4" /></Button>
+          </div>
+        </div>
+      )}
+
+      {step === "details" && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Step 8: Quote details</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Set the handoff details the customer will ask about before anyone sends a document.</p>
+          </div>
+
+          <Card className="p-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">Expiration date</span>
+                <input
+                  type="date"
+                  value={dateInputValue(draft.expiresAt)}
+                  onChange={(event) => setDraft((current) => ({ ...current, expiresAt: isoFromDateInput(event.target.value) }))}
+                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                />
+                <span className="text-[11px] text-muted-foreground">Defaults to 30 days when this step opens.</span>
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">Follow-up reminder</span>
+                <input
+                  type="datetime-local"
+                  value={dateTimeInputValue(draft.followUpAt)}
+                  onChange={(event) => setDraft((current) => ({ ...current, followUpAt: isoFromDateTimeInput(event.target.value) }))}
+                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                />
+                <span className="text-[11px] text-muted-foreground">Defaults to 3 days. Final send/log will require it.</span>
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">Delivery ETA</span>
+                <input
+                  type="date"
+                  value={dateInputValue(draft.deliveryEta)}
+                  onChange={(event) => setDraft((current) => ({ ...current, deliveryEta: isoFromDateInput(event.target.value) }))}
+                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">Deposit placeholder</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={250}
+                  value={draft.depositRequiredAmount ?? ""}
+                  onChange={(event) => setDraft((current) => ({ ...current, depositRequiredAmount: event.target.value === "" ? null : Number(event.target.value) || 0 }))}
+                  placeholder="Awaiting deposit SOP"
+                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+
+            <label className="mt-4 block space-y-1 text-sm">
+              <span className="text-xs font-medium text-muted-foreground">Special terms</span>
+              <textarea
+                value={draft.specialTerms ?? ""}
+                onChange={(event) => setDraft((current) => ({ ...current, specialTerms: event.target.value || null }))}
+                placeholder="Subject to availability, freight confirmation, manager approval, or customer-specific terms."
+                className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+              />
+            </label>
+          </Card>
+
+          <Card className="p-4">
+            <p className="text-sm font-semibold text-foreground">Why this machine</p>
+            <p className="mt-1 text-xs text-muted-foreground">QRM can suggest a reason, but the rep must edit or confirm it before customer-facing send.</p>
+            <textarea
+              value={draft.whyThisMachine ?? ""}
+              onChange={(event) => setDraft((current) => ({ ...current, whyThisMachine: event.target.value, whyThisMachineConfirmed: false }))}
+              placeholder="Explain why this unit fits the customer's job, terrain, timeline, and budget."
+              className="mt-3 min-h-[120px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+            />
+            <label className="mt-3 flex items-center gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                checked={draft.whyThisMachineConfirmed === true}
+                onChange={(event) => setDraft((current) => ({ ...current, whyThisMachineConfirmed: event.target.checked }))}
+                className="h-4 w-4"
+              />
+              I reviewed this language and confirm it is rep-approved.
+            </label>
+          </Card>
+
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={() => setStep("financing")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
             <Button onClick={() => setStep("review")}>Review <ArrowRight className="ml-1 h-4 w-4" /></Button>
           </div>
         </div>
@@ -2590,9 +3685,41 @@ export function QuoteBuilderV2Page() {
 
       {step === "review" && (
         <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-foreground">Review Quote</h2>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Step 9: Review + approval</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Everything in one plain-English summary. Approval case status is the authoritative gate before any future send step.</p>
+          </div>
 
-          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} shadowCalibration={shadowCalibration} />
+          <Card className="p-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ReviewSummaryBlock title="Customer" rows={[
+                ["Name", draft.customerName || draft.customerCompany || "Not set"],
+                ["Company", draft.customerCompany || "—"],
+                ["Email", draft.customerEmail || "Missing before send"],
+                ["Branch", selectedBranch?.display_name ?? (draft.branchSlug || "Missing")],
+              ]} />
+              <ReviewSummaryBlock title="Equipment" rows={[
+                ["Primary", firstEquipment?.title || [firstEquipment?.make, firstEquipment?.model].filter(Boolean).join(" ") || "No equipment"],
+                ["Config rows", String(draft.attachments.length)],
+                ["Trade", draft.tradeAllowance > 0 ? money(draft.tradeAllowance) : "No trade"],
+                ["Availability", sourceRequiredAwaitingConfirmation.length > 0 ? "Needs sourcing request" : "Ready for review"],
+              ]} />
+              <ReviewSummaryBlock title="Pricing + tax" rows={[
+                ["Subtotal", money(subtotal)],
+                ["Discounts", `-${money(discountTotal)}`],
+                ["Taxable basis", money(taxableBasis)],
+                ["Tax", money(taxTotal)],
+                ["Customer total", money(customerTotal)],
+              ]} />
+              <ReviewSummaryBlock title="Finance + details" rows={[
+                ["Scenario", financeMethodLabel],
+                ["Amount financed", money(amountFinanced)],
+                ["Expires", dateInputValue(draft.expiresAt) || "Default needed"],
+                ["Delivery ETA", dateInputValue(draft.deliveryEta) || "TBD"],
+                ["Why confirmed", draft.whyThisMachineConfirmed ? "Yes" : "Needs rep confirm"],
+              ]} />
+            </div>
+          </Card>
 
           <MarginCheckBanner
             marginPct={marginPct}
@@ -2605,297 +3732,224 @@ export function QuoteBuilderV2Page() {
             }}
           />
 
-          <Card className="p-4 space-y-3">
-            {draft.branchSlug && (
-              <BranchDocumentHeader branchSlug={draft.branchSlug} className="pb-3 border-b mb-2" />
-            )}
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Equipment</span>
-              <span className="font-medium">${equipmentTotal.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Attachments</span>
-              <span className="font-medium">${attachmentTotal.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between text-sm border-t border-border pt-2">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span className="font-semibold">${subtotal.toLocaleString()}</span>
-            </div>
-            {discountTotal > 0 && (
-              <div className="flex justify-between text-sm text-emerald-400">
-                <span>Commercial Discount</span>
-                <span>-${discountTotal.toLocaleString()}</span>
+          <Card className="p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Approval handoff</p>
+                <p className="mt-1 text-xs text-muted-foreground">Submit routes through the existing approval-case workflow. Future document/send steps should trust activeApprovalCase.canSend, not a duplicate UI flag.</p>
               </div>
-            )}
-            {draft.tradeAllowance > 0 && (
-              <div className="flex justify-between text-sm text-emerald-400">
-                <span>Trade-In Credit</span>
-                <span>-${draft.tradeAllowance.toLocaleString()}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-sm border-t border-border pt-2">
-              <span className="font-bold text-foreground">Net Before Tax</span>
-              <span className="text-lg font-bold text-qep-orange">${netTotal.toLocaleString()}</span>
+              <Button onClick={() => void submitApprovalMutation.mutateAsync()} disabled={!canSubmitForApproval || submitApprovalMutation.isPending}>
+                {submitApprovalMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+                {approvalPending ? "Approval pending" : approvalGranted ? "Approved" : "Submit for approval"}
+              </Button>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Estimated Tax</span>
-              <span className="font-medium">${taxTotal.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between text-sm border-t border-border pt-2">
-              <span className="font-bold text-foreground">Customer Total</span>
-              <span className="text-lg font-bold text-qep-orange">${customerTotal.toLocaleString()}</span>
-            </div>
-            {cashDown > 0 && (
-              <div className="flex justify-between text-sm text-emerald-400">
-                <span>Cash Down</span>
-                <span>-${cashDown.toLocaleString()}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-sm border-t border-border pt-2">
-              <span className="font-bold text-foreground">Amount Financed</span>
-              <span className="text-lg font-bold text-qep-orange">${amountFinanced.toLocaleString()}</span>
-            </div>
-            {draft.branchSlug && <BranchDocumentFooter branchSlug={draft.branchSlug} />}
           </Card>
 
-          {selectedFinanceScenario && selectedFinanceScenario.type !== "cash" && (
-            <Card className="p-4 space-y-3">
-              <div>
-                <p className="text-sm font-semibold text-foreground">Selected Financing Option</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  This optional payment structure will be included on the quote sheet.
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-4">
-                <div className="rounded-lg border border-border/70 bg-card/50 p-3">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Option</p>
-                  <p className="mt-2 text-sm font-semibold text-foreground">{selectedFinanceScenario.label}</p>
-                </div>
-                <div className="rounded-lg border border-border/70 bg-card/50 p-3">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Monthly payment</p>
-                  <p className="mt-2 text-sm font-semibold text-qep-orange">
-                    ${(selectedFinanceScenario.monthlyPayment ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo
-                  </p>
-                </div>
-                <div className="rounded-lg border border-border/70 bg-card/50 p-3">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">APR / term</p>
-                  <p className="mt-2 text-sm font-semibold text-foreground">
-                    {((selectedFinanceScenario.rate ?? selectedFinanceScenario.apr ?? 0)).toFixed(2)}% · {selectedFinanceScenario.termMonths ?? 0} mo
-                  </p>
-                </div>
-                <div className="rounded-lg border border-border/70 bg-card/50 p-3">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Total paid</p>
-                  <p className="mt-2 text-sm font-semibold text-foreground">
-                    ${(selectedFinanceScenario.totalCost ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </p>
-                </div>
-              </div>
+          {activeQuotePackageId ? (
+            <QuoteReviewWorkflowPanels
+              quotePackageId={activeQuotePackageId}
+              draft={draft}
+              financeScenarios={allFinanceScenarios}
+              computed={{ subtotal, discountTotal, netTotal, taxTotal, customerTotal, cashDown, amountFinanced }}
+              sendReadiness={packetReadiness.send}
+              requiresManagerApproval={approvalState.requiresManagerApproval}
+              userRole={userRoleQuery.data ?? null}
+              quoteStatus={quoteStatus}
+              onQuoteStatusChange={(status) => setDraft((current) => ({ ...current, quoteStatus: status }))}
+              showSendSection={false}
+            />
+          ) : (
+            <Card className="border-amber-500/20 bg-amber-500/5 p-4">
+              <p className="text-sm font-semibold text-amber-300">Save required for approval case details</p>
+              <p className="mt-1 text-xs text-amber-200">Autosave starts once customer and equipment are present, or use Save Draft above.</p>
             </Card>
           )}
 
-          {draft.branchSlug && subtotal > 0 && (
-            <TaxBreakdown
-              data={taxPreviewQuery.data}
-              isLoading={taxPreviewQuery.isLoading}
-              isError={taxPreviewQuery.isError}
-              enabled={true}
-            />
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={() => setStep("details")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
+            <Button variant="outline" onClick={() => setStep("document")}>Document <ArrowRight className="ml-1 h-4 w-4" /></Button>
+          </div>
+        </div>
+      )}
+
+      {step === "document" && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Step 10: Document preview</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Generate a customer-facing PDF preview. Until stored document artifacts are wired, this is a local PDF/print fallback and not a final persisted artifact.
+            </p>
+          </div>
+
+          <Card className="border-blue-500/20 bg-blue-500/5 p-4">
+            <p className="text-sm font-semibold text-blue-100">Preview/fallback mode</p>
+            <p className="mt-1 text-xs text-blue-100/90">
+              The wizard reuses the existing Quote PDF renderer and printable fallback. No R2/object-storage artifact is created in this slice.
+            </p>
+          </Card>
+
+          {customerFacingDocumentBlocker && (
+            <Card className="border-amber-500/20 bg-amber-500/5 p-4">
+              <p className="text-sm font-semibold text-amber-300">Document blocked</p>
+              <p className="mt-1 text-xs text-amber-200">{customerFacingDocumentBlocker}</p>
+            </Card>
           )}
 
-          <Card className="border-qep-orange/20 bg-qep-orange/5 p-4">
-            <p className="text-xs font-bold uppercase tracking-wider text-qep-orange">Commercial Readiness</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-lg border border-border/70 bg-background/60 p-3">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Approval</p>
-                <p className="mt-1 text-sm font-medium text-foreground">
-                  {approvalPending
-                    ? "Submitted to sales manager"
-                    : approvalGranted && approvalState.requiresManagerApproval
-                      ? "Manager approved"
-                      : approvalState.requiresManagerApproval
-                        ? "Manager approval required"
-                        : "Ready to proceed"}
-                </p>
-                {(approvalState.reason || approvalPending || approvalGranted) && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {approvalPending
-                      ? "The quote is waiting in Approval Center for manager review."
-                      : approvalGranted && approvalState.requiresManagerApproval
-                        ? "Approval is complete. You can now send the quote."
-                        : approvalState.reason}
-                  </p>
-                )}
+          <Card className="p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Quote document preview</p>
+                <p className="mt-2 text-base font-semibold text-foreground">{quoteTitle}</p>
+                <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                  <SummaryRow label="Customer" value={draft.customerName || draft.customerCompany || "Customer"} />
+                  <SummaryRow label="Customer total" value={money(customerTotal)} emphasize />
+                  <SummaryRow label="Equipment lines" value={String(draft.equipment.length)} />
+                  <SummaryRow label="Financing" value={financeMethodLabel} />
+                </div>
+                <div className="mt-4 rounded-lg border border-border/70 bg-background/50 p-3 text-xs text-muted-foreground">
+                  {documentFallbackGeneratedAt
+                    ? `Preview generated ${shortDateTime(documentFallbackGeneratedAt)}. This confirms only the local fallback document, not stored final artifact persistence.`
+                    : "Click Generate Preview PDF to open/download the current proposal preview."}
+                </div>
               </div>
-              <div className="rounded-lg border border-border/70 bg-background/60 p-3">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Draft Readiness</p>
-                <p className="mt-1 text-sm font-medium text-foreground">
-                  {packetReadiness.draft.ready ? "Ready to save" : "Needs completion"}
-                </p>
-                {!packetReadiness.draft.ready && packetReadiness.draft.missing.length > 0 && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Missing: {packetReadiness.draft.missing.join(", ")}
-                  </p>
-                )}
-              </div>
-              <div className="rounded-lg border border-border/70 bg-background/60 p-3">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Send Readiness</p>
-                <p className="mt-1 text-sm font-medium text-foreground">
-                  {packetReadiness.send.ready ? "Ready to send" : "Needs completion"}
-                </p>
-                {!packetReadiness.send.ready && packetReadiness.send.missing.length > 0 && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Missing: {packetReadiness.send.missing.join(", ")}
-                  </p>
-                )}
+              <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
+                <Button onClick={() => void handleGenerateFallbackDocument()} disabled={Boolean(customerFacingDocumentBlocker) || pdfGenerating}>
+                  {pdfGenerating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileDown className="mr-1 h-4 w-4" />}
+                  Generate Preview PDF
+                </Button>
+                <Button variant="outline" onClick={() => void handleGenerateFallbackDocument()} disabled={Boolean(customerFacingDocumentBlocker) || pdfGenerating}>
+                  <Printer className="mr-1 h-4 w-4" /> Print Preview
+                </Button>
               </div>
             </div>
+            {documentActionError && <p className="mt-3 text-xs text-rose-400">{documentActionError}</p>}
           </Card>
 
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("financing")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
-            <div className="flex gap-2">
-              {canSubmitForApproval && (
-                <Button
-                  variant="outline"
-                  onClick={() => { void submitApprovalMutation.mutateAsync(); }}
-                  disabled={submitApprovalMutation.isPending || !packetReadiness.draft.ready}
-                >
-                  {submitApprovalMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileText className="mr-1 h-4 w-4" />}
-                  {submitApprovalMutation.isPending ? "Submitting..." : "Submit for Approval"}
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                onClick={() => downloadPDF({
-                  dealName: draft.dealId || draft.customerCompany || draft.customerName || "Quote",
-                  customerName: draft.customerName || draft.customerCompany || "Customer",
-                  preparedBy: "QEP Sales Team",
-                  preparedDate: new Date().toLocaleDateString(),
-                  aiRecommendationSummary: draft.recommendation?.reasoning ?? null,
-                  equipment: draft.equipment.map((item) => ({
-                    make: item.make ?? "",
-                    model: item.model ?? item.title,
-                    year: item.year ?? null,
-                    price: item.unitPrice,
-                  })),
-                  attachments: draft.attachments.map((item) => ({ name: item.title, price: item.unitPrice })),
-                  equipmentTotal,
-                  attachmentTotal,
-                  subtotal,
-                  discountTotal,
-                  tradeAllowance: draft.tradeAllowance,
-                  taxTotal,
-                  customerTotal,
-                  cashDown,
-                  amountFinanced,
-                  netTotal,
-                  financing: allFinanceScenarios.map((scenario) => ({
-                    type: scenario.type,
-                    label: scenario.label,
-                    termMonths: scenario.termMonths ?? 0,
-                    rate: scenario.rate ?? scenario.apr ?? 0,
-                    monthlyPayment: scenario.monthlyPayment ?? 0,
-                    totalCost: scenario.totalCost ?? 0,
-                    lender: scenario.lender ?? "Preferred lender",
-                  })),
-                  selectedFinancingLabel: draft.selectedFinanceScenario,
-                  branch: buildQuotePdfBranch(selectedBranch),
-                })}
-                disabled={pdfGenerating || !isQuoteApprovedForDistribution(draft.quoteStatus)}
-                title={isQuoteApprovedForDistribution(draft.quoteStatus) ? undefined : "PDF unlocks after owner approval"}
-              >
-                {pdfGenerating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileDown className="mr-1 h-4 w-4" />}
-                {pdfGenerating ? "Generating..." : "Download PDF"}
-              </Button>
-              <Button
-                onClick={() => { void handleSaveClick(); }}
-                disabled={saveMutation.isPending || submitApprovalMutation.isPending || !packetReadiness.draft.ready}
-              >
-                <Save className="mr-1 h-4 w-4" />
-                {saveMutation.isPending ? "Saving..." : "Save Quote"}
-              </Button>
-            </div>
+            <Button variant="outline" onClick={() => setStep("review")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
+            <Button onClick={() => setStep("send")} disabled={!documentReady}>Send & log <ArrowRight className="ml-1 h-4 w-4" /></Button>
           </div>
-
-          {/* Slice 15: margin-floor gate — renders banner when under floor,
-              and hosts the reason modal opened by handleSaveClick. */}
-          <MarginFloorGate
-            brandId={null}
-            marginPct={marginPct}
-            netTotalCents={Math.round(netTotal * 100)}
-            reasonModalOpen={marginGateOpen}
-            onReasonModalOpenChange={setMarginGateOpen}
-            onReasonConfirm={(payload) => { void handleMarginReasonConfirm(payload); }}
-          />
-
-          {pdfError && (
-            <Card className="border-red-500/30 bg-red-500/5 p-4">
-              <p className="text-sm text-red-400">{pdfError}</p>
-            </Card>
-          )}
-
-          {saveMutation.isSuccess && (
-            <Card className="border-emerald-500/30 bg-emerald-500/5 p-4">
-              <p className="text-sm text-emerald-400">Quote saved successfully.</p>
-            </Card>
-          )}
-
-          {submitApprovalMutation.isError && (
-            <Card className="border-red-500/30 bg-red-500/5 p-4">
-              <p className="text-sm text-red-400">
-                {submitApprovalMutation.error instanceof Error
-                  ? submitApprovalMutation.error.message
-                  : "Failed to submit the quote for approval."}
-              </p>
-            </Card>
-          )}
-
-          {showQuoteActions && activeQuotePackageId && (
-            <Suspense
-              fallback={(
-                <Card className="border-border/60 bg-card/60 p-4">
-                  <p className="text-sm text-muted-foreground">Loading review workflow…</p>
-                </Card>
-              )}
-            >
-              <QuoteReviewWorkflowPanels
-                quotePackageId={activeQuotePackageId}
-                draft={draft}
-                financeScenarios={allFinanceScenarios}
-                computed={{
-                  subtotal,
-                  discountTotal,
-                  netTotal,
-                  taxTotal,
-                  customerTotal,
-                  cashDown,
-                  amountFinanced,
-                }}
-                sendReadiness={packetReadiness.send}
-                requiresManagerApproval={approvalState.requiresManagerApproval}
-                userRole={userRoleQuery.data ?? null}
-                submitApprovalResult={submitApprovalMutation.data}
-                quoteStatus={quoteStatus}
-                onQuoteStatusChange={(nextStatus) => {
-                  setDraft((current) => current.quoteStatus === nextStatus
-                    ? current
-                    : { ...current, quoteStatus: nextStatus });
-                }}
-              />
-            </Suspense>
-          )}
-
-          {saveMutation.isError && (
-            <Card className="border-red-500/30 bg-red-500/5 p-4">
-              <p className="text-sm text-red-400">
-                {saveMutation.error instanceof Error
-                  ? saveMutation.error.message
-                  : "Failed to save the quote."}
-              </p>
-            </Card>
-          )}
         </div>
       )}
+
+      {step === "send" && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Step 11: Send & log</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Preview, email, or text the quote only after clean approval and a follow-up date are present.</p>
+          </div>
+
+          {customerFacingDocumentBlocker && (
+            <Card className="border-amber-500/20 bg-amber-500/5 p-4">
+              <p className="text-sm font-semibold text-amber-300">Customer send blocked</p>
+              <p className="mt-1 text-xs text-amber-200">{customerFacingDocumentBlocker}</p>
+            </Card>
+          )}
+
+          <Card className="p-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <ReadinessRow label="Approval case" ready={approvalCaseCanSend} detail={approvalBlocker ?? "canSend is true"} />
+              <ReadinessRow label="Document" ready={documentReady} detail={documentReady ? "Local preview fallback generated" : "Generate Step 10 preview first"} />
+              <ReadinessRow label="Follow-up" ready={Boolean(draft.followUpAt)} detail={draft.followUpAt ? (shortDateTime(draft.followUpAt) ?? "Scheduled") : "Required before email/text"} />
+              <ReadinessRow label="Tax" ready={taxResolved} detail={taxResolutionBlocker ?? "Tax preview resolved"} />
+              <ReadinessRow label="Why this machine" ready={!whyThisMachineRequired || draft.whyThisMachineConfirmed === true} detail={whyThisMachineBlocker ?? "Rep confirmed or not required"} />
+            </div>
+            <label className="mt-4 block space-y-1 text-sm">
+              <span className="text-xs font-medium text-muted-foreground">Required follow-up date</span>
+              <input
+                type="date"
+                value={dateInputValue(draft.followUpAt)}
+                onChange={(event) => setDraft((current) => ({ ...current, followUpAt: isoFromDateInput(event.target.value) }))}
+                className="w-full rounded border border-input bg-card px-3 py-2 text-sm sm:max-w-xs"
+              />
+              <span className="block text-xs text-muted-foreground">Defaults to +3 days when absent. Email/text send/log remains blocked without this date.</span>
+            </label>
+          </Card>
+
+          <Card className="p-4">
+            <div className="grid gap-3 lg:grid-cols-3">
+              <QuoteSendActionCard
+                icon={<FileText className="h-4 w-4" />}
+                title="Preview Quote"
+                detail="Open the local PDF/print fallback and log a preview event. Does not mark sent."
+                readiness={previewReadiness}
+                busy={deliveryActionBusy === "preview" || pdfGenerating}
+                onClick={() => void handleQuoteSendAction("preview")}
+              />
+              <QuoteSendActionCard
+                icon={<Mail className="h-4 w-4" />}
+                title="Email Quote"
+                detail={graphEmailEnabled ? "Graph flag enabled, but provider endpoint must be wired before customer send." : "Microsoft Graph email is not configured; no email will be sent."}
+                readiness={emailReadiness}
+                setupBlocked={!graphEmailEnabled}
+                busy={deliveryActionBusy === "email"}
+                onClick={() => void handleQuoteSendAction("email")}
+              />
+              <QuoteSendActionCard
+                icon={<Smartphone className="h-4 w-4" />}
+                title="Text Quote"
+                detail={textQuoteEnabled ? "Twilio flag enabled, but provider endpoint must be wired before customer send." : "Twilio text delivery is not configured; no text will be sent."}
+                readiness={textReadiness}
+                setupBlocked={!textQuoteEnabled}
+                busy={deliveryActionBusy === "text"}
+                onClick={() => void handleQuoteSendAction("text")}
+              />
+            </div>
+            {deliveryActionMessage && <p className="mt-3 rounded border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-300">{deliveryActionMessage}</p>}
+            {deliveryActionError && <p className="mt-3 rounded border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-xs text-rose-300">{deliveryActionError}</p>}
+          </Card>
+
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={() => setStep("document")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
+            <Button variant="outline" onClick={() => void handleSaveClick()} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
+              Save follow-up
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <MarginFloorGate
+        brandId={null}
+        marginPct={marginPct}
+        netTotalCents={Math.round(netTotal * 100)}
+        reasonModalOpen={marginGateOpen}
+        onReasonModalOpenChange={setMarginGateOpen}
+        onReasonConfirm={(payload) => { void handleMarginReasonConfirm(payload); }}
+      />
+
+      {pdfError && (
+        <Card className="border-red-500/30 bg-red-500/5 p-4">
+          <p className="text-sm text-red-400">{pdfError}</p>
+        </Card>
+      )}
+
+      {saveMutation.isSuccess && (
+        <Card className="border-emerald-500/30 bg-emerald-500/5 p-4">
+          <p className="text-sm text-emerald-400">Quote saved successfully.</p>
+        </Card>
+      )}
+
+      {submitApprovalMutation.isError && (
+        <Card className="border-red-500/30 bg-red-500/5 p-4">
+          <p className="text-sm text-red-400">
+            {submitApprovalMutation.error instanceof Error
+              ? submitApprovalMutation.error.message
+              : "Failed to submit the quote for approval."}
+          </p>
+        </Card>
+      )}
+
+      {saveMutation.isError && (
+        <Card className="border-red-500/30 bg-red-500/5 p-4">
+          <p className="text-sm text-red-400">
+            {saveMutation.error instanceof Error
+              ? saveMutation.error.message
+              : "Failed to save the quote."}
+          </p>
+        </Card>
+      )}
+
       </div>
       {/* Right column — intelligence panel + Deal Coach (desktop only) */}
       <aside className="hidden w-80 shrink-0 lg:block">
@@ -3174,6 +4228,49 @@ function DeliveryOption({
   );
 }
 
+function SummaryRow({
+  label,
+  value,
+  emphasize = false,
+  positive = false,
+}: {
+  label: string;
+  value: string;
+  emphasize?: boolean;
+  positive?: boolean;
+}) {
+  return (
+    <div className={`flex items-center justify-between ${emphasize ? "border-t border-border pt-2" : ""}`}>
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`font-medium ${emphasize ? "text-qep-orange" : positive ? "text-emerald-400" : "text-foreground"}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function ReviewSummaryBlock({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: Array<[string, string]>;
+}) {
+  return (
+    <div className="rounded-lg border border-border/70 bg-card/50 p-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{title}</p>
+      <div className="mt-3 space-y-2 text-sm">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex items-start justify-between gap-3">
+            <span className="text-muted-foreground">{label}</span>
+            <span className="max-w-[60%] text-right font-medium text-foreground">{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ReadinessRow({
   label,
   ready,
@@ -3194,6 +4291,102 @@ function ReadinessRow({
       }`}>
         {ready ? "ready" : "open"}
       </span>
+    </div>
+  );
+}
+
+function QuoteWizardProgress({
+  steps,
+  currentStep,
+  onJumpBack,
+}: {
+  steps: WizardStepMeta[];
+  currentStep: Step;
+  onJumpBack: (step: Step) => void;
+}) {
+  const currentIndex = steps.findIndex((item) => item.id === currentStep);
+  return (
+    <Card className="p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Wizard progress</p>
+          <p className="mt-1 text-sm font-medium text-foreground">{steps[currentIndex]?.label ?? "Customer"}</p>
+        </div>
+        <span className="rounded-full bg-qep-orange/10 px-3 py-1 text-xs font-semibold text-qep-orange">
+          Step {Math.max(1, currentIndex + 1)} of {steps.length}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-4 xl:grid-cols-11">
+        {steps.map((item, index) => {
+          const isCurrent = item.id === currentStep;
+          const isComplete = index < currentIndex;
+          const isFuture = index > currentIndex;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => { if (!isFuture) onJumpBack(item.id); }}
+              disabled={isFuture}
+              className={`rounded-lg border px-2 py-2 text-left text-[11px] transition ${
+                isCurrent
+                  ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
+                  : isComplete
+                    ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-300 hover:border-emerald-400/60"
+                    : "border-border/60 bg-muted/20 text-muted-foreground"
+              }`}
+            >
+              <span className="block font-semibold">{item.number}. {item.shortLabel}</span>
+              <span className="mt-0.5 block text-[10px] opacity-80">
+                {isCurrent ? "Now" : isComplete ? "Jump back" : item.owner === "placeholder" ? "Later" : "Locked"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function QuoteSendActionCard({
+  icon,
+  title,
+  detail,
+  readiness,
+  setupBlocked,
+  busy,
+  onClick,
+}: {
+  icon: ReactNode;
+  title: string;
+  detail: string;
+  readiness: { ready: boolean; missing: string[] };
+  setupBlocked?: boolean;
+  busy?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border/70 bg-background/50 p-4">
+      <div className="flex items-start gap-3">
+        <span className="rounded-full bg-qep-orange/10 p-2 text-qep-orange">{icon}</span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+        </div>
+      </div>
+      <div className="mt-3 rounded border border-border/60 bg-card/50 px-3 py-2 text-xs">
+        {readiness.ready ? (
+          <span className="text-emerald-300">Ready to log this action.</span>
+        ) : (
+          <span className="text-amber-300">Blocked: {readiness.missing.join(", ")}</span>
+        )}
+      </div>
+      {setupBlocked && (
+        <p className="mt-2 text-xs text-blue-200">Setup blocked — this button logs a draft/setup-blocked event only; it does not send to the customer.</p>
+      )}
+      <Button className="mt-4 w-full" variant={setupBlocked ? "outline" : "default"} onClick={onClick} disabled={busy || !readiness.ready}>
+        {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+        {setupBlocked ? "Log setup-blocked" : title}
+      </Button>
     </div>
   );
 }

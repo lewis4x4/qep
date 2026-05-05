@@ -48,6 +48,7 @@ interface QuoteReviewWorkflowPanelsProps {
   };
   quoteStatus: QuoteWorkspaceDraft["quoteStatus"];
   onQuoteStatusChange: (status: QuoteWorkspaceDraft["quoteStatus"]) => void;
+  showSendSection?: boolean;
 }
 
 export function QuoteReviewWorkflowPanels({
@@ -61,6 +62,7 @@ export function QuoteReviewWorkflowPanels({
   submitApprovalResult,
   quoteStatus,
   onQuoteStatusChange,
+  showSendSection = true,
 }: QuoteReviewWorkflowPanelsProps) {
   const queryClient = useQueryClient();
   const [dealerMessage, setDealerMessage] = useState("");
@@ -123,7 +125,8 @@ export function QuoteReviewWorkflowPanels({
   // must exist and canSend must be true. This is the single source of
   // truth for "is the quote green-lit".
   const canShowSendSection =
-    Boolean(quotePackageId)
+    showSendSection
+    && Boolean(quotePackageId)
     && Boolean(activeApprovalCase?.canSend)
     && resolvedQuoteStatus !== "sent"
     && resolvedQuoteStatus !== "accepted";
@@ -262,7 +265,7 @@ export function QuoteReviewWorkflowPanels({
         </Card>
       )}
 
-      {canShowSendSection ? (
+      {showSendSection && (canShowSendSection ? (
         <SendQuoteSection
           quotePackageId={quotePackageId}
           contactName={draft.customerName || draft.customerCompany || "customer"}
@@ -315,7 +318,7 @@ export function QuoteReviewWorkflowPanels({
             Missing: {sendReadiness.missing.join(", ")}
           </p>
         </Card>
-      ) : null}
+      ) : null)}
 
       {portalRevision?.review && (
         <Card className="border-border/60 bg-card/60 p-4 space-y-3">

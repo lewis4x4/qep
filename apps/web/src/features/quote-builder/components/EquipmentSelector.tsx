@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Search, Sparkles } from "lucide-react";
 import { searchCatalog, getAiEquipmentRecommendation } from "../lib/quote-api";
 
+type AvailabilityStatus = "in_stock" | "in_transit" | "source_required";
+
 interface CatalogEntry {
   id: string;
   sourceCatalog?: "qb_equipment_models" | "qb_attachments" | "catalog_entries" | "manual";
@@ -17,7 +19,28 @@ interface CatalogEntry {
   list_price: number | null;
   stock_number: string | null;
   condition: string | null;
+  availabilityStatus?: AvailabilityStatus;
+  availability_status?: AvailabilityStatus;
   attachments: Array<{ id: string; name: string; price: number }>;
+}
+
+function availabilityStatus(entry: CatalogEntry): AvailabilityStatus {
+  if (entry.availabilityStatus) return entry.availabilityStatus;
+  if (entry.availability_status) return entry.availability_status;
+  const condition = entry.condition?.toLowerCase() ?? "";
+  if (condition.includes("transit")) return "in_transit";
+  if (entry.stock_number) return "in_stock";
+  return "source_required";
+}
+
+function availabilityCopy(status: AvailabilityStatus): { label: string; className: string } {
+  if (status === "in_stock") {
+    return { label: "In stock", className: "bg-emerald-500/10 text-emerald-400" };
+  }
+  if (status === "in_transit") {
+    return { label: "In transit", className: "bg-blue-500/10 text-blue-300" };
+  }
+  return { label: "Source required", className: "bg-amber-500/10 text-amber-300" };
 }
 
 interface EquipmentSelectorProps {
@@ -86,7 +109,17 @@ export function EquipmentSelector({ onSelect, onRecommendation }: EquipmentSelec
                   onClick={() => onSelect(entry)}
                   className="w-full rounded border border-border bg-card p-3 text-left text-sm hover:border-primary transition"
                 >
-                  <div className="font-semibold">{entry.make} {entry.model} {entry.year && `(${entry.year})`}</div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="font-semibold">{entry.make} {entry.model} {entry.year && `(${entry.year})`}</div>
+                    {(() => {
+                      const copy = availabilityCopy(availabilityStatus(entry));
+                      return (
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${copy.className}`}>
+                          {copy.label}
+                        </span>
+                      );
+                    })()}
+                  </div>
                   <div className="text-xs text-muted-foreground">
                     {entry.category} {entry.condition && `• ${entry.condition}`}
                     {entry.stock_number && ` • Stock #${entry.stock_number}`}

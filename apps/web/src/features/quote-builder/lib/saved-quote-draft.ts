@@ -1,5 +1,6 @@
 import type {
   QuoteEntryMode,
+  QuoteFinanceScenarioDraft,
   QuoteLineItemKind,
   QuoteLineItemDraft,
   QuoteTaxProfile,
@@ -7,7 +8,29 @@ import type {
 } from "../../../../../../shared/qep-moonshot-contracts";
 
 const ENTRY_MODES: QuoteEntryMode[] = ["voice", "ai_chat", "manual", "trade_photo"];
-const LINE_ITEM_KINDS: QuoteLineItemKind[] = ["equipment", "attachment", "warranty", "financing", "custom"];
+const LINE_ITEM_KINDS: QuoteLineItemKind[] = [
+  "equipment",
+  "attachment",
+  "option",
+  "accessory",
+  "warranty",
+  "financing",
+  "pdi",
+  "freight",
+  "good_faith",
+  "doc_fee",
+  "title",
+  "tag",
+  "registration",
+  "discount",
+  "trade_allowance",
+  "rebate_mfg",
+  "rebate_dealer",
+  "loyalty_discount",
+  "tax_state",
+  "tax_county",
+  "custom",
+];
 const TAX_PROFILES: QuoteTaxProfile[] = [
   "standard",
   "agriculture_exempt",
@@ -39,6 +62,10 @@ function asNumber(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function asBoolean(value: unknown): boolean {
+  return value === true || value === "true";
 }
 
 function isEntryMode(value: string): value is QuoteEntryMode {
@@ -186,6 +213,9 @@ function toPackageLineItemDraft(item: unknown): QuoteLineItemDraft[] {
       ?? asNumber(record.price)
       ?? asNumber(record.amount)
       ?? 0,
+    reasonCode: asString(record.reason_code) || null,
+    approvalRequired: asBoolean(record.approval_required),
+    metadata,
   };
   const sourceCatalog = asString(metadata?.source_catalog);
   const sourceId = asString(metadata?.source_id) || asString(record.catalog_entry_id);
@@ -198,6 +228,59 @@ function toPackageLineItemDraft(item: unknown): QuoteLineItemDraft[] {
   if (sourceId) line.sourceId = sourceId;
   if (dealerCost !== null) line.dealerCost = dealerCost;
   return [line];
+}
+
+function isPricingLineKind(kind: QuoteLineItemKind): boolean {
+  return [
+    "pdi",
+    "freight",
+    "good_faith",
+    "doc_fee",
+    "title",
+    "tag",
+    "registration",
+    "discount",
+    "trade_allowance",
+    "rebate_mfg",
+    "rebate_dealer",
+    "loyalty_discount",
+    "tax_state",
+    "tax_county",
+    "custom",
+    "financing",
+  ].includes(kind);
+}
+
+function normalizeFinanceScenario(item: unknown): QuoteFinanceScenarioDraft[] {
+  const record = asRecord(item);
+  if (!record) return [];
+  const kindRaw = asString(record.kind);
+  const typeRaw = asString(record.type);
+  const kind = kindRaw === "lease_fmv" || kindRaw === "lease_fppo" || kindRaw === "finance" || kindRaw === "cash"
+    ? kindRaw
+    : typeRaw === "finance"
+      ? "finance"
+      : typeRaw === "lease"
+        ? "lease_fmv"
+        : "cash";
+  const type = kind === "finance" ? "finance" : kind === "cash" ? "cash" : "lease";
+  const label = asString(record.label) || asString(record.scenario_label) || (type === "cash" ? "Cash" : type === "finance" ? "Finance" : "Lease");
+  return [{
+    id: asString(record.id) || null,
+    type,
+    kind,
+    label,
+    termMonths: asNumber(record.term_months) ?? asNumber(record.termMonths),
+    apr: asNumber(record.apr) ?? asNumber(record.rate),
+    rate: asNumber(record.rate) ?? asNumber(record.apr),
+    downPayment: asNumber(record.down_payment) ?? asNumber(record.downPayment),
+    residualAmount: asNumber(record.residual_amount) ?? asNumber(record.residualAmount),
+    moneyFactor: asNumber(record.money_factor) ?? asNumber(record.moneyFactor),
+    monthlyPayment: asNumber(record.monthly_payment) ?? asNumber(record.monthlyPayment),
+    totalCost: asNumber(record.total_cost) ?? asNumber(record.totalCost),
+    lender: asString(record.lender) || null,
+    isDefault: asBoolean(record.is_default) || asBoolean(record.isDefault),
+  }];
 }
 
 function toRecommendation(value: unknown): QuoteWorkspaceDraft["recommendation"] {
@@ -241,7 +324,10 @@ function toRecommendation(value: unknown): QuoteWorkspaceDraft["recommendation"]
 export function hydrateDraftFromSavedQuote(
   savedQuote: Record<string, unknown>,
 ): Partial<QuoteWorkspaceDraft> {
-  const financeScenarios = asArray(savedQuote.financing_scenarios)
+  const financeScenarioSource = asArray(savedQuote.quote_financing_scenarios).length > 0
+    ? asArray(savedQuote.quote_financing_scenarios)
+    : asArray(savedQuote.financing_scenarios);
+  const financeScenarios = financeScenarioSource
     .map((item) => asRecord(item))
     .filter((item): item is Record<string, unknown> => Boolean(item));
 
@@ -260,7 +346,9 @@ export function hydrateDraftFromSavedQuote(
   const normalizedLineItems = asArray(savedQuote.quote_package_line_items)
     .flatMap(toPackageLineItemDraft);
   const normalizedEquipment = normalizedLineItems.filter((item) => item.kind === "equipment");
-  const normalizedAttachments = normalizedLineItems.filter((item) => item.kind !== "equipment");
+  const normalizedPricingLines = normalizedLineItems.filter((item) => item.kind !== "equipment" && isPricingLineKind(item.kind));
+  const normalizedAttachments = normalizedLineItems.filter((item) => item.kind !== "equipment" && !isPricingLineKind(item.kind));
+  const savedFinanceScenarios = financeScenarios.flatMap(normalizeFinanceScenario);
 
   return {
     dealId: asString(savedQuote.deal_id) || undefined,
@@ -276,6 +364,7 @@ export function hydrateDraftFromSavedQuote(
     attachments: normalizedAttachments.length > 0
       ? normalizedAttachments
       : asArray(savedQuote.attachments_included).flatMap(toAttachmentDraft),
+    pricingLines: normalizedPricingLines,
     tradeAllowance: asNumber(savedQuote.trade_allowance) ?? asNumber(savedQuote.trade_credit) ?? 0,
     tradeValuationId: asString(savedQuote.trade_in_valuation_id) || null,
     commercialDiscountType,
@@ -285,6 +374,24 @@ export function hydrateDraftFromSavedQuote(
     taxTotal: asNumber(savedQuote.tax_total) ?? 0,
     amountFinanced: asNumber(savedQuote.amount_financed) ?? 0,
     selectedFinanceScenario,
+    savedFinanceScenarios,
+    wizardStep: asNumber(savedQuote.wizard_step),
+    expiresAt: asString(savedQuote.expires_at) || null,
+    followUpAt: asString(savedQuote.follow_up_at) || null,
+    depositRequiredAmount: asNumber(savedQuote.deposit_required_amount),
+    deliveryEta: asString(savedQuote.delivery_eta) || null,
+    deliveryState: asString(savedQuote.delivery_state) || null,
+    deliveryCounty: asString(savedQuote.delivery_county) || null,
+    specialTerms: asString(savedQuote.special_terms) || null,
+    whyThisMachine: asString(savedQuote.why_this_machine) || null,
+    whyThisMachineConfirmed: asBoolean(savedQuote.why_this_machine_confirmed),
+    taxJurisdictionId: asString(savedQuote.tax_jurisdiction_id) || null,
+    taxOverrideAmount: asNumber(savedQuote.tax_override_amount),
+    taxOverrideReason: asString(savedQuote.tax_override_reason) || null,
+    selectedPromotionIds: asArray(savedQuote.selected_promotion_ids).flatMap((item) => {
+      const value = asString(item);
+      return value ? [value] : [];
+    }),
     customerName: asString(savedQuote.customer_name),
     customerCompany: asString(savedQuote.customer_company),
     customerPhone: asString(savedQuote.customer_phone),

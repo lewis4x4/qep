@@ -157,7 +157,32 @@ function clampCurrency(value: unknown): number {
   return Math.round(Math.max(0, numeric) * 100) / 100;
 }
 
-const QUOTE_PACKAGE_LINE_TYPES = new Set(["equipment", "attachment", "warranty", "financing", "custom"]);
+const QUOTE_LINE_DISCOUNT_REASON_CODES = new Set(["competitive_match", "volume_buyer", "aged_inventory", "loyalty", "other"]);
+
+const QUOTE_PACKAGE_LINE_TYPES = new Set([
+  "equipment",
+  "attachment",
+  "option",
+  "accessory",
+  "warranty",
+  "financing",
+  "pdi",
+  "freight",
+  "good_faith",
+  "doc_fee",
+  "title",
+  "tag",
+  "registration",
+  "discount",
+  "trade_allowance",
+  "rebate_mfg",
+  "rebate_dealer",
+  "loyalty_discount",
+  "tax_state",
+  "tax_county",
+  "custom",
+]);
+const FINANCE_SCENARIO_KINDS = new Set(["cash", "finance", "lease_fmv", "lease_fppo"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function lineString(value: unknown, max = 240): string | null {
@@ -195,6 +220,11 @@ function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Re
       ?? `${lineType} line item`;
     const catalogEntryId = lineString(row.catalog_entry_id ?? row.catalogEntryId ?? row.id, 80);
 
+    const rawReasonCode = lineString(row.reason_code ?? row.reasonCode, 80);
+    const reasonCode = lineType === "discount" && rawReasonCode && QUOTE_LINE_DISCOUNT_REASON_CODES.has(rawReasonCode)
+      ? rawReasonCode
+      : null;
+
     return [{
       catalog_entry_id: catalogEntryId && UUID_RE.test(catalogEntryId) ? catalogEntryId : null,
       make: lineString(row.make, 80),
@@ -209,6 +239,8 @@ function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Re
       unit_price: unitPrice,
       extended_price: extendedPrice,
       display_order: Math.round(lineNumber(row.display_order, index)),
+      reason_code: reasonCode,
+      approval_required: row.approval_required === true || row.approvalRequired === true,
       metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
         ? row.metadata
         : {},
@@ -244,6 +276,78 @@ async function syncQuotePackageLineItems(input: {
 
   if (insertErr) return { rows: [], error: insertErr.message };
   return { rows: (data ?? []) as Array<Record<string, unknown>>, error: null };
+}
+
+function normalizeQuoteFinancingScenarios(body: Record<string, unknown>): Array<Record<string, unknown>> {
+  const source = Array.isArray(body.financing_scenarios) ? body.financing_scenarios : [];
+  const hasExplicitDefault = source.some((item) =>
+    Boolean(item && typeof item === "object" && !Array.isArray(item)
+      && ((item as Record<string, unknown>).is_default === true || (item as Record<string, unknown>).isDefault === true)));
+  let defaultAssigned = false;
+  return source.flatMap((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const row = item as Record<string, unknown>;
+    const rawType = lineString(row.type, 40) ?? "cash";
+    const rawKind = lineString(row.kind, 40) ?? rawType;
+    const kind = FINANCE_SCENARIO_KINDS.has(rawKind)
+      ? rawKind
+      : rawType === "lease"
+        ? "lease_fmv"
+        : rawType === "finance"
+          ? "finance"
+          : "cash";
+    const scenarioLabel = lineString(row.scenario_label ?? row.label, 160)
+      ?? (kind === "cash" ? "Cash" : kind === "finance" ? "Finance" : "Lease");
+    const requestedDefault = row.is_default === true || row.isDefault === true || (!hasExplicitDefault && index === 0);
+    const isDefault = requestedDefault && !defaultAssigned;
+    if (isDefault) defaultAssigned = true;
+    return [{
+      scenario_label: scenarioLabel,
+      kind,
+      down_payment: clampCurrency(row.down_payment ?? row.downPayment),
+      term_months: Number.isFinite(Number(row.term_months ?? row.termMonths))
+        ? Math.round(Number(row.term_months ?? row.termMonths))
+        : null,
+      apr: Number.isFinite(Number(row.apr ?? row.rate)) ? Number(row.apr ?? row.rate) : null,
+      residual_amount: clampCurrency(row.residual_amount ?? row.residualAmount),
+      money_factor: Number.isFinite(Number(row.money_factor ?? row.moneyFactor))
+        ? Number(row.money_factor ?? row.moneyFactor)
+        : null,
+      monthly_payment: clampCurrency(row.monthly_payment ?? row.monthlyPayment),
+      total_cost: clampCurrency(row.total_cost ?? row.totalCost),
+      lender: lineString(row.lender, 160),
+      is_default: isDefault,
+      metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? row.metadata
+        : {},
+    }];
+  });
+}
+
+async function syncQuoteFinancingScenarios(input: {
+  admin: ReturnType<typeof createAdminClient>;
+  quotePackageId: string;
+  workspaceId: string;
+  body: Record<string, unknown>;
+}): Promise<{ error: string | null }> {
+  const scenarios = normalizeQuoteFinancingScenarios(input.body).map((row) => ({
+    ...row,
+    quote_package_id: input.quotePackageId,
+    workspace_id: input.workspaceId,
+  }));
+
+  const { error: deleteErr } = await input.admin
+    .from("quote_financing_scenarios")
+    .delete()
+    .eq("quote_package_id", input.quotePackageId);
+  if (deleteErr) return { error: deleteErr.message };
+
+  if (scenarios.length === 0) return { error: null };
+
+  const { error: insertErr } = await input.admin
+    .from("quote_financing_scenarios")
+    .insert(scenarios);
+  return { error: insertErr?.message ?? null };
 }
 
 function contactNameFromRelation(value: unknown): string | null {
@@ -1405,6 +1509,8 @@ function defaultQuoteApprovalPolicy(workspaceId: string): QuoteApprovalPolicy {
     branchManagerMinMarginPct: 8,
     standardMarginFloorPct: 10,
     branchManagerMaxQuoteAmount: 250000,
+    tradeCreditMax: null,
+    repDiscountMaxPct: null,
     submitSlaHours: 24,
     escalationSlaHours: 48,
     ownerEscalationRole: "owner",
@@ -1442,6 +1548,8 @@ async function loadQuoteApprovalPolicy(input: {
     branchManagerMinMarginPct: Number(data.branch_manager_min_margin_pct ?? defaultPolicy.branchManagerMinMarginPct),
     standardMarginFloorPct: Number(data.standard_margin_floor_pct ?? defaultPolicy.standardMarginFloorPct),
     branchManagerMaxQuoteAmount: Number(data.branch_manager_max_quote_amount ?? defaultPolicy.branchManagerMaxQuoteAmount),
+    tradeCreditMax: Number.isFinite(Number(data.trade_credit_max)) ? Number(data.trade_credit_max) : null,
+    repDiscountMaxPct: Number.isFinite(Number(data.rep_discount_max_pct)) ? Number(data.rep_discount_max_pct) : null,
     submitSlaHours: Number(data.submit_sla_hours ?? defaultPolicy.submitSlaHours),
     escalationSlaHours: Number(data.escalation_sla_hours ?? defaultPolicy.escalationSlaHours),
     ownerEscalationRole: data.owner_escalation_role === "admin" ? "admin" : "owner",
@@ -1465,8 +1573,9 @@ function buildQuoteVersionArtifacts(input: {
   snapshot: QuoteVersionSnapshot;
   computedMetrics: Record<string, unknown>;
 } {
-  const equipment = Array.isArray(input.body.equipment) ? input.body.equipment as Array<Record<string, unknown>> : [];
-  const attachments = Array.isArray(input.body.attachments_included) ? input.body.attachments_included as Array<Record<string, unknown>> : [];
+  const normalizedLines = normalizeQuotePackageLineItems(input.body);
+  const equipment = normalizedLines.filter((row) => row.line_type === "equipment");
+  const attachments = normalizedLines.filter((row) => row.line_type !== "equipment");
   const snapshot = buildQuoteVersionSnapshot({
     quotePackageId: input.quotePackageId ?? null,
     dealId: input.dealId ?? null,
@@ -1490,20 +1599,24 @@ function buildQuoteVersionArtifacts(input: {
     marginPct: typeof input.body.margin_pct === "number" ? input.body.margin_pct : Number(input.body.margin_pct ?? 0),
     amount: typeof input.body.net_total === "number" ? input.body.net_total : Number(input.body.net_total ?? 0),
     equipment: equipment.map((row) => ({
-      id: typeof row.id === "string" ? row.id : null,
-      title: [row.make, row.model].filter(Boolean).join(" ").trim(),
+      id: typeof row.catalog_entry_id === "string" ? row.catalog_entry_id : null,
+      title: typeof row.description === "string" ? row.description : [row.make, row.model].filter(Boolean).join(" ").trim(),
       make: typeof row.make === "string" ? row.make : null,
       model: typeof row.model === "string" ? row.model : null,
-      quantity: 1,
-      unitPrice: Number(row.price ?? 0) || 0,
+      quantity: Number(row.quantity ?? 1) || 1,
+      unitPrice: Number(row.unit_price ?? row.quoted_list_price ?? 0) || 0,
+      kind: "equipment",
     })),
     attachments: attachments.map((row) => ({
-      id: null,
-      title: typeof row.name === "string" ? row.name : "",
-      make: null,
-      model: null,
-      quantity: 1,
-      unitPrice: Number(row.price ?? 0) || 0,
+      id: typeof row.catalog_entry_id === "string" ? row.catalog_entry_id : null,
+      title: typeof row.description === "string" ? row.description : "",
+      make: typeof row.make === "string" ? row.make : null,
+      model: typeof row.model === "string" ? row.model : null,
+      quantity: Number(row.quantity ?? 1) || 1,
+      unitPrice: Number(row.unit_price ?? row.quoted_list_price ?? 0) || 0,
+      kind: typeof row.line_type === "string" && QUOTE_PACKAGE_LINE_TYPES.has(row.line_type)
+        ? row.line_type as QuoteVersionSnapshot["attachments"][number]["kind"]
+        : "custom",
     })),
     quoteStatus: (typeof input.status === "string" ? input.status : "draft") as QuoteVersionSnapshot["quoteStatus"],
     savedAt: new Date().toISOString(),
@@ -1721,6 +1834,8 @@ function buildQuoteApprovalReasonSummary(input: {
     branch_manager_band_floor_pct: input.policy.branchManagerMinMarginPct,
     standard_floor_pct: input.policy.standardMarginFloorPct,
     branch_manager_max_quote_amount: input.policy.branchManagerMaxQuoteAmount,
+    trade_credit_max: input.policy.tradeCreditMax,
+    rep_discount_max_pct: input.policy.repDiscountMaxPct,
     reasons,
   };
 }
@@ -2480,7 +2595,7 @@ Deno.serve(async (req) => {
 
       let query = supabase
         .from("quote_packages")
-        .select("*, quote_signatures(*), quote_package_line_items(*)");
+        .select("*, quote_signatures(*), quote_package_line_items(*), quote_financing_scenarios(*)");
 
       if (packageId) {
         query = query.eq("id", packageId);
@@ -2592,7 +2707,7 @@ Deno.serve(async (req) => {
       const admin = createAdminClient();
       const { data: sourceLines } = await admin
         .from("quote_package_line_items")
-        .select("workspace_id, catalog_entry_id, make, model, year, quoted_list_price, quoted_dealer_cost, quantity, source_location, line_type, description, unit_price, extended_price, display_order, metadata")
+        .select("workspace_id, catalog_entry_id, make, model, year, quoted_list_price, quoted_dealer_cost, quantity, source_location, line_type, description, unit_price, extended_price, display_order, reason_code, approval_required, metadata")
         .eq("quote_package_id", quotePackageId)
         .order("display_order", { ascending: true });
       if (Array.isArray(sourceLines) && sourceLines.length > 0) {
@@ -3108,6 +3223,23 @@ Deno.serve(async (req) => {
       const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const rawLogId = typeof body.originating_log_id === "string" ? body.originating_log_id : null;
       const originatingLogId = rawLogId && UUID_RE.test(rawLogId) ? rawLogId : null;
+      const selectedPromotionIds = Array.isArray(body.selected_promotion_ids)
+        ? body.selected_promotion_ids.filter((value: unknown): value is string =>
+          typeof value === "string" && UUID_RE.test(value))
+        : [];
+      const rawTaxJurisdictionId = typeof body.tax_jurisdiction_id === "string" ? body.tax_jurisdiction_id : null;
+      const taxJurisdictionId = rawTaxJurisdictionId && UUID_RE.test(rawTaxJurisdictionId) ? rawTaxJurisdictionId : null;
+      const taxOverrideAmount = body.tax_override_amount == null || body.tax_override_amount === ""
+        ? null
+        : clampCurrency(body.tax_override_amount);
+      const taxOverrideReason = taxOverrideAmount == null
+        ? null
+        : typeof body.tax_override_reason === "string" && body.tax_override_reason.trim().length > 0
+          ? body.tax_override_reason.trim().slice(0, 500)
+          : null;
+      if (taxOverrideAmount != null && !taxOverrideReason) {
+        return safeJsonError("tax_override_reason is required when tax_override_amount is provided", 400, origin);
+      }
 
       // Slice 20e: win-probability snapshot. We store the client-computed
       // rule-based scorer result alongside the quote. Defensive validation:
@@ -3274,6 +3406,20 @@ Deno.serve(async (req) => {
           amount_financed: body.amount_financed || 0,
           tax_profile: typeof body.tax_profile === "string" ? body.tax_profile : "standard",
           selected_finance_scenario: typeof body.selected_finance_scenario === "string" ? body.selected_finance_scenario : null,
+          wizard_step: Number.isFinite(Number(body.wizard_step)) ? Math.max(1, Math.min(11, Math.round(Number(body.wizard_step)))) : null,
+          expires_at: typeof body.expires_at === "string" ? body.expires_at : null,
+          follow_up_at: typeof body.follow_up_at === "string" ? body.follow_up_at : null,
+          deposit_required_amount: body.deposit_required_amount == null ? null : clampCurrency(body.deposit_required_amount),
+          delivery_eta: typeof body.delivery_eta === "string" ? body.delivery_eta.trim().slice(0, 240) || null : null,
+          delivery_state: typeof body.delivery_state === "string" ? body.delivery_state.trim().slice(0, 2).toUpperCase() || null : null,
+          delivery_county: typeof body.delivery_county === "string" ? body.delivery_county.trim().slice(0, 120) || null : null,
+          special_terms: typeof body.special_terms === "string" ? body.special_terms.trim().slice(0, 4000) || null : null,
+          why_this_machine: typeof body.why_this_machine === "string" ? body.why_this_machine.trim().slice(0, 4000) || null : null,
+          why_this_machine_confirmed: body.why_this_machine_confirmed === true,
+          tax_jurisdiction_id: taxJurisdictionId,
+          tax_override_amount: taxOverrideAmount,
+          tax_override_reason: taxOverrideReason,
+          selected_promotion_ids: selectedPromotionIds,
           margin_amount: body.margin_amount,
           margin_pct: body.margin_pct,
           ai_recommendation: body.ai_recommendation,
@@ -3319,6 +3465,17 @@ Deno.serve(async (req) => {
       if (syncedLineItems.error) {
         console.error("quote line item sync error:", syncedLineItems.error);
         return safeJsonError(`Quote saved but line-item sync failed: ${syncedLineItems.error}`, 500, origin);
+      }
+
+      const syncedFinancingScenarios = await syncQuoteFinancingScenarios({
+        admin,
+        quotePackageId: String(data.id),
+        workspaceId,
+        body,
+      });
+      if (syncedFinancingScenarios.error) {
+        console.error("quote financing scenario sync error:", syncedFinancingScenarios.error);
+        return safeJsonError(`Quote saved but financing scenario sync failed: ${syncedFinancingScenarios.error}`, 500, origin);
       }
 
       const versionArtifacts = buildQuoteVersionArtifacts({
@@ -3686,6 +3843,8 @@ Deno.serve(async (req) => {
         branchManagerMinMarginPct: Number(body.branch_manager_min_margin_pct ?? existing.branchManagerMinMarginPct) || existing.branchManagerMinMarginPct,
         standardMarginFloorPct: Number(body.standard_margin_floor_pct ?? existing.standardMarginFloorPct) || existing.standardMarginFloorPct,
         branchManagerMaxQuoteAmount: Number(body.branch_manager_max_quote_amount ?? existing.branchManagerMaxQuoteAmount) || existing.branchManagerMaxQuoteAmount,
+        tradeCreditMax: body.trade_credit_max == null ? existing.tradeCreditMax : Number(body.trade_credit_max),
+        repDiscountMaxPct: body.rep_discount_max_pct == null ? existing.repDiscountMaxPct : Number(body.rep_discount_max_pct),
         submitSlaHours: Number(body.submit_sla_hours ?? existing.submitSlaHours) || existing.submitSlaHours,
         escalationSlaHours: Number(body.escalation_sla_hours ?? existing.escalationSlaHours) || existing.escalationSlaHours,
         ownerEscalationRole: body.owner_escalation_role === "admin" ? "admin" : existing.ownerEscalationRole,
@@ -3707,6 +3866,8 @@ Deno.serve(async (req) => {
           branch_manager_min_margin_pct: nextPolicy.branchManagerMinMarginPct,
           standard_margin_floor_pct: nextPolicy.standardMarginFloorPct,
           branch_manager_max_quote_amount: nextPolicy.branchManagerMaxQuoteAmount,
+          trade_credit_max: Number.isFinite(Number(nextPolicy.tradeCreditMax)) ? nextPolicy.tradeCreditMax : null,
+          rep_discount_max_pct: Number.isFinite(Number(nextPolicy.repDiscountMaxPct)) ? nextPolicy.repDiscountMaxPct : null,
           submit_sla_hours: nextPolicy.submitSlaHours,
           escalation_sla_hours: nextPolicy.escalationSlaHours,
           owner_escalation_role: nextPolicy.ownerEscalationRole,

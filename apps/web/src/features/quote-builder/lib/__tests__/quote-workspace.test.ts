@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   computeCommercialDiscountTotal,
+  computeQuoteSendActionReadiness,
   computeQuoteWorkspace,
   hasQuoteCustomerIdentity,
+  isQuoteWhyThisMachineConfirmationRequired,
   isTaxProfileExempt,
 } from "../quote-workspace";
 import type { QuoteWorkspaceDraft } from "../../../../../../../shared/qep-moonshot-contracts";
@@ -91,6 +93,91 @@ describe("isTaxProfileExempt", () => {
   });
 });
 
+describe("computeQuoteSendActionReadiness", () => {
+  test("keeps customer-facing email blocked until approval, document, follow-up, and email are present", () => {
+    const result = computeQuoteSendActionReadiness({
+      channel: "email",
+      quotePackageId: "quote-1",
+      approvalCaseCanSend: false,
+      documentReady: false,
+      followUpAt: null,
+      customerEmail: "",
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.missing).toEqual([
+      "clean owner approval",
+      "document preview/generation",
+      "follow-up date",
+      "customer email",
+    ]);
+  });
+
+  test("allows preview logging after clean approval and document fallback are ready without requiring follow-up", () => {
+    const result = computeQuoteSendActionReadiness({
+      channel: "preview",
+      quotePackageId: "quote-1",
+      approvalCaseCanSend: true,
+      documentReady: true,
+      followUpAt: null,
+    });
+
+    expect(result.ready).toBe(true);
+    expect(result.missing).toEqual([]);
+  });
+
+  test("requires rep-confirmed Why this machine narrative when present", () => {
+    const result = computeQuoteSendActionReadiness({
+      channel: "preview",
+      quotePackageId: "quote-1",
+      approvalCaseCanSend: true,
+      documentReady: true,
+      whyThisMachineRequired: true,
+      whyThisMachineConfirmed: false,
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.missing).toEqual(["rep-confirmed Why this machine narrative"]);
+  });
+
+  test("blocks customer-facing actions while tax preview is unresolved", () => {
+    const result = computeQuoteSendActionReadiness({
+      channel: "preview",
+      quotePackageId: "quote-1",
+      approvalCaseCanSend: true,
+      documentReady: true,
+      taxResolved: false,
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.missing).toEqual(["resolved tax preview or override reason"]);
+  });
+
+  test("requires phone and follow-up before text quote send/log", () => {
+    const result = computeQuoteSendActionReadiness({
+      channel: "text",
+      quotePackageId: "quote-1",
+      approvalCaseCanSend: true,
+      documentReady: true,
+      followUpAt: "",
+      customerPhone: "",
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.missing).toEqual(["follow-up date", "customer phone"]);
+  });
+});
+
+describe("isQuoteWhyThisMachineConfirmationRequired", () => {
+  test("requires confirmation when AI reasoning or narrative text exists", () => {
+    expect(isQuoteWhyThisMachineConfirmationRequired(makeDraft({ whyThisMachine: "Fits the job." }))).toBe(true);
+    expect(isQuoteWhyThisMachineConfirmationRequired(makeDraft({
+      recommendation: { machine: "CTL", attachments: [], reasoning: "AI suggested fit." },
+    }))).toBe(true);
+    expect(isQuoteWhyThisMachineConfirmationRequired(makeDraft())).toBe(false);
+  });
+});
+
 describe("computeQuoteWorkspace", () => {
   test("computes commercial totals from discount, trade, tax, and cash down", () => {
     const result = computeQuoteWorkspace(makeDraft({
@@ -115,6 +202,56 @@ describe("computeQuoteWorkspace", () => {
     expect(result.packetReadiness.canSave).toBe(true);
     expect(result.packetReadiness.canSend).toBe(false);
     expect(result.packetReadiness.send.missing).toContain("manager approval (margin below 10%)");
+  });
+
+  test("includes wizard pricing adders and rebate lines in taxable workspace totals", () => {
+    const result = computeQuoteWorkspace(makeDraft({
+      branchSlug: "lake-city",
+      customerName: "Anderson",
+      customerEmail: "buyer@example.com",
+      equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 100_000 }],
+      attachments: [
+        { kind: "option", title: "Hydraulic coupler", quantity: 1, unitPrice: 4_000 },
+        { kind: "accessory", title: "Beacon kit", quantity: 1, unitPrice: 1_000 },
+      ],
+      pricingLines: [
+        { kind: "freight", title: "Freight", quantity: 1, unitPrice: 1_500 },
+        { kind: "pdi", title: "PDI", quantity: 1, unitPrice: 750 },
+        { kind: "rebate_mfg", title: "Manufacturer rebate", quantity: 1, unitPrice: 2_000 },
+      ],
+      commercialDiscountType: "flat",
+      commercialDiscountValue: 1_000,
+      tradeAllowance: 10_000,
+      taxTotal: 5_595,
+    }));
+
+    expect(result.equipmentTotal).toBe(100_000);
+    expect(result.attachmentTotal).toBe(5_000);
+    expect(result.pricingLineTotal).toBe(2_250);
+    expect(result.subtotal).toBe(107_250);
+    expect(result.discountTotal).toBe(3_000);
+    expect(result.taxableBasis).toBe(94_250);
+    expect(result.customerTotal).toBe(99_845);
+  });
+
+  test("legacy custom and financing attachment rows still contribute to totals", () => {
+    const result = computeQuoteWorkspace(makeDraft({
+      branchSlug: "lake-city",
+      customerName: "Anderson",
+      customerEmail: "buyer@example.com",
+      equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 100_000 }],
+      attachments: [
+        { kind: "custom", title: "Legacy custom setup", quantity: 1, unitPrice: 2_000 },
+        { kind: "financing", title: "Legacy finance fee", quantity: 1, unitPrice: 750 },
+      ],
+      taxTotal: 6_000,
+    }));
+
+    expect(result.attachmentTotal).toBe(0);
+    expect(result.pricingLineTotal).toBe(2_750);
+    expect(result.subtotal).toBe(102_750);
+    expect(result.taxableBasis).toBe(102_750);
+    expect(result.customerTotal).toBe(108_750);
   });
 
   test("approved low-margin quotes become send-ready", () => {

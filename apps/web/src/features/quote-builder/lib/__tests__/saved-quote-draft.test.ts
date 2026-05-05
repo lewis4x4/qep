@@ -25,6 +25,12 @@ describe("hydrateDraftFromSavedQuote", () => {
       tax_total: 0,
       amount_financed: 48700,
       selected_finance_scenario: "48 mo @ 0%",
+      wizard_step: 5,
+      delivery_state: "FL",
+      delivery_county: "Columbia",
+      tax_override_amount: null,
+      follow_up_at: "2026-05-08T14:00:00Z",
+      financing_scenarios: [{ type: "finance", kind: "finance", label: "48 mo @ 0%", term_months: 48, apr: 0 }],
       customer_name: "Thomas Sykes",
       customer_company: "Sykes Earthworks",
       customer_phone: "919-555-0100",
@@ -52,6 +58,10 @@ describe("hydrateDraftFromSavedQuote", () => {
       taxTotal: 0,
       amountFinanced: 48700,
       selectedFinanceScenario: "48 mo @ 0%",
+      wizardStep: 5,
+      deliveryState: "FL",
+      deliveryCounty: "Columbia",
+      followUpAt: "2026-05-08T14:00:00Z",
       customerName: "Thomas Sykes",
       customerCompany: "Sykes Earthworks",
       customerPhone: "919-555-0100",
@@ -84,6 +94,13 @@ describe("hydrateDraftFromSavedQuote", () => {
         unitPrice: 4200,
       },
     ]);
+    expect(draft.savedFinanceScenarios?.[0]).toMatchObject({
+      type: "finance",
+      kind: "finance",
+      label: "48 mo @ 0%",
+      termMonths: 48,
+      apr: 0,
+    });
   });
 
   test("falls back to safe defaults for sparse or legacy quote rows", () => {
@@ -166,9 +183,14 @@ describe("hydrateDraftFromSavedQuote", () => {
         year: null,
         quantity: 2,
         unitPrice: 1500,
+        reasonCode: null,
+        approvalRequired: false,
+        metadata: { source_catalog: "manual", source_id: "manual-1" },
         sourceCatalog: "manual",
         sourceId: "manual-1",
       },
+    ]);
+    expect(draft.pricingLines).toEqual([
       {
         kind: "custom",
         id: "line-2",
@@ -178,6 +200,9 @@ describe("hydrateDraftFromSavedQuote", () => {
         year: null,
         quantity: 1,
         unitPrice: 500,
+        reasonCode: null,
+        approvalRequired: false,
+        metadata: null,
       },
     ]);
     expect(draft.recommendation?.attachments).toEqual(["Loader"]);

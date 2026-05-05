@@ -16,25 +16,7 @@ import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors
 import { requireServiceUser } from "../_shared/service-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
-interface TaxLine {
-  description: string;
-  rate: number;
-  amount: number;
-  applies_to: string;
-}
-
-type QuoteTaxProfile =
-  | "standard"
-  | "agriculture_exempt"
-  | "fire_mitigation_exempt"
-  | "government_exempt"
-  | "resale_exempt";
-
-function clampCurrency(value: unknown): number {
-  const numeric = Number(value ?? 0);
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.round(Math.max(0, numeric) * 100) / 100;
-}
+import { clampCurrency, computeQuoteTax, type QuoteTaxProfile, type TaxLine } from "./tax-logic.ts";
 
 function computeSection179(
   equipmentCost: number,
@@ -67,6 +49,7 @@ Deno.serve(async (req) => {
     const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
     if (!auth.ok) return auth.response;
     const supabase = auth.supabase;
+    const workspaceId = auth.workspaceId || "default";
 
     // tax_treatments, tax_exemption_certificates, section_179_scenarios are
     // admin-managed tables — keep a service-role client for those reads/inserts.
@@ -83,32 +66,37 @@ Deno.serve(async (req) => {
     const discountTotal = clampCurrency(body.discount_total);
     const tradeAllowance = clampCurrency(body.trade_allowance);
     const taxProfile = (typeof body.tax_profile === "string" ? body.tax_profile : "standard") as QuoteTaxProfile;
-    const taxableBasis = Math.max(0, subtotal - discountTotal - tradeAllowance);
-    const section179Base = Math.max(0, subtotal - discountTotal);
+    const deliveryState = typeof body.delivery_state === "string" ? body.delivery_state.trim().toUpperCase() : null;
+    const deliveryCounty = typeof body.delivery_county === "string" ? body.delivery_county.trim() : null;
+    const taxOverrideAmount = body.tax_override_amount == null || body.tax_override_amount === ""
+      ? null
+      : clampCurrency(body.tax_override_amount);
+    const taxOverrideReason = typeof body.tax_override_reason === "string" ? body.tax_override_reason.trim() : "";
+    const taxableBasis = clampCurrency(subtotal - discountTotal - tradeAllowance);
+    const section179Base = clampCurrency(subtotal - discountTotal);
 
     if (subtotal <= 0) return safeJsonError("subtotal must be positive", 400, origin);
-    if (!branchSlug) return safeJsonError("branch_slug required", 400, origin);
-
-    const { data: branch } = await supabaseAdmin
-      .from("branches")
-      .select("slug, state_province")
-      .eq("slug", branchSlug)
-      .eq("is_active", true)
-      .is("deleted_at", null)
-      .maybeSingle();
-
-    if (!branch?.state_province) {
-      return safeJsonError("Branch tax jurisdiction unavailable", 400, origin);
+    if (taxOverrideAmount != null && taxOverrideReason.length === 0) {
+      return safeJsonError("tax_override_reason is required when tax_override_amount is provided", 400, origin);
     }
 
-    // Look up tax treatments for branch jurisdiction
-    const { data: taxTreatments } = await supabaseAdmin
-      .from("tax_treatments")
-      .select("*")
-      .eq("is_active", true)
-      .eq("jurisdiction", branch.state_province)
-      .eq("tax_type", "sales_tax")
-      .order("applies_to");
+    let branchState: string | null = null;
+    if (branchSlug) {
+      const { data: branch } = await supabaseAdmin
+        .from("branches")
+        .select("slug, state_province")
+        .eq("workspace_id", workspaceId)
+        .eq("slug", branchSlug)
+        .eq("is_active", true)
+        .is("deleted_at", null)
+        .maybeSingle();
+      branchState = typeof branch?.state_province === "string" ? branch.state_province : null;
+    }
+
+    const stateCode = deliveryState || branchState;
+    if (!stateCode) {
+      return safeJsonError("delivery_state or branch_slug required for tax jurisdiction", 400, origin);
+    }
 
     // Check for customer exemptions
     let exemptionsApplied: string[] = [];
@@ -136,12 +124,73 @@ Deno.serve(async (req) => {
       ];
     }
 
-    // Calculate tax lines
-    const taxLines: TaxLine[] = [];
-    let totalTax = 0;
+    let taxResult = computeQuoteTax({
+      subtotal,
+      discountTotal,
+      tradeAllowance,
+      taxProfile,
+      stateCode,
+      countyName: deliveryCounty,
+      exemptionsApplied,
+      taxOverrideAmount,
+      taxOverrideReason,
+    });
 
-    if (exemptionsApplied.length === 0 && taxTreatments) {
-      for (const tt of taxTreatments) {
+    if (taxResult.exemptions_applied.length === 0 && !taxResult.manual_override_applied && stateCode.toUpperCase() === "FL") {
+      let jurisdiction: Record<string, unknown> | null = null;
+      if (!deliveryCounty) {
+        return safeJsonError("delivery_county is required for taxable Florida tax preview", 400, origin);
+      }
+      const lookupCounty = deliveryCounty.replace(/\s+county$/i, "").trim();
+      const allowedJurisdictionWorkspaces = Array.from(new Set([workspaceId, "global"]));
+      const { data } = await supabaseAdmin
+        .from("tax_jurisdictions")
+        .select("id, workspace_id, state_code, county_name, jurisdiction_name, state_rate, county_surtax_rate, surtax_cap_amount")
+        .in("workspace_id", allowedJurisdictionWorkspaces)
+        .eq("state_code", "FL")
+        .ilike("county_name", lookupCounty)
+        .eq("is_active", true)
+        .order("effective_date", { ascending: false })
+        .limit(10);
+      const jurisdictionRows = Array.isArray(data) ? data : [];
+      jurisdiction = jurisdictionRows.find((row) => row.workspace_id === workspaceId)
+        ?? jurisdictionRows.find((row) => row.workspace_id === "global")
+        ?? null;
+      if (!jurisdiction) {
+        return safeJsonError(`Florida tax jurisdiction unavailable for ${deliveryCounty}`, 400, origin);
+      }
+      taxResult = computeQuoteTax({
+        subtotal,
+        discountTotal,
+        tradeAllowance,
+        taxProfile,
+        stateCode,
+        countyName: deliveryCounty,
+        jurisdiction: jurisdiction
+          ? {
+            id: typeof jurisdiction.id === "string" ? jurisdiction.id : null,
+            state_code: typeof jurisdiction.state_code === "string" ? jurisdiction.state_code : "FL",
+            county_name: typeof jurisdiction.county_name === "string" ? jurisdiction.county_name : deliveryCounty,
+            jurisdiction_name: typeof jurisdiction.jurisdiction_name === "string" ? jurisdiction.jurisdiction_name : null,
+            state_rate: Number(jurisdiction.state_rate ?? 0.06),
+            county_surtax_rate: Number(jurisdiction.county_surtax_rate ?? 0),
+            surtax_cap_amount: jurisdiction.surtax_cap_amount == null ? null : Number(jurisdiction.surtax_cap_amount),
+          }
+          : null,
+        exemptionsApplied,
+      });
+    } else if (taxResult.exemptions_applied.length === 0 && !taxResult.manual_override_applied) {
+      // Preserve legacy non-FL treatment-table behavior.
+      const { data: taxTreatments } = await supabaseAdmin
+        .from("tax_treatments")
+        .select("*")
+        .eq("is_active", true)
+        .eq("jurisdiction", stateCode)
+        .eq("tax_type", "sales_tax")
+        .order("applies_to");
+      const taxLines: TaxLine[] = [];
+      let totalTax = 0;
+      for (const tt of taxTreatments ?? []) {
         if (["equipment_new", "attachments"].includes(tt.applies_to) && taxableBasis > 0) {
           const amount = Math.round(taxableBasis * tt.rate * 100) / 100;
           taxLines.push({
@@ -153,6 +202,13 @@ Deno.serve(async (req) => {
           totalTax += amount;
         }
       }
+      taxResult = {
+        ...taxResult,
+        tax_lines: taxLines,
+        total_tax: Math.round(totalTax * 100) / 100,
+        state_tax: Math.round(totalTax * 100) / 100,
+        county_tax: 0,
+      };
     }
 
     // Section 179 scenarios
@@ -180,9 +236,13 @@ Deno.serve(async (req) => {
     }
 
     return safeJsonOk({
-      tax_lines: taxLines,
-      total_tax: totalTax,
-      exemptions_applied: exemptionsApplied,
+      tax_lines: taxResult.tax_lines,
+      total_tax: taxResult.total_tax,
+      state_tax: taxResult.state_tax,
+      county_tax: taxResult.county_tax,
+      taxable_basis: taxResult.taxable_basis,
+      exemptions_applied: taxResult.exemptions_applied,
+      manual_override_applied: taxResult.manual_override_applied,
       section_179: section179,
       equipment_cost: section179Base,
     }, origin);

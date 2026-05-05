@@ -10,13 +10,17 @@ export interface QuoteTaxPreviewInput {
   discountTotal: number;
   tradeAllowance: number;
   taxProfile: QuoteTaxProfile;
+  deliveryState?: string;
+  deliveryCounty?: string;
+  taxOverrideAmount?: number | null;
+  taxOverrideReason?: string | null;
   include179?: boolean;
   taxYear?: number;
   effectiveTaxRate?: number;
 }
 
 export function useQuoteTaxPreview(input: QuoteTaxPreviewInput) {
-  const enabled = Boolean(input.branchSlug) && input.subtotal > 0;
+  const enabled = Boolean(input.branchSlug || input.deliveryState) && input.subtotal > 0;
 
   return useQuery<TaxCalculation>({
     queryKey: [
@@ -29,6 +33,10 @@ export function useQuoteTaxPreview(input: QuoteTaxPreviewInput) {
       input.discountTotal,
       input.tradeAllowance,
       input.taxProfile,
+      input.deliveryState ?? null,
+      input.deliveryCounty ?? null,
+      input.taxOverrideAmount ?? null,
+      input.taxOverrideReason ?? null,
       input.include179 ?? true,
       input.taxYear ?? null,
       input.effectiveTaxRate ?? null,
@@ -41,6 +49,10 @@ export function useQuoteTaxPreview(input: QuoteTaxPreviewInput) {
       discount_total: input.discountTotal,
       trade_allowance: input.tradeAllowance,
       tax_profile: input.taxProfile,
+      delivery_state: input.deliveryState,
+      delivery_county: input.deliveryCounty,
+      tax_override_amount: input.taxOverrideAmount,
+      tax_override_reason: input.taxOverrideReason,
       include_179: input.include179,
       tax_year: input.taxYear,
       effective_tax_rate: input.effectiveTaxRate,

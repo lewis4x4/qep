@@ -14,6 +14,8 @@ const policy: QuoteApprovalPolicy = {
   branchManagerMinMarginPct: 8,
   standardMarginFloorPct: 10,
   branchManagerMaxQuoteAmount: 250000,
+  tradeCreditMax: null,
+  repDiscountMaxPct: null,
   submitSlaHours: 24,
   escalationSlaHours: 48,
   ownerEscalationRole: "owner",

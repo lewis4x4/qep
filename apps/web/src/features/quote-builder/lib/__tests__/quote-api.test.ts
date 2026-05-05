@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildQuoteListActionPayload,
+  buildQuoteSavePayload,
   buildQuoteListUrl,
   normalizeClosedDealsAudit,
   normalizeFactorAttributionDeals,
@@ -23,6 +24,88 @@ import {
   normalizeScorerCalibrationObservations,
   normalizeSendQuotePackageResponse,
 } from "../quote-api";
+import type { QuoteWorkspaceDraft } from "../../../../../../../shared/qep-moonshot-contracts";
+
+function makeQuoteDraft(overrides: Partial<QuoteWorkspaceDraft> = {}): QuoteWorkspaceDraft {
+  return {
+    entryMode: "manual",
+    branchSlug: "lake-city",
+    recommendation: null,
+    voiceSummary: null,
+    equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 100_000 }],
+    attachments: [],
+    pricingLines: [],
+    tradeAllowance: 0,
+    tradeValuationId: null,
+    commercialDiscountType: "flat",
+    commercialDiscountValue: 0,
+    cashDown: 0,
+    taxProfile: "standard",
+    taxTotal: 0,
+    amountFinanced: 100_000,
+    selectedFinanceScenario: null,
+    customerName: "Walk-in prospect",
+    customerCompany: "",
+    customerPhone: "",
+    customerEmail: "buyer@example.com",
+    customerSignals: null,
+    customerWarmth: null,
+    quoteStatus: "draft",
+    ...overrides,
+  };
+}
+
+const computedQuoteTotals = {
+  equipmentTotal: 100_000,
+  attachmentTotal: 0,
+  subtotal: 100_000,
+  discountTotal: 1_000,
+  discountedSubtotal: 99_000,
+  netTotal: 99_000,
+  taxTotal: 0,
+  customerTotal: 99_000,
+  cashDown: 0,
+  amountFinanced: 99_000,
+  marginAmount: 20_000,
+  marginPct: 20,
+};
+
+describe("buildQuoteSavePayload", () => {
+  test("does not persist placeholder promotion ids or promotion marker reason codes", () => {
+    const realPromotionId = "11111111-1111-4111-8111-111111111111";
+    const payload = buildQuoteSavePayload(
+      makeQuoteDraft({
+        selectedPromotionIds: ["seed-mfg-support", realPromotionId],
+        pricingLines: [
+          {
+            kind: "rebate_mfg",
+            id: "rebate_mfg-1",
+            title: "Manufacturer retail support",
+            quantity: 1,
+            unitPrice: 1_000,
+            reasonCode: "seed-mfg-support",
+            metadata: { promotion_placeholder_id: "seed-mfg-support" },
+          },
+          {
+            kind: "discount",
+            id: "discount-1",
+            title: "Manual discount",
+            quantity: 1,
+            unitPrice: 500,
+            reasonCode: "competitive_match",
+          },
+        ],
+      }),
+      computedQuoteTotals,
+      [],
+    );
+
+    expect(payload.selected_promotion_ids).toEqual([realPromotionId]);
+    const lines = payload.line_items as Array<Record<string, unknown>>;
+    expect(lines.find((line) => line.line_type === "rebate_mfg")?.reason_code).toBeUndefined();
+    expect(lines.find((line) => line.line_type === "discount")?.reason_code).toBe("competitive_match");
+  });
+});
 
 describe("normalizeQuoteFinanceScenario", () => {
   test("maps snake_case backend fields into the shared frontend contract", () => {
