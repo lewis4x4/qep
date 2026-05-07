@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { DataSourceBadge } from "@/components/DataSourceBadge";
@@ -27,6 +27,7 @@ interface QrmActivityComposerProps {
   }) => Promise<void>;
   isPending: boolean;
   subjectLabel: string;
+  initialActivityType?: QrmActivityType;
 }
 
 interface IntegrationAvailabilityResponse {
@@ -49,7 +50,9 @@ export function QrmActivityComposer({
   onSubmit,
   isPending,
   subjectLabel,
+  initialActivityType,
 }: QrmActivityComposerProps) {
+  const wasOpenRef = useRef(false);
   const [activityType, setActivityType] = useState<QrmActivityType>("call");
   const [body, setBody] = useState("");
   const [sendNow, setSendNow] = useState(true);
@@ -85,6 +88,15 @@ export function QrmActivityComposer({
   );
 
   const canSubmit = useMemo(() => body.trim().length > 0 && !isPending, [body, isPending]);
+
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      setActivityType(initialActivityType ?? "call");
+      setSelectedTemplateId(null);
+      setTaskError(null);
+    }
+    wasOpenRef.current = open;
+  }, [open, initialActivityType]);
 
   useEffect(() => {
     if (!isCommunicationType) {

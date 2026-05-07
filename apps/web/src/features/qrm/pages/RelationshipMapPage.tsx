@@ -20,15 +20,11 @@ import { normalizeExtractedDealData } from "@/lib/voice-capture-extraction";
 import { fetchAccount360 } from "../lib/account-360-api";
 import {
   buildAccountCommandHref,
-  buildAccountFleetIntelligenceHref,
-  buildAccountGenomeHref,
-  buildAccountOperatingProfileHref,
-  buildAccountRelationshipMapHref,
-  buildAccountWhiteSpaceHref,
 } from "../lib/account-command";
 import { buildRelationshipMapBoard, type RelationshipRole } from "../lib/relationship-map";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { QrmAccountDetailMenu } from "../components/QrmAccountDetailMenu";
 
 function formatDate(value: string | null): string {
   if (!value) return "No recent signal";
@@ -216,20 +212,7 @@ export function RelationshipMapPage() {
             Back to account
           </Link>
         </Button>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountGenomeHref(accountId)}>Customer Genome</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountOperatingProfileHref(accountId)}>Operating Profile</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountFleetIntelligenceHref(accountId)}>Fleet Intelligence</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountWhiteSpaceHref(accountId)}>White-Space Map</Link>
-          </Button>
-        </div>
+        <QrmAccountDetailMenu accountId={accountId} />
       </div>
 
       <QrmPageHeader

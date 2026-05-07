@@ -19,15 +19,13 @@ import { fetchAccount360 } from "../lib/account-360-api";
 import {
   buildAccountCommandHref,
   buildAccountFleetIntelligenceHref,
-  buildAccountGenomeHref,
-  buildAccountOperatingProfileHref,
   buildAccountRentalConversionHref,
-  buildAccountRelationshipMapHref,
   buildAccountWhiteSpaceHref,
 } from "../lib/account-command";
 import { buildWhiteSpaceMapBoard, type WhiteSpaceOpportunity, type WhiteSpaceOpportunityType } from "../lib/white-space-map";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { QrmAccountDetailMenu } from "../components/QrmAccountDetailMenu";
 
 function typeMeta(type: WhiteSpaceOpportunityType): { label: string; icon: ComponentType<{ className?: string }>; tone: string } {
   switch (type) {
@@ -162,20 +160,7 @@ export function WhiteSpaceMapPage() {
             Back to account
           </Link>
         </Button>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountGenomeHref(accountId)}>Customer Genome</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountOperatingProfileHref(accountId)}>Operating Profile</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountRelationshipMapHref(accountId)}>Relationship Map</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountRentalConversionHref(accountId)}>Rental Conversion</Link>
-          </Button>
-        </div>
+        <QrmAccountDetailMenu accountId={accountId} />
       </div>
 
       <QrmPageHeader

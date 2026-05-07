@@ -305,6 +305,9 @@ const RepRealityReflectionPage = lazy(() =>
 const AccountCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/AccountCommandCenterPage").then((m) => ({ default: m.AccountCommandCenterPage }))
 );
+const AccountTimelinePage = lazy(() =>
+  import("./features/qrm/pages/AccountTimelinePage").then((m) => ({ default: m.AccountTimelinePage }))
+);
 const CustomerGenomePage = lazy(() =>
   import("./features/qrm/pages/CustomerGenomePage").then((m) => ({ default: m.CustomerGenomePage }))
 );
@@ -2417,7 +2420,7 @@ function App() {
                 path="/qrm/accounts/:accountId/timeline"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <LifecyclePage />
+                    <AccountTimelinePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

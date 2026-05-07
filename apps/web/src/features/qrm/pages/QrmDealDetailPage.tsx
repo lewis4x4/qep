@@ -27,7 +27,7 @@ import {
 } from "../lib/qrm-api";
 import { dealCompositeQueryKey } from "../lib/deal-composite-keys";
 import { fetchDealComposite } from "../lib/deal-composite-api";
-import type { QrmDealPatchInput } from "../lib/types";
+import type { QrmActivityType, QrmDealPatchInput } from "../lib/types";
 
 const QrmActivityComposer = lazy(() =>
   import("../components/QrmActivityComposer").then((m) => ({ default: m.QrmActivityComposer }))
@@ -84,7 +84,13 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
   const isElevatedRole = userRole === "admin" || userRole === "manager" || userRole === "owner";
 
   const [composerOpen, setComposerOpen] = useState(false);
+  const [composerInitialActivityType, setComposerInitialActivityType] = useState<QrmActivityType>("call");
   const [stageId, setStageId] = useState("");
+
+  function openComposer(initialActivityType: QrmActivityType = "call"): void {
+    setComposerInitialActivityType(initialActivityType);
+    setComposerOpen(true);
+  }
   const [nextFollowUpInput, setNextFollowUpInput] = useState("");
   const [lossReason, setLossReason] = useState("");
   const [competitor, setCompetitor] = useState("");
@@ -803,7 +809,7 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
               <Suspense fallback={<div className="h-24 animate-pulse rounded bg-muted/20" />}>
                 <QrmActivityTimeline
                   activities={activitiesData}
-                  onLogActivity={() => setComposerOpen(true)}
+                  onLogActivity={openComposer}
                   entityLabel={dealName}
                   showEntityLabel={false}
                   pendingBodyId={pendingBodyId}
@@ -831,7 +837,7 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
 
       <Button
         className="fixed bottom-20 right-4 z-30 min-h-[44px] rounded-full px-5 shadow-lg sm:hidden"
-        onClick={() => setComposerOpen(true)}
+        onClick={() => openComposer("call")}
       >
         <Plus className="mr-1 h-4 w-4" />
         Log Activity
@@ -843,6 +849,7 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
           onOpenChange={setComposerOpen}
           isPending={createActivityMutation.isPending}
           subjectLabel={dealName}
+          initialActivityType={composerInitialActivityType}
           onSubmit={async (input) => {
             await createActivityMutation.mutateAsync(input);
           }}

@@ -28,7 +28,7 @@ import {
   listContactTerritories,
   listRepSafeDealsForContact,
 } from "../lib/qrm-api";
-import type { QrmActivityItem } from "../lib/types";
+import type { QrmActivityItem, QrmActivityType } from "../lib/types";
 
 interface QrmContactDetailPageProps {
   userId: string;
@@ -40,7 +40,13 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [composerOpen, setComposerOpen] = useState(false);
+  const [composerInitialActivityType, setComposerInitialActivityType] = useState<QrmActivityType>("call");
   const [editorOpen, setEditorOpen] = useState(false);
+
+  function openComposer(initialActivityType: QrmActivityType = "call"): void {
+    setComposerInitialActivityType(initialActivityType);
+    setComposerOpen(true);
+  }
 
   const contactQuery = useQuery({
     queryKey: ["crm", "contact", contactId],
@@ -208,7 +214,7 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
               New Quote
             </Link>
           </Button>
-          <Button className="hidden sm:inline-flex" onClick={() => setComposerOpen(true)}>
+          <Button className="hidden sm:inline-flex" onClick={() => openComposer("call")}>
             <Plus className="mr-2 h-4 w-4" />
             Log Activity
           </Button>
@@ -381,7 +387,7 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
             ) : (
               <QrmActivityTimeline
                 activities={activitiesQuery.data ?? []}
-                onLogActivity={() => setComposerOpen(true)}
+                onLogActivity={openComposer}
                 entityLabel={contactName}
                 showEntityLabel={false}
                 pendingBodyId={pendingBodyId}
@@ -408,7 +414,7 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
 
       <Button
         className="fixed bottom-20 right-4 z-30 min-h-[44px] rounded-full px-5 shadow-lg sm:hidden"
-        onClick={() => setComposerOpen(true)}
+        onClick={() => openComposer("call")}
       >
         <Plus className="mr-1 h-4 w-4" />
         Log Activity
@@ -419,6 +425,7 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
         onOpenChange={setComposerOpen}
         isPending={createActivityMutation.isPending}
         subjectLabel={contactName}
+        initialActivityType={composerInitialActivityType}
         onSubmit={async (input) => {
           await createActivityMutation.mutateAsync(input);
         }}

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CalendarDays, GitMerge, Loader2, Plus } from "lucide-react";
+import { ArrowLeft, Loader2, Plus } from "lucide-react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import type { UserRole } from "@/lib/database.types";
 import { QrmActivityComposer } from "../components/QrmActivityComposer";
+import { QrmAccountDetailMenu } from "../components/QrmAccountDetailMenu";
 import { QrmActivityTimeline } from "../components/QrmActivityTimeline";
 import { QrmCompanyEditorSheet } from "../components/QrmCompanyEditorSheet";
 import { QrmCompanyEquipmentSection } from "../components/QrmCompanyEquipmentSection";
@@ -16,7 +17,7 @@ import { QrmPageHeader } from "../components/QrmPageHeader";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { DeckSurface } from "../components/command-deck";
 import { fetchAccount360 } from "../lib/account-360-api";
-import { buildAccountCommandHref, buildAccountTimelineHref } from "../lib/account-command";
+import { buildAccountCommandHref } from "../lib/account-command";
 import {
   AccountNextBestActions,
   AccountCommercialTab,
@@ -43,7 +44,7 @@ import {
   listCompanyActivities,
 } from "../lib/qrm-api";
 import { fetchCompanyHierarchy, updateCompanyParent } from "../lib/qrm-router-api";
-import type { QrmActivityItem } from "../lib/types";
+import type { QrmActivityItem, QrmActivityType } from "../lib/types";
 
 interface QrmCompanyDetailPageProps {
   userId: string;
@@ -56,6 +57,7 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [composerOpen, setComposerOpen] = useState(false);
+  const [composerInitialActivityType, setComposerInitialActivityType] = useState<QrmActivityType>("call");
   const [hierarchyEditorOpen, setHierarchyEditorOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [parentSearchInput, setParentSearchInput] = useState("");
@@ -64,6 +66,11 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
   const [account360Tab, setAccount360Tab] = useState<"commercial" | "fleet" | "quotes" | "service" | "parts" | "ar" | "intellidealer" | "lifecycle">("commercial");
   const [healthDrawerOpen, setHealthDrawerOpen] = useState(false);
+
+  function openComposer(initialActivityType: QrmActivityType = "call"): void {
+    setComposerInitialActivityType(initialActivityType);
+    setComposerOpen(true);
+  }
 
   const account360Query = useQuery({
     queryKey: ["account-360", companyId],
@@ -328,18 +335,14 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
               Ask Knowledge
             </Link>
           </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to="/admin/duplicates">
-              <GitMerge className="mr-2 h-4 w-4" />
-              Review Duplicates
-            </Link>
-          </Button>
-          <Button className="hidden sm:inline-flex" onClick={() => setComposerOpen(true)}>
+          <Button className="hidden sm:inline-flex" onClick={() => openComposer("call")}>
             <Plus className="mr-2 h-4 w-4" />
             Log Activity
           </Button>
         </div>
       </div>
+
+      {companyId ? <QrmAccountDetailMenu accountId={companyId} className="justify-start" /> : null}
 
       {companyQuery.isLoading && (
         <DeckSurface className="h-28 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
@@ -444,8 +447,8 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
                         </p>
                       </div>
                       <Button asChild size="sm" variant="outline" className="h-7 text-[10px]">
-                        <Link to={buildAccountTimelineHref(companyId)}>
-                          Open timeline →
+                        <Link to={`/qrm/companies/${companyId}/lifecycle`}>
+                          Open lifecycle →
                         </Link>
                       </Button>
                     </div>
@@ -673,7 +676,7 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
               <div className="mt-4">
                 <QrmActivityTimeline
                   activities={activitiesQuery.data ?? []}
-                  onLogActivity={() => setComposerOpen(true)}
+                  onLogActivity={openComposer}
                   entityLabel={companyName}
                   showEntityLabel={false}
                   pendingBodyId={pendingBodyId}
@@ -701,7 +704,7 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
 
       <Button
         className="fixed bottom-20 right-4 z-30 min-h-[44px] rounded-full px-5 shadow-lg sm:hidden"
-        onClick={() => setComposerOpen(true)}
+        onClick={() => openComposer("call")}
       >
         <Plus className="mr-1 h-4 w-4" />
         Log Activity
@@ -712,6 +715,7 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
         onOpenChange={setComposerOpen}
         isPending={createActivityMutation.isPending}
         subjectLabel={companyName}
+        initialActivityType={composerInitialActivityType}
         onSubmit={async (input) => {
           await createActivityMutation.mutateAsync(input);
         }}

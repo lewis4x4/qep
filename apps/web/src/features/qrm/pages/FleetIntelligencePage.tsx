@@ -7,8 +7,9 @@ import { supabase } from "@/lib/supabase";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { fetchAccount360 } from "../lib/account-360-api";
 import { fetchCustomerProfile } from "@/features/dge/lib/dge-api";
-import { buildAccountCommandHref, buildAccountFleetIntelligenceHref, buildAccountGenomeHref, buildAccountOperatingProfileHref } from "../lib/account-command";
+import { buildAccountCommandHref, buildAccountFleetIntelligenceHref } from "../lib/account-command";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { QrmAccountDetailMenu } from "../components/QrmAccountDetailMenu";
 import { buildFleetIntelligenceBoard } from "../lib/fleet-intelligence";
 
 function replacementWindowTone(value: "now" | "30d" | "60d" | "90d" | "future" | "none"): string {
@@ -121,17 +122,7 @@ export function FleetIntelligencePage() {
             Back to account
           </Link>
         </Button>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountFleetIntelligenceHref(accountId)}>Refresh intelligence</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountGenomeHref(accountId)}>Customer Genome</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountOperatingProfileHref(accountId)}>Operating Profile</Link>
-          </Button>
-        </div>
+        <QrmAccountDetailMenu accountId={accountId} />
       </div>
 
       <QrmPageHeader

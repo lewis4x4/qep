@@ -21,7 +21,6 @@ import {
   buildAccountFleetIntelligenceHref,
   buildAccountGenomeHref,
   buildAccountOperatingProfileHref,
-  buildAccountTimelineHref,
 } from "../lib/account-command";
 import {
   buildCustomerOperatingProfileBoard,
@@ -29,6 +28,7 @@ import {
 } from "../lib/customer-operating-profile";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { QrmAccountDetailMenu } from "../components/QrmAccountDetailMenu";
 
 function formatDate(value: string | null): string {
   if (!value) return "Unknown";
@@ -158,20 +158,7 @@ export function CustomerOperatingProfilePage() {
             Back to account
           </Link>
         </Button>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountGenomeHref(accountId)}>Customer Genome</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountTimelineHref(accountId)}>Timeline</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountCommandHref(accountId)}>Account Command</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountFleetIntelligenceHref(accountId)}>Fleet Intelligence</Link>
-          </Button>
-        </div>
+        <QrmAccountDetailMenu accountId={accountId} />
       </div>
 
       <QrmPageHeader

@@ -10,6 +10,7 @@ import {
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { fetchFleetRadar, type FleetRadarLensItem, type FleetRadarResponse } from "../lib/account-360-api";
 import { accountCommandUrl } from "../lib/account-links";
+import { QrmAccountDetailMenu } from "../components/QrmAccountDetailMenu";
 import { supabase } from "@/lib/supabase";
 
 type LensKey = "aging" | "expensive" | "trade_up" | "underutilized" | "attachment_upsell";
@@ -152,6 +153,8 @@ export function FleetRadarPage() {
         </div>
         <AskIronAdvisorButton contextType="fleet_radar" contextId={companyId} variant="inline" />
       </div>
+
+      {companyId ? <QrmAccountDetailMenu accountId={companyId} /> : null}
 
       {/* Lens chips */}
       <div className="flex flex-wrap items-center gap-2">

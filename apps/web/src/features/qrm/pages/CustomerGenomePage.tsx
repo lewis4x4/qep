@@ -10,10 +10,10 @@ import {
   buildAccountCommandHref,
   buildAccountGenomeHref,
   buildAccountOperatingProfileHref,
-  buildAccountTimelineHref,
 } from "../lib/account-command";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { QrmAccountDetailMenu } from "../components/QrmAccountDetailMenu";
 
 function monthLabel(month: number | null | undefined): string | null {
   if (!month || month < 1 || month > 12) return null;
@@ -76,20 +76,7 @@ export function CustomerGenomePage() {
             Back to account
           </Link>
         </Button>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountTimelineHref(accountId)}>Timeline</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountCommandHref(accountId)}>Account Command</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountOperatingProfileHref(accountId)}>Operating Profile</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={`/qrm/companies/${accountId}`}>Legacy detail</Link>
-          </Button>
-        </div>
+        <QrmAccountDetailMenu accountId={accountId} />
       </div>
 
       <QrmPageHeader

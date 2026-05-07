@@ -17,11 +17,7 @@ import { fetchAccount360 } from "../lib/account-360-api";
 import {
   buildAccountCommandHref,
   buildAccountCrossDealerMirrorHref,
-  buildAccountOperatingProfileHref,
-  buildAccountRelationshipMapHref,
-  buildAccountRentalConversionHref,
   buildAccountStrategistHref,
-  buildAccountWhiteSpaceHref,
 } from "../lib/account-command";
 import {
   buildCustomerOperatingProfileBoard,
@@ -33,6 +29,7 @@ import { buildWhiteSpaceMapBoard } from "../lib/white-space-map";
 import { buildCustomerStrategistBoard, type StrategistPlan } from "../lib/customer-strategist";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { QrmAccountDetailMenu } from "../components/QrmAccountDetailMenu";
 
 function horizonTone(horizon: StrategistPlan["horizon"]): string {
   switch (horizon) {
@@ -317,23 +314,7 @@ export function CustomerStrategistPage() {
             Back to account
           </Link>
         </Button>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountRelationshipMapHref(accountId)}>Relationship Map</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountRentalConversionHref(accountId)}>Rental Conversion</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountOperatingProfileHref(accountId)}>Operating Profile</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountWhiteSpaceHref(accountId)}>White-Space Map</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountStrategistHref(accountId)}>Refresh strategist</Link>
-          </Button>
-        </div>
+        <QrmAccountDetailMenu accountId={accountId} />
       </div>
 
       <QrmPageHeader

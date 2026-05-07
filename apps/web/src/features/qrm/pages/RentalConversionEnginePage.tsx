@@ -16,15 +16,13 @@ import { normalizeExtractedDealData } from "@/lib/voice-capture-extraction";
 import { fetchAccount360 } from "../lib/account-360-api";
 import {
   buildAccountCommandHref,
-  buildAccountGenomeHref,
-  buildAccountOperatingProfileHref,
   buildAccountRentalConversionHref,
   buildAccountStrategistHref,
-  buildAccountWhiteSpaceHref,
 } from "../lib/account-command";
 import { buildRentalConversionBoard } from "../lib/rental-conversion";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { QrmAccountDetailMenu } from "../components/QrmAccountDetailMenu";
 
 export function RentalConversionEnginePage() {
   const { accountId } = useParams<{ accountId: string }>();
@@ -130,11 +128,7 @@ export function RentalConversionEnginePage() {
             Back to account
           </Link>
         </Button>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountRentalConversionHref(accountId)}>Refresh conversion</Link>
-          </Button>
-        </div>
+        <QrmAccountDetailMenu accountId={accountId} />
       </div>
 
       <QrmPageHeader

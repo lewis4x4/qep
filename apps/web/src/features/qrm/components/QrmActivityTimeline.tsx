@@ -1,5 +1,6 @@
-import { CalendarClock, ClipboardList, Mail, MessageSquareText, Mic, Phone, StickyNote } from "lucide-react";
-import { useState, type ComponentType } from "react";
+import { CalendarClock, ClipboardList, Mail, MessageSquareText, Mic, Phone, Sparkles, StickyNote } from "lucide-react";
+import { useId, useState, type ComponentType } from "react";
+import { Link } from "react-router-dom";
 import { DataSourceBadge } from "@/components/DataSourceBadge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -12,11 +13,20 @@ import {
 } from "../lib/voice-capture-activity-metadata";
 import { QrmVoiceCaptureSignalBlock } from "./QrmVoiceCaptureSignalBlock";
 
+export interface QrmActivityEmptyStateCue {
+  headline?: string;
+  suggestion: string;
+  primaryLabel?: string;
+  primaryActivityType?: QrmActivityType;
+  seeTimelineHref?: string;
+}
+
 interface QrmActivityTimelineProps {
   activities: QrmActivityItem[];
-  onLogActivity: () => void;
+  onLogActivity: (initialActivityType?: QrmActivityType) => void;
   entityLabel: string;
   showEntityLabel?: boolean;
+  emptyStateCue?: QrmActivityEmptyStateCue;
   onPatchBody?: (activity: QrmActivityItem, body: string, updatedAt: string) => Promise<void>;
   pendingBodyId?: string | null;
   onPatchOccurredAt?: (activity: QrmActivityItem, occurredAt: string, updatedAt: string) => Promise<void>;
@@ -272,6 +282,7 @@ export function QrmActivityTimeline({
   onLogActivity,
   entityLabel,
   showEntityLabel = true,
+  emptyStateCue,
   onPatchBody,
   pendingBodyId = null,
   onPatchOccurredAt,
@@ -282,6 +293,7 @@ export function QrmActivityTimeline({
   onDeliverCommunication,
   pendingDeliveryId = null,
 }: QrmActivityTimelineProps) {
+  const emptyCueId = useId();
   const [editingBodyId, setEditingBodyId] = useState<string | null>(null);
   const [editingBodyUpdatedAt, setEditingBodyUpdatedAt] = useState<string | null>(null);
   const [bodyConflictId, setBodyConflictId] = useState<string | null>(null);
@@ -464,18 +476,66 @@ export function QrmActivityTimeline({
   }
 
   if (activities.length === 0) {
+    const quickTypes: Array<{ type: QrmActivityType; label: string }> = [
+      { type: "call", label: "Call" },
+      { type: "note", label: "Note" },
+      { type: "meeting", label: "Meeting" },
+      { type: "task", label: "Task" },
+      { type: "sms", label: "SMS" },
+    ];
+    const cue = emptyStateCue ?? {
+      headline: `No activity recorded yet for ${entityLabel}.`,
+      suggestion:
+        "QEP cue: capture the first operator touchpoint so the account command center can build a trustworthy handoff trail.",
+      primaryLabel: "Start with a call",
+      primaryActivityType: "call" as QrmActivityType,
+    };
+
     return (
-      <div className="rounded-xl border border-dashed border-border bg-card/80 p-6 text-center">
-        <p className="text-sm text-muted-foreground">
-          No activities yet. Keep momentum and capture the first touchpoint.
-        </p>
-        <div className="mt-4 flex items-center justify-center gap-2">
-          <Button size="sm" onClick={onLogActivity}>
-            Log a call
-          </Button>
-          <Button size="sm" variant="outline" onClick={onLogActivity}>
-            Add a note
-          </Button>
+      <div className="rounded-2xl border border-dashed border-qep-live/35 bg-gradient-to-br from-qep-live/10 via-card/90 to-qep-deck-elevated/30 p-5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 rounded-full border border-qep-live/30 bg-qep-live/10 p-2 text-qep-live" aria-hidden>
+            <Sparkles className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-foreground">
+              {cue.headline ?? `No activity recorded yet for ${entityLabel}.`}
+            </p>
+            <p id={emptyCueId} className="mt-2 text-sm leading-6 text-muted-foreground">
+              {cue.suggestion}
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" onClick={() => onLogActivity(cue.primaryActivityType ?? "call")} aria-describedby={emptyCueId}>
+              {cue.primaryLabel ?? "Start that"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => onLogActivity("call")} aria-describedby={emptyCueId}>
+              Log a call
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => onLogActivity("note")} aria-describedby={emptyCueId}>
+              Add a note
+            </Button>
+            {cue.seeTimelineHref ? (
+              <Button asChild size="sm" variant="ghost">
+                <Link to={cue.seeTimelineHref}>See timeline</Link>
+              </Button>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-1.5" aria-label="Log something else">
+            {quickTypes.map((item) => (
+              <button
+                key={item.type}
+                type="button"
+                onClick={() => onLogActivity(item.type)}
+                className="min-h-[34px] rounded-full border border-qep-deck-rule/60 bg-card/70 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:border-qep-orange/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange/45 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                aria-describedby={emptyCueId}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     );
