@@ -2521,7 +2521,7 @@ export function QuoteBuilderV2Page() {
       ) : (
         <div className="flex w-full gap-6">
       {/* Left column — wizard */}
-      <div className="flex w-full max-w-2xl flex-1 flex-col gap-5">
+      <div className="flex min-w-0 flex-1 flex-col gap-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-foreground">Quote Builder</h1>
@@ -3990,7 +3990,7 @@ export function QuoteBuilderV2Page() {
 
       </div>
       {/* Right column — intelligence panel + Deal Coach (desktop only) */}
-      <aside className="hidden w-80 shrink-0 lg:block">
+      <aside className="hidden w-80 shrink-0 xl:block">
         <div className="sticky top-4 space-y-3">
           {intelligencePanel}
           {draft.equipment.length > 0 && (

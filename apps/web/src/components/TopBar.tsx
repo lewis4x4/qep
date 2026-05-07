@@ -639,7 +639,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
 
           <nav
             className={cn(
-              "min-w-0 flex-1 items-center gap-1.5 text-[11px] font-bold tracking-[0.12em] uppercase text-slate-300",
+              "min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-[11px] font-bold tracking-[0.12em] uppercase text-slate-300",
               "hidden justify-start xl:flex",
             )}
           >
@@ -719,7 +719,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
 
         {/* Right: Search + Bell + Workspace + Avatar */}
         <div className="flex items-center gap-3 ml-auto shrink-0">
-          <div className="hidden w-48 transition-all xl:block 2xl:w-[340px]">
+          <div className="hidden w-56 transition-all min-[2200px]:block">
             <form onSubmit={handleSearchSubmit} className="w-full">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
