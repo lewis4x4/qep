@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QEP QRM Quote Wizard — Sales Workflow One-Pager</title>
+  <style>
+    @page { size: letter landscape; margin: 0; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      width: 11in;
+      height: 8.5in;
+      overflow: hidden;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #f8fafc;
+      background:
+        radial-gradient(circle at 12% 18%, rgba(249,115,22,.22), transparent 28%),
+        radial-gradient(circle at 84% 26%, rgba(34,197,94,.14), transparent 32%),
+        linear-gradient(135deg, #08111f 0%, #0f172a 46%, #101827 100%);
+    }
+    .page { position: relative; width: 100%; height: 100%; padding: .44in .5in .34in; }
+    .page:before {
+      content: "";
+      position: absolute; inset: .19in;
+      border: 1px solid rgba(148,163,184,.20);
+      border-radius: 28px;
+      pointer-events: none;
+    }
+    .top { display: grid; grid-template-columns: 1.45fr .92fr; gap: .32in; align-items: start; }
+    .eyebrow { color: #fb923c; letter-spacing: .18em; font-size: 10px; text-transform: uppercase; font-weight: 800; }
+    h1 { margin: .04in 0 .06in; font-size: 34px; line-height: .94; letter-spacing: -.045em; }
+    .thesis { margin: 0; max-width: 6.2in; color: #cbd5e1; font-size: 15px; line-height: 1.35; }
+    .pills { display: grid; grid-template-columns: repeat(4,1fr); gap: .08in; margin-top: .18in; }
+    .pill { border: 1px solid rgba(148,163,184,.22); background: rgba(15,23,42,.72); border-radius: 15px; padding: .12in; min-height: .72in; }
+    .pill b { display: block; color: #fff7ed; font-size: 12px; margin-bottom: 5px; }
+    .pill span { display:block; color: #94a3b8; font-size: 10.5px; line-height: 1.25; }
+    .right-card { border: 1px solid rgba(251,146,60,.32); background: linear-gradient(145deg, rgba(251,146,60,.12), rgba(15,23,42,.68)); border-radius: 22px; padding: .16in; }
+    .right-card h2 { margin: 0 0 .1in; font-size: 15px; letter-spacing: -.02em; }
+    .badges { display:flex; flex-wrap:wrap; gap: .06in; }
+    .badge { padding: .055in .09in; border-radius: 999px; border: 1px solid rgba(148,163,184,.22); color:#dbeafe; background: rgba(15,23,42,.56); font-size: 10px; font-weight: 700; }
+    .badge.green { color: #bbf7d0; border-color: rgba(34,197,94,.35); }
+    .badge.orange { color: #fed7aa; border-color: rgba(249,115,22,.42); }
+    .diagram-wrap { position: relative; margin-top: .22in; height: 4.25in; border-radius: 28px; border: 1px solid rgba(148,163,184,.18); background: rgba(2,6,23,.36); overflow: hidden; }
+    .diagram-wrap:after { content:""; position:absolute; inset:-40% 10% auto; height:4.2in; background: radial-gradient(ellipse at center, rgba(59,130,246,.10), transparent 68%); }
+    .legend { position:absolute; left:.22in; top:.17in; display:flex; gap:.08in; z-index:3; }
+    .legend span { font-size:10px; color:#cbd5e1; padding:.055in .09in; border-radius:999px; background:rgba(15,23,42,.8); border:1px solid rgba(148,163,184,.18); }
+    .callout { position:absolute; z-index:4; border-radius:14px; padding:.08in .1in; border:1px solid rgba(148,163,184,.20); background:rgba(15,23,42,.78); box-shadow:0 18px 40px rgba(0,0,0,.18); font-size:10.5px; color:#dbeafe; font-weight:750; }
+    .c1{left:.34in; top:.78in;} .c2{left:1.9in; top:.34in;} .c3{left:3.55in; top:.62in;} .c4{right:2.35in; top:.36in;} .c5{right:.42in; top:.82in;} .c6{right:.54in; bottom:.34in;}
+    svg { position:absolute; inset:0; z-index:2; }
+    .node text { font-weight: 800; fill:#f8fafc; font-size: 10px; text-anchor: middle; }
+    .node .sub { fill:#94a3b8; font-weight: 700; font-size: 7.4px; letter-spacing:.02em; }
+    .node .num { fill:#020617; font-size:10px; font-weight:900; }
+    .capture { fill:#2563eb; } .build { fill:#f97316; } .confirm { fill:#16a34a; } .close { fill:#334155; stroke:#f59e0b; stroke-width:2; }
+    .footer { position:absolute; left:.5in; right:.5in; bottom:.33in; display:flex; justify-content:space-between; align-items:center; gap:.18in; }
+    .proof { display:flex; flex-wrap:wrap; gap:.06in; }
+    .proof span { color:#cbd5e1; font-size:9.5px; border:1px solid rgba(148,163,184,.20); background:rgba(15,23,42,.58); border-radius:999px; padding:.05in .075in; }
+    .mark { color:#94a3b8; font-size:10px; text-align:right; white-space:nowrap; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="top">
+      <div>
+        <div class="eyebrow">QEP QRM Quote Wizard</div>
+        <h1>Quote with confidence.<br/>Send when ready.</h1>
+        <p class="thesis">A guided sales workflow that captures the need, builds the quote, and clears every guardrail before customer delivery.</p>
+        <div class="pills">
+          <div class="pill"><b>Zero-blocking</b><span>Move with what you know. Come back when details sharpen.</span></div>
+          <div class="pill"><b>Always editable</b><span>Completed steps stay open — including steps 1–4 after pricing.</span></div>
+          <div class="pill"><b>Guardrails built in</b><span>Approval, tax, margin, and readiness checks protect the send.</span></div>
+          <div class="pill"><b>Customer-facing last</b><span>Internal draft until the package is truly ready.</span></div>
+        </div>
+      </div>
+      <aside class="right-card">
+        <h2>What changes for the rep?</h2>
+        <div class="badges">
+          <span class="badge orange">Branch selected early</span>
+          <span class="badge">Manual · Voice · AI · Trade photo</span>
+          <span class="badge green">Why this machine confirmed</span>
+          <span class="badge green">Owner approval before send</span>
+          <span class="badge">Document + follow-up logged</span>
+        </div>
+      </aside>
+    </section>
+
+    <section class="diagram-wrap" aria-label="11-step QRM Quote Wizard workflow diagram">
+      <div class="legend"><span>Capture</span><span>Build</span><span>Confirm</span><span>Close</span></div>
+      <div class="callout c1">Voice in. Quote out.</div>
+      <div class="callout c2">Branch picked first.</div>
+      <div class="callout c3">Skip a field. Edit later.</div>
+      <div class="callout c4">Why this machine?</div>
+      <div class="callout c5">Tax + approval cleared.</div>
+      <div class="callout c6">One log. Every follow-up.</div>
+      <svg viewBox="0 0 1000 400" role="img">
+        <defs>
+          <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="12" stdDeviation="10" flood-color="#000" flood-opacity=".32"/></filter>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker>
+        </defs>
+        <path d="M85 225 C190 118 316 110 430 180 S654 292 795 202 S912 135 945 168" fill="none" stroke="rgba(148,163,184,.38)" stroke-width="7" stroke-linecap="round" marker-end="url(#arrow)"/>
+        <g class="node" filter="url(#shadow)" transform="translate(90 225)"><circle r="35" class="capture"/><circle r="12" cx="-24" cy="-24" fill="#bfdbfe"/><text class="num" x="-24" y="-20">1</text><text y="4">Capture</text><text class="sub" y="18">Need</text></g>
+        <g class="node" filter="url(#shadow)" transform="translate(178 153)"><circle r="31" class="capture"/><circle r="11" cx="-22" cy="-22" fill="#bfdbfe"/><text class="num" x="-22" y="-18">2</text><text y="4">Pick</text><text class="sub" y="18">Equipment</text></g>
+        <g class="node" filter="url(#shadow)" transform="translate(276 132)"><circle r="31" class="capture"/><circle r="11" cx="-22" cy="-22" fill="#bfdbfe"/><text class="num" x="-22" y="-18">3</text><text y="4">Configure</text><text class="sub" y="18">Options</text></g>
+        <g class="node" filter="url(#shadow)" transform="translate(376 158)"><circle r="31" class="capture"/><circle r="11" cx="-22" cy="-22" fill="#bfdbfe"/><text class="num" x="-22" y="-18">4</text><text y="4">Trade-In</text><text class="sub" y="18">Value</text></g>
+        <g class="node" filter="url(#shadow)" transform="translate(476 218)"><circle r="35" class="build"/><circle r="12" cx="-24" cy="-24" fill="#fed7aa"/><text class="num" x="-24" y="-20">5</text><text y="4">Price</text><text class="sub" y="18">Build</text></g>
+        <g class="node" filter="url(#shadow)" transform="translate(572 264)"><circle r="31" class="build"/><circle r="11" cx="-22" cy="-22" fill="#fed7aa"/><text class="num" x="-22" y="-18">6</text><text y="4">Promos</text><text class="sub" y="18">Rebates</text></g>
+        <g class="node" filter="url(#shadow)" transform="translate(671 255)"><circle r="31" class="build"/><circle r="11" cx="-22" cy="-22" fill="#fed7aa"/><text class="num" x="-22" y="-18">7</text><text y="4">Finance</text><text class="sub" y="18">Terms</text></g>
+        <g class="node" filter="url(#shadow)" transform="translate(760 204)"><circle r="31" class="confirm"/><circle r="11" cx="-22" cy="-22" fill="#bbf7d0"/><text class="num" x="-22" y="-18">8</text><text y="4">Details</text><text class="sub" y="18">Why</text></g>
+        <g class="node" filter="url(#shadow)" transform="translate(834 154)"><circle r="35" class="confirm"/><circle r="12" cx="-24" cy="-24" fill="#bbf7d0"/><text class="num" x="-24" y="-20">9</text><text y="2">Review</text><text class="sub" y="16">Approve</text><text x="0" y="-43" font-size="24" fill="#bbf7d0">🛡</text></g>
+        <g class="node" filter="url(#shadow)" transform="translate(900 142)"><circle r="31" class="close"/><circle r="11" cx="-22" cy="-22" fill="#fde68a"/><text class="num" x="-22" y="-18">10</text><text y="4">Document</text><text class="sub" y="18">Ready</text></g>
+        <g class="node" filter="url(#shadow)" transform="translate(946 181)"><circle r="37" class="close"/><circle r="12" cx="-24" cy="-24" fill="#fde68a"/><text class="num" x="-24" y="-20">11</text><text y="2">Send</text><text class="sub" y="16">+ Log</text><text x="0" y="51" font-size="23" fill="#fde68a">👤</text></g>
+      </svg>
+    </section>
+
+    <footer class="footer">
+      <div class="proof"><span>Mobile-first</span><span>Role + workspace secured</span><span>RLS-enforced rows</span><span>Audit trail</span><span>Demo/manual-safe</span><span>Built on QEP OS</span></div>
+      <div class="mark">QEP Sales Workflow · May 5, 2026</div>
+    </footer>
+  </main>
+</body>
+</html>

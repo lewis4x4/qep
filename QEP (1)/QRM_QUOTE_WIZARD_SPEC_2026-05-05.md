@@ -1,0 +1,345 @@
+# QRM Quote Tool — Wizard Spec & Implementation Plan
+
+**Source:** Rylee McKenzie email, 2026-05-04 22:12 ET
+**Compiled:** 2026-05-05
+**Client:** QEP USA (`qep-usa`)
+**Module:** QRM > Quote Tool (Phase 1B Sales)
+**Pipeline Target:** Paperclip CEO → Architect → Engineer → QA → DevOps → Security → Data & Integration
+**Supersedes:** Quote Builder section in `CLAUDE_CODE_HANDOFF_2026-04-23.md` where conflicting
+
+---
+
+## 0. EXECUTIVE DECISIONS (binding, no rework)
+
+1. **Wizard pattern** — Replace the current scroll-down quote builder with a step-by-step wizard. One step per screen. Slide transition forward, jump-back enabled via the progress bar. Save state continuously to the draft store (auto-save per ADR-008/C8 pattern).
+2. **Tax engine** — Florida 6% state sales tax applied to subtotal **after** trade allowance. County discretionary surtax added per delivery county, with the Florida $5,000 cap rule enforced at the calculation layer. Tax exempt customers skip entirely when a valid resale certificate is on file. Manual override field retained (with reason code).
+3. **Send panel** — Below margin waterfall on Step 9 (Review). Three buttons: Preview Quote (PDF in pane), Email Quote (composer with customer prefilled, rep auto-BCC), Text Quote (Twilio MMS with branded PDF link).
+4. **Lease quoting** — Net new scope. Add as a tab inside Step 7 (Financing). Blocks on Rylee delivering rate sheets, OEM list, residual tables.
+5. **Default expiration** — 30 days.
+6. **Default follow-up** — 3 days, required field on Step 11.
+
+---
+
+## 1. RYLEE FEEDBACK → WORK ITEM MAPPING
+
+| Rylee Item | Status | Maps To | Owner |
+|---|---|---|---|
+| 6% FL tax on post-trade subtotal | NEW REQ | QRM-TAX-001 | Architect → Engineer |
+| County tax rules engine | NEW REQ | QRM-TAX-002 | Architect → Engineer |
+| Send / Preview / Email / Text panel | NEW REQ | QRM-SEND-001 | Engineer + Design |
+| Wizard / step slide UX | NEW REQ | QRM-UX-001 | Architect + Engineer |
+| Step 1 — Customer info + dedupe | EXISTS, expand | QRM-CUST-001 | Engineer |
+| Step 2 — Equipment search + availability | EXISTS, expand | QRM-EQUIP-001 + ADR-004 ref | Engineer |
+| Step 3 — Configure (attachments / options / accessories) | EXISTS, expand | C1, C2 in handoff | Engineer |
+| Step 4 — Trade-in workflow | NEEDS SOP | QRM-TRADE-001 | Architect (blocked on Trade SOP) |
+| Step 5 — Pricing build (incl. PDI, freight, 1% good faith, doc/title/tag) | NEW LINE ITEMS | QRM-PRICE-001 | Architect + Engineer |
+| Step 6 — Rebates & promotions (mfg + dealer + loyalty) | NEW REQ | QRM-PROMO-001 | Architect + Engineer + Data |
+| Step 7 — Financing scenarios + multi-save | EXISTS, expand | QRM-FIN-001 (wraps ADR-006) | Engineer |
+| Step 7b — Lease quoting (FMV / FPPO) | NEW SCOPE | QRM-LEASE-001 | Architect (blocked on lease rate sheets) |
+| Step 8 — Quote details + Why This Machine narrative | NEW REQ | QRM-DETAIL-001 | Engineer + AI |
+| Step 9 — Review + margin gate + manager approval | EXISTS, expand | QRM-APPROVAL-001 | Architect + Engineer |
+| Step 10 — Branded PDF output | EXISTS, improve | C3 in handoff | Engineer + Design |
+| Step 11 — Send + log + required follow-up date | NEW REQ | QRM-LOG-001 | Engineer |
+
+---
+
+## 2. SCHEMA ADDITIONS
+
+```sql
+-- Tax engine
+CREATE TABLE tax_jurisdictions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  state_code text NOT NULL,
+  county text NOT NULL,
+  state_rate numeric(6,5) NOT NULL,
+  county_surtax_rate numeric(6,5) NOT NULL,
+  surtax_cap_amount numeric(12,2),  -- $5000 for FL
+  effective_from date NOT NULL,
+  effective_to date,
+  source_url text,
+  UNIQUE (state_code, county, effective_from)
+);
+
+CREATE INDEX tax_jurisdictions_lookup_idx
+  ON tax_jurisdictions (state_code, county, effective_from DESC);
+
+-- Quotes (extend existing)
+ALTER TABLE quotes
+  ADD COLUMN wizard_step smallint NOT NULL DEFAULT 1,
+  ADD COLUMN wizard_completed_at timestamptz,
+  ADD COLUMN expires_at timestamptz NOT NULL DEFAULT (now() + interval '30 days'),
+  ADD COLUMN follow_up_at timestamptz,
+  ADD COLUMN deposit_required_amount numeric(12,2),
+  ADD COLUMN delivery_eta date,
+  ADD COLUMN special_terms text,
+  ADD COLUMN why_this_machine text,
+  ADD COLUMN tax_jurisdiction_id uuid REFERENCES tax_jurisdictions(id),
+  ADD COLUMN tax_override_amount numeric(12,2),
+  ADD COLUMN tax_override_reason text,
+  ADD COLUMN approval_status text NOT NULL DEFAULT 'draft',
+  ADD COLUMN approval_route_reason text,
+  ADD COLUMN approver_user_id uuid REFERENCES auth.users(id),
+  ADD COLUMN approved_at timestamptz;
+
+-- Quote line item types (so pricing build is modular)
+CREATE TYPE quote_line_kind AS ENUM (
+  'equipment', 'attachment', 'option', 'accessory',
+  'pdi', 'freight', 'good_faith', 'doc_fee',
+  'title', 'tag', 'registration', 'discount',
+  'trade_allowance', 'rebate_mfg', 'rebate_dealer',
+  'loyalty_discount', 'tax_state', 'tax_county'
+);
+
+ALTER TABLE quote_lines
+  ADD COLUMN kind quote_line_kind NOT NULL,
+  ADD COLUMN reason_code text,
+  ADD COLUMN approval_required boolean NOT NULL DEFAULT false;
+
+-- Financing scenarios (multi-save)
+CREATE TABLE quote_financing_scenarios (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  quote_id uuid NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
+  scenario_label text NOT NULL,  -- "36 month", "48 month FMV lease"
+  kind text NOT NULL,            -- 'finance' | 'lease_fmv' | 'lease_fppo' | 'cash'
+  down_payment numeric(12,2),
+  term_months smallint,
+  apr numeric(6,4),
+  residual_amount numeric(12,2),  -- lease only
+  monthly_payment numeric(12,2),
+  is_default boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX quote_financing_scenarios_quote_idx
+  ON quote_financing_scenarios (quote_id);
+
+-- Promotions catalog
+CREATE TABLE promotions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  source text NOT NULL,         -- 'manufacturer' | 'dealer' | 'loyalty'
+  manufacturer text,             -- 'Bandit', 'Develon', 'Yanmar', etc.
+  name text NOT NULL,
+  description text,
+  amount_type text NOT NULL,     -- 'flat' | 'percent' | 'rate_buydown'
+  amount_value numeric(12,4) NOT NULL,
+  conditions jsonb,              -- min_amount, customer_tier, equipment_categories
+  effective_from date NOT NULL,
+  effective_to date,
+  active boolean NOT NULL DEFAULT true
+);
+
+CREATE INDEX promotions_active_idx
+  ON promotions (active, effective_from, effective_to)
+  WHERE active = true;
+
+-- Approval thresholds (configurable per dealership)
+CREATE TABLE approval_thresholds (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  scope text NOT NULL,           -- 'margin_floor_pct', 'trade_credit_max', 'rep_discount_max_pct'
+  value numeric(12,4) NOT NULL,
+  notes text,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid REFERENCES auth.users(id)
+);
+```
+
+Rollback migration filed alongside (per blueprint-template).
+
+---
+
+## 3. STEP-BY-STEP WIZARD SPEC
+
+### Step 1 — Customer
+
+**Search-first UX.** Single autofocus input on entry. Fuzzy match across `customers.business_name`, `contacts.first_name + last_name`, `contacts.phone`, `contacts.email`. Top 5 results with badges (existing customer / equipment owner / tax exempt). New customer drawer slides in only when the rep clicks "Create new."
+
+Required on new: first name, last name, phone, billing address, assigned salesperson. Optional: business name, email, shipping address (default same as billing toggle), tax ID + resale certificate upload. Territory auto-assigned from billing zip via the territory map.
+
+Dedupe enforcement: phone match + last name match → blocks save, surfaces existing record.
+
+### Step 2 — Equipment
+
+Two entry paths. Path A: serial / stock number search (per ADR-004 pattern). Path B: category → make → model filter cascade. Result card displays year, hours, condition, location, base cost, photos, availability status.
+
+Availability statuses: `in_stock`, `in_transit`, `source_required`. The "source_required" state surfaces a "Confirm availability" button that fires a Slack-style notification to the sales manager + admin (via 8x8 / email / in-app) and locks the wizard at Step 2 until cleared.
+
+### Step 3 — Configure
+
+Two-pane layout. Left: equipment hero with photo and base price. Right: tabbed configuration with Attachments, Factory Options, Accessories, Warranty.
+
+Attachment compatibility sidebar (per C1 in handoff) with one-click add. Each attachment shows MSRP, dealer cost, margin badge. Warranty tab pre-populates extended warranty offers per OEM (ASV, Bandit, Yanmar prefilled per C2).
+
+### Step 4 — Trade-in (skippable)
+
+**BLOCKED on Trade SOP delivery.** Provisional fields based on email and ADR-005:
+
+Make, model, year, hours, condition notes, photos (multi-upload, IndexedDB queue per ADR-008), lien holder, payoff amount, evaluated trade value with manager approval flag.
+
+Inspection checklist (mandatory before trade credit unlocks): hour meter, undercarriage condition, hydraulic leaks Y/N + notes, engine hours at last service, tires/tracks condition, visible damage photos. Per ADR-005 the trade allowance line is locked until checklist completes.
+
+Photo-to-estimate displays the comparable market range with the ADR-005 disclaimer. No single number estimate.
+
+### Step 5 — Pricing build
+
+Auto-summed line groups in a vertical waterfall:
+
+Equipment base price (locked, from Step 2). Attachments + factory options + accessories subtotal (locked, from Step 3). Manual discount field with required reason code dropdown (`competitive_match`, `volume_buyer`, `aged_inventory`, `loyalty`, `other`). Trade allowance applied (locked, from Step 4). Freight/delivery (manual entry or zip-to-zip estimate). PDI (configurable default per equipment type). 1% good faith cost (auto-calculated on subtotal). Doc fee, title, tag, registration (configurable defaults, optional toggle).
+
+Sales tax preview at the bottom, calculated from delivery county. Override available with reason code.
+
+### Step 6 — Rebates & promotions
+
+Three sections: Manufacturer Programs (filtered to the equipment's OEM and active dates), Dealer Promotions (active flag from `promotions` table), Loyalty Discounts (auto-suggested if customer.repeat_customer = true or prior purchase count >= 2).
+
+Each rebate is an opt-in checkbox with the program name + amount + effective dates visible. Selected rebates become quote_lines with kind `rebate_mfg` / `rebate_dealer` / `loyalty_discount`.
+
+### Step 7 — Financing scenarios (skippable for cash)
+
+Tabbed: Cash | Finance | Lease.
+
+Finance tab: down payment, term length (preset chips: 24/36/48/60/72), interest rate (auto-pulled from active manufacturer rate buy-down promotions if applicable), monthly payment auto-calculated. Save Scenario button creates a `quote_financing_scenarios` row. Multiple scenarios save in parallel.
+
+Lease tab (NEW SCOPE, blocked on rate sheets): toggle FMV vs FPPO, term, residual, money factor, monthly payment auto-calculated.
+
+All payment math is gated by `FEATURE_FINANCING_CALCULATOR` flag (ADR-006). TILA disclaimer module renders on every payment surface.
+
+### Step 8 — Quote details
+
+Quote expiration date (default +30 days, editable). Deposit amount (BLOCKED on deposit SOP). Estimated delivery date (date picker). Special terms / notes (long-text). "Why This Machine" narrative (long-text, AI pre-suggests from discovery notes on customer record + equipment specs; rep edits before save, no AI-sounding output ships unedited per QEP voice rules).
+
+### Step 9 — Review + approval gate
+
+Full summary screen: customer block, equipment block, configuration block, pricing waterfall, rebates, financing scenarios, expiration, follow-up.
+
+Margin check: system calculates margin = (sale price - dealer cost - trade allowance - rebates) / sale price. Compares to `approval_thresholds` row for `margin_floor_pct`.
+
+Approval routing logic:
+
+```
+IF margin < margin_floor_pct
+  OR trade_credit > trade_credit_max
+  OR rep_discount_pct > rep_discount_max_pct
+  OR any quote_line.approval_required = true
+THEN
+  approval_status = 'pending_manager'
+  notify(sales_manager, quote_id)
+  block "Generate Quote" button
+ELSE
+  approval_status = 'rep_cleared'
+  enable "Generate Quote" button
+END
+```
+
+Manager approval has four outcomes (per existing handoff): approve, approve-with-edits, reject, reject-with-comments.
+
+### Step 10 — Generate quote document
+
+Branded PDF per `qep_brand_guide.pdf`. Includes: machine photos, specs, configuration, pricing waterfall, financing scenarios, rebates applied, expiration, deposit, terms, rep contact card, QEP letterhead.
+
+PDF generation via Puppeteer-on-Workers (existing pattern). Stored in R2 bucket `qep-quote-pdfs`, addressable by quote UUID.
+
+### Step 11 — Send & log (Send Panel)
+
+**Layout:** Below the margin waterfall on Step 9 result OR as the final wizard step. Three primary buttons in a horizontal row.
+
+Preview Quote: opens PDF in side pane (no send action). Email Quote: opens composer with customer email prefilled, subject `Your QEP Quote {quote_number}`, body templated and editable, rep BCC'd via `Microsoft Graph send-as` (Phase 1C dependency). PDF auto-attached. Text Quote: Twilio outbound MMS with short message ("Hey {first_name}, here's your quote from QEP. {short_link}") and PDF link via R2 signed URL with 30-day expiry.
+
+Send action triggers:
+
+1. Quote saved to customer record in CRM (linked to company + contact + equipment).
+2. Activity timeline entry created on company record.
+3. Opportunity stage updated to `quote_sent`.
+4. Follow-up date REQUIRED (date picker, default +3 days, editable, cannot save without).
+5. Cadence engine schedules: day 0 send, day 2-3 nudge, day 7 check-in, day 14 escalation, day 30 close-or-archive.
+
+---
+
+## 4. BLOCKING DEPENDENCIES (route to CEO escalation)
+
+| ID | Item | Owner | Blocks |
+|---|---|---|---|
+| BLK-1 | Trade SOP from Rylee | Rylee | QRM-TRADE-001 (Step 4) |
+| BLK-2 | Deposit SOP from Rylee | Rylee | QRM-DETAIL-001 (Step 8 deposit field) |
+| BLK-3 | Lease rate sheets + OEM list + residual tables | Rylee | QRM-LEASE-001 (Step 7 lease tab) |
+| BLK-4 | Approval thresholds (margin floor, trade max, rep discount cap) | Rylee + Ryan | QRM-APPROVAL-001 (Step 9 routing) |
+| BLK-5 | Florida county tax rate source (FL DOR data feed or static seed) | Data agent | QRM-TAX-002 (Step 5 county surtax) |
+| BLK-6 | Microsoft Graph send-as configuration in QEP M365 tenant | Rylee + DevOps | Email Quote button (Step 11) |
+| BLK-7 | Twilio number provisioning + A2P 10DLC registration for QEP | DevOps | Text Quote button (Step 11) |
+| BLK-8 | TILA disclaimer sign-off (ADR-006) | Angela | Lease tab + Finance tab go-live |
+
+---
+
+## 5. AGENT ROUTING
+
+**Architect** owns: ADR addendum for wizard pattern, schema migrations, approval routing logic, lease scenario data model.
+
+**Engineer** owns: wizard component framework (single-page route with step state machine), tax engine implementation (jurisdiction lookup + cap rule), send panel UI + Twilio + Graph wiring, all step UIs, PDF generator updates.
+
+**QA** owns: test matrix per step, approval gate boundary tests (at floor / above floor / way above floor), tax math tests for FL counties (with $5K cap edge cases), lease vs finance vs cash calculation parity tests.
+
+**DevOps** owns: Twilio A2P registration, M365 OAuth + send-as scope, R2 bucket policy for PDF signed URLs, environment flag setup for `FEATURE_LEASE_QUOTING`.
+
+**Security** owns: RLS policies on `quotes`, `quote_lines`, `quote_financing_scenarios`, `promotions`, `approval_thresholds`. Rep can read/write own quotes, manager can read all + approve, finance_admin can read all + see margin, sales_rep cannot see margin column.
+
+**Data & Integration** owns: tax_jurisdictions seed for FL counties (DOR source), promotions sync from manufacturer portals (manual import → Phase 5 automated), customer dedupe matching algorithm tuning.
+
+---
+
+## 6. ACCEPTANCE CRITERIA (QA must verify all before ship)
+
+1. Quote builder is a wizard, not a scroll. Each step renders solo. Forward / back navigation persists state.
+2. Tax line correctly shows: state tax = (subtotal - trade) * 0.06 for any FL delivery address.
+3. County surtax line correctly applies the $5,000 cap. Test with a $50,000 sale in Columbia County (1% surtax = $50, not $500).
+4. Tax exempt customer with valid certificate produces $0 tax line and a "Tax Exempt" badge on the quote PDF.
+5. Send Panel renders three buttons. Each opens its expected destination and logs the activity.
+6. Approval gate fires on margin below floor, trade above max, rep discount above cap, OR any line item flagged for approval.
+7. Manager approve / approve-with-edits / reject / reject-with-comments all route correctly.
+8. Follow-up date is required at Step 11. Save blocked without it.
+9. Quote PDF matches brand guide (orange accents, charcoal base, Bebas / Montserrat fonts, gear motif).
+10. Lease tab renders only when `FEATURE_LEASE_QUOTING=true` AND rate sheets are seeded.
+11. TILA disclaimer renders on every screen showing payment math.
+
+---
+
+## 7. OPEN ITEMS FOR FOLLOW-UP CALL
+
+To close on the next QEP touchpoint:
+
+1. Confirm 30-day quote expiration default is acceptable (Rylee gave "14 or 30").
+2. Confirm 3-day default follow-up cadence (was implied, not specified).
+3. Confirm rep BCC on email send is correct, vs. visible CC.
+4. Confirm whether manager approval routes to one specific user or to a role-based queue.
+5. Confirm "Why This Machine" AI pre-suggest is desired (could be hand-written only if Rylee wants zero AI text exposure).
+6. Confirm Sandhills / Iron Solutions feed is the comp data source for Step 4 trade ranges.
+
+---
+
+## 8. CHANGES TO PRIOR HANDOFF
+
+The following items in `CLAUDE_CODE_HANDOFF_2026-04-23.md` are clarified or extended by this spec:
+
+- **C1 (attachment compatibility sidebar)** — Confirmed inside Step 3 of the wizard.
+- **C2 (extended warranty)** — Confirmed inside Step 3 Warranty tab, prefilled OEMs unchanged.
+- **C3 (PDF improvement)** — Reaffirmed as gating on customer-facing send actions in Step 11.
+- **C5 (mobile floating action bar)** — Now applies to wizard "Next Step" button on mobile.
+- **Sales cadence (Section 5)** — Reaffirmed: day 0 / 2-3 / 7 / 14 / 30 from quote send.
+- **ADR-005 (trade-in guardrails)** — Reaffirmed at Step 4.
+- **ADR-006 (financing compliance gate)** — Extended to cover lease tab; same gate, expanded scope.
+- **ADR-008 (offline-first)** — Wizard state persists to IndexedDB through every step, syncs on reconnect.
+
+---
+
+## 9. FILES TO PRODUCE NEXT
+
+For Architect to draft as Phase 1B Sprint addendum:
+
+- `docs/adr/ADR-011-quote-wizard-pattern.md`
+- `docs/adr/ADR-012-tax-jurisdiction-engine.md`
+- `docs/adr/ADR-013-lease-quoting-scope.md`
+- `supabase/migrations/<timestamp>_quote_wizard_schema.sql` (and rollback)
+- `src/features/quote-wizard/` route + step components
+- `src/features/quote-wizard/tax-engine.ts`
+- `src/features/quote-wizard/send-panel.tsx`
+- `src/lib/financing-math.ts` (extend with lease functions)
+
+---
