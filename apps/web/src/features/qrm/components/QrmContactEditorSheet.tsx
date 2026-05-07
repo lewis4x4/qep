@@ -98,9 +98,18 @@ export function QrmContactEditorSheet({
         return patchCrmContactViaRouter(contact.id, { archive: true });
       }
 
+      const trimmedFirstName = firstName.trim();
+      const trimmedLastName = lastName.trim();
+      if (!trimmedFirstName) {
+        throw new Error("First name is required.");
+      }
+      if (!trimmedLastName) {
+        throw new Error("Last name is required.");
+      }
+
       const payload = {
-        firstName,
-        lastName,
+        firstName: trimmedFirstName,
+        lastName: trimmedLastName,
         email: email.trim() || null,
         phone: phone.trim() || null,
         cell: cell.trim() || null,
@@ -120,6 +129,11 @@ export function QrmContactEditorSheet({
         queryClient.invalidateQueries({ queryKey: ["crm", "contacts"] }),
         queryClient.invalidateQueries({ queryKey: ["crm", "contact", savedContact.id] }),
         queryClient.invalidateQueries({ queryKey: ["crm", "activities"] }),
+        queryClient.invalidateQueries({ queryKey: ["crm", "duplicates"] }),
+        queryClient.invalidateQueries({ queryKey: ["qrm", "graph-explorer"] }),
+        ...(savedContact.primaryCompanyId
+          ? [queryClient.invalidateQueries({ queryKey: ["crm", "company", savedContact.primaryCompanyId] })]
+          : []),
       ]);
       toast({
         title: variables.archive ? "Contact archived" : contact ? "Contact updated" : "Contact created",

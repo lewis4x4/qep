@@ -508,8 +508,8 @@ const HubSpotConnectPage = lazy(() =>
 const QrmContactsPage = lazy(() =>
   import("./features/qrm/pages/QrmContactsPage").then((m) => ({ default: m.QrmContactsPage }))
 );
-// Shell v2: when flag is on, legacy list pages are replaced by the universal
-// GraphExplorer via the WithGraphExplorer wrapper (see shell/withGraphExplorer).
+// Shell v2: generic graph fallback for surfaces that do not yet have dedicated
+// router-backed pages. Contacts and Companies render their own dedicated pages.
 const WithGraphExplorer = lazy(() =>
   import("./features/qrm/shell/withGraphExplorer").then((m) => ({
     default: m.WithGraphExplorer,
@@ -2056,12 +2056,7 @@ function App() {
                 path="/qrm/contacts"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <WithGraphExplorer
-                      defaultLens="contact"
-                      title="Contacts"
-                      subtitle="Every person — searchable across the graph."
-                      fallback={<QrmContactsPage />}
-                    />
+                    <QrmContactsPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -2382,12 +2377,7 @@ function App() {
                 path="/qrm/companies"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <WithGraphExplorer
-                      defaultLens="company"
-                      title="Companies"
-                      subtitle="Every business — searchable across the graph."
-                      fallback={<QrmCompaniesPage />}
-                    />
+                    <QrmCompaniesPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

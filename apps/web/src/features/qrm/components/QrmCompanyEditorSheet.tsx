@@ -119,13 +119,18 @@ export function QrmCompanyEditorSheet({
         return patchCrmCompanyViaRouter(company.id, { archive: true });
       }
 
+      const trimmedName = name.trim();
+      if (!trimmedName) {
+        throw new Error("Company name is required.");
+      }
+
       const parsedPricingLevel = pricingLevel.trim() ? Number(pricingLevel) : null;
       if (parsedPricingLevel != null && !Number.isFinite(parsedPricingLevel)) {
         throw new Error("Pricing level must be a number.");
       }
 
       const payload = {
-        name,
+        name: trimmedName,
         search1: search1.trim() || null,
         search2: search2.trim() || null,
         addressLine1: addressLine1.trim() || null,
@@ -156,6 +161,8 @@ export function QrmCompanyEditorSheet({
         queryClient.invalidateQueries({ queryKey: ["crm", "company", savedCompany.id] }),
         queryClient.invalidateQueries({ queryKey: ["account-360", savedCompany.id] }),
         queryClient.invalidateQueries({ queryKey: ["account-command", savedCompany.id] }),
+        queryClient.invalidateQueries({ queryKey: ["qrm", "graph-explorer"] }),
+        queryClient.invalidateQueries({ queryKey: ["crm", "companies", "health-profiles"] }),
       ]);
       toast({
         title: variables.archive ? "Company archived" : company ? "Company updated" : "Company created",

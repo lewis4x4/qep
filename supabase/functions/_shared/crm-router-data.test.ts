@@ -6,6 +6,7 @@ import {
   createCompany,
   deliverActivity,
   getCommunicationTarget,
+  listContacts,
   patchActivity,
   patchCompany,
 } from "./crm-router-data.ts";
@@ -496,6 +497,25 @@ Deno.test("patchActivity rejects body edits while a fresh delivery lock is activ
     Error,
     "VALIDATION_ACTIVITY_BODY_LOCKED",
   );
+});
+
+Deno.test("listContacts rejects malformed tree root company id before RPC", async () => {
+  let rpcCalled = false;
+  const ctx = makeCtx({
+    callerDb: {
+      rpc() {
+        rpcCalled = true;
+        return Promise.resolve({ data: [], error: null });
+      },
+    } as unknown as SupabaseClient,
+  });
+
+  await assertRejects(
+    () => listContacts(ctx, { treeRootCompanyId: "not-a-uuid" }),
+    Error,
+    "VALIDATION_TREE_ROOT_COMPANY_ID",
+  );
+  assertEquals(rpcCalled, false);
 });
 
 Deno.test("deliverActivity rejects resend while a fresh delivery lock is active", async () => {

@@ -8,7 +8,11 @@ import { QrmCompanyEditorSheet } from "../components/QrmCompanyEditorSheet";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
 import {
-  DeckSurface,
+  EmptyState,
+  KbdHint,
+  MoonshotBeat,
+  RetryState,
+  RowSkeleton,
   SignalChip,
   StatusDot,
   type StatusTone,
@@ -46,6 +50,19 @@ export function QrmCompaniesPage() {
   }, []);
 
   useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTyping = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
+      if (event.key === "/" && !isTyping) {
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => {
       setDebouncedSearch(searchInput.trim());
     }, 250);
@@ -54,7 +71,7 @@ export function QrmCompaniesPage() {
 
   const companiesQuery = useInfiniteQuery({
     queryKey: ["crm", "companies", debouncedSearch, includeExtendedFields],
-    queryFn: ({ pageParam }) => listCrmCompanies(debouncedSearch, pageParam, { includeExtendedFields }),
+    queryFn: ({ pageParam, signal }) => listCrmCompanies(debouncedSearch, pageParam, { includeExtendedFields, signal }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     staleTime: 60_000,
@@ -89,6 +106,8 @@ export function QrmCompaniesPage() {
   }, [healthProfiles]);
   const hasNextPage = companiesQuery.hasNextPage;
   const isFetchingNextPage = companiesQuery.isFetchingNextPage;
+  const isInitialLoading = companiesQuery.isLoading && companies.length === 0;
+  const hasCohort = companies.length > 0;
 
   // Derived metrics
   const loaded = companies.length;
@@ -98,27 +117,45 @@ export function QrmCompaniesPage() {
   const hot = scores.filter((s) => s >= 80).length;
   const cool = scores.filter((s) => s < 40).length;
   const states = new Set(companies.map((c) => c.state).filter(Boolean));
+  const tracked = scores.length;
+  const legacyIds = companies.filter((c) => Boolean(c.legacyCustomerNumber)).length;
+  const dnc = companies.filter((c) => c.doNotContact).length;
+  const coverageDelta = loaded > 0 && tracked < loaded ? { value: "Backfill", direction: "flat" as const } : undefined;
 
   const ironHeadline =
-    hot > 0
-      ? `${hot} account${hot === 1 ? "" : "s"} running hot across ${states.size} state${states.size === 1 ? "" : "s"}. ${cool} account${cool === 1 ? "" : "s"} have gone cold.`
-      : `${loaded} account${loaded === 1 ? "" : "s"} across ${states.size} state${states.size === 1 ? "" : "s"}. No breach signal today.`;
+    isInitialLoading
+      ? "Iron is loading the account cohort, health coverage, and IntelliDealer evidence."
+      : !hasCohort
+        ? "No account cohort loaded yet; add an account or clear filters to restore the command view."
+        : tracked === 0
+          ? `Health intel pending sync for ${loaded} account${loaded === 1 ? "" : "s"}; list remains safe to search, export, and command.`
+          : hot > 0
+            ? `${hot} account${hot === 1 ? "" : "s"} running hot across ${states.size} state${states.size === 1 ? "" : "s"}. ${cool} account${cool === 1 ? "" : "s"} need recovery.`
+            : `${loaded} account${loaded === 1 ? "" : "s"} across ${states.size} state${states.size === 1 ? "" : "s"}; ${legacyIds} carry IntelliDealer evidence.`;
 
   return (
     <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
         title="Companies"
         subtitle="Every account and sub-account — rolled up by territory, rep, and health."
-        crumb={{ surface: "GRAPH", lens: "COMPANIES", count: loaded }}
+        crumb={{ surface: "GRAPH", lens: "COMPANIES", count: isInitialLoading ? "loading" : hasCohort ? loaded : "empty" }}
         metrics={[
-          { label: "Loaded", value: loaded.toLocaleString() },
-          { label: "States", value: states.size },
-          { label: "Hot (≥80)", value: hot, tone: hot > 0 ? "hot" : undefined },
-          { label: "Cool (<40)", value: cool, tone: cool > 0 ? "warm" : undefined },
-          { label: "Tracked", value: scores.length },
+          { label: "Loaded", value: isInitialLoading || !hasCohort ? "—" : loaded.toLocaleString() },
+          { label: "States", value: isInitialLoading || !hasCohort ? "—" : states.size },
+          {
+            label: "Coverage",
+            value: isInitialLoading || !hasCohort ? "—" : `${tracked}/${loaded || 0}`,
+            tone: tracked > 0 ? "live" : "warm",
+            delta: coverageDelta,
+          },
+          { label: "Hot (≥80)", value: tracked > 0 ? hot : "—", tone: hot > 0 ? "hot" : undefined },
+          { label: "Cool (<40)", value: tracked > 0 ? cool : "—", tone: cool > 0 ? "warm" : undefined },
         ]}
         ironBriefing={{
           headline: ironHeadline,
+          evidence: isInitialLoading ? "Loading cohort" : includeExtendedFields ? "Pulse · Pricing · Legacy" : "Pulse · Pricing · Service",
+          confidence: isInitialLoading ? 0.5 : tracked > 0 ? 0.86 : 0.72,
+          freshness: isInitialLoading ? "loading" : tracked > 0 ? "live cohort" : "sync pending",
         }}
         rightRail={
           <div className="flex items-center gap-2">
@@ -153,8 +190,22 @@ export function QrmCompaniesPage() {
       />
       <QrmSubNav />
 
+      <MoonshotBeat
+        pending
+        headline="Iron sort will rank this view by predicted parts-revenue-at-risk in the next 30 days."
+        evidence={
+          isInitialLoading
+            ? "Loading account cohort · awaiting health coverage"
+            : !hasCohort
+              ? "No account cohort · add or clear filters"
+              : `${legacyIds}/${loaded || 0} IntelliDealer IDs · ${dnc} do-not-contact flags · ${tracked}/${loaded || 0} health profiles`
+        }
+        why="Parts · service · territory"
+        action={{ label: "Open account command →", href: companies[0] ? buildAccountCommandHref(companies[0].id) : "/qrm/companies" }}
+      />
+
       {/* Search */}
-      <div className="grid gap-2 lg:grid-cols-[1fr_auto]">
+      <div className="space-y-1.5">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -163,56 +214,80 @@ export function QrmCompaniesPage() {
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
             placeholder="Search company · IntelliDealer # · Search 1/2 · city · state"
-            className="h-10 w-full rounded-sm border border-qep-deck-rule bg-qep-deck-elevated/60 pl-9 pr-3 font-mono text-[13px] text-foreground placeholder:text-muted-foreground/80 focus:border-qep-orange focus:outline-none focus:ring-1 focus:ring-qep-orange/50"
+            aria-label="Search companies"
+            className="h-10 w-full rounded-sm border border-qep-deck-rule bg-qep-deck-elevated/60 pl-9 pr-36 font-mono text-[13px] text-foreground placeholder:text-muted-foreground/80 focus:border-qep-orange focus:outline-none focus:ring-1 focus:ring-qep-orange/50"
           />
+          <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1.5">
+            <button
+              type="button"
+              className={`rounded-sm border px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.1em] transition-colors focus-visible:ring-2 focus-visible:ring-qep-orange/40 ${includeExtendedFields ? "border-qep-orange/40 bg-qep-orange/10 text-qep-orange" : "border-qep-deck-rule bg-muted/30 text-muted-foreground hover:text-foreground"}`}
+              aria-pressed={includeExtendedFields}
+              onClick={() => setIncludeExtendedFields((enabled) => !enabled)}
+            >
+              ID+ {includeExtendedFields ? "on" : "off"}
+            </button>
+            <KbdHint />
+          </div>
         </div>
-        <Button
-          type="button"
-          variant={includeExtendedFields ? "default" : "outline"}
-          className="h-10 rounded-sm font-mono text-[11px] uppercase tracking-[0.12em]"
-          onClick={() => setIncludeExtendedFields((enabled) => !enabled)}
-        >
-          Extended IntelliDealer search {includeExtendedFields ? "on" : "off"}
-        </Button>
-      </div>
-      {includeExtendedFields && (
-        <p className="-mt-3 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-          Searching legacy customer fields, Search 1/2, contacts, phones, email, and ship-to aliases.
+        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+          {includeExtendedFields
+            ? "Searching legacy customer fields, Search 1/2, contacts, phones, email, and ship-to aliases."
+            : `/${" "}focus · ${isInitialLoading ? "loading cohort" : `${loaded.toLocaleString()} loaded`} · base fields active`}
         </p>
-      )}
+      </div>
 
-      {companiesQuery.isLoading && (
-        <div className="space-y-1.5" role="status" aria-label="Loading companies">
-          {Array.from({ length: 8 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-14 animate-pulse rounded-sm border border-qep-deck-rule/50 bg-muted/20"
-            />
-          ))}
-        </div>
-      )}
+      {companiesQuery.isLoading && <RowSkeleton variant="company" />}
 
       {companiesQuery.isError && (
-        <DeckSurface className="p-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            Failed to load companies. Refresh and try again.
-          </p>
-        </DeckSurface>
+        <RetryState
+          message="Failed to load companies. The router can retry without losing the current search."
+          diagnostic={`${companiesQuery.error?.name ?? "Unknown"} · ${new Date().toLocaleTimeString()}`}
+          onRetry={() => void companiesQuery.refetch()}
+        />
       )}
 
       {!companiesQuery.isLoading && !companiesQuery.isError && companies.length === 0 && (
-        <DeckSurface className="p-8 text-center">
-          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-            No results
-          </p>
-          <p className="mt-2 text-sm text-foreground/80">
-            No companies found. Try a different search term.
-          </p>
-        </DeckSurface>
+        <EmptyState
+          headline={debouncedSearch ? "No company match" : "No companies loaded"}
+          body={
+            includeExtendedFields
+              ? "Extended IntelliDealer fields were included. Add a company or clear the search to return to the command deck."
+              : "Try IntelliDealer extended search, clear the current filters, or add the missing account now."
+          }
+          primary={
+            <Button size="sm" className="h-8 font-mono text-[11px] uppercase tracking-[0.1em]" onClick={() => setEditorOpen(true)}>
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Add company
+            </Button>
+          }
+          secondary={
+            debouncedSearch ? (
+              <Button variant="outline" size="sm" className="h-8 font-mono text-[11px] uppercase tracking-[0.1em]" onClick={() => setSearchInput("")}>
+                Clear search
+              </Button>
+            ) : undefined
+          }
+        />
       )}
 
       {!companiesQuery.isLoading && !companiesQuery.isError && companies.length > 0 && (
         <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 px-3 py-2">
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Iron sort
+            </p>
+            <div className="flex flex-wrap items-center gap-1">
+              <button type="button" className="rounded-sm border border-qep-orange/40 bg-qep-orange/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-qep-orange">
+                Default
+              </button>
+              {["Hottest", "Largest pipeline", "Newest touch"].map((label) => (
+                <button key={label} type="button" disabled className="rounded-sm border border-qep-live/20 bg-qep-live/[0.04] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-qep-live/70 disabled:cursor-not-allowed disabled:opacity-70">
+                  {label} · soon
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Column legend */}
           <div className="grid grid-cols-12 gap-3 border-b border-qep-deck-rule/50 px-3 pb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
             <div className="col-span-6 sm:col-span-5">Account</div>
@@ -221,7 +296,7 @@ export function QrmCompaniesPage() {
           </div>
 
           <div className="divide-y divide-qep-deck-rule/40 overflow-hidden rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40">
-            {companies.map((company) => {
+            {companies.map((company, index) => {
               const entry = healthProfileByCompanyId.get(company.id);
               const score = entry?.score ?? null;
               const tone = toneFromHealth(score);
@@ -229,13 +304,24 @@ export function QrmCompaniesPage() {
               const location =
                 [company.city, company.state, company.country].filter(Boolean).join(", ") ||
                 "—";
+              const operatingMeta = [
+                company.territoryCode ? `Territory ${company.territoryCode}` : null,
+                company.termsCode || company.paymentTermsCode ? `Terms ${company.termsCode || company.paymentTermsCode}` : null,
+                typeof company.pricingLevel === "number" ? `Price L${company.pricingLevel}` : null,
+              ].filter(Boolean).join(" · ");
+              const rowDescriptionId = `company-row-${company.id}`;
 
               return (
-                <Link
+                <div
                   key={company.id}
-                  to={buildAccountCommandHref(company.id)}
-                  className="group grid grid-cols-12 items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-qep-orange/[0.04]"
+                  role="group"
+                  aria-describedby={rowDescriptionId}
+                  className="group grid grid-cols-12 items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-qep-orange/[0.04] motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1"
+                  style={{ animationDelay: `${Math.min(index, 12) * 22}ms` }}
                 >
+                  <span id={rowDescriptionId} className="sr-only">
+                    {company.name}, {location}, health {score ?? "unknown"}, {operatingMeta || "operating fields pending"}.
+                  </span>
                   {/* Account */}
                   <div className="col-span-6 flex min-w-0 items-center gap-2.5 sm:col-span-5">
                     <StatusDot tone={tone} pulse={tone === "hot"} />
@@ -243,10 +329,16 @@ export function QrmCompaniesPage() {
                       <Building2 className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-foreground">{company.name}</p>
-                      {(company.search1 || company.search2) && (
+                      <Link
+                        to={buildAccountCommandHref(company.id)}
+                        aria-describedby={rowDescriptionId}
+                        className="block truncate font-medium text-foreground focus-visible:ring-2 focus-visible:ring-qep-orange/40 focus-visible:ring-offset-2 focus-visible:ring-offset-qep-deck-elevated"
+                      >
+                        {company.name}
+                      </Link>
+                      {(company.search1 || company.search2 || operatingMeta) && (
                         <p className="truncate font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70">
-                          {[company.search1, company.search2].filter(Boolean).join(" · ")}
+                          {[company.search1, company.search2, operatingMeta].filter(Boolean).join(" · ")}
                         </p>
                       )}
                       {company.legacyCustomerNumber && (
@@ -272,6 +364,8 @@ export function QrmCompaniesPage() {
                     {hasHealth ? (
                       <button
                         type="button"
+                        aria-label={`Open health score for ${company.name}`}
+                        aria-describedby={rowDescriptionId}
                         onClick={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
@@ -284,9 +378,16 @@ export function QrmCompaniesPage() {
                     ) : (
                       <span className="font-mono text-[11px] text-muted-foreground/50">—</span>
                     )}
-                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-qep-orange" />
+                    <Link
+                      to={buildAccountCommandHref(company.id)}
+                      aria-describedby={rowDescriptionId}
+                      className="hidden font-mono text-[10px] uppercase tracking-[0.1em] text-qep-orange/80 focus-visible:ring-2 focus-visible:ring-qep-orange/40 lg:inline"
+                    >
+                      Command
+                    </Link>
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-qep-orange" aria-hidden />
                   </div>
-                </Link>
+                </div>
               );
             })}
           </div>
@@ -318,7 +419,7 @@ export function QrmCompaniesPage() {
       <QrmCompanyEditorSheet
         open={editorOpen}
         onOpenChange={setEditorOpen}
-        onSaved={(company) => navigate(`/crm/companies/${company.id}`)}
+        onSaved={(company) => navigate(buildAccountCommandHref(company.id))}
       />
       <HealthScoreDrawer
         customerProfileId={healthDrawerProfileId}

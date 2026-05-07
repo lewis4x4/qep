@@ -72,9 +72,14 @@ interface ContactExportInput {
   lastName: string;
   email: string | null;
   phone: string | null;
+  cell?: string | null;
+  directPhone?: string | null;
+  smsOptIn?: boolean | null;
   title: string | null;
   companyName?: string | null;
   assignedRepName?: string | null;
+  sourceCustomerNumber?: string | null;
+  sourceContactNumber?: string | null;
   createdAt: string;
 }
 
@@ -84,9 +89,14 @@ export function exportContacts(contacts: ContactExportInput[]): void {
     "Last Name": c.lastName,
     "Email": c.email ?? "",
     "Phone": c.phone ?? "",
+    "Cell": c.cell ?? "",
+    "Direct Phone": c.directPhone ?? "",
+    "SMS Opt-In": c.smsOptIn === true ? "Yes" : c.smsOptIn === false ? "No" : "",
     "Title": c.title ?? "",
     "Company": c.companyName ?? "",
     "Assigned Rep": c.assignedRepName ?? "",
+    "Source Customer #": c.sourceCustomerNumber ?? "",
+    "Source Contact #": c.sourceContactNumber ?? "",
     "Created": new Date(c.createdAt).toLocaleDateString(),
     "ID": c.id,
   }));
@@ -99,6 +109,15 @@ interface CompanyExportInput {
   id: string;
   name: string;
   legacyCustomerNumber?: string | null;
+  status?: string | null;
+  search1?: string | null;
+  search2?: string | null;
+  territoryCode?: string | null;
+  paymentTermsCode?: string | null;
+  termsCode?: string | null;
+  pricingLevel?: number | null;
+  doNotContact?: boolean | null;
+  optOutSalePi?: boolean | null;
   addressLine1: string | null;
   city: string | null;
   state: string | null;
@@ -111,6 +130,14 @@ export function exportCompanies(companies: CompanyExportInput[]): void {
   const rows = companies.map((c) => ({
     "Company Name": c.name,
     "IntelliDealer #": c.legacyCustomerNumber ?? "",
+    "Search 1": c.search1 ?? "",
+    "Search 2": c.search2 ?? "",
+    "Status": c.status ?? "",
+    "Territory": c.territoryCode ?? "",
+    "Payment Terms": c.termsCode ?? c.paymentTermsCode ?? "",
+    "Pricing Level": c.pricingLevel ?? "",
+    "Do Not Contact": c.doNotContact === true ? "Yes" : c.doNotContact === false ? "No" : "",
+    "Opt Out Sale PI": c.optOutSalePi === true ? "Yes" : c.optOutSalePi === false ? "No" : "",
     "Address": c.addressLine1 ?? "",
     "City": c.city ?? "",
     "State": c.state ?? "",

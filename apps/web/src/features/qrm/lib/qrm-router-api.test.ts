@@ -1,9 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import {
+  normalizeCompanyMergeResultPayload,
   normalizeRouterErrorPayload,
   readRouterJsonPayload,
   requireRouterArrayPayload,
   requireRouterObjectPayload,
+  requireRouterPagePayload,
 } from "./qrm-router-api";
 
 describe("qrm router api response normalizers", () => {
@@ -39,6 +41,39 @@ describe("qrm router api response normalizers", () => {
     });
 
     expect(normalizeRouterErrorPayload({ error: "bad" })).toBeNull();
+  });
+
+  it("validates router-backed list and company merge contract payloads", () => {
+    expect(requireRouterPagePayload<{ id: string }>({
+      items: [{ id: "contact-1" }],
+      nextCursor: "cursor-1",
+    })).toEqual({
+      items: [{ id: "contact-1" }],
+      nextCursor: "cursor-1",
+    });
+
+    expect(normalizeCompanyMergeResultPayload({
+      ok: true,
+      auditId: "audit-1",
+      dryRun: true,
+      totalRowsAffected: 3,
+      tableRowCounts: { crm_deals: 2, bad: "nope" },
+      keptCompanyId: "company-a",
+      discardedCompanyId: "company-b",
+    })).toEqual({
+      ok: true,
+      auditId: "audit-1",
+      dryRun: true,
+      totalRowsAffected: 3,
+      tableRowCounts: { crm_deals: 2 },
+      keptCompanyId: "company-a",
+      discardedCompanyId: "company-b",
+    });
+
+    expect(() => requireRouterPagePayload({ items: {}, nextCursor: null }))
+      .toThrow("QRM router response is missing a valid 'items' array.");
+    expect(() => normalizeCompanyMergeResultPayload({ ok: true }))
+      .toThrow("QRM company merge response is incomplete.");
   });
 
   it("fails safely on malformed JSON and unexpected container shapes", async () => {

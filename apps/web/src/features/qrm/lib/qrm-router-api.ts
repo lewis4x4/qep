@@ -7,6 +7,8 @@ import type {
   QrmCampaign,
   QrmCampaignInput,
   QrmCampaignRecipient,
+  QrmCompanyDuplicatePair,
+  QrmCompanyMergeResult,
   QrmCompanySummary,
   QrmCompanyShipToAddress,
   QrmCompanyShipToInput,
@@ -22,6 +24,7 @@ import type {
   QrmDealEquipmentRole,
   QrmDuplicateCandidate,
   QrmEquipment,
+  QrmPageResult,
   QrmRecordType,
   QrmSearchEntityType,
   QrmSearchItem,
@@ -42,6 +45,7 @@ interface RouterRequestOptions {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   idempotencyKey?: string;
+  signal?: AbortSignal;
 }
 
 async function getAuthHeaders(idempotencyKey?: string): Promise<Record<string, string>> {
@@ -114,6 +118,49 @@ export function requireRouterRecordPayload<T>(payload: Record<string, unknown>, 
   return payload as T;
 }
 
+export function requireRouterPagePayload<T>(payload: Record<string, unknown>): QrmPageResult<T> {
+  if (!Array.isArray(payload.items)) {
+    throw new Error("QRM router response is missing a valid 'items' array.");
+  }
+  if (payload.nextCursor !== undefined && payload.nextCursor !== null && typeof payload.nextCursor !== "string") {
+    throw new Error("QRM router response has an invalid 'nextCursor'.");
+  }
+  return {
+    items: payload.items as T[],
+    nextCursor: payload.nextCursor ?? null,
+  };
+}
+
+export function normalizeCompanyMergeResultPayload(value: unknown): QrmCompanyMergeResult {
+  if (!isRecord(value)) throw new Error("QRM company merge response is missing a valid result object.");
+  if (
+    typeof value.ok !== "boolean" ||
+    typeof value.auditId !== "string" ||
+    typeof value.dryRun !== "boolean" ||
+    typeof value.totalRowsAffected !== "number" ||
+    !isRecord(value.tableRowCounts) ||
+    typeof value.keptCompanyId !== "string" ||
+    typeof value.discardedCompanyId !== "string"
+  ) {
+    throw new Error("QRM company merge response is incomplete.");
+  }
+  const tableRowCounts: Record<string, number> = {};
+  for (const [table, count] of Object.entries(value.tableRowCounts)) {
+    if (typeof count === "number" && Number.isFinite(count)) {
+      tableRowCounts[table] = count;
+    }
+  }
+  return {
+    ok: value.ok,
+    auditId: value.auditId,
+    dryRun: value.dryRun,
+    totalRowsAffected: value.totalRowsAffected,
+    tableRowCounts,
+    keptCompanyId: value.keptCompanyId,
+    discardedCompanyId: value.discardedCompanyId,
+  };
+}
+
 async function requestRouter(
   path: string,
   options: RouterRequestOptions = {},
@@ -123,6 +170,7 @@ async function requestRouter(
     method,
     headers: await getAuthHeaders(options.idempotencyKey),
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: options.signal,
   });
 
   const payload = await readRouterJsonPayload(response, `QRM router ${method} ${path}`);
@@ -213,6 +261,42 @@ export async function patchCrmDealViaRouter(
     body: input,
   });
   return requireRouterObjectPayload<QrmRepSafeDeal>(payload, "deal");
+}
+
+export async function listCrmContactsViaRouter(
+  params: {
+    search?: string;
+    cursor?: string | null;
+    treeRootCompanyId?: string;
+    signal?: AbortSignal;
+  } = {},
+): Promise<QrmPageResult<QrmContactSummary>> {
+  const query = new URLSearchParams();
+  const search = params.search?.trim();
+  if (search) query.set("search", search);
+  if (params.cursor) query.set("cursor", params.cursor);
+  if (params.treeRootCompanyId) query.set("tree_root_company_id", params.treeRootCompanyId);
+  const qs = query.toString();
+  const payload = await requestRouter(`/qrm/contacts${qs ? `?${qs}` : ""}`, { signal: params.signal });
+  return requireRouterPagePayload<QrmContactSummary>(payload);
+}
+
+export async function listCrmCompaniesViaRouter(
+  params: {
+    search?: string;
+    cursor?: string | null;
+    includeExtendedFields?: boolean;
+    signal?: AbortSignal;
+  } = {},
+): Promise<QrmPageResult<QrmCompanySummary>> {
+  const query = new URLSearchParams();
+  const search = params.search?.trim();
+  if (search) query.set("search", search);
+  if (params.cursor) query.set("cursor", params.cursor);
+  if (params.includeExtendedFields) query.set("include_extended_fields", "1");
+  const qs = query.toString();
+  const payload = await requestRouter(`/qrm/companies${qs ? `?${qs}` : ""}`, { signal: params.signal });
+  return requireRouterPagePayload<QrmCompanySummary>(payload);
 }
 
 export async function createCrmContactViaRouter(
@@ -589,6 +673,32 @@ export async function saveRecordCustomFields(
 export async function listDuplicateCandidates(): Promise<QrmDuplicateCandidate[]> {
   const payload = await requestRouter("/qrm/duplicates");
   return requireRouterArrayPayload<QrmDuplicateCandidate>(payload, "candidates");
+}
+
+export async function listDuplicateCompaniesViaRouter(threshold = 0.6): Promise<QrmCompanyDuplicatePair[]> {
+  const query = new URLSearchParams({ threshold: String(threshold) });
+  const payload = await requestRouter(`/qrm/company-duplicates?${query.toString()}`);
+  return requireRouterArrayPayload<QrmCompanyDuplicatePair>(payload, "companies");
+}
+
+export async function mergeCompaniesViaRouter(input: {
+  keepId: string;
+  discardId: string;
+  dryRun: boolean;
+  notes?: string | null;
+}): Promise<QrmCompanyMergeResult> {
+  const payload = await requestRouter("/qrm/company-merges", {
+    method: "POST",
+    idempotencyKey: crypto.randomUUID(),
+    body: input,
+  });
+  return normalizeCompanyMergeResultPayload(payload.result);
+}
+
+export async function undoCompanyMergeViaRouter(auditId: string): Promise<void> {
+  await requestRouter(`/qrm/company-merges/${auditId}/undo`, {
+    method: "POST",
+  });
 }
 
 export async function dismissDuplicateCandidate(candidateId: string): Promise<void> {

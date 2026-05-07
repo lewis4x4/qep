@@ -38,6 +38,7 @@ export interface QrmContactSummary {
   smsOptIn: boolean | null;
   title: string | null;
   primaryCompanyId: string | null;
+  primaryCompanyName?: string | null;
   assignedRepId: string | null;
   mergedIntoContactId: string | null;
   sourceCustomerNumber: string | null;
@@ -591,4 +592,23 @@ export interface QrmDuplicateCandidate {
   rightContact: QrmDuplicateContact | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface QrmCompanyDuplicatePair {
+  groupKey: string;
+  companyAId: string;
+  companyAName: string;
+  companyBId: string;
+  companyBName: string;
+  similarityScore: number;
+}
+
+export interface QrmCompanyMergeResult {
+  ok: boolean;
+  auditId: string;
+  dryRun: boolean;
+  totalRowsAffected: number;
+  tableRowCounts: Record<string, number>;
+  keptCompanyId: string;
+  discardedCompanyId: string;
 }

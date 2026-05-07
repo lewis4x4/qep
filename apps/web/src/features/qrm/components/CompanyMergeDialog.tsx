@@ -6,67 +6,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { GitMerge, Loader2, AlertTriangle, RotateCcw } from "lucide-react";
-import { crmSupabase } from "../lib/qrm-supabase";
+import { mergeCompaniesViaRouter, undoCompanyMergeViaRouter } from "../lib/qrm-router-api";
+import type { QrmCompanyDuplicatePair, QrmCompanyMergeResult } from "../lib/types";
 
-interface CompanyPair {
-  company_a_id: string;
-  company_a_name: string;
-  company_b_id: string;
-  company_b_name: string;
-  similarity_score: number;
-}
 
 interface CompanyMergeDialogProps {
-  pair: CompanyPair | null;
+  pair: QrmCompanyDuplicatePair | null;
   onClose: () => void;
-}
-
-interface MergeResponse {
-  ok: boolean;
-  audit_id: string;
-  dry_run: boolean;
-  total_rows_affected: number;
-  table_row_counts: Record<string, number>;
-  kept_company_id: string;
-  discarded_company_id: string;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong.";
-}
-
-function parseMergeResponse(value: unknown): MergeResponse {
-  if (!isRecord(value)) throw new Error("Merge returned an invalid response");
-  if (
-    typeof value.ok !== "boolean" ||
-    typeof value.audit_id !== "string" ||
-    typeof value.dry_run !== "boolean" ||
-    typeof value.total_rows_affected !== "number" ||
-    !isRecord(value.table_row_counts) ||
-    typeof value.kept_company_id !== "string" ||
-    typeof value.discarded_company_id !== "string"
-  ) {
-    throw new Error("Merge returned an incomplete response");
-  }
-
-  const tableRowCounts: Record<string, number> = {};
-  for (const [table, count] of Object.entries(value.table_row_counts)) {
-    if (typeof count === "number") tableRowCounts[table] = count;
-  }
-
-  return {
-    ok: value.ok,
-    audit_id: value.audit_id,
-    dry_run: value.dry_run,
-    total_rows_affected: value.total_rows_affected,
-    table_row_counts: tableRowCounts,
-    kept_company_id: value.kept_company_id,
-    discarded_company_id: value.discarded_company_id,
-  };
 }
 
 export function CompanyMergeDialog({ pair, onClose }: CompanyMergeDialogProps) {
@@ -74,34 +24,35 @@ export function CompanyMergeDialog({ pair, onClose }: CompanyMergeDialogProps) {
   const [keepSide, setKeepSide] = useState<"a" | "b">("a");
   const [notes, setNotes] = useState("");
   const [confirmText, setConfirmText] = useState("");
-  const [dryRunResult, setDryRunResult] = useState<MergeResponse | null>(null);
+  const [dryRunResult, setDryRunResult] = useState<QrmCompanyMergeResult | null>(null);
   const [lastMergeAuditId, setLastMergeAuditId] = useState<string | null>(null);
 
   const mergeMutation = useMutation({
     mutationFn: async (opts: { dryRun: boolean }) => {
       if (!pair) throw new Error("No pair selected");
-      const keepId = keepSide === "a" ? pair.company_a_id : pair.company_b_id;
-      const discardId = keepSide === "a" ? pair.company_b_id : pair.company_a_id;
-      const { data, error } = await crmSupabase.rpc("merge_companies", {
-        p_keep_id: keepId,
-        p_discard_id: discardId,
-        p_dry_run: opts.dryRun,
-        p_caller_notes: notes.trim() || undefined,
+      const keepId = keepSide === "a" ? pair.companyAId : pair.companyBId;
+      const discardId = keepSide === "a" ? pair.companyBId : pair.companyAId;
+      return mergeCompaniesViaRouter({
+        keepId,
+        discardId,
+        dryRun: opts.dryRun,
+        notes: notes.trim() || null,
       });
-      if (error) throw new Error(error.message ?? "Merge failed");
-      return parseMergeResponse(data);
     },
     onSuccess: (data) => {
-      if (data.dry_run) {
+      if (data.dryRun) {
         setDryRunResult(data);
       } else {
         // Round-5 audit fix: clear the dry-run preview on real-merge success
         // so the success banner doesn't render alongside a stale preview card.
         setDryRunResult(null);
         setConfirmText("");
-        setLastMergeAuditId(data.audit_id);
+        setLastMergeAuditId(data.auditId);
         queryClient.invalidateQueries({ queryKey: ["duplicate-companies"] });
+        queryClient.invalidateQueries({ queryKey: ["crm", "companies"] });
         queryClient.invalidateQueries({ queryKey: ["account-360"] });
+        queryClient.invalidateQueries({ queryKey: ["account-command"] });
+        queryClient.invalidateQueries({ queryKey: ["qrm", "graph-explorer"] });
       }
     },
   });
@@ -117,19 +68,25 @@ export function CompanyMergeDialog({ pair, onClose }: CompanyMergeDialogProps) {
       setLastMergeAuditId(null);
       setKeepSide("a");
     }
-  }, [pair?.company_a_id, pair?.company_b_id]);
+  }, [pair?.companyAId, pair?.companyBId]);
+
+  useEffect(() => {
+    if (dryRunResult && !lastMergeAuditId) {
+      setDryRunResult(null);
+      setConfirmText("");
+    }
+  }, [keepSide, notes]);
 
   const undoMutation = useMutation({
-    mutationFn: async (auditId: string) => {
-      const { data, error } = await crmSupabase.rpc("qrm_undo_company_merge", { p_audit_id: auditId });
-      if (error) throw new Error(error.message ?? "Undo failed");
-      return data;
-    },
+    mutationFn: (auditId: string) => undoCompanyMergeViaRouter(auditId),
     onSuccess: () => {
       setLastMergeAuditId(null);
       setDryRunResult(null);
       queryClient.invalidateQueries({ queryKey: ["duplicate-companies"] });
+      queryClient.invalidateQueries({ queryKey: ["crm", "companies"] });
       queryClient.invalidateQueries({ queryKey: ["account-360"] });
+      queryClient.invalidateQueries({ queryKey: ["account-command"] });
+      queryClient.invalidateQueries({ queryKey: ["qrm", "graph-explorer"] });
       onClose();
     },
   });
@@ -145,8 +102,8 @@ export function CompanyMergeDialog({ pair, onClose }: CompanyMergeDialogProps) {
 
   if (!pair) return null;
 
-  const keepName = keepSide === "a" ? pair.company_a_name : pair.company_b_name;
-  const discardName = keepSide === "a" ? pair.company_b_name : pair.company_a_name;
+  const keepName = keepSide === "a" ? pair.companyAName : pair.companyBName;
+  const discardName = keepSide === "a" ? pair.companyBName : pair.companyAName;
 
   return (
     <Dialog open={pair !== null} onOpenChange={(next) => !next && resetAndClose()}>
@@ -177,7 +134,7 @@ export function CompanyMergeDialog({ pair, onClose }: CompanyMergeDialogProps) {
               <p className="text-[9px] uppercase tracking-wider text-muted-foreground">
                 {keepSide === "a" ? "Keeping" : "Discarding"}
               </p>
-              <p className="mt-0.5 text-xs font-semibold text-foreground truncate">{pair.company_a_name}</p>
+              <p className="mt-0.5 text-xs font-semibold text-foreground truncate">{pair.companyAName}</p>
             </button>
             <button
               type="button"
@@ -189,7 +146,7 @@ export function CompanyMergeDialog({ pair, onClose }: CompanyMergeDialogProps) {
               <p className="text-[9px] uppercase tracking-wider text-muted-foreground">
                 {keepSide === "b" ? "Keeping" : "Discarding"}
               </p>
-              <p className="mt-0.5 text-xs font-semibold text-foreground truncate">{pair.company_b_name}</p>
+              <p className="mt-0.5 text-xs font-semibold text-foreground truncate">{pair.companyBName}</p>
             </button>
           </div>
 
@@ -211,16 +168,16 @@ export function CompanyMergeDialog({ pair, onClose }: CompanyMergeDialogProps) {
             <Card className="border-blue-500/30 bg-blue-500/5 p-3">
               <p className="text-[10px] uppercase tracking-wider text-blue-400">Dry run preview</p>
               <p className="mt-1 text-sm font-bold text-foreground">
-                {dryRunResult.total_rows_affected} rows would be reassigned
+                {dryRunResult.totalRowsAffected} rows would be reassigned
               </p>
               <div className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
-                {Object.entries(dryRunResult.table_row_counts).map(([tbl, n]) => (
+                {Object.entries(dryRunResult.tableRowCounts).map(([tbl, n]) => (
                   <div key={tbl} className="flex justify-between">
                     <span className="font-mono">{tbl}</span>
                     <span className="tabular-nums">{n}</span>
                   </div>
                 ))}
-                {Object.keys(dryRunResult.table_row_counts).length === 0 && (
+                {Object.keys(dryRunResult.tableRowCounts).length === 0 && (
                   <span className="italic">No rows to reassign.</span>
                 )}
               </div>

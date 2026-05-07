@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, GitMerge, XCircle } from "lucide-react";
 import { CompanyMergeDialog } from "../components/CompanyMergeDialog";
 import { accountCommandUrl } from "../lib/account-links";
-import { crmSupabase } from "../lib/qrm-supabase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,9 +19,10 @@ import { QrmPageHeader } from "../components/QrmPageHeader";
 import {
   dismissDuplicateCandidate,
   listDuplicateCandidates,
+  listDuplicateCompaniesViaRouter,
   mergeDuplicateContacts,
 } from "../lib/qrm-router-api";
-import type { QrmDuplicateCandidate } from "../lib/types";
+import type { QrmCompanyDuplicatePair, QrmDuplicateCandidate } from "../lib/types";
 import type { UserRole } from "@/lib/database.types";
 
 interface QrmDuplicatesPageProps {
@@ -254,24 +254,11 @@ export function QrmDuplicatesPage({ userRole }: QrmDuplicatesPageProps) {
 
 /* ── Duplicate Companies section (Phase H) ─────────────────────────── */
 
-interface CompanyDupRow {
-  group_key: string;
-  company_a_id: string;
-  company_a_name: string;
-  company_b_id: string;
-  company_b_name: string;
-  similarity_score: number;
-}
-
 function DuplicateCompaniesSection() {
-  const [mergePair, setMergePair] = useState<CompanyDupRow | null>(null);
+  const [mergePair, setMergePair] = useState<QrmCompanyDuplicatePair | null>(null);
   const { data: dupes = [], isLoading, isError } = useQuery({
     queryKey: ["duplicate-companies"],
-    queryFn: async () => {
-      const { data, error } = await crmSupabase.rpc("find_duplicate_companies", { p_threshold: 0.6 });
-      if (error) throw new Error(error.message ?? "Failed to scan");
-      return (data ?? []) satisfies CompanyDupRow[];
-    },
+    queryFn: () => listDuplicateCompaniesViaRouter(0.6),
     staleTime: 5 * 60_000,
   });
 
@@ -298,21 +285,21 @@ function DuplicateCompaniesSection() {
       {!isLoading && !isError && dupes.length > 0 && (
         <div className="space-y-1.5">
           {dupes.slice(0, 25).map((d, i) => (
-            <div key={`${d.company_a_id}-${d.company_b_id}-${i}`} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2 text-xs border-b border-border/50 pb-1.5 last:border-b-0 last:pb-0">
+            <div key={`${d.companyAId}-${d.companyBId}-${i}`} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2 text-xs border-b border-border/50 pb-1.5 last:border-b-0 last:pb-0">
               <a
-                href={accountCommandUrl(d.company_a_id)}
+                href={accountCommandUrl(d.companyAId)}
                 className="truncate text-foreground hover:text-qep-orange"
               >
-                {d.company_a_name}
+                {d.companyAName}
               </a>
               <span className="text-center tabular-nums text-muted-foreground">
-                {(d.similarity_score * 100).toFixed(0)}%
+                {(d.similarityScore * 100).toFixed(0)}%
               </span>
               <a
-                href={accountCommandUrl(d.company_b_id)}
+                href={accountCommandUrl(d.companyBId)}
                 className="truncate text-foreground hover:text-qep-orange"
               >
-                {d.company_b_name}
+                {d.companyBName}
               </a>
               <Button
                 size="sm"

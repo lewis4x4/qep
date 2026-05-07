@@ -56,6 +56,11 @@ import {
   createEquipment,
   getEquipment,
   findEquipmentInvoiceReversalCandidate,
+  listCompanies,
+  listContacts,
+  listDuplicateCompanies,
+  mergeCompanies,
+  undoCompanyMerge,
   reverseEquipmentSaleByStockNumber,
   dismissDuplicateCandidate,
   getCommunicationTarget,
@@ -88,6 +93,7 @@ import {
   type DealCreatePayload,
   type DealEquipmentPayload,
   type DealPatchPayload,
+  type CompanyMergePayload,
   type EquipmentPayload,
   type EquipmentSaleReversalPayload,
 } from "../_shared/crm-router-data.ts";
@@ -355,6 +361,15 @@ function mapError(origin: string | null, error: unknown): Response {
     });
   }
 
+  if (message === "Invalid list cursor.") {
+    return crmFail({
+      origin,
+      status: 400,
+      code: "VALIDATION_ERROR",
+      message: "Invalid list cursor.",
+    });
+  }
+
   if (message === "VALIDATION_STAGE_CREATE_OPEN_ONLY") {
     return crmFail({
       origin,
@@ -447,6 +462,64 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const types = url.searchParams.get("types") ?? "contact,company,deal,equipment,rental";
       const results = await crmSearch(ctx, q, types);
       return crmOk({ results }, { origin });
+    }
+
+    if (req.method === "GET" && segments[1] === "contacts" && segments.length === 2) {
+      requireCaller(ctx);
+      const result = await listContacts(ctx, {
+        search: url.searchParams.get("search"),
+        cursor: url.searchParams.get("cursor"),
+        treeRootCompanyId: url.searchParams.get("tree_root_company_id"),
+      });
+      return crmOk(result, { origin });
+    }
+
+    if (req.method === "GET" && segments[1] === "companies" && segments.length === 2) {
+      requireCaller(ctx);
+      const result = await listCompanies(ctx, {
+        search: url.searchParams.get("search"),
+        cursor: url.searchParams.get("cursor"),
+        includeExtendedFields: url.searchParams.get("include_extended_fields") === "1",
+      });
+      return crmOk(result, { origin });
+    }
+
+    if (req.method === "GET" && segments[1] === "company-duplicates" && segments.length === 2) {
+      requireCaller(ctx);
+      requireElevated(ctx);
+      const thresholdParam = url.searchParams.get("threshold");
+      const threshold = thresholdParam ? Number(thresholdParam) : 0.6;
+      if (!Number.isFinite(threshold)) {
+        return crmFail({
+          origin,
+          status: 400,
+          code: "VALIDATION_ERROR",
+          message: "threshold must be a number.",
+        });
+      }
+      const companies = await listDuplicateCompanies(ctx, threshold);
+      return crmOk({ companies }, { origin });
+    }
+
+    if (req.method === "POST" && segments[1] === "company-merges" && segments.length === 2) {
+      requireCaller(ctx);
+      requireElevated(ctx);
+      const body = await readJsonBody<CompanyMergePayload>(req);
+      const result = await mergeCompanies(ctx, body);
+      return crmOk({ result }, { origin });
+    }
+
+    if (
+      req.method === "POST" &&
+      segments[1] === "company-merges" &&
+      segments[2] &&
+      segments[3] === "undo" &&
+      segments.length === 4
+    ) {
+      requireCaller(ctx);
+      requireElevated(ctx);
+      await undoCompanyMerge(ctx, segments[2]);
+      return crmOk({ ok: true }, { origin });
     }
 
     if (

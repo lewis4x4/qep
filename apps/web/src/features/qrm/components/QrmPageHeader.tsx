@@ -42,6 +42,9 @@ interface QrmPageHeaderProps {
   ironBriefing?: {
     headline: React.ReactNode;
     actions?: IronBarAction[];
+    evidence?: string;
+    confidence?: number;
+    freshness?: string;
   } | null;
   /**
    * Optional right-side action rail (buttons, toggles, etc.).
@@ -51,6 +54,10 @@ interface QrmPageHeaderProps {
    * Hide CRM source badge on native command pages where a HubSpot data badge would be misleading.
    */
   showDataSourceBadge?: boolean;
+  /**
+   * Optional source prefix for pages that need to distinguish CRM provenance from native computed ledgers.
+   */
+  dataSourceBadgePrefix?: string;
 }
 
 interface HubSpotIntegrationStatusRow {
@@ -116,6 +123,7 @@ export function QrmPageHeader({
   ironBriefing,
   rightRail,
   showDataSourceBadge = true,
+  dataSourceBadgePrefix,
 }: QrmPageHeaderProps) {
   const dataSourceQuery = useQuery({
     queryKey: ["crm", "hubspot-data-source-state"],
@@ -124,9 +132,15 @@ export function QrmPageHeader({
     enabled: showDataSourceBadge,
   });
 
-  const snapshot = dataSourceQuery.data ?? { state: "Demo" as DataSourceState, lastSyncAt: null };
+  const snapshot = dataSourceQuery.data ?? {
+    state: (dataSourceQuery.isLoading ? "Manual" : "Demo") as DataSourceState,
+    lastSyncAt: null,
+  };
   const dataSourceState = snapshot.state;
   const lastSyncAt = snapshot.lastSyncAt;
+  const badgeLabel = dataSourceBadgePrefix
+    ? `${dataSourceBadgePrefix} ${dataSourceQuery.isLoading ? "Checking" : dataSourceState}`
+    : undefined;
 
   useEffect(() => {
     if (!showDataSourceBadge || !dataSourceState) return;
@@ -155,14 +169,20 @@ export function QrmPageHeader({
         </span>
       );
     }
-    return <DataSourceBadge state={dataSourceState} />;
+    return <DataSourceBadge state={dataSourceState} label={badgeLabel} />;
   };
 
   return (
     <header className="space-y-3">
       {/* Iron briefing ribbon — the AI narrative that frames the page */}
       {ironBriefing && (
-        <IronBar headline={ironBriefing.headline} actions={ironBriefing.actions} />
+        <IronBar
+          headline={ironBriefing.headline}
+          actions={ironBriefing.actions}
+          evidence={ironBriefing.evidence}
+          confidence={ironBriefing.confidence}
+          freshness={ironBriefing.freshness}
+        />
       )}
 
       {/* Title block */}

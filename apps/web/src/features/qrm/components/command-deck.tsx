@@ -19,7 +19,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { ArrowDownRight, ArrowUpRight, Minus, Sparkles } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Minus, RotateCcw, Sparkles } from "lucide-react";
 
 /* -------------------------------------------------------------------------- */
 /*  StatusDot                                                                  */
@@ -273,10 +273,16 @@ export interface IronBarAction {
 export function IronBar({
   headline,
   actions,
+  evidence,
+  confidence,
+  freshness,
   className,
 }: {
   headline: React.ReactNode;
   actions?: IronBarAction[];
+  evidence?: string;
+  confidence?: number;
+  freshness?: string;
   className?: string;
 }) {
   return (
@@ -294,25 +300,29 @@ export function IronBar({
         Iron
       </span>
       <span className="hidden h-4 w-px bg-qep-deck-rule sm:inline-block" />
+      {evidence && <SignalChip label={evidence} tone="live" className="hidden shrink-0 sm:inline-flex" />}
       <div className="min-w-0 flex-1 truncate text-sm text-foreground/90">{headline}</div>
+      {(confidence !== undefined || freshness) && (
+        <span className="hidden shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70 lg:inline">
+          {confidence !== undefined ? `${Math.round(confidence * 100)}%` : null}
+          {confidence !== undefined && freshness ? " · " : null}
+          {freshness}
+        </span>
+      )}
       {actions && actions.length > 0 && (
         <div className="flex shrink-0 items-center gap-1">
           {actions.map((action) => {
-            const content = (
-              <span className="inline-flex items-center gap-1 rounded-sm border border-qep-live/30 bg-qep-live/10 px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-qep-live transition-colors hover:bg-qep-live/20">
-                {action.label}
-              </span>
-            );
+            const actionClass = "inline-flex items-center gap-1 rounded-sm border border-qep-live/30 bg-qep-live/10 px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-qep-live transition-colors hover:bg-qep-live/20 focus-visible:ring-2 focus-visible:ring-qep-orange/40";
             if (action.href) {
               return (
-                <a key={action.label} href={action.href}>
-                  {content}
+                <a key={action.label} href={action.href} className={actionClass}>
+                  {action.label}
                 </a>
               );
             }
             return (
-              <button key={action.label} type="button" onClick={action.onClick}>
-                {content}
+              <button key={action.label} type="button" onClick={action.onClick} className={actionClass}>
+                {action.label}
               </button>
             );
           })}
@@ -368,3 +378,169 @@ export const DeckSurface = React.forwardRef<
     </div>
   );
 });
+
+/* -------------------------------------------------------------------------- */
+/*  MoonshotBeat — explicit AI next-move slot                                  */
+/* -------------------------------------------------------------------------- */
+
+export function MoonshotBeat({
+  label = "MoonshotBeat",
+  headline,
+  evidence,
+  action,
+  why,
+  pending = false,
+  className,
+}: {
+  label?: string;
+  headline: React.ReactNode;
+  evidence: React.ReactNode;
+  action?: IronBarAction;
+  why?: React.ReactNode;
+  pending?: boolean;
+  className?: string;
+}) {
+  const actionClass = "inline-flex items-center rounded-sm border border-qep-live/30 bg-qep-live/10 px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-qep-live transition-colors hover:bg-qep-live/20 focus-visible:ring-2 focus-visible:ring-qep-orange/40";
+
+  return (
+    <DeckSurface tone="live" className={cn("relative overflow-hidden px-4 py-3", className)}>
+      <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-qep-live to-transparent" />
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="mb-1.5 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-qep-live">
+              <Sparkles className="h-3.5 w-3.5 motion-safe:animate-pulse" aria-hidden />
+              {label}
+            </span>
+            {pending && <SignalChip label="Pending data" tone="warm" />}
+          </div>
+          <p className="text-sm font-medium text-foreground/95">{headline}</p>
+          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+            {evidence}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {why && <SignalChip label="Why this" value={why} tone="live" />}
+          {action && (action.href ? (
+            <a href={action.href} className={actionClass}>{action.label}</a>
+          ) : (
+            <button type="button" onClick={action.onClick} className={actionClass}>{action.label}</button>
+          ))}
+        </div>
+      </div>
+    </DeckSurface>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  RowSkeleton — mirrors command-deck row geometry                             */
+/* -------------------------------------------------------------------------- */
+
+export function RowSkeleton({ rows = 8, variant = "company" }: { rows?: number; variant?: "company" | "contact" }) {
+  const grid = variant === "contact" ? "grid-cols-12" : "grid-cols-12";
+  return (
+    <div className="space-y-1.5" role="status" aria-label={`Loading ${variant === "contact" ? "contacts" : "companies"}`}>
+      {Array.from({ length: rows }).map((_, index) => (
+        <div
+          key={index}
+          className={cn(
+            "grid h-14 animate-pulse items-center gap-3 rounded-sm border border-qep-deck-rule/50 bg-qep-deck-elevated/30 px-3",
+            grid,
+          )}
+        >
+          <div className="col-span-6 flex items-center gap-2.5 sm:col-span-5">
+            <div className="h-2 w-2 rounded-full bg-muted/60" />
+            {variant === "company" && <div className="h-7 w-7 rounded-sm bg-muted/40" />}
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <div className="h-3 w-2/3 rounded-sm bg-muted/50" />
+              <div className="h-2 w-1/2 rounded-sm bg-muted/35" />
+            </div>
+          </div>
+          <div className="col-span-4 hidden h-3 rounded-sm bg-muted/35 sm:block" />
+          <div className="col-span-3 h-5 rounded-sm bg-muted/35 sm:col-span-1" />
+          <div className="col-span-3 flex justify-end sm:col-span-1">
+            <div className="h-4 w-4 rounded-sm bg-muted/30" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Empty / Retry / Keyboard hint primitives                                   */
+/* -------------------------------------------------------------------------- */
+
+export function EmptyState({
+  headline,
+  body,
+  primary,
+  secondary,
+  className,
+}: {
+  headline: React.ReactNode;
+  body: React.ReactNode;
+  primary?: React.ReactNode;
+  secondary?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <DeckSurface className={cn("p-8 text-center", className)}>
+      <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-qep-live">
+        {headline}
+      </p>
+      <p className="mx-auto mt-2 max-w-xl text-sm text-foreground/80">{body}</p>
+      {(primary || secondary) && (
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+          {primary}
+          {secondary}
+        </div>
+      )}
+    </DeckSurface>
+  );
+}
+
+export function RetryState({
+  message,
+  diagnostic,
+  onRetry,
+  className,
+}: {
+  message: React.ReactNode;
+  diagnostic?: React.ReactNode;
+  onRetry: () => void;
+  className?: string;
+}) {
+  return (
+    <DeckSurface className={cn("p-6 text-center", className)}>
+      <p className="text-sm text-foreground/85">{message}</p>
+      {diagnostic && (
+        <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70">
+          {diagnostic}
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-4 inline-flex items-center gap-1.5 rounded-sm border border-qep-orange/40 bg-qep-orange/10 px-3 py-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-qep-orange transition-colors hover:bg-qep-orange/20 focus-visible:ring-2 focus-visible:ring-qep-orange/40"
+      >
+        <RotateCcw className="h-3 w-3" aria-hidden />
+        Retry
+      </button>
+    </DeckSurface>
+  );
+}
+
+export function KbdHint({ children = "/", className }: { children?: React.ReactNode; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "pointer-events-none hidden rounded-sm border border-qep-deck-rule bg-qep-deck-elevated/80 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground md:inline-flex",
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}

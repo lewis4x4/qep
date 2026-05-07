@@ -270,10 +270,47 @@ export interface DealCreatePayload {
   followUpReminderSource?: FollowUpReminderSource;
 }
 
+interface ContactListCursor {
+  lastName: string;
+  firstName: string;
+  id: string;
+}
+
+interface CompanyListCursor {
+  name: string;
+  id: string;
+}
+
+export interface ListContactsParams {
+  search?: string | null;
+  cursor?: string | null;
+  treeRootCompanyId?: string | null;
+}
+
+export interface ListCompaniesParams {
+  search?: string | null;
+  cursor?: string | null;
+  includeExtendedFields?: boolean;
+}
+
+export interface CompanyMergePayload {
+  keepId?: string | null;
+  discardId?: string | null;
+  dryRun?: boolean;
+  notes?: string | null;
+}
+
+const CONTACTS_PAGE_SIZE = 25;
+const COMPANIES_PAGE_SIZE = 25;
+
 function cleanText(value: string | null | undefined): string | null {
   if (!value) return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function cleanMetadataText(metadata: unknown, key: string): string | null {
@@ -286,6 +323,57 @@ function cleanInteger(value: number | null | undefined): number | null {
   if (value === null || value === undefined) return null;
   if (!Number.isFinite(value)) return null;
   return Math.trunc(value);
+}
+
+function encodeListCursor(value: ContactListCursor | CompanyListCursor): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function parseEncodedListCursor(cursor: string | null | undefined): unknown {
+  if (!cursor) return null;
+  try {
+    const binary = atob(cursor);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new Error("Invalid list cursor.");
+  }
+}
+
+function decodeContactCursor(cursor: string | null | undefined): ContactListCursor | null {
+  const value = parseEncodedListCursor(cursor);
+  if (value === null) return null;
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof (value as Record<string, unknown>).lastName === "string" &&
+    typeof (value as Record<string, unknown>).firstName === "string" &&
+    typeof (value as Record<string, unknown>).id === "string"
+  ) {
+    const record = value as Record<string, string>;
+    return { lastName: record.lastName, firstName: record.firstName, id: record.id };
+  }
+  throw new Error("Invalid list cursor.");
+}
+
+function decodeCompanyCursor(cursor: string | null | undefined): CompanyListCursor | null {
+  const value = parseEncodedListCursor(cursor);
+  if (value === null) return null;
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof (value as Record<string, unknown>).name === "string" &&
+    typeof (value as Record<string, unknown>).id === "string"
+  ) {
+    const record = value as Record<string, string>;
+    return { name: record.name, id: record.id };
+  }
+  throw new Error("Invalid list cursor.");
 }
 
 function toCommunicationMergeFields(contact: CommunicationContact): Record<string, string> {
@@ -1044,6 +1132,245 @@ async function resolveStage(
     isClosedWon: Boolean(data.is_closed_won),
     isClosedLost: Boolean(data.is_closed_lost),
   };
+}
+
+function toContactSummary(row: Record<string, unknown>, primaryCompanyName?: string | null): unknown {
+  return {
+    id: String(row.id),
+    workspaceId: String(row.workspace_id ?? "default"),
+    dgeCustomerProfileId: typeof row.dge_customer_profile_id === "string" ? row.dge_customer_profile_id : null,
+    firstName: String(row.first_name ?? ""),
+    lastName: String(row.last_name ?? ""),
+    email: typeof row.email === "string" ? row.email : null,
+    phone: typeof row.phone === "string" ? row.phone : null,
+    cell: typeof row.cell === "string" ? row.cell : null,
+    directPhone: typeof row.direct_phone === "string" ? row.direct_phone : null,
+    birthDate: typeof row.birth_date === "string" ? row.birth_date : null,
+    smsOptIn: typeof row.sms_opt_in === "boolean" ? row.sms_opt_in : null,
+    title: typeof row.title === "string" ? row.title : null,
+    primaryCompanyId: typeof row.primary_company_id === "string" ? row.primary_company_id : null,
+    primaryCompanyName: primaryCompanyName ?? null,
+    assignedRepId: typeof row.assigned_rep_id === "string" ? row.assigned_rep_id : null,
+    mergedIntoContactId: typeof row.merged_into_contact_id === "string" ? row.merged_into_contact_id : null,
+    sourceCustomerNumber: cleanMetadataText(row.metadata, "source_customer_number"),
+    sourceContactNumber: cleanMetadataText(row.metadata, "source_contact_number"),
+    sourceStatusCode: cleanMetadataText(row.metadata, "status_code"),
+    sourceSalespersonCode: cleanMetadataText(row.metadata, "salesperson_code"),
+    myDealerUser: cleanMetadataText(row.metadata, "mydealer_user"),
+    createdAt: String(row.created_at ?? ""),
+    updatedAt: String(row.updated_at ?? ""),
+  };
+}
+
+function toCompanySummary(row: Record<string, unknown>): unknown {
+  return {
+    id: String(row.id),
+    workspaceId: String(row.workspace_id ?? "default"),
+    name: typeof row.name === "string" && row.name.trim().length > 0 ? row.name : "Unnamed company",
+    parentCompanyId: typeof row.parent_company_id === "string" ? row.parent_company_id : null,
+    assignedRepId: typeof row.assigned_rep_id === "string" ? row.assigned_rep_id : null,
+    legacyCustomerNumber: typeof row.legacy_customer_number === "string" ? row.legacy_customer_number : null,
+    status: typeof row.status === "string" ? row.status : null,
+    productCategory: typeof row.product_category === "string" ? row.product_category : null,
+    arType: typeof row.ar_type === "string" ? row.ar_type : null,
+    paymentTermsCode: typeof row.payment_terms_code === "string" ? row.payment_terms_code : null,
+    termsCode: typeof row.terms_code === "string" ? row.terms_code : null,
+    territoryCode: typeof row.territory_code === "string" ? row.territory_code : null,
+    pricingLevel: typeof row.pricing_level === "number" && Number.isFinite(row.pricing_level) ? row.pricing_level : null,
+    doNotContact: typeof row.do_not_contact === "boolean" ? row.do_not_contact : null,
+    optOutSalePi: typeof row.opt_out_sale_pi === "boolean" ? row.opt_out_sale_pi : null,
+    search1: typeof row.search_1 === "string" ? row.search_1 : null,
+    search2: typeof row.search_2 === "string" ? row.search_2 : null,
+    addressLine1: typeof row.address_line_1 === "string" ? row.address_line_1 : null,
+    addressLine2: typeof row.address_line_2 === "string" ? row.address_line_2 : null,
+    city: typeof row.city === "string" ? row.city : null,
+    state: typeof row.state === "string" ? row.state : null,
+    postalCode: typeof row.postal_code === "string" ? row.postal_code : null,
+    country: typeof row.country === "string" ? row.country : null,
+    createdAt: String(row.created_at ?? ""),
+    updatedAt: String(row.updated_at ?? ""),
+  };
+}
+
+export async function listContacts(
+  ctx: RouterCtx,
+  params: ListContactsParams,
+): Promise<{ items: unknown[]; nextCursor: string | null }> {
+  const cursor = decodeContactCursor(params.cursor);
+  const treeRoot = cleanText(params.treeRootCompanyId ?? null);
+  if (treeRoot && !isUuid(treeRoot)) {
+    throw new Error("VALIDATION_TREE_ROOT_COMPANY_ID");
+  }
+  const search = cleanText(params.search ?? null);
+  const rpcParams = {
+    p_search: search ?? undefined,
+    p_after_last_name: cursor?.lastName,
+    p_after_first_name: cursor?.firstName,
+    p_after_id: cursor?.id,
+    p_limit: CONTACTS_PAGE_SIZE + 1,
+  };
+  const { data, error } = treeRoot
+    ? await ctx.callerDb.rpc("list_crm_contacts_for_company_subtree_page", {
+      ...rpcParams,
+      p_company_id: treeRoot,
+    })
+    : await ctx.callerDb.rpc("list_crm_contacts_page", rpcParams);
+  if (error) throw error;
+
+  const rows = ((data ?? []) as Array<Record<string, unknown>>);
+  const visibleRows = rows.slice(0, CONTACTS_PAGE_SIZE);
+  const visibleIds = visibleRows.map((row) => String(row.id));
+  const detailById = new Map<string, Record<string, unknown>>();
+  if (visibleIds.length > 0) {
+    const { data: detailRows, error: detailError } = await ctx.callerDb
+      .from("crm_contacts")
+      .select("id, workspace_id, dge_customer_profile_id, first_name, last_name, email, phone, cell, direct_phone, birth_date, sms_opt_in, title, primary_company_id, assigned_rep_id, merged_into_contact_id, metadata, created_at, updated_at")
+      .eq("workspace_id", ctx.workspaceId)
+      .in("id", visibleIds)
+      .is("deleted_at", null);
+    if (detailError) throw detailError;
+    for (const detail of detailRows ?? []) {
+      detailById.set(String(detail.id), detail as Record<string, unknown>);
+    }
+  }
+
+  const companyIds = Array.from(new Set(visibleRows
+    .map((row) => detailById.get(String(row.id)) ?? row)
+    .map((row) => typeof row.primary_company_id === "string" ? row.primary_company_id : null)
+    .filter((id): id is string => Boolean(id))));
+  const companyNameById = new Map<string, string>();
+  if (companyIds.length > 0) {
+    const { data: companies, error: companyError } = await ctx.callerDb
+      .from("crm_companies")
+      .select("id, name")
+      .eq("workspace_id", ctx.workspaceId)
+      .in("id", companyIds)
+      .is("deleted_at", null);
+    if (companyError) throw companyError;
+    for (const company of companies ?? []) {
+      companyNameById.set(String(company.id), String(company.name));
+    }
+  }
+
+  const nextRow = rows.length > CONTACTS_PAGE_SIZE ? visibleRows[visibleRows.length - 1] : null;
+  return {
+    items: visibleRows.map((row) => {
+      const detail = detailById.get(String(row.id)) ?? row;
+      const companyId = typeof detail.primary_company_id === "string" ? detail.primary_company_id : null;
+      return toContactSummary(detail, companyId ? companyNameById.get(companyId) ?? null : null);
+    }),
+    nextCursor: nextRow
+      ? encodeListCursor({
+        lastName: String(nextRow.last_name ?? ""),
+        firstName: String(nextRow.first_name ?? ""),
+        id: String(nextRow.id),
+      })
+      : null,
+  };
+}
+
+export async function listCompanies(
+  ctx: RouterCtx,
+  params: ListCompaniesParams,
+): Promise<{ items: unknown[]; nextCursor: string | null }> {
+  const cursor = decodeCompanyCursor(params.cursor);
+  const { data, error } = await ctx.callerDb.rpc("list_crm_companies_page", {
+    p_search: cleanText(params.search ?? null) ?? undefined,
+    p_after_name: cursor?.name,
+    p_after_id: cursor?.id,
+    p_include_extended_fields: params.includeExtendedFields === true,
+    p_limit: COMPANIES_PAGE_SIZE + 1,
+  });
+  if (error) throw error;
+
+  const rows = ((data ?? []) as Array<Record<string, unknown>>);
+  const visibleRows = rows.slice(0, COMPANIES_PAGE_SIZE);
+  const nextRow = rows.length > COMPANIES_PAGE_SIZE ? visibleRows[visibleRows.length - 1] : null;
+  return {
+    items: visibleRows.map(toCompanySummary),
+    nextCursor: nextRow
+      ? encodeListCursor({ name: String(nextRow.name ?? ""), id: String(nextRow.id) })
+      : null,
+  };
+}
+
+export async function listDuplicateCompanies(
+  ctx: RouterCtx,
+  threshold = 0.6,
+): Promise<unknown[]> {
+  const safeThreshold = Number.isFinite(threshold) ? Math.min(0.95, Math.max(0.1, threshold)) : 0.6;
+  const { data, error } = await ctx.callerDb.rpc("find_duplicate_companies", { p_threshold: safeThreshold });
+  if (error) throw error;
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    groupKey: String(row.group_key ?? `${row.company_a_id}:${row.company_b_id}`),
+    companyAId: String(row.company_a_id),
+    companyAName: String(row.company_a_name ?? ""),
+    companyBId: String(row.company_b_id),
+    companyBName: String(row.company_b_name ?? ""),
+    similarityScore: typeof row.similarity_score === "number" ? row.similarity_score : 0,
+  }));
+}
+
+export async function mergeCompanies(
+  ctx: RouterCtx,
+  payload: CompanyMergePayload,
+): Promise<unknown> {
+  const keepId = cleanText(payload.keepId ?? null);
+  const discardId = cleanText(payload.discardId ?? null);
+  if (!keepId || !discardId) throw new Error("VALIDATION_COMPANY_MERGE_IDS_REQUIRED");
+  if (keepId === discardId) throw new Error("VALIDATION_COMPANY_MERGE_SAME_ID");
+  const { data, error } = await ctx.callerDb.rpc("merge_companies", {
+    p_keep_id: keepId,
+    p_discard_id: discardId,
+    p_dry_run: payload.dryRun === true,
+    p_caller_notes: cleanText(payload.notes ?? null) ?? undefined,
+  });
+  if (error) throw error;
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("COMPANY_MERGE_RESPONSE_INVALID");
+  }
+  const row = data as Record<string, unknown>;
+  const tableRowCounts = row.table_row_counts;
+  if (
+    row.ok !== true ||
+    typeof row.audit_id !== "string" ||
+    row.audit_id.trim().length === 0 ||
+    typeof row.dry_run !== "boolean" ||
+    typeof row.total_rows_affected !== "number" ||
+    !Number.isFinite(row.total_rows_affected) ||
+    !tableRowCounts ||
+    typeof tableRowCounts !== "object" ||
+    Array.isArray(tableRowCounts) ||
+    typeof row.kept_company_id !== "string" ||
+    row.kept_company_id.trim().length === 0 ||
+    typeof row.discarded_company_id !== "string" ||
+    row.discarded_company_id.trim().length === 0
+  ) {
+    throw new Error("COMPANY_MERGE_RESPONSE_INVALID");
+  }
+  const normalizedCounts: Record<string, number> = {};
+  for (const [table, count] of Object.entries(tableRowCounts)) {
+    if (typeof count !== "number" || !Number.isFinite(count)) {
+      throw new Error("COMPANY_MERGE_RESPONSE_INVALID");
+    }
+    normalizedCounts[table] = count;
+  }
+  return {
+    ok: true,
+    auditId: row.audit_id,
+    dryRun: row.dry_run,
+    totalRowsAffected: row.total_rows_affected,
+    tableRowCounts: normalizedCounts,
+    keptCompanyId: row.kept_company_id,
+    discardedCompanyId: row.discarded_company_id,
+  };
+}
+
+export async function undoCompanyMerge(ctx: RouterCtx, auditId: string): Promise<void> {
+  const safeAuditId = cleanText(auditId);
+  if (!safeAuditId) throw new Error("VALIDATION_COMPANY_MERGE_AUDIT_REQUIRED");
+  const { error } = await ctx.callerDb.rpc("qrm_undo_company_merge", { p_audit_id: safeAuditId });
+  if (error) throw error;
 }
 
 export async function createContact(
