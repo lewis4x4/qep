@@ -791,6 +791,19 @@ function availabilityStatusResolved(status: unknown): boolean {
   );
 }
 
+function availabilityTransitionAllowed(fromStatus: string, toStatus: string): boolean {
+  if (fromStatus === toStatus) return true;
+  if (["available", "available_with_conditions", "alternative_recommended", "not_available", "cancelled"].includes(fromStatus)) {
+    return false;
+  }
+  const allowed: Record<string, string[]> = {
+    pending: ["checking_internal_inventory", "checking_vendor", "available", "available_with_conditions", "alternative_recommended", "not_available", "cancelled"],
+    checking_internal_inventory: ["checking_vendor", "available", "available_with_conditions", "alternative_recommended", "not_available", "cancelled"],
+    checking_vendor: ["available", "available_with_conditions", "alternative_recommended", "not_available", "cancelled"],
+  };
+  return (allowed[fromStatus] ?? []).includes(toStatus);
+}
+
 function availabilitySlaDueAt(urgency: "low" | "normal" | "rush" | "customer_waiting"): string {
   const now = Date.now();
   const ms = urgency === "customer_waiting"
@@ -809,8 +822,9 @@ function availabilityPriorityScore(input: { urgency: string; requestedBudget: nu
   return urgencyScore + budgetScore + (input.customerWaiting ? 10 : 0);
 }
 
-function normalizeAvailabilityEventRow(row: Record<string, unknown>): Record<string, unknown> {
+function normalizeAvailabilityEventRow(row: Record<string, unknown>, options: { internal?: boolean } = {}): Record<string, unknown> {
   const actorProfile = Array.isArray(row.actor_profile) ? row.actor_profile[0] : row.actor_profile;
+  const internal = options.internal === true;
   return {
     id: row.id,
     request_id: row.request_id,
@@ -819,8 +833,8 @@ function normalizeAvailabilityEventRow(row: Record<string, unknown>): Record<str
     event_type: row.event_type,
     from_status: row.from_status ?? null,
     to_status: row.to_status ?? null,
-    note: row.note ?? null,
-    metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata) ? row.metadata : {},
+    note: internal ? row.note ?? null : row.event_type === "requested" || row.event_type === "resolved" ? row.note ?? null : null,
+    metadata: internal && row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata) ? row.metadata : {},
     created_at: row.created_at ?? null,
   };
 }
@@ -863,10 +877,12 @@ function normalizeAvailabilityRequestRow(
   row: Record<string, unknown>,
   candidates: Array<Record<string, unknown>> = [],
   events: Array<Record<string, unknown>> = [],
+  options: { internal?: boolean } = {},
 ): Record<string, unknown> {
   const assignedProfile = Array.isArray(row.assigned_profile) ? row.assigned_profile[0] : row.assigned_profile;
   const requestedProfile = Array.isArray(row.requested_profile) ? row.requested_profile[0] : row.requested_profile;
   const quote = Array.isArray(row.quote) ? row.quote[0] : row.quote;
+  const internal = options.internal === true;
   return {
     id: row.id,
     quote_package_id: row.quote_package_id ?? null,
@@ -890,9 +906,9 @@ function normalizeAvailabilityRequestRow(
     priority_score: row.priority_score ?? 0,
     sla_due_at: row.sla_due_at ?? null,
     last_activity_at: row.last_activity_at ?? null,
-    manager_override_by: row.manager_override_by ?? null,
+    manager_override_by: internal ? row.manager_override_by ?? null : null,
     manager_override_at: row.manager_override_at ?? null,
-    manager_override_reason: row.manager_override_reason ?? null,
+    manager_override_reason: internal ? row.manager_override_reason ?? null : null,
     rep_visibility_note: row.rep_visibility_note ?? null,
     customer_safe_summary: row.customer_safe_summary ?? null,
     metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata) ? row.metadata : {},
@@ -904,9 +920,10 @@ function normalizeAvailabilityRequestRow(
   };
 }
 
-function normalizeAvailabilityCandidateRow(row: Record<string, unknown>): Record<string, unknown> {
+function normalizeAvailabilityCandidateRow(row: Record<string, unknown>, options: { internal?: boolean } = {}): Record<string, unknown> {
   const model = Array.isArray(row.model) ? row.model[0] : row.model;
   const equipment = Array.isArray(row.equipment) ? row.equipment[0] : row.equipment;
+  const internal = options.internal === true;
   return {
     id: row.id,
     request_id: row.request_id,
@@ -916,15 +933,15 @@ function normalizeAvailabilityCandidateRow(row: Record<string, unknown>): Record
     score: Number(row.score ?? 0),
     availability_status: row.availability_status ?? "unknown",
     eta_days: row.eta_days ?? null,
-    estimated_cost: row.estimated_cost ?? null,
-    estimated_margin: row.estimated_margin ?? null,
+    estimated_cost: internal ? row.estimated_cost ?? null : null,
+    estimated_margin: internal ? row.estimated_margin ?? null : null,
     reason: row.reason ?? null,
     selected_at: row.selected_at ?? null,
     selected_by: row.selected_by ?? null,
-    source_ref: row.source_ref ?? null,
-    source_confidence: row.source_confidence ?? null,
+    source_ref: internal ? row.source_ref ?? null : null,
+    source_confidence: internal ? row.source_confidence ?? null : null,
     customer_safe_label: row.customer_safe_label ?? null,
-    internal_note: row.internal_note ?? null,
+    internal_note: internal ? row.internal_note ?? null : null,
     metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata) ? row.metadata : {},
     model: model && typeof model === "object" ? model : null,
     equipment: equipment && typeof equipment === "object" ? equipment : null,
@@ -977,8 +994,8 @@ async function loadAvailabilityRequestEnvelope(input: {
 
   return normalizeAvailabilityRequestRow(
     request as Record<string, unknown>,
-    (candidates ?? []).map((row: Record<string, unknown>) => normalizeAvailabilityCandidateRow(row)),
-    (events ?? []).map((row: Record<string, unknown>) => normalizeAvailabilityEventRow(row)),
+    (candidates ?? []).map((row: Record<string, unknown>) => normalizeAvailabilityCandidateRow(row, { internal: true })),
+    (events ?? []).map((row: Record<string, unknown>) => normalizeAvailabilityEventRow(row, { internal: true })),
   );
 }
 
@@ -1146,59 +1163,29 @@ async function assertQuoteAvailabilitySendable(input: {
   workspaceId: string;
   quotePackageId: string;
 }): Promise<{ ok: true } | { ok: false; message: string; blockers: Array<Record<string, unknown>> }> {
-  const { data: lineRows, error: lineErr } = await input.admin
-    .from("quote_package_line_items")
-    .select("id, description, metadata")
-    .eq("quote_package_id", input.quotePackageId)
-    .eq("workspace_id", input.workspaceId)
-    .order("display_order", { ascending: true });
-  if (lineErr) throw new Error(lineErr.message);
-
-  const sourceRequiredLines = (lineRows ?? []).filter((line: Record<string, unknown>) => {
-    const metadata = line.metadata && typeof line.metadata === "object" && !Array.isArray(line.metadata)
-      ? line.metadata as Record<string, unknown>
-      : {};
-    return metadata.availability_status === "source_required";
-  });
-  if (sourceRequiredLines.length === 0) return { ok: true };
-
   const { data: requestRows, error: requestErr } = await input.admin
     .from("quote_availability_requests")
     .select("id, quote_line_item_id, client_line_key, status, requested_machine_label, decision_note, manager_override_at, manager_override_reason")
     .eq("workspace_id", input.workspaceId)
-    .eq("quote_package_id", input.quotePackageId);
+    .eq("quote_package_id", input.quotePackageId)
+    .neq("status", "cancelled");
   if (requestErr) throw new Error(requestErr.message);
 
-  const requests = (requestRows ?? []) as Array<Record<string, unknown>>;
-  const blockers: Array<Record<string, unknown>> = [];
-
-  for (const line of sourceRequiredLines) {
-    const metadata = line.metadata && typeof line.metadata === "object" && !Array.isArray(line.metadata)
-      ? line.metadata as Record<string, unknown>
-      : {};
-    const requestId = lineString(metadata.availability_request_id, 80);
-    const clientLineKey = lineString(metadata.availability_client_line_key, 240);
-    const request = requests.find((candidate) =>
-      (requestId && candidate.id === requestId)
-      || (candidate.quote_line_item_id && candidate.quote_line_item_id === line.id)
-      || (clientLineKey && candidate.client_line_key === clientLineKey)
-    );
-    if (!request) {
-      blockers.push({ line_item_id: line.id, description: line.description ?? "Equipment", reason: "No availability request exists" });
-      continue;
-    }
+  const blockers = ((requestRows ?? []) as Array<Record<string, unknown>>).flatMap((request) => {
     const status = String(request.status ?? "pending");
-    const hasOverride = typeof request.manager_override_at === "string" && typeof request.manager_override_reason === "string" && request.manager_override_reason.trim().length > 0;
-    if (availabilityBlocksCustomerSend(status) && !hasOverride) {
-      blockers.push({
-        line_item_id: line.id,
-        request_id: request.id,
-        description: line.description ?? request.requested_machine_label ?? "Equipment",
-        status,
-        reason: "Availability is unresolved or unavailable",
-      });
-    }
-  }
+    const hasOverride = typeof request.manager_override_at === "string"
+      && typeof request.manager_override_reason === "string"
+      && request.manager_override_reason.trim().length > 0;
+    if (!availabilityBlocksCustomerSend(status) || hasOverride) return [];
+    return [{
+      request_id: request.id,
+      line_item_id: request.quote_line_item_id ?? null,
+      client_line_key: request.client_line_key ?? null,
+      description: request.requested_machine_label ?? "Equipment",
+      status,
+      reason: "Availability is unresolved or unavailable",
+    }];
+  });
 
   if (blockers.length === 0) return { ok: true };
   return {
@@ -1208,6 +1195,28 @@ async function assertQuoteAvailabilitySendable(input: {
       ? `Resolve availability for ${String(blockers[0].description ?? "this equipment")} before sending, or record a manager override.`
       : `Resolve ${blockers.length} availability requests before sending, or record manager overrides.`,
   };
+}
+
+async function assertQuoteCustomerShareable(input: {
+  admin: ReturnType<typeof createAdminClient>;
+  workspaceId: string;
+  quotePackageId: string;
+  status: string;
+  marginPct: number | null;
+}): Promise<{ ok: true } | { ok: false; message: string; blockers?: Array<Record<string, unknown>> }> {
+  if (["pending_approval", "changes_requested", "rejected"].includes(input.status)) {
+    return { ok: false, message: `This quote cannot be shared while status is ${input.status}.` };
+  }
+  if (typeof input.marginPct === "number" && input.marginPct < 10 && input.status !== "approved") {
+    return { ok: false, message: "Submit this quote for manager approval before sharing it with the customer." };
+  }
+  const availabilityGate = await assertQuoteAvailabilitySendable({
+    admin: input.admin,
+    workspaceId: input.workspaceId,
+    quotePackageId: input.quotePackageId,
+  });
+  if (!availabilityGate.ok) return availabilityGate;
+  return { ok: true };
 }
 
 // Customer-safe projection of a quote row for the /q/:token deal room.
@@ -3241,7 +3250,7 @@ Deno.serve(async (req) => {
           const key = String((candidate as Record<string, unknown>).request_id ?? "");
           if (!key) continue;
           const bucket = candidatesByRequest.get(key) ?? [];
-          bucket.push(normalizeAvailabilityCandidateRow(candidate as Record<string, unknown>));
+          bucket.push(normalizeAvailabilityCandidateRow(candidate as Record<string, unknown>, { internal: true }));
           candidatesByRequest.set(key, bucket);
         }
         const eventsByRequest = new Map<string, Array<Record<string, unknown>>>();
@@ -3249,7 +3258,7 @@ Deno.serve(async (req) => {
           const key = String((event as Record<string, unknown>).request_id ?? "");
           if (!key) continue;
           const bucket = eventsByRequest.get(key) ?? [];
-          bucket.push(normalizeAvailabilityEventRow(event as Record<string, unknown>));
+          bucket.push(normalizeAvailabilityEventRow(event as Record<string, unknown>, { internal: true }));
           eventsByRequest.set(key, bucket);
         }
         const requests = (rows ?? [])
@@ -3257,6 +3266,7 @@ Deno.serve(async (req) => {
             row,
             candidatesByRequest.get(String(row.id)) ?? [],
             eventsByRequest.get(String(row.id)) ?? [],
+            { internal: true },
           ))
           .filter((row: Record<string, unknown>) => {
             if (!search) return true;
@@ -3366,13 +3376,15 @@ Deno.serve(async (req) => {
             : "";
           if (!requestKey) continue;
           const bucket = candidatesByRequest.get(requestKey) ?? [];
-          bucket.push(normalizeAvailabilityCandidateRow(candidate as Record<string, unknown>));
+          bucket.push(normalizeAvailabilityCandidateRow(candidate as Record<string, unknown>, { internal: true }));
           candidatesByRequest.set(requestKey, bucket);
         }
         const requests = (rows ?? []).map((row: Record<string, unknown>) =>
           normalizeAvailabilityRequestRow(
             row,
             candidatesByRequest.get(String(row.id)) ?? [],
+            [],
+            { internal: canPublish },
           )
         );
         return safeJsonOk({ requests }, origin);
@@ -3636,13 +3648,28 @@ Deno.serve(async (req) => {
         const nextStatus = normalizeAvailabilityOpsStatus(body.status);
         const note = lineString(body.note ?? body.decision_note, 2000);
         const selectedCandidateId = lineString(body.selected_candidate_id, 80);
+        if (!availabilityTransitionAllowed(oldStatus, nextStatus)) {
+          return safeJsonError(`Availability request cannot transition from ${oldStatus} to ${nextStatus}`, 409, origin);
+        }
         if (["available_with_conditions", "alternative_recommended", "not_available"].includes(nextStatus) && !note) {
           return safeJsonError("A decision note is required for conditional, alternative, or unavailable responses", 400, origin);
+        }
+        if (["available", "available_with_conditions", "alternative_recommended"].includes(nextStatus) && !selectedCandidateId) {
+          return safeJsonError("Select a candidate before resolving availability as available, conditional, or alternative", 400, origin);
         }
         if (["available", "available_with_conditions", "alternative_recommended"].includes(nextStatus) && selectedCandidateId && !UUID_RE.test(selectedCandidateId)) {
           return safeJsonError("selected_candidate_id is malformed", 400, origin);
         }
         if (selectedCandidateId && UUID_RE.test(selectedCandidateId)) {
+          const { data: selectedCandidate, error: candidateLoadErr } = await admin
+            .from("quote_availability_candidates")
+            .select("id")
+            .eq("workspace_id", userWorkspaceId)
+            .eq("request_id", requestId)
+            .eq("id", selectedCandidateId)
+            .maybeSingle();
+          if (candidateLoadErr) return safeJsonError(candidateLoadErr.message, 500, origin);
+          if (!selectedCandidate) return safeJsonError("Selected candidate is not attached to this availability request", 400, origin);
           const { error: candidateUpdateErr } = await admin
             .from("quote_availability_candidates")
             .update({ selected_at: nowIso, selected_by: user.id })
@@ -3719,6 +3746,9 @@ Deno.serve(async (req) => {
       }
 
       if (action === "cancel") {
+        if (!availabilityTransitionAllowed(oldStatus, "cancelled")) {
+          return safeJsonError(`Availability request cannot transition from ${oldStatus} to cancelled`, 409, origin);
+        }
         const note = lineString(body.note, 1000) ?? "Availability request cancelled.";
         const { error: updateErr } = await admin
           .from("quote_availability_requests")
@@ -5351,14 +5381,25 @@ Deno.serve(async (req) => {
       // is the authorization check for issuing a share token.
       const { data: existing, error: loadErr } = await supabase
         .from("quote_packages")
-        .select("id, workspace_id")
+        .select("id, workspace_id, status, margin_pct")
         .eq("id", body.quote_package_id)
         .maybeSingle();
       if (loadErr) return safeJsonError(loadErr.message, 500, origin);
       if (!existing) return safeJsonError("Quote package not found or not accessible", 404, origin);
 
-      const token = generateShareToken();
       const admin = createAdminClient();
+      const shareGate = await assertQuoteCustomerShareable({
+        admin,
+        workspaceId: typeof existing.workspace_id === "string" ? existing.workspace_id : userWorkspaceId,
+        quotePackageId: String(existing.id),
+        status: String(existing.status ?? "draft"),
+        marginPct: typeof existing.margin_pct === "number" ? existing.margin_pct : null,
+      });
+      if (!shareGate.ok) {
+        return safeJsonErrorWithFields(shareGate.message, 409, origin, { blockers: shareGate.blockers ?? [] });
+      }
+
+      const token = generateShareToken();
       const { error: updateErr } = await admin
         .from("quote_packages")
         .update({
