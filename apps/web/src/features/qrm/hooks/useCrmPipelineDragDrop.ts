@@ -181,27 +181,39 @@ export function useCrmPipelineDragDrop(
 
         try {
           await Promise.all(dealIds.map((id) => patchCrmDeal(id, { stageId: targetStageId })));
-          // After stage transition, append to the end of the target column's
-          // current order. We read the board's current list, filter to target
-          // stage, drop the moved ids (they were just relocated), and commit
-          // [...existing, ...movedIds] back via the reorder RPC.
-          const boardNow = hydratedDealsRef.current ?? [];
-          const existing = boardNow
-            .filter((d) => d.stageId === targetStageId && !dealIds.includes(d.id))
-            .sort((a, b) => (a.sortPosition ?? Infinity) - (b.sortPosition ?? Infinity) || a.createdAt.localeCompare(b.createdAt))
-            .map((d) => d.id);
-          const newOrder = [...existing, ...dealIds];
-          await reorderPipelineDeals(targetStageId, newOrder);
-          dealIds.forEach((id) => schedulePipelineRefresh(id));
-          if (draggingDeals.length > 1) clearSelection?.();
         } catch (err) {
-          // Rollback: restore origin stage.
+          // Rollback only when the actual stage transition failed.
           setHydratedDeals((current) =>
             current?.map((d) => (dealIds.includes(d.id) ? { ...d, stageId: originalStageId } : d)) ?? current,
           );
           console.error("Stage transition failed:", err);
-          onGateRejection?.("Could not move the deal(s). Please try again.");
+          const message = err instanceof Error && err.message.trim()
+            ? `Could not move the deal(s): ${err.message}`
+            : "Could not move the deal(s). Please try again.";
+          onGateRejection?.(message);
+          return;
         }
+
+        // After stage transition, append to the end of the target column's
+        // current order. Reorder is best-effort: if it fails, the stage move
+        // should still remain saved and a refresh will pull the canonical order.
+        const boardNow = hydratedDealsRef.current ?? [];
+        const existing = boardNow
+          .filter((d) => d.stageId === targetStageId && !dealIds.includes(d.id))
+          .sort((a, b) => (a.sortPosition ?? Infinity) - (b.sortPosition ?? Infinity) || a.createdAt.localeCompare(b.createdAt))
+          .map((d) => d.id);
+        const newOrder = [...existing, ...dealIds];
+        try {
+          await reorderPipelineDeals(targetStageId, newOrder);
+        } catch (err) {
+          console.error("Pipeline reorder after stage transition failed:", err);
+          const message = err instanceof Error && err.message.trim()
+            ? `Deal moved, but column order was not saved: ${err.message}`
+            : "Deal moved, but column order was not saved. Refreshing the board.";
+          onGateRejection?.(message);
+        }
+        dealIds.forEach((id) => schedulePipelineRefresh(id));
+        if (draggingDeals.length > 1) clearSelection?.();
         return;
       }
 

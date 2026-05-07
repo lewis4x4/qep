@@ -434,7 +434,24 @@ export function ApprovalCenterPage() {
         <GlassPanel className="py-16 text-center">
           <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto mb-3" />
           <p className="text-sm text-white font-medium">No approvals waiting</p>
-          <p className="text-xs text-slate-500 mt-1">You're caught up. Nice work.</p>
+          <p className="mx-auto mt-2 max-w-xl text-xs leading-5 text-slate-500">
+            This page only shows items waiting on a manager or owner decision. Draft, saved, approved, and sent quotes
+            stay in Quote Builder and the QRM pipeline board.
+          </p>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              to="/quote-v2"
+              className="inline-flex min-h-10 items-center rounded-lg border border-white/10 px-4 text-xs font-semibold text-slate-200 hover:border-qep-orange/50 hover:text-white"
+            >
+              Open Quote Builder
+            </Link>
+            <Link
+              to="/qrm/deals"
+              className="inline-flex min-h-10 items-center rounded-lg border border-qep-orange/40 bg-qep-orange/10 px-4 text-xs font-semibold text-qep-orange hover:bg-qep-orange/20"
+            >
+              Open Pipeline Board
+            </Link>
+          </div>
         </GlassPanel>
       )}
 

@@ -711,6 +711,106 @@ async function resolveFirstOpenDealStageId(
   return String(data.id);
 }
 
+async function resolveOpenDealStageByName(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  workspaceId: string;
+  stageNames: string[];
+}): Promise<{ id: string; sortOrder: number } | null> {
+  if (input.stageNames.length === 0) return null;
+  const { data, error } = await input.admin
+    .from("crm_deal_stages")
+    .select("id, name, sort_order, is_closed_won, is_closed_lost")
+    .eq("workspace_id", input.workspaceId)
+    .in("name", input.stageNames);
+
+  if (error) throw new Error(error.message);
+  const rows = Array.isArray(data) ? data : [];
+  for (const stageName of input.stageNames) {
+    const row = rows.find((candidate: Record<string, unknown>) =>
+      candidate.name === stageName &&
+      candidate.is_closed_won !== true &&
+      candidate.is_closed_lost !== true &&
+      typeof candidate.id === "string"
+    );
+    if (row) {
+      const sortOrder = Number((row as Record<string, unknown>).sort_order ?? 0);
+      return {
+        id: String((row as Record<string, unknown>).id),
+        sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
+      };
+    }
+  }
+  return null;
+}
+
+async function advanceQuoteDealStage(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  workspaceId: string;
+  dealId: string | null | undefined;
+  stageNames: string[];
+  source: string;
+}): Promise<void> {
+  if (!input.dealId || !UUID_RE.test(input.dealId)) return;
+
+  try {
+    const targetStage = await resolveOpenDealStageByName({
+      admin: input.admin,
+      workspaceId: input.workspaceId || "default",
+      stageNames: input.stageNames,
+    });
+    if (!targetStage) return;
+
+    const { data: deal, error: dealErr } = await input.admin
+      .from("crm_deals")
+      .select("id, workspace_id, stage_id")
+      .eq("workspace_id", input.workspaceId || "default")
+      .eq("id", input.dealId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (dealErr) throw new Error(dealErr.message);
+    if (!deal?.id) return;
+
+    const currentStageId = typeof deal.stage_id === "string" ? deal.stage_id : null;
+    if (currentStageId === targetStage.id) return;
+
+    let currentSortOrder = -1;
+    if (currentStageId) {
+      const { data: currentStage, error: currentStageErr } = await input.admin
+        .from("crm_deal_stages")
+        .select("sort_order")
+        .eq("workspace_id", input.workspaceId || "default")
+        .eq("id", currentStageId)
+        .maybeSingle();
+      if (currentStageErr) throw new Error(currentStageErr.message);
+      const parsed = Number(currentStage?.sort_order ?? -1);
+      currentSortOrder = Number.isFinite(parsed) ? parsed : -1;
+    }
+
+    // Auto-progression is forward-only. If a rep manually moved the deal to
+    // a later pipeline step, quote automation must not demote it.
+    if (currentSortOrder >= targetStage.sortOrder) return;
+
+    const { error: updateErr } = await input.admin
+      .from("crm_deals")
+      .update({
+        stage_id: targetStage.id,
+        last_activity_at: new Date().toISOString(),
+      })
+      .eq("workspace_id", input.workspaceId || "default")
+      .eq("id", input.dealId)
+      .is("deleted_at", null);
+    if (updateErr) throw new Error(updateErr.message);
+  } catch (err) {
+    console.error("quote deal stage advance failed:", {
+      dealId: input.dealId,
+      source: input.source,
+      error: err instanceof Error ? err.message : err,
+    });
+  }
+}
+
 async function createDraftDealForQuote(input: {
   // deno-lint-ignore no-explicit-any
   supabase: any;
@@ -1725,6 +1825,14 @@ async function handlePublicAccept(
       .update({ status: "accepted", accepted_at: sigRow?.signed_at ?? new Date().toISOString() })
       .eq("id", quote.id);
   }
+
+  await advanceQuoteDealStage({
+    admin,
+    workspaceId: typeof quote.workspace_id === "string" ? quote.workspace_id : "default",
+    dealId: typeof quote.deal_id === "string" ? quote.deal_id : null,
+    stageNames: ["Sales Order Signed"],
+    source: "quote_public_accept",
+  });
 
   return safeJsonOk({
     signature_id: sigRow?.id ?? null,
@@ -3808,6 +3916,13 @@ Deno.serve(async (req) => {
           .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, updated_at, accepted_at, win_probability_score")
           .single();
         if (updateErr) return safeJsonError(updateErr.message, 500, origin);
+        await advanceQuoteDealStage({
+          admin: createAdminClient(),
+          workspaceId: typeof (pkg as Record<string, unknown>).workspace_id === "string" ? String((pkg as Record<string, unknown>).workspace_id) : userWorkspaceId,
+          dealId: typeof (pkg as Record<string, unknown>).deal_id === "string" ? String((pkg as Record<string, unknown>).deal_id) : null,
+          stageNames: ["Quote Sent"],
+          source: "quote_list_mark_sent",
+        });
         return safeJsonOk({ ok: true, quote: updated }, origin);
       }
 
@@ -4672,6 +4787,14 @@ Deno.serve(async (req) => {
           : `Quote saved but financing scenario sync failed: ${syncedFinancingScenarios.error}`;
       }
 
+      await advanceQuoteDealStage({
+        admin,
+        workspaceId,
+        dealId: resolvedDealId,
+        stageNames: ["Quote Created"],
+        source: "quote_save",
+      });
+
       const versionArtifacts = buildQuoteVersionArtifacts({
         body: {
           ...body,
@@ -4736,7 +4859,7 @@ Deno.serve(async (req) => {
 
       const { data: pkg, error: pkgErr } = await supabase
         .from("quote_packages")
-        .select("id, status, viewed_at")
+        .select("id, workspace_id, deal_id, status, viewed_at")
         .eq("id", body.quote_package_id)
         .maybeSingle();
 
@@ -4744,7 +4867,13 @@ Deno.serve(async (req) => {
       if (!pkg) return safeJsonError("Quote package not found", 404, origin);
 
       // Only flip when we are at `sent` and haven't already viewed.
-      const row = pkg as { id: string; status: string; viewed_at: string | null };
+      const row = pkg as {
+        id: string;
+        workspace_id: string | null;
+        deal_id: string | null;
+        status: string;
+        viewed_at: string | null;
+      };
       if (row.viewed_at) {
         return safeJsonOk({ already_viewed: true, viewed_at: row.viewed_at }, origin);
       }
@@ -4760,6 +4889,13 @@ Deno.serve(async (req) => {
         .eq("status", "sent"); // race-safe: only transition from sent
 
       if (updateErr) return safeJsonError("Failed to mark viewed", 500, origin);
+      await advanceQuoteDealStage({
+        admin: createAdminClient(),
+        workspaceId: row.workspace_id || userWorkspaceId,
+        dealId: row.deal_id,
+        stageNames: ["Quote Presented", "Quote Sent"],
+        source: "quote_mark_viewed",
+      });
       return safeJsonOk({ already_viewed: false, status: "viewed", viewed_at: nowIso }, origin);
     }
 
@@ -5009,6 +5145,14 @@ Deno.serve(async (req) => {
 
       if (statusErr) return safeJsonError(statusErr.message, 500, origin);
 
+      await advanceQuoteDealStage({
+        admin,
+        workspaceId: pkgRow.workspace_id || "default",
+        dealId: pkgRow.deal_id,
+        stageNames: ["Quote Created"],
+        source: "quote_submit_approval",
+      });
+
       return safeJsonOk({
         approval_case_id: approvalCase.id,
         approval_id: approvalId,
@@ -5256,6 +5400,16 @@ Deno.serve(async (req) => {
         .eq("id", caseRow.quote_package_id);
       if (quoteStatusErr) return safeJsonError(quoteStatusErr.message, 500, origin);
 
+      if (nextQuoteStatus === "approved" || nextQuoteStatus === "approved_with_conditions") {
+        await advanceQuoteDealStage({
+          admin,
+          workspaceId: typeof caseRow.workspace_id === "string" ? caseRow.workspace_id : "default",
+          dealId: typeof caseRow.deal_id === "string" ? caseRow.deal_id : null,
+          stageNames: ["Quote Created"],
+          source: "quote_approval_decision",
+        });
+      }
+
       const refreshedCase = await getLatestQuoteApprovalCase({
         admin,
         quotePackageId: String(caseRow.quote_package_id),
@@ -5283,7 +5437,7 @@ Deno.serve(async (req) => {
 
       const { data: pkg, error: pkgErr } = await supabase
         .from("quote_packages")
-        .select("id, status, pdf_url, equipment, equipment_total, attachment_total, subtotal, trade_credit, net_total")
+        .select("id, workspace_id, deal_id, status, pdf_url, equipment, equipment_total, attachment_total, subtotal, trade_credit, net_total")
         .eq("id", body.quote_package_id)
         .maybeSingle();
       if (pkgErr) return safeJsonError("Failed to load quote package", 500, origin);
@@ -5291,6 +5445,8 @@ Deno.serve(async (req) => {
 
       const pkgRow = pkg as {
         id: string;
+        workspace_id: string | null;
+        deal_id: string | null;
         status: string;
         pdf_url: string | null;
         equipment: unknown;
@@ -5364,6 +5520,14 @@ Deno.serve(async (req) => {
         .from("quote_packages")
         .update({ status: "accepted", accepted_at: new Date().toISOString() })
         .eq("id", body.quote_package_id);
+
+      await advanceQuoteDealStage({
+        admin: createAdminClient(),
+        workspaceId: pkgRow.workspace_id || userWorkspaceId,
+        dealId: pkgRow.deal_id ?? (typeof body.deal_id === "string" ? body.deal_id : null),
+        stageNames: ["Sales Order Signed"],
+        source: "quote_signature_accept",
+      });
 
       return safeJsonOk({ signature: data, document_hash: documentHash }, origin, 201);
     }
@@ -5536,6 +5700,14 @@ Deno.serve(async (req) => {
           sent_via: "email",
         })
         .eq("id", body.quote_package_id);
+
+      await advanceQuoteDealStage({
+        admin,
+        workspaceId: typeof pkg.workspace_id === "string" ? pkg.workspace_id : userWorkspaceId,
+        dealId: typeof pkg.deal_id === "string" ? pkg.deal_id : null,
+        stageNames: ["Quote Sent"],
+        source: "quote_send_package",
+      });
 
       console.log(`[quote-builder-v2] sent package ${body.quote_package_id} to ${toEmail}`);
       return safeJsonOk({ sent: true, to_email: toEmail }, origin);

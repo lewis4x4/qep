@@ -1282,6 +1282,7 @@ export function QuoteBuilderV2Page() {
   const quotePdfData = useMemo(() => ({
     dealName: draft.dealId || draft.customerCompany || draft.customerName || "Quote",
     customerName: draft.customerName || draft.customerCompany || "Customer",
+    quoteNumber: activeQuoteNumber,
     preparedBy: "QEP Sales Team",
     preparedDate: new Date().toLocaleDateString(),
     aiRecommendationSummary: draft.recommendation?.reasoning ?? null,
@@ -1314,6 +1315,7 @@ export function QuoteBuilderV2Page() {
     selectedFinancingLabel: draft.selectedFinanceScenario,
     branch: buildQuotePdfBranch(selectedBranch),
   }), [
+    activeQuoteNumber,
     allFinanceScenarios,
     amountFinanced,
     attachmentTotal,
