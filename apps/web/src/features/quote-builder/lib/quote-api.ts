@@ -843,9 +843,28 @@ export interface QuoteAvailabilityCandidate {
   estimatedCost: number | null;
   estimatedMargin: number | null;
   reason: string | null;
+  selectedAt: string | null;
+  selectedBy: string | null;
+  sourceRef: string | null;
+  sourceConfidence: string | null;
+  customerSafeLabel: string | null;
+  internalNote: string | null;
   metadata: Record<string, unknown>;
   model: Record<string, unknown> | null;
   equipment: Record<string, unknown> | null;
+  createdAt: string | null;
+}
+
+export interface QuoteAvailabilityEvent {
+  id: string;
+  requestId: string | null;
+  actorId: string | null;
+  actorName: string | null;
+  eventType: string;
+  fromStatus: string | null;
+  toStatus: string | null;
+  note: string | null;
+  metadata: Record<string, unknown>;
   createdAt: string | null;
 }
 
@@ -869,10 +888,20 @@ export interface QuoteAvailabilityRequest {
   decisionNote: string | null;
   resolvedBy: string | null;
   resolvedAt: string | null;
+  priorityScore: number;
+  slaDueAt: string | null;
+  lastActivityAt: string | null;
+  managerOverrideBy: string | null;
+  managerOverrideAt: string | null;
+  managerOverrideReason: string | null;
+  repVisibilityNote: string | null;
+  customerSafeSummary: string | null;
   metadata: Record<string, unknown>;
   createdAt: string | null;
   updatedAt: string | null;
+  quote: Record<string, unknown> | null;
   candidates: QuoteAvailabilityCandidate[];
+  events: QuoteAvailabilityEvent[];
 }
 
 export interface QuoteAvailabilityRequestInput {
@@ -893,6 +922,46 @@ export interface QuoteAvailabilityRequestInput {
   allowAlternatives?: boolean;
 }
 
+export interface QuoteAvailabilityQueueFilters {
+  status?: string;
+  assignedTo?: string;
+  search?: string;
+  overdue?: boolean;
+}
+
+export interface QuoteAvailabilitySummary {
+  openCount: number;
+  overdueCount: number;
+  blockedQuoteValue: number;
+  byStatus: Record<string, number>;
+}
+
+export interface QuoteAvailabilityResponseInput {
+  requestId: string;
+  status: string;
+  note?: string | null;
+  selectedCandidateId?: string | null;
+  availabilityEta?: string | null;
+  repVisibilityNote?: string | null;
+  customerSafeSummary?: string | null;
+}
+
+function normalizeAvailabilityEvent(value: unknown): QuoteAvailabilityEvent | null {
+  if (!isRecord(value) || typeof value.id !== "string") return null;
+  return {
+    id: value.id,
+    requestId: nullableString(value.request_id ?? value.requestId),
+    actorId: nullableString(value.actor_id ?? value.actorId),
+    actorName: nullableString(value.actor_name ?? value.actorName),
+    eventType: requiredString(value.event_type ?? value.eventType, "event"),
+    fromStatus: nullableString(value.from_status ?? value.fromStatus),
+    toStatus: nullableString(value.to_status ?? value.toStatus),
+    note: nullableString(value.note),
+    metadata: normalizeRecord(value.metadata),
+    createdAt: nullableString(value.created_at ?? value.createdAt),
+  };
+}
+
 function normalizeAvailabilityCandidate(value: unknown): QuoteAvailabilityCandidate | null {
   if (!isRecord(value) || typeof value.id !== "string") return null;
   return {
@@ -907,6 +976,12 @@ function normalizeAvailabilityCandidate(value: unknown): QuoteAvailabilityCandid
     estimatedCost: numOrNull(value.estimated_cost ?? value.estimatedCost),
     estimatedMargin: numOrNull(value.estimated_margin ?? value.estimatedMargin),
     reason: nullableString(value.reason),
+    selectedAt: nullableString(value.selected_at ?? value.selectedAt),
+    selectedBy: nullableString(value.selected_by ?? value.selectedBy),
+    sourceRef: nullableString(value.source_ref ?? value.sourceRef),
+    sourceConfidence: nullableString(value.source_confidence ?? value.sourceConfidence),
+    customerSafeLabel: nullableString(value.customer_safe_label ?? value.customerSafeLabel),
+    internalNote: nullableString(value.internal_note ?? value.internalNote),
     metadata: normalizeRecord(value.metadata),
     model: isRecord(value.model) ? value.model : null,
     equipment: isRecord(value.equipment) ? value.equipment : null,
@@ -917,6 +992,7 @@ function normalizeAvailabilityCandidate(value: unknown): QuoteAvailabilityCandid
 export function normalizeAvailabilityRequest(value: unknown): QuoteAvailabilityRequest | null {
   if (!isRecord(value) || typeof value.id !== "string") return null;
   const candidates = Array.isArray(value.candidates) ? value.candidates : [];
+  const events = Array.isArray(value.events) ? value.events : [];
   return {
     id: value.id,
     quotePackageId: nullableString(value.quote_package_id ?? value.quotePackageId),
@@ -937,11 +1013,24 @@ export function normalizeAvailabilityRequest(value: unknown): QuoteAvailabilityR
     decisionNote: nullableString(value.decision_note ?? value.decisionNote),
     resolvedBy: nullableString(value.resolved_by ?? value.resolvedBy),
     resolvedAt: nullableString(value.resolved_at ?? value.resolvedAt),
+    priorityScore: numOrNull(value.priority_score ?? value.priorityScore) ?? 0,
+    slaDueAt: nullableString(value.sla_due_at ?? value.slaDueAt),
+    lastActivityAt: nullableString(value.last_activity_at ?? value.lastActivityAt),
+    managerOverrideBy: nullableString(value.manager_override_by ?? value.managerOverrideBy),
+    managerOverrideAt: nullableString(value.manager_override_at ?? value.managerOverrideAt),
+    managerOverrideReason: nullableString(value.manager_override_reason ?? value.managerOverrideReason),
+    repVisibilityNote: nullableString(value.rep_visibility_note ?? value.repVisibilityNote),
+    customerSafeSummary: nullableString(value.customer_safe_summary ?? value.customerSafeSummary),
     metadata: normalizeRecord(value.metadata),
     createdAt: nullableString(value.created_at ?? value.createdAt),
     updatedAt: nullableString(value.updated_at ?? value.updatedAt),
+    quote: isRecord(value.quote) ? value.quote : null,
     candidates: candidates.flatMap((candidate) => {
       const normalized = normalizeAvailabilityCandidate(candidate);
+      return normalized ? [normalized] : [];
+    }),
+    events: events.flatMap((event) => {
+      const normalized = normalizeAvailabilityEvent(event);
       return normalized ? [normalized] : [];
     }),
   };
@@ -992,6 +1081,109 @@ export async function listQuoteAvailabilityRequests(quotePackageId: string): Pro
   return source.flatMap((item) => {
     const request = normalizeAvailabilityRequest(item);
     return request ? [request] : [];
+  });
+}
+
+export async function listQuoteAvailabilityQueue(filters: QuoteAvailabilityQueueFilters = {}): Promise<QuoteAvailabilityRequest[]> {
+  const qs = new URLSearchParams();
+  if (filters.status) qs.set("status", filters.status);
+  if (filters.assignedTo) qs.set("assigned_to", filters.assignedTo);
+  if (filters.search) qs.set("search", filters.search);
+  if (filters.overdue) qs.set("overdue", "true");
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/availability/queue${suffix}`);
+  if (!res.ok) {
+    const body = await readJsonRecord(res);
+    const detail = errorDetail(body);
+    throw new Error(detail.trim() || `Failed to load availability queue (HTTP ${res.status})`);
+  }
+  const body = await readJsonRecord(res);
+  const source = Array.isArray(body.requests) ? body.requests : [];
+  return source.flatMap((item) => {
+    const request = normalizeAvailabilityRequest(item);
+    return request ? [request] : [];
+  });
+}
+
+export async function getQuoteAvailabilitySummary(): Promise<QuoteAvailabilitySummary> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/availability/summary`);
+  if (!res.ok) {
+    const body = await readJsonRecord(res);
+    const detail = errorDetail(body);
+    throw new Error(detail.trim() || `Failed to load availability summary (HTTP ${res.status})`);
+  }
+  const body = await readJsonRecord(res);
+  return {
+    openCount: numOrNull(body.open_count ?? body.openCount) ?? 0,
+    overdueCount: numOrNull(body.overdue_count ?? body.overdueCount) ?? 0,
+    blockedQuoteValue: numOrNull(body.blocked_quote_value ?? body.blockedQuoteValue) ?? 0,
+    byStatus: normalizeRecord(body.by_status ?? body.byStatus) as Record<string, number>,
+  };
+}
+
+async function mutateQuoteAvailability(path: string, payload: Record<string, unknown>): Promise<QuoteAvailabilityRequest> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/availability/${path}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await readJsonRecord(res);
+    const detail = errorDetail(body);
+    throw new Error(detail.trim() || `Availability ${path} failed (HTTP ${res.status})`);
+  }
+  const body = await readJsonRecord(res);
+  const request = normalizeAvailabilityRequest(body.request);
+  if (!request) throw new Error("Availability mutation response was malformed.");
+  return request;
+}
+
+export function assignQuoteAvailabilityRequest(requestId: string, assignedTo: string | null = "me"): Promise<QuoteAvailabilityRequest> {
+  return mutateQuoteAvailability("assign", { request_id: requestId, assigned_to: assignedTo });
+}
+
+export function respondToQuoteAvailabilityRequest(input: QuoteAvailabilityResponseInput): Promise<QuoteAvailabilityRequest> {
+  return mutateQuoteAvailability("respond", {
+    request_id: input.requestId,
+    status: input.status,
+    note: input.note ?? null,
+    selected_candidate_id: input.selectedCandidateId ?? null,
+    availability_eta: input.availabilityEta ?? null,
+    rep_visibility_note: input.repVisibilityNote ?? null,
+    customer_safe_summary: input.customerSafeSummary ?? null,
+  });
+}
+
+export function overrideQuoteAvailabilityRequest(input: { requestId: string; reason: string }): Promise<QuoteAvailabilityRequest> {
+  return mutateQuoteAvailability("override", { request_id: input.requestId, reason: input.reason });
+}
+
+export function cancelQuoteAvailabilityRequest(input: { requestId: string; note?: string | null }): Promise<QuoteAvailabilityRequest> {
+  return mutateQuoteAvailability("cancel", { request_id: input.requestId, note: input.note ?? null });
+}
+
+export function addQuoteAvailabilityCandidate(input: {
+  requestId: string;
+  candidateType?: string;
+  reason: string;
+  availabilityStatus?: string;
+  etaDays?: number | null;
+  estimatedCost?: number | null;
+  sourceRef?: string | null;
+  sourceConfidence?: string | null;
+  customerSafeLabel?: string | null;
+  internalNote?: string | null;
+}): Promise<QuoteAvailabilityRequest> {
+  return mutateQuoteAvailability("candidate", {
+    request_id: input.requestId,
+    candidate_type: input.candidateType ?? "vendor_order",
+    reason: input.reason,
+    availability_status: input.availabilityStatus ?? "source_required",
+    eta_days: input.etaDays ?? null,
+    estimated_cost: input.estimatedCost ?? null,
+    source_ref: input.sourceRef ?? null,
+    source_confidence: input.sourceConfidence ?? null,
+    customer_safe_label: input.customerSafeLabel ?? null,
+    internal_note: input.internalNote ?? null,
   });
 }
 
@@ -1737,7 +1929,7 @@ export async function searchCatalog(query: string) {
 }
 
 export async function searchQuoteAttachments(query: string) {
-  const sanitized = query.replace(/[%,().!]/g, "").trim().substring(0, 100);
+  const sanitized = sanitizeCatalogSearch(query);
 
   let attachmentQuery = supabase
     .from("qb_attachments")
@@ -1768,4 +1960,209 @@ export async function searchQuoteAttachments(query: string) {
       universal: row.universal === true,
     };
   });
+}
+
+export type QuotePackageCatalogKind = "attachment" | "option" | "accessory" | "warranty";
+
+export interface QuotePackageCatalogItem {
+  id: string;
+  kind: QuotePackageCatalogKind;
+  name: string;
+  price: number;
+  dealerCost: number | null;
+  brandName: string | null;
+  category: string | null;
+  universal: boolean;
+  sourceCatalog: "qb_equipment_models" | "qb_attachments" | "catalog_entries" | "manual";
+  sourceId: string;
+  metadata: Record<string, unknown> | null;
+}
+
+const PACKAGE_ITEM_STARTER_CATALOG: QuotePackageCatalogItem[] = [
+  {
+    id: "starter-option-hydraulic-thumb-kit",
+    kind: "option",
+    name: "Hydraulic thumb kit",
+    price: 4_800,
+    dealerCost: null,
+    brandName: "QEP",
+    category: "Excavator options",
+    universal: false,
+    sourceCatalog: "manual",
+    sourceId: "starter-option-hydraulic-thumb-kit",
+    metadata: { source: "starter_package_catalog", compatibility: "model_or_dealer_verified" },
+  },
+  {
+    id: "starter-option-enclosed-cab-upgrade",
+    kind: "option",
+    name: "Enclosed cab upgrade",
+    price: 6_500,
+    dealerCost: null,
+    brandName: "QEP",
+    category: "Comfort options",
+    universal: false,
+    sourceCatalog: "manual",
+    sourceId: "starter-option-enclosed-cab-upgrade",
+    metadata: { source: "starter_package_catalog", compatibility: "model_or_dealer_verified" },
+  },
+  {
+    id: "starter-accessory-led-work-light-kit",
+    kind: "accessory",
+    name: "LED work light kit",
+    price: 950,
+    dealerCost: null,
+    brandName: "QEP",
+    category: "Jobsite accessories",
+    universal: true,
+    sourceCatalog: "manual",
+    sourceId: "starter-accessory-led-work-light-kit",
+    metadata: { source: "starter_package_catalog", compatibility: "universal" },
+  },
+  {
+    id: "starter-accessory-bluetooth-telematics-tag",
+    kind: "accessory",
+    name: "Bluetooth telematics tag",
+    price: 375,
+    dealerCost: null,
+    brandName: "QEP Fleet",
+    category: "Telematics",
+    universal: true,
+    sourceCatalog: "manual",
+    sourceId: "starter-accessory-bluetooth-telematics-tag",
+    metadata: { source: "starter_package_catalog", compatibility: "universal" },
+  },
+  {
+    id: "starter-warranty-extended-powertrain-36",
+    kind: "warranty",
+    name: "Extended powertrain warranty — 36 months",
+    price: 2_950,
+    dealerCost: null,
+    brandName: "QEP Protect",
+    category: "Extended warranty",
+    universal: true,
+    sourceCatalog: "manual",
+    sourceId: "starter-warranty-extended-powertrain-36",
+    metadata: { source: "starter_package_catalog", term_months: 36, coverage: "powertrain" },
+  },
+  {
+    id: "starter-warranty-premier-protection-60",
+    kind: "warranty",
+    name: "Premier protection plan — 60 months",
+    price: 4_250,
+    dealerCost: null,
+    brandName: "QEP Protect",
+    category: "Extended warranty",
+    universal: true,
+    sourceCatalog: "manual",
+    sourceId: "starter-warranty-premier-protection-60",
+    metadata: { source: "starter_package_catalog", term_months: 60, coverage: "premier" },
+  },
+];
+
+function sanitizeCatalogSearch(query: string): string {
+  return query.replace(/[%,().!]/g, "").trim().substring(0, 100);
+}
+
+export function normalizeQuotePackageCatalogItem(
+  value: unknown,
+  kind: QuotePackageCatalogKind,
+): QuotePackageCatalogItem | null {
+  if (!isRecord(value)) return null;
+  const id = firstString(value.id, value.source_id);
+  const name = firstString(value.name, value.title, value.name_display);
+  if (!id || !name) return null;
+  const brand = Array.isArray(value.brand) ? value.brand[0] : value.brand;
+  const brandRecord = recordOrEmpty(brand);
+  const listPriceCents = numOrNull(value.list_price_cents);
+  const dealerCostCents = numOrNull(value.dealer_cost_cents);
+  const directPrice = numOrNull(value.price) ?? numOrNull(value.unit_price) ?? numOrNull(value.list_price);
+  const directDealerCost = numOrNull(value.dealerCost) ?? numOrNull(value.dealer_cost);
+  return {
+    id,
+    kind,
+    name,
+    price: listPriceCents != null ? listPriceCents / 100 : directPrice ?? 0,
+    dealerCost: dealerCostCents != null ? dealerCostCents / 100 : directDealerCost,
+    brandName: firstString(brandRecord.name, value.brandName, value.brand_name),
+    category: firstString(value.category, brandRecord.category),
+    universal: value.universal === true,
+    sourceCatalog: kind === "attachment" ? "qb_attachments" : "manual",
+    sourceId: id,
+    metadata: {
+      catalog_kind: kind,
+      source: kind === "attachment" ? "qb_attachments" : "qb_package_items",
+      term_months: numOrNull(value.warranty_term_months),
+      compatibility: value.universal === true ? "universal" : "catalog_match",
+    },
+  };
+}
+
+function starterPackageItems(kind: QuotePackageCatalogKind, query: string): QuotePackageCatalogItem[] {
+  const sanitized = sanitizeCatalogSearch(query).toLowerCase();
+  return PACKAGE_ITEM_STARTER_CATALOG.filter((item) => {
+    if (item.kind !== kind) return false;
+    if (!sanitized) return true;
+    return [item.name, item.brandName, item.category]
+      .filter(Boolean)
+      .some((field) => field!.toLowerCase().includes(sanitized));
+  });
+}
+
+export async function searchQuotePackageItems(params: {
+  kind: QuotePackageCatalogKind;
+  query: string;
+}): Promise<QuotePackageCatalogItem[]> {
+  const sanitized = sanitizeCatalogSearch(params.query);
+  if (params.kind === "attachment") {
+    const attachments = await searchQuoteAttachments(sanitized);
+    return attachments.map((entry) => ({
+      id: entry.id,
+      kind: "attachment" as const,
+      name: entry.name,
+      price: entry.price,
+      dealerCost: null,
+      brandName: entry.brandName,
+      category: entry.category,
+      universal: entry.universal,
+      sourceCatalog: "qb_attachments" as const,
+      sourceId: entry.id,
+      metadata: {
+        catalog_kind: entry.universal ? "universal_attachment" : "attachment",
+        brand_name: entry.brandName ?? null,
+        category: entry.category ?? null,
+        compatibility: entry.universal ? "universal" : "catalog_match",
+      },
+    }));
+  }
+
+  const starterRows = starterPackageItems(params.kind, sanitized);
+
+  try {
+    let packageQuery = supabase
+      .from("qb_package_items")
+      .select(
+        `id, kind, name, category, list_price_cents, dealer_cost_cents, universal, warranty_term_months,
+         brand:qb_brands!brand_id ( id, code, name, category )`,
+      )
+      .eq("kind", params.kind)
+      .eq("active", true)
+      .is("deleted_at", null)
+      .order("name", { ascending: true })
+      .limit(sanitized ? 20 : 100);
+
+    if (sanitized) {
+      packageQuery = packageQuery.or(`name.ilike.%${sanitized}%,category.ilike.%${sanitized}%`);
+    }
+
+    const { data, error } = await packageQuery;
+    if (error) throw error;
+    const rows = (data ?? []).flatMap((row) => {
+      const normalized = normalizeQuotePackageCatalogItem(row, params.kind);
+      return normalized ? [normalized] : [];
+    });
+    const seen = new Set(rows.map((row) => row.id));
+    return [...rows, ...starterRows.filter((row) => !seen.has(row.id))];
+  } catch {
+    return starterRows;
+  }
 }

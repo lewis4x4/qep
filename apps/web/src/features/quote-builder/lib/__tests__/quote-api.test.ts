@@ -20,6 +20,7 @@ import {
   normalizeQuoteFinancingPreview,
   normalizeQuoteListActionResponse,
   normalizeQuoteListResponse,
+  normalizeQuotePackageCatalogItem,
   normalizeQuoteRecommendation,
   normalizeQuoteSignatureResponse,
   normalizeScorerCalibrationObservations,
@@ -157,6 +158,60 @@ describe("normalizeQuoteFinanceScenario", () => {
     expect(scenario.apr).toBe(6.5);
     expect(scenario.monthlyPayment).toBe(1999.42);
     expect(scenario.totalCost).toBe(119_965.2);
+  });
+});
+
+describe("package item catalog helpers", () => {
+  test("normalizes option rows into quote package catalog items", () => {
+    const item = normalizeQuotePackageCatalogItem({
+      id: "option-1",
+      name: "Hydraulic thumb kit",
+      category: "Excavator options",
+      list_price_cents: 480000,
+      dealer_cost_cents: 310000,
+      universal: false,
+      brand: { name: "QEP", category: "Attachments" },
+    }, "option");
+
+    expect(item).toEqual({
+      id: "option-1",
+      kind: "option",
+      name: "Hydraulic thumb kit",
+      price: 4800,
+      dealerCost: 3100,
+      brandName: "QEP",
+      category: "Excavator options",
+      universal: false,
+      sourceCatalog: "manual",
+      sourceId: "option-1",
+      metadata: {
+        catalog_kind: "option",
+        source: "qb_package_items",
+        term_months: null,
+        compatibility: "catalog_match",
+      },
+    });
+  });
+
+  test("normalizes warranty term metadata and direct prices", () => {
+    const item = normalizeQuotePackageCatalogItem({
+      id: "warranty-60",
+      title: "Premier protection plan",
+      price: 4250,
+      warranty_term_months: 60,
+      universal: true,
+    }, "warranty");
+
+    expect(item?.kind).toBe("warranty");
+    expect(item?.price).toBe(4250);
+    expect(item?.universal).toBe(true);
+    expect(item?.metadata?.term_months).toBe(60);
+    expect(item?.metadata?.compatibility).toBe("universal");
+  });
+
+  test("rejects package rows without ids or names", () => {
+    expect(normalizeQuotePackageCatalogItem({ id: "missing-name" }, "accessory")).toBeNull();
+    expect(normalizeQuotePackageCatalogItem({ name: "Missing id" }, "accessory")).toBeNull();
   });
 });
 
@@ -354,19 +409,45 @@ describe("quote recommendation and send normalizers", () => {
           score: "80",
           availability_status: "source_required",
           estimated_cost: 75000,
+          selected_at: "2026-05-07T15:05:00Z",
+          source_confidence: "high",
+          customer_safe_label: "Bobcat T86 available path",
           metadata: { ok: true },
           model: { model_code: "T86" },
         },
         { missing: "id" },
       ],
+      events: [
+        {
+          id: "event-1",
+          request_id: "req-1",
+          actor_name: "Ops Manager",
+          event_type: "requested",
+          to_status: "pending",
+          note: "Request created",
+          metadata: { source: "quote_builder_v2" },
+          created_at: "2026-05-07T15:01:00Z",
+        },
+        { missing: "id" },
+      ],
+      priority_score: "50",
+      sla_due_at: "2026-05-07T17:00:00Z",
+      manager_override_at: "2026-05-07T16:00:00Z",
+      manager_override_reason: "Customer accepts sourcing risk",
       created_at: "2026-05-07T15:00:00Z",
     });
 
     expect(request?.id).toBe("req-1");
     expect(request?.requestedMachineLabel).toBe("Bobcat T86");
     expect(request?.requestedBudget).toBe(75000);
+    expect(request?.priorityScore).toBe(50);
+    expect(request?.managerOverrideReason).toBe("Customer accepts sourcing risk");
     expect(request?.candidates).toHaveLength(1);
     expect(request?.candidates[0]?.candidateType).toBe("exact_catalog_model");
+    expect(request?.candidates[0]?.selectedAt).toBe("2026-05-07T15:05:00Z");
+    expect(request?.candidates[0]?.customerSafeLabel).toBe("Bobcat T86 available path");
+    expect(request?.events).toHaveLength(1);
+    expect(request?.events[0]?.eventType).toBe("requested");
   });
 
   test("normalizes AI recommendation envelopes and filters malformed nested rows", () => {

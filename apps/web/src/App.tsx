@@ -146,6 +146,9 @@ const DealRoomPage = lazy(() =>
 const IntakeKanbanPage = lazy(() =>
   import("./features/ops/pages/IntakeKanbanPage").then((m) => ({ default: m.IntakeKanbanPage }))
 );
+const QuoteAvailabilityQueuePage = lazy(() =>
+  import("./features/ops/pages/QuoteAvailabilityQueuePage").then((m) => ({ default: m.QuoteAvailabilityQueuePage }))
+);
 const PdiChecklistPage = lazy(() =>
   import("./features/ops/pages/PdiChecklistPage").then((m) => ({ default: m.PdiChecklistPage }))
 );
@@ -1324,6 +1327,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <IntakeKanbanPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/ops/quote-availability"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <QuoteAvailabilityQueuePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

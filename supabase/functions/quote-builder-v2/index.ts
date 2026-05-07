@@ -14,7 +14,7 @@
  * Auth: rep/manager/owner
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonErrorWithFields, safeJsonOk } from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { sendResendEmail } from "../_shared/resend-email.ts";
@@ -765,6 +765,92 @@ function availabilityRequestActive(status: unknown): boolean {
   return status === "pending" || status === "checking_internal_inventory" || status === "checking_vendor";
 }
 
+function availabilityBlocksCustomerSend(status: unknown): boolean {
+  return availabilityRequestActive(status) || status === "not_available" || status === "alternative_recommended";
+}
+
+function normalizeAvailabilityOpsStatus(value: unknown): string {
+  const status = typeof value === "string" ? value : "pending";
+  return [
+    "pending",
+    "checking_internal_inventory",
+    "checking_vendor",
+    "available",
+    "available_with_conditions",
+    "alternative_recommended",
+    "not_available",
+    "cancelled",
+  ].includes(status)
+    ? status
+    : "pending";
+}
+
+function availabilityStatusResolved(status: unknown): boolean {
+  return ["available", "available_with_conditions", "alternative_recommended", "not_available", "cancelled"].includes(
+    String(status ?? ""),
+  );
+}
+
+function availabilitySlaDueAt(urgency: "low" | "normal" | "rush" | "customer_waiting"): string {
+  const now = Date.now();
+  const ms = urgency === "customer_waiting"
+    ? 30 * 60 * 1000
+    : urgency === "rush"
+      ? 2 * 60 * 60 * 1000
+      : urgency === "low"
+        ? 48 * 60 * 60 * 1000
+        : 24 * 60 * 60 * 1000;
+  return new Date(now + ms).toISOString();
+}
+
+function availabilityPriorityScore(input: { urgency: string; requestedBudget: number | null; customerWaiting?: boolean }): number {
+  const urgencyScore = input.urgency === "customer_waiting" ? 50 : input.urgency === "rush" ? 35 : input.urgency === "low" ? 5 : 15;
+  const budgetScore = input.requestedBudget ? Math.min(40, Math.round(input.requestedBudget / 5000)) : 0;
+  return urgencyScore + budgetScore + (input.customerWaiting ? 10 : 0);
+}
+
+function normalizeAvailabilityEventRow(row: Record<string, unknown>): Record<string, unknown> {
+  const actorProfile = Array.isArray(row.actor_profile) ? row.actor_profile[0] : row.actor_profile;
+  return {
+    id: row.id,
+    request_id: row.request_id,
+    actor_id: row.actor_id ?? null,
+    actor_name: profileDisplayName(actorProfile),
+    event_type: row.event_type,
+    from_status: row.from_status ?? null,
+    to_status: row.to_status ?? null,
+    note: row.note ?? null,
+    metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata) ? row.metadata : {},
+    created_at: row.created_at ?? null,
+  };
+}
+
+async function insertAvailabilityEvent(input: {
+  admin: ReturnType<typeof createAdminClient>;
+  workspaceId: string;
+  requestId: string;
+  actorId: string;
+  eventType: string;
+  fromStatus?: string | null;
+  toStatus?: string | null;
+  note?: string | null;
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  const { error } = await input.admin
+    .from("quote_availability_events")
+    .insert({
+      workspace_id: input.workspaceId,
+      request_id: input.requestId,
+      actor_id: input.actorId,
+      event_type: input.eventType,
+      from_status: input.fromStatus ?? null,
+      to_status: input.toStatus ?? null,
+      note: input.note ?? null,
+      metadata: input.metadata ?? {},
+    });
+  if (error) throw new Error(error.message);
+}
+
 function profileDisplayName(profile: unknown): string | null {
   if (!profile || typeof profile !== "object" || Array.isArray(profile)) return null;
   const row = profile as Record<string, unknown>;
@@ -773,9 +859,14 @@ function profileDisplayName(profile: unknown): string | null {
     ?? lineString(row.email, 160);
 }
 
-function normalizeAvailabilityRequestRow(row: Record<string, unknown>, candidates: Array<Record<string, unknown>> = []): Record<string, unknown> {
+function normalizeAvailabilityRequestRow(
+  row: Record<string, unknown>,
+  candidates: Array<Record<string, unknown>> = [],
+  events: Array<Record<string, unknown>> = [],
+): Record<string, unknown> {
   const assignedProfile = Array.isArray(row.assigned_profile) ? row.assigned_profile[0] : row.assigned_profile;
   const requestedProfile = Array.isArray(row.requested_profile) ? row.requested_profile[0] : row.requested_profile;
+  const quote = Array.isArray(row.quote) ? row.quote[0] : row.quote;
   return {
     id: row.id,
     quote_package_id: row.quote_package_id ?? null,
@@ -796,10 +887,20 @@ function normalizeAvailabilityRequestRow(row: Record<string, unknown>, candidate
     decision_note: row.decision_note ?? null,
     resolved_by: row.resolved_by ?? null,
     resolved_at: row.resolved_at ?? null,
+    priority_score: row.priority_score ?? 0,
+    sla_due_at: row.sla_due_at ?? null,
+    last_activity_at: row.last_activity_at ?? null,
+    manager_override_by: row.manager_override_by ?? null,
+    manager_override_at: row.manager_override_at ?? null,
+    manager_override_reason: row.manager_override_reason ?? null,
+    rep_visibility_note: row.rep_visibility_note ?? null,
+    customer_safe_summary: row.customer_safe_summary ?? null,
     metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata) ? row.metadata : {},
     created_at: row.created_at ?? null,
     updated_at: row.updated_at ?? null,
+    quote: quote && typeof quote === "object" ? quote : null,
     candidates,
+    events,
   };
 }
 
@@ -818,6 +919,12 @@ function normalizeAvailabilityCandidateRow(row: Record<string, unknown>): Record
     estimated_cost: row.estimated_cost ?? null,
     estimated_margin: row.estimated_margin ?? null,
     reason: row.reason ?? null,
+    selected_at: row.selected_at ?? null,
+    selected_by: row.selected_by ?? null,
+    source_ref: row.source_ref ?? null,
+    source_confidence: row.source_confidence ?? null,
+    customer_safe_label: row.customer_safe_label ?? null,
+    internal_note: row.internal_note ?? null,
     metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata) ? row.metadata : {},
     model: model && typeof model === "object" ? model : null,
     equipment: equipment && typeof equipment === "object" ? equipment : null,
@@ -856,9 +963,22 @@ async function loadAvailabilityRequestEnvelope(input: {
     .order("created_at", { ascending: true });
   if (candidateErr) throw new Error(candidateErr.message);
 
+  const { data: events, error: eventErr } = await input.admin
+    .from("quote_availability_events")
+    .select(`
+      *,
+      actor_profile:profiles!quote_availability_events_actor_id_fkey ( id, full_name, email )
+    `)
+    .eq("workspace_id", input.workspaceId)
+    .eq("request_id", input.requestId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (eventErr) throw new Error(eventErr.message);
+
   return normalizeAvailabilityRequestRow(
     request as Record<string, unknown>,
     (candidates ?? []).map((row: Record<string, unknown>) => normalizeAvailabilityCandidateRow(row)),
+    (events ?? []).map((row: Record<string, unknown>) => normalizeAvailabilityEventRow(row)),
   );
 }
 
@@ -1019,6 +1139,75 @@ async function callerCanReadAvailabilityRequest(input: {
     .eq("id", quotePackageId)
     .maybeSingle();
   return !error && Boolean(data?.id);
+}
+
+async function assertQuoteAvailabilitySendable(input: {
+  admin: ReturnType<typeof createAdminClient>;
+  workspaceId: string;
+  quotePackageId: string;
+}): Promise<{ ok: true } | { ok: false; message: string; blockers: Array<Record<string, unknown>> }> {
+  const { data: lineRows, error: lineErr } = await input.admin
+    .from("quote_package_line_items")
+    .select("id, description, metadata")
+    .eq("quote_package_id", input.quotePackageId)
+    .eq("workspace_id", input.workspaceId)
+    .order("display_order", { ascending: true });
+  if (lineErr) throw new Error(lineErr.message);
+
+  const sourceRequiredLines = (lineRows ?? []).filter((line: Record<string, unknown>) => {
+    const metadata = line.metadata && typeof line.metadata === "object" && !Array.isArray(line.metadata)
+      ? line.metadata as Record<string, unknown>
+      : {};
+    return metadata.availability_status === "source_required";
+  });
+  if (sourceRequiredLines.length === 0) return { ok: true };
+
+  const { data: requestRows, error: requestErr } = await input.admin
+    .from("quote_availability_requests")
+    .select("id, quote_line_item_id, client_line_key, status, requested_machine_label, decision_note, manager_override_at, manager_override_reason")
+    .eq("workspace_id", input.workspaceId)
+    .eq("quote_package_id", input.quotePackageId);
+  if (requestErr) throw new Error(requestErr.message);
+
+  const requests = (requestRows ?? []) as Array<Record<string, unknown>>;
+  const blockers: Array<Record<string, unknown>> = [];
+
+  for (const line of sourceRequiredLines) {
+    const metadata = line.metadata && typeof line.metadata === "object" && !Array.isArray(line.metadata)
+      ? line.metadata as Record<string, unknown>
+      : {};
+    const requestId = lineString(metadata.availability_request_id, 80);
+    const clientLineKey = lineString(metadata.availability_client_line_key, 240);
+    const request = requests.find((candidate) =>
+      (requestId && candidate.id === requestId)
+      || (candidate.quote_line_item_id && candidate.quote_line_item_id === line.id)
+      || (clientLineKey && candidate.client_line_key === clientLineKey)
+    );
+    if (!request) {
+      blockers.push({ line_item_id: line.id, description: line.description ?? "Equipment", reason: "No availability request exists" });
+      continue;
+    }
+    const status = String(request.status ?? "pending");
+    const hasOverride = typeof request.manager_override_at === "string" && typeof request.manager_override_reason === "string" && request.manager_override_reason.trim().length > 0;
+    if (availabilityBlocksCustomerSend(status) && !hasOverride) {
+      blockers.push({
+        line_item_id: line.id,
+        request_id: request.id,
+        description: line.description ?? request.requested_machine_label ?? "Equipment",
+        status,
+        reason: "Availability is unresolved or unavailable",
+      });
+    }
+  }
+
+  if (blockers.length === 0) return { ok: true };
+  return {
+    ok: false,
+    blockers,
+    message: blockers.length === 1
+      ? `Resolve availability for ${String(blockers[0].description ?? "this equipment")} before sending, or record a manager override.`
+      : `Resolve ${blockers.length} availability requests before sending, or record manager overrides.`,
+  };
 }
 
 // Customer-safe projection of a quote row for the /q/:token deal room.
@@ -2989,6 +3178,141 @@ Deno.serve(async (req) => {
         return safeJsonOk({ observations }, origin);
       }
 
+      if (action === "queue" && url.pathname.includes("/availability/")) {
+        if (!canPublish) return safeJsonError("Availability queue requires manager, admin, or owner role", 403, origin);
+        const admin = createAdminClient();
+        const statusFilter = url.searchParams.get("status");
+        const assignedTo = url.searchParams.get("assigned_to");
+        const search = (url.searchParams.get("search") ?? "").trim().toLowerCase();
+        const overdueOnly = url.searchParams.get("overdue") === "true";
+        let queueQuery = admin
+          .from("quote_availability_requests")
+          .select(`
+            *,
+            requested_profile:profiles!quote_availability_requests_requested_by_fkey ( id, full_name, email ),
+            assigned_profile:profiles!quote_availability_requests_assigned_to_fkey ( id, full_name, email ),
+            quote:quote_packages!quote_availability_requests_quote_package_id_fkey ( id, quote_number, customer_name, customer_company, net_total, branch_slug, status )
+          `)
+          .eq("workspace_id", userWorkspaceId)
+          .order("priority_score", { ascending: false })
+          .order("last_activity_at", { ascending: false })
+          .limit(100);
+        if (statusFilter && statusFilter !== "all" && statusFilter !== "open") {
+          queueQuery = queueQuery.eq("status", normalizeAvailabilityOpsStatus(statusFilter));
+        } else if (statusFilter === "open" || !statusFilter) {
+          queueQuery = queueQuery.in("status", ["pending", "checking_internal_inventory", "checking_vendor", "alternative_recommended", "not_available"]);
+        }
+        if (assignedTo === "unassigned") queueQuery = queueQuery.is("assigned_to", null);
+        else if (assignedTo && UUID_RE.test(assignedTo)) queueQuery = queueQuery.eq("assigned_to", assignedTo);
+        if (overdueOnly) queueQuery = queueQuery.lt("sla_due_at", new Date().toISOString());
+
+        const { data: rows, error } = await queueQuery;
+        if (error) return safeJsonError(error.message, 500, origin);
+        const requestIds = (rows ?? []).flatMap((row: Record<string, unknown>) => typeof row.id === "string" ? [row.id] : []);
+        const { data: candidateRows, error: candidateErr } = requestIds.length > 0
+          ? await admin
+              .from("quote_availability_candidates")
+              .select(`
+                *,
+                model:qb_equipment_models!quote_availability_candidates_catalog_model_id_fkey ( id, model_code, family, series, name_display, model_year, list_price_cents ),
+                equipment:qrm_equipment!quote_availability_candidates_equipment_id_fkey ( id, name, make, model, year, stock_number, availability, location_description, current_market_value )
+              `)
+              .eq("workspace_id", userWorkspaceId)
+              .in("request_id", requestIds)
+              .order("score", { ascending: false })
+          : { data: [], error: null };
+        if (candidateErr) return safeJsonError(candidateErr.message, 500, origin);
+        const { data: eventRows, error: eventErr } = requestIds.length > 0
+          ? await admin
+              .from("quote_availability_events")
+              .select(`
+                *,
+                actor_profile:profiles!quote_availability_events_actor_id_fkey ( id, full_name, email )
+              `)
+              .eq("workspace_id", userWorkspaceId)
+              .in("request_id", requestIds)
+              .order("created_at", { ascending: false })
+              .limit(300)
+          : { data: [], error: null };
+        if (eventErr) return safeJsonError(eventErr.message, 500, origin);
+
+        const candidatesByRequest = new Map<string, Array<Record<string, unknown>>>();
+        for (const candidate of candidateRows ?? []) {
+          const key = String((candidate as Record<string, unknown>).request_id ?? "");
+          if (!key) continue;
+          const bucket = candidatesByRequest.get(key) ?? [];
+          bucket.push(normalizeAvailabilityCandidateRow(candidate as Record<string, unknown>));
+          candidatesByRequest.set(key, bucket);
+        }
+        const eventsByRequest = new Map<string, Array<Record<string, unknown>>>();
+        for (const event of eventRows ?? []) {
+          const key = String((event as Record<string, unknown>).request_id ?? "");
+          if (!key) continue;
+          const bucket = eventsByRequest.get(key) ?? [];
+          bucket.push(normalizeAvailabilityEventRow(event as Record<string, unknown>));
+          eventsByRequest.set(key, bucket);
+        }
+        const requests = (rows ?? [])
+          .map((row: Record<string, unknown>) => normalizeAvailabilityRequestRow(
+            row,
+            candidatesByRequest.get(String(row.id)) ?? [],
+            eventsByRequest.get(String(row.id)) ?? [],
+          ))
+          .filter((row: Record<string, unknown>) => {
+            if (!search) return true;
+            const quote = row.quote && typeof row.quote === "object" ? row.quote as Record<string, unknown> : {};
+            return [
+              row.requested_machine_label,
+              row.customer_need,
+              quote.quote_number,
+              quote.customer_name,
+              quote.customer_company,
+            ].some((value) => String(value ?? "").toLowerCase().includes(search));
+          });
+        return safeJsonOk({ requests }, origin);
+      }
+
+      if (action === "summary" && url.pathname.includes("/availability/")) {
+        if (!canPublish) return safeJsonError("Availability summary requires manager, admin, or owner role", 403, origin);
+        const admin = createAdminClient();
+        const { data: rows, error } = await admin
+          .from("quote_availability_requests")
+          .select(`
+            status,
+            urgency,
+            sla_due_at,
+            requested_budget,
+            quote:quote_packages!quote_availability_requests_quote_package_id_fkey ( net_total )
+          `)
+          .eq("workspace_id", userWorkspaceId)
+          .neq("status", "cancelled")
+          .limit(1000);
+        if (error) return safeJsonError(error.message, 500, origin);
+        const now = Date.now();
+        const byStatus: Record<string, number> = {};
+        let overdueCount = 0;
+        let blockedQuoteValue = 0;
+        for (const row of rows ?? []) {
+          const record = row as Record<string, unknown>;
+          const status = String(record.status ?? "pending");
+          byStatus[status] = (byStatus[status] ?? 0) + 1;
+          const due = typeof record.sla_due_at === "string" ? Date.parse(record.sla_due_at) : NaN;
+          if (Number.isFinite(due) && due < now && availabilityBlocksCustomerSend(status)) overdueCount += 1;
+          if (availabilityBlocksCustomerSend(status)) {
+            const quote = Array.isArray(record.quote) ? record.quote[0] : record.quote;
+            const netTotal = quote && typeof quote === "object" ? Number((quote as Record<string, unknown>).net_total) : NaN;
+            const requestedBudget = Number(record.requested_budget);
+            blockedQuoteValue += Number.isFinite(netTotal) ? netTotal : Number.isFinite(requestedBudget) ? requestedBudget : 0;
+          }
+        }
+        return safeJsonOk({
+          open_count: (rows ?? []).filter((row: Record<string, unknown>) => availabilityBlocksCustomerSend(row.status)).length,
+          overdue_count: overdueCount,
+          blocked_quote_value: blockedQuoteValue,
+          by_status: byStatus,
+        }, origin);
+      }
+
       if (action === "availability") {
         const quotePackageId = url.searchParams.get("quote_package_id");
         const requestId = url.searchParams.get("request_id");
@@ -3168,6 +3492,8 @@ Deno.serve(async (req) => {
         return safeJsonOk({ request: existing }, origin);
       }
 
+      const urgency = normalizeAvailabilityUrgency(body.urgency);
+      const customerWaiting = urgency === "customer_waiting" || /waiting|today|now|asap/i.test(customerNeed ?? "");
       const { data: created, error: createErr } = await admin
         .from("quote_availability_requests")
         .insert({
@@ -3177,11 +3503,15 @@ Deno.serve(async (req) => {
           client_line_key: clientLineKey,
           requested_by: user.id,
           status: "pending",
-          urgency: normalizeAvailabilityUrgency(body.urgency),
+          urgency,
+          priority_score: availabilityPriorityScore({ urgency, requestedBudget: budget, customerWaiting }),
+          sla_due_at: availabilitySlaDueAt(urgency),
+          last_activity_at: new Date().toISOString(),
           customer_need: customerNeed,
           requested_machine_label: requestedMachineLabel,
           requested_budget: budget,
           requested_timeline: lineString(body.requested_timeline, 240),
+          rep_visibility_note: "Availability request sent to operations.",
           metadata: {
             source: "quote_builder_v2",
             source_catalog: sourceCatalog,
@@ -3197,6 +3527,17 @@ Deno.serve(async (req) => {
       if (createErr) return safeJsonError(createErr.message, 500, origin);
       const requestId = String((created as { id: string }).id);
 
+      await insertAvailabilityEvent({
+        admin,
+        workspaceId: userWorkspaceId,
+        requestId,
+        actorId: user.id,
+        eventType: "requested",
+        toStatus: "pending",
+        note: "Availability request created from Quote Builder.",
+        metadata: { client_line_key: clientLineKey, catalog_model_id: catalogModelId },
+      });
+
       await buildAvailabilityCandidates({
         admin,
         workspaceId: userWorkspaceId,
@@ -3208,6 +3549,197 @@ Deno.serve(async (req) => {
 
       const request = await loadAvailabilityRequestEnvelope({ admin, workspaceId: userWorkspaceId, requestId });
       return safeJsonOk({ request }, origin, 201);
+    }
+
+    // ── POST /availability/*: operations workflow mutations ─────────────
+    if (["assign", "respond", "candidate", "override", "cancel"].includes(action) && url.pathname.includes("/availability/")) {
+      if (!canPublish) return safeJsonError("Availability operations require manager, admin, or owner role", 403, origin);
+      const admin = createAdminClient();
+      const requestId = lineString(body.request_id ?? body.availability_request_id, 80);
+      if (!requestId || !UUID_RE.test(requestId)) return safeJsonError("request_id required", 400, origin);
+      const { data: requestRow, error: requestErr } = await admin
+        .from("quote_availability_requests")
+        .select("*")
+        .eq("workspace_id", userWorkspaceId)
+        .eq("id", requestId)
+        .maybeSingle();
+      if (requestErr) return safeJsonError(requestErr.message, 500, origin);
+      if (!requestRow) return safeJsonError("Availability request not found", 404, origin);
+      const oldStatus = String((requestRow as Record<string, unknown>).status ?? "pending");
+      const nowIso = new Date().toISOString();
+
+      if (action === "assign") {
+        const rawAssignee = lineString(body.assigned_to, 80);
+        const assignedTo = rawAssignee === "me" ? user.id : rawAssignee && UUID_RE.test(rawAssignee) ? rawAssignee : null;
+        const { error: updateErr } = await admin
+          .from("quote_availability_requests")
+          .update({ assigned_to: assignedTo, last_activity_at: nowIso })
+          .eq("workspace_id", userWorkspaceId)
+          .eq("id", requestId);
+        if (updateErr) return safeJsonError(updateErr.message, 500, origin);
+        await insertAvailabilityEvent({
+          admin,
+          workspaceId: userWorkspaceId,
+          requestId,
+          actorId: user.id,
+          eventType: "assigned",
+          fromStatus: oldStatus,
+          toStatus: oldStatus,
+          note: assignedTo ? "Availability request assigned." : "Availability request unassigned.",
+          metadata: { assigned_to: assignedTo },
+        });
+      }
+
+      if (action === "candidate") {
+        const candidateType = ["owned_inventory", "branch_transfer", "vendor_order", "rental_conversion", "equivalent_catalog_model"].includes(String(body.candidate_type ?? ""))
+          ? String(body.candidate_type)
+          : "vendor_order";
+        const catalogModelId = lineString(body.catalog_model_id, 80);
+        const equipmentId = lineString(body.equipment_id, 80);
+        const note = lineString(body.reason ?? body.note, 1000) ?? "Manual sourcing candidate added.";
+        const { error: insertErr } = await admin
+          .from("quote_availability_candidates")
+          .insert({
+            workspace_id: userWorkspaceId,
+            request_id: requestId,
+            candidate_type: candidateType,
+            catalog_model_id: catalogModelId && UUID_RE.test(catalogModelId) ? catalogModelId : null,
+            equipment_id: equipmentId && UUID_RE.test(equipmentId) ? equipmentId : null,
+            score: Number.isFinite(Number(body.score)) ? Number(body.score) : 55,
+            availability_status: normalizeAvailabilityStatus(body.availability_status),
+            eta_days: Number.isFinite(Number(body.eta_days)) ? Math.round(Number(body.eta_days)) : null,
+            estimated_cost: Number.isFinite(Number(body.estimated_cost)) ? Number(body.estimated_cost) : null,
+            estimated_margin: Number.isFinite(Number(body.estimated_margin)) ? Number(body.estimated_margin) : null,
+            reason: note,
+            source_ref: lineString(body.source_ref, 240),
+            source_confidence: ["low", "medium", "high"].includes(String(body.source_confidence ?? "")) ? String(body.source_confidence) : null,
+            customer_safe_label: lineString(body.customer_safe_label, 240),
+            internal_note: lineString(body.internal_note, 2000),
+            metadata: body.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata) ? body.metadata : {},
+          });
+        if (insertErr) return safeJsonError(insertErr.message, 500, origin);
+        await admin.from("quote_availability_requests").update({ last_activity_at: nowIso }).eq("id", requestId).eq("workspace_id", userWorkspaceId);
+        await insertAvailabilityEvent({
+          admin,
+          workspaceId: userWorkspaceId,
+          requestId,
+          actorId: user.id,
+          eventType: "candidate_added",
+          fromStatus: oldStatus,
+          toStatus: oldStatus,
+          note,
+          metadata: { candidate_type: candidateType },
+        });
+      }
+
+      if (action === "respond") {
+        const nextStatus = normalizeAvailabilityOpsStatus(body.status);
+        const note = lineString(body.note ?? body.decision_note, 2000);
+        const selectedCandidateId = lineString(body.selected_candidate_id, 80);
+        if (["available_with_conditions", "alternative_recommended", "not_available"].includes(nextStatus) && !note) {
+          return safeJsonError("A decision note is required for conditional, alternative, or unavailable responses", 400, origin);
+        }
+        if (["available", "available_with_conditions", "alternative_recommended"].includes(nextStatus) && selectedCandidateId && !UUID_RE.test(selectedCandidateId)) {
+          return safeJsonError("selected_candidate_id is malformed", 400, origin);
+        }
+        if (selectedCandidateId && UUID_RE.test(selectedCandidateId)) {
+          const { error: candidateUpdateErr } = await admin
+            .from("quote_availability_candidates")
+            .update({ selected_at: nowIso, selected_by: user.id })
+            .eq("workspace_id", userWorkspaceId)
+            .eq("request_id", requestId)
+            .eq("id", selectedCandidateId);
+          if (candidateUpdateErr) return safeJsonError(candidateUpdateErr.message, 500, origin);
+          await insertAvailabilityEvent({
+            admin,
+            workspaceId: userWorkspaceId,
+            requestId,
+            actorId: user.id,
+            eventType: "candidate_selected",
+            fromStatus: oldStatus,
+            toStatus: oldStatus,
+            note: "Availability candidate selected.",
+            metadata: { candidate_id: selectedCandidateId },
+          });
+        }
+        const resolved = availabilityStatusResolved(nextStatus);
+        const patch: Record<string, unknown> = {
+          status: nextStatus,
+          decision_note: note,
+          rep_visibility_note: lineString(body.rep_visibility_note, 1000) ?? note,
+          customer_safe_summary: lineString(body.customer_safe_summary, 1000),
+          availability_eta: lineString(body.availability_eta, 240),
+          last_activity_at: nowIso,
+          ...(resolved ? { resolved_by: user.id, resolved_at: nowIso } : { resolved_by: null, resolved_at: null }),
+        };
+        const { error: updateErr } = await admin
+          .from("quote_availability_requests")
+          .update(patch)
+          .eq("workspace_id", userWorkspaceId)
+          .eq("id", requestId);
+        if (updateErr) return safeJsonError(updateErr.message, 500, origin);
+        await insertAvailabilityEvent({
+          admin,
+          workspaceId: userWorkspaceId,
+          requestId,
+          actorId: user.id,
+          eventType: resolved ? "resolved" : "status_changed",
+          fromStatus: oldStatus,
+          toStatus: nextStatus,
+          note,
+          metadata: { selected_candidate_id: selectedCandidateId ?? null },
+        });
+      }
+
+      if (action === "override") {
+        const reason = lineString(body.reason ?? body.manager_override_reason, 1000);
+        if (!reason) return safeJsonError("Manager override reason is required", 400, origin);
+        const { error: updateErr } = await admin
+          .from("quote_availability_requests")
+          .update({
+            manager_override_by: user.id,
+            manager_override_at: nowIso,
+            manager_override_reason: reason,
+            rep_visibility_note: "Manager override recorded. Customer-facing send is allowed with availability risk.",
+            last_activity_at: nowIso,
+          })
+          .eq("workspace_id", userWorkspaceId)
+          .eq("id", requestId);
+        if (updateErr) return safeJsonError(updateErr.message, 500, origin);
+        await insertAvailabilityEvent({
+          admin,
+          workspaceId: userWorkspaceId,
+          requestId,
+          actorId: user.id,
+          eventType: "override_granted",
+          fromStatus: oldStatus,
+          toStatus: oldStatus,
+          note: reason,
+        });
+      }
+
+      if (action === "cancel") {
+        const note = lineString(body.note, 1000) ?? "Availability request cancelled.";
+        const { error: updateErr } = await admin
+          .from("quote_availability_requests")
+          .update({ status: "cancelled", decision_note: note, resolved_by: user.id, resolved_at: nowIso, last_activity_at: nowIso })
+          .eq("workspace_id", userWorkspaceId)
+          .eq("id", requestId);
+        if (updateErr) return safeJsonError(updateErr.message, 500, origin);
+        await insertAvailabilityEvent({
+          admin,
+          workspaceId: userWorkspaceId,
+          requestId,
+          actorId: user.id,
+          eventType: "cancelled",
+          fromStatus: oldStatus,
+          toStatus: "cancelled",
+          note,
+        });
+      }
+
+      const request = await loadAvailabilityRequestEnvelope({ admin, workspaceId: userWorkspaceId, requestId });
+      return safeJsonOk({ request }, origin);
     }
 
     // ── POST /list-action: narrow row actions from the quote list ────────
@@ -3231,6 +3763,14 @@ Deno.serve(async (req) => {
       const nowIso = new Date().toISOString();
 
       if (requestedAction === "mark_sent") {
+        const availabilityGate = await assertQuoteAvailabilitySendable({
+          admin: createAdminClient(),
+          workspaceId: typeof (pkg as Record<string, unknown>).workspace_id === "string" ? String((pkg as Record<string, unknown>).workspace_id) : userWorkspaceId,
+          quotePackageId,
+        });
+        if (!availabilityGate.ok) {
+          return safeJsonErrorWithFields(availabilityGate.message, 409, origin, { blockers: availabilityGate.blockers });
+        }
         const { data: updated, error: updateErr } = await supabase
           .from("quote_packages")
           .update({ status: "sent", sent_at: nowIso, sent_via: "manual" })
@@ -4843,7 +5383,7 @@ Deno.serve(async (req) => {
       // Fetch quote package with contact email
       const { data: pkg, error: pkgErr } = await supabase
         .from("quote_packages")
-        .select("id, deal_id, contact_id, equipment, equipment_total, net_total, trade_allowance, sent_at, status, margin_pct, crm_contacts(first_name, last_name, email)")
+        .select("id, workspace_id, deal_id, contact_id, equipment, equipment_total, net_total, trade_allowance, sent_at, status, margin_pct, crm_contacts(first_name, last_name, email)")
         .eq("id", body.quote_package_id)
         .single();
 
@@ -4894,6 +5434,15 @@ Deno.serve(async (req) => {
         }
       } else if (typeof pkg.margin_pct === "number" && pkg.margin_pct < 10 && quoteStatus !== "approved") {
         return safeJsonError("Submit this quote for manager approval before sending it.", 409, origin);
+      }
+
+      const availabilityGate = await assertQuoteAvailabilitySendable({
+        admin,
+        workspaceId: typeof pkg.workspace_id === "string" ? pkg.workspace_id : userWorkspaceId,
+        quotePackageId: String(pkg.id),
+      });
+      if (!availabilityGate.ok) {
+        return safeJsonErrorWithFields(availabilityGate.message, 409, origin, { blockers: availabilityGate.blockers });
       }
 
       // Compose email body

@@ -49,6 +49,7 @@ import {
 import { hydrateCustomerById } from "../lib/customer-search-api";
 import { IntelligencePanel } from "../components/IntelligencePanel";
 import { EquipmentSelector } from "../components/EquipmentSelector";
+import { PackageItemSearchDialog } from "../components/PackageItemSearchDialog";
 import { FinancingCalculator } from "../components/FinancingCalculator";
 import { DealCoachSidebar } from "../components/DealCoachSidebar";
 import { IncentiveStack } from "../components/IncentiveStack";
@@ -78,6 +79,8 @@ import {
   searchCatalog,
   submitQuoteForApproval,
   type QuoteAvailabilityRequest,
+  type QuotePackageCatalogItem,
+  type QuotePackageCatalogKind,
   type QuotePackageSaveResponse,
   type QuoteFinancingRequest,
 } from "../lib/quote-api";
@@ -259,6 +262,13 @@ function availabilityLabel(status: EquipmentAvailabilityStatus): string {
   if (status === "in_stock") return "In stock";
   if (status === "in_transit") return "In transit";
   return "Source required";
+}
+
+function packageKindLabel(kind: QuotePackageCatalogKind): string {
+  if (kind === "attachment") return "attachments";
+  if (kind === "option") return "options";
+  if (kind === "accessory") return "accessories";
+  return "warranty";
 }
 
 function metadataString(metadata: Record<string, unknown> | null | undefined, key: string): string | null {
@@ -495,6 +505,7 @@ export function QuoteBuilderV2Page() {
   const [marginWaterfallExpanded, setMarginWaterfallExpanded] = useState(false);
   const [packageToolsOpen, setPackageToolsOpen] = useState(false);
   const [catalogBrowserOpen, setCatalogBrowserOpen] = useState(false);
+  const [packageItemSearchOpen, setPackageItemSearchOpen] = useState(false);
   const [customLineTitle, setCustomLineTitle] = useState("");
   const [customLinePrice, setCustomLinePrice] = useState(0);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
@@ -548,7 +559,7 @@ export function QuoteBuilderV2Page() {
   const [dealAssistantOpen, setDealAssistantOpen] = useState(false);
   const [availableOptions, setAvailableOptions] = useState<Array<{ id: string; name: string; price: number }>>([]);
   const [availableOptionsLabel, setAvailableOptionsLabel] = useState<string | null>(null);
-  const [configureTab, setConfigureTab] = useState<"attachment" | "option" | "accessory" | "warranty">("attachment");
+  const [configureTab, setConfigureTab] = useState<QuotePackageCatalogKind>("attachment");
   const [tradeChecklist, setTradeChecklist] = useState({
     hourMeter: false,
     undercarriage: false,
@@ -1504,19 +1515,40 @@ export function QuoteBuilderV2Page() {
   }
 
   function addCatalogAttachment(entry: CatalogAttachmentMatch): void {
-    const nextLine: QuoteLineItemDraft = {
-      kind: "attachment",
+    addPackageCatalogItem({
       id: entry.id,
+      kind: "attachment",
+      name: entry.name,
+      price: entry.price,
+      dealerCost: null,
+      brandName: entry.brandName ?? null,
+      category: entry.category ?? null,
+      universal: entry.universal === true,
       sourceCatalog: "qb_attachments",
       sourceId: entry.id,
-      dealerCost: null,
-      title: entry.name,
-      quantity: 1,
-      unitPrice: entry.price,
       metadata: {
         catalog_kind: entry.universal ? "universal_attachment" : "attachment",
         brand_name: entry.brandName ?? null,
         category: entry.category ?? null,
+      },
+    });
+  }
+
+  function addPackageCatalogItem(entry: QuotePackageCatalogItem): void {
+    const nextLine: QuoteLineItemDraft = {
+      kind: entry.kind,
+      id: entry.id,
+      sourceCatalog: entry.sourceCatalog,
+      sourceId: entry.sourceId,
+      dealerCost: entry.dealerCost,
+      title: entry.name,
+      quantity: 1,
+      unitPrice: entry.price,
+      metadata: {
+        ...(entry.metadata ?? {}),
+        brand_name: entry.brandName ?? null,
+        category: entry.category ?? null,
+        universal: entry.universal,
       },
     };
     const nextKey = equipmentKeyForLine(nextLine);
@@ -1790,9 +1822,14 @@ export function QuoteBuilderV2Page() {
 
   const firstEquipment = draft.equipment[0];
 
-  function liveAvailabilityStatusForLine(item: QuoteLineItemDraft): string | null {
+  function liveAvailabilityRequestForLine(item: QuoteLineItemDraft): QuoteAvailabilityRequest | null {
     const requestId = availabilityRequestIdForLine(item);
-    return requestId ? availabilityRequestsById.get(requestId)?.status ?? availabilityRequestStatusForLine(item) : null;
+    return requestId ? availabilityRequestsById.get(requestId) ?? null : null;
+  }
+
+  function liveAvailabilityStatusForLine(item: QuoteLineItemDraft): string | null {
+    const request = liveAvailabilityRequestForLine(item);
+    return request?.status ?? availabilityRequestStatusForLine(item);
   }
 
   // Gate for advancing off the Customer step — any of name, company,
@@ -1807,7 +1844,10 @@ export function QuoteBuilderV2Page() {
   const hasEquipmentLine = draft.equipment.length > 0;
   const sourceRequiredEquipment = draft.equipment.filter((item) => availabilityStatusForLine(item) === "source_required");
   const sourceRequiredAwaitingConfirmation = sourceRequiredEquipment.filter((item) => !availabilityRequestIdForLine(item));
-  const sourceRequiredUnavailable = sourceRequiredEquipment.filter((item) => liveAvailabilityStatusForLine(item) === "not_available");
+  const sourceRequiredUnavailable = sourceRequiredEquipment.filter((item) => {
+    const request = liveAvailabilityRequestForLine(item);
+    return request?.status === "not_available" && !request.managerOverrideAt;
+  });
   const equipmentCanContinue = hasEquipmentLine && sourceRequiredAwaitingConfirmation.length === 0 && sourceRequiredUnavailable.length === 0;
   const tradeChecklistComplete = Object.values(tradeChecklist).every(Boolean);
   const tradeManagerApprovalRequired = draft.tradeAllowance > 0 && !tradeChecklistComplete;
@@ -3096,9 +3136,11 @@ export function QuoteBuilderV2Page() {
                 {draft.equipment.map((equipment, index) => {
                   const status = availabilityStatusForLine(equipment);
                   const availabilityRequestId = availabilityRequestIdForLine(equipment);
+                  const availabilityRequest = liveAvailabilityRequestForLine(equipment);
                   const requestStatus = liveAvailabilityStatusForLine(equipment);
                   const confirmationRequested = Boolean(availabilityRequestId);
                   const requestCreatedAt = availabilityRequestCreatedAtForLine(equipment);
+                  const latestAvailabilityNote = availabilityRequest?.repVisibilityNote ?? availabilityRequest?.decisionNote ?? availabilityRequest?.customerSafeSummary;
                   return (
                     <div key={`${equipment.title}-${index}`} className="rounded-lg border border-border/70 bg-card/50 p-3">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -3174,6 +3216,19 @@ export function QuoteBuilderV2Page() {
                           </Button>
                         </div>
                       </div>
+                      {availabilityRequest && (
+                        <div className="mt-3 rounded-lg border border-border/70 bg-background/60 p-3 text-xs text-muted-foreground">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span>Ops owner: <b className="text-foreground">{availabilityRequest.assignedToName ?? "Unassigned"}</b></span>
+                            <span>SLA: <b className="text-foreground">{availabilityRequest.slaDueAt ? new Date(availabilityRequest.slaDueAt).toLocaleString() : "Pending"}</b></span>
+                            {availabilityRequest.managerOverrideAt && <span className="text-red-300">Manager override recorded</span>}
+                          </div>
+                          {latestAvailabilityNote && <p className="mt-2 text-foreground">{latestAvailabilityNote}</p>}
+                          {availabilityRequest.candidates.length > 0 && (
+                            <p className="mt-2">{availabilityRequest.candidates.length} candidate path{availabilityRequest.candidates.length === 1 ? "" : "s"} attached in the ops queue.</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -3229,7 +3284,10 @@ export function QuoteBuilderV2Page() {
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => setConfigureTab(tab.id)}
+                    onClick={() => {
+                      setConfigureTab(tab.id);
+                      setPackageItemSearchOpen(true);
+                    }}
                     className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
                       configureTab === tab.id
                         ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
@@ -3240,6 +3298,20 @@ export function QuoteBuilderV2Page() {
                   </button>
                 );
               })}
+            </div>
+
+            <div className="mt-4 rounded-xl border border-qep-orange/25 bg-qep-orange/5 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Search catalog-backed package items</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Add real {packageKindLabel(configureTab)} with saved name, price, source, and compatibility instead of typing manually.
+                  </p>
+                </div>
+                <Button size="sm" onClick={() => setPackageItemSearchOpen(true)}>
+                  <PackagePlus className="mr-1 h-4 w-4" /> Search {packageKindLabel(configureTab)}
+                </Button>
+              </div>
             </div>
 
             <div className="mt-4 space-y-3">
@@ -3303,8 +3375,8 @@ export function QuoteBuilderV2Page() {
               {configureTab !== "attachment" || availableOptions.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
                   {configureTab === "attachment"
-                    ? "No compatible attachment list is loaded yet. Add a manual item below if needed."
-                    : `${STEP_LABELS.configure} supports manual ${configureTab} rows until catalog data is seeded.`}
+                    ? "No compatible attachment list is loaded yet. Use Search attachments for the full catalog or add a manual fallback below."
+                    : `Use Search ${packageKindLabel(configureTab)} for catalog-backed rows, or add a manual fallback below when a row is missing.`}
                 </div>
               ) : null}
 
@@ -4251,6 +4323,33 @@ export function QuoteBuilderV2Page() {
           // already live. This callback is reserved for future
           // animation hooks (pulse the strip on delta, etc.).
         }}
+      />
+
+      <PackageItemSearchDialog
+        open={packageItemSearchOpen}
+        onOpenChange={setPackageItemSearchOpen}
+        kind={configureTab}
+        selectedIds={draft.attachments
+          .filter((item) => item.kind === configureTab)
+          .flatMap((item) => [item.id, item.sourceId].filter((value): value is string => Boolean(value)))}
+        compatibleItems={availableOptions.map((item) => ({
+          id: item.id,
+          kind: "attachment" as const,
+          name: item.name,
+          price: item.price,
+          dealerCost: null,
+          brandName: availableOptionsLabel,
+          category: "Compatible attachment",
+          universal: false,
+          sourceCatalog: "qb_attachments" as const,
+          sourceId: item.id,
+          metadata: {
+            catalog_kind: "compatible_attachment",
+            compatibility: "selected_equipment",
+            compatible_for: availableOptionsLabel,
+          },
+        }))}
+        onAdd={addPackageCatalogItem}
       />
 
       <Dialog open={catalogBrowserOpen} onOpenChange={setCatalogBrowserOpen}>
