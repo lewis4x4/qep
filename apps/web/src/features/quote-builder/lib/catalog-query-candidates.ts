@@ -10,7 +10,8 @@
 //   1. the original string
 //   2. the string with year tokens and parens removed
 //   3. just the first two tokens (usually make + model)
-//   4. just the first token (usually make)
+//   4. just the last token (usually the catalog model code)
+//   5. just the first token (usually make)
 //
 // Deduplicated and trimmed so the sanitizer in searchCatalog doesn't drop
 // the final query to empty.
@@ -25,6 +26,7 @@ export function buildCatalogQueryCandidates(machine: string): string[] {
   if (raw) candidates.add(raw);
   if (withoutYear && withoutYear !== raw) candidates.add(withoutYear);
   if (tokens.length >= 2) candidates.add(`${tokens[0]} ${tokens[1]}`);
+  if (tokens.length >= 2) candidates.add(tokens[tokens.length - 1]!);
   if (tokens.length >= 1) candidates.add(tokens[0]!);
   return Array.from(candidates).filter((q) => q.length >= 2);
 }

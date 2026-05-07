@@ -19,9 +19,10 @@ describe("buildCatalogQueryCandidates", () => {
     expect(candidates).toContain("Bobcat T770");
   });
 
-  test("includes make + model and make-only fallbacks", () => {
+  test("includes make + model, model-code, and make-only fallbacks", () => {
     const candidates = buildCatalogQueryCandidates("Case SR175 (2026)");
     expect(candidates).toContain("Case SR175");
+    expect(candidates).toContain("SR175");
     expect(candidates).toContain("Case");
   });
 

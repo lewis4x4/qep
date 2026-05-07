@@ -218,7 +218,10 @@ function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Re
       lineString(row.description ?? row.title ?? row.name)
       ?? [lineString(row.make, 80), lineString(row.model, 80)].filter(Boolean).join(" ").trim()
       ?? `${lineType} line item`;
-    const catalogEntryId = lineString(row.catalog_entry_id ?? row.catalogEntryId ?? row.id, 80);
+    // `row.id` is the client line-item identity, not a catalog FK. Only persist
+    // an explicitly supplied catalog ID, and the sync step below verifies it
+    // exists before insert so AI/manual recommendations do not trip the FK.
+    const catalogEntryId = lineString(row.catalog_entry_id ?? row.catalogEntryId, 80);
 
     const rawReasonCode = lineString(row.reason_code ?? row.reasonCode, 80);
     const reasonCode = lineType === "discount" && rawReasonCode && QUOTE_LINE_DISCOUNT_REASON_CODES.has(rawReasonCode)
@@ -254,8 +257,30 @@ async function syncQuotePackageLineItems(input: {
   workspaceId: string;
   body: Record<string, unknown>;
 }): Promise<{ rows: Array<Record<string, unknown>>; error: string | null }> {
-  const lineItems = normalizeQuotePackageLineItems(input.body).map((row) => ({
+  const normalizedLineItems = normalizeQuotePackageLineItems(input.body);
+  const requestedCatalogIds = [...new Set(normalizedLineItems
+    .map((row) => row.catalog_entry_id)
+    .filter((value): value is string => typeof value === "string" && UUID_RE.test(value)))];
+  let validCatalogIds = new Set<string>();
+
+  if (requestedCatalogIds.length > 0) {
+    const { data: catalogRows, error: catalogErr } = await input.admin
+      .from("catalog_entries")
+      .select("id")
+      .in("id", requestedCatalogIds);
+
+    if (catalogErr) return { rows: [], error: catalogErr.message };
+    validCatalogIds = new Set((catalogRows ?? []).flatMap((row: Record<string, unknown>) => {
+      const id = typeof row.id === "string" ? row.id : null;
+      return id ? [id] : [];
+    }));
+  }
+
+  const lineItems = normalizedLineItems.map((row) => ({
     ...row,
+    catalog_entry_id: typeof row.catalog_entry_id === "string" && validCatalogIds.has(row.catalog_entry_id)
+      ? row.catalog_entry_id
+      : null,
     quote_package_id: input.quotePackageId,
     workspace_id: input.workspaceId,
   }));
@@ -367,6 +392,30 @@ function buildScenarioLabel(type: "cash" | "finance" | "lease", termMonths: numb
   return termMonths > 0 ? `Finance ${termMonths} mo` : "Finance";
 }
 
+function normalizeMachineLabel(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function quoteCatalogMachineLabel(entry: Record<string, unknown>): string {
+  const make = typeof entry.make === "string" ? entry.make.trim() : "";
+  const model = typeof entry.model === "string" ? entry.model.trim() : "";
+  return [make, model].filter(Boolean).join(" ").trim();
+}
+
+function noCatalogRecommendation(reasoning: string): AiRecommendationResult {
+  return {
+    machine: "",
+    attachments: [],
+    reasoning,
+    alternative: null,
+  };
+}
+
 async function aiEquipmentRecommendation(
   jobDescription: string,
   catalogEntries: Record<string, unknown>[],
@@ -375,9 +424,22 @@ async function aiEquipmentRecommendation(
     return { machine: "", attachments: [], reasoning: "AI recommendation unavailable — select equipment manually." };
   }
 
+  const catalogByLabel = new Map<string, string>();
+  for (const entry of catalogEntries) {
+    const label = quoteCatalogMachineLabel(entry);
+    const key = normalizeMachineLabel(label);
+    if (label && key && !catalogByLabel.has(key)) catalogByLabel.set(key, label);
+  }
+
+  if (catalogByLabel.size === 0) {
+    return noCatalogRecommendation(
+      "No active QEP quote-catalog machines are available for AI recommendation. Browse the catalog or add a verified model before quoting.",
+    );
+  }
+
   try {
     const catalogSummary = catalogEntries.slice(0, 50).map((e) =>
-      `${e.make} ${e.model} (${e.year || "N/A"}) - ${e.category} - $${e.list_price || "N/A"}`
+      `${quoteCatalogMachineLabel(e)} (${e.year || "N/A"}) - ${e.category} - $${e.list_price || "N/A"}`
     ).join("\n");
 
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -417,6 +479,8 @@ Return JSON exactly matching this shape:
 }
 
 Rules:
+- machine and alternative.machine MUST be exact labels copied from Available equipment below. Do not invent make/model names.
+- If no Available equipment label is a responsible fit, return machine as an empty string, attachments as [], reasoning explaining that no active QEP catalog match is available, and alternative as null.
 - reasoning: write to the customer (you / your), not about them. No marketing fluff.
 - alternative: set to null ONLY when the catalog truly has no close second.
 - jobConsiderations: 2-3 practical notes (permit, ground conditions, seasonality, operator training). Concrete, not vague.
@@ -424,7 +488,7 @@ Rules:
 - transcriptHighlights: 2-4 short verbatim quotes (10-20 words each) from the job description. Each must appear in the input; do not paraphrase. Pair with the decision they justify.`,
         }, {
           role: "user",
-          content: `Job description (transcript):\n${jobDescription}\n\nAvailable equipment:\n${catalogSummary || "No catalog entries — provide general recommendation."}`,
+          content: `Job description (transcript):\n${jobDescription}\n\nAvailable equipment — choose only exact labels from this list:\n${catalogSummary}`,
         }],
         max_tokens: 900,
         temperature: 0.3,
@@ -440,10 +504,20 @@ Rules:
     // Guard every new field so a model that skips one (or hallucinates a
     // wrong shape) can't poison the saved quote blob. Each new field is
     // optional at the contract level.
+    const primaryMachine = catalogByLabel.get(normalizeMachineLabel(parsed.machine));
+    if (!primaryMachine) {
+      return noCatalogRecommendation(
+        "AI did not return an active QEP quote-catalog machine. Browse the catalog or add a verified model before quoting.",
+      );
+    }
+
     const altRaw = parsed.alternative;
-    const alternative = altRaw && typeof altRaw === "object"
+    const altMachine = altRaw && typeof altRaw === "object"
+      ? catalogByLabel.get(normalizeMachineLabel((altRaw as { machine?: unknown }).machine))
+      : null;
+    const alternative = altRaw && typeof altRaw === "object" && altMachine
       ? {
-        machine: typeof altRaw.machine === "string" ? altRaw.machine : "",
+        machine: altMachine,
         attachments: Array.isArray(altRaw.attachments) ? altRaw.attachments.filter((a: unknown) => typeof a === "string") : [],
         reasoning: typeof altRaw.reasoning === "string" ? altRaw.reasoning : "",
         whyNotChosen: typeof altRaw.whyNotChosen === "string" ? altRaw.whyNotChosen : null,
@@ -472,7 +546,7 @@ Rules:
       })
       : null;
     return {
-      machine: parsed.machine ?? "",
+      machine: primaryMachine,
       attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
       reasoning: parsed.reasoning ?? "",
       alternative,

@@ -219,12 +219,21 @@ interface CatalogEntryMatch {
   make: string;
   model: string;
   year: number | null;
-  list_price?: number;
+  list_price?: number | null;
   stock_number?: string | null;
   condition?: string | null;
   availabilityStatus?: EquipmentAvailabilityStatus;
   availability_status?: EquipmentAvailabilityStatus;
   attachments?: Array<{ id: string; name: string; price: number }>;
+}
+
+interface CatalogAttachmentMatch {
+  id: string;
+  name: string;
+  price: number;
+  brandName?: string | null;
+  category?: string | null;
+  universal?: boolean;
 }
 
 function availabilityStatusForEntry(entry: Pick<CatalogEntryMatch, "stock_number" | "condition" | "availabilityStatus" | "availability_status">): EquipmentAvailabilityStatus {
@@ -310,31 +319,6 @@ function buildEquipmentLine(entry: CatalogEntryMatch): QuoteLineItemDraft {
   };
 }
 
-// When the catalog search misses (AI recommended a Make+Model we don't
-// carry, or the match was fuzzy and the sanitized ilike returned 0 rows),
-// seed the workspace with the AI's textual pick so the rep sees something
-// concrete to refine — never land on an empty Equipment step after a
-// successful AI intake.
-function buildEquipmentLineFromRecommendation(
-  machine: string | null | undefined,
-): QuoteLineItemDraft | null {
-  const text = (machine ?? "").trim();
-  if (!text) return null;
-  const [firstToken, ...rest] = text.split(/\s+/);
-  return {
-    kind: "equipment",
-    sourceCatalog: "manual",
-    sourceId: null,
-    dealerCost: null,
-    title: text,
-    make: firstToken ?? text,
-    model: rest.join(" "),
-    year: null,
-    quantity: 1,
-    unitPrice: 0,
-  };
-}
-
 // QEP governance: Download PDF / Send Quote / Share Link are locked
 // until the quote reaches an approved state via the owner-tier review
 // (Ryan + Rylee McKenzie). Draft, pending_approval, changes_requested,
@@ -354,6 +338,14 @@ function equipmentKeyForLine(item: Pick<QuoteLineItemDraft, "id" | "title" | "ma
     item.model ?? "",
     item.year ?? "",
   ].join("|");
+}
+
+function normalizeMachineMatchLabel(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function isWizardStepId(value: string | null): value is Step {
@@ -451,6 +443,7 @@ export function QuoteBuilderV2Page() {
   const [digitalTwinExpanded, setDigitalTwinExpanded] = useState(false);
   const [marginWaterfallExpanded, setMarginWaterfallExpanded] = useState(false);
   const [packageToolsOpen, setPackageToolsOpen] = useState(false);
+  const [catalogBrowserOpen, setCatalogBrowserOpen] = useState(false);
   const [customLineTitle, setCustomLineTitle] = useState("");
   const [customLinePrice, setCustomLinePrice] = useState(0);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
@@ -1385,31 +1378,78 @@ export function QuoteBuilderV2Page() {
     applyScenarioSelection(selection, "deal_assistant");
   };
 
+  function addCatalogEquipment(entry: CatalogEntryMatch): void {
+    setAvailableOptions(entry.attachments ?? []);
+    setAvailableOptionsLabel(`${entry.make} ${entry.model}`);
+    const nextLine = buildEquipmentLine(entry);
+    const nextKey = equipmentKeyForLine(nextLine);
+    setDraft((current) => ({
+      ...current,
+      equipment: current.equipment.some((item) => equipmentKeyForLine(item) === nextKey)
+        ? current.equipment
+        : [...current.equipment, nextLine],
+    }));
+  }
+
+  function addCatalogAttachment(entry: CatalogAttachmentMatch): void {
+    const nextLine: QuoteLineItemDraft = {
+      kind: "attachment",
+      id: entry.id,
+      sourceCatalog: "qb_attachments",
+      sourceId: entry.id,
+      dealerCost: null,
+      title: entry.name,
+      quantity: 1,
+      unitPrice: entry.price,
+      metadata: {
+        catalog_kind: entry.universal ? "universal_attachment" : "attachment",
+        brand_name: entry.brandName ?? null,
+        category: entry.category ?? null,
+      },
+    };
+    const nextKey = equipmentKeyForLine(nextLine);
+    setDraft((current) => ({
+      ...current,
+      attachments: current.attachments.some((item) => equipmentKeyForLine(item) === nextKey)
+        ? current.attachments
+        : [...current.attachments, nextLine],
+    }));
+  }
+
   async function addRecommendedMachine(machine: string) {
-    const fallback = buildEquipmentLineFromRecommendation(machine);
     // AI machine strings look like "Case SR175 (2026)". Catalog columns
     // (model_code/family/series/name_display) don't contain the year, so
     // a single ilike on the full string returns zero rows and we fall
-    // back to a $0 line. Strip year tokens + parens, then try progressive
-    // fallbacks (full → no year → make+model → make) so at least one of
-    // them lands on a real catalog row with the real list price.
+    // through progressive catalog-only fallbacks (full → no year →
+    // make+model → model code → make). If none match, do not add a manual
+    // line: AI recommendations must remain backed by a sellable QEP model.
     const candidateQueries = buildCatalogQueryCandidates(machine);
+    const expectedMachine = normalizeMachineMatchLabel(machine);
     let firstMatch: CatalogEntryMatch | undefined;
     try {
       for (const query of candidateQueries) {
-        const matches = await searchCatalog(query);
-        if (matches.length > 0) {
-          firstMatch = matches[0] as CatalogEntryMatch;
+        const matches = await searchCatalog(query) as CatalogEntryMatch[];
+        const exactMatch = matches.find((match) =>
+          normalizeMachineMatchLabel(`${match.make} ${match.model}`) === expectedMachine
+        );
+        if (exactMatch || matches.length > 0) {
+          firstMatch = exactMatch ?? matches[0];
           break;
         }
       }
-      const line = firstMatch ? buildEquipmentLine(firstMatch) : fallback;
-      if (!line) return;
-      if (firstMatch) {
-        setAvailableOptions(firstMatch.attachments ?? []);
-        setAvailableOptionsLabel(`${firstMatch.make} ${firstMatch.model}`);
+      if (!firstMatch) {
+        toast({
+          title: "Recommendation not in QEP catalog",
+          description: "Select a verified machine from Browse Catalog before quoting.",
+          variant: "destructive",
+        });
+        setStep("equipment");
+        return;
       }
+      const line = buildEquipmentLine(firstMatch);
       const nextKey = equipmentKeyForLine(line);
+      setAvailableOptions(firstMatch.attachments ?? []);
+      setAvailableOptionsLabel(`${firstMatch.make} ${firstMatch.model}`);
       setDraft((current) => {
         const alreadyAdded = current.equipment.some((item) => equipmentKeyForLine(item) === nextKey);
         if (alreadyAdded) return current;
@@ -1419,16 +1459,13 @@ export function QuoteBuilderV2Page() {
         };
       });
     } catch {
-      if (!fallback) return;
-      const nextKey = equipmentKeyForLine(fallback);
-      setDraft((current) => {
-        const alreadyAdded = current.equipment.some((item) => equipmentKeyForLine(item) === nextKey);
-        if (alreadyAdded) return current;
-        return {
-          ...current,
-          equipment: [...current.equipment, fallback],
-        };
+      toast({
+        title: "Catalog verification failed",
+        description: "The recommendation was not added. Browse Catalog and select a verified machine.",
+        variant: "destructive",
       });
+      setStep("equipment");
+      return;
     }
     // Slice 20a: if the rep hasn't picked a customer yet, land on Customer
     // so "who is this quote for?" is explicit before we jump to Equipment.
@@ -1865,7 +1902,11 @@ export function QuoteBuilderV2Page() {
       onSelectAlternative={draft.recommendation?.alternative?.machine ? () => {
         void addRecommendedMachine(draft.recommendation!.alternative!.machine);
       } : undefined}
-      onBrowseCatalog={() => setStep("equipment")}
+      onBrowseCatalog={() => {
+        setStep("equipment");
+        setPackageToolsOpen(true);
+        setCatalogBrowserOpen(true);
+      }}
       financingInput={financingInput}
       equipmentMake={firstEquipment?.make}
       userRole={userRoleQuery.data ?? null}
@@ -2211,36 +2252,15 @@ export function QuoteBuilderV2Page() {
                 <div className="mt-4 space-y-4 rounded-lg border border-border/70 bg-background/50 p-3">
                   <EquipmentSelector
                     onSelect={(entry) => {
-                      setAvailableOptions(entry.attachments ?? []);
-                      setAvailableOptionsLabel(`${entry.make} ${entry.model}`);
-                      const nextLine = {
-                        kind: "equipment" as const,
-                        id: entry.id,
-                        sourceCatalog: entry.sourceCatalog ?? "qb_equipment_models",
-                        sourceId: entry.sourceId ?? entry.id ?? null,
-                        dealerCost: entry.dealerCost ?? null,
-                        title: `${entry.make} ${entry.model}`,
-                        make: entry.make,
-                        model: entry.model,
-                        year: entry.year,
-                        quantity: 1,
-                        unitPrice: entry.list_price || 0,
-                        metadata: {
-                          availability_status: availabilityStatusForEntry(entry),
-                          stock_number: entry.stock_number ?? null,
-                        },
-                      };
-                      const nextKey = equipmentKeyForLine(nextLine);
-                      setDraft((current) => ({
-                        ...current,
-                        equipment: current.equipment.some((item) => equipmentKeyForLine(item) === nextKey)
-                          ? current.equipment
-                          : [...current.equipment, nextLine],
-                      }));
+                      addCatalogEquipment(entry);
                     }}
+                    onSelectAttachment={addCatalogAttachment}
                     onRecommendation={(recommendation) => {
                       setDraft((current) => ({ ...current, recommendation }));
                     }}
+                    autoLoad
+                    title="Package catalog"
+                    helper="Add QEP equipment, attachments, or parts without leaving the quote."
                   />
 
                   {availableOptions.length > 0 && (
@@ -4044,6 +4064,35 @@ export function QuoteBuilderV2Page() {
           // animation hooks (pulse the strip on delta, etc.).
         }}
       />
+
+      <Dialog open={catalogBrowserOpen} onOpenChange={setCatalogBrowserOpen}>
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Browse QEP catalog</DialogTitle>
+            <DialogDescription>
+              Pick equipment or parts from active QEP catalog records. AI text cannot become a quote line unless it resolves here.
+            </DialogDescription>
+          </DialogHeader>
+          <EquipmentSelector
+            onSelect={(entry) => {
+              addCatalogEquipment(entry);
+              setCatalogBrowserOpen(false);
+              setStep("equipment");
+            }}
+            onSelectAttachment={(entry) => {
+              addCatalogAttachment(entry);
+              setCatalogBrowserOpen(false);
+              setStep("configure");
+            }}
+            onRecommendation={(recommendation) => {
+              setDraft((current) => ({ ...current, recommendation }));
+            }}
+            autoLoad
+            title="Find quote items"
+            helper="Start broad with all active QEP catalog items, then narrow by make, model, category, tractor, attachment, blade, mower, or part name."
+          />
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={reviewSendOpen} onOpenChange={setReviewSendOpen}>
         <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">

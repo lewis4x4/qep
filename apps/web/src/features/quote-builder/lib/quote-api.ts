@@ -1247,10 +1247,15 @@ export function buildQuoteSavePayload(
     source_catalog: item.sourceCatalog ?? defaults.source_catalog,
     source_id: item.sourceId ?? item.id ?? defaults.source_id ?? null,
   });
+  const catalogEntryIdForLine = (item: QuoteWorkspaceDraft["equipment"][number]) => {
+    if (item.sourceCatalog !== "catalog_entries") return undefined;
+    const candidate = item.sourceId ?? item.id;
+    return candidate && UUID_RE.test(candidate) ? candidate : undefined;
+  };
   const lineItems = [
     ...draft.equipment.map((item, index) => ({
       id: item.id,
-      catalog_entry_id: item.sourceCatalog === "catalog_entries" ? item.sourceId ?? item.id : undefined,
+      catalog_entry_id: catalogEntryIdForLine(item),
       line_type: "equipment",
       description: item.title,
       make: item.make,
@@ -1270,7 +1275,7 @@ export function buildQuoteSavePayload(
     })),
     ...draft.attachments.map((item, index) => ({
       id: item.id,
-      catalog_entry_id: item.sourceCatalog === "catalog_entries" ? item.sourceId ?? item.id : undefined,
+      catalog_entry_id: catalogEntryIdForLine(item),
       line_type: item.kind,
       description: item.title,
       make: item.make,
@@ -1290,7 +1295,7 @@ export function buildQuoteSavePayload(
     })),
     ...pricingLines.map((item, index) => ({
       id: item.id,
-      catalog_entry_id: item.sourceCatalog === "catalog_entries" ? item.sourceId ?? item.id : undefined,
+      catalog_entry_id: catalogEntryIdForLine(item),
       line_type: item.kind,
       description: item.title,
       make: item.make,
@@ -1486,9 +1491,8 @@ export function buildPortalRevisionQuoteData(
 export async function searchCatalog(query: string) {
   // Sanitize query: strip PostgREST filter metacharacters to prevent injection
   const sanitized = query.replace(/[%,().!]/g, "").trim().substring(0, 100);
-  if (!sanitized) return [];
 
-  const { data, error } = await supabase
+  let catalogQuery = supabase
     .from("qb_equipment_models")
     .select(
       `id, model_code, family, series, name_display, model_year, list_price_cents,
@@ -1496,11 +1500,14 @@ export async function searchCatalog(query: string) {
     )
     .eq("active", true)
     .is("deleted_at", null)
-    .or(
-      `model_code.ilike.%${sanitized}%,family.ilike.%${sanitized}%,series.ilike.%${sanitized}%,name_display.ilike.%${sanitized}%`,
-    )
     .order("name_display", { ascending: true })
-    .limit(20);
+    .limit(sanitized ? 20 : 100);
+  if (sanitized) {
+    catalogQuery = catalogQuery.or(
+      `model_code.ilike.%${sanitized}%,family.ilike.%${sanitized}%,series.ilike.%${sanitized}%,name_display.ilike.%${sanitized}%`,
+    );
+  }
+  const { data, error } = await catalogQuery;
   if (error) throw error;
 
   const models = data ?? [];
@@ -1557,6 +1564,40 @@ export async function searchCatalog(query: string) {
       stock_number: null as string | null,
       condition: "new" as const,
       attachments: compatibleAttachments,
+    };
+  });
+}
+
+export async function searchQuoteAttachments(query: string) {
+  const sanitized = query.replace(/[%,().!]/g, "").trim().substring(0, 100);
+
+  let attachmentQuery = supabase
+    .from("qb_attachments")
+    .select(
+      `id, name, list_price_cents, universal,
+       brand:qb_brands!brand_id ( id, code, name, category )`,
+    )
+    .eq("active", true)
+    .is("deleted_at", null)
+    .order("name", { ascending: true })
+    .limit(sanitized ? 20 : 100);
+
+  if (sanitized) {
+    attachmentQuery = attachmentQuery.ilike("name", `%${sanitized}%`);
+  }
+
+  const { data, error } = await attachmentQuery;
+  if (error) throw error;
+
+  return (data ?? []).map((row) => {
+    const brand = Array.isArray(row.brand) ? row.brand[0] : row.brand;
+    return {
+      id: row.id,
+      name: row.name ?? "",
+      price: row.list_price_cents != null ? Number(row.list_price_cents) / 100 : 0,
+      brandName: brand?.name ?? null,
+      category: brand?.category ?? null,
+      universal: row.universal === true,
     };
   });
 }
