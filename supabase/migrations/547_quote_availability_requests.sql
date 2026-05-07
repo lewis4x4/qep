@@ -103,50 +103,50 @@ create policy "qar_service_all" on public.quote_availability_requests
 
 create policy "qar_select" on public.quote_availability_requests
   for select using (
-    workspace_id = public.get_my_workspace()
-    and public.get_my_role() in ('rep', 'admin', 'manager', 'owner')
+    workspace_id = (select public.get_my_workspace())
+    and (select public.get_my_role()) in ('rep', 'admin', 'manager', 'owner')
   );
 
 create policy "qar_insert" on public.quote_availability_requests
   for insert with check (
-    workspace_id = public.get_my_workspace()
-    and requested_by = auth.uid()
-    and public.get_my_role() in ('rep', 'admin', 'manager', 'owner')
+    workspace_id = (select public.get_my_workspace())
+    and requested_by = (select auth.uid())
+    and (select public.get_my_role()) in ('rep', 'admin', 'manager', 'owner')
   );
 
 create policy "qar_rep_update_own_pending" on public.quote_availability_requests
   for update using (
-    workspace_id = public.get_my_workspace()
-    and requested_by = auth.uid()
+    workspace_id = (select public.get_my_workspace())
+    and requested_by = (select auth.uid())
     and status in ('pending', 'checking_internal_inventory', 'checking_vendor')
   )
   with check (
-    workspace_id = public.get_my_workspace()
-    and requested_by = auth.uid()
+    workspace_id = (select public.get_my_workspace())
+    and requested_by = (select auth.uid())
   );
 
 create policy "qar_manage" on public.quote_availability_requests
   for all using (
-    workspace_id = public.get_my_workspace()
-    and public.get_my_role() in ('admin', 'manager', 'owner')
+    workspace_id = (select public.get_my_workspace())
+    and (select public.get_my_role()) in ('admin', 'manager', 'owner')
   )
-  with check (workspace_id = public.get_my_workspace());
+  with check (workspace_id = (select public.get_my_workspace()));
 
 create policy "qacand_service_all" on public.quote_availability_candidates
   for all to service_role using (true) with check (true);
 
 create policy "qacand_select" on public.quote_availability_candidates
   for select using (
-    workspace_id = public.get_my_workspace()
-    and public.get_my_role() in ('rep', 'admin', 'manager', 'owner')
+    workspace_id = (select public.get_my_workspace())
+    and (select public.get_my_role()) in ('rep', 'admin', 'manager', 'owner')
   );
 
 create policy "qacand_manage" on public.quote_availability_candidates
   for all using (
-    workspace_id = public.get_my_workspace()
-    and public.get_my_role() in ('admin', 'manager', 'owner')
+    workspace_id = (select public.get_my_workspace())
+    and (select public.get_my_role()) in ('admin', 'manager', 'owner')
   )
-  with check (workspace_id = public.get_my_workspace());
+  with check (workspace_id = (select public.get_my_workspace()));
 
 comment on table public.quote_availability_requests is
   'Backend-backed sourcing workflow for Quote Builder equipment availability requests.';

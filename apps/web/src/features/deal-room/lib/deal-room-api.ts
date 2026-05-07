@@ -42,6 +42,19 @@ export interface DealRoomRecommendation {
   transcriptHighlights?: Array<{ quote: string; supports: string }> | null;
 }
 
+export interface DealRoomLineItem {
+  line_type: string | null;
+  description: string | null;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  quantity: number | null;
+  unit_price: number | null;
+  extended_price: number | null;
+  display_order: number | null;
+  reason_code?: string | null;
+}
+
 export interface DealRoomQuote {
   id: string | null;
   quote_number: string | null;
@@ -51,6 +64,7 @@ export interface DealRoomQuote {
   branch_slug: string | null;
   equipment: DealRoomEquipmentLine[];
   attachments_included: DealRoomAttachment[];
+  quote_package_line_items: DealRoomLineItem[];
   subtotal: number | null;
   equipment_total: number | null;
   attachment_total: number | null;
@@ -64,6 +78,14 @@ export interface DealRoomQuote {
   financing_scenarios: DealRoomFinanceScenario[];
   selected_finance_scenario: string | null;
   ai_recommendation: DealRoomRecommendation | null;
+  why_this_machine: string | null;
+  why_this_machine_confirmed: boolean;
+  special_terms: string | null;
+  delivery_eta: string | null;
+  deposit_required_amount: number | null;
+  tax_profile: string | null;
+  tax_override_reason: string | null;
+  follow_up_at: string | null;
   created_at: string | null;
   updated_at: string | null;
   expires_at: string | null;

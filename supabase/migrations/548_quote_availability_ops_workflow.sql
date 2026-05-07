@@ -71,16 +71,16 @@ create policy "qae_service_all" on public.quote_availability_events
 
 create policy "qae_select" on public.quote_availability_events
   for select using (
-    workspace_id = public.get_my_workspace()
-    and public.get_my_role() in ('rep', 'admin', 'manager', 'owner')
+    workspace_id = (select public.get_my_workspace())
+    and (select public.get_my_role()) in ('rep', 'admin', 'manager', 'owner')
   );
 
 create policy "qae_manage" on public.quote_availability_events
   for all using (
-    workspace_id = public.get_my_workspace()
-    and public.get_my_role() in ('admin', 'manager', 'owner')
+    workspace_id = (select public.get_my_workspace())
+    and (select public.get_my_role()) in ('admin', 'manager', 'owner')
   )
-  with check (workspace_id = public.get_my_workspace());
+  with check (workspace_id = (select public.get_my_workspace()));
 
 comment on table public.quote_availability_events is
   'Immutable audit timeline for quote availability operations workflow actions.';

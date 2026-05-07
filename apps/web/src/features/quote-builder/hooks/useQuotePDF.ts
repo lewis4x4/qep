@@ -31,8 +31,10 @@ export function useQuotePDF() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const safeName = (data.dealName || "Quote").replace(/[^a-zA-Z0-9-_ ]/g, "").trim().replace(/\s+/g, "-") || "Quote";
-      a.download = `QEP-Quote-${safeName}-${new Date().toISOString().slice(0, 10)}.pdf`;
+      const quoteNumber = data.quoteNumber?.trim();
+      const safeDealName = (data.dealName || "Quote").replace(/[^a-zA-Z0-9-_ ]/g, "").trim().replace(/\s+/g, "-") || "Quote";
+      const baseName = quoteNumber || `QEP-Quote-${safeDealName}`;
+      a.download = `${baseName}-proposal.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -40,9 +42,12 @@ export function useQuotePDF() {
     } catch (err) {
       console.error("[useQuotePDF] PDF generation failed:", {
         error: err instanceof Error ? err.message : String(err),
+        quoteNumber: data.quoteNumber ?? null,
         dealName: data.dealName,
         customerName: data.customerName,
         equipmentCount: data.equipment.length,
+        lineItemCount: data.lineItems.length,
+        selectedPaymentKind: data.compliance.selectedPaymentKind,
       });
       try {
         await openPrintableQuoteSheet(data);

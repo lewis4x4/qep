@@ -18,6 +18,7 @@ function makeQuote(overrides: Partial<DealRoomQuote> = {}): DealRoomQuote {
     branch_slug: null,
     equipment: [],
     attachments_included: [],
+    quote_package_line_items: [],
     subtotal: 47_000,
     equipment_total: 47_000,
     attachment_total: 0,
@@ -31,6 +32,14 @@ function makeQuote(overrides: Partial<DealRoomQuote> = {}): DealRoomQuote {
     financing_scenarios: [],
     selected_finance_scenario: null,
     ai_recommendation: null,
+    why_this_machine: null,
+    why_this_machine_confirmed: false,
+    special_terms: null,
+    delivery_eta: null,
+    deposit_required_amount: null,
+    tax_profile: "standard",
+    tax_override_reason: null,
+    follow_up_at: null,
     created_at: null,
     updated_at: null,
     expires_at: null,
@@ -111,14 +120,13 @@ describe("computePaymentFor", () => {
 describe("filterDisplayableScenarios", () => {
   test("drops cash placeholders with all-zero data", () => {
     const scenarios = [
-      makeScenario({ type: "cash", monthly_payment: null, term_months: 0, rate: 0, apr: 0 }),
+      makeScenario({ type: "cash", monthly_payment: null, total_cost: null, term_months: 0, rate: 0, apr: 0 }),
       makeScenario({ type: "finance" }),
     ];
     expect(filterDisplayableScenarios(scenarios)).toHaveLength(1);
   });
-  test("keeps cash scenarios with populated data", () => {
-    const scenarios = [makeScenario({ type: "cash", total_cost: 44_650, monthly_payment: 0, apr: 0, term_months: 0 })];
-    // monthly_payment is explicitly null in the placeholder filter; 0 counts.
+  test("keeps cash scenarios with populated total-cost data", () => {
+    const scenarios = [makeScenario({ type: "cash", total_cost: 44_650, monthly_payment: null, apr: 0, term_months: 0 })];
     expect(filterDisplayableScenarios(scenarios)).toHaveLength(1);
   });
 });

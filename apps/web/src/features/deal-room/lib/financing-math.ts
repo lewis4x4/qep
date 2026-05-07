@@ -75,6 +75,7 @@ export function filterDisplayableScenarios(
     s.type !== "cash"
     || (s.monthly_payment ?? null) != null
     || (s.term_months ?? 0) > 0
-    || ((s.rate ?? s.apr ?? 0) > 0),
+    || ((s.rate ?? s.apr ?? 0) > 0)
+    || ((s.total_cost ?? 0) > 0),
   );
 }

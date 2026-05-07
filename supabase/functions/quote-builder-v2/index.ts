@@ -21,6 +21,11 @@ import { sendResendEmail } from "../_shared/resend-email.ts";
 import { computeQuoteDocumentHash } from "../_shared/quote-document-hash.ts";
 import { quoteManagerApproval } from "../_shared/flow-workflows/quote-manager-approval.ts";
 import {
+  assertQuoteCustomerContentReady,
+  buildCustomerProposalEmailText,
+  buildPublicDealRoomPayload,
+} from "./quote-public-safety.ts";
+import {
   allowedQuoteVersionScopesForConditions,
   buildQuoteVersionSnapshot,
   diffQuoteVersionScopes,
@@ -1303,13 +1308,16 @@ async function assertQuoteCustomerShareable(input: {
   quotePackageId: string;
   status: string;
   marginPct: number | null;
+  quote: Record<string, unknown>;
 }): Promise<{ ok: true } | { ok: false; message: string; blockers?: Array<Record<string, unknown>> }> {
-  if (["pending_approval", "changes_requested", "rejected"].includes(input.status)) {
+  if (["draft", "pending_approval", "changes_requested", "rejected"].includes(input.status)) {
     return { ok: false, message: `This quote cannot be shared while status is ${input.status}.` };
   }
   if (typeof input.marginPct === "number" && input.marginPct < 10 && input.status !== "approved") {
     return { ok: false, message: "Submit this quote for manager approval before sharing it with the customer." };
   }
+  const contentGate = assertQuoteCustomerContentReady(input.quote);
+  if (!contentGate.ok) return contentGate;
   const availabilityGate = await assertQuoteAvailabilitySendable({
     admin: input.admin,
     workspaceId: input.workspaceId,
@@ -1317,48 +1325,6 @@ async function assertQuoteCustomerShareable(input: {
   });
   if (!availabilityGate.ok) return availabilityGate;
   return { ok: true };
-}
-
-// Customer-safe projection of a quote row for the /q/:token deal room.
-// Drops every field we don't want the end customer to see (margin,
-// dealer cost, internal status transitions, created_by, etc.) and
-// re-shapes the blob so the public API is a stable contract even if
-// internal columns churn.
-function buildPublicDealRoomPayload(row: Record<string, unknown>): Record<string, unknown> {
-  const pickString = (v: unknown) => typeof v === "string" ? v : null;
-  const pickNumber = (v: unknown) => typeof v === "number" && Number.isFinite(v) ? v : null;
-  const pickArray = (v: unknown) => Array.isArray(v) ? v : [];
-  const pickObject = (v: unknown) =>
-    v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : null;
-  return {
-    id: pickString(row.id),
-    quote_number: pickString(row.quote_number),
-    status: pickString(row.status) ?? "draft",
-    customer_name: pickString(row.customer_name),
-    customer_company: pickString(row.customer_company),
-    branch_slug: pickString(row.branch_slug),
-    equipment: pickArray(row.equipment),
-    attachments_included: pickArray(row.attachments_included),
-    quote_package_line_items: pickArray(row.quote_package_line_items),
-    subtotal: pickNumber(row.subtotal),
-    equipment_total: pickNumber(row.equipment_total),
-    attachment_total: pickNumber(row.attachment_total),
-    discount_total: pickNumber(row.discount_total),
-    trade_credit: pickNumber(row.trade_credit),
-    net_total: pickNumber(row.net_total),
-    tax_total: pickNumber(row.tax_total),
-    cash_down: pickNumber(row.cash_down),
-    amount_financed: pickNumber(row.amount_financed),
-    customer_total: pickNumber(row.customer_total),
-    financing_scenarios: pickArray(row.financing_scenarios),
-    selected_finance_scenario: pickString(row.selected_finance_scenario),
-    ai_recommendation: pickObject(row.ai_recommendation),
-    created_at: pickString(row.created_at),
-    updated_at: pickString(row.updated_at),
-    expires_at: pickString(row.expires_at),
-    sent_at: pickString(row.sent_at),
-    viewed_at: pickString(row.viewed_at),
-  };
 }
 
 async function handlePublicDealRoomRead(url: URL, origin: string | null): Promise<Response> {
@@ -1389,7 +1355,6 @@ async function handlePublicDealRoomRead(url: URL, origin: string | null): Promis
   // save-to-draft-then-send; status flips forward then.
   const status = typeof quote.status === "string" ? quote.status : "draft";
   const shareableStatuses = new Set([
-    "draft",
     "ready",
     "sent",
     "viewed",
@@ -1399,11 +1364,22 @@ async function handlePublicDealRoomRead(url: URL, origin: string | null): Promis
     "expired",
     "approved",
     "approved_with_conditions",
-    "pending_approval",
-    "changes_requested",
   ]);
   if (!shareableStatuses.has(status)) {
     return safeJsonError("Quote is not shareable in its current state", 403, origin);
+  }
+
+  const contentGate = assertQuoteCustomerContentReady(quote as Record<string, unknown>);
+  if (!contentGate.ok) {
+    return safeJsonErrorWithFields(contentGate.message, 403, origin, { blockers: contentGate.blockers });
+  }
+  const availabilityGate = await assertQuoteAvailabilitySendable({
+    admin,
+    workspaceId: typeof quote.workspace_id === "string" ? quote.workspace_id : "default",
+    quotePackageId: String(quote.id),
+  });
+  if (!availabilityGate.ok) {
+    return safeJsonErrorWithFields(availabilityGate.message, 403, origin, { blockers: availabilityGate.blockers });
   }
 
   const branchSlug = typeof quote.branch_slug === "string" ? quote.branch_slug : null;
@@ -1411,7 +1387,7 @@ async function handlePublicDealRoomRead(url: URL, origin: string | null): Promis
   if (branchSlug) {
     const { data: branchRow } = await admin
       .from("branches")
-      .select("name, address_line1, city, state, postal_code, phone, email, website, doc_footer_text")
+      .select("name, address_line1, city, state, postal_code, phone:phone_main, email:email_main, website:website_url, doc_footer_text")
       .eq("slug", branchSlug)
       .maybeSingle();
     branch = branchRow ?? null;
@@ -1611,7 +1587,7 @@ async function handlePublicChatTurn(
   const admin = createAdminClient();
   const { data: quote, error: quoteErr } = await admin
     .from("quote_packages")
-    .select("id, equipment, customer_name, customer_company, customer_total, amount_financed, financing_scenarios, branch_slug, ai_recommendation")
+    .select("id, equipment, customer_name, customer_company, customer_total, amount_financed, financing_scenarios, branch_slug, why_this_machine, why_this_machine_confirmed")
     .eq("share_token", token)
     .maybeSingle();
   if (quoteErr) return safeJsonError("Failed to load quote", 500, origin);
@@ -1622,7 +1598,7 @@ async function handlePublicChatTurn(
   if (branchSlug) {
     const { data } = await admin
       .from("branches")
-      .select("name, address_line1, city, state, phone, email, website")
+      .select("name, address_line1, city, state, phone:phone_main, email:email_main, website:website_url")
       .eq("slug", branchSlug)
       .maybeSingle();
     branch = data ?? null;
@@ -1636,8 +1612,8 @@ async function handlePublicChatTurn(
   const machineLabel = primary
     ? [primary.make, primary.model, primary.year ? `(${primary.year})` : null].filter(Boolean).join(" ")
     : "the machine on this proposal";
-  const recommendationReasoning = quote.ai_recommendation && typeof quote.ai_recommendation === "object"
-    ? (quote.ai_recommendation as Record<string, unknown>).reasoning
+  const confirmedWhyThisMachine = quote.why_this_machine_confirmed === true && typeof quote.why_this_machine === "string"
+    ? quote.why_this_machine.trim().slice(0, 500)
     : null;
   const scenarios = Array.isArray(quote.financing_scenarios) ? quote.financing_scenarios : [];
   const scenarioSummary = scenarios.slice(0, 3).map((s: Record<string, unknown>) => {
@@ -1655,7 +1631,7 @@ ${quote.customer_company ? `- Company: ${quote.customer_company}` : ""}
 - Primary equipment: ${machineLabel}
 - Customer total: ${typeof quote.customer_total === "number" ? `$${Math.round(quote.customer_total).toLocaleString()}` : "—"}
 ${scenarioSummary ? `- Financing options: ${scenarioSummary}` : ""}
-${recommendationReasoning ? `- Why we recommended this machine: ${String(recommendationReasoning).slice(0, 500)}` : ""}
+${confirmedWhyThisMachine ? `- Confirmed Why this machine: ${confirmedWhyThisMachine}` : ""}
 ${branch ? `- Dealership: ${branch.name ?? "QEP"}${branch.phone ? `, ${branch.phone}` : ""}${branch.email ? `, ${branch.email}` : ""}` : ""}
 
 Rules:
@@ -1946,6 +1922,16 @@ function generateShareToken(): string {
   // for a tidier URL. crypto.randomUUID is cryptographically random in
   // Deno (see whatwg-webcrypto).
   return globalThis.crypto.randomUUID().replace(/-/g, "");
+}
+
+function buildDealRoomUrl(token: string | null, requestOrigin: string | null): string | null {
+  if (!token) return null;
+  const baseUrl = Deno.env.get("APP_URL") ?? requestOrigin ?? "https://qep.blackrockai.co";
+  try {
+    return new URL(`/q/${encodeURIComponent(token)}`, baseUrl).toString();
+  } catch {
+    return null;
+  }
 }
 
 // Public attachments lookup — finds the quote by token, pulls the primary
@@ -3901,6 +3887,10 @@ Deno.serve(async (req) => {
       const nowIso = new Date().toISOString();
 
       if (requestedAction === "mark_sent") {
+        const contentGate = assertQuoteCustomerContentReady(pkg as Record<string, unknown>);
+        if (!contentGate.ok) {
+          return safeJsonErrorWithFields(contentGate.message, 409, origin, { blockers: contentGate.blockers });
+        }
         const availabilityGate = await assertQuoteAvailabilitySendable({
           admin: createAdminClient(),
           workspaceId: typeof (pkg as Record<string, unknown>).workspace_id === "string" ? String((pkg as Record<string, unknown>).workspace_id) : userWorkspaceId,
@@ -5545,7 +5535,7 @@ Deno.serve(async (req) => {
       // is the authorization check for issuing a share token.
       const { data: existing, error: loadErr } = await supabase
         .from("quote_packages")
-        .select("id, workspace_id, status, margin_pct")
+        .select("id, workspace_id, status, margin_pct, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
         .eq("id", body.quote_package_id)
         .maybeSingle();
       if (loadErr) return safeJsonError(loadErr.message, 500, origin);
@@ -5558,6 +5548,7 @@ Deno.serve(async (req) => {
         quotePackageId: String(existing.id),
         status: String(existing.status ?? "draft"),
         marginPct: typeof existing.margin_pct === "number" ? existing.margin_pct : null,
+        quote: existing as Record<string, unknown>,
       });
       if (!shareGate.ok) {
         return safeJsonErrorWithFields(shareGate.message, 409, origin, { blockers: shareGate.blockers ?? [] });
@@ -5588,7 +5579,7 @@ Deno.serve(async (req) => {
       // Fetch quote package with contact email
       const { data: pkg, error: pkgErr } = await supabase
         .from("quote_packages")
-        .select("id, workspace_id, deal_id, contact_id, equipment, equipment_total, net_total, trade_allowance, sent_at, status, margin_pct, crm_contacts(first_name, last_name, email)")
+        .select("id, workspace_id, deal_id, contact_id, quote_number, share_token, branch_slug, customer_total, amount_financed, selected_finance_scenario, equipment, equipment_total, net_total, trade_allowance, sent_at, status, margin_pct, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason, special_terms, expires_at, crm_contacts(first_name, last_name, email)")
         .eq("id", body.quote_package_id)
         .single();
 
@@ -5604,7 +5595,7 @@ Deno.serve(async (req) => {
       }
 
       const quoteStatus = String(pkg.status ?? "draft");
-      if (["pending_approval", "changes_requested", "rejected"].includes(quoteStatus)) {
+      if (["draft", "pending_approval", "changes_requested", "rejected"].includes(quoteStatus)) {
         return safeJsonError(`This quote cannot be sent while status is ${quoteStatus}.`, 409, origin);
       }
 
@@ -5641,6 +5632,11 @@ Deno.serve(async (req) => {
         return safeJsonError("Submit this quote for manager approval before sending it.", 409, origin);
       }
 
+      const contentGate = assertQuoteCustomerContentReady(pkg as Record<string, unknown>);
+      if (!contentGate.ok) {
+        return safeJsonErrorWithFields(contentGate.message, 409, origin, { blockers: contentGate.blockers });
+      }
+
       const availabilityGate = await assertQuoteAvailabilitySendable({
         admin,
         workspaceId: typeof pkg.workspace_id === "string" ? pkg.workspace_id : userWorkspaceId,
@@ -5650,32 +5646,51 @@ Deno.serve(async (req) => {
         return safeJsonErrorWithFields(availabilityGate.message, 409, origin, { blockers: availabilityGate.blockers });
       }
 
-      // Compose email body
+      let shareToken = typeof pkg.share_token === "string" && pkg.share_token.length >= 16 ? pkg.share_token : null;
+      if (!shareToken) {
+        shareToken = generateShareToken();
+        const { error: shareUpdateErr } = await admin
+          .from("quote_packages")
+          .update({
+            share_token: shareToken,
+            share_token_created_at: new Date().toISOString(),
+          })
+          .eq("id", body.quote_package_id);
+        if (shareUpdateErr) {
+          console.error("send-package share token update error:", shareUpdateErr);
+          return safeJsonError(shareUpdateErr.message || "Failed to prepare proposal link", 500, origin);
+        }
+      }
+
+      const branchSlug = typeof pkg.branch_slug === "string" ? pkg.branch_slug : null;
+      let branch: Record<string, unknown> | null = null;
+      if (branchSlug) {
+        const { data: branchRow } = await admin
+          .from("branches")
+          .select("name, phone:phone_main, email:email_main, website:website_url")
+          .eq("slug", branchSlug)
+          .maybeSingle();
+        branch = branchRow ?? null;
+      }
+
+      // Compose a customer-safe notification. Full proposal details stay behind
+      // the tokenized deal-room link; this email intentionally avoids raw line
+      // items, dealer cost, margin, approval state, and unconfirmed AI output.
       const contactName = [contact?.first_name, contact?.last_name].filter(Boolean).join(" ") || "Valued Customer";
-      const equipmentList = Array.isArray(pkg.equipment)
-        ? (pkg.equipment as Array<{ make?: string; model?: string; price?: number }>)
-          .map((e) => `  - ${e.make ?? ""} ${e.model ?? ""}: $${((e.price ?? 0)).toLocaleString()}`)
-          .join("\n")
-        : "  (Equipment details in attached proposal)";
-
-      const netTotal = typeof pkg.net_total === "number" ? `$${pkg.net_total.toLocaleString()}` : "See attached proposal";
-
-      const emailBody = [
-        `Dear ${contactName},`,
-        "",
-        "Thank you for your interest. Please find our equipment proposal below:",
-        "",
-        "Equipment:",
-        equipmentList,
-        "",
-        `Total: ${netTotal}`,
-        pkg.trade_allowance ? `Trade-In Allowance: $${Number(pkg.trade_allowance).toLocaleString()}` : null,
-        "",
-        "This proposal is valid for 30 days. Please don't hesitate to reach out with any questions.",
-        "",
-        "Best regards,",
-        "Quality Equipment & Parts",
-      ].filter((line) => line !== null).join("\n");
+      const publicUrl = buildDealRoomUrl(shareToken, origin);
+      const emailBody = buildCustomerProposalEmailText({
+        contactName,
+        quoteNumber: typeof pkg.quote_number === "string" ? pkg.quote_number : null,
+        customerTotal: pkg.customer_total ?? pkg.net_total,
+        amountFinanced: pkg.amount_financed,
+        selectedFinanceScenario: typeof pkg.selected_finance_scenario === "string" ? pkg.selected_finance_scenario : null,
+        whyThisMachine: typeof pkg.why_this_machine === "string" ? pkg.why_this_machine : null,
+        whyThisMachineConfirmed: pkg.why_this_machine_confirmed === true,
+        specialTerms: typeof pkg.special_terms === "string" ? pkg.special_terms : null,
+        expiresAt: typeof pkg.expires_at === "string" ? pkg.expires_at : null,
+        publicUrl,
+        branch: branch as { name?: string | null; phone?: string | null; email?: string | null; website?: string | null } | null,
+      });
 
       // Send via Resend
       const result = await sendResendEmail({
@@ -5710,7 +5725,7 @@ Deno.serve(async (req) => {
       });
 
       console.log(`[quote-builder-v2] sent package ${body.quote_package_id} to ${toEmail}`);
-      return safeJsonOk({ sent: true, to_email: toEmail }, origin);
+      return safeJsonOk({ sent: true, to_email: toEmail, share_token: shareToken, public_url: publicUrl }, origin);
     }
 
     return safeJsonError("Unknown action", 400, origin);

@@ -106,6 +106,7 @@ import { useQuotePDF } from "../hooks/useQuotePDF";
 import { useQuoteFinancingPreview } from "../hooks/useQuoteFinancingPreview";
 import { useQuoteTaxPreview } from "../hooks/useQuoteTaxPreview";
 import { buildCustomFinanceScenario } from "../lib/custom-finance";
+import { buildQuoteProposalData } from "../lib/quote-proposal-data";
 import { buildQuotePdfBranch } from "../lib/quote-builder-page-normalizers";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
@@ -1279,40 +1280,24 @@ export function QuoteBuilderV2Page() {
   const quoteTitle =
     activeQuoteNumber
     ?? (activeQuotePackageId ? `Quote ${activeQuotePackageId.slice(0, 8)}` : "New quote");
-  const quotePdfData = useMemo(() => ({
-    dealName: draft.dealId || draft.customerCompany || draft.customerName || "Quote",
-    customerName: draft.customerName || draft.customerCompany || "Customer",
+  const quotePdfData = useMemo(() => buildQuoteProposalData({
+    draft,
+    computed: {
+      equipmentTotal,
+      attachmentTotal,
+      pricingLineTotal,
+      subtotal,
+      discountTotal,
+      netTotal,
+      taxTotal,
+      customerTotal,
+      cashDown,
+      amountFinanced,
+    },
+    financeScenarios: allFinanceScenarios,
     quoteNumber: activeQuoteNumber,
     preparedBy: "QEP Sales Team",
     preparedDate: new Date().toLocaleDateString(),
-    aiRecommendationSummary: draft.recommendation?.reasoning ?? null,
-    equipment: draft.equipment.map((item) => ({
-      make: item.make ?? "",
-      model: item.model ?? item.title,
-      year: item.year ?? null,
-      price: item.unitPrice,
-    })),
-    attachments: draft.attachments.map((item) => ({ name: item.title, price: item.unitPrice })),
-    equipmentTotal,
-    attachmentTotal,
-    subtotal,
-    discountTotal,
-    tradeAllowance: draft.tradeAllowance,
-    taxTotal,
-    customerTotal,
-    cashDown,
-    amountFinanced,
-    netTotal,
-    financing: allFinanceScenarios.map((scenario) => ({
-      type: scenario.type,
-      label: scenario.label,
-      termMonths: scenario.termMonths ?? 0,
-      rate: scenario.rate ?? scenario.apr ?? 0,
-      monthlyPayment: scenario.monthlyPayment ?? 0,
-      totalCost: scenario.totalCost ?? 0,
-      lender: scenario.lender ?? "Preferred lender",
-    })),
-    selectedFinancingLabel: draft.selectedFinanceScenario,
     branch: buildQuotePdfBranch(selectedBranch),
   }), [
     activeQuoteNumber,
@@ -1322,16 +1307,10 @@ export function QuoteBuilderV2Page() {
     cashDown,
     customerTotal,
     discountTotal,
-    draft.attachments,
-    draft.customerCompany,
-    draft.customerName,
-    draft.dealId,
-    draft.equipment,
-    draft.recommendation?.reasoning,
-    draft.selectedFinanceScenario,
-    draft.tradeAllowance,
+    draft,
     equipmentTotal,
     netTotal,
+    pricingLineTotal,
     selectedBranch,
     subtotal,
     taxTotal,
@@ -1649,6 +1628,10 @@ export function QuoteBuilderV2Page() {
   }
 
   function handleDownloadPdf() {
+    if (customerFacingDocumentBlocker) {
+      setDocumentActionError(customerFacingDocumentBlocker);
+      return;
+    }
     void downloadPDF(quotePdfData);
   }
 

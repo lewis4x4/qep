@@ -12,8 +12,8 @@ create policy "qar_select" on public.quote_availability_requests
   for select using (
     workspace_id = (select public.get_my_workspace())
     and (
-      public.get_my_role() in ('admin', 'manager', 'owner')
-      or requested_by = auth.uid()
+      (select public.get_my_role()) in ('admin', 'manager', 'owner')
+      or requested_by = (select auth.uid())
       or (
         quote_package_id is not null
         and public.quote_package_accessible_to_me(quote_package_id)
@@ -31,8 +31,8 @@ create policy "qacand_select" on public.quote_availability_candidates
       where request.id = quote_availability_candidates.request_id
         and request.workspace_id = quote_availability_candidates.workspace_id
         and (
-          public.get_my_role() in ('admin', 'manager', 'owner')
-          or request.requested_by = auth.uid()
+          (select public.get_my_role()) in ('admin', 'manager', 'owner')
+          or request.requested_by = (select auth.uid())
           or (
             request.quote_package_id is not null
             and public.quote_package_accessible_to_me(request.quote_package_id)
@@ -51,8 +51,8 @@ create policy "qae_select" on public.quote_availability_events
       where request.id = quote_availability_events.request_id
         and request.workspace_id = quote_availability_events.workspace_id
         and (
-          public.get_my_role() in ('admin', 'manager', 'owner')
-          or request.requested_by = auth.uid()
+          (select public.get_my_role()) in ('admin', 'manager', 'owner')
+          or request.requested_by = (select auth.uid())
           or (
             request.quote_package_id is not null
             and public.quote_package_accessible_to_me(request.quote_package_id)

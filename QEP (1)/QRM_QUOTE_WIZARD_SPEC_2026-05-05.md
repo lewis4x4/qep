@@ -343,3 +343,235 @@ For Architect to draft as Phase 1B Sprint addendum:
 - `src/lib/financing-math.ts` (extend with lease functions)
 
 ---
+
+## 10. INTELLIDEALER PDF PARITY (Q02699 REFERENCE)
+
+**Source:** IntelliDealer quote `Q02699` (RYLEE MCKENZIE, 05/07/2026, ASV RT-135F + ShearEx HM-70SR + Trade + Parts + Misc, Quote Total $144,110.65).
+**Purpose:** Lock in every element from the legacy IntelliDealer PDF that customers and the sales team are already trained on. The QRM PDF must match this content set or exceed it. Cosmetic upgrade is welcome — content omission is not. C3 (PDF improvement) cannot close without every item below present.
+
+### 10.1 Letterhead (every page)
+
+- QEP gear logo lockup, full color
+- Tagline: `IT'S IN THE NAME`
+- Company name: `Quality Equipment & Parts`
+- Address: `4894 NW US Highway 41 • Lake City, Florida 32055`
+- Phone: `(386) 754-6186`
+- Fax: `(386) 888-1413`
+- Web: `www.qepusa.com`
+- OEM line-card badges, top right: `DEVELON` · `Bandit Industries, Inc.` · `YANMAR` · `asv`
+- Faded gear watermark across page body
+
+### 10.2 Header / metadata box (every page, top right)
+
+- Branch number + name (e.g., `01 - LAKE CITY`, `02 - OCALA`)
+- Date (MM/DD/YYYY)
+- Time of preparation (HH:MM:SS)
+- Origin marker `(O)` original / `(R)` reprint
+- Page X of Y
+- Account No (customer code, e.g., `RYLEE001`)
+- Customer phone
+- Quote number (e.g., `Q02699`)
+- Ship Via field
+- Purchase Order field
+- Tax ID No field
+- Salesperson code (e.g., `RM3`) + full name
+
+### 10.3 Bill-to / Ship-to
+
+Separate `Ship To:` and `Invoice To:` address blocks. Default ship = bill toggle, but rendered separately on the PDF.
+
+### 10.4 Document title banner
+
+```
+EQUIPMENT ESTIMATE - NOT AN INVOICE
+```
+
+Boxed and bolded at the top of body. Replaces / pairs with the modern `Equipment Proposal` headline — keep the legal banner.
+
+### 10.5 Column header row
+
+```
+Description     ** Q U O T E **     EXPIRY DATE: MM/DD/YYYY     Amount
+```
+
+### 10.6 Equipment line item structure (per unit, repeating)
+
+```
+Stock #: Qxxxxxx        Serial #: xxxxxxxxxxx        $xxx,xxx.xx
+New/Used  YYYY  MAKE MODEL
+Long marketing description (HP, class, family)
+Short product line
+*****************************************
+INCLUDING THE FOLLOWING OPTIONS:
+- Spec line 1
+- Spec line 2
+- ...
+*****************************************
+**Warranty callout (e.g., "2 Year/ 2000 Hour Full Machine Warranty")**
+```
+
+Multi-unit support required: machine + attachment + secondary equipment each as their own stock line with their own spec list and amount.
+
+### 10.7 Trade-In section (when applicable)
+
+```
+                          Trade Ins
+                          =========
+Serial #: xxxxxx                                       50000.00-
+YYYY MAKE MODEL
+Condition / inclusions notes
+Free-text trade notes
+```
+
+Negative amount notation (`-` suffix). Centered section header with `=` divider.
+
+### 10.8 Additional Parts section
+
+```
+                       ADDITIONAL PARTS
+                       ================
+PART DESCRIPTION  PARTNUM  Qty: NN  Price: NN.NN     EXTENDED
+```
+
+Columns: Description / Part # / Qty / Unit Price / Extended.
+
+### 10.9 Miscellaneous Charges/Credits section
+
+```
+                  Miscellaneous Charges/Credits
+                  =============================
+LESS DOWN PAYMENT RECD.        Qty: 1  Price: 10000.00   10000.00-
+```
+
+Down payment received, freight, PDI, doc fee, title, tag, registration, and any other adjustments live here as line items with Qty + Unit Price + Extended.
+
+### 10.10 Totals block
+
+```
+                                       Subtotal:    XXX,XXX.XX
+                                Florida State 6.00%:   X,XXX.XX
+                                  COLUMBIA COUNTY:        XX.XX
+Authorization: _________________________  Quote Total:  XXX,XXX.XX
+```
+
+- State tax line shows the rate percentage inline (`Florida State 6.00%:`)
+- County tax line named after the actual delivery county (`COLUMBIA COUNTY:`, `MARION COUNTY:`, `SUWANNEE COUNTY:`, etc.)
+- $5,000 surtax cap math must replicate IntelliDealer (Q02699: Columbia County 1.5% × $5,000 = $75.00)
+- **`Authorization: _________________________`** customer signature line on the same row as Quote Total — required signature gate
+
+### 10.11 Comments box
+
+Free-text comments field below totals. Used for special terms, deal notes, delivery instructions.
+
+### 10.12 Standard financing disclaimer (verbatim)
+
+Print directly below the comments box whenever any payment math is shown. Pair with — do not replace — the ADR-006 TILA block.
+
+```
+** FINANCING BASED ON CREDIT APPROVAL. INTEREST RATE MAY
+VARY. MONTHLY PAYMENTS ARE ESTIMATED **
+```
+
+### 10.13 Finance Options grid
+
+Render as a styled table (not ASCII). Default columns 36 / 48 / 60 / 72 months. Three rows: Months / %Rate / $Payment. Reference layout:
+
+```
+************************************************************
+*                    Finance Options                       *
+*                                                          *
+* Months:       36       48       60       72              *
+* %Rate         0.00     0.00     0.00     2.99            *
+* $Payment    4003.07  3002.31  2401.84  2188.93           *
+************************************************************
+```
+
+### 10.14 Standard footer (verbatim, every page)
+
+```
+Good for thirty (30) days from date of quote.  This estimate is not a contract.  Estimate is based on initial inspection.
+Does not cover any issues that came up when work started.  Prices not guaranteed.
+
+Thank You For Your Business!
+```
+
+QR code bottom right linking to `https://www.qepusa.com` with label `Visit our Website`.
+
+### 10.15 Parity checklist (Engineer signs off line by line before C3 closes)
+
+1. Full QEP letterhead with address, phone, fax, web, tagline `IT'S IN THE NAME`
+2. OEM line-card badges (DEVELON / Bandit / YANMAR / ASV)
+3. Faded gear watermark on body
+4. Branch number + name on every page
+5. Date + time of preparation with `(O)` / `(R)` marker
+6. `Page X of Y` numbering
+7. Account No, customer phone, quote number, salesperson code in header box
+8. Ship Via, Purchase Order, Tax ID No fields (blank when N/A but rendered)
+9. Separate Ship To and Invoice To address blocks
+10. Salesperson code AND full name
+11. `EQUIPMENT ESTIMATE - NOT AN INVOICE` banner
+12. Per-line stock # + serial # for every machine
+13. New/Used flag on each unit
+14. Full spec bullet list under each machine (`INCLUDING THE FOLLOWING OPTIONS:`)
+15. Warranty callout per machine
+16. Multi-unit support (machine + attachment as separate stock lines)
+17. Dedicated `Trade Ins` section with serial # and notes, negative amount notation
+18. Dedicated `ADDITIONAL PARTS` section with Qty / Unit Price / Extended columns
+19. Dedicated `Miscellaneous Charges/Credits` section (down payment, freight, PDI, doc fee, title, tag, registration)
+20. Subtotal line
+21. State tax line with rate % inline (`Florida State 6.00%:`)
+22. County tax line named after actual county with $5K cap math
+23. `Authorization: ____________________` customer signature line on the totals row
+24. Quote Total (final out-the-door)
+25. Free-text comments box
+26. Standard financing disclaimer (verbatim block in 10.12)
+27. Finance Options grid: Months / %Rate / $Payment for 36/48/60/72
+28. Standard footer disclaimer (verbatim block in 10.14)
+29. `Thank You For Your Business!` closing
+30. QR code → qepusa.com
+
+### 10.16 Schema additions to support parity
+
+```sql
+-- Multi-unit support: link multiple equipment lines per quote
+-- (already supported by quote_lines.kind = 'equipment'; ensure stock_number and serial_number
+-- carry through and warranty_text + spec_bullets render in PDF)
+ALTER TABLE quote_lines
+  ADD COLUMN stock_number text,
+  ADD COLUMN serial_number text,
+  ADD COLUMN condition text,           -- 'new' | 'used' | 'demo'
+  ADD COLUMN model_year smallint,
+  ADD COLUMN make text,
+  ADD COLUMN model text,
+  ADD COLUMN long_description text,
+  ADD COLUMN spec_bullets jsonb,        -- ordered array of spec lines
+  ADD COLUMN warranty_text text;
+
+-- Branch and origin metadata on quotes
+ALTER TABLE quotes
+  ADD COLUMN branch_code text,          -- '01', '02'
+  ADD COLUMN branch_name text,          -- 'LAKE CITY', 'OCALA'
+  ADD COLUMN origin_marker text NOT NULL DEFAULT 'O',  -- 'O' original, 'R' reprint
+  ADD COLUMN ship_via text,
+  ADD COLUMN purchase_order text,
+  ADD COLUMN comments_box text,
+  ADD COLUMN authorization_signed_at timestamptz,
+  ADD COLUMN authorization_signature_url text;  -- R2 path to signed PDF
+
+-- Customer account code (IntelliDealer parity, e.g., 'RYLEE001')
+ALTER TABLE customers
+  ADD COLUMN account_code text UNIQUE;
+
+-- Salesperson code (IntelliDealer parity, e.g., 'RM3')
+ALTER TABLE auth.users
+  ADD COLUMN salesperson_code text UNIQUE;
+```
+
+### 10.17 Acceptance addition to Section 6
+
+Add to the Section 6 acceptance criteria:
+
+12. PDF renders 100% of items 1–30 in the parity checklist (10.15) for a real customer + multi-unit + trade-in + parts + misc + financing scenario.
+13. Side-by-side review against IntelliDealer Q02699 shows no missing element. Architect signs off in writing before C3 closes.
+
+---
