@@ -6,6 +6,13 @@ interface AiBriefingCardProps {
   pipelineValue: number;
   closingSoonCount: number;
   priorityCount: number;
+  /**
+   * Optional caller-owned summary. When omitted, the card keeps deriving its
+   * summary from the scalar sales feed values to preserve existing callers.
+   */
+  summaryParts?: string[];
+  /** Explicit copy for healthy-but-empty or degraded source states. */
+  emptySummary?: string;
 }
 
 function formatCurrency(value: number): string {
@@ -20,6 +27,8 @@ export function AiBriefingCard({
   pipelineValue,
   closingSoonCount,
   priorityCount,
+  summaryParts,
+  emptySummary,
 }: AiBriefingCardProps) {
   const label =
     timeOfDay === "morning"
@@ -30,18 +39,19 @@ export function AiBriefingCard({
 
   const greeting = `Good ${timeOfDay}${firstName ? `, ${firstName}` : ""}`;
 
-  const parts: string[] = [];
+  const derivedParts: string[] = [];
   if (pipelineValue > 0)
-    parts.push(`${formatCurrency(pipelineValue)} in active pipeline`);
+    derivedParts.push(`${formatCurrency(pipelineValue)} in active pipeline`);
   if (closingSoonCount > 0)
-    parts.push(
+    derivedParts.push(
       `${closingSoonCount} deal${closingSoonCount === 1 ? "" : "s"} closing this week`,
     );
   if (priorityCount > 0 && closingSoonCount === 0)
-    parts.push(
+    derivedParts.push(
       `${priorityCount} ${priorityCount === 1 ? "priority" : "priorities"} today`,
     );
-  const summary = parts.length > 0 ? parts.join(". ") + "." : "";
+  const parts = (summaryParts ?? derivedParts).map((part) => part.trim()).filter(Boolean);
+  const summary = parts.length > 0 ? parts.join(". ") + "." : (emptySummary ?? "");
 
   return (
     <div

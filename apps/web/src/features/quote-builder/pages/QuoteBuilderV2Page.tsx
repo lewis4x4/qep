@@ -99,20 +99,26 @@ import { useQuotePDF } from "../hooks/useQuotePDF";
 import { useQuoteFinancingPreview } from "../hooks/useQuoteFinancingPreview";
 import { useQuoteTaxPreview } from "../hooks/useQuoteTaxPreview";
 import { buildCustomFinanceScenario } from "../lib/custom-finance";
-import {
-  buildQuotePdfBranch,
-  parsePendingScenarioSelection,
-} from "../lib/quote-builder-page-normalizers";
+import { buildQuotePdfBranch } from "../lib/quote-builder-page-normalizers";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { VoiceRecorder } from "@/features/voice-qrm/components/VoiceRecorder";
 import { submitVoiceToQrm } from "@/features/voice-qrm/lib/voice-qrm-api";
+import {
+  clearVoiceQuoteHandoff,
+  readVoiceQuoteHandoff,
+} from "@/features/voice-quote/lib/voice-quote-handoff";
+import { toast } from "@/hooks/use-toast";
 import {
   ConversationalDealEngine,
   DealAssistantTrigger,
   type ScenarioSelection,
 } from "../components/ConversationalDealEngine";
 import { issueShareToken } from "@/features/deal-room/lib/deal-room-api";
+import {
+  buildScenarioSelectionDraftPatch,
+  type ScenarioSelectionSource,
+} from "../lib/scenario-selection-draft";
 import type {
   QuoteEntryMode,
   QuoteFinanceScenario,
@@ -436,6 +442,7 @@ export function QuoteBuilderV2Page() {
   const packageId = searchParams.get("package_id") || "";
   const dealId = searchParams.get("deal_id") || searchParams.get("crm_deal_id") || "";
   const contactId = searchParams.get("contact_id") || searchParams.get("crm_contact_id") || "";
+  const voiceSessionId = searchParams.get("voice_session_id") || "";
   const [step, setStep] = useState<Step>("customer");
   const [builderMode] = useState<BuilderMode>("guided");
   const [reviewSendOpen, setReviewSendOpen] = useState(false);
@@ -535,6 +542,7 @@ export function QuoteBuilderV2Page() {
   const { generateAndDownload: downloadPDF, generating: pdfGenerating, error: pdfError } = useQuotePDF();
   const { profile } = useAuth();
   const existingQuoteHydrationKeyRef = useRef<string | null>(null);
+  const voiceHandoffHydrationKeyRef = useRef<string | null>(null);
 
   const existingQuoteQuery = useQuery({
     queryKey: ["quote-builder", "saved-quote", packageId, dealId],
@@ -874,26 +882,33 @@ export function QuoteBuilderV2Page() {
     existingQuoteQuery.isLoading,
   ]);
 
-  // Slice 14: pick up a pending voice-quote handoff on mount. The VoiceQuotePage
-  // stashes the selected scenario in sessionStorage; we read + clear it here
-  // and seed the draft via the same handler the in-place ConversationalDealEngine
-  // uses. Deliberately one-shot: once consumed, the key is deleted so a browser
-  // refresh doesn't re-apply it.
+  // Slice 14: pick up a pending voice-quote handoff only when the URL's
+  // voice_session_id matches the sessionStorage payload. Saved quote/deal
+  // hydration wins, so advisor/deal launches do not get overwritten by stale
+  // browser handoffs.
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem("qep.voiceQuote.pendingSelection");
-      if (!raw) return;
-      sessionStorage.removeItem("qep.voiceQuote.pendingSelection");
-      const parsed = parsePendingScenarioSelection(raw);
-      if (!parsed) return;
-      handleScenarioSelection(parsed);
-    } catch {
-      // Malformed payload — ignore silently; the user is in the quote builder
-      // and can proceed manually.
+    if (!voiceSessionId) return;
+    if (packageId || dealId) return;
+    if (existingQuoteQuery.isFetching || existingQuoteQuery.isLoading) return;
+    if (voiceHandoffHydrationKeyRef.current === voiceSessionId) return;
+    voiceHandoffHydrationKeyRef.current = voiceSessionId;
+
+    const handoff = readVoiceQuoteHandoff(voiceSessionId);
+    if (!handoff) {
+      toast({
+        title: "Voice handoff expired",
+        description: "Start manually or record again.",
+        variant: "destructive",
+      });
+      return;
     }
-    // Intentionally one-shot: no deps; runs once on mount.
+
+    clearVoiceQuoteHandoff();
+    applyScenarioSelection(handoff, "voice_handoff");
+    // applyScenarioSelection is intentionally omitted so this remains keyed
+    // only by the stable handoff id, not by render-local function identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [dealId, existingQuoteQuery.isFetching, existingQuoteQuery.isLoading, packageId, voiceSessionId]);
 
   const saveMutation = useMutation({
     mutationFn: (): Promise<QuotePackageSaveResponse> => {
@@ -1351,41 +1366,23 @@ export function QuoteBuilderV2Page() {
   // Pre-populate form state when rep selects an AI-generated scenario.
   // Behavior: (a) set equipment from resolved model, (b) store prompt as
   // voiceSummary, (c) advance to equipment step for review — never auto-save.
-  const handleScenarioSelection = (selection: ScenarioSelection) => {
-    const { scenario, resolvedModelId, deliveryState, customerType, prompt, originatingLogId } = selection;
+  const applyScenarioSelection = (
+    selection: ScenarioSelection & { at?: string },
+    source: ScenarioSelectionSource,
+  ) => {
     setDealAssistantOpen(false);
-
-    // Build equipment line from the resolved model embedded in the SSE complete event.
-    // The resolved model data is in selection.scenario but we only have scenario economics,
-    // not model metadata. Re-use the prompt to set voiceSummary so IntelligencePanel renders.
     setDraft((current) => ({
       ...current,
-      voiceSummary: prompt,
-      // Slice 09: thread the originating qb_ai_request_log id through the draft
-      // so the save path can persist it on quote_packages.originating_log_id.
-      originatingLogId: originatingLogId ?? current.originatingLogId ?? null,
-      // If no equipment yet and we have a resolved model ID, add a placeholder.
-      // The rep confirms/refines in the equipment step.
-      ...(resolvedModelId && current.equipment.length === 0
-        ? {
-            equipment: [{
-              kind:      "equipment" as const,
-              id:        resolvedModelId,
-              title:     `AI-matched machine (${resolvedModelId.slice(0, 8)}…)`,
-              make:      "",
-              model:     "",
-              year:      null,
-              quantity:  1,
-              // customerOutOfPocketCents is the scenario price in cents — convert to dollars
-              unitPrice: Math.round(scenario.customerOutOfPocketCents / 100),
-            }],
-          }
-        : {}),
+      ...buildScenarioSelectionDraftPatch(current, selection, source),
     }));
 
     // Slice 20a: land on the Customer step first so the rep picks who the
     // quote is for before confirming the AI-matched equipment.
     setStep("customer");
+  };
+
+  const handleScenarioSelection = (selection: ScenarioSelection) => {
+    applyScenarioSelection(selection, "deal_assistant");
   };
 
   async function addRecommendedMachine(machine: string) {

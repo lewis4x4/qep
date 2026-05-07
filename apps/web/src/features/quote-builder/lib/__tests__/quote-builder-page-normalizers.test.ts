@@ -84,6 +84,7 @@ describe("quote builder page normalizers", () => {
       customerType: "gmu",
       prompt: "Need low cash down",
       originatingLogId: "log-1",
+      voiceSessionId: "voice-session-1",
       at: "2026-05-03T12:00:00Z",
     }, new Date("2026-05-03T12:05:00Z").getTime());
 
@@ -92,6 +93,7 @@ describe("quote builder page normalizers", () => {
     expect(selection?.scenario.pros).toEqual(["Low cash"]);
     expect(selection?.customerType).toBe("gmu");
     expect(selection?.resolvedModelId).toBe("model-1");
+    expect(selection?.voiceSessionId).toBe("voice-session-1");
   });
 
   test("rejects malformed or stale pending scenario selections", () => {
@@ -99,6 +101,7 @@ describe("quote builder page normalizers", () => {
     expect(normalizePendingScenarioSelection({
       scenario: validScenario,
       customerType: "standard",
+      voiceSessionId: "voice-session-1",
       at: "2026-05-03T11:00:00Z",
     }, new Date("2026-05-03T12:00:01Z").getTime())).toBeNull();
     expect(parsePendingScenarioSelection("{not-json")).toBeNull();

@@ -145,6 +145,7 @@ export function SalesAiBriefingFloorWidget() {
           pipelineValue={liveStats.total_pipeline_value}
           closingSoonCount={closingSoonCount(pipeline)}
           priorityCount={livePriorityActions.length}
+          emptySummary="No active sales pressure found yet. Start a quote or log a follow-up to seed today’s briefing."
         />
       ) : null}
     </FloorWidgetShell>

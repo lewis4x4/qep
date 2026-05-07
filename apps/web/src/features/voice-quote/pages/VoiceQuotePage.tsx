@@ -63,8 +63,7 @@ import {
 } from "@/features/quote-builder/lib/scenario-orchestrator";
 import type { ScenarioSelection } from "@/features/quote-builder/components/ConversationalDealEngine";
 import type { QuoteScenario } from "@/features/quote-builder/lib/programs-types";
-
-export const VOICE_QUOTE_HANDOFF_KEY = "qep.voiceQuote.pendingSelection";
+import { VOICE_QUOTE_HANDOFF_KEY } from "@/features/voice-quote/lib/voice-quote-handoff";
 
 type RecordingPhase = "idle" | "recording" | "paused" | "transcribing" | "generating" | "ready" | "error";
 type ConfidenceLevel = "High" | "Medium" | "Low";
@@ -631,6 +630,7 @@ export function VoiceQuotePage() {
   }
 
   function openScenario(scenario: QuoteScenario) {
+    const voiceSessionId = originatingLogId ?? `voice-session-${Date.now()}`;
     const selection: ScenarioSelection = {
       scenario,
       resolvedModelId: resolved?.model.id ?? null,
@@ -646,7 +646,7 @@ export function VoiceQuotePage() {
         VOICE_QUOTE_HANDOFF_KEY,
         JSON.stringify({
           ...selection,
-          voiceSessionId: originatingLogId ?? `voice-session-${Date.now()}`,
+          voiceSessionId,
           at: new Date().toISOString(),
         }),
       );
@@ -660,7 +660,7 @@ export function VoiceQuotePage() {
       console.warn("[voice-quote] sessionStorage write failed:", error);
     }
 
-    navigate(`/quote-v2?voice_session_id=${encodeURIComponent(originatingLogId ?? "voice-session")}`);
+    navigate(`/quote-v2?voice_session_id=${encodeURIComponent(voiceSessionId)}`);
   }
 
   const primaryStatus = phase === "recording" ? "Live" : phase === "paused" ? "Paused" : phase === "error" ? "Needs review" : "Ready";

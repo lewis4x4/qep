@@ -58,5 +58,8 @@ export function useTodayFeed() {
     timeOfDay,
     isLoading: briefingQuery.isLoading || pipelineQuery.isLoading,
     error: briefingQuery.error || pipelineQuery.error,
+    briefingError: briefingQuery.error,
+    pipelineError: pipelineQuery.error,
+    hasBriefing: Boolean(briefing),
   };
 }

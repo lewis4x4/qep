@@ -1096,7 +1096,7 @@ function App() {
               <Route
                 path="/sales/quotes"
                 element={
-                  ["rep", "manager", "owner"].includes(profile.role) ? (
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <QuoteListPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1108,7 +1108,7 @@ function App() {
               <Route
                 path="/quote-v2"
                 element={
-                  ["rep", "manager", "owner"].includes(profile.role) ? (
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <QuoteBuilderV2Page />
                   ) : (
                     <Navigate to="/dashboard" replace />
