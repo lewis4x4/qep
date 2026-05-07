@@ -831,6 +831,170 @@ export async function getAiEquipmentRecommendation(jobDescription: string): Prom
   return normalizeQuoteRecommendation(await res.json().catch(() => ({})));
 }
 
+export interface QuoteAvailabilityCandidate {
+  id: string;
+  requestId: string | null;
+  candidateType: string;
+  catalogModelId: string | null;
+  equipmentId: string | null;
+  score: number;
+  availabilityStatus: string;
+  etaDays: number | null;
+  estimatedCost: number | null;
+  estimatedMargin: number | null;
+  reason: string | null;
+  metadata: Record<string, unknown>;
+  model: Record<string, unknown> | null;
+  equipment: Record<string, unknown> | null;
+  createdAt: string | null;
+}
+
+export interface QuoteAvailabilityRequest {
+  id: string;
+  quotePackageId: string | null;
+  quoteLineItemId: string | null;
+  catalogModelId: string | null;
+  clientLineKey: string | null;
+  requestedBy: string | null;
+  requestedByName: string | null;
+  assignedTo: string | null;
+  assignedToName: string | null;
+  status: string;
+  urgency: string;
+  customerNeed: string | null;
+  requestedMachineLabel: string;
+  requestedBudget: number | null;
+  requestedTimeline: string | null;
+  availabilityEta: string | null;
+  decisionNote: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string | null;
+  updatedAt: string | null;
+  candidates: QuoteAvailabilityCandidate[];
+}
+
+export interface QuoteAvailabilityRequestInput {
+  quotePackageId?: string | null;
+  availabilityRequestId?: string | null;
+  clientLineKey: string;
+  sourceCatalog?: string | null;
+  sourceId?: string | null;
+  catalogModelId?: string | null;
+  requestedMachineLabel: string;
+  make?: string | null;
+  model?: string | null;
+  year?: number | null;
+  customerNeed?: string | null;
+  requestedBudget?: number | null;
+  requestedTimeline?: string | null;
+  urgency?: "low" | "normal" | "rush" | "customer_waiting";
+  allowAlternatives?: boolean;
+}
+
+function normalizeAvailabilityCandidate(value: unknown): QuoteAvailabilityCandidate | null {
+  if (!isRecord(value) || typeof value.id !== "string") return null;
+  return {
+    id: value.id,
+    requestId: nullableString(value.request_id ?? value.requestId),
+    candidateType: requiredString(value.candidate_type ?? value.candidateType, "unknown"),
+    catalogModelId: nullableString(value.catalog_model_id ?? value.catalogModelId),
+    equipmentId: nullableString(value.equipment_id ?? value.equipmentId),
+    score: numOrNull(value.score) ?? 0,
+    availabilityStatus: requiredString(value.availability_status ?? value.availabilityStatus, "unknown"),
+    etaDays: numOrNull(value.eta_days ?? value.etaDays),
+    estimatedCost: numOrNull(value.estimated_cost ?? value.estimatedCost),
+    estimatedMargin: numOrNull(value.estimated_margin ?? value.estimatedMargin),
+    reason: nullableString(value.reason),
+    metadata: normalizeRecord(value.metadata),
+    model: isRecord(value.model) ? value.model : null,
+    equipment: isRecord(value.equipment) ? value.equipment : null,
+    createdAt: nullableString(value.created_at ?? value.createdAt),
+  };
+}
+
+export function normalizeAvailabilityRequest(value: unknown): QuoteAvailabilityRequest | null {
+  if (!isRecord(value) || typeof value.id !== "string") return null;
+  const candidates = Array.isArray(value.candidates) ? value.candidates : [];
+  return {
+    id: value.id,
+    quotePackageId: nullableString(value.quote_package_id ?? value.quotePackageId),
+    quoteLineItemId: nullableString(value.quote_line_item_id ?? value.quoteLineItemId),
+    catalogModelId: nullableString(value.catalog_model_id ?? value.catalogModelId),
+    clientLineKey: nullableString(value.client_line_key ?? value.clientLineKey),
+    requestedBy: nullableString(value.requested_by ?? value.requestedBy),
+    requestedByName: nullableString(value.requested_by_name ?? value.requestedByName),
+    assignedTo: nullableString(value.assigned_to ?? value.assignedTo),
+    assignedToName: nullableString(value.assigned_to_name ?? value.assignedToName),
+    status: requiredString(value.status, "pending"),
+    urgency: requiredString(value.urgency, "normal"),
+    customerNeed: nullableString(value.customer_need ?? value.customerNeed),
+    requestedMachineLabel: requiredString(value.requested_machine_label ?? value.requestedMachineLabel, "Equipment"),
+    requestedBudget: numOrNull(value.requested_budget ?? value.requestedBudget),
+    requestedTimeline: nullableString(value.requested_timeline ?? value.requestedTimeline),
+    availabilityEta: nullableString(value.availability_eta ?? value.availabilityEta),
+    decisionNote: nullableString(value.decision_note ?? value.decisionNote),
+    resolvedBy: nullableString(value.resolved_by ?? value.resolvedBy),
+    resolvedAt: nullableString(value.resolved_at ?? value.resolvedAt),
+    metadata: normalizeRecord(value.metadata),
+    createdAt: nullableString(value.created_at ?? value.createdAt),
+    updatedAt: nullableString(value.updated_at ?? value.updatedAt),
+    candidates: candidates.flatMap((candidate) => {
+      const normalized = normalizeAvailabilityCandidate(candidate);
+      return normalized ? [normalized] : [];
+    }),
+  };
+}
+
+export async function requestQuoteAvailability(input: QuoteAvailabilityRequestInput): Promise<QuoteAvailabilityRequest> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/availability/request`, {
+    method: "POST",
+    body: JSON.stringify({
+      quote_package_id: input.quotePackageId ?? null,
+      availability_request_id: input.availabilityRequestId ?? null,
+      client_line_key: input.clientLineKey,
+      source_catalog: input.sourceCatalog ?? null,
+      source_id: input.sourceId ?? null,
+      catalog_model_id: input.catalogModelId ?? null,
+      requested_machine_label: input.requestedMachineLabel,
+      make: input.make ?? null,
+      model: input.model ?? null,
+      year: input.year ?? null,
+      customer_need: input.customerNeed ?? null,
+      requested_budget: input.requestedBudget ?? null,
+      requested_timeline: input.requestedTimeline ?? null,
+      urgency: input.urgency ?? "normal",
+      allow_alternatives: input.allowAlternatives ?? true,
+    }),
+  });
+  if (!res.ok) {
+    const body = await readJsonRecord(res);
+    const detail = errorDetail(body);
+    throw new Error(detail.trim() || `Availability request failed (HTTP ${res.status})`);
+  }
+  const body = await readJsonRecord(res);
+  const request = normalizeAvailabilityRequest(body.request);
+  if (!request) throw new Error("Availability request response was malformed.");
+  return request;
+}
+
+export async function listQuoteAvailabilityRequests(quotePackageId: string): Promise<QuoteAvailabilityRequest[]> {
+  const qs = new URLSearchParams({ quote_package_id: quotePackageId });
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/availability?${qs.toString()}`);
+  if (!res.ok) {
+    const body = await readJsonRecord(res);
+    const detail = errorDetail(body);
+    throw new Error(detail.trim() || `Failed to load availability requests (HTTP ${res.status})`);
+  }
+  const body = await readJsonRecord(res);
+  const source = Array.isArray(body.requests) ? body.requests : [];
+  return source.flatMap((item) => {
+    const request = normalizeAvailabilityRequest(item);
+    return request ? [request] : [];
+  });
+}
+
 export interface QuoteFinancingRequest {
   packageSubtotal: number;
   discountTotal: number;

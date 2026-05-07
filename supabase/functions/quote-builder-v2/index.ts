@@ -255,6 +255,7 @@ async function syncQuotePackageLineItems(input: {
   admin: ReturnType<typeof createAdminClient>;
   quotePackageId: string;
   workspaceId: string;
+  requestedBy: string;
   body: Record<string, unknown>;
 }): Promise<{ rows: Array<Record<string, unknown>>; error: string | null }> {
   const normalizedLineItems = normalizeQuotePackageLineItems(input.body);
@@ -300,7 +301,16 @@ async function syncQuotePackageLineItems(input: {
     .order("display_order", { ascending: true });
 
   if (insertErr) return { rows: [], error: insertErr.message };
-  return { rows: (data ?? []) as Array<Record<string, unknown>>, error: null };
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  const bindErr = await bindAvailabilityRequestsToLineItems({
+    admin: input.admin,
+    quotePackageId: input.quotePackageId,
+    workspaceId: input.workspaceId,
+    requestedBy: input.requestedBy,
+    lineItems: rows,
+  });
+  if (bindErr) return { rows, error: bindErr };
+  return { rows, error: null };
 }
 
 function normalizeQuoteFinancingScenarios(body: Record<string, unknown>): Array<Record<string, unknown>> {
@@ -739,6 +749,276 @@ function createAdminClient() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
   });
+}
+
+function normalizeAvailabilityUrgency(value: unknown): "low" | "normal" | "rush" | "customer_waiting" {
+  return value === "low" || value === "rush" || value === "customer_waiting" ? value : "normal";
+}
+
+function normalizeAvailabilityStatus(value: unknown): "available" | "in_transit" | "source_required" | "not_available" | "unknown" {
+  return value === "available" || value === "in_transit" || value === "source_required" || value === "not_available"
+    ? value
+    : "unknown";
+}
+
+function availabilityRequestActive(status: unknown): boolean {
+  return status === "pending" || status === "checking_internal_inventory" || status === "checking_vendor";
+}
+
+function profileDisplayName(profile: unknown): string | null {
+  if (!profile || typeof profile !== "object" || Array.isArray(profile)) return null;
+  const row = profile as Record<string, unknown>;
+  return lineString(row.full_name, 160)
+    ?? lineString(row.name, 160)
+    ?? lineString(row.email, 160);
+}
+
+function normalizeAvailabilityRequestRow(row: Record<string, unknown>, candidates: Array<Record<string, unknown>> = []): Record<string, unknown> {
+  const assignedProfile = Array.isArray(row.assigned_profile) ? row.assigned_profile[0] : row.assigned_profile;
+  const requestedProfile = Array.isArray(row.requested_profile) ? row.requested_profile[0] : row.requested_profile;
+  return {
+    id: row.id,
+    quote_package_id: row.quote_package_id ?? null,
+    quote_line_item_id: row.quote_line_item_id ?? null,
+    catalog_model_id: row.catalog_model_id ?? null,
+    client_line_key: row.client_line_key ?? null,
+    requested_by: row.requested_by ?? null,
+    requested_by_name: profileDisplayName(requestedProfile),
+    assigned_to: row.assigned_to ?? null,
+    assigned_to_name: profileDisplayName(assignedProfile),
+    status: row.status ?? "pending",
+    urgency: row.urgency ?? "normal",
+    customer_need: row.customer_need ?? null,
+    requested_machine_label: row.requested_machine_label ?? "",
+    requested_budget: row.requested_budget ?? null,
+    requested_timeline: row.requested_timeline ?? null,
+    availability_eta: row.availability_eta ?? null,
+    decision_note: row.decision_note ?? null,
+    resolved_by: row.resolved_by ?? null,
+    resolved_at: row.resolved_at ?? null,
+    metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata) ? row.metadata : {},
+    created_at: row.created_at ?? null,
+    updated_at: row.updated_at ?? null,
+    candidates,
+  };
+}
+
+function normalizeAvailabilityCandidateRow(row: Record<string, unknown>): Record<string, unknown> {
+  const model = Array.isArray(row.model) ? row.model[0] : row.model;
+  const equipment = Array.isArray(row.equipment) ? row.equipment[0] : row.equipment;
+  return {
+    id: row.id,
+    request_id: row.request_id,
+    candidate_type: row.candidate_type,
+    catalog_model_id: row.catalog_model_id ?? null,
+    equipment_id: row.equipment_id ?? null,
+    score: Number(row.score ?? 0),
+    availability_status: row.availability_status ?? "unknown",
+    eta_days: row.eta_days ?? null,
+    estimated_cost: row.estimated_cost ?? null,
+    estimated_margin: row.estimated_margin ?? null,
+    reason: row.reason ?? null,
+    metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata) ? row.metadata : {},
+    model: model && typeof model === "object" ? model : null,
+    equipment: equipment && typeof equipment === "object" ? equipment : null,
+    created_at: row.created_at ?? null,
+  };
+}
+
+async function loadAvailabilityRequestEnvelope(input: {
+  admin: ReturnType<typeof createAdminClient>;
+  workspaceId: string;
+  requestId: string;
+}): Promise<Record<string, unknown> | null> {
+  const { data: request, error: requestErr } = await input.admin
+    .from("quote_availability_requests")
+    .select(`
+      *,
+      requested_profile:profiles!quote_availability_requests_requested_by_fkey ( id, full_name, email ),
+      assigned_profile:profiles!quote_availability_requests_assigned_to_fkey ( id, full_name, email )
+    `)
+    .eq("workspace_id", input.workspaceId)
+    .eq("id", input.requestId)
+    .maybeSingle();
+  if (requestErr) throw new Error(requestErr.message);
+  if (!request) return null;
+
+  const { data: candidates, error: candidateErr } = await input.admin
+    .from("quote_availability_candidates")
+    .select(`
+      *,
+      model:qb_equipment_models!quote_availability_candidates_catalog_model_id_fkey ( id, model_code, family, series, name_display, model_year, list_price_cents ),
+      equipment:qrm_equipment!quote_availability_candidates_equipment_id_fkey ( id, name, make, model, year, stock_number, availability, location_description, current_market_value )
+    `)
+    .eq("workspace_id", input.workspaceId)
+    .eq("request_id", input.requestId)
+    .order("score", { ascending: false })
+    .order("created_at", { ascending: true });
+  if (candidateErr) throw new Error(candidateErr.message);
+
+  return normalizeAvailabilityRequestRow(
+    request as Record<string, unknown>,
+    (candidates ?? []).map((row: Record<string, unknown>) => normalizeAvailabilityCandidateRow(row)),
+  );
+}
+
+async function buildAvailabilityCandidates(input: {
+  admin: ReturnType<typeof createAdminClient>;
+  workspaceId: string;
+  requestId: string;
+  catalogModel: Record<string, unknown> | null;
+  requestedMachineLabel: string;
+  budget: number | null;
+}): Promise<void> {
+  const rows: Array<Record<string, unknown>> = [];
+  const catalogModelId = typeof input.catalogModel?.id === "string" ? input.catalogModel.id : null;
+  const family = lineString(input.catalogModel?.family, 160);
+  const modelCode = lineString(input.catalogModel?.model_code, 120);
+  const brandRaw = input.catalogModel?.brand;
+  const brand = Array.isArray(brandRaw) ? brandRaw[0] : brandRaw;
+  const brandName = brand && typeof brand === "object" ? lineString((brand as Record<string, unknown>).name, 160) : null;
+  const listPrice = Number(input.catalogModel?.list_price_cents);
+  const listPriceDollars = Number.isFinite(listPrice) ? listPrice / 100 : null;
+
+  if (catalogModelId) {
+    rows.push({
+      workspace_id: input.workspaceId,
+      request_id: input.requestId,
+      candidate_type: "exact_catalog_model",
+      catalog_model_id: catalogModelId,
+      score: 80,
+      availability_status: "source_required",
+      estimated_cost: listPriceDollars,
+      reason: "Exact active QEP catalog model; sourcing confirmation required before customer-facing send.",
+      metadata: { requested_machine_label: input.requestedMachineLabel },
+    });
+  }
+
+  if (brandName || modelCode) {
+    let equipmentQuery = input.admin
+      .from("qrm_equipment")
+      .select("id, make, model, year, stock_number, availability, current_market_value, location_description")
+      .eq("workspace_id", input.workspaceId)
+      .is("deleted_at", null)
+      .limit(10);
+    if (brandName) equipmentQuery = equipmentQuery.ilike("make", `%${brandName}%`);
+    if (modelCode) equipmentQuery = equipmentQuery.ilike("model", `%${modelCode}%`);
+    const { data: equipmentRows } = await equipmentQuery;
+    for (const equipment of equipmentRows ?? []) {
+      const availability = normalizeAvailabilityStatus((equipment as Record<string, unknown>).availability === "available" ? "available" : (equipment as Record<string, unknown>).availability);
+      rows.push({
+        workspace_id: input.workspaceId,
+        request_id: input.requestId,
+        candidate_type: "owned_inventory",
+        catalog_model_id: catalogModelId,
+        equipment_id: (equipment as Record<string, unknown>).id,
+        score: availability === "available" ? 100 : 88,
+        availability_status: availability === "unknown" ? "source_required" : availability,
+        estimated_cost: (equipment as Record<string, unknown>).current_market_value ?? listPriceDollars,
+        reason: availability === "available"
+          ? "Matching QEP equipment record appears available now."
+          : "Matching QEP equipment record found; operations should confirm current status.",
+        metadata: {
+          stock_number: (equipment as Record<string, unknown>).stock_number ?? null,
+          location_description: (equipment as Record<string, unknown>).location_description ?? null,
+        },
+      });
+    }
+  }
+
+  if (family) {
+    let alternatives = input.admin
+      .from("qb_equipment_models")
+      .select("id, model_code, family, series, name_display, model_year, list_price_cents")
+      .eq("workspace_id", input.workspaceId)
+      .eq("active", true)
+      .is("deleted_at", null)
+      .eq("family", family)
+      .neq("id", catalogModelId ?? "00000000-0000-0000-0000-000000000000")
+      .limit(5);
+    if (input.budget && input.budget > 0) {
+      alternatives = alternatives.lte("list_price_cents", Math.round(input.budget * 1.15 * 100));
+    }
+    const { data: altRows } = await alternatives.order("list_price_cents", { ascending: true });
+    for (const alt of altRows ?? []) {
+      const altPrice = Number((alt as Record<string, unknown>).list_price_cents);
+      rows.push({
+        workspace_id: input.workspaceId,
+        request_id: input.requestId,
+        candidate_type: "equivalent_catalog_model",
+        catalog_model_id: (alt as Record<string, unknown>).id,
+        score: 65,
+        availability_status: "source_required",
+        estimated_cost: Number.isFinite(altPrice) ? altPrice / 100 : null,
+        reason: "Same active QEP catalog family; viable fallback if the requested model cannot be sourced.",
+        metadata: {
+          requested_family: family,
+          name_display: (alt as Record<string, unknown>).name_display ?? null,
+        },
+      });
+    }
+  }
+
+  const deduped = rows.filter((row, index, all) => {
+    const key = `${row.candidate_type}:${row.catalog_model_id ?? ""}:${row.equipment_id ?? ""}`;
+    return all.findIndex((candidate) => `${candidate.candidate_type}:${candidate.catalog_model_id ?? ""}:${candidate.equipment_id ?? ""}` === key) === index;
+  });
+  if (deduped.length === 0) return;
+  await input.admin
+    .from("quote_availability_candidates")
+    .delete()
+    .eq("request_id", input.requestId);
+  const { error } = await input.admin
+    .from("quote_availability_candidates")
+    .insert(deduped);
+  if (error) throw new Error(error.message);
+}
+
+async function bindAvailabilityRequestsToLineItems(input: {
+  admin: ReturnType<typeof createAdminClient>;
+  quotePackageId: string;
+  workspaceId: string;
+  requestedBy: string;
+  lineItems: Array<Record<string, unknown>>;
+}): Promise<string | null> {
+  for (const line of input.lineItems) {
+    const metadata = line.metadata && typeof line.metadata === "object" && !Array.isArray(line.metadata)
+      ? line.metadata as Record<string, unknown>
+      : {};
+    const requestId = lineString(metadata.availability_request_id, 80);
+    if (!requestId || !UUID_RE.test(requestId)) continue;
+    const { error } = await input.admin
+      .from("quote_availability_requests")
+      .update({
+        quote_package_id: input.quotePackageId,
+        quote_line_item_id: line.id,
+        client_line_key: lineString(metadata.availability_client_line_key, 240),
+      })
+      .eq("workspace_id", input.workspaceId)
+      .eq("id", requestId)
+      .eq("requested_by", input.requestedBy);
+    if (error) return error.message;
+  }
+  return null;
+}
+
+async function callerCanReadAvailabilityRequest(input: {
+  // deno-lint-ignore no-explicit-any
+  supabase: any;
+  userId: string;
+  canPublish: boolean;
+  request: Record<string, unknown>;
+}): Promise<boolean> {
+  if (input.canPublish) return true;
+  if (input.request.requested_by === input.userId) return true;
+  const quotePackageId = typeof input.request.quote_package_id === "string" ? input.request.quote_package_id : null;
+  if (!quotePackageId) return false;
+  const { data, error } = await input.supabase
+    .from("quote_packages")
+    .select("id")
+    .eq("id", quotePackageId)
+    .maybeSingle();
+  return !error && Boolean(data?.id);
 }
 
 // Customer-safe projection of a quote row for the /q/:token deal room.
@@ -2709,6 +2989,71 @@ Deno.serve(async (req) => {
         return safeJsonOk({ observations }, origin);
       }
 
+      if (action === "availability") {
+        const quotePackageId = url.searchParams.get("quote_package_id");
+        const requestId = url.searchParams.get("request_id");
+        const admin = createAdminClient();
+        if (requestId) {
+          const request = await loadAvailabilityRequestEnvelope({ admin, workspaceId: userWorkspaceId, requestId });
+          if (!request) return safeJsonError("Availability request not found", 404, origin);
+          if (!(await callerCanReadAvailabilityRequest({ supabase, userId: user.id, canPublish, request }))) {
+            return safeJsonError("Availability request not found or not accessible", 404, origin);
+          }
+          return safeJsonOk({ request }, origin);
+        }
+        if (!quotePackageId) return safeJsonError("quote_package_id or request_id required", 400, origin);
+        const { data: accessibleQuote, error: accessibleQuoteErr } = await supabase
+          .from("quote_packages")
+          .select("id")
+          .eq("id", quotePackageId)
+          .maybeSingle();
+        if (accessibleQuoteErr) return safeJsonError(accessibleQuoteErr.message, 500, origin);
+        if (!accessibleQuote) return safeJsonError("Quote package not found or not accessible", 404, origin);
+        const { data: rows, error } = await admin
+          .from("quote_availability_requests")
+          .select(`
+            *,
+            requested_profile:profiles!quote_availability_requests_requested_by_fkey ( id, full_name, email ),
+            assigned_profile:profiles!quote_availability_requests_assigned_to_fkey ( id, full_name, email )
+          `)
+          .eq("workspace_id", userWorkspaceId)
+          .eq("quote_package_id", quotePackageId)
+          .order("created_at", { ascending: false });
+        if (error) return safeJsonError(error.message, 500, origin);
+
+        const requestIds = (rows ?? []).flatMap((row: Record<string, unknown>) => typeof row.id === "string" ? [row.id] : []);
+        const { data: candidateRows, error: candidateErr } = requestIds.length > 0
+          ? await admin
+              .from("quote_availability_candidates")
+              .select(`
+                *,
+                model:qb_equipment_models!quote_availability_candidates_catalog_model_id_fkey ( id, model_code, family, series, name_display, model_year, list_price_cents ),
+                equipment:qrm_equipment!quote_availability_candidates_equipment_id_fkey ( id, name, make, model, year, stock_number, availability, location_description, current_market_value )
+              `)
+              .eq("workspace_id", userWorkspaceId)
+              .in("request_id", requestIds)
+              .order("score", { ascending: false })
+          : { data: [], error: null };
+        if (candidateErr) return safeJsonError(candidateErr.message, 500, origin);
+        const candidatesByRequest = new Map<string, Array<Record<string, unknown>>>();
+        for (const candidate of candidateRows ?? []) {
+          const requestKey = typeof (candidate as Record<string, unknown>).request_id === "string"
+            ? String((candidate as Record<string, unknown>).request_id)
+            : "";
+          if (!requestKey) continue;
+          const bucket = candidatesByRequest.get(requestKey) ?? [];
+          bucket.push(normalizeAvailabilityCandidateRow(candidate as Record<string, unknown>));
+          candidatesByRequest.set(requestKey, bucket);
+        }
+        const requests = (rows ?? []).map((row: Record<string, unknown>) =>
+          normalizeAvailabilityRequestRow(
+            row,
+            candidatesByRequest.get(String(row.id)) ?? [],
+          )
+        );
+        return safeJsonOk({ requests }, origin);
+      }
+
       const packageId = url.searchParams.get("package_id");
       const dealId = url.searchParams.get("deal_id");
       if (!packageId && !dealId) {
@@ -2739,6 +3084,131 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
+
+    // ── POST /availability/request: durable equipment sourcing workflow ─
+    if (action === "request" && url.pathname.includes("/availability/")) {
+      if (!canRevise) return safeJsonError("Availability requests require rep, manager, or owner role", 403, origin);
+      const admin = createAdminClient();
+      const existingRequestId = lineString(body.availability_request_id ?? body.request_id, 80);
+      if (existingRequestId && UUID_RE.test(existingRequestId)) {
+        const existing = await loadAvailabilityRequestEnvelope({ admin, workspaceId: userWorkspaceId, requestId: existingRequestId });
+        if (!existing) return safeJsonError("Availability request not found", 404, origin);
+        if (!(await callerCanReadAvailabilityRequest({ supabase, userId: user.id, canPublish, request: existing }))) {
+          return safeJsonError("Availability request not found or not accessible", 404, origin);
+        }
+        return safeJsonOk({ request: existing }, origin);
+      }
+
+      const quotePackageId = lineString(body.quote_package_id, 80);
+      const clientLineKey = lineString(body.client_line_key, 240);
+      const sourceCatalog = lineString(body.source_catalog, 80);
+      const sourceId = lineString(body.source_id, 80);
+      const explicitCatalogModelId = lineString(body.catalog_model_id, 80);
+      const catalogModelId = explicitCatalogModelId && UUID_RE.test(explicitCatalogModelId)
+        ? explicitCatalogModelId
+        : sourceCatalog === "qb_equipment_models" && sourceId && UUID_RE.test(sourceId)
+          ? sourceId
+          : null;
+      const requestedMachineLabel = lineString(body.requested_machine_label, 240)
+        ?? [lineString(body.make, 80), lineString(body.model, 120)].filter(Boolean).join(" ").trim()
+        ?? "Equipment";
+      const customerNeed = lineString(body.customer_need, 2000);
+      const requestedBudget = Number(body.requested_budget);
+      const budget = Number.isFinite(requestedBudget) && requestedBudget > 0 ? requestedBudget : null;
+
+      if (!clientLineKey) return safeJsonError("client_line_key required", 400, origin);
+      if (!catalogModelId) return safeJsonError("A QEP catalog model is required before requesting availability", 400, origin);
+
+      if (quotePackageId) {
+        const { data: quote, error: quoteErr } = await supabase
+          .from("quote_packages")
+          .select("id, workspace_id")
+          .eq("id", quotePackageId)
+          .maybeSingle();
+        if (quoteErr) return safeJsonError(quoteErr.message, 500, origin);
+        if (!quote) return safeJsonError("Quote package not found or not accessible", 404, origin);
+      }
+
+      const { data: catalogModel, error: modelErr } = await admin
+        .from("qb_equipment_models")
+        .select(`
+          id, workspace_id, model_code, family, series, name_display, model_year, list_price_cents,
+          brand:qb_brands!brand_id ( id, code, name, category )
+        `)
+        .eq("workspace_id", userWorkspaceId)
+        .eq("id", catalogModelId)
+        .eq("active", true)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (modelErr) return safeJsonError(modelErr.message, 500, origin);
+      if (!catalogModel) return safeJsonError("Catalog model is not active or not accessible", 404, origin);
+
+      let existingQuery = admin
+        .from("quote_availability_requests")
+        .select("id, status")
+        .eq("workspace_id", userWorkspaceId)
+        .eq("client_line_key", clientLineKey)
+        .in("status", ["pending", "checking_internal_inventory", "checking_vendor"])
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (quotePackageId) {
+        existingQuery = existingQuery.eq("quote_package_id", quotePackageId);
+      } else {
+        existingQuery = existingQuery
+          .is("quote_package_id", null)
+          .eq("requested_by", user.id)
+          .eq("catalog_model_id", catalogModelId)
+          .gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+      }
+      const { data: existingRows, error: existingErr } = await existingQuery;
+      if (existingErr) return safeJsonError(existingErr.message, 500, origin);
+      const activeExistingId = (existingRows ?? []).find((row: Record<string, unknown>) => availabilityRequestActive(row.status))?.id;
+      if (typeof activeExistingId === "string") {
+        const existing = await loadAvailabilityRequestEnvelope({ admin, workspaceId: userWorkspaceId, requestId: activeExistingId });
+        return safeJsonOk({ request: existing }, origin);
+      }
+
+      const { data: created, error: createErr } = await admin
+        .from("quote_availability_requests")
+        .insert({
+          workspace_id: userWorkspaceId,
+          quote_package_id: quotePackageId && UUID_RE.test(quotePackageId) ? quotePackageId : null,
+          catalog_model_id: catalogModelId,
+          client_line_key: clientLineKey,
+          requested_by: user.id,
+          status: "pending",
+          urgency: normalizeAvailabilityUrgency(body.urgency),
+          customer_need: customerNeed,
+          requested_machine_label: requestedMachineLabel,
+          requested_budget: budget,
+          requested_timeline: lineString(body.requested_timeline, 240),
+          metadata: {
+            source: "quote_builder_v2",
+            source_catalog: sourceCatalog,
+            source_id: sourceId,
+            allow_alternatives: body.allow_alternatives !== false,
+            make: lineString(body.make, 80),
+            model: lineString(body.model, 120),
+            year: Number.isFinite(Number(body.year)) ? Math.round(Number(body.year)) : null,
+          },
+        })
+        .select("id")
+        .single();
+      if (createErr) return safeJsonError(createErr.message, 500, origin);
+      const requestId = String((created as { id: string }).id);
+
+      await buildAvailabilityCandidates({
+        admin,
+        workspaceId: userWorkspaceId,
+        requestId,
+        catalogModel: catalogModel as Record<string, unknown>,
+        requestedMachineLabel,
+        budget,
+      });
+
+      const request = await loadAvailabilityRequestEnvelope({ admin, workspaceId: userWorkspaceId, requestId });
+      return safeJsonOk({ request }, origin, 201);
+    }
 
     // ── POST /list-action: narrow row actions from the quote list ────────
     if (action === "list-action") {
@@ -3608,6 +4078,7 @@ Deno.serve(async (req) => {
         admin,
         quotePackageId: String(data.id),
         workspaceId,
+        requestedBy: user.id,
         body,
       });
       if (syncedLineItems.error) {

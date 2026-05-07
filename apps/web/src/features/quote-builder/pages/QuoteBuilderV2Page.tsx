@@ -71,10 +71,13 @@ import {
   getFactorVerdicts,
   getQuoteApprovalCase,
   getSavedQuotePackage,
+  listQuoteAvailabilityRequests,
   logQuoteDeliveryEvent,
+  requestQuoteAvailability,
   saveQuotePackage,
   searchCatalog,
   submitQuoteForApproval,
+  type QuoteAvailabilityRequest,
   type QuotePackageSaveResponse,
   type QuoteFinancingRequest,
 } from "../lib/quote-api";
@@ -256,6 +259,45 @@ function availabilityLabel(status: EquipmentAvailabilityStatus): string {
   if (status === "in_stock") return "In stock";
   if (status === "in_transit") return "In transit";
   return "Source required";
+}
+
+function metadataString(metadata: Record<string, unknown> | null | undefined, key: string): string | null {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function availabilityClientLineKey(item: QuoteLineItemDraft, index: number): string {
+  return [
+    item.sourceCatalog ?? item.kind,
+    item.sourceId ?? item.id ?? item.title,
+    item.make ?? "",
+    item.model ?? "",
+    item.year ?? "",
+    index,
+  ].join("|");
+}
+
+function availabilityRequestIdForLine(item: QuoteLineItemDraft): string | null {
+  return metadataString(item.metadata, "availability_request_id");
+}
+
+function availabilityRequestStatusForLine(item: QuoteLineItemDraft): string | null {
+  return metadataString(item.metadata, "availability_request_status");
+}
+
+function availabilityRequestCreatedAtForLine(item: QuoteLineItemDraft): string | null {
+  return metadataString(item.metadata, "availability_confirmation_requested_at");
+}
+
+function availabilityRequestLabel(status: string | null): string {
+  if (status === "available") return "Available";
+  if (status === "available_with_conditions") return "Available with conditions";
+  if (status === "alternative_recommended") return "Alternative ready";
+  if (status === "not_available") return "Unavailable";
+  if (status === "checking_internal_inventory") return "Checking inventory";
+  if (status === "checking_vendor") return "Checking vendor";
+  if (status === "pending") return "Availability pending";
+  return "Request sent";
 }
 
 /**
@@ -1124,6 +1166,19 @@ export function QuoteBuilderV2Page() {
     : typeof activeQuoteRecord?.created_at === "string"
       ? activeQuoteRecord.created_at
       : null;
+  const availabilityRequestsQuery = useQuery({
+    queryKey: ["quote-builder", "availability-requests", activeQuotePackageId],
+    queryFn: () => listQuoteAvailabilityRequests(activeQuotePackageId!),
+    enabled: Boolean(activeQuotePackageId),
+    staleTime: 5_000,
+  });
+  const availabilityRequestsById = useMemo(() => {
+    const map = new Map<string, QuoteAvailabilityRequest>();
+    for (const request of availabilityRequestsQuery.data ?? []) {
+      map.set(request.id, request);
+    }
+    return map;
+  }, [availabilityRequestsQuery.data]);
 
   const activeApprovalCaseQuery = useQuery({
     queryKey: ["quote-builder", "approval-case", activeQuotePackageId],
@@ -1735,6 +1790,11 @@ export function QuoteBuilderV2Page() {
 
   const firstEquipment = draft.equipment[0];
 
+  function liveAvailabilityStatusForLine(item: QuoteLineItemDraft): string | null {
+    const requestId = availabilityRequestIdForLine(item);
+    return requestId ? availabilityRequestsById.get(requestId)?.status ?? availabilityRequestStatusForLine(item) : null;
+  }
+
   // Gate for advancing off the Customer step — any of name, company,
   // or a resolved CRM id is enough. Kept as one derived flag so the
   // Next-button disabled state and the inline helper text can't drift.
@@ -1746,42 +1806,81 @@ export function QuoteBuilderV2Page() {
   );
   const hasEquipmentLine = draft.equipment.length > 0;
   const sourceRequiredEquipment = draft.equipment.filter((item) => availabilityStatusForLine(item) === "source_required");
-  const sourceRequiredAwaitingConfirmation = sourceRequiredEquipment.filter((item) => !item.metadata?.availability_confirmation_requested_at);
-  const equipmentCanContinue = hasEquipmentLine && sourceRequiredAwaitingConfirmation.length === 0;
+  const sourceRequiredAwaitingConfirmation = sourceRequiredEquipment.filter((item) => !availabilityRequestIdForLine(item));
+  const sourceRequiredUnavailable = sourceRequiredEquipment.filter((item) => liveAvailabilityStatusForLine(item) === "not_available");
+  const equipmentCanContinue = hasEquipmentLine && sourceRequiredAwaitingConfirmation.length === 0 && sourceRequiredUnavailable.length === 0;
   const tradeChecklistComplete = Object.values(tradeChecklist).every(Boolean);
   const tradeManagerApprovalRequired = draft.tradeAllowance > 0 && !tradeChecklistComplete;
   const signalsReady = hasCustomer && hasEquipmentLine;
 
+  const availabilityRequestMutation = useMutation({
+    mutationFn: async ({ equipment, index }: { equipment: QuoteLineItemDraft; index: number }) => {
+      const clientLineKey = metadataString(equipment.metadata, "availability_client_line_key")
+        ?? availabilityClientLineKey(equipment, index);
+      const requestedMachineLabel = equipment.title || [equipment.make, equipment.model].filter(Boolean).join(" ").trim() || "Equipment";
+      const request = await requestQuoteAvailability({
+        quotePackageId: activeQuotePackageId,
+        availabilityRequestId: availabilityRequestIdForLine(equipment),
+        clientLineKey,
+        sourceCatalog: equipment.sourceCatalog ?? null,
+        sourceId: equipment.sourceId ?? equipment.id ?? null,
+        catalogModelId: equipment.sourceCatalog === "qb_equipment_models" ? equipment.sourceId ?? equipment.id ?? null : null,
+        requestedMachineLabel,
+        make: equipment.make ?? null,
+        model: equipment.model ?? null,
+        year: equipment.year ?? null,
+        customerNeed: draft.voiceSummary ?? null,
+        requestedBudget: netTotal > 0 ? netTotal : equipment.unitPrice,
+        urgency: "normal",
+        allowAlternatives: true,
+      });
+      return { request, index, clientLineKey };
+    },
+    onSuccess: ({ request, index, clientLineKey }: { request: QuoteAvailabilityRequest; index: number; clientLineKey: string }) => {
+      setDraft((current) => ({
+        ...current,
+        equipment: current.equipment.map((item, rowIndex) => rowIndex === index
+          ? {
+              ...item,
+              metadata: {
+                ...(item.metadata ?? {}),
+                availability_status: availabilityStatusForLine(item),
+                availability_request_id: request.id,
+                availability_request_status: request.status,
+                availability_client_line_key: clientLineKey,
+                availability_confirmation_requested_at: request.createdAt ?? new Date().toISOString(),
+                availability_candidate_count: request.candidates.length,
+              },
+            }
+          : item),
+      }));
+      toast({
+        title: "Availability request created",
+        description: `${request.requestedMachineLabel} is now pending sourcing review.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["quote-builder", "availability-requests"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Availability request failed",
+        description: error instanceof Error ? error.message : "Could not create the sourcing request.",
+        variant: "destructive",
+      });
+    },
+  });
+
   function markAvailabilityConfirmationRequested(index: number): void {
-    setDraft((current) => ({
-      ...current,
-      equipment: current.equipment.map((item, rowIndex) => rowIndex === index
-        ? {
-            ...item,
-            metadata: {
-              ...(item.metadata ?? {}),
-              availability_status: availabilityStatusForLine(item),
-              availability_confirmation_requested_at: new Date().toISOString(),
-            },
-          }
-        : item),
-    }));
+    const equipment = draft.equipment[index];
+    if (!equipment) return;
+    availabilityRequestMutation.mutate({ equipment, index });
   }
 
   function markAllAvailabilityConfirmationRequested(): void {
-    setDraft((current) => ({
-      ...current,
-      equipment: current.equipment.map((item) => availabilityStatusForLine(item) === "source_required" && !item.metadata?.availability_confirmation_requested_at
-        ? {
-            ...item,
-            metadata: {
-              ...(item.metadata ?? {}),
-              availability_status: "source_required",
-              availability_confirmation_requested_at: new Date().toISOString(),
-            },
-          }
-        : item),
-    }));
+    draft.equipment.forEach((equipment, index) => {
+      if (availabilityStatusForLine(equipment) === "source_required" && !availabilityRequestIdForLine(equipment)) {
+        availabilityRequestMutation.mutate({ equipment, index });
+      }
+    });
   }
 
   function addConfigLine(kind: "attachment" | "option" | "accessory" | "warranty", input?: { id?: string; title: string; unitPrice: number }): void {
@@ -2984,10 +3083,11 @@ export function QuoteBuilderV2Page() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Selected equipment</p>
-                  <p className="mt-1 text-sm text-muted-foreground">Availability is a simple placeholder until inventory sourcing is fully automated.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Source-required machines create a backend sourcing request before the quote can move forward.</p>
                 </div>
                 {sourceRequiredAwaitingConfirmation.length > 0 && (
-                  <Button size="sm" variant="outline" onClick={markAllAvailabilityConfirmationRequested}>
+                  <Button size="sm" variant="outline" onClick={markAllAvailabilityConfirmationRequested} disabled={availabilityRequestMutation.isPending}>
+                    {availabilityRequestMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
                     Request availability check
                   </Button>
                 )}
@@ -2995,7 +3095,10 @@ export function QuoteBuilderV2Page() {
               <div className="mt-3 space-y-2">
                 {draft.equipment.map((equipment, index) => {
                   const status = availabilityStatusForLine(equipment);
-                  const confirmationRequested = Boolean(equipment.metadata?.availability_confirmation_requested_at);
+                  const availabilityRequestId = availabilityRequestIdForLine(equipment);
+                  const requestStatus = liveAvailabilityStatusForLine(equipment);
+                  const confirmationRequested = Boolean(availabilityRequestId);
+                  const requestCreatedAt = availabilityRequestCreatedAtForLine(equipment);
                   return (
                     <div key={`${equipment.title}-${index}`} className="rounded-lg border border-border/70 bg-card/50 p-3">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -3013,12 +3116,23 @@ export function QuoteBuilderV2Page() {
                               ? "bg-amber-500/10 text-amber-300"
                               : "bg-emerald-500/10 text-emerald-400"
                           }`}>
-                            {confirmationRequested ? "Request sent" : availabilityLabel(status)}
+                            {confirmationRequested ? availabilityRequestLabel(requestStatus) : availabilityLabel(status)}
                           </span>
                           {status === "source_required" && !confirmationRequested && (
-                            <Button size="sm" variant="outline" onClick={() => markAvailabilityConfirmationRequested(index)}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => markAvailabilityConfirmationRequested(index)}
+                              disabled={availabilityRequestMutation.isPending}
+                            >
+                              {availabilityRequestMutation.isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
                               Request availability check
                             </Button>
+                          )}
+                          {confirmationRequested && (
+                            <span className="text-[11px] text-muted-foreground">
+                              {requestCreatedAt ? `Requested ${new Date(requestCreatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "Backend request recorded"}
+                            </span>
                           )}
                           <label className="flex items-center gap-1 rounded border border-input bg-background px-2 py-1 font-semibold text-foreground">
                             <span className="text-muted-foreground">$</span>
@@ -3072,7 +3186,14 @@ export function QuoteBuilderV2Page() {
           {sourceRequiredAwaitingConfirmation.length > 0 && (
             <Card className="border-amber-500/20 bg-amber-500/5 p-4">
               <p className="text-sm font-semibold text-amber-300">Availability needs one click.</p>
-              <p className="mt-1 text-xs text-amber-200">This machine must be sourced. Send the availability request before moving forward; verified sourcing will be wired by a later slice.</p>
+              <p className="mt-1 text-xs text-amber-200">This machine must be sourced. The button now creates a backend availability request with candidate alternatives and an audit trail.</p>
+            </Card>
+          )}
+
+          {sourceRequiredUnavailable.length > 0 && (
+            <Card className="border-red-500/30 bg-red-500/5 p-4">
+              <p className="text-sm font-semibold text-red-300">Availability is unresolved.</p>
+              <p className="mt-1 text-xs text-red-200">At least one selected machine is marked unavailable. Pick an alternative or get manager override before continuing.</p>
             </Card>
           )}
 

@@ -3,6 +3,7 @@ import {
   buildQuoteListActionPayload,
   buildQuoteSavePayload,
   buildQuoteListUrl,
+  normalizeAvailabilityRequest,
   normalizeClosedDealsAudit,
   normalizeFactorAttributionDeals,
   normalizeFactorVerdicts,
@@ -71,6 +72,39 @@ const computedQuoteTotals = {
 };
 
 describe("buildQuoteSavePayload", () => {
+  test("preserves availability request metadata on equipment line items", () => {
+    const payload = buildQuoteSavePayload(
+      makeQuoteDraft({
+        equipment: [{
+          kind: "equipment",
+          id: "model-1",
+          sourceCatalog: "qb_equipment_models",
+          sourceId: "11111111-1111-4111-8111-111111111111",
+          title: "Bobcat T86",
+          make: "Bobcat",
+          model: "T86",
+          year: 2026,
+          quantity: 1,
+          unitPrice: 75_000,
+          metadata: {
+            availability_status: "source_required",
+            availability_request_id: "22222222-2222-4222-8222-222222222222",
+            availability_request_status: "pending",
+            availability_client_line_key: "qb_equipment_models|model-1|0",
+          },
+        }],
+      }),
+      computedQuoteTotals,
+      [],
+    );
+
+    const line = (payload.line_items as Array<{ metadata: Record<string, unknown> }>)[0]!;
+    expect(line.metadata.availability_request_id).toBe("22222222-2222-4222-8222-222222222222");
+    expect(line.metadata.availability_request_status).toBe("pending");
+    expect(line.metadata.source_catalog).toBe("qb_equipment_models");
+    expect(line.metadata.source_id).toBe("11111111-1111-4111-8111-111111111111");
+  });
+
   test("does not persist placeholder promotion ids or promotion marker reason codes", () => {
     const realPromotionId = "11111111-1111-4111-8111-111111111111";
     const payload = buildQuoteSavePayload(
@@ -297,6 +331,44 @@ describe("normalizeQuoteFinancingPreview", () => {
 });
 
 describe("quote recommendation and send normalizers", () => {
+  test("normalizes availability request envelopes with candidates", () => {
+    const request = normalizeAvailabilityRequest({
+      id: "req-1",
+      quote_package_id: "pkg-1",
+      quote_line_item_id: null,
+      catalog_model_id: "model-1",
+      client_line_key: "line-1",
+      requested_by: "user-1",
+      requested_by_name: "Brian",
+      status: "pending",
+      urgency: "rush",
+      requested_machine_label: "Bobcat T86",
+      requested_budget: "75000",
+      metadata: { source: "quote_builder_v2" },
+      candidates: [
+        {
+          id: "cand-1",
+          request_id: "req-1",
+          candidate_type: "exact_catalog_model",
+          catalog_model_id: "model-1",
+          score: "80",
+          availability_status: "source_required",
+          estimated_cost: 75000,
+          metadata: { ok: true },
+          model: { model_code: "T86" },
+        },
+        { missing: "id" },
+      ],
+      created_at: "2026-05-07T15:00:00Z",
+    });
+
+    expect(request?.id).toBe("req-1");
+    expect(request?.requestedMachineLabel).toBe("Bobcat T86");
+    expect(request?.requestedBudget).toBe(75000);
+    expect(request?.candidates).toHaveLength(1);
+    expect(request?.candidates[0]?.candidateType).toBe("exact_catalog_model");
+  });
+
   test("normalizes AI recommendation envelopes and filters malformed nested rows", () => {
     const recommendation = normalizeQuoteRecommendation({
       recommendation: {
