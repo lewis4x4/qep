@@ -407,6 +407,56 @@ function quoteCatalogMachineLabel(entry: Record<string, unknown>): string {
   return [make, model].filter(Boolean).join(" ").trim();
 }
 
+function quoteCatalogDisplayLabel(entry: Record<string, unknown>): string {
+  const display = typeof entry.name_display === "string" ? entry.name_display.trim() : "";
+  return display || quoteCatalogMachineLabel(entry);
+}
+
+function machineLookupKeys(value: unknown): string[] {
+  const normalized = normalizeMachineLabel(value);
+  if (!normalized) return [];
+  const compact = normalized.replace(/\s+/g, "");
+  return Array.from(new Set([normalized, compact].filter(Boolean)));
+}
+
+function addCatalogMachineAlias(
+  catalogByLabel: Map<string, string>,
+  alias: unknown,
+  canonicalLabel: string,
+): void {
+  for (const key of machineLookupKeys(alias)) {
+    if (!catalogByLabel.has(key)) catalogByLabel.set(key, canonicalLabel);
+  }
+}
+
+function registerCatalogMachine(
+  catalogByLabel: Map<string, string>,
+  entry: Record<string, unknown>,
+): void {
+  const canonicalLabel = quoteCatalogMachineLabel(entry);
+  if (!canonicalLabel) return;
+  const displayLabel = quoteCatalogDisplayLabel(entry);
+  const category = typeof entry.category === "string" ? entry.category.trim() : "";
+  const year = typeof entry.year === "number" || typeof entry.year === "string" ? String(entry.year).trim() : "";
+
+  addCatalogMachineAlias(catalogByLabel, canonicalLabel, canonicalLabel);
+  addCatalogMachineAlias(catalogByLabel, displayLabel, canonicalLabel);
+  addCatalogMachineAlias(catalogByLabel, [canonicalLabel, category].filter(Boolean).join(" "), canonicalLabel);
+  addCatalogMachineAlias(catalogByLabel, [displayLabel, year].filter(Boolean).join(" "), canonicalLabel);
+  addCatalogMachineAlias(catalogByLabel, [displayLabel, category].filter(Boolean).join(" "), canonicalLabel);
+}
+
+function resolveCatalogMachineLabel(
+  catalogByLabel: Map<string, string>,
+  value: unknown,
+): string | null {
+  for (const key of machineLookupKeys(value)) {
+    const match = catalogByLabel.get(key);
+    if (match) return match;
+  }
+  return null;
+}
+
 function noCatalogRecommendation(reasoning: string): AiRecommendationResult {
   return {
     machine: "",
@@ -426,9 +476,7 @@ async function aiEquipmentRecommendation(
 
   const catalogByLabel = new Map<string, string>();
   for (const entry of catalogEntries) {
-    const label = quoteCatalogMachineLabel(entry);
-    const key = normalizeMachineLabel(label);
-    if (label && key && !catalogByLabel.has(key)) catalogByLabel.set(key, label);
+    registerCatalogMachine(catalogByLabel, entry);
   }
 
   if (catalogByLabel.size === 0) {
@@ -439,7 +487,7 @@ async function aiEquipmentRecommendation(
 
   try {
     const catalogSummary = catalogEntries.slice(0, 50).map((e) =>
-      `${quoteCatalogMachineLabel(e)} (${e.year || "N/A"}) - ${e.category} - $${e.list_price || "N/A"}`
+      `${quoteCatalogDisplayLabel(e)} (${e.year || "N/A"}) - ${e.category} - $${e.list_price || "N/A"}`
     ).join("\n");
 
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -504,7 +552,7 @@ Rules:
     // Guard every new field so a model that skips one (or hallucinates a
     // wrong shape) can't poison the saved quote blob. Each new field is
     // optional at the contract level.
-    const primaryMachine = catalogByLabel.get(normalizeMachineLabel(parsed.machine));
+    const primaryMachine = resolveCatalogMachineLabel(catalogByLabel, parsed.machine);
     if (!primaryMachine) {
       return noCatalogRecommendation(
         "AI did not return an active QEP quote-catalog machine. Browse the catalog or add a verified model before quoting.",
@@ -513,7 +561,7 @@ Rules:
 
     const altRaw = parsed.alternative;
     const altMachine = altRaw && typeof altRaw === "object"
-      ? catalogByLabel.get(normalizeMachineLabel((altRaw as { machine?: unknown }).machine))
+      ? resolveCatalogMachineLabel(catalogByLabel, (altRaw as { machine?: unknown }).machine)
       : null;
     const alternative = altRaw && typeof altRaw === "object" && altMachine
       ? {
@@ -2824,6 +2872,7 @@ Deno.serve(async (req) => {
         const brandName = (brand as { name?: string } | null)?.name ?? "";
         return {
           id: row.id,
+          name_display: row.name_display ?? null,
           make: brandName,
           model: row.model_code ?? "",
           year: row.model_year ?? null,

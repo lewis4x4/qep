@@ -348,6 +348,15 @@ function normalizeMachineMatchLabel(value: string): string {
     .trim();
 }
 
+function draftHasCustomer(draft: Pick<QuoteWorkspaceDraft, "customerName" | "customerCompany" | "contactId" | "companyId">): boolean {
+  return Boolean(
+    draft.customerName?.trim() ||
+    draft.customerCompany?.trim() ||
+    draft.contactId ||
+    draft.companyId,
+  );
+}
+
 function isWizardStepId(value: string | null): value is Step {
   return Boolean(value && WIZARD_STEP_IDS.includes(value as Step));
 }
@@ -493,6 +502,7 @@ export function QuoteBuilderV2Page() {
     quoteStatus: "draft",
   });
   const [aiPrompt, setAiPrompt] = useState("");
+  const [aiIntakeMessage, setAiIntakeMessage] = useState<string | null>(null);
   const [dealAssistantOpen, setDealAssistantOpen] = useState(false);
   const [availableOptions, setAvailableOptions] = useState<Array<{ id: string; name: string; price: number }>>([]);
   const [availableOptionsLabel, setAvailableOptionsLabel] = useState<string | null>(null);
@@ -1357,6 +1367,9 @@ export function QuoteBuilderV2Page() {
   });
 
   const aiIntakeMutation = useMutation({
+    onMutate: () => {
+      setAiIntakeMessage(null);
+    },
     mutationFn: async (prompt: string) => {
       const recommendation = await getAiEquipmentRecommendation(prompt);
       return { recommendation, prompt };
@@ -1367,7 +1380,35 @@ export function QuoteBuilderV2Page() {
         recommendation,
         voiceSummary: prompt,
       }));
-      setStep("customer");
+      if (!recommendation.machine) {
+        const message = recommendation.reasoning || "AI could not find a sellable QEP catalog match. Browse the catalog and pick a verified machine.";
+        setAiIntakeMessage(message);
+        setPackageToolsOpen(true);
+        setCatalogBrowserOpen(true);
+        setStep("equipment");
+        toast({
+          title: "No catalog-backed machine found",
+          description: message,
+          variant: "destructive",
+        });
+        return;
+      }
+      setStep(draftHasCustomer(draft) ? "equipment" : "customer");
+      toast({
+        title: "Catalog-backed recommendation ready",
+        description: draftHasCustomer(draft)
+          ? "Review the verified machine on the equipment step."
+          : "Confirm the customer, then review the verified machine.",
+      });
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : "AI recommendation failed. Try again or browse the catalog.";
+      setAiIntakeMessage(message);
+      toast({
+        title: "AI intake failed",
+        description: message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -2208,6 +2249,11 @@ export function QuoteBuilderV2Page() {
                       Build with AI
                     </Button>
                   </div>
+                  {aiIntakeMessage && (
+                    <p className="mt-2 rounded border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-300">
+                      {aiIntakeMessage}
+                    </p>
+                  )}
                 </div>
               )}
             </Card>
@@ -2829,6 +2875,11 @@ export function QuoteBuilderV2Page() {
                     {aiIntakeMutation.isPending ? "Building…" : "Build with AI"}
                   </Button>
                 </div>
+                {aiIntakeMessage && (
+                  <p className="rounded border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-300">
+                    {aiIntakeMessage}
+                  </p>
+                )}
               </div>
             )}
 
