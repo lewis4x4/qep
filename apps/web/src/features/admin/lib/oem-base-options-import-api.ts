@@ -1,7 +1,7 @@
 import type { Database } from "@/lib/database.types";
 import { supabase } from "@/lib/supabase";
 
-export const OEM_BASE_OPTIONS_MANUFACTURERS = ["bobcat", "vermeer"] as const;
+export const OEM_BASE_OPTIONS_MANUFACTURERS = ["asv", "yanmar", "bobcat", "vermeer"] as const;
 
 export type OemBaseOptionsManufacturer = typeof OEM_BASE_OPTIONS_MANUFACTURERS[number];
 export type OemBaseOptionsImportPath = "file" | "api";
@@ -48,7 +48,7 @@ export interface OemBaseOptionsReadinessResult {
 }
 
 export const OEM_BASE_OPTIONS_FILE_IMPORT_REQUIREMENTS = [
-  "Authorized Bobcat/Vermeer sample file from the OEM catalog/import owner.",
+  "Authorized OEM sample file from the catalog/import owner.",
   "File format definition covering base codes, option codes, descriptions, pricing/cost fields, effective dates, supersession behavior, and delete/deactivate semantics.",
   "Upload ownership and storage retention policy.",
   "Invalid-row error reporting requirements.",
@@ -65,7 +65,16 @@ export const OEM_BASE_OPTIONS_API_IMPORT_REQUIREMENTS = [
 ] as const;
 
 export function oemBaseOptionsManufacturerLabel(manufacturer: OemBaseOptionsManufacturer): string {
-  return manufacturer === "bobcat" ? "Bobcat" : "Vermeer";
+  switch (manufacturer) {
+    case "asv":
+      return "ASV";
+    case "yanmar":
+      return "Yanmar";
+    case "bobcat":
+      return "Bobcat";
+    case "vermeer":
+      return "Vermeer";
+  }
 }
 
 export function getOemBaseOptionsImportRequirements(path: OemBaseOptionsImportPath): readonly string[] {

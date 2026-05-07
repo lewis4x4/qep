@@ -9,7 +9,7 @@ import {
 describe("oem-base-options-import-api", () => {
   test("documents exact file-import requirements without inventing OEM formats", () => {
     expect(getOemBaseOptionsImportRequirements("file")).toEqual([
-      "Authorized Bobcat/Vermeer sample file from the OEM catalog/import owner.",
+      "Authorized OEM sample file from the catalog/import owner.",
       "File format definition covering base codes, option codes, descriptions, pricing/cost fields, effective dates, supersession behavior, and delete/deactivate semantics.",
       "Upload ownership and storage retention policy.",
       "Invalid-row error reporting requirements.",
@@ -70,7 +70,7 @@ describe("oem-base-options-import-api", () => {
     })).toEqual({ ready: true, blockers: [] });
   });
 
-  test("normalizes only Bobcat and Vermeer import-run ledger rows", () => {
+  test("normalizes ASV/Yanmar/Bobcat/Vermeer import-run ledger rows", () => {
     expect(normalizeOemBaseOptionsImportRunRows([
       {
         id: "run-1",
@@ -92,7 +92,16 @@ describe("oem-base-options-import-api", () => {
       {
         id: "run-2",
         manufacturer: "yanmar",
+        import_format: "pdf",
+        source_filename: "Yanmar-CE-Price-Book-EFF-14APR2026_v2.pdf",
+        source_storage_path: null,
+        source_sha256: "def",
+        rows_inserted: 28,
+        rows_updated: 278,
+        rows_skipped: 0,
         run_status: "completed",
+        error: null,
+        metadata: { parent_oem: "YCENA", discount_off_list_pct: 30 },
         ran_at: "2026-05-04T12:00:00Z",
         created_at: "2026-05-04T12:00:00Z",
         updated_at: "2026-05-04T12:01:00Z",
@@ -112,6 +121,23 @@ describe("oem-base-options-import-api", () => {
         runStatus: "unknown",
         error: null,
         metadata: { parser: "fixture-backed" },
+        ranAt: "2026-05-04T12:00:00Z",
+        createdAt: "2026-05-04T12:00:00Z",
+        updatedAt: "2026-05-04T12:01:00Z",
+      },
+      {
+        id: "run-2",
+        manufacturer: "yanmar",
+        importFormat: "pdf",
+        sourceFilename: "Yanmar-CE-Price-Book-EFF-14APR2026_v2.pdf",
+        sourceStoragePath: null,
+        sourceSha256: "def",
+        rowsInserted: 28,
+        rowsUpdated: 278,
+        rowsSkipped: 0,
+        runStatus: "completed",
+        error: null,
+        metadata: { parent_oem: "YCENA", discount_off_list_pct: 30 },
         ranAt: "2026-05-04T12:00:00Z",
         createdAt: "2026-05-04T12:00:00Z",
         updatedAt: "2026-05-04T12:01:00Z",
