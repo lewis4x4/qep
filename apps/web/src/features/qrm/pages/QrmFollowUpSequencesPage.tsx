@@ -172,6 +172,8 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
   }, [enrollmentsQuery.data, selectedSequenceId]);
 
   const activeSequenceCount = sequences.filter((sequence) => sequence.isActive).length;
+  const totalStepCount = sequences.reduce((total, sequence) => total + sequence.steps.length, 0);
+  const activeEnrollmentCount = selectedEnrollments.filter((enrollment) => enrollment.status === "active").length;
   const pausedEnrollmentCount = selectedEnrollments.filter((enrollment) => enrollment.status === "paused").length;
   const overdueEnrollmentCount = selectedEnrollments.filter((enrollment) => {
     if (!enrollment.nextStepDueAt) return false;
@@ -189,6 +191,28 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
   const sequencesRiskIfIgnored = overdueEnrollmentCount > 0
     ? "Overdue enrollments can make automation look active while deals quietly stall."
     : "If sequence coverage drifts, follow-up quality becomes manual and inconsistent again.";
+  const moonshotChecks = [
+    {
+      label: "Live persistence",
+      value: "RPC + tables",
+      detail: "Saves through save_follow_up_sequence into follow_up_sequences and follow_up_steps.",
+    },
+    {
+      label: "Scheduler visibility",
+      value: `${selectedEnrollments.length} enrollments`,
+      detail: "Enrollments are read from sequence_enrollments for pause, resume, and cancel control.",
+    },
+    {
+      label: "Step coverage",
+      value: `${totalStepCount} steps`,
+      detail: "Every sequence exposes its timed task, email, call-log, or stalled-alert moves.",
+    },
+    {
+      label: "Operator controls",
+      value: "Pause · resume · cancel",
+      detail: "Managers can govern live automations before the scheduler runs the next step.",
+    },
+  ];
 
   function focusEditor(): void {
     window.requestAnimationFrame(() => {
@@ -318,7 +342,7 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
         This screen reads and writes live QEP automation records: sequences, steps, enrollments, and scheduler status.
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card className="p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">What matters now</p>
           <p className="mt-2 text-sm text-foreground">{sequencesWhatMattersNow}</p>
@@ -331,7 +355,36 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Risk if ignored</p>
           <p className="mt-2 text-sm text-foreground">{sequencesRiskIfIgnored}</p>
         </Card>
+        <Card className="border-qep-live/25 bg-qep-live/[0.04] p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-qep-live">World-class measurement</p>
+          <p className="mt-2 text-sm text-foreground">
+            {activeSequenceCount} active · {totalStepCount} timed steps · {activeEnrollmentCount} running
+          </p>
+        </Card>
       </div>
+
+      <Card className="rounded-2xl border border-qep-live/20 bg-gradient-to-br from-qep-live/[0.08] via-card to-card p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-qep-live">
+              Moonshot operating standard
+            </p>
+            <h2 className="mt-2 text-lg font-semibold text-foreground">Every follow-up sequence must be measurable, interruptible, and scheduler-ready.</h2>
+          </div>
+          <div className="rounded-full border border-qep-live/30 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-qep-live">
+            Customer-ready
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          {moonshotChecks.map((check) => (
+            <div key={check.label} className="rounded-xl border border-white/10 bg-black/10 p-3">
+              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{check.label}</p>
+              <p className="mt-2 text-sm font-semibold text-foreground">{check.value}</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
 
       <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
         <Card className="space-y-4 rounded-2xl border border-border p-4 shadow-sm">
