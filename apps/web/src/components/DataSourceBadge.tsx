@@ -4,12 +4,15 @@
  * Per CDO design direction §2.
  */
 
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export type DataSourceState = "Live" | "Demo" | "Manual" | "Error" | "Stale" | "Native";
 
 interface DataSourceBadgeProps {
   state: DataSourceState;
+  label?: ReactNode;
+  title?: string;
   className?: string;
 }
 
@@ -28,7 +31,7 @@ const STATE_STYLES: Record<DataSourceState, string> = {
     "bg-emerald-50 text-emerald-900 border-emerald-200 dark:bg-emerald-950/35 dark:text-emerald-100 dark:border-emerald-800",
 };
 
-export function DataSourceBadge({ state, className }: DataSourceBadgeProps) {
+export function DataSourceBadge({ state, label, title, className }: DataSourceBadgeProps) {
   return (
     <span
       className={cn(
@@ -36,8 +39,9 @@ export function DataSourceBadge({ state, className }: DataSourceBadgeProps) {
         STATE_STYLES[state],
         className
       )}
+      title={title}
     >
-      {state}
+      {label ?? state}
     </span>
   );
 }
