@@ -21,6 +21,7 @@ import {
   MapPin,
   Loader2,
   Camera,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   DollarSign,
@@ -192,6 +193,8 @@ const STEP_LABELS: Record<Step, string> = WIZARD_STEPS.reduce((labels, item) => 
 type EquipmentAvailabilityStatus = "in_stock" | "in_transit" | "source_required";
 type FinanceStepTab = "cash" | "finance" | "lease";
 type PricingLineKind = Extract<QuoteLineItemDraft["kind"], "pdi" | "freight" | "good_faith" | "doc_fee" | "title" | "tag" | "registration" | "discount" | "rebate_mfg" | "rebate_dealer" | "loyalty_discount">;
+type TradeChecklistKey = "hourMeter" | "undercarriage" | "hydraulicLeaks" | "serviceHours" | "tiresTracks" | "photos";
+type TradeCaptureDraft = Record<TradeChecklistKey, string>;
 
 const PRICING_ADDER_FIELDS: Array<{ kind: PricingLineKind; title: string; helper: string; step: number }> = [
   { kind: "freight", title: "Freight", helper: "Shipping or transfer cost", step: 100 },
@@ -210,6 +213,24 @@ const DISCOUNT_REASON_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "loyalty", label: "Loyalty" },
   { value: "other", label: "Other" },
 ];
+
+const TRADE_CHECKLIST_ITEMS: Array<{ key: TradeChecklistKey; label: string; prompt: string; placeholder: string }> = [
+  { key: "hourMeter", label: "Hour meter captured", prompt: "Capture the hour meter reading or photo note.", placeholder: "e.g. 1,248 hours shown on meter; photo captured" },
+  { key: "undercarriage", label: "Undercarriage / frame checked", prompt: "Record frame, undercarriage, rust, welds, or structural concerns.", placeholder: "e.g. Frame straight, no cracks; light wear on undercarriage" },
+  { key: "hydraulicLeaks", label: "Hydraulic leaks checked", prompt: "Note whether leaks, seepage, hose issues, or cylinder concerns are visible.", placeholder: "e.g. No active leaks; left lift cylinder seepage noted" },
+  { key: "serviceHours", label: "Engine hours / service noted", prompt: "Record service interval, last service, engine hours, or maintenance proof.", placeholder: "e.g. 250h service completed Jan 2026; oil sample pending" },
+  { key: "tiresTracks", label: "Tires or tracks condition noted", prompt: "Capture tire/track tread, cuts, wear percentage, and replacement risk.", placeholder: "e.g. Rear tires 60%; front right has sidewall cut" },
+  { key: "photos", label: "Visible damage photos captured", prompt: "List captured photo angles or visible damage evidence.", placeholder: "e.g. Front-left, rear-right, serial plate, bucket edge damage photos captured" },
+];
+
+const EMPTY_TRADE_CAPTURE: TradeCaptureDraft = {
+  hourMeter: "",
+  undercarriage: "",
+  hydraulicLeaks: "",
+  serviceHours: "",
+  tiresTracks: "",
+  photos: "",
+};
 
 const PROMOTION_PLACEHOLDERS: Array<{ id: string; title: string; kind: PricingLineKind; amount: number; source: string; detail: string }> = [
   { id: "seed-mfg-support", title: "Manufacturer retail support", kind: "rebate_mfg", amount: 1000, source: "Manufacturer", detail: "Clear starter row until seeded OEM programs resolve." },
@@ -560,14 +581,15 @@ export function QuoteBuilderV2Page() {
   const [availableOptions, setAvailableOptions] = useState<Array<{ id: string; name: string; price: number }>>([]);
   const [availableOptionsLabel, setAvailableOptionsLabel] = useState<string | null>(null);
   const [configureTab, setConfigureTab] = useState<QuotePackageCatalogKind>("attachment");
-  const [tradeChecklist, setTradeChecklist] = useState({
-    hourMeter: false,
-    undercarriage: false,
-    hydraulicLeaks: false,
-    serviceHours: false,
-    tiresTracks: false,
-    photos: false,
-  });
+  const [tradeCaptureOpen, setTradeCaptureOpen] = useState(false);
+  const [activeTradeCaptureKey, setActiveTradeCaptureKey] = useState<TradeChecklistKey>("hourMeter");
+  const [tradeCapture, setTradeCapture] = useState<TradeCaptureDraft>(EMPTY_TRADE_CAPTURE);
+  const tradeChecklist = useMemo(
+    () => Object.fromEntries(
+      TRADE_CHECKLIST_ITEMS.map((item) => [item.key, tradeCapture[item.key].trim().length > 0]),
+    ) as Record<TradeChecklistKey, boolean>,
+    [tradeCapture],
+  );
   const queryClient = useQueryClient();
 
   const branchesQ = useActiveBranches();
@@ -3461,27 +3483,47 @@ export function QuoteBuilderV2Page() {
           />
 
           <Card className="p-4">
-            <p className="text-sm font-semibold text-foreground">Provisional trade checklist</p>
-            <p className="mt-1 text-xs text-muted-foreground">This is the temporary SOP surface. Complete what you know; persistence and approval routing for checklist details land in a later slice.</p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Trade evidence checklist</p>
+                <p className="mt-1 text-xs text-muted-foreground">Click a row, capture the evidence in this quote, and it checks itself off automatically.</p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setActiveTradeCaptureKey("hourMeter");
+                  setTradeCaptureOpen(true);
+                }}
+              >
+                Open trade capture
+              </Button>
+            </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {([
-                ["hourMeter", "Hour meter captured"],
-                ["undercarriage", "Undercarriage / frame checked"],
-                ["hydraulicLeaks", "Hydraulic leaks checked"],
-                ["serviceHours", "Engine hours / service noted"],
-                ["tiresTracks", "Tires or tracks condition noted"],
-                ["photos", "Visible damage photos captured"],
-              ] as Array<[keyof typeof tradeChecklist, string]>).map(([key, label]) => (
-                <label key={key} className="flex items-center gap-2 rounded border border-border/70 bg-card/50 px-3 py-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={tradeChecklist[key]}
-                    onChange={(event) => setTradeChecklist((current) => ({ ...current, [key]: event.target.checked }))}
-                    className="h-4 w-4"
-                  />
-                  <span>{label}</span>
-                </label>
-              ))}
+              {TRADE_CHECKLIST_ITEMS.map((item) => {
+                const complete = tradeChecklist[item.key];
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => {
+                      setActiveTradeCaptureKey(item.key);
+                      setTradeCaptureOpen(true);
+                    }}
+                    className={`flex items-start gap-3 rounded border px-3 py-3 text-left text-sm transition ${
+                      complete ? "border-emerald-500/30 bg-emerald-500/5" : "border-border/70 bg-card/50 hover:border-qep-orange/60"
+                    }`}
+                  >
+                    {complete ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" /> : <span className="mt-0.5 h-4 w-4 shrink-0 rounded border border-muted-foreground/70" />}
+                    <span className="min-w-0">
+                      <span className="block font-medium text-foreground">{item.label}</span>
+                      <span className="mt-1 block truncate text-xs text-muted-foreground">
+                        {tradeCapture[item.key] || item.prompt}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </Card>
 
@@ -4324,6 +4366,106 @@ export function QuoteBuilderV2Page() {
           // animation hooks (pulse the strip on delta, etc.).
         }}
       />
+
+      <Dialog open={tradeCaptureOpen} onOpenChange={setTradeCaptureOpen}>
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Trade capture evidence</DialogTitle>
+            <DialogDescription>
+              Capture the trade facts here without leaving the quote. Rows check off automatically when their evidence field has content.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {TRADE_CHECKLIST_ITEMS.map((item) => {
+              const active = activeTradeCaptureKey === item.key;
+              const complete = tradeChecklist[item.key];
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setActiveTradeCaptureKey(item.key)}
+                  className={`rounded-lg border p-3 text-left text-sm transition ${
+                    active
+                      ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
+                      : complete
+                        ? "border-emerald-500/30 bg-emerald-500/5 text-foreground"
+                        : "border-border bg-card text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {complete && <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
+                    <span className="font-semibold">{item.label}</span>
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-xs opacity-80">{tradeCapture[item.key] || item.prompt}</p>
+                </button>
+              );
+            })}
+          </div>
+
+          {(() => {
+            const activeItem = TRADE_CHECKLIST_ITEMS.find((item) => item.key === activeTradeCaptureKey) ?? TRADE_CHECKLIST_ITEMS[0]!;
+            return (
+              <div className="mt-4 rounded-xl border border-border bg-card/60 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{activeItem.label}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{activeItem.prompt}</p>
+                  </div>
+                  {tradeChecklist[activeItem.key] && <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-300">Captured</span>}
+                </div>
+                <textarea
+                  value={tradeCapture[activeItem.key]}
+                  onChange={(event) => setTradeCapture((current) => ({ ...current, [activeItem.key]: event.target.value }))}
+                  placeholder={activeItem.placeholder}
+                  className="mt-3 min-h-[120px] w-full rounded border border-input bg-background px-3 py-2 text-sm"
+                />
+                <label className="mt-3 block rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 text-foreground">
+                    <Camera className="h-4 w-4 text-qep-orange" /> Optional photo evidence
+                  </div>
+                  <p className="mt-1 text-xs">Attach a local photo during capture. The note above is what drives checklist completion today.</p>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="mt-3 block w-full text-xs"
+                    onChange={(event) => {
+                      const fileName = event.target.files?.[0]?.name;
+                      if (!fileName) return;
+                      setTradeCapture((current) => ({
+                        ...current,
+                        [activeItem.key]: `${current[activeItem.key]}${current[activeItem.key].trim() ? "\n" : ""}Photo captured: ${fileName}`,
+                      }));
+                    }}
+                  />
+                </label>
+                <div className="mt-4 flex flex-wrap justify-between gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setTradeCapture((current) => ({ ...current, [activeItem.key]: "" }))}
+                  >
+                    Clear this evidence
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setTradeCaptureOpen(false)}>Done</Button>
+                    <Button
+                      onClick={() => {
+                        const currentIndex = TRADE_CHECKLIST_ITEMS.findIndex((item) => item.key === activeItem.key);
+                        const next = TRADE_CHECKLIST_ITEMS[currentIndex + 1];
+                        if (next) setActiveTradeCaptureKey(next.key);
+                        else setTradeCaptureOpen(false);
+                      }}
+                    >
+                      Save & next <ArrowRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
 
       <PackageItemSearchDialog
         open={packageItemSearchOpen}
