@@ -16,8 +16,8 @@ const blockerLabels: Record<string, string> = {
   missing_stock_number: "Stock number is required before the readiness guard can run.",
   equipment_not_found: "No active QRM equipment record matches this stock number.",
   no_direct_equipment_invoice: "No direct equipment sale invoice is linked to this stock number.",
-  invoice_status_blocks_reversal: "Partially paid, paid, void, or already reversed invoices are blocked pending finance policy.",
-  quickbooks_posted_invoice_requires_finance_policy: "QuickBooks-posted invoices require an approved finance reversal policy.",
+  invoice_status_blocks_reversal: "Void or already reversed invoices cannot be reversed again.",
+  quickbooks_posted_invoice_requires_finance_policy: "QuickBooks-posted invoices execute through the credit memo reversal mutation and require finance approval.",
   no_gl_period_for_invoice_date: "No GL period covers the invoice date.",
   hard_closed_gl_period: "The matching GL period is hard closed.",
   equipment_not_marked_sold: "Equipment is not currently marked sold.",
@@ -75,8 +75,8 @@ export function EquipmentReversalReadinessCard({
             </h3>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Diagnostic only. JAR-103 remains blocked until finance approves credit memo, GL, tax, paid/posted,
-            closed-period, rental-branch, authorization, and idempotency policy.
+            Diagnostic only. JAR-103 reversal policy is now encoded in the atomic credit memo mutation; readiness still
+            checks stock-number linkage, invoice state, GL period coverage, and sold equipment status before execution.
           </p>
         </div>
         <Badge variant="outline">Read-only</Badge>
@@ -122,7 +122,7 @@ export function EquipmentReversalReadinessCard({
               </Badge>
             )}
             <span className="text-xs text-muted-foreground">
-              This status enables triage only; it does not authorize reversal execution.
+              Execution still requires the reverse-sale mutation with approval metadata and a unique reversal ID.
             </span>
           </div>
 

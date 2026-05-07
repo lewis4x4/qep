@@ -14,11 +14,8 @@ const fetchEquipmentInvoiceReversalCandidate = mock(async () => ({
   quickbooksGlStatus: "posted",
   postingPeriodStatus: "open",
   equipmentInOutState: "sold",
-  candidateStatus: "blocked" as const,
-  blockers: [
-    "invoice_status_blocks_reversal",
-    "quickbooks_posted_invoice_requires_finance_policy",
-  ],
+  candidateStatus: "ready" as const,
+  blockers: [],
 }));
 
 mock.module(routerApiModulePath, () => ({
@@ -66,11 +63,10 @@ describe("EquipmentReversalReadinessCard", () => {
 
     expect(screen.getByText("Sale Reversal Readiness")).toBeTruthy();
     expect(screen.getByText("Read-only")).toBeTruthy();
-    expect(screen.getByText("Candidate blocked")).toBeTruthy();
+    expect(screen.getByText("Candidate ready")).toBeTruthy();
     expect(screen.getByText("EQ-1003")).toBeTruthy();
-    expect(screen.getByText(/Partially paid, paid, void, or already reversed invoices are blocked/)).toBeTruthy();
-    expect(screen.getByText(/QuickBooks-posted invoices require an approved finance reversal policy/)).toBeTruthy();
-    expect(screen.getByText(/does not authorize reversal execution/)).toBeTruthy();
+    expect(screen.getByText(/atomic credit memo mutation/)).toBeTruthy();
+    expect(screen.getByText(/approval metadata and a unique reversal ID/)).toBeTruthy();
   });
 
   test("does not call the elevated guard for non-elevated users", () => {

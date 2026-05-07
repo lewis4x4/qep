@@ -98,6 +98,38 @@ export interface EquipmentInvoiceReversalCandidate {
   blockers: string[];
 }
 
+export interface EquipmentSaleReversalPayload {
+  stockNumber?: string | null;
+  reversalId?: string | null;
+  reason?: string | null;
+  revertAvailability?: string | null;
+  revertInOutState?: string | null;
+  revertInventoryType?: string | null;
+  managerApprovedBy?: string | null;
+  financeApprovedBy?: string | null;
+  ownerApprovedBy?: string | null;
+}
+
+export interface EquipmentSaleReversalResult {
+  creditMemoId: string;
+  reversalId: string;
+  creditMemoNumber: string;
+  stockNumber: string | null;
+  equipmentId: string | null;
+  invoiceId: string;
+  invoiceNumber: string | null;
+  policyBranch: string;
+  invoiceStatus: string;
+  equipmentAvailability: string | null;
+  equipmentInOutState: string | null;
+  quickbooksSyncStatus: string;
+  glJournalEntryId: string | null;
+  priorPeriodReversal: boolean;
+  rentalInvoiceId: string | null;
+  refundAmount: number;
+  idempotent: boolean;
+}
+
 const ON_ORDER_INVENTORY_COMPANY_NAME = "QEP On-Order Inventory";
 const ON_ORDER_INVENTORY_COMPANY_KEY = "qep_on_order_inventory";
 
@@ -2099,6 +2131,45 @@ function mapEquipmentInvoiceReversalCandidate(row: Record<string, unknown>): Equ
   };
 }
 
+function rowText(row: Record<string, unknown>, key: string): string | null {
+  const value = row[key];
+  return typeof value === "string" ? cleanText(value) : null;
+}
+
+function mapEquipmentSaleReversalResult(row: Record<string, unknown>): EquipmentSaleReversalResult {
+  const creditMemoId = rowText(row, "credit_memo_id");
+  const reversalId = rowText(row, "reversal_id");
+  const creditMemoNumber = rowText(row, "credit_memo_number");
+  const invoiceId = rowText(row, "invoice_id");
+  const policyBranch = rowText(row, "policy_branch");
+  const invoiceStatus = rowText(row, "invoice_status");
+  const quickbooksSyncStatus = rowText(row, "quickbooks_sync_status");
+
+  if (!creditMemoId || !reversalId || !creditMemoNumber || !invoiceId || !policyBranch || !invoiceStatus || !quickbooksSyncStatus) {
+    throw new Error("VALIDATION_EQUIPMENT_REVERSAL_RESPONSE_INVALID");
+  }
+
+  return {
+    creditMemoId,
+    reversalId,
+    creditMemoNumber,
+    stockNumber: rowText(row, "stock_number"),
+    equipmentId: rowText(row, "equipment_id"),
+    invoiceId,
+    invoiceNumber: rowText(row, "invoice_number"),
+    policyBranch,
+    invoiceStatus,
+    equipmentAvailability: rowText(row, "equipment_availability"),
+    equipmentInOutState: rowText(row, "equipment_in_out_state"),
+    quickbooksSyncStatus,
+    glJournalEntryId: rowText(row, "gl_journal_entry_id"),
+    priorPeriodReversal: row.prior_period_reversal === true,
+    rentalInvoiceId: rowText(row, "rental_invoice_id"),
+    refundAmount: typeof row.refund_amount === "number" ? row.refund_amount : Number(row.refund_amount ?? 0),
+    idempotent: row.idempotent === true,
+  };
+}
+
 export async function findEquipmentInvoiceReversalCandidate(
   ctx: RouterCtx,
   stockNumberInput: string | null | undefined,
@@ -2113,6 +2184,37 @@ export async function findEquipmentInvoiceReversalCandidate(
   if (error) throw error;
   if (!data) throw new Error("NOT_FOUND");
   return mapEquipmentInvoiceReversalCandidate(data as Record<string, unknown>);
+}
+
+
+export async function reverseEquipmentSaleByStockNumber(
+  ctx: RouterCtx,
+  input: EquipmentSaleReversalPayload,
+): Promise<EquipmentSaleReversalResult> {
+  const stockNumber = cleanText(input.stockNumber ?? null);
+  const reversalId = cleanText(input.reversalId ?? null);
+  const reason = cleanText(input.reason ?? null);
+  if (!stockNumber) throw new Error("VALIDATION_STOCK_NUMBER_REQUIRED");
+  if (!reversalId) throw new Error("VALIDATION_REVERSAL_ID_REQUIRED");
+  if (!reason) throw new Error("VALIDATION_REVERSAL_REASON_REQUIRED");
+
+  const { data, error } = await ctx.callerDb
+    .rpc("reverse_equipment_sale_by_stock_number", {
+      p_stock_number: stockNumber,
+      p_reversal_id: reversalId,
+      p_reason: reason,
+      p_revert_availability: cleanText(input.revertAvailability ?? null) ?? "available",
+      p_revert_in_out_state: cleanText(input.revertInOutState ?? null) ?? "in",
+      p_revert_inventory_type: cleanText(input.revertInventoryType ?? null),
+      p_manager_approved_by: cleanText(input.managerApprovedBy ?? null),
+      p_finance_approved_by: cleanText(input.financeApprovedBy ?? null),
+      p_owner_approved_by: cleanText(input.ownerApprovedBy ?? null),
+    })
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("NOT_FOUND");
+  return mapEquipmentSaleReversalResult(data as Record<string, unknown>);
 }
 
 export async function getEquipment(

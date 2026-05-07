@@ -420,12 +420,56 @@ export interface EquipmentInvoiceReversalCandidate {
   blockers: string[];
 }
 
+export interface EquipmentSaleReversalInput {
+  stockNumber: string;
+  reversalId: string;
+  reason: string;
+  revertAvailability?: string | null;
+  revertInOutState?: string | null;
+  revertInventoryType?: string | null;
+  managerApprovedBy?: string | null;
+  financeApprovedBy?: string | null;
+  ownerApprovedBy?: string | null;
+}
+
+export interface EquipmentSaleReversalResult {
+  creditMemoId: string;
+  reversalId: string;
+  creditMemoNumber: string;
+  stockNumber: string | null;
+  equipmentId: string | null;
+  invoiceId: string;
+  invoiceNumber: string | null;
+  policyBranch: string;
+  invoiceStatus: string;
+  equipmentAvailability: string | null;
+  equipmentInOutState: string | null;
+  quickbooksSyncStatus: string;
+  glJournalEntryId: string | null;
+  priorPeriodReversal: boolean;
+  rentalInvoiceId: string | null;
+  refundAmount: number;
+  idempotent: boolean;
+}
+
 export async function fetchEquipmentInvoiceReversalCandidate(
   stockNumber: string,
 ): Promise<EquipmentInvoiceReversalCandidate> {
   const params = new URLSearchParams({ stock_number: stockNumber });
   const payload = await requestRouter(`/qrm/equipment/reversal-candidate?${params.toString()}`);
   return requireRouterObjectPayload<EquipmentInvoiceReversalCandidate>(payload, "candidate");
+}
+
+
+export async function reverseEquipmentSaleByStockNumber(
+  input: EquipmentSaleReversalInput,
+): Promise<EquipmentSaleReversalResult> {
+  const payload = await requestRouter("/qrm/equipment/reverse-sale", {
+    method: "POST",
+    body: input,
+    idempotencyKey: input.reversalId,
+  });
+  return requireRouterObjectPayload<EquipmentSaleReversalResult>(payload, "reversal");
 }
 
 export async function getEquipmentById(equipmentId: string): Promise<QrmEquipment> {
