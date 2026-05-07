@@ -1388,7 +1388,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                   { label: "OEM Portals", description: "Aggregate manufacturer portals and launch paths in one dashboard.", href: "/oem-portals", icon: Building2 },
                   { label: "Accounts Payable", description: "Vendor bills, approvals, and aging analysis.", href: "/admin/accounts-payable", icon: Building2 },
                   { label: "Sequences", description: "Automated follow-up sequences that keep deals moving.", href: "/admin/sequences", icon: NotebookPen },
-                  { label: "Templates", description: "Activity and email templates for reps.", href: "/admin/templates", icon: NotebookPen },
+                  { label: "Templates", description: "Activity and email templates for reps.", href: "/qrm/activities/templates", icon: NotebookPen },
                   { label: "Duplicates", description: "Find and merge duplicate contact records.", href: "/admin/duplicates", icon: GitMerge },
 	                  { label: "Branches", description: "Store locations, contacts, managers, hours, and document branding.", href: "/admin/branches", icon: Building2 },
 	                  { label: "Flow Builder", description: "Workflow definitions, approval routing, run history, and draft automation flows.", href: "/admin/flow", icon: Workflow },

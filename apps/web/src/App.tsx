@@ -2030,7 +2030,7 @@ function App() {
               />
               <Route
                 path="/qrm/templates"
-                element={<Navigate to="/admin/templates" replace />}
+                element={<Navigate to="/qrm/activities/templates" replace />}
               />
               <Route
                 path="/qrm/sequences"
@@ -2656,7 +2656,7 @@ function App() {
                 element={<Navigate to="/admin/duplicates" replace />}
               />
               <Route
-                path="/admin/templates"
+                path="/qrm/activities/templates"
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <QrmActivityTemplatesPage userId={profile.id} />
@@ -2664,6 +2664,10 @@ function App() {
                     <Navigate to="/dashboard" replace />
                   )
                 }
+              />
+              <Route
+                path="/admin/templates"
+                element={<Navigate to="/qrm/activities/templates" replace />}
               />
               <Route
                 path="/admin/sequences"
