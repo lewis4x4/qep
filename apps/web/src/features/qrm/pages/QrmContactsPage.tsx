@@ -20,7 +20,6 @@ import {
   DeckSurface,
   EmptyState,
   KbdHint,
-  MoonshotBeat,
   RetryState,
   RowSkeleton,
   SignalChip,
@@ -183,10 +182,6 @@ export function QrmContactsPage() {
   }).length;
   const reachable = contacts.filter((c) => c.email || c.phone || c.cell || c.directPhone).length;
   const missingReach = Math.max(loaded - reachable, 0);
-  const smsReady = contacts.filter((c) => c.smsOptIn && c.cell).length;
-  const callReady = contacts.filter((c) => c.cell || c.directPhone || c.phone).length;
-  const emailReady = contacts.filter((c) => c.email).length;
-
   const ironHeadline =
     isInitialLoading
       ? "Iron is loading the contact cohort, reach channels, and duplicate graph."
@@ -281,19 +276,6 @@ export function QrmContactsPage() {
         </DeckSurface>
       )}
 
-      <MoonshotBeat
-        pending
-        headline="Reach intelligence is reserving a best-channel-now lane for every contact in this view."
-        evidence={
-          isInitialLoading
-            ? "Loading reach lanes · awaiting duplicate graph"
-            : !hasCohort
-              ? "No contact cohort · add or reset filters"
-              : `${smsReady} SMS-ready · ${callReady} call-ready · ${emailReady} email-ready · ${missingReach} missing reach`
-        }
-        why="Channel fit · role · recency"
-        action={{ label: duplicateCount > 0 ? "Review merges →" : "Open reach plan →", href: duplicateCount > 0 ? "/admin/duplicates" : "/qrm/contacts" }}
-      />
 
       {/* Search rail */}
       <div className="space-y-1.5">

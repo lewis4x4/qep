@@ -10,7 +10,6 @@ import { QrmSubNav } from "../components/QrmSubNav";
 import {
   EmptyState,
   KbdHint,
-  MoonshotBeat,
   RetryState,
   RowSkeleton,
   SignalChip,
@@ -119,7 +118,6 @@ export function QrmCompaniesPage() {
   const states = new Set(companies.map((c) => c.state).filter(Boolean));
   const tracked = scores.length;
   const legacyIds = companies.filter((c) => Boolean(c.legacyCustomerNumber)).length;
-  const dnc = companies.filter((c) => c.doNotContact).length;
   const coverageDelta = loaded > 0 && tracked < loaded ? { value: "Backfill", direction: "flat" as const } : undefined;
 
   const ironHeadline =
@@ -190,19 +188,6 @@ export function QrmCompaniesPage() {
       />
       <QrmSubNav />
 
-      <MoonshotBeat
-        pending
-        headline="Iron sort will rank this view by predicted parts-revenue-at-risk in the next 30 days."
-        evidence={
-          isInitialLoading
-            ? "Loading account cohort · awaiting health coverage"
-            : !hasCohort
-              ? "No account cohort · add or clear filters"
-              : `${legacyIds}/${loaded || 0} IntelliDealer IDs · ${dnc} do-not-contact flags · ${tracked}/${loaded || 0} health profiles`
-        }
-        why="Parts · service · territory"
-        action={{ label: "Open account command →", href: companies[0] ? buildAccountCommandHref(companies[0].id) : "/qrm/companies" }}
-      />
 
       {/* Search */}
       <div className="space-y-1.5">

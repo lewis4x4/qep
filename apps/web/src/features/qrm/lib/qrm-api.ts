@@ -413,17 +413,71 @@ function decodeCompanyCursor(cursor: string | null | undefined): CompanyListCurs
   return normalized;
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+async function listCrmContactsDirect(
+  search: string,
+  cursor?: string | null,
+  options?: { treeRootCompanyId?: string },
+): Promise<QrmPageResult<QrmContactSummary>> {
+  const decodedCursor = decodeContactCursor(cursor);
+  const treeRoot = options?.treeRootCompanyId?.trim();
+  const normalizedSearch = search.trim() || undefined;
+
+  const { data, error } = treeRoot
+    ? await crmSupabase.rpc("list_crm_contacts_for_company_subtree_page", {
+        p_company_id: treeRoot,
+        p_search: normalizedSearch,
+        p_after_last_name: decodedCursor?.lastName,
+        p_after_first_name: decodedCursor?.firstName,
+        p_after_id: decodedCursor?.id,
+        p_limit: CONTACTS_PAGE_SIZE + 1,
+      })
+    : await crmSupabase.rpc("list_crm_contacts_page", {
+        p_search: normalizedSearch,
+        p_after_last_name: decodedCursor?.lastName,
+        p_after_first_name: decodedCursor?.firstName,
+        p_after_id: decodedCursor?.id,
+        p_limit: CONTACTS_PAGE_SIZE + 1,
+      });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const rows = data ?? [];
+  const visibleRows = rows.slice(0, CONTACTS_PAGE_SIZE);
+  const nextRow = rows.length > CONTACTS_PAGE_SIZE ? visibleRows[visibleRows.length - 1] : null;
+  return {
+    items: visibleRows.map(toListContactSummary),
+    nextCursor: nextRow
+      ? encodeCursor({
+          lastName: nextRow.last_name,
+          firstName: nextRow.first_name,
+          id: nextRow.id,
+        })
+      : null,
+  };
+}
+
 export async function listCrmContacts(
   search: string,
   cursor?: string | null,
   options?: { treeRootCompanyId?: string; signal?: AbortSignal },
 ): Promise<QrmPageResult<QrmContactSummary>> {
-  return listCrmContactsViaRouter({
-    search,
-    cursor,
-    treeRootCompanyId: options?.treeRootCompanyId,
-    signal: options?.signal,
-  });
+  try {
+    return await listCrmContactsViaRouter({
+      search,
+      cursor,
+      treeRootCompanyId: options?.treeRootCompanyId,
+      signal: options?.signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    return listCrmContactsDirect(search, cursor, options);
+  }
 }
 
 export async function getCrmContact(contactId: string): Promise<QrmContactSummary | null> {
@@ -462,17 +516,53 @@ export async function listCrmContactsByIds(contactIds: string[]): Promise<QrmCon
   return normalizeContactRows(data);
 }
 
+async function listCrmCompaniesDirect(
+  search: string,
+  cursor?: string | null,
+  options?: { includeExtendedFields?: boolean },
+): Promise<QrmPageResult<QrmCompanySummary>> {
+  const decodedCursor = decodeCompanyCursor(cursor);
+  const { data, error } = await crmSupabase.rpc("list_crm_companies_page", {
+    p_search: search.trim() || undefined,
+    p_after_name: decodedCursor?.name,
+    p_after_id: decodedCursor?.id,
+    p_include_extended_fields: options?.includeExtendedFields ?? false,
+    p_limit: COMPANIES_PAGE_SIZE + 1,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const rows = data ?? [];
+  const visibleRows = rows.slice(0, COMPANIES_PAGE_SIZE);
+  const nextRow = rows.length > COMPANIES_PAGE_SIZE ? visibleRows[visibleRows.length - 1] : null;
+  return {
+    items: visibleRows.map(toListCompanySummary),
+    nextCursor: nextRow
+      ? encodeCursor({
+          name: nextRow.name,
+          id: nextRow.id,
+        })
+      : null,
+  };
+}
+
 export async function listCrmCompanies(
   search: string,
   cursor?: string | null,
   options?: { includeExtendedFields?: boolean; signal?: AbortSignal },
 ): Promise<QrmPageResult<QrmCompanySummary>> {
-  return listCrmCompaniesViaRouter({
-    search,
-    cursor,
-    includeExtendedFields: options?.includeExtendedFields,
-    signal: options?.signal,
-  });
+  try {
+    return await listCrmCompaniesViaRouter({
+      search,
+      cursor,
+      includeExtendedFields: options?.includeExtendedFields,
+      signal: options?.signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    return listCrmCompaniesDirect(search, cursor, options);
+  }
 }
 
 export async function getCrmCompany(companyId: string): Promise<QrmCompanySummary | null> {
