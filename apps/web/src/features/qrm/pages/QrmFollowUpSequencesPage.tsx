@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock3, Pause, Play, Plus, Save, Slash, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -53,6 +53,39 @@ const EMPTY_EDITOR: SequenceEditorState = {
   triggerStage: "quote_sent",
   isActive: true,
   steps: [{ ...EMPTY_STEP }],
+};
+
+const STARTER_SEQUENCE: SequenceEditorState = {
+  name: "Post-quote revenue rescue",
+  description: "Keeps the customer moving after a quote goes out by combining same-day ownership, proof, and a committed next call.",
+  triggerStage: "quote_sent",
+  isActive: true,
+  steps: [
+    {
+      stepNumber: 1,
+      dayOffset: 0,
+      stepType: "task",
+      subject: "Confirm the next committed quote move",
+      bodyTemplate: "Call {{contact_name}} today. Confirm they received {{deal_name}}, name the buying blocker, and set the next committed decision time.",
+      taskPriority: "HIGH",
+    },
+    {
+      stepNumber: 2,
+      dayOffset: 2,
+      stepType: "email",
+      subject: "Keeping your equipment decision moving",
+      bodyTemplate: "Hi {{contact_name}} — I wanted to keep this quote moving instead of letting it sit. The next useful step is confirming fit, timing, and any finance/trade questions before the window changes.",
+      taskPriority: "MEDIUM",
+    },
+    {
+      stepNumber: 3,
+      dayOffset: 5,
+      stepType: "call_log",
+      subject: "Decision checkpoint before quote drift",
+      bodyTemplate: "Log the decision status, competitor pressure, trade/rental alternative, and the next owner. If no decision is clear, escalate to stalled alert.",
+      taskPriority: "MEDIUM",
+    },
+  ],
 };
 
 const STEP_TYPE_OPTIONS: Array<{ value: QrmFollowUpStepType; label: string }> = [
@@ -111,6 +144,9 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [updatingEnrollmentId, setUpdatingEnrollmentId] = useState<string | null>(null);
+  const [editorSignal, setEditorSignal] = useState("Live QEP automation: saving sequences into the scheduler-backed playbook tables.");
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
 
   const sequencesQuery = useQuery({
     queryKey: FOLLOW_UP_SEQUENCES_QUERY_KEY,
@@ -154,10 +190,25 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
     ? "Overdue enrollments can make automation look active while deals quietly stall."
     : "If sequence coverage drifts, follow-up quality becomes manual and inconsistent again.";
 
-  function resetEditor(sequence?: QrmFollowUpSequence | null): void {
-    setEditor(sequence ? toEditorState(sequence) : EMPTY_EDITOR);
+  function focusEditor(): void {
+    window.requestAnimationFrame(() => {
+      editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.setTimeout(() => nameInputRef.current?.focus(), 250);
+    });
+  }
+
+  function resetEditor(sequence?: QrmFollowUpSequence | null, options: { starter?: boolean; focus?: boolean } = {}): void {
+    setEditor(sequence ? toEditorState(sequence) : options.starter ? STARTER_SEQUENCE : EMPTY_EDITOR);
     setSelectedSequenceId(sequence?.id ?? null);
     setSaveError(null);
+    setEditorSignal(
+      sequence
+        ? `Editing ${sequence.name}. Changes save back through the sequence RPC.`
+        : options.starter
+          ? "Starter automation drafted. Review the timing, copy, and trigger, then save it live."
+          : "Blank sequence ready. Add at least one step, then save it live.",
+    );
+    if (options.focus) focusEditor();
   }
 
   async function refresh(): Promise<void> {
@@ -206,6 +257,7 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
       await refresh();
       cacheSavedSequence(saved);
       resetEditor(saved);
+      setEditorSignal(`${saved.name} is saved live and scheduler-ready.`);
       toast({
         title: editor.id ? "Sequence updated" : "Sequence created",
         description: "Follow-up automation is ready for the scheduler and review queue.",
@@ -251,7 +303,20 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
       <QrmPageHeader
         title="QRM Sequences"
         subtitle="Own the follow-up automation that keeps deals moving after the first quote goes out."
+        rightRail={(
+          <div className="rounded-full border border-emerald-400/35 bg-emerald-400/10 px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+            Live QEP automation
+          </div>
+        )}
+        showDataSourceBadge={false}
       />
+
+      <div className="rounded-2xl border border-qep-live/25 bg-qep-live/[0.04] px-4 py-3 text-sm text-muted-foreground">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-live">
+          Source of truth
+        </span>{" "}
+        This screen reads and writes live QEP automation records: sequences, steps, enrollments, and scheduler status.
+      </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="p-4">
@@ -281,7 +346,7 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => resetEditor(null)}
+              onClick={() => resetEditor(null, { starter: true, focus: true })}
               disabled={isSaving}
             >
               <Plus className="mr-2 h-4 w-4" />
@@ -348,7 +413,7 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => resetEditor(sequence)}
+                      onClick={() => resetEditor(sequence, { focus: true })}
                       disabled={isSaving}
                     >
                       Edit
@@ -360,7 +425,7 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
           )}
         </Card>
 
-        <Card className="rounded-2xl border border-border p-4 shadow-sm">
+        <Card ref={editorRef} className="scroll-mt-24 rounded-2xl border border-border p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-foreground">
@@ -369,12 +434,15 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
               <p className="mt-1 text-sm text-muted-foreground">
                 Keep step timing and copy dealership-native and operator-safe.
               </p>
+              <p className="mt-2 rounded-md border border-qep-live/20 bg-qep-live/[0.04] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] text-qep-live">
+                {editorSignal}
+              </p>
             </div>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => resetEditor(selectedSequence)}
+              onClick={() => resetEditor(selectedSequence, { focus: true })}
               disabled={isSaving}
             >
               <Trash2 className="mr-2 h-4 w-4" />
@@ -386,6 +454,7 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
             <div>
               <Label htmlFor="crm-sequence-name">Sequence name</Label>
               <Input
+                ref={nameInputRef}
                 id="crm-sequence-name"
                 value={editor.name}
                 onChange={(event) => setEditor((current) => ({ ...current, name: event.target.value }))}
