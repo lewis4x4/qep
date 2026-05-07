@@ -18,6 +18,19 @@
 
 import type { QrmDealStage, QrmRepSafeDeal } from "./types";
 
+function normalizeStageName(name: string | null | undefined): string {
+  return typeof name === "string" ? name.trim().toLowerCase() : "";
+}
+
+function isApprovalPendingForQuoteProgression(deal: QrmRepSafeDeal): boolean {
+  return deal.pendingQuoteApproval;
+}
+
+function findStageByName(stages: QrmDealStage[] | undefined, name: string): QrmDealStage | null {
+  const target = normalizeStageName(name);
+  return (stages ?? []).find((stage) => normalizeStageName(stage.name) === target) ?? null;
+}
+
 export type PipelineGateSeverity = "allow" | "warn" | "block";
 
 export interface PipelineGateResult {
@@ -38,10 +51,30 @@ const ALLOW: PipelineGateResult = { severity: "allow", message: null, proceed: t
 export function evaluateStageGate(
   deal: QrmRepSafeDeal | null | undefined,
   targetStage: QrmDealStage | null | undefined,
+  context?: {
+    currentStage?: QrmDealStage | null;
+    stages?: QrmDealStage[];
+  },
 ): PipelineGateResult {
   if (!deal || !targetStage) return ALLOW;
 
   const order = targetStage.sortOrder ?? 0;
+
+  const quoteSentStage = findStageByName(context?.stages, "Quote Sent");
+  const targetOrder = targetStage.sortOrder ?? 0;
+  const quoteSentOrder = quoteSentStage?.sortOrder ?? null;
+
+  if (
+    quoteSentOrder !== null &&
+    targetOrder >= quoteSentOrder &&
+    isApprovalPendingForQuoteProgression(deal)
+  ) {
+    return {
+      severity: "block",
+      message: "Quote is pending supervisor approval. Resolve approval before moving to Quote Sent or later.",
+      proceed: false,
+    };
+  }
 
   // Hard gate: Post-Sale stages require a verified deposit.
   if (order >= 17 && deal.depositStatus !== "verified") {
@@ -74,12 +107,19 @@ export function evaluateStageGate(
 export function evaluateStageGateForSelection(
   deals: QrmRepSafeDeal[],
   targetStage: QrmDealStage | null | undefined,
+  context?: {
+    stageById?: Map<string, QrmDealStage>;
+    stages?: QrmDealStage[];
+  },
 ): PipelineGateResult {
   if (deals.length === 0) return ALLOW;
 
   let warnResult: PipelineGateResult | null = null;
   for (const deal of deals) {
-    const result = evaluateStageGate(deal, targetStage);
+    const result = evaluateStageGate(deal, targetStage, {
+      currentStage: context?.stageById?.get(deal.stageId) ?? null,
+      stages: context?.stages,
+    });
     if (result.severity === "block") return result;
     if (result.severity === "warn" && warnResult === null) warnResult = result;
   }

@@ -71,6 +71,7 @@ function normalizeCachedDeal(value: unknown): QrmRepSafeDeal | null {
     depositAmount: asNullableNumber(value.depositAmount),
     sortPosition: asNullableNumber(value.sortPosition),
     marginPct: asNullableNumber(value.marginPct),
+    pendingQuoteApproval: value.pendingQuoteApproval === true,
   };
 }
 

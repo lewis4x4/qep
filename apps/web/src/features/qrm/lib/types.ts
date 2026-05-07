@@ -207,6 +207,8 @@ export interface QrmRepSafeDeal {
   // Pipeline board polish (migration 254 — Slice 2.4)
   sortPosition: number | null;
   marginPct: number | null;
+  // Quote approval lifecycle enrichment (quote_approval_cases pending/escalated)
+  pendingQuoteApproval: boolean;
 }
 
 export interface QrmDealLossFields {

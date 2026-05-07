@@ -24,6 +24,7 @@ function makeDeal(overrides: Partial<QrmRepSafeDeal> = {}): QrmRepSafeDeal {
     depositAmount: null,
     sortPosition: null,
     marginPct: null,
+    pendingQuoteApproval: false,
     ...overrides,
   };
 }
@@ -48,6 +49,68 @@ describe("evaluateStageGate", () => {
     const result = evaluateStageGate(makeDeal(), makeStage(5));
     expect(result.severity).toBe("allow");
     expect(result.proceed).toBe(true);
+  });
+
+  test("blocks quote progression when Quote Created deal is pending approval", () => {
+    const stages = [
+      makeStage(6, { id: "qc", name: "Quote Created" }),
+      makeStage(8, { id: "qs", name: "Quote Sent" }),
+      makeStage(9, { id: "qr", name: "Quote Reviewed" }),
+    ];
+
+    const result = evaluateStageGate(
+      makeDeal({ stageId: "qc", pendingQuoteApproval: true, marginPct: 5 }),
+      stages[1],
+      { currentStage: stages[0], stages },
+    );
+    expect(result.severity).toBe("block");
+    expect(result.proceed).toBe(false);
+    expect(result.message).toContain("pending supervisor approval");
+  });
+
+  test("blocks quote progression when an explicit quote approval case is pending", () => {
+    const stages = [
+      makeStage(6, { id: "qc", name: "Quote Created" }),
+      makeStage(7, { id: "qs", name: "Quote Sent" }),
+    ];
+
+    const result = evaluateStageGate(
+      makeDeal({ stageId: "qc", pendingQuoteApproval: true, marginPct: 20 }),
+      stages[1],
+      { currentStage: stages[0], stages },
+    );
+    expect(result.severity).toBe("block");
+    expect(result.message).toContain("pending supervisor approval");
+  });
+
+
+  test("blocks pending approval progression to Quote Sent from any earlier stage", () => {
+    const stages = [
+      makeStage(1, { id: "lead", name: "Lead Received" }),
+      makeStage(7, { id: "qs", name: "Quote Sent" }),
+    ];
+
+    const result = evaluateStageGate(
+      makeDeal({ stageId: "lead", pendingQuoteApproval: true, marginPct: 20 }),
+      stages[1],
+      { currentStage: stages[0], stages },
+    );
+    expect(result.severity).toBe("block");
+    expect(result.proceed).toBe(false);
+  });
+
+  test("allows quote progression when approval is clear", () => {
+    const stages = [
+      makeStage(6, { id: "qc", name: "Quote Created" }),
+      makeStage(8, { id: "qs", name: "Quote Sent" }),
+    ];
+
+    const result = evaluateStageGate(
+      makeDeal({ stageId: "qc", marginPct: 16 }),
+      stages[1],
+      { currentStage: stages[0], stages },
+    );
+    expect(result.severity).toBe("allow");
   });
 
   test("warns on low margin at close stages (13-16)", () => {
@@ -97,6 +160,20 @@ describe("evaluateStageGateForSelection", () => {
     ];
     const result = evaluateStageGateForSelection(deals, makeStage(14));
     expect(result.severity).toBe("warn");
+  });
+
+  test("blocks selection when any Quote Created deal is approval-pending and target is Quote Sent+", () => {
+    const quoteCreated = makeStage(6, { id: "qc", name: "Quote Created" });
+    const quoteSent = makeStage(8, { id: "qs", name: "Quote Sent" });
+    const stages = [quoteCreated, quoteSent];
+    const deals = [
+      makeDeal({ id: "a", stageId: "qc", pendingQuoteApproval: true, marginPct: 5 }),
+      makeDeal({ id: "b", stageId: "qc", marginPct: 20 }),
+    ];
+
+    const stageById = new Map(stages.map((stage) => [stage.id, stage]));
+    const result = evaluateStageGateForSelection(deals, quoteSent, { stages, stageById });
+    expect(result.severity).toBe("block");
   });
 
   test("allows when every deal passes", () => {

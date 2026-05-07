@@ -4,6 +4,16 @@ import { getDealSignalState } from "../lib/deal-signals";
 import { getFollowUpSortTime } from "../lib/pipeline-utils";
 import type { DealUrgencyState } from "../lib/pipeline-utils";
 
+export const VIRTUAL_QUOTE_PENDING_APPROVAL_STAGE_ID = "__virtual_quote_pending_approval__";
+
+function normalizeStageName(name: string | null | undefined): string {
+  return typeof name === "string" ? name.trim().toLowerCase() : "";
+}
+
+function isQuoteApprovalPending(deal: QrmRepSafeDeal): boolean {
+  return deal.pendingQuoteApproval;
+}
+
 export type UrgencyFilter =
   | "all"
   | "overdue_follow_up"
@@ -126,6 +136,8 @@ export function useCrmPipelineComputed(
   }, [deferredOpenDeals, stageNameById]);
 
   const stageColumns = useMemo(() => {
+    const quoteCreatedStage = (stages ?? []).find((stage) => normalizeStageName(stage.name) === "quote created") ?? null;
+    const quoteSentStage = (stages ?? []).find((stage) => normalizeStageName(stage.name) === "quote sent") ?? null;
     const openStages =
       stageOptions.length > 0
         ? stageOptions
@@ -135,9 +147,15 @@ export function useCrmPipelineComputed(
         ? openStages
         : openStages.filter((stage) => stage.id === selectedStageId);
 
-    return visibleStages.map((stage) => {
+    const baseColumns = visibleStages.map((stage) => {
       const deals = filteredDeals
-        .filter((deal) => deal.stageId === stage.id)
+        .filter((deal) => {
+          if (deal.stageId !== stage.id) return false;
+          if (quoteCreatedStage && stage.id === quoteCreatedStage.id && quoteSentStage) {
+            return !isQuoteApprovalPending(deal);
+          }
+          return true;
+        })
         .sort((a, b) => {
           const nextA = getFollowUpSortTime(a.nextFollowUpAt);
           const nextB = getFollowUpSortTime(b.nextFollowUpAt);
@@ -147,7 +165,39 @@ export function useCrmPipelineComputed(
       const amount = deals.reduce((total, deal) => total + (deal.amount ?? 0), 0);
       return { stageId: stage.id, stageName: stage.name, deals, amount };
     });
-  }, [filteredDeals, selectedStageId, stageOptions, stageNameById]);
+
+    if (!quoteCreatedStage || !quoteSentStage) {
+      return baseColumns;
+    }
+
+    const pendingDeals = filteredDeals
+      .filter((deal) => {
+        if (deal.stageId !== quoteCreatedStage.id) return false;
+        return isQuoteApprovalPending(deal);
+      })
+      .sort((a, b) => {
+          const nextA = getFollowUpSortTime(a.nextFollowUpAt);
+          const nextB = getFollowUpSortTime(b.nextFollowUpAt);
+          if (nextA !== nextB) return nextA - nextB;
+          return (b.amount ?? 0) - (a.amount ?? 0);
+        });
+    const amount = pendingDeals.reduce((total, deal) => total + (deal.amount ?? 0), 0);
+
+    const pendingColumn = {
+      stageId: VIRTUAL_QUOTE_PENDING_APPROVAL_STAGE_ID,
+      stageName: "Quote Pending Approval",
+      deals: pendingDeals,
+      amount,
+    };
+
+    const quoteCreatedIndex = baseColumns.findIndex((column) => column.stageId === quoteCreatedStage.id);
+    if (quoteCreatedIndex < 0) return baseColumns;
+    return [
+      ...baseColumns.slice(0, quoteCreatedIndex + 1),
+      pendingColumn,
+      ...baseColumns.slice(quoteCreatedIndex + 1),
+    ];
+  }, [filteredDeals, selectedStageId, stageOptions, stageNameById, stages]);
 
   return {
     stageNameById,

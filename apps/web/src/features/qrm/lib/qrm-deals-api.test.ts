@@ -82,6 +82,7 @@ describe("qrm deal row normalizers", () => {
         depositAmount: null,
         sortPosition: 3,
         marginPct: 11.5,
+        pendingQuoteApproval: false,
       },
     ]);
   });

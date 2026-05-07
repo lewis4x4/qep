@@ -124,7 +124,8 @@ export function useCrmPipelineDragDrop(
       return;
     }
     const dragging = resolveDragSelection(activeDealId);
-    const result = evaluateStageGateForSelection(dragging, targetStage);
+    const stageById = new Map(stages.map((stage) => [stage.id, stage]));
+    const result = evaluateStageGateForSelection(dragging, targetStage, { stageById, stages });
     setGateRejectedStageId(result.severity === "block" ? targetStage.id : null);
   }, [resolveDragSelection]);
 
@@ -160,7 +161,8 @@ export function useCrmPipelineDragDrop(
       if (draggingDeals.length === 0) return;
 
       // Gate evaluation — blocks hard-rejected drops; warn results proceed.
-      const gate = evaluateStageGateForSelection(draggingDeals, targetStage);
+      const stageById = new Map(stages.map((stage) => [stage.id, stage]));
+      const gate = evaluateStageGateForSelection(draggingDeals, targetStage, { stageById, stages });
       if (gate.severity === "block") {
         if (gate.message) onGateRejection?.(gate.message);
         return;

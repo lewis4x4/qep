@@ -64,6 +64,7 @@ function mapDealFromCompositeJson(d: Record<string, unknown>): QrmRepSafeDeal {
     depositAmount: (d.deposit_amount as number | null) ?? null,
     sortPosition: (d.sort_position as number | null) ?? null,
     marginPct: (d.margin_pct as number | null) ?? null,
+    pendingQuoteApproval: d.pending_quote_approval === true,
   };
 }
 

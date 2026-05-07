@@ -64,8 +64,38 @@ export function normalizeRepSafeDealRows(rows: unknown): QrmRepSafeDeal[] {
       depositAmount: nullableNumber(r.deposit_amount),
       sortPosition: nullableNumber(r.sort_position),
       marginPct: nullableNumber(r.margin_pct),
+      pendingQuoteApproval: r.pending_quote_approval === true,
     }];
   });
+}
+
+async function enrichDealsWithPendingQuoteApprovals(deals: QrmRepSafeDeal[]): Promise<QrmRepSafeDeal[]> {
+  if (deals.length === 0) return deals;
+
+  const dealIds = Array.from(new Set(deals.map((deal) => deal.id).filter(Boolean)));
+  if (dealIds.length === 0) return deals;
+
+  const { data, error } = await crmSupabase
+    .from("quote_approval_cases")
+    .select("deal_id, status")
+    .in("deal_id", dealIds)
+    .in("status", ["pending", "escalated"]);
+
+  if (error) {
+    console.error("[qrm-deals] pending quote approval lookup failed:", error.message);
+    return deals;
+  }
+
+  const pendingDealIds = new Set(
+    (Array.isArray(data) ? data : [])
+      .map((row) => (isRecord(row) ? nullableString(row.deal_id) : null))
+      .filter((value): value is string => Boolean(value)),
+  );
+
+  return deals.map((deal) => ({
+    ...deal,
+    pendingQuoteApproval: pendingDealIds.has(deal.id),
+  }));
 }
 
 export function normalizeWeightedDealRows(rows: unknown): QrmWeightedDeal[] {
@@ -187,8 +217,9 @@ export async function listCrmOpenDealsForBoard(
   }
 
   const rows = normalizeRepSafeDealRows(data);
+  const enrichedRows = await enrichDealsWithPendingQuoteApprovals(rows.slice(0, pageSize).map(toRepSafeDeal));
   return {
-    items: rows.slice(0, pageSize).map(toRepSafeDeal),
+    items: enrichedRows,
     nextCursor: rows.length > pageSize ? rows[pageSize].id : null,
   };
 }
@@ -204,7 +235,9 @@ export async function getCrmDeal(dealId: string): Promise<QrmRepSafeDeal | null>
     throw new Error(error.message);
   }
 
-  return normalizeRepSafeDealRows(data ? [data] : [])[0] ?? null;
+  const deal = normalizeRepSafeDealRows(data ? [data] : [])[0] ?? null;
+  if (!deal) return null;
+  return (await enrichDealsWithPendingQuoteApprovals([deal]))[0] ?? deal;
 }
 
 export async function getCrmDealLossFields(dealId: string): Promise<QrmDealLossFields | null> {

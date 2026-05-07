@@ -39,6 +39,13 @@ import {
   type QuoteApprovalRouteMode,
   type QuoteVersionSnapshot,
 } from "../../../shared/qep-moonshot-contracts.ts";
+import {
+  chooseQuotePipelineTargetStage,
+  QUOTE_PIPELINE_STAGE_TARGETS,
+  shouldAdvanceQuoteDealStage,
+  type QuotePipelineStageRow,
+  type QuotePipelineStageTarget,
+} from "../_shared/qrm-pipeline-stage-automation.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -698,55 +705,101 @@ function calculateFinancingScenarios(
   return scenarios;
 }
 
-async function resolveFirstOpenDealStageId(
+async function resolveFirstOpenDealStageId(input: {
   // deno-lint-ignore no-explicit-any
-  supabase: any,
-): Promise<string> {
-  const { data, error } = await supabase
-    .from("crm_deal_stages")
-    .select("id")
-    .neq("is_closed_won", true)
-    .neq("is_closed_lost", true)
-    .order("sort_order", { ascending: true, nullsFirst: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  if (!data?.id) throw new Error("No open CRM deal stage configured");
-  return String(data.id);
-}
-
-async function resolveOpenDealStageByName(input: {
-  // deno-lint-ignore no-explicit-any
-  admin: any;
+  supabase: any;
   workspaceId: string;
-  stageNames: string[];
-}): Promise<{ id: string; sortOrder: number } | null> {
-  if (input.stageNames.length === 0) return null;
-  const { data, error } = await input.admin
+}): Promise<string> {
+  const workspaceId = input.workspaceId || "default";
+  const workspaceIds = Array.from(new Set([workspaceId, "default"]));
+  const { data, error } = await input.supabase
     .from("crm_deal_stages")
-    .select("id, name, sort_order, is_closed_won, is_closed_lost")
-    .eq("workspace_id", input.workspaceId)
-    .in("name", input.stageNames);
+    .select("id, workspace_id, sort_order, is_closed_won, is_closed_lost")
+    .in("workspace_id", workspaceIds)
+    .order("sort_order", { ascending: true, nullsFirst: false });
 
   if (error) throw new Error(error.message);
   const rows = Array.isArray(data) ? data : [];
-  for (const stageName of input.stageNames) {
-    const row = rows.find((candidate: Record<string, unknown>) =>
-      candidate.name === stageName &&
-      candidate.is_closed_won !== true &&
-      candidate.is_closed_lost !== true &&
-      typeof candidate.id === "string"
-    );
-    if (row) {
-      const sortOrder = Number((row as Record<string, unknown>).sort_order ?? 0);
-      return {
-        id: String((row as Record<string, unknown>).id),
-        sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
-      };
+  const openRows = rows.filter((row: Record<string, unknown>) =>
+    typeof row.id === "string" &&
+    row.is_closed_won !== true &&
+    row.is_closed_lost !== true
+  );
+  const sameWorkspaceStage = openRows.find((row: Record<string, unknown>) => row.workspace_id === workspaceId);
+  const defaultStage = openRows.find((row: Record<string, unknown>) => row.workspace_id === "default");
+  const selectedStage = sameWorkspaceStage ?? defaultStage;
+
+  if (!selectedStage?.id) throw new Error("No open CRM deal stage configured");
+  return String(selectedStage.id);
+}
+
+function normalizeQuotePipelineStageRows(rows: unknown[]): QuotePipelineStageRow[] {
+  return rows.flatMap((row) => {
+    if (!row || typeof row !== "object") return [];
+    const record = row as Record<string, unknown>;
+    if (typeof record.id !== "string" || typeof record.name !== "string") return [];
+    const sortOrder = Number(record.sort_order);
+    if (!Number.isFinite(sortOrder)) return [];
+    return [{
+      id: record.id,
+      workspace_id: typeof record.workspace_id === "string" && record.workspace_id.length > 0
+        ? record.workspace_id
+        : "default",
+      name: record.name,
+      sort_order: sortOrder,
+      is_closed_won: record.is_closed_won === true,
+      is_closed_lost: record.is_closed_lost === true,
+    }];
+  });
+}
+
+async function resolveQuotePipelineTargetStage(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  workspaceId: string;
+  target: QuotePipelineStageTarget;
+}): Promise<{ id: string; name: string; workspaceId: string; sortOrder: number } | null> {
+  const workspaceId = input.workspaceId || "default";
+  const workspaceIds = Array.from(new Set([workspaceId, "default"]));
+  const { data, error } = await input.admin
+    .from("crm_deal_stages")
+    .select("id, workspace_id, name, sort_order, is_closed_won, is_closed_lost")
+    .in("workspace_id", workspaceIds);
+
+  if (error) throw new Error(error.message);
+  const selected = chooseQuotePipelineTargetStage({
+    candidates: normalizeQuotePipelineStageRows(Array.isArray(data) ? data : []),
+    workspaceId,
+    target: input.target,
+  });
+
+  return selected
+    ? {
+      id: selected.id,
+      name: selected.name,
+      workspaceId: selected.workspace_id,
+      sortOrder: selected.sort_order,
     }
-  }
-  return null;
+    : null;
+}
+
+interface QuoteStageAdvanceResult {
+  attempted: boolean;
+  advanced: boolean;
+  reason:
+    | "missing_deal_id"
+    | "target_stage_not_found"
+    | "deal_not_found"
+    | "current_stage_unknown"
+    | "already_at_target"
+    | "already_later_or_equal"
+    | "updated"
+    | "concurrent_stage_change"
+    | "error";
+  dealId?: string | null;
+  currentStageId?: string | null;
+  targetStageId?: string | null;
+  source: string;
 }
 
 async function advanceQuoteDealStage(input: {
@@ -754,71 +807,178 @@ async function advanceQuoteDealStage(input: {
   admin: any;
   workspaceId: string;
   dealId: string | null | undefined;
-  stageNames: string[];
+  target: QuotePipelineStageTarget;
   source: string;
-}): Promise<void> {
-  if (!input.dealId || !UUID_RE.test(input.dealId)) return;
+}): Promise<QuoteStageAdvanceResult> {
+  if (!input.dealId || !UUID_RE.test(input.dealId)) {
+    return {
+      attempted: false,
+      advanced: false,
+      reason: "missing_deal_id",
+      dealId: input.dealId ?? null,
+      source: input.source,
+    };
+  }
 
+  const workspaceId = input.workspaceId || "default";
   try {
-    const targetStage = await resolveOpenDealStageByName({
-      admin: input.admin,
-      workspaceId: input.workspaceId || "default",
-      stageNames: input.stageNames,
-    });
-    if (!targetStage) return;
-
     const { data: deal, error: dealErr } = await input.admin
       .from("crm_deals")
       .select("id, workspace_id, stage_id")
-      .eq("workspace_id", input.workspaceId || "default")
+      .eq("workspace_id", workspaceId)
       .eq("id", input.dealId)
       .is("deleted_at", null)
       .maybeSingle();
     if (dealErr) throw new Error(dealErr.message);
-    if (!deal?.id) return;
+    if (!deal?.id) {
+      return {
+        attempted: true,
+        advanced: false,
+        reason: "deal_not_found",
+        dealId: input.dealId,
+        source: input.source,
+      };
+    }
 
     const currentStageId = typeof deal.stage_id === "string" ? deal.stage_id : null;
-    if (currentStageId === targetStage.id) return;
-
-    let currentSortOrder = -1;
+    let currentSortOrder: number | null = null;
     if (currentStageId) {
       const { data: currentStage, error: currentStageErr } = await input.admin
         .from("crm_deal_stages")
         .select("sort_order")
-        .eq("workspace_id", input.workspaceId || "default")
         .eq("id", currentStageId)
         .maybeSingle();
       if (currentStageErr) throw new Error(currentStageErr.message);
-      const parsed = Number(currentStage?.sort_order ?? -1);
-      currentSortOrder = Number.isFinite(parsed) ? parsed : -1;
+      const parsed = Number(currentStage?.sort_order);
+      currentSortOrder = Number.isFinite(parsed) ? parsed : null;
+    }
+
+    if (currentStageId && currentSortOrder === null) {
+      console.error("quote deal stage advance current stage unknown:", {
+        dealId: input.dealId,
+        workspaceId,
+        source: input.source,
+        currentStageId,
+        target: input.target.key,
+      });
+      return {
+        attempted: true,
+        advanced: false,
+        reason: "current_stage_unknown",
+        dealId: input.dealId,
+        currentStageId,
+        source: input.source,
+      };
+    }
+
+    const targetStage = await resolveQuotePipelineTargetStage({
+      admin: input.admin,
+      workspaceId,
+      target: input.target,
+    });
+    if (!targetStage) {
+      const result: QuoteStageAdvanceResult = {
+        attempted: true,
+        advanced: false,
+        reason: "target_stage_not_found",
+        dealId: input.dealId,
+        currentStageId,
+        source: input.source,
+      };
+      console.error("quote deal stage advance target not found:", {
+        dealId: input.dealId,
+        workspaceId,
+        source: input.source,
+        target: input.target.key,
+        stageNames: input.target.stageNames,
+        fallbackSortOrder: input.target.fallbackSortOrder,
+      });
+      return result;
+    }
+
+    if (currentStageId === targetStage.id) {
+      return {
+        attempted: true,
+        advanced: false,
+        reason: "already_at_target",
+        dealId: input.dealId,
+        currentStageId,
+        targetStageId: targetStage.id,
+        source: input.source,
+      };
     }
 
     // Auto-progression is forward-only. If a rep manually moved the deal to
     // a later pipeline step, quote automation must not demote it.
-    if (currentSortOrder >= targetStage.sortOrder) return;
+    if (!shouldAdvanceQuoteDealStage({ currentSortOrder, targetSortOrder: targetStage.sortOrder })) {
+      return {
+        attempted: true,
+        advanced: false,
+        reason: "already_later_or_equal",
+        dealId: input.dealId,
+        currentStageId,
+        targetStageId: targetStage.id,
+        source: input.source,
+      };
+    }
 
-    const { error: updateErr } = await input.admin
+    let updateQuery = input.admin
       .from("crm_deals")
       .update({
         stage_id: targetStage.id,
         last_activity_at: new Date().toISOString(),
       })
-      .eq("workspace_id", input.workspaceId || "default")
+      .eq("workspace_id", workspaceId)
       .eq("id", input.dealId)
       .is("deleted_at", null);
+    updateQuery = currentStageId ? updateQuery.eq("stage_id", currentStageId) : updateQuery.is("stage_id", null);
+    const { data: updatedDeal, error: updateErr } = await updateQuery
+      .select("id, stage_id")
+      .maybeSingle();
     if (updateErr) throw new Error(updateErr.message);
+    if (!updatedDeal?.id) {
+      return {
+        attempted: true,
+        advanced: false,
+        reason: "concurrent_stage_change",
+        dealId: input.dealId,
+        currentStageId,
+        targetStageId: targetStage.id,
+        source: input.source,
+      };
+    }
+
+    return {
+      attempted: true,
+      advanced: true,
+      reason: "updated",
+      dealId: input.dealId,
+      currentStageId,
+      targetStageId: targetStage.id,
+      source: input.source,
+    };
   } catch (err) {
     console.error("quote deal stage advance failed:", {
       dealId: input.dealId,
+      workspaceId,
       source: input.source,
+      target: input.target.key,
       error: err instanceof Error ? err.message : err,
     });
+    return {
+      attempted: true,
+      advanced: false,
+      reason: "error",
+      dealId: input.dealId,
+      source: input.source,
+    };
   }
 }
 
 async function createDraftDealForQuote(input: {
   // deno-lint-ignore no-explicit-any
   supabase: any;
+  workspaceId: string;
   userId: string;
   customerName: string | null;
   customerCompany: string | null;
@@ -826,12 +986,16 @@ async function createDraftDealForQuote(input: {
   companyId: string | null;
   amount: number;
 }): Promise<string> {
-  const stageId = await resolveFirstOpenDealStageId(input.supabase);
+  const stageId = await resolveFirstOpenDealStageId({
+    supabase: input.supabase,
+    workspaceId: input.workspaceId,
+  });
   const customerLabel = input.customerCompany || input.customerName || "Walk-in prospect";
   const dealName = `${customerLabel} Quote`;
   const { data, error } = await input.supabase
     .from("crm_deals")
     .insert({
+      workspace_id: input.workspaceId || "default",
       name: dealName,
       stage_id: stageId,
       primary_contact_id: input.contactId,
@@ -1806,7 +1970,7 @@ async function handlePublicAccept(
     admin,
     workspaceId: typeof quote.workspace_id === "string" ? quote.workspace_id : "default",
     dealId: typeof quote.deal_id === "string" ? quote.deal_id : null,
-    stageNames: ["Sales Order Signed"],
+    target: QUOTE_PIPELINE_STAGE_TARGETS.salesOrderSigned,
     source: "quote_public_accept",
   });
 
@@ -3910,7 +4074,7 @@ Deno.serve(async (req) => {
           admin: createAdminClient(),
           workspaceId: typeof (pkg as Record<string, unknown>).workspace_id === "string" ? String((pkg as Record<string, unknown>).workspace_id) : userWorkspaceId,
           dealId: typeof (pkg as Record<string, unknown>).deal_id === "string" ? String((pkg as Record<string, unknown>).deal_id) : null,
-          stageNames: ["Quote Sent"],
+          target: QUOTE_PIPELINE_STAGE_TARGETS.quoteSent,
           source: "quote_list_mark_sent",
         });
         return safeJsonOk({ ok: true, quote: updated }, origin);
@@ -4564,6 +4728,7 @@ Deno.serve(async (req) => {
         try {
           resolvedDealId = await createDraftDealForQuote({
             supabase,
+            workspaceId: userWorkspaceId,
             userId: user.id,
             customerName,
             customerCompany,
@@ -4781,7 +4946,7 @@ Deno.serve(async (req) => {
         admin,
         workspaceId,
         dealId: resolvedDealId,
-        stageNames: ["Quote Created"],
+        target: QUOTE_PIPELINE_STAGE_TARGETS.quoteCreated,
         source: "quote_save",
       });
 
@@ -4883,7 +5048,7 @@ Deno.serve(async (req) => {
         admin: createAdminClient(),
         workspaceId: row.workspace_id || userWorkspaceId,
         dealId: row.deal_id,
-        stageNames: ["Quote Presented", "Quote Sent"],
+        target: QUOTE_PIPELINE_STAGE_TARGETS.quotePresented,
         source: "quote_mark_viewed",
       });
       return safeJsonOk({ already_viewed: false, status: "viewed", viewed_at: nowIso }, origin);
@@ -4935,6 +5100,13 @@ Deno.serve(async (req) => {
       });
 
       if (latestCase && ["pending", "escalated"].includes(String(latestCase.status ?? ""))) {
+        await advanceQuoteDealStage({
+          admin,
+          workspaceId: pkgRow.workspace_id || "default",
+          dealId: pkgRow.deal_id,
+          target: QUOTE_PIPELINE_STAGE_TARGETS.quoteCreated,
+          source: "quote_submit_approval_already_pending",
+        });
         const summary = await buildQuoteApprovalCaseResponse({
           admin,
           approvalCase: latestCase,
@@ -5139,7 +5311,7 @@ Deno.serve(async (req) => {
         admin,
         workspaceId: pkgRow.workspace_id || "default",
         dealId: pkgRow.deal_id,
-        stageNames: ["Quote Created"],
+        target: QUOTE_PIPELINE_STAGE_TARGETS.quoteCreated,
         source: "quote_submit_approval",
       });
 
@@ -5395,7 +5567,7 @@ Deno.serve(async (req) => {
           admin,
           workspaceId: typeof caseRow.workspace_id === "string" ? caseRow.workspace_id : "default",
           dealId: typeof caseRow.deal_id === "string" ? caseRow.deal_id : null,
-          stageNames: ["Quote Created"],
+          target: QUOTE_PIPELINE_STAGE_TARGETS.quoteCreated,
           source: "quote_approval_decision",
         });
       }
@@ -5515,7 +5687,7 @@ Deno.serve(async (req) => {
         admin: createAdminClient(),
         workspaceId: pkgRow.workspace_id || userWorkspaceId,
         dealId: pkgRow.deal_id ?? (typeof body.deal_id === "string" ? body.deal_id : null),
-        stageNames: ["Sales Order Signed"],
+        target: QUOTE_PIPELINE_STAGE_TARGETS.salesOrderSigned,
         source: "quote_signature_accept",
       });
 
@@ -5720,7 +5892,7 @@ Deno.serve(async (req) => {
         admin,
         workspaceId: typeof pkg.workspace_id === "string" ? pkg.workspace_id : userWorkspaceId,
         dealId: typeof pkg.deal_id === "string" ? pkg.deal_id : null,
-        stageNames: ["Quote Sent"],
+        target: QUOTE_PIPELINE_STAGE_TARGETS.quoteSent,
         source: "quote_send_package",
       });
 

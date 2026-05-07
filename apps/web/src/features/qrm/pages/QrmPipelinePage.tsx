@@ -227,7 +227,7 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
     <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
         title="QRM Pipeline"
-        subtitle="21-step deal pipeline with SLA enforcement, drag-and-drop stage transitions, and real-time follow-up tracking."
+        subtitle="21-step deal pipeline with SLA enforcement, approval-aware quote flow, drag-and-drop stage transitions, and real-time follow-up tracking."
         crumb={{ surface: "GRAPH", lens: "DEALS", count: filteredDeals.length }}
       />
 

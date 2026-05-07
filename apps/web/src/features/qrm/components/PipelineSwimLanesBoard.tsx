@@ -36,9 +36,10 @@ interface PipelineSwimLanesBoardProps {
 }
 
 const SWIM_LANES: Array<{ label: string; range: [number, number]; color: string }> = [
-  { label: "Pre-Sale Pipeline", range: [1, 12], color: "border-blue-500/30" },
-  { label: "Close Process", range: [13, 16], color: "border-orange-500/30" },
-  { label: "Post-Sale", range: [17, 21], color: "border-emerald-500/30" },
+  { label: "Pre-Quote", range: [1, 5], color: "border-blue-500/30" },
+  { label: "Quote", range: [6, 10], color: "border-cyan-500/30" },
+  { label: "Close", range: [11, 16], color: "border-orange-500/30" },
+  { label: "Delivery & Post-Sale", range: [17, 21], color: "border-emerald-500/30" },
 ];
 
 const DAY_MS = 86_400_000;
@@ -98,6 +99,9 @@ export function PipelineSwimLanesBoard({
 
         {SWIM_LANES.map((lane) => {
           const laneColumns = stageColumns.filter((col) => {
+            if (col.stageName === "Quote Pending Approval") {
+              return lane.label === "Quote";
+            }
             const stage = (stages ?? []).find((s) => s.id === col.stageId);
             const order = stage?.sortOrder ?? 0;
             return order >= lane.range[0] && order <= lane.range[1];
@@ -126,12 +130,15 @@ export function PipelineSwimLanesBoard({
                     const isBottleneck = bottleneckStageId === column.stageId;
                     const isGateRejected = gateRejectedStageId === column.stageId;
 
+                    const isVirtualApprovalColumn = column.stageName === "Quote Pending Approval";
+
                     return (
                       <section
                         key={column.stageId}
                         className={cn(
                           "w-[280px] shrink-0 rounded-xl border bg-muted/30 transition-colors",
                           isBottleneck ? "border-rose-500/50" : "border-border",
+                          isVirtualApprovalColumn ? "border-amber-500/40 bg-amber-500/5" : null,
                         )}
                       >
                         <header className="border-b border-border px-3 py-2">
@@ -159,8 +166,8 @@ export function PipelineSwimLanesBoard({
                           </div>
                         </header>
 
-                        <DroppableStageColumn stageId={column.stageId} isGateRejected={isGateRejected}>
-                          <SortableContext items={dealIds} strategy={verticalListSortingStrategy}>
+                        {isVirtualApprovalColumn ? (
+                          <div className="space-y-2 p-2">
                             {sortedDeals.length === 0 && (
                               <div className="rounded-lg border border-dashed border-input bg-card px-3 py-4 text-center text-xs text-muted-foreground">
                                 No deals
@@ -179,8 +186,31 @@ export function PipelineSwimLanesBoard({
                                 onOpenHealthProfile={onOpenHealthProfile}
                               />
                             ))}
-                          </SortableContext>
-                        </DroppableStageColumn>
+                          </div>
+                        ) : (
+                          <DroppableStageColumn stageId={column.stageId} isGateRejected={isGateRejected}>
+                            <SortableContext items={dealIds} strategy={verticalListSortingStrategy}>
+                              {sortedDeals.length === 0 && (
+                                <div className="rounded-lg border border-dashed border-input bg-card px-3 py-4 text-center text-xs text-muted-foreground">
+                                  No deals
+                                </div>
+                              )}
+
+                              {sortedDeals.map((deal) => (
+                                <DraggableDealCard
+                                  key={deal.id}
+                                  deal={deal}
+                                  healthProfile={deal.companyId ? healthProfileByCompanyId.get(deal.companyId) ?? null : null}
+                                  isSelected={selectedDealIds?.has(deal.id) ?? false}
+                                  onSelectToggle={onDealSelectToggle}
+                                  onCommitPipelineFollowUp={onCommitPipelineFollowUp}
+                                  onSchedulePipelineRefresh={onSchedulePipelineRefresh}
+                                  onOpenHealthProfile={onOpenHealthProfile}
+                                />
+                              ))}
+                            </SortableContext>
+                          </DroppableStageColumn>
+                        )}
                       </section>
                     );
                   })}
