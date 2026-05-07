@@ -52,6 +52,8 @@ export interface QuotePackageSaveResponse {
   quote_package_version_id?: string | null;
   version_number?: number | null;
   quote?: { id?: string; deal_id?: string; status?: string; updated_at?: string };
+  warning?: string | null;
+  partial_error?: string | null;
 }
 
 export interface PortalRevisionEnvelope {
@@ -1233,6 +1235,7 @@ export function buildQuoteSavePayload(
    *  callers keep working. */
   winProbabilitySnapshot?: Record<string, unknown> | null,
   options?: {
+    quotePackageId?: string | null;
     expectedUpdatedAt?: string | null;
     saveMode?: "manual" | "autosave";
   },
@@ -1331,6 +1334,7 @@ export function buildQuoteSavePayload(
     : null;
 
   return {
+    quote_package_id: options?.quotePackageId ?? null,
     deal_id: draft.dealId,
     contact_id: draft.contactId || undefined,
     // Slice: Customer Picker. When the rep picks an existing customer

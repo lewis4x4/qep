@@ -3342,9 +3342,30 @@ Deno.serve(async (req) => {
         }
       }
 
-      let resolvedDealId = typeof body.deal_id === "string" && body.deal_id.length > 0
-        ? body.deal_id
+      const admin = createAdminClient();
+      const requestedQuotePackageId = typeof body.quote_package_id === "string" && UUID_RE.test(body.quote_package_id)
+        ? body.quote_package_id
         : null;
+      const { data: existingQuoteById, error: existingQuoteByIdErr } = requestedQuotePackageId
+        ? await admin
+          .from("quote_packages")
+          .select("id, workspace_id, status, updated_at, created_by, deal_id")
+          .eq("id", requestedQuotePackageId)
+          .eq("workspace_id", userWorkspaceId)
+          .maybeSingle()
+        : { data: null, error: null };
+      if (existingQuoteByIdErr) {
+        return safeJsonError(existingQuoteByIdErr.message, 500, origin);
+      }
+      if (requestedQuotePackageId && !existingQuoteById?.id) {
+        return safeJsonError("Quote package not found for update", 404, origin);
+      }
+
+      let resolvedDealId = typeof existingQuoteById?.deal_id === "string" && existingQuoteById.deal_id.length > 0
+        ? existingQuoteById.deal_id
+        : typeof body.deal_id === "string" && body.deal_id.length > 0
+          ? body.deal_id
+          : null;
       if (!resolvedDealId) {
         try {
           resolvedDealId = await createDraftDealForQuote({
@@ -3366,15 +3387,17 @@ Deno.serve(async (req) => {
         }
       }
 
-      const admin = createAdminClient();
-      const { data: existingQuote, error: existingQuoteErr } = await admin
-        .from("quote_packages")
-        .select("id, workspace_id, status, updated_at, created_by")
-        .eq("deal_id", resolvedDealId)
-        .maybeSingle();
+      const { data: existingQuoteByDealId, error: existingQuoteErr } = existingQuoteById?.id
+        ? { data: null, error: null }
+        : await admin
+          .from("quote_packages")
+          .select("id, workspace_id, status, updated_at, created_by, deal_id")
+          .eq("deal_id", resolvedDealId)
+          .maybeSingle();
       if (existingQuoteErr) {
         return safeJsonError(existingQuoteErr.message, 500, origin);
       }
+      const existingQuote = existingQuoteById?.id ? existingQuoteById : existingQuoteByDealId;
       const expectedUpdatedAt = typeof body.expected_updated_at === "string" ? body.expected_updated_at : null;
       if (
         existingQuote?.id &&
@@ -3458,6 +3481,7 @@ Deno.serve(async (req) => {
       const { data, error } = await supabase
         .from("quote_packages")
         .upsert({
+          ...(typeof existingQuote?.id === "string" ? { id: existingQuote.id } : {}),
           workspace_id: userWorkspaceId,
           deal_id: resolvedDealId,
           contact_id: contactId,
@@ -3530,6 +3554,7 @@ Deno.serve(async (req) => {
       }
 
       const workspaceId = typeof data.workspace_id === "string" ? data.workspace_id : "default";
+      let partialSaveWarning: string | null = null;
       const syncedLineItems = await syncQuotePackageLineItems({
         admin,
         quotePackageId: String(data.id),
@@ -3538,7 +3563,10 @@ Deno.serve(async (req) => {
       });
       if (syncedLineItems.error) {
         console.error("quote line item sync error:", syncedLineItems.error);
-        return safeJsonError(`Quote saved but line-item sync failed: ${syncedLineItems.error}`, 500, origin);
+        // The parent quote row already exists. Return the id to the client so
+        // retrying updates the same quote instead of minting another quote
+        // number/draft deal; surface the child-table failure as a warning.
+        partialSaveWarning = `Quote saved but line-item sync failed: ${syncedLineItems.error}`;
       }
 
       const syncedFinancingScenarios = await syncQuoteFinancingScenarios({
@@ -3549,7 +3577,9 @@ Deno.serve(async (req) => {
       });
       if (syncedFinancingScenarios.error) {
         console.error("quote financing scenario sync error:", syncedFinancingScenarios.error);
-        return safeJsonError(`Quote saved but financing scenario sync failed: ${syncedFinancingScenarios.error}`, 500, origin);
+        partialSaveWarning = partialSaveWarning
+          ? `${partialSaveWarning}; financing scenario sync failed: ${syncedFinancingScenarios.error}`
+          : `Quote saved but financing scenario sync failed: ${syncedFinancingScenarios.error}`;
       }
 
       const versionArtifacts = buildQuoteVersionArtifacts({
@@ -3601,6 +3631,8 @@ Deno.serve(async (req) => {
         deal_id: resolvedDealId,
         quote_package_version_id: latestVersionInfo?.id ?? null,
         version_number: latestVersionInfo?.versionNumber ?? null,
+        warning: partialSaveWarning,
+        partial_error: partialSaveWarning,
       }, origin, 201);
     }
 

@@ -459,6 +459,7 @@ export function QuoteBuilderV2Page() {
   const [deliveryActionBusy, setDeliveryActionBusy] = useState<QuoteSendActionChannel | null>(null);
   const lastAutoSaveSignatureRef = useRef<string>("");
   const documentDraftSignatureRef = useRef<string>("");
+  const persistedQuotePackageIdRef = useRef<string | null>(packageId || null);
   const [customFinanceEnabled, setCustomFinanceEnabled] = useState(false);
   const [customFinanceRate, setCustomFinanceRate] = useState<number | null>(null);
   const [customFinanceTermMonths, setCustomFinanceTermMonths] = useState<number | null>(null);
@@ -941,10 +942,18 @@ export function QuoteBuilderV2Page() {
           },
           allFinanceScenarios,
           snapshot,
+          {
+            quotePackageId: persistedQuotePackageIdRef.current ?? (typeof existingQuote?.id === "string" ? existingQuote.id : null),
+          },
         ),
       );
     },
     onSuccess: (result) => {
+      const savedQuoteId =
+        (result.quote as { id?: string } | undefined)?.id
+        ?? (result as { id?: string }).id
+        ?? null;
+      if (savedQuoteId) persistedQuotePackageIdRef.current = savedQuoteId;
       const resolvedDealId =
         (result.quote as { deal_id?: string } | undefined)?.deal_id
         ?? (result as { deal_id?: string }).deal_id
@@ -969,6 +978,13 @@ export function QuoteBuilderV2Page() {
       }
       setLocalPersistEnabled(false);
       queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case"] });
+      if (result.warning || result.partial_error) {
+        toast({
+          title: "Quote saved with a sync warning",
+          description: result.warning ?? result.partial_error ?? "Some quote details may need another save after refresh.",
+          variant: "destructive",
+        });
+      }
     },
   });
 
