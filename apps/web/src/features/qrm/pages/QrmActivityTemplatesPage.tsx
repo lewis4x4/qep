@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentType } from "react";
+import { useMemo, useRef, useState, type ComponentType } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Clock3,
@@ -200,12 +200,32 @@ function formatDueWindow(minutes?: number | null): string {
   return `${Math.round(minutes / (24 * 60))}d`;
 }
 
+function buildLaneDraft(lane: PlaybookLane): Partial<EditorState> {
+  const activityType = lane.recommendedTypes[0] ?? "call";
+  return {
+    activityType,
+    label: `${lane.label} next move`,
+    description: lane.description,
+    body: [
+      `Situation: [name the customer, machine, part, rental, or service signal].`,
+      "Why it matters: [connect the signal to revenue, uptime, timing, or customer trust].",
+      "Next committed move: [who owns it, when it happens, and what the customer should expect].",
+    ].join("\n"),
+    taskDueMinutes: activityType === "task" ? "1440" : "",
+    taskStatus: "open",
+    sortOrder: "0",
+  };
+}
+
 export function QrmActivityTemplatesPage({ userId }: QrmActivityTemplatesPageProps) {
   const queryClient = useQueryClient();
   const [selectedType, setSelectedType] = useState<QrmActivityType>("email");
   const [editor, setEditor] = useState<EditorState>(EMPTY_EDITOR);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [authoringSignal, setAuthoringSignal] = useState("Ready to codify the next QEP field play.");
+  const authoringRef = useRef<HTMLDivElement | null>(null);
+  const labelInputRef = useRef<HTMLInputElement | null>(null);
 
   const templatesQuery = useQuery({
     queryKey: ["crm", "activity-templates", "manage"],
@@ -270,9 +290,26 @@ export function QrmActivityTemplatesPage({ userId }: QrmActivityTemplatesPagePro
     },
   ];
 
+  function focusAuthoringDeck(): void {
+    window.requestAnimationFrame(() => {
+      authoringRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.setTimeout(() => labelInputRef.current?.focus(), 250);
+    });
+  }
+
+  function beginNewPlay(nextType: QrmActivityType = selectedType, seed: Partial<EditorState> = {}): void {
+    const activityType = seed.activityType ?? nextType;
+    setSelectedType(activityType);
+    setEditor({ ...EMPTY_EDITOR, activityType, ...seed, id: null });
+    setSaveError(null);
+    setAuthoringSignal(seed.label ? `Drafting ${seed.label}.` : "New play ready — name it, paste the language, then save.");
+    focusAuthoringDeck();
+  }
+
   function resetEditor(nextType: QrmActivityType = selectedType): void {
     setEditor({ ...EMPTY_EDITOR, activityType: nextType });
     setSaveError(null);
+    setAuthoringSignal("Editor reset. Start from a blank QEP play.");
   }
 
   async function refreshTemplates(): Promise<void> {
@@ -313,6 +350,8 @@ export function QrmActivityTemplatesPage({ userId }: QrmActivityTemplatesPagePro
         sortOrder: Number(editor.sortOrder) || 0,
       };
 
+      const savedMode = editor.id ? "updated" : "saved";
+
       if (editor.id) {
         await updateCrmActivityTemplate(editor.id, payload);
       } else {
@@ -324,6 +363,7 @@ export function QrmActivityTemplatesPage({ userId }: QrmActivityTemplatesPagePro
 
       await refreshTemplates();
       resetEditor(editor.activityType);
+      setAuthoringSignal(`Play ${savedMode}. It will now appear ahead of the system baseline in the activity composer.`);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Could not save template.");
     } finally {
@@ -364,11 +404,12 @@ export function QrmActivityTemplatesPage({ userId }: QrmActivityTemplatesPagePro
           actions: [{ label: "Today queue", href: "/qrm/activities" }],
         }}
         rightRail={(
-          <Button type="button" size="sm" onClick={() => resetEditor(selectedType)}>
+          <Button type="button" size="sm" onClick={() => beginNewPlay(selectedType)}>
             <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
             New play
           </Button>
         )}
+        showDataSourceBadge={false}
       />
 
       <DeckSurface tone="live" className="overflow-hidden">
@@ -427,6 +468,15 @@ export function QrmActivityTemplatesPage({ userId }: QrmActivityTemplatesPagePro
                 <span>{matches} matches</span>
                 <span>{typeCoverage}/{lane.recommendedTypes.length} types</span>
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-4 w-full justify-center"
+                onClick={() => beginNewPlay(lane.recommendedTypes[0] ?? selectedType, buildLaneDraft(lane))}
+              >
+                Draft play
+              </Button>
             </DeckSurface>
           );
         })}
@@ -528,6 +578,18 @@ export function QrmActivityTemplatesPage({ userId }: QrmActivityTemplatesPagePro
                 Your reps still have {selectedSystemTemplates.length} system quick starts, but a QEP-specific
                 play here would move ahead of the baseline in QrmActivityComposer.
               </p>
+              <Button
+                type="button"
+                size="sm"
+                className="mt-4"
+                onClick={() => beginNewPlay(selectedType, {
+                  label: `${selectedProfile.label} field play`,
+                  description: selectedProfile.operatorCue,
+                })}
+              >
+                <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+                Create {selectedProfile.label.toLowerCase()} play
+              </Button>
             </Card>
           )}
 
@@ -567,6 +629,8 @@ export function QrmActivityTemplatesPage({ userId }: QrmActivityTemplatesPagePro
                             setSelectedType(template.activityType);
                             setEditor(toEditorState(template));
                             setSaveError(null);
+                            setAuthoringSignal(`Editing ${template.label}.`);
+                            focusAuthoringDeck();
                           }}
                         >
                           Edit
@@ -616,7 +680,7 @@ export function QrmActivityTemplatesPage({ userId }: QrmActivityTemplatesPagePro
           )}
         </DeckSurface>
 
-        <DeckSurface className="p-4 sm:p-5">
+        <DeckSurface ref={authoringRef} className="p-4 sm:p-5 scroll-mt-24">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -628,8 +692,11 @@ export function QrmActivityTemplatesPage({ userId }: QrmActivityTemplatesPagePro
               <p className="mt-1 text-sm text-muted-foreground">
                 Keep rep language tight, clear, dealership-native, and safe for the activity composer.
               </p>
+              <p className="mt-2 rounded-sm border border-qep-live/20 bg-qep-live/[0.04] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] text-qep-live">
+                {authoringSignal}
+              </p>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => resetEditor(selectedType)}>
+            <Button type="button" variant="outline" size="sm" onClick={() => beginNewPlay(selectedType)}>
               <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
               New
             </Button>
@@ -676,6 +743,7 @@ export function QrmActivityTemplatesPage({ userId }: QrmActivityTemplatesPagePro
                 Label
               </label>
               <input
+                ref={labelInputRef}
                 id="crm-template-label"
                 value={editor.label}
                 onChange={(event) => setEditor((current) => ({ ...current, label: event.target.value }))}

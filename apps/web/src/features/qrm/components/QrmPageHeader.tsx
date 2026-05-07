@@ -47,6 +47,10 @@ interface QrmPageHeaderProps {
    * Optional right-side action rail (buttons, toggles, etc.).
    */
   rightRail?: React.ReactNode;
+  /**
+   * Hide CRM source badge on native command pages where a HubSpot data badge would be misleading.
+   */
+  showDataSourceBadge?: boolean;
 }
 
 interface HubSpotIntegrationStatusRow {
@@ -111,11 +115,13 @@ export function QrmPageHeader({
   metrics,
   ironBriefing,
   rightRail,
+  showDataSourceBadge = true,
 }: QrmPageHeaderProps) {
   const dataSourceQuery = useQuery({
     queryKey: ["crm", "hubspot-data-source-state"],
     queryFn: fetchCrmDataSource,
     staleTime: 60_000,
+    enabled: showDataSourceBadge,
   });
 
   const snapshot = dataSourceQuery.data ?? { state: "Demo" as DataSourceState, lastSyncAt: null };
@@ -123,13 +129,13 @@ export function QrmPageHeader({
   const lastSyncAt = snapshot.lastSyncAt;
 
   useEffect(() => {
-    if (!dataSourceState) return;
+    if (!showDataSourceBadge || !dataSourceState) return;
     void trackIntegrationEvent("integration_badge_rendered", {
       integration_key: "hubspot",
       data_mode: dataSourceState.toLowerCase(),
       surface: "crm_header",
     });
-  }, [dataSourceState]);
+  }, [dataSourceState, showDataSourceBadge]);
 
   const renderStatusIndicator = () => {
     if (dataSourceState === "Stale") {
@@ -179,7 +185,7 @@ export function QrmPageHeader({
         </div>
         <div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
           {rightRail}
-          {renderStatusIndicator()}
+          {showDataSourceBadge && renderStatusIndicator()}
         </div>
       </div>
 

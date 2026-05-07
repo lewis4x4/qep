@@ -345,17 +345,17 @@ export function DeckDivider({ label, className }: { label?: string; className?: 
 /*  DeckSurface — the elevated card-like container for dense data              */
 /* -------------------------------------------------------------------------- */
 
-export function DeckSurface({
-  children,
-  className,
-  tone,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  tone?: "default" | "live";
-}) {
+export const DeckSurface = React.forwardRef<
+  HTMLDivElement,
+  {
+    children: React.ReactNode;
+    className?: string;
+    tone?: "default" | "live";
+  }
+>(function DeckSurface({ children, className, tone }, ref) {
   return (
     <div
+      ref={ref}
       className={cn(
         "rounded-md border bg-qep-deck-elevated/70 backdrop-blur-sm",
         tone === "live"
@@ -367,4 +367,4 @@ export function DeckSurface({
       {children}
     </div>
   );
-}
+});
