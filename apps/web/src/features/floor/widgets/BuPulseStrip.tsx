@@ -246,6 +246,36 @@ interface TileProps {
   secondary: string;
 }
 
+type EquipmentTileCopy = {
+  primary: string;
+  secondary: string;
+};
+
+function pipelineDealLabel(count: number): string {
+  return `${count} pipeline ${count === 1 ? "deal" : "deals"}`;
+}
+
+function getEquipmentTileCopy(data: Pick<BuPulseData, "equipment_mtd" | "equipment_pipeline_count">): EquipmentTileCopy {
+  if (data.equipment_mtd > 0) {
+    return {
+      primary: currency(data.equipment_mtd),
+      secondary: pipelineDealLabel(data.equipment_pipeline_count),
+    };
+  }
+
+  if (data.equipment_pipeline_count > 0) {
+    return {
+      primary: pipelineDealLabel(data.equipment_pipeline_count),
+      secondary: "No booked revenue MTD",
+    };
+  }
+
+  return {
+    primary: "No active pipeline",
+    secondary: "No booked revenue MTD",
+  };
+}
+
 function Tile({ icon: Icon, label, primary, secondary }: TileProps) {
   return (
     <div className="flex flex-1 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 transition-colors hover:border-[#f28a07]/30">
@@ -271,11 +301,13 @@ export function BuPulseStripWidget() {
     refetchOnWindowFocus: false,
   });
 
+  const equipmentCopy = query.data ? getEquipmentTileCopy(query.data) : null;
+
   return (
     <div className="rounded-xl border border-white/10 bg-[#121927] p-3">
       <div className="flex items-center justify-between px-1">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#f6a53a]">
-          BU Pulse
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#f6a53a]" title="Business Unit Pulse">
+          Business Unit Pulse
         </p>
         <Link
           to="/executive"
@@ -288,7 +320,7 @@ export function BuPulseStripWidget() {
       {query.isLoading ? (
         <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
           <Loader2 className="h-3 w-3 animate-spin" />
-          Loading cross-BU pulse…
+          Loading cross-business-unit pulse…
         </div>
       ) : null}
 
@@ -299,13 +331,13 @@ export function BuPulseStripWidget() {
         </div>
       ) : null}
 
-      {!query.isLoading && !query.isError && query.data ? (
+      {!query.isLoading && !query.isError && query.data && equipmentCopy ? (
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <Tile
             icon={TrendingUp}
             label="Equipment"
-            primary={currency(query.data.equipment_mtd)}
-            secondary={`${query.data.equipment_pipeline_count} in pipeline`}
+            primary={equipmentCopy.primary}
+            secondary={equipmentCopy.secondary}
           />
           <Tile
             icon={Package}

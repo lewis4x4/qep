@@ -543,9 +543,9 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
   },
   "exec.bu-pulse": {
     id: "exec.bu-pulse",
-    title: "BU Pulse",
+    title: "Business Unit Pulse",
     purpose:
-      "Four-tile cross-business snapshot: Equipment sales, Parts, Service, Rentals.",
+      "Four-tile business-unit snapshot: Equipment sales, Parts, Service, and Rentals.",
     allowedRoles: ["iron_owner"],
     size: "wide",
     component: BuPulseStripWidget,
