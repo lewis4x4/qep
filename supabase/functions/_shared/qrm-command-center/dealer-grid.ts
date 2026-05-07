@@ -22,6 +22,16 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const AGING_QUOTE_DAYS = 14;
 const DEMO_SOON_HOURS = 48;
 const RENTAL_AGING_DAYS = 3;
+const ACTIVE_QUOTE_PACKAGE_STATUSES = new Set([
+  "draft",
+  "pending_approval",
+  "approved",
+  "approved_with_conditions",
+  "changes_requested",
+  "sent",
+  "viewed",
+]);
+const ACTIVE_LEGACY_QUOTE_STATUSES = new Set(["draft", "sent"]);
 
 // ─── Row types (minimal projections from the DB queries) ───────────────────
 
@@ -36,6 +46,8 @@ export interface QuotePackageRow {
   id: string;
   deal_id: string | null;
   status: string | null;
+  created_at: string;
+  updated_at: string;
   net_total: number | null;
   margin_pct: number | null;
 }
@@ -121,25 +133,37 @@ function buildQuotesTile(
   packages: QuotePackageRow[] | null,
   nowTime: number,
 ): DealerGridTile {
-  if (!quotes) return makeDegradedTile("quotes", "Quotes", "View Quotes", "/qrm/command/quotes", "Query failed");
+  if (!quotes && !packages) return makeDegradedTile("quotes", "Quotes", "View Quotes", "/qrm/command/quotes", "Query failed");
 
-  const active = quotes.filter((q) => q.status === "draft" || q.status === "sent");
+  // Quote Builder packages are the source of truth for active quote work.
+  // Legacy `quotes` rows are only a fallback for older data that has not been
+  // migrated into quote_packages.
+  const activePackages = (packages ?? []).filter((p) => ACTIVE_QUOTE_PACKAGE_STATUSES.has(p.status ?? "draft"));
+  const usePackages = packages !== null && packages.length > 0;
+  const activeLegacyQuotes = usePackages ? [] : (quotes ?? []).filter((q) => ACTIVE_LEGACY_QUOTE_STATUSES.has(q.status ?? "draft"));
+  const active = usePackages ? activePackages : activeLegacyQuotes;
   const aging = active.filter((q) => {
     const t = Date.parse(q.updated_at);
     return Number.isFinite(t) && (nowTime - t) > AGING_QUOTE_DAYS * DAY_MS;
   });
 
-  const totalValue = (packages ?? [])
-    .filter((p) => p.status === "draft" || p.status === "sent")
-    .reduce((sum, p) => sum + (p.net_total ?? 0), 0);
+  const totalValue = activePackages.reduce((sum, p) => sum + (p.net_total ?? 0), 0);
 
   const todayStart = nowTime - (nowTime % DAY_MS);
   const yesterdayStart = todayStart - DAY_MS;
-  const todayCount = countCreatedInWindow(quotes, todayStart, nowTime);
-  const yesterdayCount = countCreatedInWindow(quotes, yesterdayStart, todayStart);
+  const movementRows = usePackages ? (packages ?? []) : (quotes ?? []);
+  const todayCount = countCreatedInWindow(movementRows, todayStart, nowTime);
+  const yesterdayCount = countCreatedInWindow(movementRows, yesterdayStart, todayStart);
+
+  const pendingApproval = activePackages.filter((p) => p.status === "pending_approval").length;
+  const approved = activePackages.filter((p) => p.status === "approved" || p.status === "approved_with_conditions").length;
+  const sentOrViewed = activePackages.filter((p) => p.status === "sent" || p.status === "viewed").length;
 
   const parts: string[] = [];
   if (active.length > 0) parts.push(`${active.length} active`);
+  if (pendingApproval > 0) parts.push(`${pendingApproval} pending approval`);
+  if (approved > 0) parts.push(`${approved} approved`);
+  if (sentOrViewed > 0) parts.push(`${sentOrViewed} customer-facing`);
   if (aging.length > 0) parts.push(`${aging.length} aging >14d`);
   if (parts.length === 0) parts.push("No active quotes");
 

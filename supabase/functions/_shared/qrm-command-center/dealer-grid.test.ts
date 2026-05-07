@@ -36,6 +36,8 @@ function makePackage(overrides: Partial<QuotePackageRow> = {}): QuotePackageRow 
     id: overrides.id ?? crypto.randomUUID(),
     deal_id: overrides.deal_id ?? null,
     status: overrides.status ?? "sent",
+    created_at: overrides.created_at ?? new Date(NOW - 2 * DAY_MS).toISOString(),
+    updated_at: overrides.updated_at ?? new Date(NOW - 2 * DAY_MS).toISOString(),
     net_total: overrides.net_total ?? 50_000,
     margin_pct: overrides.margin_pct ?? 15,
   };
@@ -119,24 +121,38 @@ Deno.test("empty data returns 6 tiles with zero counts and live status", () => {
 
 // ─── Quotes tile ───────────────────────────────────────────────────────────
 
-Deno.test("quotes tile counts active and aging quotes", () => {
+Deno.test("quotes tile counts active and aging Quote Builder packages", () => {
   const quotes = [
-    makeQuote({ status: "sent", updated_at: new Date(NOW - 20 * DAY_MS).toISOString() }), // aging
-    makeQuote({ status: "sent", updated_at: new Date(NOW - 2 * DAY_MS).toISOString() }),   // active
-    makeQuote({ status: "draft" }),                                                         // active
-    makeQuote({ status: "archived" }),                                                      // inactive
+    makeQuote({ status: "sent", updated_at: new Date(NOW - 20 * DAY_MS).toISOString() }),
+    makeQuote({ status: "archived" }),
   ];
   const packages = [
-    makePackage({ status: "sent", net_total: 100_000 }),
-    makePackage({ status: "sent", net_total: 50_000 }),
+    makePackage({ status: "sent", net_total: 100_000, updated_at: new Date(NOW - 20 * DAY_MS).toISOString() }),
+    makePackage({ status: "pending_approval", net_total: 50_000 }),
     makePackage({ status: "draft", net_total: 25_000 }),
     makePackage({ status: "archived", net_total: 10_000 }),
   ];
   const result = buildDealerRealityGrid(quotes, packages, [], [], [], [], [], [], NOW);
   const tile = result.tiles.find((t) => t.key === "quotes")!;
   assertEquals(tile.activeCount, 3);
-  assertEquals(tile.urgentCount, 1); // 1 aging
+  assertEquals(tile.urgentCount, 1); // 1 aging package
   assertEquals(tile.totalValue, 175_000); // 100k + 50k + 25k (excludes archived)
+  assertEquals(tile.summary, "3 active, 1 pending approval, 1 customer-facing, 1 aging >14d");
+  assertEquals(tile.status, "live");
+});
+
+Deno.test("quotes tile falls back to legacy quotes when packages are unavailable", () => {
+  const quotes = [
+    makeQuote({ status: "sent", updated_at: new Date(NOW - 20 * DAY_MS).toISOString() }),
+    makeQuote({ status: "sent", updated_at: new Date(NOW - 2 * DAY_MS).toISOString() }),
+    makeQuote({ status: "draft" }),
+    makeQuote({ status: "archived" }),
+  ];
+  const result = buildDealerRealityGrid(quotes, null, [], [], [], [], [], [], NOW);
+  const tile = result.tiles.find((t) => t.key === "quotes")!;
+  assertEquals(tile.activeCount, 3);
+  assertEquals(tile.urgentCount, 1);
+  assertEquals(tile.totalValue, 0);
   assertEquals(tile.status, "live");
 });
 

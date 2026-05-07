@@ -11,6 +11,16 @@ const DAY_MS = 86_400_000;
 const AGING_THRESHOLD_DAYS = 14;
 const EXPIRING_SOON_DAYS = 14;
 const CONVERSION_WINDOW_DAYS = 90;
+const ACTIVE_QUOTE_STATUSES = new Set([
+  "draft",
+  "pending_approval",
+  "approved",
+  "approved_with_conditions",
+  "changes_requested",
+  "sent",
+  "viewed",
+  "expiring",
+]);
 
 // ─── Input types (match Supabase select projections) ───────────────────────
 
@@ -145,8 +155,8 @@ export function computeQuoteVelocity(
 
     const effectiveStatus = deriveEffectiveStatus(pkg.status, pkg.expires_at, isSigned, nowTime);
 
-    // Active = draft or sent (not expired, not signed)
-    const isActive = effectiveStatus === "draft" || effectiveStatus === "sent" || effectiveStatus === "expiring";
+    // Active = any non-terminal quote package that still needs rep/customer/approval motion.
+    const isActive = ACTIVE_QUOTE_STATUSES.has(effectiveStatus);
     if (isActive) {
       activeCount++;
       totalExposure += netTotal;
@@ -211,7 +221,7 @@ export function computeQuoteVelocity(
   });
 
   // Build status distribution in canonical order
-  const STATUS_ORDER = ["draft", "sent", "expiring", "signed", "expired"];
+  const STATUS_ORDER = ["draft", "pending_approval", "approved", "approved_with_conditions", "changes_requested", "sent", "viewed", "expiring", "signed", "expired"];
   const statusDistribution: StatusBucket[] = STATUS_ORDER
     .filter((s) => bucketMap.has(s))
     .map((s) => ({ status: s, ...bucketMap.get(s)! }));

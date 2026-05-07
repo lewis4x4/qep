@@ -507,7 +507,7 @@ Deno.serve(async (req) => {
         : Promise.resolve({ data: [], error: null }),
       // ── Dealer Reality Grid: 7 operational domain queries ──
       callerClient.from("quotes").select("id, status, created_at, updated_at").is("deleted_at", null).limit(500),
-      callerClient.from("quote_packages").select("id, deal_id, status, net_total, margin_pct").in("status", ["draft", "sent"]).limit(500),
+      callerClient.from("quote_packages").select("id, deal_id, status, created_at, updated_at, net_total, margin_pct").in("status", ["draft", "pending_approval", "approved", "approved_with_conditions", "changes_requested", "sent", "viewed"]).limit(500),
       callerClient.from("trade_valuations").select("id, deal_id, status, preliminary_value, created_at").limit(500),
       callerClient.from("demos").select("id, deal_id, status, scheduled_date, followup_due_at, followup_completed, requested_by, created_at").limit(500),
       callerClient.from("traffic_tickets").select("id, deal_id, status, ticket_type, promised_delivery_at, blocker_reason, created_at").limit(500),
