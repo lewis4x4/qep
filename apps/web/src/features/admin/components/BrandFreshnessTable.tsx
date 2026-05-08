@@ -4,11 +4,12 @@ import type { BrandSheetStatus } from "../lib/price-sheets-api";
 
 interface BrandFreshnessTableProps {
   rows: BrandSheetStatus[];
+  onViewDetails: (row: BrandSheetStatus) => void;
   onUpload: (brandId: string, brandCode: string, brandName: string) => void;
   onManageZones: (brandId: string, brandCode: string, brandName: string) => void;
 }
 
-export function BrandFreshnessTable({ rows, onUpload, onManageZones }: BrandFreshnessTableProps) {
+export function BrandFreshnessTable({ rows, onViewDetails, onUpload, onManageZones }: BrandFreshnessTableProps) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -27,7 +28,15 @@ export function BrandFreshnessTable({ rows, onUpload, onManageZones }: BrandFres
         <tbody>
           {rows.map((row) => (
             <tr key={row.brand_id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-              <td className="py-3 pr-4 font-medium">{row.brand_name}</td>
+              <td className="py-3 pr-4 font-medium">
+                <button
+                  type="button"
+                  onClick={() => onViewDetails(row)}
+                  className="text-left text-primary hover:underline"
+                >
+                  {row.brand_name}
+                </button>
+              </td>
               <td className="py-3 pr-4">
                 <UrgencyBadge lastUploadedAt={row.last_uploaded_at} />
               </td>
@@ -61,12 +70,21 @@ export function BrandFreshnessTable({ rows, onUpload, onManageZones }: BrandFres
               <td className="py-3">
                 <div className="flex gap-2">
                   <button
+                    type="button"
+                    onClick={() => onViewDetails(row)}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Details
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => onUpload(row.brand_id, row.brand_code, row.brand_name)}
                     className="text-xs text-primary hover:underline"
                   >
                     Upload
                   </button>
                   <button
+                    type="button"
                     onClick={() => onManageZones(row.brand_id, row.brand_code, row.brand_name)}
                     className="text-xs text-primary hover:underline"
                   >

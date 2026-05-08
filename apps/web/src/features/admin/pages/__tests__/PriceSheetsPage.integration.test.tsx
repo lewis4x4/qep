@@ -83,7 +83,7 @@ mock.module("@/hooks/useAuth", () => ({
   }),
 }));
 
-// price-sheets-api: stub the one function the page calls on mount.
+// price-sheets-api: stub the functions this page and its drawer wiring can touch.
 const mockRows = [
   {
     brand_id: "brand-asv-uuid",
@@ -106,13 +106,38 @@ const mockRows = [
 // come back as `undefined`. Keep this list in sync with the module's exports.
 mock.module("../../lib/price-sheets-api", () => ({
   getBrandSheetStatus: () => Promise.resolve(mockRows),
+  getBrandDrilldown: () => Promise.resolve({
+    ok: true as const,
+    detail: {
+      brand: { id: "brand-asv-uuid", code: "ASV", name: "ASV", discount_configured: true, has_inbound_freight_key: true },
+      activeSheet: null,
+      sheetHistory: [],
+      pendingSheets: [],
+      products: { rows: [], loadedCount: 0, limit: 100, hasMore: false },
+      freight: { zones: [], coverage: { covered: [], uncovered: [], overlaps: [] } },
+      readiness: {
+        publishedSheetCount: 1,
+        freightZoneCount: 3,
+        activeProgramCount: 0,
+        dealEngineEnabled: true,
+        hasInboundFreightKey: true,
+      },
+    },
+  }),
   getFreightZones: () => Promise.resolve([]),
   upsertFreightZone: () => Promise.resolve({ ok: true as const, zone: null }),
   deleteFreightZone: () => Promise.resolve({ ok: true as const }),
   uploadAndExtractSheet: () => Promise.resolve({ ok: true as const, priceSheetId: "stub", itemsWritten: 0, programsWritten: 0 }),
   retryExtract: () => Promise.resolve({ ok: true as const, priceSheetId: "stub", itemsWritten: 0, programsWritten: 0 }),
   retryPublish: () => Promise.resolve({ ok: true as const, priceSheetId: "stub", itemsWritten: 0, programsWritten: 0 }),
-  analyzeFreightCoverage: () => ({ covered: [], uncovered: [] }),
+  analyzeFreightCoverage: () => ({ covered: [], uncovered: [], overlaps: [] }),
+  normalizeBrandSheetSourceRows: () => [],
+  normalizePriceSheetSourceRows: () => [],
+  normalizeBrandPriceSheetSummaryRows: () => [],
+  normalizeBrandProductPriceRows: () => [],
+  normalizeBrandIdRows: () => [],
+  normalizePriceSheetItemRows: () => [],
+  normalizeFreightZoneRows: () => [],
   parseDollarInput: (raw: string) => {
     const n = Number(raw.replace(/[^0-9.-]/g, ""));
     return Number.isFinite(n) ? Math.round(n * 100) : null;
@@ -131,6 +156,36 @@ mock.module("../../components/UploadDrawer", () => ({
 mock.module("../../components/FreightZoneDrawer", () => ({
   FreightZoneDrawer: (props: { open: boolean; brandName: string | null }) =>
     props.open ? <div data-testid="freight-drawer">FreightZoneDrawer open for {props.brandName}</div> : null,
+}));
+mock.module("../../components/SheetSourcesSection", () => ({
+  SheetSourcesSection: () => <div data-testid="watchdog-section">Watchdog sources ready</div>,
+}));
+mock.module("../../components/BrandDrilldownDrawer", () => ({
+  BrandDrilldownDrawer: (props: {
+    open: boolean;
+    statusRow: (typeof mockRows)[number] | null;
+    onUpload: (brandId: string, brandCode: string, brandName: string) => void;
+    onManageZones: (brandId: string, brandCode: string, brandName: string) => void;
+    onOpenWatchdog: () => void;
+  }) =>
+    props.open && props.statusRow ? (
+      <div data-testid="brand-drilldown-drawer">
+        BrandDrilldown open for {props.statusRow.brand_name}
+        <button
+          type="button"
+          onClick={() => props.onUpload(props.statusRow!.brand_id, props.statusRow!.brand_code, props.statusRow!.brand_name)}
+        >
+          Upload new sheet
+        </button>
+        <button
+          type="button"
+          onClick={() => props.onManageZones(props.statusRow!.brand_id, props.statusRow!.brand_code, props.statusRow!.brand_name)}
+        >
+          Manage freight zones
+        </button>
+        <button type="button" onClick={props.onOpenWatchdog}>Open Watchdog</button>
+      </div>
+    ) : null,
 }));
 
 // Have to import after mock.module registrations.
@@ -164,6 +219,42 @@ describe("PriceSheetsPage (integration)", () => {
     // Brand row — both name and a freshness metric should appear
     expect(screen.getByText("ASV")).toBeTruthy();
     expect(screen.getByText("Brand Sheet Status")).toBeTruthy();
+  });
+
+  test("clicking a brand opens the brand drilldown with the correct row context", async () => {
+    renderPage();
+
+    const brandBtn = await screen.findByRole("button", { name: "ASV" });
+    fireEvent.click(brandBtn);
+
+    const drawer = await screen.findByTestId("brand-drilldown-drawer");
+    expect(drawer.textContent).toContain("BrandDrilldown open for ASV");
+  });
+
+  test("clicking the Details action opens the brand drilldown", async () => {
+    renderPage();
+
+    const detailsBtn = await screen.findByRole("button", { name: /details/i });
+    fireEvent.click(detailsBtn);
+
+    const drawer = await screen.findByTestId("brand-drilldown-drawer");
+    expect(drawer.textContent).toContain("BrandDrilldown open for ASV");
+  });
+
+  test("drilldown actions preserve Upload, Zones, and Watchdog routing", async () => {
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /details/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /upload new sheet/i }));
+    expect((await screen.findByTestId("upload-drawer")).textContent).toContain("UploadDrawer open for ASV");
+
+    fireEvent.click(await screen.findByRole("button", { name: /details/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /manage freight zones/i }));
+    expect((await screen.findByTestId("freight-drawer")).textContent).toContain("FreightZoneDrawer open for ASV");
+
+    fireEvent.click(await screen.findByRole("button", { name: /details/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /open watchdog/i }));
+    expect(await screen.findByTestId("watchdog-section")).toBeTruthy();
   });
 
   test("clicking Upload opens the UploadDrawer with the correct brand context", async () => {

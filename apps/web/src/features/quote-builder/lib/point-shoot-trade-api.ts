@@ -139,6 +139,33 @@ export interface BookValueRange {
 export interface ApplyTradeResult {
   valuationId: string;
   preliminaryValueCents: number;
+  /** First stored trade_valuations.photos URL, when the edge function echoes it. */
+  photoUrl: string | null;
+  /** All stored trade_valuations.photos URLs from the apply response. */
+  photoUrls: string[];
+}
+
+export interface TradeValuationProposalPhoto {
+  type: string;
+  url: string;
+}
+
+export interface TradeValuationProposalSnapshot {
+  id: string;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  serialNumber: string | null;
+  hours: number | null;
+  photos: TradeValuationProposalPhoto[];
+  marketComps: Array<Record<string, unknown>>;
+  auctionValue: number | null;
+  discountedValue: number | null;
+  reconditioningEstimate: number | null;
+  preliminaryValue: number | null;
+  conditionalLanguage: string | null;
+  aiConditionNotes: string | null;
+  operationalStatus: string | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -191,6 +218,48 @@ function normalizeStringArray(value: unknown): string[] {
     const text = firstString(item);
     return text ? [text] : [];
   });
+}
+
+function normalizeMarketComps(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is Record<string, unknown> => isRecord(item));
+}
+
+export function normalizeTradeValuationPhotos(value: unknown): TradeValuationProposalPhoto[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (typeof item === "string") {
+      const url = firstString(item);
+      return url ? [{ type: "trade", url }] : [];
+    }
+    if (!isRecord(item)) return [];
+    const url = firstString(item.url, item.publicUrl, item.public_url);
+    if (!url) return [];
+    return [{ type: firstString(item.type, item.kind) ?? "trade", url }];
+  });
+}
+
+export function normalizeTradeValuationProposalSnapshot(payload: unknown): TradeValuationProposalSnapshot | null {
+  if (!isRecord(payload)) return null;
+  const id = firstString(payload.id);
+  if (!id) return null;
+  return {
+    id,
+    make: firstString(payload.make),
+    model: firstString(payload.model),
+    year: numberOrNull(payload.year),
+    serialNumber: firstString(payload.serial_number, payload.serialNumber),
+    hours: numberOrNull(payload.hours),
+    photos: normalizeTradeValuationPhotos(payload.photos),
+    marketComps: normalizeMarketComps(payload.market_comps ?? payload.marketComps),
+    auctionValue: numberOrNull(payload.auction_value ?? payload.auctionValue),
+    discountedValue: numberOrNull(payload.discounted_value ?? payload.discountedValue),
+    reconditioningEstimate: numberOrNull(payload.reconditioning_estimate ?? payload.reconditioningEstimate),
+    preliminaryValue: numberOrNull(payload.preliminary_value ?? payload.preliminaryValue),
+    conditionalLanguage: firstString(payload.conditional_language, payload.conditionalLanguage),
+    aiConditionNotes: firstString(payload.ai_condition_notes, payload.aiConditionNotes),
+    operationalStatus: firstString(payload.operational_status, payload.operationalStatus),
+  };
 }
 
 function parseYear(value: unknown): number | null {
@@ -265,11 +334,14 @@ export function normalizeApplyTradeResultPayload(
   const id = firstString(valuation.id);
   if (!id) throw new Error("Trade valuation response missing id");
   const preliminaryValue = numberOrNull(valuation.preliminary_value);
+  const photoUrls = normalizeTradeValuationPhotos(valuation.photos).map((photo) => photo.url);
   return {
     valuationId: id,
     preliminaryValueCents: Math.round(
       preliminaryValue == null ? fallbackPreliminaryValueCents : preliminaryValue * 100,
     ),
+    photoUrl: photoUrls[0] ?? null,
+    photoUrls,
   };
 }
 
@@ -350,6 +422,18 @@ export interface ApplyTradeInput {
   conditionOverall: PointShootIdentification["conditionOverall"];
   bookValue: BookValueRange;
   allowanceDollars: number; // what the rep is offering (derived from midCents by default)
+}
+
+export async function getTradeValuationProposalSnapshot(
+  valuationId: string,
+): Promise<TradeValuationProposalSnapshot | null> {
+  const { data, error } = await supabase
+    .from("trade_valuations")
+    .select("id, make, model, year, serial_number, hours, photos, market_comps, auction_value, discounted_value, reconditioning_estimate, preliminary_value, conditional_language, ai_condition_notes, operational_status")
+    .eq("id", valuationId)
+    .maybeSingle();
+  if (error) throw error;
+  return normalizeTradeValuationProposalSnapshot(data);
 }
 
 export async function applyPointShootTrade(input: ApplyTradeInput): Promise<ApplyTradeResult> {

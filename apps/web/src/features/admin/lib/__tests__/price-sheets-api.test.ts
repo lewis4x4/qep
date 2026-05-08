@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 //   getFreightZones:      from → select → eq → order      (Promise)
 //   upsertFreightZone:    from → insert/update → [eq] → select → single  (Promise)
 //   deleteFreightZone:    from → delete → eq              (Promise)
+//   getBrandDrilldown:    from → select → eq → maybeSingle/order/limit
 //
 // Strategy: makeChain(data) returns an object that is both chainable (every
 // method returns itself or a terminal Promise) and thenable so Promise.all
@@ -33,6 +34,7 @@ function makeChain(result: ChainResult) {
     chain[m] = () => chain;
   }
   chain["single"] = () => Promise.resolve(singleResult);
+  chain["maybeSingle"] = () => Promise.resolve(singleResult);
   chain["then"]   = resolved.then.bind(resolved);
   chain["catch"]  = resolved.catch.bind(resolved);
   return chain;
@@ -44,6 +46,7 @@ const tableData: Record<string, ChainResult> = {
   qb_price_sheets:      { data: [], error: null },
   qb_freight_zones:     { data: [], error: null },
   qb_price_sheet_items: { data: [], error: null },
+  qb_programs:          { data: [], error: null },
 };
 
 const mockFrom = mock((table: string) =>
@@ -91,8 +94,11 @@ const {
   uploadAndExtractSheet,
   retryExtract,
   retryPublish,
+  getBrandDrilldown,
   normalizeBrandIdRows,
   normalizeBrandSheetSourceRows,
+  normalizeBrandPriceSheetSummaryRows,
+  normalizeBrandProductPriceRows,
   normalizeFreightZoneRows,
   normalizePriceSheetItemRows,
   normalizePriceSheetSourceRows,
@@ -146,6 +152,7 @@ describe("price-sheets-api", () => {
     tableData["qb_price_sheets"]      = { data: [], error: null };
     tableData["qb_freight_zones"]     = { data: [], error: null };
     tableData["qb_price_sheet_items"] = { data: [], error: null };
+    tableData["qb_programs"]          = { data: [], error: null };
   });
 
   test("normalizes dashboard source rows and filters malformed payloads", () => {
@@ -184,6 +191,75 @@ describe("price-sheets-api", () => {
         freight_large_cents: 194200,
         freight_small_cents: 77700,
         state_codes: ["FL", "GA"],
+      },
+    ]);
+  });
+
+  test("normalizes brand drill-down sheet summaries", () => {
+    expect(normalizeBrandPriceSheetSummaryRows([
+      {
+        id: "sheet-1",
+        brand_id: "brand-asv-uuid",
+        filename: "ASV April.pdf",
+        file_type: "pdf",
+        sheet_type: "price_book",
+        status: "published",
+        uploaded_at: "2026-04-15T00:00:00Z",
+        published_at: "2026-04-16T00:00:00Z",
+        created_at: "2026-04-14T00:00:00Z",
+        source_id: "source-1",
+      },
+      { id: "bad-sheet", brand_id: "brand-asv-uuid" },
+    ])).toEqual([
+      {
+        id: "sheet-1",
+        brand_id: "brand-asv-uuid",
+        filename: "ASV April.pdf",
+        file_type: "pdf",
+        sheet_type: "price_book",
+        status: "published",
+        uploaded_at: "2026-04-15T00:00:00Z",
+        published_at: "2026-04-16T00:00:00Z",
+        created_at: "2026-04-14T00:00:00Z",
+        source_id: "source-1",
+        version: "v2026.04",
+      },
+    ]);
+  });
+
+  test("normalizes product rows from extracted JSON aliases", () => {
+    expect(normalizeBrandProductPriceRows([
+      {
+        id: "item-1",
+        item_type: "model",
+        extracted: {
+          modelCode: "RT-40",
+          description: "RT-40 compact track loader",
+          series: "Loaders",
+          base_price_cents: "12890000",
+        },
+      },
+      {
+        id: "item-2",
+        item_type: "model",
+        extracted: JSON.stringify({ sku: "RT-65", name: "RT-65", product_type: "Loaders", price_cents: 14900000 }),
+      },
+      { id: "item-3", item_type: "part", extracted: { model_code: "NOT-A-MODEL" } },
+      { id: "bad-item", item_type: "model", extracted: { name: "Missing code" } },
+    ])).toEqual([
+      {
+        id: "item-1",
+        model_code: "RT-40",
+        name_display: "RT-40 compact track loader",
+        category: "Loaders",
+        list_price_cents: 12890000,
+      },
+      {
+        id: "item-2",
+        model_code: "RT-65",
+        name_display: "RT-65",
+        category: "Loaders",
+        list_price_cents: 14900000,
       },
     ]);
   });
@@ -325,6 +401,84 @@ describe("price-sheets-api", () => {
     expect(zones[0].state_codes).toEqual(["FL"]);
     expect(zones[0].freight_large_cents).toBe(194200);
     expect(zones[0].freight_small_cents).toBe(77700);
+  });
+
+  test("getBrandDrilldown: composes active sheet, pending uploads, products, freight, and readiness", async () => {
+    tableData["qb_brands"] = { data: [BRAND_ASV], error: null };
+    tableData["qb_price_sheets"] = { data: [
+      {
+        id: "sheet-active",
+        brand_id: "brand-asv-uuid",
+        filename: "ASV May.pdf",
+        file_type: "pdf",
+        sheet_type: "price_book",
+        status: "published",
+        uploaded_at: "2026-05-01T00:00:00Z",
+        published_at: "2026-05-02T00:00:00Z",
+        created_at: "2026-05-01T00:00:00Z",
+        source_id: "source-1",
+      },
+      {
+        id: "sheet-old",
+        brand_id: "brand-asv-uuid",
+        filename: "ASV April.pdf",
+        file_type: "pdf",
+        sheet_type: "price_book",
+        status: "published",
+        uploaded_at: "2026-04-01T00:00:00Z",
+        published_at: "2026-04-02T00:00:00Z",
+        created_at: "2026-04-01T00:00:00Z",
+        source_id: null,
+      },
+      {
+        id: "sheet-pending",
+        brand_id: "brand-asv-uuid",
+        filename: "ASV June draft.pdf",
+        file_type: "pdf",
+        sheet_type: "price_book",
+        status: "pending_review",
+        uploaded_at: "2026-06-01T00:00:00Z",
+        published_at: null,
+        created_at: "2026-06-01T00:00:00Z",
+        source_id: "source-2",
+      },
+    ], error: null };
+    tableData["qb_freight_zones"] = { data: [FREIGHT_ZONE_ROW], error: null };
+    tableData["qb_programs"] = { data: [
+      { brand_id: "brand-asv-uuid", active: true },
+      { brand_id: "brand-asv-uuid", active: false },
+    ], error: null };
+    tableData["qb_price_sheet_items"] = { data: [
+      { id: "item-1", item_type: "model", extracted: { model_code: "RT-40", name: "RT-40", category: "Loaders", list_price_cents: 12890000 } },
+      { id: "item-2", item_type: "model", extracted: { code: "RT-65", description: "RT-65", series: "Loaders", base_price_cents: "14900000" } },
+      { id: "item-3", item_type: "model", extracted: { sku: "VT-100", name: "VT-100", product_type: "Forestry", price_cents: 21000000 } },
+    ], error: null };
+
+    const result = await getBrandDrilldown("brand-asv-uuid", { productLimit: 2 });
+
+    expect(result).toMatchObject({ ok: true });
+    if (!("ok" in result)) throw new Error(result.error);
+
+    expect(result.detail.brand).toEqual(BRAND_ASV);
+    expect(result.detail.activeSheet?.id).toBe("sheet-active");
+    expect(result.detail.activeSheet?.version).toBe("v2026.05");
+    expect(result.detail.sheetHistory.map((sheet) => sheet.id)).toEqual(["sheet-pending", "sheet-active", "sheet-old"]);
+    expect(result.detail.pendingSheets.map((sheet) => sheet.id)).toEqual(["sheet-pending"]);
+    expect(result.detail.products.rows).toEqual([
+      { id: "item-1", model_code: "RT-40", name_display: "RT-40", category: "Loaders", list_price_cents: 12890000 },
+      { id: "item-2", model_code: "RT-65", name_display: "RT-65", category: "Loaders", list_price_cents: 14900000 },
+    ]);
+    expect(result.detail.products).toMatchObject({ loadedCount: 2, limit: 2, hasMore: true });
+    expect(result.detail.freight.zones).toHaveLength(1);
+    expect(result.detail.freight.coverage.covered).toContain("FL");
+    expect(result.detail.freight.coverage.uncovered).toContain("GA");
+    expect(result.detail.readiness).toEqual({
+      publishedSheetCount: 2,
+      freightZoneCount: 1,
+      activeProgramCount: 1,
+      dealEngineEnabled: true,
+      hasInboundFreightKey: true,
+    });
   });
 
   // ── Upload pipeline (CP5) ────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import {
   buildQuoteListUrl,
   normalizeAvailabilityRequest,
   normalizeClosedDealsAudit,
+  normalizeCrmEquipmentQuoteSeed,
   normalizeFactorAttributionDeals,
   normalizeFactorVerdicts,
   normalizePortalQuoteRevisionCompare,
@@ -92,6 +93,12 @@ describe("buildQuoteSavePayload", () => {
             availability_request_id: "22222222-2222-4222-8222-222222222222",
             availability_request_status: "pending",
             availability_client_line_key: "qb_equipment_models|model-1|0",
+            photo_url: "https://cdn.qep.example/t86-front.jpg",
+            photo_urls: ["https://cdn.qep.example/t86-front.jpg", "https://cdn.qep.example/t86-side.jpg"],
+            media_source: "crm_equipment",
+            media_source_id: "asset-1",
+            media_kind: "actual",
+            serial_number: "B4CD12345",
           },
         }],
       }),
@@ -104,6 +111,11 @@ describe("buildQuoteSavePayload", () => {
     expect(line.metadata.availability_request_status).toBe("pending");
     expect(line.metadata.source_catalog).toBe("qb_equipment_models");
     expect(line.metadata.source_id).toBe("11111111-1111-4111-8111-111111111111");
+    expect(line.metadata.photo_url).toBe("https://cdn.qep.example/t86-front.jpg");
+    expect(line.metadata.photo_urls).toEqual(["https://cdn.qep.example/t86-front.jpg", "https://cdn.qep.example/t86-side.jpg"]);
+    expect(line.metadata.media_source).toBe("crm_equipment");
+    expect(line.metadata.media_kind).toBe("actual");
+    expect(line.metadata.serial_number).toBe("B4CD12345");
   });
 
   test("does not persist placeholder promotion ids or promotion marker reason codes", () => {
@@ -139,6 +151,58 @@ describe("buildQuoteSavePayload", () => {
     const lines = payload.line_items as Array<Record<string, unknown>>;
     expect(lines.find((line) => line.line_type === "rebate_mfg")?.reason_code).toBeUndefined();
     expect(lines.find((line) => line.line_type === "discount")?.reason_code).toBe("competitive_match");
+  });
+});
+
+describe("normalizeCrmEquipmentQuoteSeed", () => {
+  test("maps real CRM equipment photos into quote-builder catalog metadata", () => {
+    const seed = normalizeCrmEquipmentQuoteSeed({
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "ASV RT-135F Forestry",
+      make: "ASV",
+      model: "RT-135F",
+      year: 2026,
+      asset_tag: "Q003403",
+      serial_number: "ASVRT135LTDF01723",
+      condition: "new",
+      availability: "available",
+      current_market_value: 144_110.65,
+      replacement_cost: 148_950,
+      engine_hours: 4.2,
+      fuel_type: "Diesel",
+      operating_capacity: "4,150 lb ROC",
+      photo_urls: [
+        "https://storage.qep.example/equipment/asv-front.jpg",
+        "https://storage.qep.example/equipment/asv-side.jpg",
+      ],
+      warranty_expires_on: "2028-05-07",
+      metadata: { vendor_logo_url: "https://cdn.qep.example/asv-logo.png" },
+    });
+
+    expect(seed).toMatchObject({
+      id: "11111111-1111-4111-8111-111111111111",
+      sourceCatalog: "catalog_entries",
+      sourceId: "11111111-1111-4111-8111-111111111111",
+      make: "ASV",
+      model: "RT-135F",
+      year: 2026,
+      list_price: 148_950,
+      stock_number: "Q003403",
+      serial_number: "ASVRT135LTDF01723",
+      photo_url: "https://storage.qep.example/equipment/asv-front.jpg",
+      photo_urls: [
+        "https://storage.qep.example/equipment/asv-front.jpg",
+        "https://storage.qep.example/equipment/asv-side.jpg",
+      ],
+      media_source: "crm_equipment",
+      media_source_id: "11111111-1111-4111-8111-111111111111",
+      media_kind: "actual",
+      availabilityStatus: "in_stock",
+      vendor_logo_url: "https://cdn.qep.example/asv-logo.png",
+    });
+    expect(seed?.spec_bullets).toContain("4.2 hours");
+    expect(seed?.spec_bullets).toContain("Fuel type: Diesel");
+    expect(seed?.spec_bullets).toContain("Operating capacity: 4,150 lb ROC");
   });
 });
 

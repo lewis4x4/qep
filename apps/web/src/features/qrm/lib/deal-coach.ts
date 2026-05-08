@@ -107,7 +107,7 @@ export function buildDealCoachBoard(input: {
           trace: [
             `Deal has used ${Math.round(input.timeBank.pct_used * 100)}% of its stage budget.`,
             input.timeBank.is_over
-              ? `The stage is over budget by ${Math.abs(input.timeBank.remaining_days)} days.`
+              ? `The stage is over budget by ${input.timeBank.overrun_days} days.`
               : `${input.timeBank.remaining_days} days remain in the stage budget.`,
             `Current stage: ${input.timeBank.stage_name}.`,
           ],

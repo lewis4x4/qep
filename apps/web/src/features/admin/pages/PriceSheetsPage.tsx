@@ -10,11 +10,13 @@ import { supabase } from "@/lib/supabase";
 import { BrandFreshnessTable } from "../components/BrandFreshnessTable";
 import { UploadDrawer } from "../components/UploadDrawer";
 import { FreightZoneDrawer } from "../components/FreightZoneDrawer";
+import { BrandDrilldownDrawer } from "../components/BrandDrilldownDrawer";
 import { SheetSourcesSection } from "../components/SheetSourcesSection";
 import { WatchdogApprovalCard } from "../components/WatchdogApprovalCard";
 import { getBrandSheetStatus, type BrandSheetStatus } from "../lib/price-sheets-api";
 
 type SelectedBrand = { id: string; code: string; name: string } | null;
+type PriceSheetsTab = "dashboard" | "watchdog";
 
 /**
  * Slice 16: shape of a watchdog-ingested sheet awaiting review. Loaded via
@@ -46,6 +48,8 @@ function PriceSheetsPageInner() {
   const [rows, setRows] = useState<BrandSheetStatus[]>([]);
   const [pendingWatchdog, setPendingWatchdog] = useState<WatchdogPendingSheet[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<PriceSheetsTab>("dashboard");
+  const [drilldownBrand, setDrilldownBrand] = useState<BrandSheetStatus | null>(null);
   const [uploadBrand, setUploadBrand] = useState<SelectedBrand>(null);
   const [zonesBrand,  setZonesBrand]  = useState<SelectedBrand>(null);
 
@@ -87,6 +91,10 @@ function PriceSheetsPageInner() {
     setZonesBrand({ id: brandId, code: brandCode, name: brandName });
   };
 
+  const currentDrilldownRow = drilldownBrand
+    ? rows.find((row) => row.brand_id === drilldownBrand.brand_id) ?? drilldownBrand
+    : null;
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div>
@@ -104,7 +112,7 @@ function PriceSheetsPageInner() {
         </div>
       </div>
 
-      <Tabs defaultValue="dashboard">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PriceSheetsTab)}>
         <TabsList>
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="watchdog">
@@ -159,6 +167,7 @@ function PriceSheetsPageInner() {
               ) : (
                 <BrandFreshnessTable
                   rows={rows}
+                  onViewDetails={setDrilldownBrand}
                   onUpload={handleUpload}
                   onManageZones={handleManageZones}
                 />
@@ -171,6 +180,24 @@ function PriceSheetsPageInner() {
           <SheetSourcesSection />
         </TabsContent>
       </Tabs>
+
+      <BrandDrilldownDrawer
+        open={currentDrilldownRow !== null}
+        statusRow={currentDrilldownRow}
+        onClose={() => setDrilldownBrand(null)}
+        onUpload={(brandId, brandCode, brandName) => {
+          setDrilldownBrand(null);
+          handleUpload(brandId, brandCode, brandName);
+        }}
+        onManageZones={(brandId, brandCode, brandName) => {
+          setDrilldownBrand(null);
+          handleManageZones(brandId, brandCode, brandName);
+        }}
+        onOpenWatchdog={() => {
+          setDrilldownBrand(null);
+          setActiveTab("watchdog");
+        }}
+      />
 
       <UploadDrawer
         open={uploadBrand !== null}

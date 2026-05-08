@@ -48,9 +48,10 @@ import {
 export interface PointShootTradeCardProps {
   dealId: string | null;
   /** Called when the rep applies the trade; receives the allowance in
-   *  *dollars* (matching the existing draft.tradeAllowance shape) and
-   *  the trade_valuations row id. */
-  onApply: (allowanceDollars: number, valuationId: string) => void;
+   *  *dollars* (matching the existing draft.tradeAllowance shape), the
+   *  trade_valuations row id, and the first persisted photo URL when the
+   *  edge function echoes it. */
+  onApply: (allowanceDollars: number, valuationId: string, photoUrl?: string | null) => void;
   /** Called when the rep clears an applied trade. */
   onClear?: () => void;
   /** Currently-applied allowance (dollars) so the card can show an
@@ -160,7 +161,7 @@ export function PointShootTradeCard({
         bookValue: phase.range,
         allowanceDollars,
       });
-      onApply(allowanceDollars, result.valuationId);
+      onApply(allowanceDollars, result.valuationId, result.photoUrl);
       // Collapse back to a compact "applied" summary after a successful write.
       // The parent's onApply batches with our setPhase in React 18, so the
       // applied UI shows without a flash of idle.

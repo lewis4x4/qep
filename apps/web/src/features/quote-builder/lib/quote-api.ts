@@ -1211,6 +1211,96 @@ function firstString(...values: unknown[]): string | null {
   return null;
 }
 
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.flatMap((item) => {
+    const text = firstString(item);
+    if (!text || seen.has(text)) return [];
+    seen.add(text);
+    return [text];
+  });
+}
+
+function normalizeEquipmentAvailability(value: unknown): "in_stock" | "in_transit" | "source_required" {
+  const text = firstString(value)?.toLowerCase().replace(/[\s-]+/g, "_") ?? "";
+  if (["available", "in_stock", "ready", "on_hand"].includes(text)) return "in_stock";
+  if (["in_transit", "transit", "on_order", "ordered"].includes(text)) return "in_transit";
+  return "source_required";
+}
+
+export interface CrmEquipmentQuoteSeed {
+  id: string;
+  sourceCatalog: "catalog_entries";
+  sourceId: string;
+  dealerCost: number | null;
+  make: string;
+  model: string;
+  year: number | null;
+  list_price: number | null;
+  stock_number: string | null;
+  serial_number: string | null;
+  condition: string | null;
+  warranty_text: string | null;
+  long_description: string | null;
+  spec_bullets: string[];
+  photo_url: string | null;
+  photo_urls: string[];
+  vendor_logo_url: string | null;
+  media_source: "crm_equipment";
+  media_source_id: string;
+  media_kind: "actual";
+  availabilityStatus: "in_stock" | "in_transit" | "source_required";
+  attachments: Array<{ id: string; name: string; price: number }>;
+}
+
+export function normalizeCrmEquipmentQuoteSeed(row: unknown): CrmEquipmentQuoteSeed | null {
+  if (!isRecord(row)) return null;
+  const id = firstString(row.id);
+  if (!id) return null;
+  const metadata = normalizeRecord(row.metadata);
+  const make = firstString(row.make, metadata.make);
+  const model = firstString(row.model, metadata.model, row.name, metadata.name);
+  if (!make && !model) return null;
+  const photos = stringArray(row.photo_urls);
+  const year = numOrNull(row.year ?? metadata.year);
+  const hours = numOrNull(row.engine_hours ?? metadata.engine_hours ?? metadata.hours);
+  const specBullets = [
+    hours != null ? `${hours.toLocaleString("en-US")} hours` : null,
+    firstString(metadata.horsepower, metadata.hp) ? `${firstString(metadata.horsepower, metadata.hp)} HP` : null,
+    firstString(row.fuel_type, metadata.fuel_type) ? `Fuel type: ${firstString(row.fuel_type, metadata.fuel_type)}` : null,
+    firstString(row.weight_class, metadata.weight_class) ? `Weight class: ${firstString(row.weight_class, metadata.weight_class)}` : null,
+    firstString(row.operating_capacity, metadata.operating_capacity) ? `Operating capacity: ${firstString(row.operating_capacity, metadata.operating_capacity)}` : null,
+    firstString(metadata.operating_weight) ? `Operating weight: ${firstString(metadata.operating_weight)}` : null,
+    firstString(metadata.lift_capacity) ? `Lift capacity: ${firstString(metadata.lift_capacity)}` : null,
+  ].flatMap((item) => item ? [item] : []);
+  const warrantyExpiresOn = firstString(row.warranty_expires_on, metadata.warranty_expires_on);
+  return {
+    id,
+    sourceCatalog: "catalog_entries",
+    sourceId: id,
+    dealerCost: null,
+    make: make ?? "",
+    model: model ?? "",
+    year,
+    list_price: numOrNull(row.replacement_cost ?? row.current_market_value ?? row.purchase_price),
+    stock_number: firstString(row.stock_number, row.asset_tag, metadata.stock_number, metadata.asset_tag),
+    serial_number: firstString(row.serial_number, metadata.serial_number, metadata.vin, metadata.pin),
+    condition: firstString(row.condition, metadata.condition),
+    warranty_text: warrantyExpiresOn ? `Warranty through ${warrantyExpiresOn}` : firstString(metadata.warranty_text),
+    long_description: firstString(row.notes, metadata.description, row.name),
+    spec_bullets: specBullets.slice(0, 8),
+    photo_url: photos[0] ?? null,
+    photo_urls: photos,
+    vendor_logo_url: firstString(metadata.vendor_logo_url),
+    media_source: "crm_equipment",
+    media_source_id: id,
+    media_kind: "actual",
+    availabilityStatus: normalizeEquipmentAvailability(row.availability ?? metadata.availability),
+    attachments: [],
+  };
+}
+
 function normalizeQuoteScenarioType(value: unknown): QuoteFinanceScenario["type"] {
   return value === "lease" ? "lease" : value === "finance" ? "finance" : "cash";
 }
@@ -1922,10 +2012,31 @@ export async function searchCatalog(query: string) {
       category: row.family ?? brand?.category ?? null,
       list_price: row.list_price_cents != null ? Number(row.list_price_cents) / 100 : null,
       stock_number: null as string | null,
+      serial_number: null as string | null,
       condition: "new" as const,
+      warranty_text: null as string | null,
+      long_description: null as string | null,
+      spec_bullets: [] as string[],
+      photo_url: null as string | null,
+      photo_urls: [] as string[],
+      vendor_logo_url: null as string | null,
+      media_source: "qb_equipment_models" as const,
+      media_source_id: row.id,
+      media_kind: null as string | null,
       attachments: compatibleAttachments,
     };
   });
+}
+
+export async function getCrmEquipmentQuoteSeed(equipmentId: string): Promise<CrmEquipmentQuoteSeed | null> {
+  if (!equipmentId || !UUID_RE.test(equipmentId)) return null;
+  const { data, error } = await supabase
+    .from("crm_equipment")
+    .select("id, name, make, model, year, serial_number, asset_tag, condition, availability, current_market_value, replacement_cost, purchase_price, photo_urls, engine_hours, warranty_expires_on, notes, fuel_type, weight_class, operating_capacity, metadata")
+    .eq("id", equipmentId)
+    .maybeSingle();
+  if (error) throw error;
+  return normalizeCrmEquipmentQuoteSeed(data);
 }
 
 export async function searchQuoteAttachments(query: string) {

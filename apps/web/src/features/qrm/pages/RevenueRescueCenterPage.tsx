@@ -8,7 +8,6 @@ import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
 import { listCrmWeightedOpenDeals } from "../lib/qrm-deals-api";
 import { buildAccountCommandHref } from "../lib/account-command";
 import { buildRevenueRescueBoard } from "../lib/revenue-rescue";
-import type { TimeBankRow } from "../lib/time-bank";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
 import { DeckSurface, StatusDot, SignalChip } from "../components/command-deck";
@@ -16,7 +15,7 @@ import { useQuoteVelocity } from "../command-center/hooks/useQuoteVelocity";
 import { useBlockers } from "../command-center/hooks/useBlockers";
 import { computeQuoteVelocity } from "../command-center/lib/quoteVelocity";
 import { groupBlockedDeals } from "../command-center/lib/blockerTypes";
-import { crmSupabase } from "../lib/qrm-supabase";
+import { fetchTimeBankRows } from "../lib/time-bank-api";
 
 function fmtMoney(v: number) {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
@@ -26,7 +25,7 @@ function fmtMoney(v: number) {
 
 export function RevenueRescueCenterPage() {
   const workspaceQuery = useMyWorkspaceId();
-  const workspaceId = workspaceQuery.data ?? "default";
+  const workspaceId = workspaceQuery.data;
   const dealsQuery = useQuery({
     queryKey: ["revenue-rescue", "deals"],
     queryFn: () => listCrmWeightedOpenDeals(),
@@ -37,14 +36,7 @@ export function RevenueRescueCenterPage() {
   const timeBankQuery = useQuery({
     queryKey: ["revenue-rescue", "time-bank", workspaceId],
     enabled: Boolean(workspaceId),
-    queryFn: async (): Promise<TimeBankRow[]> => {
-      const { data, error } = await crmSupabase.rpc("qrm_time_bank", {
-        p_workspace_id: workspaceId,
-        p_default_budget_days: 14,
-      });
-      if (error) throw new Error(error.message ?? "Failed to load time bank.");
-      return (data ?? []) satisfies TimeBankRow[];
-    },
+    queryFn: () => fetchTimeBankRows({ workspaceId: workspaceId!, defaultBudgetDays: 14 }),
     staleTime: 60_000,
   });
 

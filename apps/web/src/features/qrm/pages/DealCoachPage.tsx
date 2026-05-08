@@ -8,13 +8,12 @@ import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { fetchDealComposite } from "../lib/deal-composite-api";
 import { buildDealCoachBoard } from "../lib/deal-coach";
-import { crmSupabase } from "../lib/qrm-supabase";
+import { fetchTimeBankRows } from "../lib/time-bank-api";
 import { readVoiceCaptureTimelineSignals } from "../lib/voice-capture-activity-metadata";
 import { useQuoteVelocity } from "../command-center/hooks/useQuoteVelocity";
 import { computeQuoteVelocity } from "../command-center/lib/quoteVelocity";
 import { useBlockers } from "../command-center/hooks/useBlockers";
 import { groupBlockedDeals } from "../command-center/lib/blockerTypes";
-import type { TimeBankRow } from "../lib/time-bank";
 
 function confidenceTone(confidence: "high" | "medium" | "low"): string {
   switch (confidence) {
@@ -30,7 +29,7 @@ function confidenceTone(confidence: "high" | "medium" | "low"): string {
 export function DealCoachPage() {
   const { dealId } = useParams<{ dealId: string }>();
   const workspaceQuery = useMyWorkspaceId();
-  const workspaceId = workspaceQuery.data ?? "default";
+  const workspaceId = workspaceQuery.data;
 
   const compositeQuery = useQuery({
     queryKey: ["deal-coach", dealId, "composite"],
@@ -42,13 +41,8 @@ export function DealCoachPage() {
   const timeBankQuery = useQuery({
     queryKey: ["deal-coach", dealId, "time-bank", workspaceId],
     enabled: Boolean(dealId) && Boolean(workspaceId),
-    queryFn: async (): Promise<TimeBankRow | null> => {
-      const { data, error } = await crmSupabase.rpc("qrm_time_bank", {
-        p_workspace_id: workspaceId,
-        p_default_budget_days: 14,
-      });
-      if (error) throw new Error(error.message ?? "Failed to load Time Bank.");
-      const rows = (data ?? []) satisfies TimeBankRow[];
+    queryFn: async () => {
+      const rows = await fetchTimeBankRows({ workspaceId: workspaceId!, defaultBudgetDays: 14 });
       return rows.find((row) => row.deal_id === dealId) ?? null;
     },
     staleTime: 60_000,

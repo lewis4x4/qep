@@ -1,4 +1,5 @@
-import type { QuotePDFData } from "../components/QuotePDFDocument";
+import type { QuotePDFData, QuoteProposalAsset } from "../components/QuotePDFDocument";
+import type { TradeValuationProposalSnapshot } from "./point-shoot-trade-api";
 import type { QuoteWorkspaceComputed } from "./quote-workspace";
 import type {
   QuoteFinanceScenario,
@@ -30,6 +31,29 @@ const TAX_PROFILE_LABELS: Record<QuoteTaxProfile, string> = {
 const FINANCING_DISCLOSURE = "Financing and lease payments shown are estimates for proposal discussion only. They are not a credit approval, commitment to lend, or final Truth in Lending Act disclosure. Final APR, payment, term, fees, taxes, and finance charges are subject to lender approval, signed finance documents, and applicable law.";
 const PROPOSAL_DISCLOSURE = "This proposal is prepared for the named customer only. Prices, incentives, freight, tax, delivery timing, financing, and availability are subject to final confirmation and prior sale. Dealer cost, margin, and internal approval details are intentionally excluded from customer-facing proposal output.";
 
+/**
+ * Customer-safe quote media metadata contract.
+ *
+ * Quote line metadata may carry URL snapshots from source records using these
+ * public keys only: photo_url, photo_urls, vendor_logo_url, media_source,
+ * media_source_id, media_kind, stock_number, serial_number, condition,
+ * warranty_text, long_description, and spec_bullets. The proposal projection
+ * below is whitelist-only: raw metadata, source IDs, margin/cost fields, AI
+ * excerpts, and local/private URLs are never copied into customer output.
+ */
+const BRAND_ASSET_ROOT = "/brand/qep/quote/";
+const QEP_BRAND_ASSETS = {
+  qepLogo: { src: `${BRAND_ASSET_ROOT}qep-its-in-the-name-logo.png`, alt: "Quality Equipment & Parts logo" },
+  vendorLogos: [
+    { src: `${BRAND_ASSET_ROOT}vendor-asv.png`, alt: "ASV" },
+    { src: `${BRAND_ASSET_ROOT}vendor-cmi.png`, alt: "CMI" },
+    { src: `${BRAND_ASSET_ROOT}vendor-develon.png`, alt: "Develon" },
+    { src: `${BRAND_ASSET_ROOT}vendor-bandit-authorized.png`, alt: "Bandit authorized dealer" },
+    { src: `${BRAND_ASSET_ROOT}vendor-stacked.png`, alt: "QEP vendor partners" },
+  ],
+  qrCode: { src: `${BRAND_ASSET_ROOT}qep-qr.png`, alt: "QEP website QR code" },
+} satisfies QuotePDFData["brandAssets"];
+
 function money(value: number | null | undefined): number {
   return Number.isFinite(value ?? NaN) ? Math.round(Math.max(0, Number(value)) * 100) / 100 : 0;
 }
@@ -37,6 +61,118 @@ function money(value: number | null | undefined): number {
 function optionalText(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function metadataRecord(value: QuoteLineItemDraft["metadata"]): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function metadataText(metadata: Record<string, unknown>, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const value = metadata[key];
+    if (typeof value === "string") {
+      const text = optionalText(value);
+      if (text) return text;
+    }
+  }
+  return null;
+}
+
+function metadataTextArray(metadata: Record<string, unknown>, ...keys: string[]): string[] {
+  const values: string[] = [];
+  for (const key of keys) {
+    const value = metadata[key];
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === "string") {
+          const text = optionalText(item);
+          if (text) values.push(text);
+        }
+      }
+    } else if (typeof value === "string") {
+      const text = optionalText(value);
+      if (text) values.push(text);
+    }
+  }
+  return values;
+}
+
+function isPrivateProposalHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return true;
+  if (host === "::1" || host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd")) return true;
+  const octets = host.split(".").map((part) => Number(part));
+  if (octets.length !== 4 || octets.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+  const [a, b] = octets;
+  return a === 0
+    || a === 10
+    || a === 127
+    || (a === 169 && b === 254)
+    || (a === 172 && b != null && b >= 16 && b <= 31)
+    || (a === 192 && b === 168);
+}
+
+export function isSafeProposalMediaUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const text = value.trim();
+  if (!text) return false;
+  if (text.startsWith("//")) return false;
+  if (text.startsWith("/")) return true;
+  try {
+    const url = new URL(text);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+    return !isPrivateProposalHost(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function safeProposalMediaUrl(value: unknown): string | null {
+  return isSafeProposalMediaUrl(value) ? value.trim() : null;
+}
+
+function proposalAsset(src: unknown, alt: string, options?: Pick<QuoteProposalAsset, "caption" | "mediaKind">): QuoteProposalAsset | null {
+  const safeSrc = safeProposalMediaUrl(src);
+  return safeSrc ? { src: safeSrc, alt, caption: options?.caption ?? null, mediaKind: options?.mediaKind ?? null } : null;
+}
+
+function proposalMediaKind(metadata: Record<string, unknown>): QuoteProposalAsset["mediaKind"] {
+  const kind = metadataText(metadata, "media_kind", "mediaKind");
+  return kind ?? null;
+}
+
+function specBullets(metadata: Record<string, unknown>): string[] {
+  const raw = metadata.spec_bullets ?? metadata.specBullets;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (typeof item !== "string") return [];
+    const text = optionalText(item);
+    return text ? [text] : [];
+  }).slice(0, 8);
+}
+
+function buildLineMedia(metadata: Record<string, unknown>, description: string): QuotePDFData["lineItems"][number]["media"] {
+  const mediaKind = proposalMediaKind(metadata);
+  const galleryUrls = metadataTextArray(metadata, "photo_urls", "photoUrls", "trade_photo_urls", "tradePhotoUrls")
+    .flatMap((url) => {
+      const safe = safeProposalMediaUrl(url);
+      return safe ? [safe] : [];
+    });
+  const primaryUrl = safeProposalMediaUrl(metadataText(metadata, "photo_url", "photoUrl", "primary_photo_url", "primaryPhotoUrl", "trade_photo_url", "tradePhotoUrl")) ?? galleryUrls[0] ?? null;
+  const primaryPhoto = proposalAsset(primaryUrl, `${description} photo`, { mediaKind });
+  if (!primaryPhoto) return undefined;
+  const gallery = galleryUrls
+    .filter((url) => url !== primaryPhoto.src)
+    .slice(0, 6)
+    .flatMap((url, index) => {
+      const asset = proposalAsset(url, `${description} photo ${index + 2}`, { mediaKind });
+      return asset ? [asset] : [];
+    });
+  return { primaryPhoto, gallery };
+}
+
+function buildVendorLogo(metadata: Record<string, unknown>, description: string): QuoteProposalAsset | null {
+  return proposalAsset(metadataText(metadata, "vendor_logo_url", "vendorLogoUrl"), `${description} manufacturer logo`);
 }
 
 function lineExtendedAmount(line: Pick<QuoteLineItemDraft, "quantity" | "unitPrice">): number {
@@ -58,9 +194,11 @@ function toProposalLine(line: QuoteLineItemDraft, fallbackType?: QuoteLineItemKi
   const lineType = line.kind ?? fallbackType ?? "custom";
   const tone: ProposalLineTone = CREDIT_LINE_KINDS.has(lineType) ? "credit" : "charge";
   const extendedPrice = lineExtendedAmount(line);
+  const description = lineDescription(line);
+  const metadata = metadataRecord(line.metadata);
   return {
     lineType,
-    description: lineDescription(line),
+    description,
     make: optionalText(line.make),
     model: optionalText(line.model),
     year: line.year ?? null,
@@ -70,10 +208,95 @@ function toProposalLine(line: QuoteLineItemDraft, fallbackType?: QuoteLineItemKi
     displayAmount: displayMoney(extendedPrice, tone),
     tone,
     reasonCode: optionalText(line.reasonCode ?? null),
+    stockNumber: metadataText(metadata, "stock_number", "stockNumber"),
+    serialNumber: metadataText(metadata, "serial_number", "serialNumber"),
+    condition: metadataText(metadata, "condition"),
+    warrantyText: metadataText(metadata, "warranty_text", "warrantyText"),
+    longDescription: metadataText(metadata, "long_description", "longDescription"),
+    specBullets: specBullets(metadata),
+    media: buildLineMedia(metadata, description),
+    vendorLogo: buildVendorLogo(metadata, description),
   };
 }
 
-function buildLineItems(draft: QuoteWorkspaceDraft, computed: Pick<QuoteWorkspaceComputed, "discountTotal">): QuotePDFData["lineItems"] {
+function formatInteger(value: number): string {
+  return Math.round(value).toLocaleString("en-US");
+}
+
+function formatCompactMoney(value: number): string {
+  return `$${Math.round(value).toLocaleString("en-US")}`;
+}
+
+function tradeConditionLabel(status: string | null): string | null {
+  if (!status) return null;
+  return status.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function marketCompSummary(comps: TradeValuationProposalSnapshot["marketComps"]): string | null {
+  const visible = comps
+    .filter((comp) => comp.source !== "_aggregate")
+    .flatMap((comp) => {
+      const source = typeof comp.source === "string" ? optionalText(comp.source) : null;
+      const price = typeof comp.price === "number" && Number.isFinite(comp.price)
+        ? formatCompactMoney(comp.price)
+        : null;
+      return source ? [`${source}${price ? ` ${price}` : ""}`] : [];
+    })
+    .slice(0, 3);
+  return visible.length > 0 ? `Market context: ${visible.join(" · ")}` : null;
+}
+
+function buildTradeAllowanceLine(
+  draft: QuoteWorkspaceDraft,
+  tradeValuation: TradeValuationProposalSnapshot | null | undefined,
+): QuotePDFData["lineItems"][number] {
+  const tradeTitle = [tradeValuation?.year, tradeValuation?.make, tradeValuation?.model].filter(Boolean).join(" ").trim();
+  const photoUrls = tradeValuation?.photos.map((photo) => photo.url) ?? [];
+  const metadata = {
+    trade_photo_url: photoUrls[0] ?? null,
+    trade_photo_urls: photoUrls,
+    media_kind: "trade_in",
+  };
+  const condition = tradeConditionLabel(tradeValuation?.operationalStatus ?? null);
+  const specs = [
+    tradeValuation?.hours != null ? `Hours: ${formatInteger(tradeValuation.hours)}` : null,
+    tradeValuation?.preliminaryValue != null ? `Preliminary value: ${formatCompactMoney(tradeValuation.preliminaryValue)}` : null,
+    tradeValuation?.auctionValue != null ? `Market midpoint: ${formatCompactMoney(tradeValuation.auctionValue)}` : null,
+    marketCompSummary(tradeValuation?.marketComps ?? []),
+    tradeValuation?.conditionalLanguage ? `Condition note: ${tradeValuation.conditionalLanguage}` : null,
+  ].flatMap((item) => {
+    const text = optionalText(item ?? null);
+    return text ? [text] : [];
+  });
+
+  return {
+    lineType: "trade_allowance",
+    description: "Trade-in allowance",
+    make: tradeValuation?.make ?? null,
+    model: tradeValuation?.model ?? null,
+    year: tradeValuation?.year ?? null,
+    quantity: 1,
+    unitPrice: money(draft.tradeAllowance),
+    extendedPrice: money(draft.tradeAllowance),
+    displayAmount: money(draft.tradeAllowance),
+    tone: "credit",
+    reasonCode: null,
+    serialNumber: tradeValuation?.serialNumber ?? null,
+    condition,
+    longDescription: tradeTitle
+      ? `Trade evidence captured for ${tradeTitle}${tradeValuation?.aiConditionNotes ? ` — ${tradeValuation.aiConditionNotes}` : ""}`
+      : tradeValuation?.aiConditionNotes ?? null,
+    specBullets: specs.slice(0, 8),
+    media: buildLineMedia(metadata, tradeTitle || "Trade-in equipment"),
+    vendorLogo: null,
+  };
+}
+
+function buildLineItems(
+  draft: QuoteWorkspaceDraft,
+  computed: Pick<QuoteWorkspaceComputed, "discountTotal">,
+  tradeValuation?: TradeValuationProposalSnapshot | null,
+): QuotePDFData["lineItems"] {
   const lines = [
     ...draft.equipment.map((line) => toProposalLine(line, "equipment")),
     ...draft.attachments.map((line) => toProposalLine(line, "attachment")),
@@ -101,19 +324,7 @@ function buildLineItems(draft: QuoteWorkspaceDraft, computed: Pick<QuoteWorkspac
   }
 
   if (draft.tradeAllowance > 0) {
-    lines.push({
-      lineType: "trade_allowance",
-      description: "Trade-in allowance",
-      make: null,
-      model: null,
-      year: null,
-      quantity: 1,
-      unitPrice: money(draft.tradeAllowance),
-      extendedPrice: money(draft.tradeAllowance),
-      displayAmount: money(draft.tradeAllowance),
-      tone: "credit",
-      reasonCode: null,
-    });
+    lines.push(buildTradeAllowanceLine(draft, tradeValuation));
   }
 
   return lines;
@@ -226,6 +437,7 @@ export function buildQuoteProposalData(input: {
   preparedBy: string;
   preparedDate: string;
   branch: QuotePDFData["branch"];
+  tradeValuation?: TradeValuationProposalSnapshot | null;
 }): QuotePDFData {
   const { draft, computed } = input;
   const financing = buildFinancing(input.financeScenarios);
@@ -256,7 +468,8 @@ export function buildQuoteProposalData(input: {
       quantity: item.quantity,
       extendedPrice: money(lineExtendedAmount(item)),
     })),
-    lineItems: buildLineItems(draft, computed),
+    lineItems: buildLineItems(draft, computed, input.tradeValuation),
+    brandAssets: QEP_BRAND_ASSETS,
     narrative: buildNarrative(draft),
     equipmentTotal: money(computed.equipmentTotal),
     attachmentTotal: money(computed.attachmentTotal),

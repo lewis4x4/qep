@@ -10,8 +10,7 @@ import { supabase } from "@/lib/supabase";
 import { buildRepRealityBoard } from "../lib/rep-reality";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
-import { crmSupabase } from "../lib/qrm-supabase";
-import type { TimeBankRow } from "../lib/time-bank";
+import { fetchTimeBankRows } from "../lib/time-bank-api";
 
 export function RepRealityReflectionPage() {
   const { profile } = useAuth();
@@ -27,9 +26,9 @@ export function RepRealityReflectionPage() {
           .eq("assigned_rep_id", profile!.id)
           .is("closed_at", null)
           .limit(300),
-        crmSupabase.rpc("qrm_time_bank", {
-          p_workspace_id: profile?.active_workspace_id ?? "default",
-          p_default_budget_days: 14,
+        fetchTimeBankRows({
+          workspaceId: profile?.active_workspace_id ?? "default",
+          defaultBudgetDays: 14,
         }),
         supabase
           .from("voice_captures")
@@ -50,11 +49,10 @@ export function RepRealityReflectionPage() {
       ]);
 
       if (dealsResult.error) throw new Error(dealsResult.error.message);
-      if (timeBankResult.error) throw new Error(timeBankResult.error.message ?? "Failed to load Time Bank.");
       if (companiesResult.error) throw new Error(companiesResult.error.message);
 
       const companyNameById = new Map((companiesResult.data ?? []).map((row) => [row.id, row.name]));
-      const timeBankRows = (timeBankResult.data ?? []) satisfies TimeBankRow[];
+      const timeBankRows = timeBankResult;
       const timeBankByDeal = new Map(timeBankRows.map((row) => [row.deal_id, row]));
 
       return {
@@ -67,6 +65,7 @@ export function RepRealityReflectionPage() {
           lastActivityAt: row.last_activity_at,
           pctUsed: timeBankByDeal.get(row.id)?.pct_used ?? null,
           isOver: Boolean(timeBankByDeal.get(row.id)?.is_over),
+          overrunDays: timeBankByDeal.get(row.id)?.overrun_days ?? 0,
         })),
         voiceNotes30d: (voiceResult.data?.length ?? 0),
         touches7d: (activityResult.data?.length ?? 0),
@@ -198,12 +197,9 @@ export function RepRealityReflectionPage() {
                               ) : null}
                               {deal.pctUsed != null && (
                                 <span className={`text-xs font-medium ${deal.pctUsed > 1.0 ? "text-qep-warm" : "text-muted-foreground"}`}>
-                                  {deal.pctUsed} of budget used
-                                </span>
-                              )}
-                              {deal.isOver && (
-                                <span className="text-xs font-medium text-qep-warm">
-                                  Over budget
+                                  {deal.isOver
+                                    ? `+${deal.overrunDays ?? 0}d over budget`
+                                    : `${Math.round(deal.pctUsed * 100)}% of budget used`}
                                 </span>
                               )}
                             </div>

@@ -36,6 +36,53 @@ export type BrandSheetStatus = {
   freight_zone_count: number;
 };
 
+export type BrandPriceSheetSummary = {
+  id: string;
+  brand_id: string;
+  filename: string | null;
+  file_type: string | null;
+  sheet_type: string | null;
+  status: string;
+  uploaded_at: string | null;
+  published_at: string | null;
+  created_at: string | null;
+  source_id: string | null;
+  /** "v2026.04" derived from uploaded_at when available, otherwise null. */
+  version: string | null;
+};
+
+export type BrandProductPriceRow = {
+  id: string;
+  model_code: string;
+  name_display: string | null;
+  category: string | null;
+  list_price_cents: number | null;
+};
+
+export type BrandDrilldownDetail = {
+  brand: BrandSheetSourceRow;
+  activeSheet: BrandPriceSheetSummary | null;
+  sheetHistory: BrandPriceSheetSummary[];
+  pendingSheets: BrandPriceSheetSummary[];
+  products: {
+    rows: BrandProductPriceRow[];
+    loadedCount: number;
+    limit: number;
+    hasMore: boolean;
+  };
+  freight: {
+    zones: FreightZone[];
+    coverage: FreightCoverage;
+  };
+  readiness: {
+    publishedSheetCount: number;
+    freightZoneCount: number;
+    activeProgramCount: number;
+    dealEngineEnabled: boolean;
+    hasInboundFreightKey: boolean;
+  };
+};
+
 /**
  * FreightZone is the exact DB row shape from qb_freight_zones.
  * Note: uses state_codes (text[], not state_code string) and separate
@@ -48,14 +95,20 @@ export type FreightZoneUpdate = Database["public"]["Tables"]["qb_freight_zones"]
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 const IN_FLIGHT_STATUSES = new Set(["pending_review", "extracting", "extracted"]);
+const DEFAULT_DRILLDOWN_PRODUCT_LIMIT = 100;
 const US_STATE_CODE_SET: ReadonlySet<string> = new Set(US_STATE_CODES);
 
-type BrandSheetSourceRow = {
+export type BrandSheetSourceRow = {
   id: string;
   code: string;
   name: string;
   discount_configured: boolean;
   has_inbound_freight_key: boolean;
+};
+
+type ProgramSourceRow = {
+  brand_id: string;
+  active: boolean;
 };
 
 type PriceSheetSourceRow = {
@@ -86,6 +139,41 @@ function numberOrNull(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function firstString(source: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = requiredString(source[key]);
+    if (value) return value;
+  }
+  return null;
+}
+
+function firstNullableString(source: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = nullableString(source[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function firstNumberOrNull(source: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = numberOrNull(source[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function parsedRecord(value: unknown): Record<string, unknown> | null {
+  if (isRecord(value)) return value;
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function requiredNumber(value: unknown): number | null {
@@ -130,6 +218,67 @@ export function normalizePriceSheetSourceRows(value: unknown): PriceSheetSourceR
     const status = requiredString(row.status);
     if (!id || !brandId || !uploadedAt || !status || !Number.isFinite(new Date(uploadedAt).getTime())) return [];
     return [{ id, brand_id: brandId, uploaded_at: uploadedAt, status }];
+  });
+}
+
+export function normalizeBrandPriceSheetSummaryRows(value: unknown): BrandPriceSheetSummary[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const id = requiredString(row.id);
+    const brandId = requiredString(row.brand_id);
+    const status = requiredString(row.status);
+    if (!id || !brandId || !status) return [];
+
+    const uploadedAt = nullableString(row.uploaded_at);
+    return [{
+      id,
+      brand_id:     brandId,
+      filename:     nullableString(row.filename),
+      file_type:    nullableString(row.file_type),
+      sheet_type:   nullableString(row.sheet_type),
+      status,
+      uploaded_at:  uploadedAt,
+      published_at: nullableString(row.published_at),
+      created_at:   nullableString(row.created_at),
+      source_id:    nullableString(row.source_id),
+      version:      uploadedAt && Number.isFinite(new Date(uploadedAt).getTime()) ? sheetVersion(uploadedAt) : null,
+    }];
+  });
+}
+
+export function normalizeBrandProductPriceRows(value: unknown): BrandProductPriceRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    if (nullableString(row.item_type) && row.item_type !== "model") return [];
+
+    const extracted = parsedRecord(row.extracted) ?? {};
+    const id = requiredString(row.id);
+    const modelCode = firstString(row, ["model_code", "modelCode", "code", "sku"])
+      ?? firstString(extracted, ["model_code", "modelCode", "code", "sku"]);
+    if (!id || !modelCode) return [];
+
+    return [{
+      id,
+      model_code: modelCode,
+      name_display: firstNullableString(row, ["name_display", "name", "description"])
+        ?? firstNullableString(extracted, ["name_display", "name", "description"]),
+      category: firstNullableString(row, ["category", "series", "product_type"])
+        ?? firstNullableString(extracted, ["category", "series", "product_type"]),
+      list_price_cents: firstNumberOrNull(row, ["list_price_cents", "base_price_cents", "price_cents"])
+        ?? firstNumberOrNull(extracted, ["list_price_cents", "base_price_cents", "price_cents"]),
+    }];
+  });
+}
+
+function normalizeProgramSourceRows(value: unknown): ProgramSourceRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const brandId = requiredString(row.brand_id);
+    if (!brandId) return [];
+    return [{ brand_id: brandId, active: bool(row.active) }];
   });
 }
 
@@ -184,6 +333,22 @@ function sheetVersion(uploadedAt: string): string {
   const d = new Date(uploadedAt);
   const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
   return `v${d.getUTCFullYear()}.${mm}`;
+}
+
+function sheetSortTime(sheet: BrandPriceSheetSummary): number {
+  const timestamp = sheet.published_at ?? sheet.uploaded_at ?? sheet.created_at;
+  const time = timestamp ? new Date(timestamp).getTime() : 0;
+  return Number.isFinite(time) ? time : 0;
+}
+
+function newestSheetsFirst(a: BrandPriceSheetSummary, b: BrandPriceSheetSummary): number {
+  return sheetSortTime(b) - sheetSortTime(a);
+}
+
+function productLimit(options?: { productLimit?: number }): number {
+  const requested = options?.productLimit;
+  if (!Number.isFinite(requested) || requested == null) return DEFAULT_DRILLDOWN_PRODUCT_LIMIT;
+  return Math.max(1, Math.floor(requested));
 }
 
 // ── getBrandSheetStatus ───────────────────────────────────────────────────────
@@ -264,6 +429,89 @@ export async function getBrandSheetStatus(): Promise<BrandSheetStatus[]> {
       freight_zone_count:      zoneCountByBrand.get(brand.id) ?? 0,
     };
   });
+}
+
+// ── Brand drill-down ──────────────────────────────────────────────────────────
+
+export async function getBrandDrilldown(
+  brandId: string,
+  options?: { productLimit?: number },
+): Promise<{ ok: true; detail: BrandDrilldownDetail } | { error: string }> {
+  const limit = productLimit(options);
+
+  const [brandRes, sheetsRes, zones, programsRes] = await Promise.all([
+    supabase
+      .from("qb_brands")
+      .select("id, code, name, discount_configured, has_inbound_freight_key")
+      .eq("id", brandId)
+      .maybeSingle(),
+    supabase
+      .from("qb_price_sheets")
+      .select("id, brand_id, filename, file_type, sheet_type, status, uploaded_at, published_at, created_at, source_id")
+      .eq("brand_id", brandId)
+      .order("published_at", { ascending: false, nullsFirst: false })
+      .order("uploaded_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false, nullsFirst: false }),
+    getFreightZones(brandId),
+    supabase
+      .from("qb_programs")
+      .select("brand_id, active")
+      .eq("brand_id", brandId),
+  ]);
+
+  if (brandRes.error) return { error: brandRes.error.message };
+  if (sheetsRes.error) return { error: sheetsRes.error.message };
+  if (programsRes.error) return { error: programsRes.error.message };
+
+  const brand = normalizeBrandSheetSourceRows(brandRes.data ? [brandRes.data] : [])[0];
+  if (!brand) return { error: "Brand not found" };
+
+  const sheets = normalizeBrandPriceSheetSummaryRows(sheetsRes.data).sort(newestSheetsFirst);
+  const activeSheet = sheets.find((sheet) => sheet.status === "published") ?? null;
+  const pendingSheets = sheets.filter((sheet) => IN_FLIGHT_STATUSES.has(sheet.status));
+  const publishedSheetCount = sheets.filter((sheet) => sheet.status === "published").length;
+  const activeProgramCount = normalizeProgramSourceRows(programsRes.data).filter((program) => program.active).length;
+
+  let normalizedProducts: BrandProductPriceRow[] = [];
+  if (activeSheet) {
+    const { data, error } = await supabase
+      .from("qb_price_sheet_items")
+      .select("id, item_type, extracted")
+      .eq("price_sheet_id", activeSheet.id)
+      .eq("item_type", "model")
+      .limit(limit + 1);
+
+    if (error) return { error: error.message };
+    normalizedProducts = normalizeBrandProductPriceRows(data);
+  }
+
+  const rows = normalizedProducts.slice(0, limit);
+  return {
+    ok: true,
+    detail: {
+      brand,
+      activeSheet,
+      sheetHistory: sheets.slice(0, 10),
+      pendingSheets,
+      products: {
+        rows,
+        loadedCount: rows.length,
+        limit,
+        hasMore: normalizedProducts.length > limit,
+      },
+      freight: {
+        zones,
+        coverage: analyzeFreightCoverage(zones),
+      },
+      readiness: {
+        publishedSheetCount,
+        freightZoneCount: zones.length,
+        activeProgramCount,
+        dealEngineEnabled: brand.discount_configured,
+        hasInboundFreightKey: brand.has_inbound_freight_key,
+      },
+    },
+  };
 }
 
 // ── Freight zones CRUD ────────────────────────────────────────────────────────

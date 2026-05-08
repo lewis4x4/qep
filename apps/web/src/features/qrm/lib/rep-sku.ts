@@ -1,5 +1,5 @@
 import { buildPipelineHealthByRep, type DealStageRow, type PipelineDealRow, type RepProfileRow } from "@/features/dashboards/lib/pipeline-health";
-import { aggregateTimeBankByRep, type TimeBankRow } from "./time-bank";
+import { aggregateTimeBankByRep, normalizeTimeBankRows, type TimeBankRow } from "./time-bank";
 
 export type RepSkuConfidence = "high" | "medium" | "low";
 
@@ -107,29 +107,7 @@ export function normalizeRepSkuProfileRows(rows: unknown): RepProfileRow[] {
 }
 
 export function normalizeRepSkuTimeBankRows(rows: unknown): TimeBankRow[] {
-  if (!Array.isArray(rows)) return [];
-
-  return rows.flatMap((row) => {
-    if (!isRecord(row) || typeof row.deal_id !== "string") return [];
-
-    return [{
-      deal_id: row.deal_id,
-      deal_name: requiredString(row.deal_name, "Unnamed deal"),
-      company_id: nullableString(row.company_id),
-      company_name: nullableString(row.company_name),
-      assigned_rep_id: nullableString(row.assigned_rep_id),
-      assigned_rep_name: nullableString(row.assigned_rep_name),
-      stage_id: requiredString(row.stage_id, "__missing_stage__"),
-      stage_name: requiredString(row.stage_name, "Unnamed stage"),
-      days_in_stage: requiredNumber(row.days_in_stage, 0),
-      stage_age_days: requiredNumber(row.stage_age_days, 0),
-      budget_days: requiredNumber(row.budget_days, 0),
-      has_explicit_budget: requiredBoolean(row.has_explicit_budget, false),
-      remaining_days: requiredNumber(row.remaining_days, 0),
-      pct_used: requiredNumber(row.pct_used, 0),
-      is_over: requiredBoolean(row.is_over, false),
-    }];
-  });
+  return normalizeTimeBankRows(rows);
 }
 
 function average(values: number[]): number | null {

@@ -5,7 +5,7 @@
  * trigger data, source IDs, metadata, or approval internals are rendered.
  */
 
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { Document, Image, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import type { QuoteFinanceScenarioKind, QuoteLineItemKind } from "../../../../../../shared/qep-moonshot-contracts";
 import { isDisplayableProposalFinanceScenario } from "../lib/quote-proposal-data";
 
@@ -17,8 +17,21 @@ const GEAR_GRAY = "#BFBFBF";
 const MUTED = "#707070";
 const WHITE = "#FFFFFF";
 const PAPER = "#F7F4EF";
+export const QEP_WEBSITE_QR_LABEL = "Scan to visit QEP online";
 
 type TextAlign = "left" | "center" | "right";
+
+export interface QuoteProposalAsset {
+  src: string;
+  alt: string;
+  caption?: string | null;
+  mediaKind?: "actual" | "model_generic" | "trade_in" | "manual" | string | null;
+}
+
+export interface QuoteProposalLineMedia {
+  primaryPhoto: QuoteProposalAsset | null;
+  gallery: QuoteProposalAsset[];
+}
 
 export interface QuoteProposalLine {
   lineType: QuoteLineItemKind;
@@ -32,6 +45,14 @@ export interface QuoteProposalLine {
   displayAmount: number;
   tone: "charge" | "credit";
   reasonCode?: string | null;
+  stockNumber?: string | null;
+  serialNumber?: string | null;
+  condition?: string | null;
+  warrantyText?: string | null;
+  longDescription?: string | null;
+  specBullets?: string[];
+  media?: QuoteProposalLineMedia;
+  vendorLogo?: QuoteProposalAsset | null;
 }
 
 export interface QuoteProposalNarrative {
@@ -84,6 +105,11 @@ export interface QuotePDFData {
   equipment: Array<{ make: string; model: string; year?: number | null; price: number; quantity?: number; extendedPrice?: number }>;
   attachments: Array<{ name: string; price: number; quantity?: number; extendedPrice?: number }>;
   lineItems: QuoteProposalLine[];
+  brandAssets: {
+    qepLogo: QuoteProposalAsset | null;
+    vendorLogos: QuoteProposalAsset[];
+    qrCode: QuoteProposalAsset | null;
+  };
   narrative: QuoteProposalNarrative;
   equipmentTotal: number;
   attachmentTotal: number;
@@ -111,12 +137,20 @@ const s = StyleSheet.create({
   page: { fontFamily: "Helvetica", fontSize: 9, padding: 34, color: SURFACE, backgroundColor: WHITE },
   masthead: { backgroundColor: CHARCOAL, margin: -34, marginBottom: 24, padding: 28, borderBottomWidth: 5, borderBottomColor: ORANGE },
   mastheadRow: { flexDirection: "row", justifyContent: "space-between" },
+  brandBlock: { width: 260 },
+  qepLogo: { width: 156, height: 48, objectFit: "contain" as const, marginBottom: 8 },
+  vendorRow: { flexDirection: "row", gap: 5, marginTop: 8 },
+  vendorLogo: { width: 38, height: 17, objectFit: "contain" as const, backgroundColor: WHITE, padding: 2 },
   brandName: { fontSize: 19, fontFamily: "Helvetica-Bold", color: WHITE, letterSpacing: 0.2 },
   brandRule: { height: 2, width: 56, backgroundColor: ORANGE, marginTop: 8, marginBottom: 8 },
   tagline: { fontSize: 8, color: GEAR_GRAY, letterSpacing: 1.4, textTransform: "uppercase" as const },
   branchMeta: { fontSize: 8, color: GEAR_GRAY, textAlign: "right" as TextAlign, lineHeight: 1.45 },
   footer: { position: "absolute" as const, bottom: 24, left: 34, right: 34, borderTopWidth: 1, borderTopColor: GEAR_GRAY, paddingTop: 7 },
+  footerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  footerCopy: { flex: 1, paddingRight: 10 },
   footerText: { fontSize: 7, color: MUTED, textAlign: "center" as TextAlign, lineHeight: 1.35 },
+  footerQr: { width: 44, height: 44, objectFit: "contain" as const, borderWidth: 1, borderColor: "#E6E2DB", padding: 2 },
+  footerQrLabel: { fontSize: 6, color: CHARCOAL, textAlign: "center" as TextAlign, marginTop: 2, fontFamily: "Helvetica-Bold" },
   coverTitle: { fontSize: 32, fontFamily: "Helvetica-Bold", color: CHARCOAL, marginTop: 64, lineHeight: 1.05 },
   coverKicker: { fontSize: 9, color: ORANGE, fontFamily: "Helvetica-Bold", letterSpacing: 1.8, textTransform: "uppercase" as const },
   coverGrid: { flexDirection: "row", marginTop: 26 },
@@ -139,6 +173,8 @@ const s = StyleSheet.create({
   headerText: { fontSize: 7, fontFamily: "Helvetica-Bold", color: WHITE, textTransform: "uppercase" as const, letterSpacing: 0.5 },
   cellText: { fontSize: 8.5, color: SURFACE },
   mutedCell: { fontSize: 7.5, color: MUTED, marginTop: 2 },
+  linePhoto: { width: 82, height: 56, objectFit: "cover" as const, marginTop: 5, borderWidth: 1, borderColor: "#E6E2DB", borderBottomWidth: 3, borderBottomColor: ORANGE },
+  lineBullet: { fontSize: 7, color: MUTED, marginTop: 2, lineHeight: 1.25 },
   creditText: { color: "#0F7A3A" },
   narrativeBox: { marginTop: 16, padding: 14, backgroundColor: CHARCOAL, borderLeftWidth: 5, borderLeftColor: ORANGE },
   narrativeLabel: { fontSize: 8, fontFamily: "Helvetica-Bold", color: ORANGE, textTransform: "uppercase" as const, letterSpacing: 1.2, marginBottom: 6 },
@@ -186,21 +222,43 @@ function PageFooter({ data }: { data: QuotePDFData }) {
   const reference = data.quoteNumber || data.dealName || "QEP Proposal";
   return (
     <View style={s.footer}>
-      <Text style={s.footerText}>{data.compliance.proposalDisclaimer}</Text>
-      <Text style={[s.footerText, { marginTop: 3 }]}>{data.branch.name || "Quality Equipment & Parts"} | {reference} | Generated {data.preparedDate}</Text>
+      <View style={s.footerRow}>
+        <View style={s.footerCopy}>
+          <Text style={s.footerText}>{data.compliance.proposalDisclaimer}</Text>
+          <Text style={[s.footerText, { marginTop: 3 }]}>{data.branch.name || "Quality Equipment & Parts"} | {reference} | Generated {data.preparedDate}</Text>
+        </View>
+        {data.brandAssets.qrCode?.src ? (
+          <View>
+            <Image src={data.brandAssets.qrCode.src} style={s.footerQr} />
+            <Text style={s.footerQrLabel}>{QEP_WEBSITE_QR_LABEL}</Text>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
 
-function PageHeader({ branch }: { branch: QuotePDFData["branch"] }) {
+function PageHeader({ data }: { data: QuotePDFData }) {
+  const branch = data.branch;
   const addressLine = [branch.address, branch.city, branch.state, branch.postalCode].filter(Boolean).join(", ");
   return (
     <View style={s.masthead}>
       <View style={s.mastheadRow}>
-        <View>
-          <Text style={s.brandName}>{branch.name || "Quality Equipment & Parts"}</Text>
+        <View style={s.brandBlock}>
+          {data.brandAssets.qepLogo?.src ? (
+            <Image src={data.brandAssets.qepLogo.src} style={s.qepLogo} />
+          ) : (
+            <Text style={s.brandName}>{branch.name || "Quality Equipment & Parts"}</Text>
+          )}
           <View style={s.brandRule} />
-          <Text style={s.tagline}>Equipment · Parts · Rental · Service</Text>
+          <Text style={s.tagline}>Setting a New Standard in Heavy Equipment. It's in the Name.</Text>
+          {data.brandAssets.vendorLogos.length > 0 ? (
+            <View style={s.vendorRow}>
+              {data.brandAssets.vendorLogos.slice(0, 5).map((logo) => (
+                <Image key={logo.src} src={logo.src} style={s.vendorLogo} />
+              ))}
+            </View>
+          ) : null}
         </View>
         <View>
           {addressLine ? <Text style={s.branchMeta}>{addressLine}</Text> : null}
@@ -211,6 +269,19 @@ function PageHeader({ branch }: { branch: QuotePDFData["branch"] }) {
       </View>
     </View>
   );
+}
+
+function lineDetailText(line: QuoteProposalLine): string {
+  const machine = [line.year, line.make, line.model].filter(Boolean).join(" ").trim();
+  return [
+    line.lineType.replace(/_/g, " "),
+    machine || null,
+    line.stockNumber ? `Stock #: ${line.stockNumber}` : null,
+    line.serialNumber ? `Serial #: ${line.serialNumber}` : null,
+    line.condition,
+    line.warrantyText ? `Warranty: ${line.warrantyText}` : null,
+    line.reasonCode ? line.reasonCode.replace(/_/g, " ") : null,
+  ].filter(Boolean).join(" · ");
 }
 
 function LineItemsTable({ lines }: { lines: QuoteProposalLine[] }) {
@@ -227,7 +298,16 @@ function LineItemsTable({ lines }: { lines: QuoteProposalLine[] }) {
         <View key={`${line.description}-${index}`} style={s.tableRow}>
           <View style={s.colDesc}>
             <Text style={s.cellText}>{line.description}</Text>
-            <Text style={s.mutedCell}>{line.lineType.replace(/_/g, " ")}{line.reasonCode ? ` · ${line.reasonCode.replace(/_/g, " ")}` : ""}</Text>
+            <Text style={s.mutedCell}>{lineDetailText(line)}</Text>
+            {line.media?.primaryPhoto?.src ? (
+              <Image src={line.media.primaryPhoto.src} style={s.linePhoto} />
+            ) : null}
+            {line.longDescription ? (
+              <Text style={s.lineBullet}>{line.longDescription}</Text>
+            ) : null}
+            {(line.specBullets ?? []).slice(0, 3).map((spec) => (
+              <Text key={spec} style={s.lineBullet}>• {spec}</Text>
+            ))}
           </View>
           <Text style={[s.cellText, s.colQty]}>{line.quantity}</Text>
           <Text style={[s.cellText, s.colUnit]}>{fmt(line.unitPrice)}</Text>
@@ -266,7 +346,7 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
   return (
     <Document>
       <Page size="LETTER" style={s.page}>
-        <PageHeader branch={b} />
+        <PageHeader data={data} />
         <Text style={s.coverKicker}>Customer equipment proposal</Text>
         <Text style={s.coverTitle}>Built for the job. Backed by QEP.</Text>
         <View style={s.coverGrid}>
@@ -298,7 +378,7 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
       </Page>
 
       <Page size="LETTER" style={s.page}>
-        <PageHeader branch={b} />
+        <PageHeader data={data} />
         <Text style={s.sectionTitle}>Configuration waterfall</Text>
         <Text style={s.sectionDeck}>Customer-visible charges and credits are shown from one proposal data model. Internal margin, cost, source IDs, and approval data are excluded.</Text>
         <LineItemsTable lines={data.lineItems} />
@@ -328,7 +408,7 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
       </Page>
 
       <Page size="LETTER" style={s.page}>
-        <PageHeader branch={b} />
+        <PageHeader data={data} />
         <Text style={s.sectionTitle}>Commercial summary and payment scenarios</Text>
         <View style={s.totalsPanel}>
           <View style={s.totalRow}><Text style={s.totalLabel}>Equipment total</Text><Text style={s.totalValue}>{fmt(data.equipmentTotal)}</Text></View>
@@ -360,7 +440,7 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
       </Page>
 
       <Page size="LETTER" style={s.page}>
-        <PageHeader branch={b} />
+        <PageHeader data={data} />
         <Text style={s.sectionTitle}>QEP support, terms, and next steps</Text>
         <View style={s.supportCard}>
           <Text style={s.supportTitle}>Equipment, parts, rental, and service under one roof</Text>

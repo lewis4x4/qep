@@ -6,6 +6,7 @@ type BasePublic = BaseDatabase["public"];
 type BaseTables = BasePublic["Tables"];
 type BaseViews = BasePublic["Views"];
 type BaseEnums = BasePublic["Enums"];
+type BaseFunctions = BasePublic["Functions"];
 
 type QrmTable<Row> = {
   Row: Row;
@@ -232,11 +233,41 @@ type QrmEnums = BaseEnums & {
   crm_activity_type: "note" | "call" | "email" | "meeting" | "task" | "sms";
 };
 
+type QrmFunctions = BaseFunctions & {
+  qrm_time_bank: {
+    Args: {
+      p_workspace_id: string;
+      p_default_budget_days?: number;
+    };
+    Returns: Array<{
+      deal_id: string;
+      deal_name: string;
+      company_id: string | null;
+      company_name: string | null;
+      assigned_rep_id: string | null;
+      assigned_rep_name: string | null;
+      stage_id: string;
+      stage_name: string;
+      days_in_stage: number;
+      stage_age_days: number;
+      budget_days: number;
+      has_explicit_budget: boolean;
+      remaining_days: number;
+      pct_used: number;
+      is_over: boolean;
+      overrun_days?: number;
+      budget_source?: "stage_sla" | "fallback";
+      pressure_tier?: "over" | "critical" | "watch" | "healthy";
+    }>;
+  };
+};
+
 export type QrmDatabase = Omit<BaseDatabase, "public"> & {
-  public: Omit<BasePublic, "Tables" | "Views" | "Enums"> & {
+  public: Omit<BasePublic, "Tables" | "Views" | "Enums" | "Functions"> & {
     Tables: QrmTables;
     Views: QrmViews;
     Enums: QrmEnums;
+    Functions: QrmFunctions;
   };
 };
 

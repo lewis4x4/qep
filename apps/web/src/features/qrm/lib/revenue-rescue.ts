@@ -77,11 +77,13 @@ export function buildRevenueRescueBoard(input: {
 
     const isOverTime = Boolean(time?.is_over);
     if (isOverTime) {
-      reasons.push(`stage time exceeded by ${Math.abs(time?.remaining_days ?? 0)}d`);
+      reasons.push(`stage time exceeded by ${time?.overrun_days ?? 0}d`);
       score += 20;
     } else if ((time?.pct_used ?? 0) >= 0.85) {
       reasons.push(`stage time ${Math.round((time?.pct_used ?? 0) * 100)}% consumed`);
       score += 10;
+      if (time?.pressure_tier === "critical") score += 5;
+      if (time?.pressure_tier === "critical") score += 5;
     }
 
     if (reasons.length === 0) continue;

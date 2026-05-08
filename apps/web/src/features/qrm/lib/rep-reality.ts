@@ -7,6 +7,7 @@ export interface RepRealityDeal {
   lastActivityAt: string | null;
   pctUsed: number | null;
   isOver: boolean;
+  overrunDays?: number;
 }
 
 export interface RepRealitySummary {

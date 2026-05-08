@@ -22,6 +22,7 @@ const validCachedDeal = {
   depositAmount: 5000,
   sortPosition: 10,
   marginPct: 18.5,
+  pendingQuoteApproval: false,
 };
 
 describe("pipeline cache normalizers", () => {

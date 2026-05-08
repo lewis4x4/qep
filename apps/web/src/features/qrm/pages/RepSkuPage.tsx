@@ -15,7 +15,7 @@ import {
   normalizeRepSkuStageRows,
   normalizeRepSkuTimeBankRows,
 } from "../lib/rep-sku";
-import { crmSupabase } from "../lib/qrm-supabase";
+import { fetchTimeBankRows } from "../lib/time-bank-api";
 
 function confidenceTone(confidence: "high" | "medium" | "low"): string {
   switch (confidence) {
@@ -63,9 +63,9 @@ export function RepSkuPage() {
           .select("created_by")
           .gte("occurred_at", new Date(Date.now() - 14 * 86_400_000).toISOString())
           .limit(2000),
-        crmSupabase.rpc("qrm_time_bank", {
-          p_workspace_id: profile?.active_workspace_id ?? "default",
-          p_default_budget_days: 14,
+        fetchTimeBankRows({
+          workspaceId: profile?.active_workspace_id ?? "default",
+          defaultBudgetDays: 14,
         }),
       ]);
 
@@ -74,8 +74,6 @@ export function RepSkuPage() {
       if (kpisResult.error) throw new Error(kpisResult.error.message);
       if (voiceResult.error) throw new Error(voiceResult.error.message);
       if (activityResult.error) throw new Error(activityResult.error.message);
-      if (timeBankResult.error) throw new Error(timeBankResult.error.message ?? "Failed to load time bank.");
-
       const repIds = Array.from(new Set([
         ...(dealsResult.data ?? []).map((row) => row.assigned_rep_id).filter((value): value is string => Boolean(value)),
         ...(kpisResult.data ?? []).map((row) => row.rep_id).filter((value): value is string => Boolean(value)),
@@ -115,7 +113,7 @@ export function RepSkuPage() {
         deals: normalizeRepSkuDealRows(dealsResult.data),
         stages: normalizeRepSkuStageRows(stagesResult.data),
         repProfiles: normalizeRepSkuProfileRows(profilesResult.data),
-        timeBankRows: normalizeRepSkuTimeBankRows(timeBankResult.data),
+        timeBankRows: normalizeRepSkuTimeBankRows(timeBankResult),
         kpis: [...kpiAgg.entries()].map(([repId, value]) => ({
           repId,
           positiveVisits: value.positiveVisits,

@@ -4,6 +4,8 @@ import {
   normalizeBookValueRangePayload,
   normalizeBookValueSources,
   normalizePointShootIdentificationPayload,
+  normalizeTradeValuationPhotos,
+  normalizeTradeValuationProposalSnapshot,
 } from "../point-shoot-trade-api";
 
 describe("point-shoot trade API normalizers", () => {
@@ -121,15 +123,21 @@ describe("point-shoot trade API normalizers", () => {
     });
   });
 
-  test("normalizes trade valuation apply responses", () => {
+  test("normalizes trade valuation apply responses with echoed photos", () => {
     expect(normalizeApplyTradeResultPayload({
       valuation: {
         id: "valuation-1",
         preliminary_value: "9250",
+        photos: [
+          { type: "point_shoot", url: "https://cdn.qep.example/trade-front.jpg" },
+          { type: "hour_meter", url: "https://cdn.qep.example/trade-hours.jpg" },
+        ],
       },
     }, 920000)).toEqual({
       valuationId: "valuation-1",
       preliminaryValueCents: 925000,
+      photoUrl: "https://cdn.qep.example/trade-front.jpg",
+      photoUrls: ["https://cdn.qep.example/trade-front.jpg", "https://cdn.qep.example/trade-hours.jpg"],
     });
   });
 
@@ -137,10 +145,58 @@ describe("point-shoot trade API normalizers", () => {
     expect(normalizeApplyTradeResultPayload({ valuation: { id: "valuation-2" } }, 920000)).toEqual({
       valuationId: "valuation-2",
       preliminaryValueCents: 920000,
+      photoUrl: null,
+      photoUrls: [],
     });
 
     expect(() => normalizeApplyTradeResultPayload({ valuation: {} }, 920000)).toThrow(
       "Trade valuation response missing id",
     );
+  });
+
+  test("normalizes durable trade valuation snapshots for proposal enrichment", () => {
+    expect(normalizeTradeValuationPhotos([
+      { type: "point_shoot", url: "https://cdn.qep.example/trade.jpg" },
+      "https://cdn.qep.example/fallback.jpg",
+      { type: "bad" },
+      null,
+    ])).toEqual([
+      { type: "point_shoot", url: "https://cdn.qep.example/trade.jpg" },
+      { type: "trade", url: "https://cdn.qep.example/fallback.jpg" },
+    ]);
+
+    expect(normalizeTradeValuationProposalSnapshot({
+      id: "trade-123",
+      make: " Deere ",
+      model: "333G",
+      year: "2021",
+      serial_number: " SN123 ",
+      hours: "2400",
+      photos: [{ type: "point_shoot", url: "https://cdn.qep.example/trade.jpg" }],
+      market_comps: [{ source: "IronPlanet", price: 43000 }, "bad"],
+      auction_value: "45000",
+      discounted_value: "41400",
+      reconditioning_estimate: "1200",
+      preliminary_value: "40200",
+      conditional_language: "Same condition as evaluated",
+      ai_condition_notes: "Clean undercarriage.",
+      operational_status: "daily_use",
+    })).toEqual({
+      id: "trade-123",
+      make: "Deere",
+      model: "333G",
+      year: 2021,
+      serialNumber: "SN123",
+      hours: 2400,
+      photos: [{ type: "point_shoot", url: "https://cdn.qep.example/trade.jpg" }],
+      marketComps: [{ source: "IronPlanet", price: 43000 }],
+      auctionValue: 45000,
+      discountedValue: 41400,
+      reconditioningEstimate: 1200,
+      preliminaryValue: 40200,
+      conditionalLanguage: "Same condition as evaluated",
+      aiConditionNotes: "Clean undercarriage.",
+      operationalStatus: "daily_use",
+    });
   });
 });

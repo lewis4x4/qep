@@ -70,6 +70,7 @@ import {
   buildQuoteSavePayload,
   getAiEquipmentRecommendation,
   getClosedDealsAudit,
+  getCrmEquipmentQuoteSeed,
   getFactorVerdicts,
   getQuoteApprovalCase,
   getSavedQuotePackage,
@@ -106,7 +107,8 @@ import { useQuotePDF } from "../hooks/useQuotePDF";
 import { useQuoteFinancingPreview } from "../hooks/useQuoteFinancingPreview";
 import { useQuoteTaxPreview } from "../hooks/useQuoteTaxPreview";
 import { buildCustomFinanceScenario } from "../lib/custom-finance";
-import { buildQuoteProposalData } from "../lib/quote-proposal-data";
+import { buildQuoteProposalData, isSafeProposalMediaUrl } from "../lib/quote-proposal-data";
+import { getTradeValuationProposalSnapshot } from "../lib/point-shoot-trade-api";
 import { buildQuotePdfBranch } from "../lib/quote-builder-page-normalizers";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
@@ -249,7 +251,17 @@ interface CatalogEntryMatch {
   year: number | null;
   list_price?: number | null;
   stock_number?: string | null;
+  serial_number?: string | null;
   condition?: string | null;
+  warranty_text?: string | null;
+  long_description?: string | null;
+  spec_bullets?: string[] | null;
+  photo_url?: string | null;
+  photo_urls?: string[] | null;
+  vendor_logo_url?: string | null;
+  media_source?: string | null;
+  media_source_id?: string | null;
+  media_kind?: string | null;
   availabilityStatus?: EquipmentAvailabilityStatus;
   availability_status?: EquipmentAvailabilityStatus;
   attachments?: Array<{ id: string; name: string; price: number }>;
@@ -284,6 +296,54 @@ function availabilityLabel(status: EquipmentAvailabilityStatus): string {
   if (status === "in_stock") return "In stock";
   if (status === "in_transit") return "In transit";
   return "Source required";
+}
+
+function safeCatalogMediaUrl(value: unknown): string | null {
+  return isSafeProposalMediaUrl(value) ? value.trim() : null;
+}
+
+function safeCatalogMediaUrls(value: unknown): string[] {
+  const raw = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
+  const seen = new Set<string>();
+  return raw.flatMap((item) => {
+    const safe = safeCatalogMediaUrl(item);
+    if (!safe || seen.has(safe)) return [];
+    seen.add(safe);
+    return [safe];
+  });
+}
+
+function mediaKindForEntry(entry: CatalogEntryMatch): string | undefined {
+  if (entry.media_kind) return entry.media_kind;
+  if (entry.sourceCatalog === "catalog_entries" || entry.stock_number || entry.serial_number) return "actual";
+  if (entry.photo_url || (entry.photo_urls?.length ?? 0) > 0) return "model_generic";
+  return undefined;
+}
+
+function metadataForCatalogEntry(entry: CatalogEntryMatch): Record<string, unknown> {
+  const photoUrls = safeCatalogMediaUrls(entry.photo_urls);
+  const primaryPhotoUrl = safeCatalogMediaUrl(entry.photo_url) ?? photoUrls[0] ?? null;
+  const allPhotoUrls = primaryPhotoUrl
+    ? [primaryPhotoUrl, ...photoUrls.filter((url) => url !== primaryPhotoUrl)]
+    : photoUrls;
+  const vendorLogoUrl = safeCatalogMediaUrl(entry.vendor_logo_url);
+  const metadata: Record<string, unknown> = {
+    availability_status: availabilityStatusForEntry(entry),
+    stock_number: entry.stock_number ?? null,
+    serial_number: entry.serial_number ?? null,
+    condition: entry.condition ?? null,
+    media_source: entry.media_source ?? (entry.sourceCatalog === "catalog_entries" ? "crm_equipment" : entry.sourceCatalog ?? "qb_equipment_models"),
+    media_source_id: entry.media_source_id ?? entry.sourceId ?? entry.id ?? null,
+  };
+  if (primaryPhotoUrl) metadata.photo_url = primaryPhotoUrl;
+  if (allPhotoUrls.length > 0) metadata.photo_urls = allPhotoUrls;
+  if (vendorLogoUrl) metadata.vendor_logo_url = vendorLogoUrl;
+  if (entry.warranty_text) metadata.warranty_text = entry.warranty_text;
+  if (entry.long_description) metadata.long_description = entry.long_description;
+  if (entry.spec_bullets?.length) metadata.spec_bullets = entry.spec_bullets.filter(Boolean).slice(0, 8);
+  const mediaKind = mediaKindForEntry(entry);
+  if (mediaKind) metadata.media_kind = mediaKind;
+  return metadata;
 }
 
 function packageKindLabel(kind: QuotePackageCatalogKind): string {
@@ -386,10 +446,7 @@ function buildEquipmentLine(entry: CatalogEntryMatch): QuoteLineItemDraft {
     year: entry.year,
     quantity: 1,
     unitPrice: entry.list_price ?? 0,
-    metadata: {
-      availability_status: availabilityStatusForEntry(entry),
-      stock_number: entry.stock_number ?? null,
-    },
+    metadata: metadataForCatalogEntry(entry),
   };
 }
 
@@ -517,6 +574,7 @@ export function QuoteBuilderV2Page() {
   const packageId = searchParams.get("package_id") || "";
   const dealId = searchParams.get("deal_id") || searchParams.get("crm_deal_id") || "";
   const contactId = searchParams.get("contact_id") || searchParams.get("crm_contact_id") || "";
+  const equipmentId = searchParams.get("equipment_id") || searchParams.get("crm_equipment_id") || "";
   const voiceSessionId = searchParams.get("voice_session_id") || "";
   const [step, setStep] = useState<Step>("customer");
   const [builderMode] = useState<BuilderMode>("guided");
@@ -544,6 +602,7 @@ export function QuoteBuilderV2Page() {
   const lastAutoSaveSignatureRef = useRef<string>("");
   const documentDraftSignatureRef = useRef<string>("");
   const persistedQuotePackageIdRef = useRef<string | null>(packageId || null);
+  const equipmentSeedAppliedRef = useRef<string | null>(null);
   const [customFinanceEnabled, setCustomFinanceEnabled] = useState(false);
   const [customFinanceRate, setCustomFinanceRate] = useState<number | null>(null);
   const [customFinanceTermMonths, setCustomFinanceTermMonths] = useState<number | null>(null);
@@ -592,6 +651,14 @@ export function QuoteBuilderV2Page() {
     [tradeCapture],
   );
   const queryClient = useQueryClient();
+  const handlePointShootTradeApply = useCallback((allowanceDollars: number, valuationId: string) => {
+    setDraft((current) => ({
+      ...current,
+      tradeAllowance: allowanceDollars,
+      tradeValuationId: valuationId,
+    }));
+    queryClient.invalidateQueries({ queryKey: ["quote-builder", "trade-valuation-proposal", valuationId] });
+  }, [queryClient]);
 
   const branchesQ = useActiveBranches();
   const branches = branchesQ.data ?? [];
@@ -634,6 +701,13 @@ export function QuoteBuilderV2Page() {
     staleTime: 10_000,
   });
 
+  const equipmentSeedQuery = useQuery({
+    queryKey: ["quote-builder", "crm-equipment-seed", equipmentId],
+    queryFn: () => getCrmEquipmentQuoteSeed(equipmentId),
+    enabled: Boolean(equipmentId) && !packageId && !dealId,
+    staleTime: 60_000,
+  });
+
   const existingQuote = useMemo(() => {
     const quote = existingQuoteQuery.data?.quote;
     if (quote && typeof quote === "object" && !Array.isArray(quote)) {
@@ -641,6 +715,25 @@ export function QuoteBuilderV2Page() {
     }
     return null;
   }, [existingQuoteQuery.data?.quote]);
+
+  useEffect(() => {
+    const seed = equipmentSeedQuery.data;
+    if (!seed) return;
+    const seedKey = seed.sourceId || seed.id || equipmentId;
+    if (!seedKey || equipmentSeedAppliedRef.current === seedKey) return;
+
+    const nextLine = buildEquipmentLine(seed);
+    const nextKey = equipmentKeyForLine(nextLine);
+    equipmentSeedAppliedRef.current = seedKey;
+    setAvailableOptions(seed.attachments ?? []);
+    setAvailableOptionsLabel(`${seed.make} ${seed.model}`.trim() || seed.long_description || "Selected equipment");
+    setDraft((current) => ({
+      ...current,
+      equipment: current.equipment.some((item) => equipmentKeyForLine(item) === nextKey)
+        ? current.equipment
+        : [...current.equipment, nextLine],
+    }));
+  }, [equipmentId, equipmentSeedQuery.data]);
 
   const userRoleQuery = useQuery({
     queryKey: ["quote-builder", "role"],
@@ -1195,6 +1288,12 @@ export function QuoteBuilderV2Page() {
   const activeQuoteNumber = typeof activeQuoteRecord?.quote_number === "string" && activeQuoteRecord.quote_number.length > 0
     ? activeQuoteRecord.quote_number
     : null;
+  const tradeValuationProposalQuery = useQuery({
+    queryKey: ["quote-builder", "trade-valuation-proposal", draft.tradeValuationId],
+    queryFn: () => getTradeValuationProposalSnapshot(draft.tradeValuationId!),
+    enabled: Boolean(draft.tradeValuationId),
+    staleTime: 60_000,
+  });
   const activeQuoteUpdatedAt = typeof activeQuoteRecord?.updated_at === "string"
     ? activeQuoteRecord.updated_at
     : typeof activeQuoteRecord?.created_at === "string"
@@ -1299,6 +1398,7 @@ export function QuoteBuilderV2Page() {
     preparedBy: "QEP Sales Team",
     preparedDate: new Date().toLocaleDateString(),
     branch: buildQuotePdfBranch(selectedBranch),
+    tradeValuation: tradeValuationProposalQuery.data ?? null,
   }), [
     activeQuoteNumber,
     allFinanceScenarios,
@@ -1314,7 +1414,12 @@ export function QuoteBuilderV2Page() {
     selectedBranch,
     subtotal,
     taxTotal,
+    tradeValuationProposalQuery.data,
   ]);
+  const quoteMediaSnapshotLoading =
+    Boolean(draft.tradeValuationId)
+    && (tradeValuationProposalQuery.isLoading || tradeValuationProposalQuery.isFetching)
+    && !tradeValuationProposalQuery.data;
   const draftSaveSignature = useMemo(() => JSON.stringify({
     draft,
     computed: {
@@ -1632,6 +1737,10 @@ export function QuoteBuilderV2Page() {
       setDocumentActionError(customerFacingDocumentBlocker);
       return;
     }
+    if (quoteMediaSnapshotLoading) {
+      setDocumentActionError("Trade-in photos are still loading. Try again in a moment so the proposal includes the stored trade media.");
+      return;
+    }
     void downloadPDF(quotePdfData);
   }
 
@@ -1674,6 +1783,10 @@ export function QuoteBuilderV2Page() {
     const blocker = customerFacingDocumentBlocker;
     if (blocker) {
       setDocumentActionError(blocker);
+      return;
+    }
+    if (quoteMediaSnapshotLoading) {
+      setDocumentActionError("Trade-in photos are still loading. Try again in a moment so the proposal includes the stored trade media.");
       return;
     }
     try {
@@ -1735,6 +1848,10 @@ export function QuoteBuilderV2Page() {
     setDeliveryActionBusy(channel);
     try {
       if (channel === "preview") {
+        if (quoteMediaSnapshotLoading) {
+          setDeliveryActionError("Blocked: trade-in photos are still loading. Try again in a moment.");
+          return;
+        }
         await downloadPDF(quotePdfData);
         await logQuoteDeliveryEvent({
           quotePackageId: activeQuotePackageId,
@@ -2553,11 +2670,7 @@ export function QuoteBuilderV2Page() {
                   <PointShootTradeCard
                     dealId={draft.dealId ?? null}
                     appliedAllowanceDollars={draft.tradeAllowance || null}
-                    onApply={(allowanceDollars, valuationId) => setDraft((cur) => ({
-                      ...cur,
-                      tradeAllowance: allowanceDollars,
-                      tradeValuationId: valuationId,
-                    }))}
+                    onApply={handlePointShootTradeApply}
                     onClear={() => setDraft((cur) => ({
                       ...cur,
                       tradeAllowance: 0,
@@ -3107,10 +3220,7 @@ export function QuoteBuilderV2Page() {
                 year: entry.year,
                 quantity: 1,
                 unitPrice: entry.list_price || 0,
-                metadata: {
-                  availability_status: availabilityStatusForEntry(entry),
-                  stock_number: entry.stock_number ?? null,
-                },
+                metadata: metadataForCatalogEntry(entry),
               };
               const nextKey = equipmentKeyForLine(nextLine);
               setDraft((current) => ({
@@ -3446,11 +3556,7 @@ export function QuoteBuilderV2Page() {
           <PointShootTradeCard
             dealId={draft.dealId ?? null}
             appliedAllowanceDollars={draft.tradeAllowance || null}
-            onApply={(allowanceDollars, valuationId) => setDraft((cur) => ({
-              ...cur,
-              tradeAllowance: allowanceDollars,
-              tradeValuationId: valuationId,
-            }))}
+            onApply={handlePointShootTradeApply}
             onClear={() => setDraft((cur) => ({
               ...cur,
               tradeAllowance: 0,
@@ -4158,11 +4264,11 @@ export function QuoteBuilderV2Page() {
                 </div>
               </div>
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
-                <Button onClick={() => void handleGenerateFallbackDocument()} disabled={Boolean(customerFacingDocumentBlocker) || pdfGenerating}>
+                <Button onClick={() => void handleGenerateFallbackDocument()} disabled={Boolean(customerFacingDocumentBlocker) || pdfGenerating || quoteMediaSnapshotLoading}>
                   {pdfGenerating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileDown className="mr-1 h-4 w-4" />}
-                  Generate Preview PDF
+                  {quoteMediaSnapshotLoading ? "Loading media..." : "Generate Preview PDF"}
                 </Button>
-                <Button variant="outline" onClick={() => void handleGenerateFallbackDocument()} disabled={Boolean(customerFacingDocumentBlocker) || pdfGenerating}>
+                <Button variant="outline" onClick={() => void handleGenerateFallbackDocument()} disabled={Boolean(customerFacingDocumentBlocker) || pdfGenerating || quoteMediaSnapshotLoading}>
                   <Printer className="mr-1 h-4 w-4" /> Print Preview
                 </Button>
               </div>
@@ -4172,7 +4278,7 @@ export function QuoteBuilderV2Page() {
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep("review")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
-            <Button onClick={() => setStep("send")} disabled={!documentReady}>Send & log <ArrowRight className="ml-1 h-4 w-4" /></Button>
+            <Button onClick={() => setStep("send")} disabled={!documentReady || quoteMediaSnapshotLoading}>Send & log <ArrowRight className="ml-1 h-4 w-4" /></Button>
           </div>
         </div>
       )}
