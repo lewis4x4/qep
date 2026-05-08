@@ -105,6 +105,12 @@ function asRecordType(value: string | null): CustomRecordType | null {
   return null;
 }
 
+function errorProperty(error: unknown, key: "code" | "message"): string | null {
+  if (!error || typeof error !== "object" || !(key in error)) return null;
+  const value = (error as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : null;
+}
+
 function mapError(origin: string | null, error: unknown): Response {
   if (error instanceof SyntaxError) {
     return crmFail({
@@ -150,6 +156,15 @@ function mapError(origin: string | null, error: unknown): Response {
       status: 403,
       code: "FORBIDDEN",
       message: "Service callers must present a signed workspace claim.",
+    });
+  }
+
+  if (message === "CALLER_WORKSPACE_UNBOUND") {
+    return crmFail({
+      origin,
+      status: 403,
+      code: "FORBIDDEN",
+      message: "Your QRM workspace could not be resolved. Refresh and sign in again.",
     });
   }
 
@@ -416,7 +431,50 @@ function mapError(origin: string | null, error: unknown): Response {
     });
   }
 
-  console.error("[crm-router] unexpected error:", message);
+  const dbCode = errorProperty(error, "code");
+  const dbMessage = errorProperty(error, "message") ?? message;
+  if (dbCode === "22P02") {
+    return crmFail({
+      origin,
+      status: 400,
+      code: "VALIDATION_ERROR",
+      message: "Request contains an invalid CRM identifier.",
+    });
+  }
+  if (dbCode === "23503") {
+    return crmFail({
+      origin,
+      status: 400,
+      code: "VALIDATION_ERROR",
+      message: "One of the selected CRM records is no longer available.",
+    });
+  }
+  if (dbCode === "23505") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "A CRM record with those unique fields already exists.",
+    });
+  }
+  if (dbCode === "42501") {
+    return crmFail({
+      origin,
+      status: 403,
+      code: "FORBIDDEN",
+      message: "Caller role is not authorized for this CRM record.",
+    });
+  }
+  if (dbCode === "PGRST116") {
+    return crmFail({
+      origin,
+      status: 404,
+      code: "NOT_FOUND",
+      message: "Requested CRM resource was not found.",
+    });
+  }
+
+  console.error("[crm-router] unexpected error:", dbCode ? `${dbCode}: ${dbMessage}` : message);
   return crmFail({
     origin,
     status: 500,

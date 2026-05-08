@@ -88,6 +88,15 @@ export function QrmContactEditorSheet({
     }
     return items;
   }, [companiesQuery.data?.items, selectedCompanyQuery.data]);
+  const primaryCompanySelectionPending = Boolean(primaryCompanyId) && selectedCompanyQuery.isFetching;
+  const primaryCompanySelectionInvalid = Boolean(primaryCompanyId) && (
+    selectedCompanyQuery.isError || (selectedCompanyQuery.isSuccess && !selectedCompanyQuery.data)
+  );
+  const primaryCompanySelectionMessage = primaryCompanySelectionInvalid
+    ? "Selected company is no longer available. Clear company or choose another before saving."
+    : primaryCompanySelectionPending
+      ? "Verifying selected company before saving."
+      : null;
 
   const mutation = useMutation({
     mutationFn: async ({ archive }: { archive: boolean }) => {
@@ -105,6 +114,12 @@ export function QrmContactEditorSheet({
       }
       if (!trimmedLastName) {
         throw new Error("Last name is required.");
+      }
+      if (primaryCompanySelectionInvalid) {
+        throw new Error("Selected company is no longer available. Clear company or choose another before saving.");
+      }
+      if (primaryCompanySelectionPending) {
+        throw new Error("Wait for the selected company to finish loading before saving.");
       }
 
       const payload = {
@@ -164,7 +179,11 @@ export function QrmContactEditorSheet({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
-    await mutation.mutateAsync({ archive: false });
+    try {
+      await mutation.mutateAsync({ archive: false });
+    } catch {
+      // handled by mutation.onError
+    }
   }
 
   async function handleArchive(): Promise<void> {
@@ -173,7 +192,11 @@ export function QrmContactEditorSheet({
       return;
     }
     setFormError(null);
-    await mutation.mutateAsync({ archive: true });
+    try {
+      await mutation.mutateAsync({ archive: true });
+    } catch {
+      // handled by mutation.onError
+    }
   }
 
   return (
@@ -345,7 +368,12 @@ export function QrmContactEditorSheet({
             />
             <select
               value={primaryCompanyId}
-              onChange={(event) => setPrimaryCompanyId(event.target.value)}
+              onChange={(event) => {
+                setPrimaryCompanyId(event.target.value);
+                setFormError(null);
+              }}
+              aria-invalid={primaryCompanySelectionInvalid}
+              aria-describedby={primaryCompanySelectionMessage ? "crm-contact-company-status" : undefined}
               className="flex h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
             >
               <option value="">No primary company</option>
@@ -355,6 +383,14 @@ export function QrmContactEditorSheet({
                 </option>
               ))}
             </select>
+            {primaryCompanySelectionMessage ? (
+              <p
+                id="crm-contact-company-status"
+                className={`text-xs ${primaryCompanySelectionInvalid ? "text-destructive" : "text-muted-foreground"}`}
+              >
+                {primaryCompanySelectionMessage}
+              </p>
+            ) : null}
           </div>
 
           {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
@@ -379,7 +415,7 @@ export function QrmContactEditorSheet({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
+            <Button type="submit" disabled={mutation.isPending || primaryCompanySelectionPending || primaryCompanySelectionInvalid}>
               {mutation.isPending ? "Saving..." : contact ? "Save contact" : "Create contact"}
             </Button>
           </div>

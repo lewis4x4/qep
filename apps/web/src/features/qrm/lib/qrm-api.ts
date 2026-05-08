@@ -4,6 +4,7 @@ import {
   deliverCrmActivityViaRouter,
   listCrmCompaniesViaRouter,
   listCrmContactsViaRouter,
+  isQrmRouterError,
   patchCrmActivityViaRouter,
   patchCrmActivityTaskViaRouter,
 } from "./qrm-router-api";
@@ -417,6 +418,14 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
+function canFallbackFromRouterList(error: unknown): boolean {
+  if (!isQrmRouterError(error)) return false;
+  // Keep direct-read fallback only for router rollout/deploy lag. Auth,
+  // validation, and server faults must remain visible because writes are
+  // router-only and would otherwise fail later with worse context.
+  return error.status === 404 && (!error.code || error.code === "NOT_FOUND");
+}
+
 async function listCrmContactsDirect(
   search: string,
   cursor?: string | null,
@@ -476,6 +485,7 @@ export async function listCrmContacts(
     });
   } catch (error) {
     if (isAbortError(error)) throw error;
+    if (!canFallbackFromRouterList(error)) throw error;
     return listCrmContactsDirect(search, cursor, options);
   }
 }
@@ -561,6 +571,7 @@ export async function listCrmCompanies(
     });
   } catch (error) {
     if (isAbortError(error)) throw error;
+    if (!canFallbackFromRouterList(error)) throw error;
     return listCrmCompaniesDirect(search, cursor, options);
   }
 }

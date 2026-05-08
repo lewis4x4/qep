@@ -28,6 +28,24 @@ function makeRouterCtx(overrides: Partial<RouterCtx> = {}): RouterCtx {
   };
 }
 
+Deno.test("hydrateCaller uses resolved workspace for authenticated callers", async () => {
+  const req = new Request("https://example.com/functions/v1/crm-router/qrm/contacts");
+
+  const ctx = await hydrateCaller(
+    req,
+    makeRouterCtx({ workspaceId: "default" }),
+    async (): Promise<CallerContext> => ({
+      authHeader: null,
+      userId: "user-1",
+      role: "rep",
+      isServiceRole: false,
+      workspaceId: "workspace-a",
+    }),
+  );
+
+  assertEquals(ctx.workspaceId, "workspace-a");
+});
+
 Deno.test("hydrateCaller ignores x-workspace-id for bound service callers", async () => {
   const req = new Request("https://example.com/functions/v1/crm-router/crm/search?q=acme", {
     headers: {
@@ -49,6 +67,20 @@ Deno.test("hydrateCaller ignores x-workspace-id for bound service callers", asyn
   );
 
   assertEquals(ctx.workspaceId, "workspace-a");
+});
+
+Deno.test("requireCaller rejects authenticated callers without a bound workspace", () => {
+  const ctx = makeRouterCtx({
+    caller: {
+      authHeader: "Bearer signed-token",
+      userId: "user-1",
+      role: "rep",
+      isServiceRole: false,
+      workspaceId: null,
+    },
+  });
+
+  assertThrows(() => requireCaller(ctx), Error, "CALLER_WORKSPACE_UNBOUND");
 });
 
 Deno.test("requireCaller rejects service callers without a bound workspace", () => {

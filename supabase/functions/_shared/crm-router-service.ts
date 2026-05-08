@@ -76,9 +76,7 @@ export async function hydrateCaller(
 ): Promise<RouterCtx> {
   const caller = await resolver(req, ctx.admin);
   const callerDb = caller.authHeader ? createCallerClient(caller.authHeader) : ctx.admin;
-  const workspaceId = caller.isServiceRole
-    ? (caller.workspaceId ?? "default")
-    : "default";
+  const workspaceId = caller.workspaceId ?? ctx.workspaceId;
 
   return {
     ...ctx,
@@ -117,6 +115,9 @@ export function requireCaller(ctx: RouterCtx): void {
   if (!ctx.caller.userId || !ctx.caller.role || !CRM_ROLES.has(ctx.caller.role)) {
     throw new Error("UNAUTHORIZED");
   }
+  if (!ctx.caller.workspaceId) {
+    throw new Error("CALLER_WORKSPACE_UNBOUND");
+  }
 }
 
 export function requireElevated(ctx: RouterCtx): void {
@@ -129,6 +130,9 @@ export function requireElevated(ctx: RouterCtx): void {
   if (!ctx.caller.role || !ELEVATED_ROLES.has(ctx.caller.role)) {
     throw new Error("FORBIDDEN");
   }
+  if (!ctx.caller.workspaceId) {
+    throw new Error("CALLER_WORKSPACE_UNBOUND");
+  }
 }
 
 export function requireDefinitionWriter(ctx: RouterCtx): void {
@@ -140,6 +144,9 @@ export function requireDefinitionWriter(ctx: RouterCtx): void {
   }
   if (!ctx.caller.role || !DEFINITION_WRITE_ROLES.has(ctx.caller.role)) {
     throw new Error("FORBIDDEN");
+  }
+  if (!ctx.caller.workspaceId) {
+    throw new Error("CALLER_WORKSPACE_UNBOUND");
   }
 }
 

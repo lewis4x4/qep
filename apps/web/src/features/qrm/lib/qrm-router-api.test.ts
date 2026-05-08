@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
+  QrmRouterError,
+  isQrmRouterError,
   normalizeCompanyMergeResultPayload,
   normalizeRouterErrorPayload,
   readRouterJsonPayload,
@@ -25,6 +27,20 @@ describe("qrm router api response normalizers", () => {
       id: "activity-1",
       body: "Call customer",
     });
+  });
+
+  it("preserves typed router error status, code, and details", () => {
+    const error = new QrmRouterError({
+      message: "Selected company is no longer available.",
+      status: 400,
+      code: "VALIDATION_ERROR",
+      details: { field: "primaryCompanyId" },
+    });
+
+    expect(isQrmRouterError(error)).toBe(true);
+    expect(error.status).toBe(400);
+    expect(error.code).toBe("VALIDATION_ERROR");
+    expect(error.details).toEqual({ field: "primaryCompanyId" });
   });
 
   it("normalizes edge error envelopes without trusting malformed fields", () => {

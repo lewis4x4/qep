@@ -1384,6 +1384,7 @@ export async function createContact(
 
   const primaryCompanyId = cleanText(payload.primaryCompanyId ?? null);
   if (primaryCompanyId) {
+    if (!isUuid(primaryCompanyId)) throw new Error("VALIDATION_PRIMARY_COMPANY_ID");
     await ensureRecordVisible(ctx, "company", primaryCompanyId);
   }
 
@@ -1487,6 +1488,7 @@ export async function patchContact(
   if (payload.primaryCompanyId !== undefined) {
     nextPrimaryCompanyId = cleanText(payload.primaryCompanyId ?? null);
     if (nextPrimaryCompanyId) {
+      if (!isUuid(nextPrimaryCompanyId)) throw new Error("VALIDATION_PRIMARY_COMPANY_ID");
       await ensureRecordVisible(ctx, "company", nextPrimaryCompanyId);
     }
     updates.primary_company_id = nextPrimaryCompanyId;

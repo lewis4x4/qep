@@ -4,11 +4,13 @@ import type { RouterCtx } from "./crm-router-service.ts";
 import {
   createActivity,
   createCompany,
+  createContact,
   deliverActivity,
   getCommunicationTarget,
   listContacts,
   patchActivity,
   patchCompany,
+  patchContact,
 } from "./crm-router-data.ts";
 
 interface QueryResult {
@@ -207,6 +209,34 @@ function makeActivityMutationClient(
     },
   } as unknown as SupabaseClient;
 }
+
+Deno.test("createContact rejects malformed primary company ids before visibility lookup", async () => {
+  const ctx = makeCtx({
+    callerDb: makeClient(async () => {
+      throw new Error("database should not be called for malformed primaryCompanyId");
+    }),
+  });
+
+  await assertRejects(
+    () => createContact(ctx, { firstName: "Jane", lastName: "Smith", primaryCompanyId: "not-a-uuid" }),
+    Error,
+    "VALIDATION_PRIMARY_COMPANY_ID",
+  );
+});
+
+Deno.test("patchContact rejects malformed primary company ids before visibility lookup", async () => {
+  const ctx = makeCtx({
+    callerDb: makeClient(async () => {
+      throw new Error("database should not be called for malformed primaryCompanyId");
+    }),
+  });
+
+  await assertRejects(
+    () => patchContact(ctx, "contact-1", { primaryCompanyId: "not-a-uuid" }),
+    Error,
+    "VALIDATION_PRIMARY_COMPANY_ID",
+  );
+});
 
 Deno.test("createCompany rejects rep EIN writes before database mutation", async () => {
   const ctx = makeCtx({

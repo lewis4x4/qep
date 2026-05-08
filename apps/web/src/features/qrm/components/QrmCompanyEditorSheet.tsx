@@ -193,7 +193,11 @@ export function QrmCompanyEditorSheet({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
-    await mutation.mutateAsync({ archive: false });
+    try {
+      await mutation.mutateAsync({ archive: false });
+    } catch {
+      // handled by mutation.onError
+    }
   }
 
   async function handleArchive(): Promise<void> {
@@ -202,7 +206,11 @@ export function QrmCompanyEditorSheet({
       return;
     }
     setFormError(null);
-    await mutation.mutateAsync({ archive: true });
+    try {
+      await mutation.mutateAsync({ archive: true });
+    } catch {
+      // handled by mutation.onError
+    }
   }
 
   return (

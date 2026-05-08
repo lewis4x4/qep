@@ -48,6 +48,31 @@ interface RouterRequestOptions {
   signal?: AbortSignal;
 }
 
+interface QrmRouterErrorOptions {
+  message: string;
+  status: number;
+  code?: string;
+  details?: unknown;
+}
+
+export class QrmRouterError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly details?: unknown;
+
+  constructor({ message, status, code, details }: QrmRouterErrorOptions) {
+    super(message);
+    this.name = "QrmRouterError";
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export function isQrmRouterError(error: unknown): error is QrmRouterError {
+  return error instanceof QrmRouterError;
+}
+
 async function getAuthHeaders(idempotencyKey?: string): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) {
@@ -173,11 +198,27 @@ async function requestRouter(
     signal: options.signal,
   });
 
-  const payload = await readRouterJsonPayload(response, `QRM router ${method} ${path}`);
+  let payload: Record<string, unknown>;
+  try {
+    payload = await readRouterJsonPayload(response, `QRM router ${method} ${path}`);
+  } catch (error) {
+    if (!response.ok) {
+      throw new QrmRouterError({
+        message: `QRM request failed (${response.status}).`,
+        status: response.status,
+      });
+    }
+    throw error;
+  }
   const edgeError = normalizeRouterErrorPayload(payload);
   if (!response.ok || edgeError) {
     const message = edgeError?.message || `QRM request failed (${response.status}).`;
-    throw new Error(message);
+    throw new QrmRouterError({
+      message,
+      status: response.status,
+      code: edgeError?.code,
+      details: edgeError?.details,
+    });
   }
 
   return payload;
