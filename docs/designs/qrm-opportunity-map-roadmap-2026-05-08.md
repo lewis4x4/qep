@@ -94,7 +94,7 @@ Rebuild Opportunity Map from a sparse map shell into a QRM geographic command su
 
 ### Slice 1.1 — Priority sidebar and marker preview
 
-**Status:** `[ ]`
+**Status:** `[x]`
 
 **Build:**
 - Change marker click from immediate navigate to selected-row preview.
@@ -103,7 +103,7 @@ Rebuild Opportunity Map from a sparse map shell into a QRM geographic command su
 
 ### Slice 1.2 — Filters and route planning
 
-**Status:** `[ ]`
+**Status:** `[x]`
 
 **Build:**
 - Add min revenue and signal-type filters.
@@ -112,7 +112,7 @@ Rebuild Opportunity Map from a sparse map shell into a QRM geographic command su
 
 ### Slice 1.3 — Marker sizing/weight
 
-**Status:** `[ ]`
+**Status:** `[x]`
 
 **Build:**
 - Extend `MapMarker` with optional `radius` and `weight`.
@@ -121,7 +121,7 @@ Rebuild Opportunity Map from a sparse map shell into a QRM geographic command su
 
 ### Slice 1.4 — Mobile field ergonomics
 
-**Status:** `[ ]`
+**Status:** `[x]`
 
 **Build:**
 - Add opt-in bottom-sheet mode to `MapWithSidebar`.
@@ -158,12 +158,13 @@ Rebuild Opportunity Map from a sparse map shell into a QRM geographic command su
 
 ## Current execution decision
 
-The reviewed plan intentionally narrows the first end-to-end build to **Phase 0**. Shared map primitives, route optimization, mobile bottom sheet, RPC, and Iron orchestration are deferred until Phase 0 is stable and verified.
+Phase 0 is committed and pushed. Phase 1 is now built as the second end-to-end pass: marker preview, field filters, route planning, revenue-aware marker metadata, and opt-in mobile bottom-sheet behavior. Phase 2/P3 remain deferred until the map has enough real coordinates and the team approves a viewport/RPC contract.
 
-## Verification checklist for Phase 0
+## Verification checklist for Phase 1
 
-- [ ] `bun test apps/web/src/features/qrm/lib/opportunity-map.test.ts`
-- [ ] `bun test apps/web/src/features/qrm/pages/__tests__/qrm-route-contracts.test.ts`
-- [ ] `bun run --filter @qep/web typecheck`
-- [ ] `bun run build:web`
-- [ ] Commit and push Phase 0 build
+- [x] `bun test apps/web/src/features/qrm/lib/opportunity-map.test.ts`
+- [x] `bun test apps/web/src/features/qrm/pages/__tests__/qrm-route-contracts.test.ts`
+- [x] `bun run --filter @qep/web typecheck`
+- [x] `bun run build:web`
+- [ ] Authenticated visual QA pass (blocked in local headless preview by login redirect; requires real session fixture)
+- [x] Commit and push Phase 1 build

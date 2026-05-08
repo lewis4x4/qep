@@ -8,6 +8,8 @@ export interface MapMarker {
   lat: number;
   label?: string;
   tone?: "blue" | "orange" | "red" | "green" | "violet" | "neutral";
+  radius?: number;
+  weight?: number;
   onClick?: () => void;
 }
 
@@ -49,6 +51,22 @@ interface MapLibreCanvasProps {
  * the 271K-asset stress test, recommend enabling cluster=true and
  * loading markers in viewport batches via a move-end handler.
  */
+const DEFAULT_MARKER_RADIUS = 7;
+const MIN_MARKER_RADIUS = 4;
+const MAX_MARKER_RADIUS = 18;
+
+function sanitizeMarkerRadius(radius: unknown): number {
+  const parsed = Number(radius);
+  if (!Number.isFinite(parsed)) return DEFAULT_MARKER_RADIUS;
+  return Math.min(MAX_MARKER_RADIUS, Math.max(MIN_MARKER_RADIUS, parsed));
+}
+
+function sanitizeMarkerWeight(weight: unknown): number {
+  const parsed = Number(weight);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, parsed);
+}
+
 export function MapLibreCanvas({
   markers,
   polygons = [],
@@ -73,6 +91,8 @@ export function MapLibreCanvas({
           id: m.id,
           label: m.label ?? "",
           tone: m.tone ?? "blue",
+          radius: sanitizeMarkerRadius(m.radius),
+          weight: sanitizeMarkerWeight(m.weight),
         },
       })),
   }), [markers]);
@@ -163,6 +183,13 @@ export function MapLibreCanvas({
         cluster,
         clusterMaxZoom: 14,
         clusterRadius: 50,
+        ...(cluster
+          ? {
+              clusterProperties: {
+                weight_sum: ["+", ["coalesce", ["get", "weight"], 0]],
+              },
+            }
+          : {}),
       });
 
       if (cluster) {
@@ -220,7 +247,11 @@ export function MapLibreCanvas({
               "neutral", "#6b7280",
               "#3b82f6", // default blue
             ],
-            "circle-radius": 7,
+            "circle-radius": [
+              "max",
+              MIN_MARKER_RADIUS,
+              ["min", MAX_MARKER_RADIUS, ["coalesce", ["get", "radius"], DEFAULT_MARKER_RADIUS]],
+            ],
             "circle-stroke-width": 2,
             "circle-stroke-color": "#ffffff",
           },
@@ -269,7 +300,11 @@ export function MapLibreCanvas({
               "neutral", "#6b7280",
               "#3b82f6",
             ],
-            "circle-radius": 7,
+            "circle-radius": [
+              "max",
+              MIN_MARKER_RADIUS,
+              ["min", MAX_MARKER_RADIUS, ["coalesce", ["get", "radius"], DEFAULT_MARKER_RADIUS]],
+            ],
             "circle-stroke-width": 2,
             "circle-stroke-color": "#ffffff",
           },

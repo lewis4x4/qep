@@ -57,6 +57,21 @@ export interface OpportunityMapBoard {
   rows: OpportunityMapMarkerRow[];
 }
 
+export interface OpportunityRouteStop {
+  id: string;
+  label: string;
+  lat: number;
+  lng: number;
+  score: number;
+  openRevenue: number;
+}
+
+export interface OpportunityRoutePlan {
+  stops: OpportunityRouteStop[];
+  estimatedMiles: number;
+  googleMapsUrl: string | null;
+}
+
 function getAccountScore(row: OpportunityMapMarkerRow): number {
   let score = 0;
   if (row.openRevenue >= 100000) score += 60;
@@ -90,6 +105,77 @@ function getReasons(row: OpportunityMapMarkerRow): string[] {
   if (reasons.length === 0) reasons.push("Mapped customer-owned equipment location");
 
   return reasons;
+}
+
+function toRadians(value: number): number {
+  return (value * Math.PI) / 180;
+}
+
+function distanceMiles(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const earthRadiusMiles = 3958.8;
+  const dLat = toRadians(b.lat - a.lat);
+  const dLng = toRadians(b.lng - a.lng);
+  const lat1 = toRadians(a.lat);
+  const lat2 = toRadians(b.lat);
+
+  const sinLat = Math.sin(dLat / 2);
+  const sinLng = Math.sin(dLng / 2);
+  const h = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLng * sinLng;
+  const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  return earthRadiusMiles * c;
+}
+
+export function buildOpportunityRoute(rows: OpportunityMapMarkerRow[], limit = 8): OpportunityRoutePlan {
+  const selected = rows
+    .filter((row) => row.kind === "account" && row.routeCandidate)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (b.openRevenue !== a.openRevenue) return b.openRevenue - a.openRevenue;
+      return a.label.localeCompare(b.label);
+    })
+    .slice(0, Math.max(0, limit));
+
+  if (selected.length === 0) {
+    return { stops: [], estimatedMiles: 0, googleMapsUrl: null };
+  }
+
+  const remaining = [...selected];
+  const ordered: OpportunityRouteStop[] = [remaining.shift() as OpportunityRouteStop];
+
+  while (remaining.length > 0) {
+    const current = ordered[ordered.length - 1] as OpportunityRouteStop;
+    let nearestIndex = 0;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    for (let i = 0; i < remaining.length; i += 1) {
+      const candidate = remaining[i] as OpportunityRouteStop;
+      const miles = distanceMiles(current, candidate);
+      if (miles < nearestDistance) {
+        nearestDistance = miles;
+        nearestIndex = i;
+      }
+    }
+
+    ordered.push(remaining.splice(nearestIndex, 1)[0] as OpportunityRouteStop);
+  }
+
+  let estimatedMiles = 0;
+  for (let i = 1; i < ordered.length; i += 1) {
+    estimatedMiles += distanceMiles(ordered[i - 1] as OpportunityRouteStop, ordered[i] as OpportunityRouteStop);
+  }
+
+  const destination = `${ordered[ordered.length - 1]?.lat},${ordered[ordered.length - 1]?.lng}`;
+  const waypoints = ordered.slice(0, -1).map((stop) => `${stop.lat},${stop.lng}`).join("|");
+  const googleMapsUrl =
+    ordered.length > 0
+      ? `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(destination)}${waypoints.length > 0 ? `&waypoints=${encodeURIComponent(waypoints)}` : ""}`
+      : null;
+
+  return {
+    stops: ordered,
+    estimatedMiles,
+    googleMapsUrl,
+  };
 }
 
 export function buildOpportunityMapBoard(input: {

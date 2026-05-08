@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/format";
 import { buildAccountCommandHref } from "../lib/account-command";
-import { buildOpportunityMapBoard } from "../lib/opportunity-map";
+import { buildOpportunityMapBoard, buildOpportunityRoute } from "../lib/opportunity-map";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
 
@@ -33,10 +33,23 @@ function toCoordinate(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+const RENTAL_MARKER_RADIUS = 6;
+const RENTAL_MARKER_WEIGHT = 1;
+const ACCOUNT_MARKER_MIN_RADIUS = 6;
+const ACCOUNT_MARKER_MAX_RADIUS = 16;
+const ACCOUNT_MARKER_FALLBACK_WEIGHT = 2;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
 export function OpportunityMapPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const [overlays, setOverlays] = useState<MapOverlay[]>(DEFAULT_OVERLAYS);
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const [minOpenRevenue, setMinOpenRevenue] = useState<number>(0);
+  const [signalFilter, setSignalFilter] = useState<"all" | "open_revenue" | "visit_targets" | "trade_signals" | "rentals">("all");
   const today = new Date().toISOString().split("T")[0];
 
   const boardQuery = useQuery({
@@ -139,30 +152,75 @@ export function OpportunityMapPage() {
   const visibleRows = useMemo(() => {
     const enabled = new Set(overlays.filter((overlay) => overlay.enabled).map((overlay) => overlay.key));
     return (board?.rows ?? []).filter((row) => {
-      if (row.kind === "rental") return enabled.has("rentals");
-      return (
+      if (row.kind === "rental") {
+        if (!enabled.has("rentals")) return false;
+        if (!(signalFilter === "all" || signalFilter === "rentals")) return false;
+        if (minOpenRevenue > 0) return false;
+        return true;
+      }
+
+      const overlayMatch =
         (enabled.has("open_revenue") && row.openRevenue > 0) ||
         (enabled.has("visit_targets") && row.visitTargetCount > 0) ||
         (enabled.has("trades") && row.tradeSignalCount > 0) ||
-        (!enabled.has("open_revenue") && !enabled.has("visit_targets") && !enabled.has("trades"))
-      );
+        (!enabled.has("open_revenue") && !enabled.has("visit_targets") && !enabled.has("trades"));
+      if (!overlayMatch) return false;
+      if (row.openRevenue < minOpenRevenue) return false;
+
+      if (signalFilter === "open_revenue") return row.openRevenue > 0;
+      if (signalFilter === "visit_targets") return row.visitTargetCount > 0;
+      if (signalFilter === "trade_signals") return row.tradeSignalCount > 0;
+      return true;
     });
-  }, [board?.rows, overlays]);
+  }, [board?.rows, overlays, minOpenRevenue, signalFilter]);
 
   const markers: MapMarker[] = useMemo(
     () => visibleRows.map((row) => {
-      const companyId = row.companyId;
+      const tone = row.kind === "rental" ? "violet" : row.tradeSignalCount > 0 ? "orange" : row.visitTargetCount > 0 ? "green" : "blue";
+
+      if (row.kind === "rental") {
+        return {
+          id: row.id,
+          lat: row.lat,
+          lng: row.lng,
+          label: row.label,
+          tone,
+          radius: RENTAL_MARKER_RADIUS,
+          weight: RENTAL_MARKER_WEIGHT,
+          onClick: () => setSelectedRowId(row.id),
+        };
+      }
+
+      const normalizedRevenue = clamp(row.openRevenue / 250_000, 0, 1);
+      const normalizedScore = clamp(row.score / 100, 0, 1);
+      const intensity = Math.max(normalizedRevenue, normalizedScore);
+      const radius = clamp(
+        ACCOUNT_MARKER_MIN_RADIUS + intensity * (ACCOUNT_MARKER_MAX_RADIUS - ACCOUNT_MARKER_MIN_RADIUS),
+        ACCOUNT_MARKER_MIN_RADIUS,
+        ACCOUNT_MARKER_MAX_RADIUS,
+      );
+      const weight = row.openRevenue > 0 ? row.openRevenue : ACCOUNT_MARKER_FALLBACK_WEIGHT;
+
       return {
         id: row.id,
         lat: row.lat,
         lng: row.lng,
         label: row.label,
-        tone: row.kind === "rental" ? "violet" : row.tradeSignalCount > 0 ? "orange" : row.visitTargetCount > 0 ? "green" : "blue",
-        onClick: companyId ? () => navigate(buildAccountCommandHref(companyId)) : undefined,
+        tone,
+        radius,
+        weight,
+        onClick: () => setSelectedRowId(row.id),
       };
     }),
-    [navigate, visibleRows],
+    [visibleRows],
   );
+
+  const selectedRow = useMemo(
+    () => (selectedRowId ? visibleRows.find((row) => row.id === selectedRowId) ?? null : null),
+    [selectedRowId, visibleRows],
+  );
+
+  const routePlan = useMemo(() => buildOpportunityRoute(visibleRows), [visibleRows]);
 
   const summary = board?.summary;
   const mappedAccounts = summary?.mappedAccounts ?? 0;
@@ -242,8 +300,52 @@ export function OpportunityMapPage() {
       <QrmSubNav />
 
       <MapWithSidebar
+        mobileSidebarMode="bottom-sheet"
         sidebar={
           <div className="divide-y divide-qep-deck-rule/40">
+            <div className="space-y-2 p-3">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Min open revenue</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1000}
+                    value={minOpenRevenue}
+                    onChange={(event) => setMinOpenRevenue(Math.max(0, Number(event.target.value) || 0))}
+                    className="h-8 w-full rounded-md border border-qep-deck-rule bg-background px-2 text-xs"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Signal type</span>
+                  <select
+                    value={signalFilter}
+                    onChange={(event) => setSignalFilter(event.target.value as "all" | "open_revenue" | "visit_targets" | "trade_signals" | "rentals")}
+                    className="h-8 w-full rounded-md border border-qep-deck-rule bg-background px-2 text-xs"
+                  >
+                    <option value="all">All signals</option>
+                    <option value="open_revenue">Open revenue</option>
+                    <option value="visit_targets">Visit targets</option>
+                    <option value="trade_signals">Trade signals</option>
+                    <option value="rentals">Rentals</option>
+                  </select>
+                </label>
+              </div>
+              <div className="rounded-md border border-qep-deck-rule/70 bg-background/70 p-2">
+                <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                  Route · {routePlan.stops.length} stop{routePlan.stops.length === 1 ? "" : "s"} · {routePlan.estimatedMiles.toFixed(1)} mi
+                </p>
+                {routePlan.googleMapsUrl ? (
+                  <Button asChild size="sm" variant="ghost" className="mt-1 h-6 px-0 font-mono text-[10px] uppercase tracking-[0.1em] text-qep-orange hover:text-qep-orange/80">
+                    <a href={routePlan.googleMapsUrl} target="_blank" rel="noreferrer">
+                      Open route in Google Maps <ArrowUpRight className="ml-1 h-3 w-3" />
+                    </a>
+                  </Button>
+                ) : (
+                  <p className="mt-1 text-[10.5px] text-muted-foreground">No visible route candidates yet.</p>
+                )}
+              </div>
+            </div>
             {isLoading ? (
               <div className="p-3 text-xs text-muted-foreground">Loading opportunity rows and diagnostics…</div>
             ) : hasQueryError ? (
@@ -253,8 +355,8 @@ export function OpportunityMapPage() {
               </div>
             ) : isFilteredEmpty ? (
               <div className="space-y-1 p-3 text-xs text-muted-foreground">
-                <p className="text-foreground">No rows match current overlays.</p>
-                <p>Turn on open revenue, visit targets, rentals, or trade signals to reveal mapped accounts.</p>
+                <p className="text-foreground">No rows match current filters and overlays.</p>
+                <p>Adjust min revenue, signal type, or overlay toggles to reveal mapped accounts.</p>
               </div>
             ) : isTrueEmpty ? (
               <div className="space-y-1 p-3 text-xs text-muted-foreground">
@@ -264,17 +366,26 @@ export function OpportunityMapPage() {
               </div>
             ) : (
               visibleRows.map((row) => (
-                <div key={row.id} className="p-2.5">
-                  <p className="truncate text-[13px] font-medium text-foreground">{row.label}</p>
-                  <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                    {row.kind === "rental" ? "Rental" : row.urgency}
-                  </p>
-                  <p className="mt-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
-                    {formatCurrency(row.openRevenue)} open · {row.openDealCount} deal{row.openDealCount === 1 ? "" : "s"} · {row.visitTargetCount} visit{row.visitTargetCount === 1 ? "" : "s"}
-                  </p>
-                  {row.reasons.length > 0 && (
-                    <p className="mt-0.5 text-[10.5px] text-muted-foreground">{row.reasons.slice(0, 2).join(" · ")}</p>
-                  )}
+                <div
+                  key={row.id}
+                  className={`p-2.5 ${selectedRowId === row.id ? "bg-qep-orange/10" : ""}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRowId(row.id)}
+                    className="block w-full text-left"
+                  >
+                    <p className="truncate text-[13px] font-medium text-foreground">{row.label}</p>
+                    <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                      {row.kind === "rental" ? "Rental" : row.urgency}
+                    </p>
+                    <p className="mt-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+                      {formatCurrency(row.openRevenue)} open · {row.openDealCount} deal{row.openDealCount === 1 ? "" : "s"} · {row.visitTargetCount} visit{row.visitTargetCount === 1 ? "" : "s"}
+                    </p>
+                    {row.reasons.length > 0 && (
+                      <p className="mt-0.5 text-[10.5px] text-muted-foreground">{row.reasons.slice(0, 2).join(" · ")}</p>
+                    )}
+                  </button>
                   {row.companyId ? (
                     <div className="mt-1">
                       <Button asChild size="sm" variant="ghost" className="h-6 px-0 font-mono text-[10px] uppercase tracking-[0.1em] text-qep-orange hover:text-qep-orange/80">
@@ -296,7 +407,43 @@ export function OpportunityMapPage() {
         }
         mapContent={
           markers.length > 0 ? (
-            <MapLibreCanvas markers={markers} cluster />
+            <div className="relative h-full w-full">
+              <MapLibreCanvas markers={markers} cluster />
+              {selectedRow ? (
+                <div className="pointer-events-none absolute left-3 top-3 z-20 max-w-sm">
+                  <div className="pointer-events-auto rounded-md border border-qep-deck-rule bg-background/95 p-3 shadow-md backdrop-blur-sm">
+                    <p className="truncate text-sm font-semibold text-foreground">{selectedRow.label}</p>
+                    <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                      {selectedRow.kind === "rental" ? "Rental" : selectedRow.urgency}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {formatCurrency(selectedRow.openRevenue)} open · {selectedRow.openDealCount} deal{selectedRow.openDealCount === 1 ? "" : "s"} · {selectedRow.visitTargetCount} visit target{selectedRow.visitTargetCount === 1 ? "" : "s"} · {selectedRow.tradeSignalCount} trade signal{selectedRow.tradeSignalCount === 1 ? "" : "s"}
+                    </p>
+                    {selectedRow.reasons.length > 0 ? (
+                      <p className="mt-1.5 text-xs text-muted-foreground">{selectedRow.reasons.slice(0, 3).join(" · ")}</p>
+                    ) : null}
+                    <div className="mt-2 flex items-center gap-2">
+                      {selectedRow.companyId ? (
+                        <Button asChild size="sm" variant="outline" className="h-7 px-2 font-mono text-[10px] uppercase tracking-[0.08em]">
+                          <Link to={buildAccountCommandHref(selectedRow.companyId)}>
+                            Open account <ArrowUpRight className="ml-1 h-3 w-3" />
+                          </Link>
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 font-mono text-[10px] uppercase tracking-[0.08em]"
+                        onClick={() => setSelectedRowId(null)}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           ) : (
             <div className="flex h-full items-center justify-center">
               <div className="text-center">
@@ -307,7 +454,7 @@ export function OpportunityMapPage() {
                     : hasQueryError
                       ? "Opportunity map data could not be loaded"
                       : isFilteredEmpty
-                        ? "No mapped rows match current overlays"
+                        ? "No mapped rows match current filters/overlays"
                         : "No mapped opportunity signals yet"}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">

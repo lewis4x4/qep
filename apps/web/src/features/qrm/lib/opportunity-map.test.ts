@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { buildOpportunityMapBoard } from "./opportunity-map";
+import { buildOpportunityMapBoard, buildOpportunityRoute, type OpportunityMapMarkerRow } from "./opportunity-map";
 
 describe("buildOpportunityMapBoard", () => {
   it("groups account signals on customer-owned equipment coordinates and keeps rentals separate", () => {
@@ -146,5 +146,63 @@ describe("buildOpportunityMapBoard", () => {
 
     expect(board.summary.criticalAccounts).toBe(1);
     expect(board.summary.routeCandidates).toBe(2);
+  });
+});
+
+describe("buildOpportunityRoute", () => {
+  function makeRow(partial: Partial<OpportunityMapMarkerRow> & Pick<OpportunityMapMarkerRow, "id" | "label" | "lat" | "lng">): OpportunityMapMarkerRow {
+    return {
+      companyId: "company",
+      kind: "account",
+      openRevenue: 0,
+      visitTargetCount: 0,
+      tradeSignalCount: 0,
+      score: 0,
+      urgency: "cold",
+      reasons: [],
+      routeCandidate: false,
+      openDealCount: 0,
+      ...partial,
+    };
+  }
+
+  it("selects visible route-candidate account rows by score and respects limit", () => {
+    const rows: OpportunityMapMarkerRow[] = [
+      makeRow({ id: "rental", label: "Rental", lat: 0, lng: 0, kind: "rental", routeCandidate: true, score: 100 }),
+      makeRow({ id: "warm", label: "Warm", lat: 0, lng: 1, routeCandidate: false, score: 70 }),
+      makeRow({ id: "hot-1", label: "Hot 1", lat: 0, lng: 2, routeCandidate: true, score: 60 }),
+      makeRow({ id: "critical", label: "Critical", lat: 0, lng: 3, routeCandidate: true, score: 90 }),
+      makeRow({ id: "hot-2", label: "Hot 2", lat: 0, lng: 4, routeCandidate: true, score: 60 }),
+    ];
+
+    const route = buildOpportunityRoute(rows, 2);
+    expect(route.stops.map((row) => row.id)).toEqual(["critical", "hot-1"]);
+  });
+
+  it("orders selected stops using nearest-neighbor and returns total straight-line miles", () => {
+    const route = buildOpportunityRoute([
+      makeRow({ id: "start", label: "Start", lat: 40.7128, lng: -74.006, routeCandidate: true, score: 100 }),
+      makeRow({ id: "near", label: "Near", lat: 40.73061, lng: -73.935242, routeCandidate: true, score: 80 }),
+      makeRow({ id: "far", label: "Far", lat: 34.0522, lng: -118.2437, routeCandidate: true, score: 70 }),
+    ]);
+
+    expect(route.stops.map((stop) => stop.id)).toEqual(["start", "near", "far"]);
+    expect(route.estimatedMiles).toBeGreaterThan(2400);
+    expect(route.estimatedMiles).toBeLessThan(2600);
+  });
+
+  it("builds google maps URL when at least one stop exists and omits it when empty", () => {
+    const empty = buildOpportunityRoute([]);
+    expect(empty.googleMapsUrl).toBeNull();
+    expect(empty.estimatedMiles).toBe(0);
+
+    const single = buildOpportunityRoute([
+      makeRow({ id: "only", label: "Only", lat: 41.8781, lng: -87.6298, routeCandidate: true, score: 90 }),
+    ]);
+
+    expect(single.googleMapsUrl).toContain("https://www.google.com/maps/dir/?api=1");
+    expect(single.googleMapsUrl).toContain("destination=41.8781%2C-87.6298");
+    expect(single.googleMapsUrl).not.toContain("waypoints=");
+    expect(single.estimatedMiles).toBe(0);
   });
 });
