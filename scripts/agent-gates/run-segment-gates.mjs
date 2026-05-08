@@ -231,7 +231,7 @@ await pushCheck({
 await pushCheck({
   id: "qa.service-engine-deno-tests",
   command:
-    "deno test supabase/functions/_shared/service-engine-smoke.test.ts supabase/functions/_shared/vendor-inbound-contract.test.ts supabase/functions/_shared/vendor-escalation-resend.test.ts --allow-read --allow-env",
+    "deno test supabase/functions/_shared/service-engine-smoke.test.ts supabase/functions/_shared/service-vendor-inbound-auth.test.ts supabase/functions/_shared/vendor-inbound-contract.test.ts supabase/functions/_shared/vendor-escalation-resend.test.ts --allow-read --allow-env",
   required: true,
 });
 
