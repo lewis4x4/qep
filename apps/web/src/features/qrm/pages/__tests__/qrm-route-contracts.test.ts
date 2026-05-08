@@ -45,6 +45,8 @@ describe("QRM route contracts", () => {
     expect(appSource).toContain('path="/qrm/opportunies-map"');
     expect(appSource).toContain('to="/qrm/opportunity-map"');
     expect(appSource).toContain('<OpportunityMapPage />');
+    expect(opportunityMapSource).toContain("<QrmPageHeader");
+    expect(opportunityMapSource).toContain("<QrmSubNav");
     expect(opportunityMapSource).not.toContain('Navigate to="/qrm/companies"');
     expect(opportunityMapSource).not.toContain('navigate("/qrm/companies")');
     expect(opportunityMapSource).not.toContain('to="/qrm/companies"');

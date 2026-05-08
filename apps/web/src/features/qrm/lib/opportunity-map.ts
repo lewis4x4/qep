@@ -35,6 +35,11 @@ export interface OpportunityMapMarkerRow {
   openRevenue: number;
   visitTargetCount: number;
   tradeSignalCount: number;
+  score: number;
+  urgency: "critical" | "hot" | "warm" | "cold" | "rental";
+  reasons: string[];
+  routeCandidate: boolean;
+  openDealCount: number;
 }
 
 export interface OpportunityMapSummary {
@@ -43,11 +48,48 @@ export interface OpportunityMapSummary {
   visitTargets: number;
   activeRentals: number;
   tradeSignals: number;
+  criticalAccounts: number;
+  routeCandidates: number;
 }
 
 export interface OpportunityMapBoard {
   summary: OpportunityMapSummary;
   rows: OpportunityMapMarkerRow[];
+}
+
+function getAccountScore(row: OpportunityMapMarkerRow): number {
+  let score = 0;
+  if (row.openRevenue >= 100000) score += 60;
+  else if (row.openRevenue >= 50000) score += 40;
+  else if (row.openRevenue > 0) score += 20;
+
+  if (row.visitTargetCount > 0) score += 20;
+  if (row.tradeSignalCount > 0) score += 20;
+  if (row.openDealCount > 0) score += 10;
+
+  return Math.min(score, 100);
+}
+
+function getAccountUrgency(score: number): "critical" | "hot" | "warm" | "cold" {
+  if (score >= 80) return "critical";
+  if (score >= 60) return "hot";
+  if (score >= 30) return "warm";
+  return "cold";
+}
+
+function getReasons(row: OpportunityMapMarkerRow): string[] {
+  if (row.kind === "rental") {
+    return ["Active rental unit in field"];
+  }
+
+  const reasons: string[] = [];
+  if (row.openRevenue > 0) reasons.push(`$${Math.round(row.openRevenue).toLocaleString()} open revenue`);
+  if (row.openDealCount > 0) reasons.push(`${row.openDealCount} open deal${row.openDealCount === 1 ? "" : "s"}`);
+  if (row.visitTargetCount > 0) reasons.push(`${row.visitTargetCount} visit target${row.visitTargetCount === 1 ? "" : "s"}`);
+  if (row.tradeSignalCount > 0) reasons.push(`${row.tradeSignalCount} trade signal${row.tradeSignalCount === 1 ? "" : "s"}`);
+  if (reasons.length === 0) reasons.push("Mapped customer-owned equipment location");
+
+  return reasons;
 }
 
 export function buildOpportunityMapBoard(input: {
@@ -75,6 +117,11 @@ export function buildOpportunityMapBoard(input: {
           openRevenue: 0,
           visitTargetCount: 0,
           tradeSignalCount: 0,
+          score: 0,
+          urgency: "cold",
+          reasons: [],
+          routeCandidate: false,
+          openDealCount: 0,
         });
       }
       const siteKeys = siteKeysByCompany.get(eq.companyId) ?? [];
@@ -93,6 +140,11 @@ export function buildOpportunityMapBoard(input: {
         openRevenue: 0,
         visitTargetCount: 0,
         tradeSignalCount: 0,
+        score: 0,
+        urgency: "rental",
+        reasons: [],
+        routeCandidate: false,
+        openDealCount: 0,
       });
     }
   }
@@ -106,6 +158,7 @@ export function buildOpportunityMapBoard(input: {
       const row = rows.get(key);
       if (!row) continue;
       row.openRevenue += share;
+      row.openDealCount += 1;
     }
   }
 
@@ -129,6 +182,19 @@ export function buildOpportunityMapBoard(input: {
     target.tradeSignalCount += 1;
   }
 
+  for (const row of rows.values()) {
+    if (row.kind === "account") {
+      row.score = getAccountScore(row);
+      row.urgency = getAccountUrgency(row.score);
+      row.routeCandidate = row.urgency === "critical" || row.urgency === "hot";
+    } else {
+      row.score = 0;
+      row.urgency = "rental";
+      row.routeCandidate = false;
+    }
+    row.reasons = getReasons(row);
+  }
+
   const list = [...rows.values()].sort((a, b) => {
     if (b.openRevenue !== a.openRevenue) return b.openRevenue - a.openRevenue;
     if (b.visitTargetCount !== a.visitTargetCount) return b.visitTargetCount - a.visitTargetCount;
@@ -142,6 +208,8 @@ export function buildOpportunityMapBoard(input: {
       visitTargets: list.reduce((sum, row) => sum + row.visitTargetCount, 0),
       activeRentals: list.filter((row) => row.kind === "rental").length,
       tradeSignals: list.reduce((sum, row) => sum + row.tradeSignalCount, 0),
+      criticalAccounts: list.filter((row) => row.kind === "account" && row.urgency === "critical").length,
+      routeCandidates: list.filter((row) => row.routeCandidate).length,
     },
     rows: list,
   };
