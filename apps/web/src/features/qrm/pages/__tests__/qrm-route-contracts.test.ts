@@ -1,8 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { resolvePrimaryNavGroups } from "../../../../lib/nav-config";
 
 const appSource = readFileSync(resolve(import.meta.dir, "../../../../App.tsx"), "utf8");
+const navConfigSource = readFileSync(resolve(import.meta.dir, "../../../../lib/nav-config.ts"), "utf8");
+const opportunityMapSource = readFileSync(resolve(import.meta.dir, "../OpportunityMapPage.tsx"), "utf8");
 
 describe("QRM route contracts", () => {
   it("renders dedicated contacts and companies pages directly while preserving duplicate redirect", () => {
@@ -26,6 +29,25 @@ describe("QRM route contracts", () => {
     expect(companiesRoute).not.toContain("WithGraphExplorer");
     expect(contactsRoute).toContain('["rep", "admin", "manager", "owner"].includes(profile.role)');
     expect(companiesRoute).toContain('["rep", "admin", "manager", "owner"].includes(profile.role)');
+  });
+
+  it("keeps the QRM Opportunity Map menu item on the map page", () => {
+    const qrmGroup = resolvePrimaryNavGroups(false, false, "owner").find((group) => group.id === "qrm");
+    const opportunityMapItem = qrmGroup?.sections
+      .flatMap((section) => section.items)
+      .find((item) => item.label === "Opportunity Map");
+
+    expect(opportunityMapItem?.href).toBe("/qrm/opportunity-map");
+    expect(navConfigSource).toContain('label: "Opportunity Map"');
+    expect(navConfigSource).toContain('href: "/qrm/opportunity-map"');
+    expect(appSource.indexOf('path="/qrm/opportunity-map"')).toBeLessThan(appSource.indexOf('path="/qrm/companies"'));
+    expect(appSource).toContain('path="/qrm/opportunities-map"');
+    expect(appSource).toContain('path="/qrm/opportunies-map"');
+    expect(appSource).toContain('to="/qrm/opportunity-map"');
+    expect(appSource).toContain('<OpportunityMapPage />');
+    expect(opportunityMapSource).not.toContain('Navigate to="/qrm/companies"');
+    expect(opportunityMapSource).not.toContain('navigate("/qrm/companies")');
+    expect(opportunityMapSource).not.toContain('to="/qrm/companies"');
   });
 
   it("registers every shared account detail menu destination", () => {

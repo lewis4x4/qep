@@ -14,7 +14,7 @@ interface WithTodaySurfaceProps {
 }
 
 export function WithTodaySurface({ fallback }: WithTodaySurfaceProps) {
-  if (isFeatureEnabled(FLAGS.SHELL_V2)) {
+  if (isFeatureEnabled(FLAGS.SHELL_V2, true)) {
     return <TodaySurface />;
   }
   return <>{fallback}</>;

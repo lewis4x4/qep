@@ -2365,6 +2365,18 @@ function App() {
                   )
                 }
               />
+              <Route
+                path="/qrm/opportunity-map"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <OpportunityMapPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route path="/qrm/opportunities-map" element={<Navigate to="/qrm/opportunity-map" replace />} />
+              <Route path="/qrm/opportunies-map" element={<Navigate to="/qrm/opportunity-map" replace />} />
               <Route path="/qrm/companies/:companyId/command" element={<LegacyCompanyCommandRedirect />} />
               <Route
                 path="/qrm/campaigns"
@@ -2499,16 +2511,6 @@ function App() {
                         )
                       }
                     />
-                  ) : (
-                    <Navigate to="/dashboard" replace />
-                  )
-                }
-              />
-              <Route
-                path="/qrm/opportunity-map"
-                element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <OpportunityMapPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

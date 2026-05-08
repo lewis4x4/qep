@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { MapWithSidebar, MapLibreCanvas, type MapMarker, type MapOverlay } from "@/components/primitives";
@@ -137,10 +137,6 @@ export function OpportunityMapPage() {
     [navigate, visibleRows],
   );
 
-  if (!profile) {
-    return <Navigate to="/qrm/companies" replace />;
-  }
-
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
       <div className="space-y-2">
@@ -148,7 +144,7 @@ export function OpportunityMapPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">Opportunity Map</h1>
           </div>
-          <Button onClick={() => navigate("/qrm/companies")}>Exit</Button>
+          <Button onClick={() => navigate("/qrm")}>Exit</Button>
         </div>
         <p className="text-sm text-muted-foreground">
           Geographic overlay of open revenue, visit targets, rentals, and trade signals.
@@ -240,10 +236,8 @@ export function OpportunityMapPage() {
                   Opportunity Map is a signal-gathering surface. The command center remains the source of truth for operational work.
                 </p>
               </div>
-              <Button asChild size="sm" variant="ghost">
-                <Link to="/qrm/companies">
-                  Refresh map <ArrowUpRight className="ml-1 h-3 w-3" />
-                </Link>
+              <Button size="sm" variant="ghost" onClick={() => void boardQuery.refetch()}>
+                Refresh map <ArrowUpRight className="ml-1 h-3 w-3" />
               </Button>
             </div>
           </DeckSurface>

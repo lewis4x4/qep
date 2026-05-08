@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Building2, ChevronRight, Database, Download, MapPin, Plus, Search } from "lucide-react";
+import { Building2, ChevronRight, Database, Download, MapPin, Plus, Search, Sparkles } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
@@ -10,12 +10,14 @@ import { QrmSubNav } from "../components/QrmSubNav";
 import {
   EmptyState,
   KbdHint,
+  MoonshotBeat,
   RetryState,
   RowSkeleton,
   SignalChip,
   StatusDot,
   type StatusTone,
 } from "../components/command-deck";
+import { ASK_IRON_PATH, createAskIronSeedState } from "../components/askIronHandoff";
 import { buildAccountCommandHref } from "../lib/account-command";
 import { listCrmCompanies } from "../lib/qrm-api";
 import { crmSupabase, type QrmDatabase } from "../lib/qrm-supabase";
@@ -25,6 +27,8 @@ type CustomerHealthProfileRow = Pick<
   "id" | "crm_company_id" | "health_score"
 >;
 
+type CompanySortMode = "default" | "coverageRisk";
+
 function toneFromHealth(score: number | null | undefined): StatusTone {
   if (score == null) return "cool";
   if (score >= 80) return "hot";
@@ -33,11 +37,20 @@ function toneFromHealth(score: number | null | undefined): StatusTone {
   return "cool";
 }
 
+function cleanDisplayText(value: string | null | undefined): string {
+  return (value ?? "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+,/g, ",")
+    .replace(/,+\s*$/g, "")
+    .trim();
+}
+
 export function QrmCompaniesPage() {
   const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [includeExtendedFields, setIncludeExtendedFields] = useState(false);
+  const [companySortMode, setCompanySortMode] = useState<CompanySortMode>("default");
   const [editorOpen, setEditorOpen] = useState(false);
   const [healthDrawerProfileId, setHealthDrawerProfileId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -118,7 +131,49 @@ export function QrmCompaniesPage() {
   const states = new Set(companies.map((c) => c.state).filter(Boolean));
   const tracked = scores.length;
   const legacyIds = companies.filter((c) => Boolean(c.legacyCustomerNumber)).length;
+  const coverageGap = Math.max(loaded - tracked, 0);
   const coverageDelta = loaded > 0 && tracked < loaded ? { value: "Backfill", direction: "flat" as const } : undefined;
+  const lowestHealthCompany = useMemo(() => {
+    let current: { name: string; score: number } | null = null;
+    for (const company of companies) {
+      const score = healthProfileByCompanyId.get(company.id)?.score;
+      if (typeof score !== "number") continue;
+      if (!current || score < current.score) {
+        current = { name: cleanDisplayText(company.name) || "Unnamed account", score };
+      }
+    }
+    return current;
+  }, [companies, healthProfileByCompanyId]);
+  const sortedCompanies = useMemo(() => {
+    if (companySortMode !== "coverageRisk") return companies;
+
+    const risk = (company: (typeof companies)[number]) => {
+      const entry = healthProfileByCompanyId.get(company.id);
+      const score = entry?.score;
+      const healthRisk = typeof score === "number" ? Math.max(0, 80 - score) : 90;
+      return (
+        (entry ? 0 : 120) +
+        healthRisk +
+        (company.legacyCustomerNumber ? 0 : 15) +
+        (company.city || company.state ? 0 : 10)
+      );
+    };
+
+    return [...companies].sort((a, b) => risk(b) - risk(a) || cleanDisplayText(a.name).localeCompare(cleanDisplayText(b.name)));
+  }, [companies, companySortMode, healthProfileByCompanyId]);
+  const moonshotPending = isInitialLoading || !hasCohort || coverageGap > 0 || tracked === 0;
+  const lowestHealthIsHighRisk = lowestHealthCompany ? lowestHealthCompany.score < 40 : false;
+  const moonshotHeadline = isInitialLoading
+    ? "Account intelligence is loading account rows and health coverage."
+    : !hasCohort
+      ? "Account intelligence pending: no company cohort is loaded for this view."
+      : coverageGap > 0
+        ? `Coverage intelligence pending: ${coverageGap} of ${loaded} account${loaded === 1 ? "" : "s"} in this view have no health row yet.`
+        : lowestHealthCompany
+          ? lowestHealthIsHighRisk
+            ? `Highest health risk in this view: ${lowestHealthCompany.name} at health ${lowestHealthCompany.score}.`
+            : `No high-risk accounts in this view; lowest health score is ${lowestHealthCompany.name} at ${lowestHealthCompany.score}.`
+          : `Coverage is complete for ${loaded} account${loaded === 1 ? "" : "s"}; no health-risk score is available yet.`;
 
   const ironHeadline =
     isInitialLoading
@@ -152,7 +207,6 @@ export function QrmCompaniesPage() {
         ironBriefing={{
           headline: ironHeadline,
           evidence: isInitialLoading ? "Loading cohort" : includeExtendedFields ? "Pulse · Pricing · Legacy" : "Pulse · Pricing · Service",
-          confidence: isInitialLoading ? 0.5 : tracked > 0 ? 0.86 : 0.72,
           freshness: isInitialLoading ? "loading" : tracked > 0 ? "live cohort" : "sync pending",
         }}
         rightRail={
@@ -188,6 +242,18 @@ export function QrmCompaniesPage() {
       />
       <QrmSubNav />
 
+      <MoonshotBeat
+        label="Account intelligence"
+        headline={moonshotHeadline}
+        evidence={
+          isInitialLoading
+            ? "Loading CRM rows"
+            : `customer_profiles_extended health_score · company row coverage ${tracked}/${loaded || 0} · IntelliDealer IDs ${legacyIds}/${loaded || 0}`
+        }
+        pending={moonshotPending}
+        why={coverageGap > 0 ? "Coverage gap" : "Source-backed"}
+        action={hasCohort ? { label: "Sort coverage risk", onClick: () => setCompanySortMode("coverageRisk") } : undefined}
+      />
 
       {/* Search */}
       <div className="space-y-1.5">
@@ -262,10 +328,23 @@ export function QrmCompaniesPage() {
               Iron sort
             </p>
             <div className="flex flex-wrap items-center gap-1">
-              <button type="button" className="rounded-sm border border-qep-orange/40 bg-qep-orange/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-qep-orange">
+              <button
+                type="button"
+                onClick={() => setCompanySortMode("default")}
+                aria-pressed={companySortMode === "default"}
+                className={`rounded-sm border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] ${companySortMode === "default" ? "border-qep-orange/40 bg-qep-orange/10 text-qep-orange" : "border-qep-deck-rule bg-muted/20 text-muted-foreground hover:text-foreground"}`}
+              >
                 Default
               </button>
-              {["Hottest", "Largest pipeline", "Newest touch"].map((label) => (
+              <button
+                type="button"
+                onClick={() => setCompanySortMode("coverageRisk")}
+                aria-pressed={companySortMode === "coverageRisk"}
+                className={`rounded-sm border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] ${companySortMode === "coverageRisk" ? "border-qep-orange/40 bg-qep-orange/10 text-qep-orange" : "border-qep-live/20 bg-qep-live/[0.04] text-qep-live/80 hover:border-qep-live/40 hover:bg-qep-live/10"}`}
+              >
+                Coverage risk
+              </button>
+              {["Largest pipeline", "Newest touch"].map((label) => (
                 <button key={label} type="button" disabled className="rounded-sm border border-qep-live/20 bg-qep-live/[0.04] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-qep-live/70 disabled:cursor-not-allowed disabled:opacity-70">
                   {label} · soon
                 </button>
@@ -281,20 +360,31 @@ export function QrmCompaniesPage() {
           </div>
 
           <div className="divide-y divide-qep-deck-rule/40 overflow-hidden rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40">
-            {companies.map((company, index) => {
+            {sortedCompanies.map((company, index) => {
               const entry = healthProfileByCompanyId.get(company.id);
               const score = entry?.score ?? null;
               const tone = toneFromHealth(score);
               const hasHealth = entry !== undefined;
+              const displayName = cleanDisplayText(company.name) || "Unnamed account";
               const location =
-                [company.city, company.state, company.country].filter(Boolean).join(", ") ||
+                [cleanDisplayText(company.city), cleanDisplayText(company.state), cleanDisplayText(company.country)].filter(Boolean).join(", ") ||
                 "—";
               const operatingMeta = [
-                company.territoryCode ? `Territory ${company.territoryCode}` : null,
-                company.termsCode || company.paymentTermsCode ? `Terms ${company.termsCode || company.paymentTermsCode}` : null,
+                company.territoryCode ? `Territory ${cleanDisplayText(company.territoryCode)}` : null,
+                company.termsCode || company.paymentTermsCode ? `Terms ${cleanDisplayText(company.termsCode || company.paymentTermsCode)}` : null,
                 typeof company.pricingLevel === "number" ? `Price L${company.pricingLevel}` : null,
               ].filter(Boolean).join(" · ");
               const rowDescriptionId = `company-row-${company.id}`;
+              const askIronQuestion = [
+                "Give me the account picture for this company — open deals, recent signals, and any moves worth queueing.",
+                `• Company: ${displayName}`,
+                location !== "—" ? `• Location: ${location}` : null,
+                operatingMeta ? `• Operating fields: ${operatingMeta}` : null,
+                company.legacyCustomerNumber ? `• IntelliDealer customer #: ${company.legacyCustomerNumber}` : null,
+                hasHealth ? `• Health score in CRM profile: ${score ?? "pending"}` : "• Health score in CRM profile: missing",
+                `• Entity: company (${company.id})`,
+                "Call summarize_company with this company_id to pull the account row + open deals + recent activities + signals in one shot. If there's a clear follow-up, call propose_move; otherwise tell me what you'd want to know before queueing anything.",
+              ].filter(Boolean).join("\n");
 
               return (
                 <div
@@ -305,7 +395,7 @@ export function QrmCompaniesPage() {
                   style={{ animationDelay: `${Math.min(index, 12) * 22}ms` }}
                 >
                   <span id={rowDescriptionId} className="sr-only">
-                    {company.name}, {location}, health {score ?? "unknown"}, {operatingMeta || "operating fields pending"}.
+                    {displayName}, {location}, health {score ?? "unknown"}, {operatingMeta || "operating fields pending"}.
                   </span>
                   {/* Account */}
                   <div className="col-span-6 flex min-w-0 items-center gap-2.5 sm:col-span-5">
@@ -319,11 +409,11 @@ export function QrmCompaniesPage() {
                         aria-describedby={rowDescriptionId}
                         className="block truncate font-medium text-foreground focus-visible:ring-2 focus-visible:ring-qep-orange/40 focus-visible:ring-offset-2 focus-visible:ring-offset-qep-deck-elevated"
                       >
-                        {company.name}
+                        {displayName}
                       </Link>
                       {(company.search1 || company.search2 || operatingMeta) && (
                         <p className="truncate font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70">
-                          {[company.search1, company.search2, operatingMeta].filter(Boolean).join(" · ")}
+                          {[cleanDisplayText(company.search1), cleanDisplayText(company.search2), operatingMeta].filter(Boolean).join(" · ")}
                         </p>
                       )}
                       {company.legacyCustomerNumber && (
@@ -349,7 +439,7 @@ export function QrmCompaniesPage() {
                     {hasHealth ? (
                       <button
                         type="button"
-                        aria-label={`Open health score for ${company.name}`}
+                        aria-label={`Open health score for ${displayName}`}
                         aria-describedby={rowDescriptionId}
                         onClick={(event) => {
                           event.preventDefault();
@@ -363,6 +453,20 @@ export function QrmCompaniesPage() {
                     ) : (
                       <span className="font-mono text-[11px] text-muted-foreground/50">—</span>
                     )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate(ASK_IRON_PATH, {
+                          state: createAskIronSeedState(askIronQuestion, "graph", company.id),
+                        })
+                      }
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-qep-orange/30 bg-qep-orange/5 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-qep-orange opacity-100 transition-opacity hover:border-qep-orange/60 hover:bg-qep-orange/10 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-qep-orange/40 xl:opacity-0 xl:group-hover:opacity-100"
+                      aria-label={`Ask Iron about ${displayName}`}
+                      title="Hand this company to Ask Iron"
+                    >
+                      <Sparkles className="h-3 w-3" aria-hidden />
+                      Ask
+                    </button>
                     <Link
                       to={buildAccountCommandHref(company.id)}
                       aria-describedby={rowDescriptionId}
@@ -370,7 +474,14 @@ export function QrmCompaniesPage() {
                     >
                       Command
                     </Link>
-                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-qep-orange" aria-hidden />
+                    <Link
+                      to={buildAccountCommandHref(company.id)}
+                      aria-describedby={rowDescriptionId}
+                      className="focus-visible:ring-2 focus-visible:ring-qep-orange/40"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-qep-orange" aria-hidden />
+                      <span className="sr-only">Open {displayName}</span>
+                    </Link>
                   </div>
                 </div>
               );

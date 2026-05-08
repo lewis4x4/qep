@@ -15,7 +15,7 @@ interface WithPulseSurfaceProps {
 }
 
 export function WithPulseSurface({ fallback }: WithPulseSurfaceProps) {
-  if (isFeatureEnabled(FLAGS.SHELL_V2)) {
+  if (isFeatureEnabled(FLAGS.SHELL_V2, true)) {
     return <PulseSurface />;
   }
   return <>{fallback}</>;

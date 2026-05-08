@@ -26,7 +26,7 @@ export function WithGraphExplorer({
   subtitle,
   fallback,
 }: WithGraphExplorerProps) {
-  if (isFeatureEnabled(FLAGS.SHELL_V2)) {
+  if (isFeatureEnabled(FLAGS.SHELL_V2, true)) {
     return <GraphExplorer defaultLens={defaultLens} title={title} subtitle={subtitle} />;
   }
   return <>{fallback}</>;

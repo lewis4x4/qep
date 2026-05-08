@@ -15,7 +15,7 @@ interface WithAskIronSurfaceProps {
 }
 
 export function WithAskIronSurface({ fallback }: WithAskIronSurfaceProps) {
-  if (isFeatureEnabled(FLAGS.SHELL_V2)) {
+  if (isFeatureEnabled(FLAGS.SHELL_V2, true)) {
     return <AskIronSurface />;
   }
   return <>{fallback}</>;

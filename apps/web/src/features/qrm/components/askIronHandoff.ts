@@ -44,6 +44,20 @@ export interface AskIronSeedState {
  * refresh / back-nav strips the state down to `{}`, at which point we
  * must NOT re-fire.
  */
+export function createAskIronSeedState(
+  question: string,
+  source: AskIronSeedState["askIronSeed"]["source"] = "today",
+  sourceId?: string,
+): AskIronSeedState {
+  return {
+    askIronSeed: {
+      question,
+      source,
+      ...(sourceId ? { sourceId } : {}),
+    },
+  };
+}
+
 export function isAskIronSeedState(
   state: unknown,
 ): state is AskIronSeedState {

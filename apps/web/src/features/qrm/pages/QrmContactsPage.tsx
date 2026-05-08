@@ -9,6 +9,7 @@ import {
   Phone,
   Plus,
   Search,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -20,12 +21,14 @@ import {
   DeckSurface,
   EmptyState,
   KbdHint,
+  MoonshotBeat,
   RetryState,
   RowSkeleton,
   SignalChip,
   StatusDot,
   type StatusTone,
 } from "../components/command-deck";
+import { ASK_IRON_PATH, createAskIronSeedState } from "../components/askIronHandoff";
 import { buildAccountCommandHref } from "../lib/account-command";
 import { listCrmContacts } from "../lib/qrm-api";
 import { listDuplicateCandidates } from "../lib/qrm-router-api";
@@ -36,6 +39,8 @@ type ContactHealthProfileRow = Pick<
   QrmDatabase["public"]["Tables"]["customer_profiles_extended"]["Row"],
   "id" | "health_score"
 >;
+
+type ContactSortMode = "default" | "reachRisk";
 
 /**
  * Map a raw health score (0–100) to a command-deck status tone.
@@ -62,6 +67,24 @@ function formatAge(iso: string | null | undefined): string | null {
   return `${Math.floor(days / 365)}y`;
 }
 
+function cleanDisplayText(value: string | null | undefined): string {
+  return (value ?? "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+,/g, ",")
+    .replace(/,+\s*$/g, "")
+    .trim();
+}
+
+function formatContactDisplayName(contact: { firstName?: string | null; lastName?: string | null }): string {
+  const name = [cleanDisplayText(contact.firstName), cleanDisplayText(contact.lastName)]
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+,/g, ",")
+    .replace(/,+\s*$/g, "")
+    .trim();
+  return name || "Unnamed contact";
+}
+
 export function QrmContactsPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
@@ -74,6 +97,7 @@ export function QrmContactsPage() {
 
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [contactSortMode, setContactSortMode] = useState<ContactSortMode>("default");
   const [editorOpen, setEditorOpen] = useState(false);
   const [healthDrawerProfileId, setHealthDrawerProfileId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -167,7 +191,17 @@ export function QrmContactsPage() {
     staleTime: 5 * 60_000,
     retry: false,
   });
-  const duplicateCount = canReviewDuplicates ? duplicatesQuery.data?.length ?? 0 : 0;
+  const duplicateCandidates = canReviewDuplicates ? duplicatesQuery.data ?? [] : [];
+  const loadedContactIds = useMemo(() => new Set(contacts.map((contact) => contact.id)), [contacts]);
+  const duplicateCountInView = useMemo(
+    () =>
+      duplicateCandidates.filter((candidate) => {
+        const leftId = candidate.leftContact?.id;
+        const rightId = candidate.rightContact?.id;
+        return (leftId != null && loadedContactIds.has(leftId)) || (rightId != null && loadedContactIds.has(rightId));
+      }).length,
+    [duplicateCandidates, loadedContactIds],
+  );
 
   // Derived pulse metrics for the header strip.
   const loaded = contacts.length;
@@ -182,13 +216,45 @@ export function QrmContactsPage() {
   }).length;
   const reachable = contacts.filter((c) => c.email || c.phone || c.cell || c.directPhone).length;
   const missingReach = Math.max(loaded - reachable, 0);
+  const smsReach = contacts.filter((c) => Boolean(c.smsOptIn && c.cell)).length;
+  const callReach = contacts.filter(
+    (c) => !Boolean(c.smsOptIn && c.cell) && Boolean(c.directPhone || c.phone || c.cell),
+  ).length;
+  const emailReach = contacts.filter(
+    (c) => !Boolean(c.smsOptIn && c.cell) && !Boolean(c.directPhone || c.phone || c.cell) && Boolean(c.email),
+  ).length;
+  const sortedContacts = useMemo(() => {
+    if (contactSortMode !== "reachRisk") return contacts;
+
+    const risk = (contact: (typeof contacts)[number]) => {
+      const reach = contact.email || contact.cell || contact.directPhone || contact.phone;
+      const score = contact.dgeCustomerProfileId ? healthProfileById.get(contact.dgeCustomerProfileId) ?? null : null;
+      return (
+        (reach ? 0 : 100) +
+        (contact.smsOptIn && contact.cell ? 0 : 12) +
+        (contact.primaryCompanyName || contact.primaryCompanyId ? 0 : 10) +
+        (contact.title ? 0 : 8) +
+        (typeof score === "number" && score < 40 ? 18 : 0)
+      );
+    };
+
+    return [...contacts].sort((a, b) => risk(b) - risk(a) || formatContactDisplayName(a).localeCompare(formatContactDisplayName(b)));
+  }, [contactSortMode, contacts, healthProfileById]);
+  const moonshotPending = isInitialLoading || !hasCohort || missingReach > 0;
+  const moonshotHeadline = isInitialLoading
+    ? "Reach intelligence is loading contact rows and usable channels."
+    : !hasCohort
+      ? "Reach intelligence pending: no contact cohort is loaded for this view."
+      : missingReach > 0
+        ? `Reach intelligence pending: ${missingReach} contact${missingReach === 1 ? "" : "s"} in this view lack a usable email or phone.`
+        : `Best-channel map in this view: SMS for ${smsReach}, call for ${callReach}, email for ${emailReach}.`;
   const ironHeadline =
     isInitialLoading
       ? "Iron is loading the contact cohort, reach channels, and duplicate graph."
       : !hasCohort
         ? "No contact cohort loaded yet; add an operator contact or reset filters to restore reach intelligence."
-        : duplicateCount > 0
-          ? `${duplicateCount} duplicate${duplicateCount === 1 ? "" : "s"} detected across ${loaded} contacts; one merge pass protects deals, activity, and timelines.`
+        : duplicateCountInView > 0
+          ? `${duplicateCountInView} duplicate candidate${duplicateCountInView === 1 ? "" : "s"} involve contacts in this view; one merge pass protects deals, activity, and timelines.`
           : hot > 0
             ? `${hot} hot contact${hot === 1 ? "" : "s"} in scope. ${reachable}/${loaded || 0} reachable now.`
             : `${loaded} contact${loaded === 1 ? "" : "s"} loaded; ${reachable}/${loaded || 0} have a usable reach path.`;
@@ -207,18 +273,17 @@ export function QrmContactsPage() {
           canReviewDuplicates
             ? {
                 label: "Duplicates",
-                value: duplicateCount || "—",
-                tone: duplicateCount > 0 ? "warm" : undefined,
+                value: duplicateCountInView || "—",
+                tone: duplicateCountInView > 0 ? "warm" : undefined,
               }
             : { label: "Cool (<40)", value: healthScores.length > 0 ? cool : "—", tone: cool > 0 ? "warm" : undefined },
         ]}
         ironBriefing={{
           headline: ironHeadline,
-          evidence: isInitialLoading ? "Loading cohort" : duplicateCount > 0 ? "Merge graph · Activity · Deals" : "Reach · Pulse · Activity",
-          confidence: isInitialLoading ? 0.5 : duplicateCount > 0 ? 0.91 : 0.84,
+          evidence: isInitialLoading ? "Loading cohort" : duplicateCountInView > 0 ? "Merge graph · Activity · Deals" : "Reach · Pulse · Activity",
           freshness: isInitialLoading ? "loading" : newThisWeek > 0 ? `${newThisWeek} new 7d` : "live cohort",
           actions:
-            duplicateCount > 0
+            duplicateCountInView > 0
               ? [{ label: "Review merges →", href: "/admin/duplicates" }]
               : undefined,
         }}
@@ -255,6 +320,19 @@ export function QrmContactsPage() {
         }
       />
       <QrmSubNav />
+
+      <MoonshotBeat
+        label="Reach intelligence"
+        headline={moonshotHeadline}
+        evidence={
+          isInitialLoading
+            ? "Loading CRM rows"
+            : `CRM contact fields · SMS opt-in · phone/email coverage ${reachable}/${loaded || 0} · health rows ${healthScores.length}/${loaded || 0}`
+        }
+        pending={moonshotPending}
+        why={missingReach > 0 ? "Coverage gap" : "Source-backed"}
+        action={hasCohort ? { label: "Sort reach risk", onClick: () => setContactSortMode("reachRisk") } : undefined}
+      />
 
       {treeRootCompanyId && (
         <DeckSurface className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -340,10 +418,23 @@ export function QrmContactsPage() {
               Iron sort
             </p>
             <div className="flex flex-wrap items-center gap-1">
-              <button type="button" className="rounded-sm border border-qep-orange/40 bg-qep-orange/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-qep-orange">
+              <button
+                type="button"
+                onClick={() => setContactSortMode("default")}
+                aria-pressed={contactSortMode === "default"}
+                className={`rounded-sm border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] ${contactSortMode === "default" ? "border-qep-orange/40 bg-qep-orange/10 text-qep-orange" : "border-qep-deck-rule bg-muted/20 text-muted-foreground hover:text-foreground"}`}
+              >
                 Default
               </button>
-              {["Hottest", "Best channel now", "Newest"].map((label) => (
+              <button
+                type="button"
+                onClick={() => setContactSortMode("reachRisk")}
+                aria-pressed={contactSortMode === "reachRisk"}
+                className={`rounded-sm border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] ${contactSortMode === "reachRisk" ? "border-qep-orange/40 bg-qep-orange/10 text-qep-orange" : "border-qep-live/20 bg-qep-live/[0.04] text-qep-live/80 hover:border-qep-live/40 hover:bg-qep-live/10"}`}
+              >
+                Reach risk
+              </button>
+              {["Hottest", "Newest"].map((label) => (
                 <button key={label} type="button" disabled className="rounded-sm border border-qep-live/20 bg-qep-live/[0.04] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-qep-live/70 disabled:cursor-not-allowed disabled:opacity-70">
                   {label} · soon
                 </button>
@@ -361,7 +452,7 @@ export function QrmContactsPage() {
           </div>
 
           <div className="divide-y divide-qep-deck-rule/40 overflow-hidden rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40">
-            {contacts.map((contact, index) => {
+            {sortedContacts.map((contact, index) => {
               const score = contact.dgeCustomerProfileId
                 ? healthProfileById.get(contact.dgeCustomerProfileId) ?? null
                 : null;
@@ -372,8 +463,18 @@ export function QrmContactsPage() {
                 healthProfileById.has(contact.dgeCustomerProfileId);
               const reach = contact.email || contact.cell || contact.directPhone || contact.phone;
               const ReachIcon = contact.email ? Mail : reach ? Phone : null;
-              const companyLine = contact.primaryCompanyName || contact.primaryCompanyId || null;
+              const companyLine = cleanDisplayText(contact.primaryCompanyName) || contact.primaryCompanyId || null;
+              const displayName = formatContactDisplayName(contact);
               const rowDescriptionId = `contact-row-${contact.id}`;
+              const askIronQuestion = [
+                "What's the state of this contact — recent touches, open threads, and whether a follow-up is overdue?",
+                `• Contact: ${displayName}`,
+                companyLine ? `• Company: ${companyLine}` : null,
+                contact.title ? `• Role: ${cleanDisplayText(contact.title)}` : null,
+                reach ? `• Reach path in CRM: ${reach}` : "• Reach path in CRM: missing",
+                `• Entity: contact (${contact.id})`,
+                "Call summarize_contact with this contact_id to pull the person + related deals at their company + recent activities + open signals in one shot. If there's a clear follow-up, call propose_move; otherwise tell me what you'd want to know before queueing anything.",
+              ].filter(Boolean).join("\n");
 
               return (
                 <div
@@ -384,7 +485,7 @@ export function QrmContactsPage() {
                   style={{ animationDelay: `${Math.min(index, 12) * 22}ms` }}
                 >
                   <span id={rowDescriptionId} className="sr-only">
-                    {contact.firstName} {contact.lastName}, {contact.title || "role unknown"}, {companyLine || "company unknown"}, health {score ?? "unknown"}, reach {reach || "missing"}.
+                    {displayName}, {cleanDisplayText(contact.title) || "role unknown"}, {companyLine || "company unknown"}, health {score ?? "unknown"}, reach {reach || "missing"}.
                   </span>
                   {/* Contact */}
                   <div className="col-span-5 flex min-w-0 items-center gap-2.5 sm:col-span-4">
@@ -395,7 +496,7 @@ export function QrmContactsPage() {
                         aria-describedby={rowDescriptionId}
                         className="block truncate font-medium text-foreground focus-visible:ring-2 focus-visible:ring-qep-orange/40 focus-visible:ring-offset-2 focus-visible:ring-offset-qep-deck-elevated"
                       >
-                        {contact.firstName} {contact.lastName}
+                        {displayName}
                       </Link>
                       <p className="truncate text-[11px] text-muted-foreground">
                         {companyLine || contact.title || "Company pending"}
@@ -414,7 +515,7 @@ export function QrmContactsPage() {
 
                   {/* Role */}
                   <div className="col-span-2 hidden min-w-0 text-[12px] text-muted-foreground md:block">
-                    <span className="truncate">{contact.title || "—"}</span>
+                    <span className="truncate">{cleanDisplayText(contact.title) || "—"}</span>
                   </div>
 
                   {/* Age */}
@@ -427,7 +528,7 @@ export function QrmContactsPage() {
                     {hasHealth ? (
                       <button
                         type="button"
-                        aria-label={`Open health score for ${contact.firstName} ${contact.lastName}`}
+                        aria-label={`Open health score for ${displayName}`}
                         aria-describedby={rowDescriptionId}
                         onClick={(event) => {
                           event.preventDefault();
@@ -445,13 +546,27 @@ export function QrmContactsPage() {
                     ) : (
                       <span className="font-mono text-[11px] text-muted-foreground/50">—</span>
                     )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate(ASK_IRON_PATH, {
+                          state: createAskIronSeedState(askIronQuestion, "graph", contact.id),
+                        })
+                      }
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-qep-orange/30 bg-qep-orange/5 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-qep-orange opacity-100 transition-opacity hover:border-qep-orange/60 hover:bg-qep-orange/10 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-qep-orange/40 lg:opacity-0 lg:group-hover:opacity-100"
+                      aria-label={`Ask Iron about ${displayName}`}
+                      title="Hand this contact to Ask Iron"
+                    >
+                      <Sparkles className="h-3 w-3" aria-hidden />
+                      Ask
+                    </button>
                     <Link
                       to={`/qrm/contacts/${contact.id}`}
                       aria-describedby={rowDescriptionId}
                       className="focus-visible:ring-2 focus-visible:ring-qep-orange/40"
                     >
                       <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-qep-orange" aria-hidden />
-                      <span className="sr-only">Open {contact.firstName} {contact.lastName}</span>
+                      <span className="sr-only">Open {displayName}</span>
                     </Link>
                   </div>
                 </div>
