@@ -28,7 +28,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/database.types";
-import { resolveNavItems, getInitials } from "@/lib/nav-config";
+import { resolveRoleScopedNavItems, getInitials } from "@/lib/nav-config";
 import { BRAND_NAME } from "@/components/BrandLogo";
 
 interface Profile {
@@ -59,8 +59,11 @@ export function NavRail({
   const [isExpanded, setIsExpanded] = useState(false);
   const [showSignOutDialog, setShowSignOutDialog] = useState(false);
 
-  const visibleItems = resolveNavItems(quoteBuilderEnabled, quoteBuilderLoading).filter((item) =>
-    item.roles.includes(profile.role)
+  const visibleItems = resolveRoleScopedNavItems(
+    quoteBuilderEnabled,
+    quoteBuilderLoading,
+    profile.role,
+    profile.iron_role,
   );
 
   return (

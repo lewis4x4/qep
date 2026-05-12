@@ -378,12 +378,14 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
   const primaryNavGroups = resolvePrimaryNavGroups(
     quoteBuilderEnabled,
     quoteBuilderLoading,
-    profile.role
+    profile.role,
+    profile.iron_role,
   );
   const utilitySections = resolveUtilityNavSections(
     quoteBuilderEnabled,
     quoteBuilderLoading,
-    profile.role
+    profile.role,
+    profile.iron_role,
   );
   const activePrimaryHeader = resolveActivePrimaryHeader(location.pathname);
   const utilityRouteActive = isUtilityRoute(location.pathname);

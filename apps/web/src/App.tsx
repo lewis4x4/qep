@@ -13,6 +13,7 @@ import {
 } from "./lib/auth-route-bootstrap";
 import { hasCachedAuthProfile } from "./lib/auth-recovery";
 import { resolveHomeRoute } from "./lib/home-route";
+import { canAccessAccountModuleForIronRole, canAccessNavHrefForIronRole, canAccessPrimaryHeaderForIronRole } from "./lib/nav-config";
 import { portalRouteElements } from "./features/portal/PortalRoutes";
 
 const SalesRoutes = lazy(() =>
@@ -700,6 +701,15 @@ function LegacyCompanyCommandRedirect() {
     : <Navigate to="/qrm/companies" replace />;
 }
 
+function AccountModuleAccessRedirect() {
+  const { pathname, search } = useLocation();
+  const match = pathname.match(/^\/qrm\/accounts\/([^/]+)\/[^/]+$/);
+  const accountId = match?.[1];
+  return accountId
+    ? <Navigate to={`/qrm/accounts/${accountId}/command${search}`} replace />
+    : <Navigate to="/qrm/companies" replace />;
+}
+
 function AnimatedRoutes({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   return (
@@ -945,6 +955,22 @@ function App() {
     profile.audience,
     profile.floor_mode,
   );
+  const hasRepOrAboveRole = ["rep", "admin", "manager", "owner"].includes(profile.role);
+  const hasManagerOrAboveRole = ["admin", "manager", "owner"].includes(profile.role);
+  const canAccessNavHref = (href: string) => canAccessNavHrefForIronRole(profile.iron_role, href);
+  const canAccessServiceHeader = canAccessPrimaryHeaderForIronRole(profile.iron_role, "service");
+  const canAccessPartsHeader = canAccessPrimaryHeaderForIronRole(profile.iron_role, "parts");
+  const canAccessRentalsHeader = canAccessPrimaryHeaderForIronRole(profile.iron_role, "rentals");
+  const canAccessServiceSurface = hasRepOrAboveRole && canAccessServiceHeader;
+  const canAccessServiceManagedSurface = hasManagerOrAboveRole && canAccessServiceHeader;
+  const canAccessPartsSurface = hasRepOrAboveRole && canAccessPartsHeader;
+  const canAccessPartsManagedSurface = hasManagerOrAboveRole && canAccessPartsHeader;
+  const canAccessRentalsSurface = hasRepOrAboveRole && canAccessRentalsHeader;
+  const canAccessAccountModule = (moduleKey: string) =>
+    hasRepOrAboveRole && canAccessAccountModuleForIronRole(profile.iron_role, moduleKey);
+  const accountModuleFallback = hasRepOrAboveRole
+    ? <AccountModuleAccessRedirect />
+    : <Navigate to="/dashboard" replace />;
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -1135,7 +1161,7 @@ function App() {
               <Route
                 path="/service/labor-pricing"
                 element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceManagedSurface ? (
                     <ServiceLaborPricingPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1145,7 +1171,7 @@ function App() {
               <Route
                 path="/service/wip"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceSurface ? (
                     <ServiceWorkInProcessPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1155,7 +1181,7 @@ function App() {
               <Route
                 path="/service/agreements/:agreementId"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceSurface ? (
                     <ServiceAgreementDetailPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1165,7 +1191,7 @@ function App() {
               <Route
                 path="/service/agreements"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceSurface ? (
                     <ServiceAgreementsPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1175,7 +1201,7 @@ function App() {
               <Route
                 path="/service/inspections/:inspectionId"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceSurface ? (
                     <ServiceInspectionDetailPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1185,7 +1211,7 @@ function App() {
               <Route
                 path="/service/inspections"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceSurface ? (
                     <ServiceInspectionPlusPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1195,7 +1221,7 @@ function App() {
               <Route
                 path="/m/service"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceSurface ? (
                     <ServiceTechnicianMobilePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1205,7 +1231,7 @@ function App() {
               <Route
                 path="/service"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceSurface ? (
                     <ServiceCommandCenterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1215,7 +1241,7 @@ function App() {
               <Route
                 path="/service/intake"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceSurface ? (
                     <ServiceIntakePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1225,7 +1251,7 @@ function App() {
               <Route
                 path="/service/parts"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceSurface ? (
                     <PartsWorkQueuePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1235,7 +1261,7 @@ function App() {
               <Route
                 path="/service/fulfillment/:runId"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceSurface ? (
                     <FulfillmentRunDetailPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1245,7 +1271,7 @@ function App() {
               <Route
                 path="/service/portal-parts"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceSurface ? (
                     <PortalPartsOrdersPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1255,7 +1281,7 @@ function App() {
               <Route
                 path="/service/vendors"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceSurface ? (
                     <VendorProfilesPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1267,7 +1293,7 @@ function App() {
               <Route
                 path="/service/efficiency"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceSurface ? (
                     <ServiceEfficiencyPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1277,7 +1303,7 @@ function App() {
               <Route
                 path="/service/branches"
                 element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceManagedSurface ? (
                     <ServiceBranchConfigPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1287,7 +1313,7 @@ function App() {
               <Route
                 path="/service/inventory"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceSurface ? (
                     <PartsInventoryPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1297,7 +1323,7 @@ function App() {
               <Route
                 path="/service/job-code-suggestions"
                 element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceManagedSurface ? (
                     <JobCodeSuggestionsPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1307,7 +1333,7 @@ function App() {
               <Route
                 path="/service/scheduler-health"
                 element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceManagedSurface ? (
                     <ServiceSchedulerHealthPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1317,7 +1343,7 @@ function App() {
               <Route
                 path="/service/invoice/:invoiceId"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceSurface ? (
                     <ServiceShopInvoicePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1538,7 +1564,7 @@ function App() {
               <Route
                 path="/service/dashboard"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessServiceSurface ? (
                     <ServiceDashboardPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1668,7 +1694,7 @@ function App() {
               <Route
                 path="/rentals"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessRentalsSurface ? (
                     <RentalLabShowcase />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1678,7 +1704,7 @@ function App() {
               <Route
                 path="/parts/lab"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessPartsSurface ? (
                     <Suspense fallback={<RouteFallback />}>
                       <PartsLabShowcase />
                     </Suspense>
@@ -1690,7 +1716,7 @@ function App() {
               <Route
                 path="/parts/catalog"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessPartsSurface ? (
                     <Suspense fallback={<RouteFallback />}>
                       <PartsCatalogPage />
                     </Suspense>
@@ -1702,7 +1728,7 @@ function App() {
               <Route
                 path="/parts/purchase-orders/:id"
                 element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessPartsManagedSurface ? (
                     <Suspense fallback={<RouteFallback />}>
                       <PurchaseOrderDetailPage />
                     </Suspense>
@@ -1714,7 +1740,7 @@ function App() {
               <Route
                 path="/parts/purchase-orders"
                 element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessPartsManagedSurface ? (
                     <Suspense fallback={<RouteFallback />}>
                       <PurchaseOrdersPage />
                     </Suspense>
@@ -1726,7 +1752,7 @@ function App() {
               <Route
                 path="/parts/orders/new"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessPartsSurface ? (
                     <Suspense fallback={<RouteFallback />}>
                       <NewPartsOrderPage />
                     </Suspense>
@@ -1738,7 +1764,7 @@ function App() {
               <Route
                 path="/parts/orders/:id"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessPartsSurface ? (
                     <Suspense fallback={<RouteFallback />}>
                       <PartsOrderDetailPage />
                     </Suspense>
@@ -1750,7 +1776,7 @@ function App() {
               <Route
                 path="/parts/orders"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessPartsSurface ? (
                     <Suspense fallback={<RouteFallback />}>
                       <PartsOrdersPage />
                     </Suspense>
@@ -1762,7 +1788,7 @@ function App() {
               <Route
                 path="/parts/fulfillment/:runId"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessPartsSurface ? (
                     <Suspense fallback={<RouteFallback />}>
                       <FulfillmentRunDetailPage />
                     </Suspense>
@@ -1774,7 +1800,7 @@ function App() {
               <Route
                 path="/parts/fulfillment"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessPartsSurface ? (
                     <Suspense fallback={<RouteFallback />}>
                       <PartsFulfillmentPage />
                     </Suspense>
@@ -1786,7 +1812,7 @@ function App() {
               <Route
                 path="/parts/forecast"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessPartsSurface ? (
                     <Suspense fallback={<RouteFallback />}>
                       <PartsForecastPage />
                     </Suspense>
@@ -1798,7 +1824,7 @@ function App() {
               <Route
                 path="/parts/analytics"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessPartsSurface ? (
                     <Suspense fallback={<RouteFallback />}>
                       <PartsAnalyticsPage />
                     </Suspense>
@@ -1810,7 +1836,7 @@ function App() {
               <Route
                 path="/parts/inventory"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessPartsSurface ? (
                     <Suspense fallback={<RouteFallback />}>
                       <PartsInventoryPage subNav="parts" />
                     </Suspense>
@@ -1822,7 +1848,7 @@ function App() {
               <Route
                 path="/parts/vendors"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessPartsSurface ? (
                     <Suspense fallback={<RouteFallback />}>
                       <VendorProfilesPage subNav="parts" />
                     </Suspense>
@@ -1834,7 +1860,7 @@ function App() {
               <Route
                 path="/parts"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessPartsSurface ? (
                     <Suspense fallback={<RouteFallback />}>
                       <PartsCommandCenterPage />
                     </Suspense>
@@ -2138,7 +2164,7 @@ function App() {
               <Route
                 path="/qrm/accounts/:accountId/command"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessAccountModule("command") ? (
                     <AccountCommandCenterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2148,120 +2174,120 @@ function App() {
               <Route
                 path="/qrm/accounts/:accountId/genome"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessAccountModule("genome") ? (
                     <CustomerGenomePage />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    accountModuleFallback
                   )
                 }
               />
               <Route
                 path="/qrm/accounts/:accountId/operating-profile"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessAccountModule("operating-profile") ? (
                     <CustomerOperatingProfilePage />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    accountModuleFallback
                   )
                 }
               />
               <Route
                 path="/qrm/accounts/:accountId/fleet-intelligence"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessAccountModule("fleet-intelligence") ? (
                     <FleetIntelligencePage />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    accountModuleFallback
                   )
                 }
               />
               <Route
                 path="/qrm/accounts/:accountId/relationship-map"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessAccountModule("relationship-map") ? (
                     <RelationshipMapPage />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    accountModuleFallback
                   )
                 }
               />
               <Route
                 path="/qrm/accounts/:accountId/white-space"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessAccountModule("white-space") ? (
                     <WhiteSpaceMapPage />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    accountModuleFallback
                   )
                 }
               />
               <Route
                 path="/qrm/accounts/:accountId/rental-conversion"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessAccountModule("rental-conversion") ? (
                     <RentalConversionEnginePage />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    accountModuleFallback
                   )
                 }
               />
               <Route
                 path="/qrm/accounts/:accountId/strategist"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessAccountModule("strategist") ? (
                     <CustomerStrategistPage />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    accountModuleFallback
                   )
                 }
               />
               <Route
                 path="/qrm/accounts/:accountId/cross-dealer-mirror"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessAccountModule("cross-dealer-mirror") ? (
                     <CrossDealerMirrorPage />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    accountModuleFallback
                   )
                 }
               />
               <Route
                 path="/qrm/accounts/:accountId/cashflow-weather"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessAccountModule("cashflow-weather") ? (
                     <CashflowWeatherMapPage />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    accountModuleFallback
                   )
                 }
               />
               <Route
                 path="/qrm/accounts/:accountId/decision-cycle"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessAccountModule("decision-cycle") ? (
                     <DecisionCycleSynchronizerPage />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    accountModuleFallback
                   )
                 }
               />
               <Route
                 path="/qrm/accounts/:accountId/ecosystem"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessAccountModule("ecosystem") ? (
                     <EcosystemLayerPage />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    accountModuleFallback
                   )
                 }
               />
               <Route
                 path="/qrm/accounts/:accountId/reputation"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessAccountModule("reputation") ? (
                     <ReputationSurfacePage />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    accountModuleFallback
                   )
                 }
               />
@@ -2288,7 +2314,7 @@ function App() {
               <Route
                 path="/qrm/operations-copilot"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/operations-copilot") ? (
                     <WithAskIronSurface fallback={<OperationsCopilotPage />} />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2298,7 +2324,7 @@ function App() {
               <Route
                 path="/qrm/replacement-prediction"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/replacement-prediction") ? (
                     <ReplacementPredictionPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2308,7 +2334,7 @@ function App() {
               <Route
                 path="/qrm/competitive-threat-map"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/competitive-threat-map") ? (
                     <CompetitiveThreatMapPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2318,7 +2344,7 @@ function App() {
               <Route
                 path="/qrm/seasonal-opportunity-map"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/seasonal-opportunity-map") ? (
                     <SeasonalOpportunityMapPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2328,7 +2354,7 @@ function App() {
               <Route
                 path="/qrm/learning-layer"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/learning-layer") ? (
                     <LearningLayerPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2368,7 +2394,7 @@ function App() {
               <Route
                 path="/qrm/opportunity-map"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/opportunity-map") ? (
                     <OpportunityMapPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2431,17 +2457,17 @@ function App() {
               <Route
                 path="/qrm/accounts/:accountId/timeline"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessAccountModule("timeline") ? (
                     <AccountTimelinePage />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    accountModuleFallback
                   )
                 }
               />
               <Route
                 path="/qrm/time-bank"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/time-bank") ? (
                     <TimeBankPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2451,7 +2477,7 @@ function App() {
               <Route
                 path="/qrm/inventory-pressure"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/inventory-pressure") ? (
                     <InventoryPressureBoardPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2461,7 +2487,7 @@ function App() {
               <Route
                 path="/qrm/iron-in-motion"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/iron-in-motion") ? (
                     <IronInMotionRegisterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2471,7 +2497,7 @@ function App() {
               <Route
                 path="/qrm/rentals"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/rentals") ? (
                     <RentalCommandCenterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2481,7 +2507,7 @@ function App() {
               <Route
                 path="/qrm/service-to-sales"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/service-to-sales") ? (
                     <ServiceToSalesPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2491,7 +2517,7 @@ function App() {
               <Route
                 path="/qrm/parts-intelligence"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/parts-intelligence") ? (
                     <PartsIntelligencePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2501,10 +2527,10 @@ function App() {
               <Route
                 path="/qrm/exceptions"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/exceptions") ? (
                     <WithPulseSurface
                       fallback={
-                        ["admin", "manager", "owner"].includes(profile.role) ? (
+                        hasManagerOrAboveRole ? (
                           <ExceptionHandlingPage />
                         ) : (
                           <Navigate to="/dashboard" replace />
@@ -2519,7 +2545,7 @@ function App() {
               <Route
                 path="/qrm/revenue-rescue"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/revenue-rescue") ? (
                     <RevenueRescueCenterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2529,7 +2555,7 @@ function App() {
               <Route
                 path="/qrm/competitive-displacement"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/competitive-displacement") ? (
                     <CompetitiveDisplacementCenterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2539,7 +2565,7 @@ function App() {
               <Route
                 path="/qrm/operator-intelligence"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/operator-intelligence") ? (
                     <OperatorIntelligencePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2549,7 +2575,7 @@ function App() {
               <Route
                 path="/qrm/post-sale-experience"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/post-sale-experience") ? (
                     <PostSaleExperienceCenterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2559,7 +2585,7 @@ function App() {
               <Route
                 path="/qrm/workflow-audit"
                 element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                  hasManagerOrAboveRole && canAccessNavHref("/qrm/workflow-audit") ? (
                     <WorkflowAuditPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2569,7 +2595,7 @@ function App() {
               <Route
                 path="/qrm/my/reality"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  hasRepOrAboveRole && canAccessNavHref("/qrm/my/reality") ? (
                     <RepRealityReflectionPage />
                   ) : (
                     <Navigate to="/dashboard" replace />

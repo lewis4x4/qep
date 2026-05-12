@@ -613,6 +613,86 @@ export const NAV_ITEMS: NavItemDefinition[] = [
 
 export const BOTTOM_TAB_HREFS = ["/qrm", "/service", "/chat", "/voice", "/quote"];
 
+interface IronPersonaNavPolicy {
+  allowedPrimaryHeaders?: ReadonlySet<PrimaryHeaderId>;
+  allowedQrmHrefs?: ReadonlySet<string>;
+  allowedUtilityHrefs?: ReadonlySet<string>;
+  allowedAccountModules?: ReadonlySet<string>;
+}
+
+const IRON_PERSONA_NAV_POLICIES: Record<string, IronPersonaNavPolicy> = {
+  iron_advisor: {
+    allowedPrimaryHeaders: new Set<PrimaryHeaderId>(["sales", "qrm"]),
+    allowedQrmHrefs: new Set([
+      "/floor",
+      "/qrm",
+      "/chat",
+      "/qrm/activities",
+      "/qrm/deals",
+      "/qrm/contacts",
+      "/qrm/companies",
+      "/qrm/time-bank",
+      "/qrm/my/reality",
+    ]),
+    allowedUtilityHrefs: new Set(["/os"]),
+    allowedAccountModules: new Set([
+      "command",
+      "timeline",
+      "relationship-map",
+      "fleet-intelligence",
+      "rental-conversion",
+      "white-space",
+    ]),
+  },
+};
+
+const NAV_ITEM_BY_HREF = new Map<string, NavItemDefinition>(NAV_ITEMS.map((item) => [item.href, item]));
+
+function getIronPersonaNavPolicy(ironRole?: string | null): IronPersonaNavPolicy | null {
+  if (!ironRole) return null;
+  return IRON_PERSONA_NAV_POLICIES[ironRole] ?? null;
+}
+
+export function canAccessPrimaryHeaderForIronRole(ironRole: string | null | undefined, header: PrimaryHeaderId): boolean {
+  const policy = getIronPersonaNavPolicy(ironRole);
+  if (!policy?.allowedPrimaryHeaders) return true;
+  return policy.allowedPrimaryHeaders.has(header);
+}
+
+function isNavItemVisibleForIronRole(item: NavItemDefinition, ironRole?: string | null): boolean {
+  const policy = getIronPersonaNavPolicy(ironRole);
+  if (!policy) return true;
+
+  if (item.utility) {
+    if (!policy.allowedUtilityHrefs) return true;
+    return policy.allowedUtilityHrefs.has(item.href);
+  }
+
+  if (!item.primaryHeaderId) return false;
+  if (!canAccessPrimaryHeaderForIronRole(ironRole, item.primaryHeaderId)) return false;
+
+  if (item.primaryHeaderId === "qrm" && policy.allowedQrmHrefs) {
+    return policy.allowedQrmHrefs.has(item.href);
+  }
+
+  return true;
+}
+
+export function canAccessNavHrefForIronRole(ironRole: string | null | undefined, href: string): boolean {
+  const item = NAV_ITEM_BY_HREF.get(href);
+  if (!item) return true;
+  return isNavItemVisibleForIronRole(item, ironRole);
+}
+
+export function canAccessAccountModuleForIronRole(
+  ironRole: string | null | undefined,
+  moduleKey: string,
+): boolean {
+  const policy = getIronPersonaNavPolicy(ironRole);
+  if (!policy?.allowedAccountModules) return true;
+  return policy.allowedAccountModules.has(moduleKey);
+}
+
 export function resolveNavItems(
   quoteBuilderEnabled: boolean,
   quoteBuilderLoading: boolean
@@ -623,6 +703,17 @@ export function resolveNavItems(
       item.requiresIntelliDealer && !quoteBuilderEnabled && !quoteBuilderLoading
     ),
   }));
+}
+
+export function resolveRoleScopedNavItems(
+  quoteBuilderEnabled: boolean,
+  quoteBuilderLoading: boolean,
+  role: UserRole,
+  ironRole?: string | null,
+): NavItem[] {
+  return resolveNavItems(quoteBuilderEnabled, quoteBuilderLoading)
+    .filter((item) => item.roles.includes(role))
+    .filter((item) => isNavItemVisibleForIronRole(item, ironRole));
 }
 
 function groupItemsBySection(items: NavItem[]): NavSection[] {
@@ -645,10 +736,11 @@ function groupItemsBySection(items: NavItem[]): NavSection[] {
 export function resolvePrimaryNavGroups(
   quoteBuilderEnabled: boolean,
   quoteBuilderLoading: boolean,
-  role: UserRole
+  role: UserRole,
+  ironRole?: string | null,
 ): PrimaryNavGroup[] {
-  const navItems = resolveNavItems(quoteBuilderEnabled, quoteBuilderLoading).filter(
-    (item) => item.roles.includes(role) && item.primaryHeaderId
+  const navItems = resolveRoleScopedNavItems(quoteBuilderEnabled, quoteBuilderLoading, role, ironRole).filter(
+    (item) => item.primaryHeaderId,
   );
 
   return PRIMARY_NAV_GROUPS.map((group) => {
@@ -663,10 +755,11 @@ export function resolvePrimaryNavGroups(
 export function resolveUtilityNavSections(
   quoteBuilderEnabled: boolean,
   quoteBuilderLoading: boolean,
-  role: UserRole
+  role: UserRole,
+  ironRole?: string | null,
 ): NavSection[] {
-  const utilityItems = resolveNavItems(quoteBuilderEnabled, quoteBuilderLoading).filter(
-    (item) => item.roles.includes(role) && item.utility
+  const utilityItems = resolveRoleScopedNavItems(quoteBuilderEnabled, quoteBuilderLoading, role, ironRole).filter(
+    (item) => item.utility,
   );
   return groupItemsBySection(utilityItems);
 }
