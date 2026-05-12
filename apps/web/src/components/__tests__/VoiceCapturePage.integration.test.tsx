@@ -73,6 +73,19 @@ const recentCaptures = [
     user_id: "user-1",
     audio_storage_path: "user-1/note-5.webm",
   },
+  {
+    id: "note-6",
+    created_at: "2026-04-19T18:32:00.000Z",
+    duration_seconds: 21,
+    sync_status: "pending",
+    hubspot_deal_id: null,
+    linked_deal_id: null,
+    transcript: "You",
+    sync_error: null,
+    updated_at: "2026-04-19T18:35:00.000Z",
+    user_id: "user-1",
+    audio_storage_path: "user-1/note-6.webm",
+  },
 ];
 
 function makeQuery(data: unknown) {
@@ -144,10 +157,29 @@ mock.module("@/features/sales/lib/offline-store", () => ({
       dealId: null,
       dealLabel: null,
       queuedAt: "2026-04-23T14:05:00.000Z",
+      status: "queued",
+      lastError: null,
+      attemptCount: 0,
+      lastAttemptAt: null,
+    },
+    {
+      id: "queued-2",
+      audioBlob: new Blob(["audio"], { type: "audio/webm" }),
+      mimeType: "audio/webm",
+      fileName: "recording.webm",
+      durationSeconds: 33,
+      dealId: "55555555-5555-4555-8555-555555555555",
+      dealLabel: "Retry field note",
+      queuedAt: "2026-04-23T14:02:00.000Z",
+      status: "failed",
+      lastError: "Rate limited. Try again in a minute.",
+      attemptCount: 2,
+      lastAttemptAt: "2026-04-23T14:04:00.000Z",
     },
   ]),
   enqueueVoiceNote: mock(async () => undefined),
   removeQueuedVoiceNotes: mock(async () => undefined),
+  updateQueuedVoiceNote: mock(async () => undefined),
 }));
 
 import { VoiceCapturePage } from "../VoiceCapturePage";
@@ -187,11 +219,17 @@ describe("VoiceCapturePage redesign", () => {
     });
 
     expect(screen.getByText("City bid review")).toBeTruthy();
+    expect(screen.getByText("Transcript needs re-record")).toBeTruthy();
+    expect(screen.getByText(/Transcript was too short to trust/i)).toBeTruthy();
+    expect(screen.queryByText(/^Transcript preview:\s*You$/)).toBeNull();
     expect(screen.getAllByText("Synced to QRM").length).toBeGreaterThan(0);
     expect(screen.getByText("1111...1111")).toBeTruthy();
     expect(screen.queryByText("11111111-1111-4111-8111-111111111111")).toBeNull();
     expect(screen.getAllByText("Needs match").length).toBeGreaterThan(0);
     expect(screen.getByText("Queued locally")).toBeTruthy();
+    expect(screen.getByText("Retry needed")).toBeTruthy();
+    expect(screen.getAllByText(/Rate limited\. Try again in a minute\./).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/1 need retry/).length).toBeGreaterThan(0);
     expect(screen.getAllByLabelText(/^Play /).length).toBeGreaterThanOrEqual(5);
   });
 });

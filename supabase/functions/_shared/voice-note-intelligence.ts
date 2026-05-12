@@ -15,10 +15,12 @@ interface IntelligenceInput {
   transcript: string;
   extracted: VoiceCaptureExtractedDealData;
   existingDealId: string | null;
+  workspaceId: string;
 }
 
 async function fuzzyMatchContact(
   db: SupabaseClient,
+  workspaceId: string,
   name: string,
 ): Promise<string | null> {
   if (!name || name.length < 2) return null;
@@ -29,6 +31,7 @@ async function fuzzyMatchContact(
   let query = db
     .from("crm_contacts")
     .select("id")
+    .eq("workspace_id", workspaceId)
     .is("deleted_at", null);
 
   if (lastName) {
@@ -43,6 +46,7 @@ async function fuzzyMatchContact(
 
 async function fuzzyMatchCompany(
   db: SupabaseClient,
+  workspaceId: string,
   name: string,
 ): Promise<string | null> {
   if (!name || name.length < 2) return null;
@@ -50,6 +54,7 @@ async function fuzzyMatchCompany(
   const { data } = await db
     .from("crm_companies")
     .select("id")
+    .eq("workspace_id", workspaceId)
     .is("deleted_at", null)
     .ilike("name", `%${name}%`)
     .limit(1)
@@ -60,6 +65,7 @@ async function fuzzyMatchCompany(
 
 async function fuzzyMatchDeal(
   db: SupabaseClient,
+  workspaceId: string,
   contactId: string | null,
   companyId: string | null,
 ): Promise<string | null> {
@@ -68,6 +74,7 @@ async function fuzzyMatchDeal(
   let query = db
     .from("crm_deals")
     .select("id")
+    .eq("workspace_id", workspaceId)
     .is("deleted_at", null)
     .order("updated_at", { ascending: false })
     .limit(1);
@@ -86,7 +93,7 @@ export async function processVoiceNoteIntelligence(
   db: SupabaseClient,
   input: IntelligenceInput,
 ): Promise<void> {
-  const { captureId, userId, transcript, extracted, existingDealId } = input;
+  const { captureId, userId, transcript, extracted, existingDealId, workspaceId } = input;
 
   // 1. Auto-link entities
   let linkedContactId: string | null = null;
@@ -97,15 +104,15 @@ export async function processVoiceNoteIntelligence(
   const companyName = extracted.record.companyName;
 
   const [matchedContact, matchedCompany] = await Promise.all([
-    contactName ? fuzzyMatchContact(db, contactName) : null,
-    companyName ? fuzzyMatchCompany(db, companyName) : null,
+    contactName ? fuzzyMatchContact(db, workspaceId, contactName) : null,
+    companyName ? fuzzyMatchCompany(db, workspaceId, companyName) : null,
   ]);
 
   linkedContactId = matchedContact;
   linkedCompanyId = matchedCompany;
 
   if (!linkedDealId) {
-    linkedDealId = await fuzzyMatchDeal(db, linkedContactId, linkedCompanyId);
+    linkedDealId = await fuzzyMatchDeal(db, workspaceId, linkedContactId, linkedCompanyId);
   }
 
   // 2. Extract queryable signals

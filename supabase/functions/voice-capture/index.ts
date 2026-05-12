@@ -5,7 +5,7 @@
  * Pipeline:
  *   1. Validate auth (rep/manager/owner roles only)
  *   2. Upload audio to Supabase Storage
- *   3. Transcribe via OpenAI Whisper
+ *   3. Transcribe via OpenAI Audio API
  *   4. Extract structured deal data via OpenAI
  *   5. Persist to voice_captures table
  *   6. If HubSpot is connected: create note engagement + schedule follow-up task
@@ -26,6 +26,11 @@ import {
 import { processVoiceNoteIntelligence } from "../_shared/voice-note-intelligence.ts";
 import { safeCorsHeaders } from "../_shared/safe-cors.ts";
 import { audioExtensionFromMimeType, canonicalizeAudioMimeType } from "../_shared/audio-mime.ts";
+import {
+  resolveVoiceCaptureModelConfig,
+  VOICE_TRANSCRIPTION_DOMAIN_PROMPT,
+  WHISPER_TRANSCRIPTION_MODEL,
+} from "../_shared/voice-model-config.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 type ExtractedDealData = VoiceCaptureExtractedDealData;
@@ -45,6 +50,8 @@ Deno.serve(async (req) => {
     }
     const supabase = auth.supabase;
     const user = { id: auth.userId };
+    const workspaceId = auth.workspaceId;
+    const modelConfig = resolveVoiceCaptureModelConfig();
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -76,6 +83,7 @@ Deno.serve(async (req) => {
     }
 
     const audioFile = formData.get("audio") as File | null;
+    const submittedDurationSeconds = parseDurationSeconds(formData.get("duration_seconds"));
     const rawCrmDealId = (formData.get("crm_deal_id") as string | null)?.trim() || null;
     const rawLegacyHubspot = (formData.get("hubspot_deal_id") as string | null)?.trim() || null;
     const crmDealId = rawCrmDealId || null;
@@ -152,32 +160,38 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── Transcribe via Whisper ────────────────────────────────────────────────
+    // ── Transcribe via OpenAI Audio API ───────────────────────────────────────
     let transcript: string;
-    let durationSeconds: number | null = null;
+    let durationSeconds: number | null = submittedDurationSeconds;
 
     try {
-      const whisperForm = new FormData();
-      whisperForm.append("file", new Blob([audioBuffer], { type: audioMimeType }), `audio.${extension}`);
-      whisperForm.append("model", "whisper-1");
-      whisperForm.append("language", "en");
-      whisperForm.append("response_format", "verbose_json");
+      const transcriptionModel = modelConfig.transcriptionModel;
+      const transcriptionForm = new FormData();
+      transcriptionForm.append("file", new Blob([audioBuffer], { type: audioMimeType }), `audio.${extension}`);
+      transcriptionForm.append("model", transcriptionModel);
+      if (transcriptionModel === WHISPER_TRANSCRIPTION_MODEL) {
+        transcriptionForm.append("language", "en");
+        transcriptionForm.append("response_format", "verbose_json");
+      } else {
+        transcriptionForm.append("response_format", "json");
+        transcriptionForm.append("prompt", VOICE_TRANSCRIPTION_DOMAIN_PROMPT);
+      }
 
-      const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      const transcriptionRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
         method: "POST",
         headers: { Authorization: `Bearer ${openAiKey}` },
-        body: whisperForm,
+        body: transcriptionForm,
         signal: AbortSignal.timeout(120_000),
       });
 
-      if (!whisperRes.ok) {
-        const errText = await whisperRes.text();
-        throw new Error(`Whisper API error: ${errText}`);
+      if (!transcriptionRes.ok) {
+        const errText = await transcriptionRes.text();
+        throw new Error(`Transcription API error: ${errText}`);
       }
 
-      const whisperData = await whisperRes.json();
-      transcript = whisperData.text?.trim() ?? "";
-      durationSeconds = whisperData.duration ? Math.round(whisperData.duration) : null;
+      const transcriptionData = await transcriptionRes.json();
+      transcript = transcriptionData.text?.trim() ?? "";
+      durationSeconds = transcriptionData.duration ? Math.round(transcriptionData.duration) : submittedDurationSeconds;
     } catch (transcribeErr) {
       const errMsg = transcribeErr instanceof Error ? transcribeErr.message : "Unknown error";
       console.error("Transcription failed:", errMsg);
@@ -194,6 +208,23 @@ Deno.serve(async (req) => {
         .update({ sync_status: "failed", sync_error: "Empty transcript — no speech detected" })
         .eq("id", captureId);
       return jsonError("No speech detected in the recording. Please try again.", 422, ch);
+    }
+
+    if (isLowSignalTranscript(transcript, durationSeconds)) {
+      await supabaseAdmin
+        .from("voice_captures")
+        .update({
+          transcript,
+          duration_seconds: durationSeconds,
+          sync_status: "failed",
+          sync_error: "Low-confidence transcript — recording produced too little usable speech text",
+        })
+        .eq("id", captureId);
+      return jsonError(
+        "The recording only produced a one-word or very short transcript, so it was not saved as a trusted field note. Check the microphone input and re-record.",
+        422,
+        ch,
+      );
     }
 
     // ── Extract structured data via OpenAI ───────────────────────────────────
@@ -298,7 +329,7 @@ Return ONLY valid JSON matching this exact structure:
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-5-mini",
+          model: modelConfig.extractionModel,
           response_format: { type: "json_object" },
           messages: [
             {
@@ -344,7 +375,7 @@ Return ONLY valid JSON matching this exact structure:
     let localCrmSync: Awaited<ReturnType<typeof writeVoiceCaptureToLocalCrm>>;
     try {
       localCrmSync = await writeVoiceCaptureToLocalCrm(supabaseAdmin, {
-        workspaceId: "default",
+        workspaceId,
         actorUserId: user.id,
         captureId,
         dealId: crmDealId,
@@ -407,6 +438,7 @@ Return ONLY valid JSON matching this exact structure:
         transcript,
         extracted,
         existingDealId: crmDealId,
+        workspaceId,
       });
     } catch (intelErr) {
       console.error("voice-capture: intelligence processing failed (non-fatal)", intelErr);
@@ -717,6 +749,42 @@ async function checkVoiceCaptureRateLimit(
   }
 
   return true;
+}
+
+function parseDurationSeconds(value: FormDataEntryValue | null): number | null {
+  if (typeof value !== "string") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.round(parsed);
+}
+
+function isLowSignalTranscript(transcript: string, durationSeconds: number | null): boolean {
+  const normalized = transcript
+    .trim()
+    .toLowerCase()
+    .replace(/[\s.,!?;:'"“”‘’()\[\]-]+/g, " ")
+    .trim();
+  if (!normalized) return true;
+
+  const words = normalized.split(/\s+/).filter(Boolean);
+  const genericNoise = new Set([
+    "you",
+    "thank you",
+    "thanks",
+    "okay",
+    "ok",
+    "yeah",
+    "yes",
+    "no",
+    "uh",
+    "um",
+    "hmm",
+  ]);
+
+  if (genericNoise.has(normalized)) return true;
+  if (durationSeconds !== null && durationSeconds >= 10 && words.length < 3) return true;
+  if (durationSeconds !== null && durationSeconds >= 20 && words.length < 5) return true;
+  return false;
 }
 
 function humanizeVoiceCaptureError(

@@ -104,6 +104,13 @@ export function VoiceQrmPage() {
                   Lead phrase detected. Captured as an idea instead of a customer activity.
                 </p>
                 <p className="mt-2 text-sm font-medium text-foreground">{result.title}</p>
+                {(result.category || result.matched_via || result.confidence !== undefined) && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {result.category ? `Category: ${result.category}` : "Category: unclassified"}
+                    {result.matched_via ? ` · Matched via ${result.matched_via}` : ""}
+                    {result.confidence !== undefined ? ` · Confidence ${(result.confidence * 100).toFixed(0)}%` : ""}
+                  </p>
+                )}
                 <p className="mt-1 text-[11px] italic text-muted-foreground">"{result.transcript}"</p>
               </div>
             </div>

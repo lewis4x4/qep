@@ -3,6 +3,7 @@ import { requireServiceUser } from "../_shared/service-auth.ts";
 import { decryptToken, encryptToken } from "../_shared/hubspot-crypto.ts";
 import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { safeCorsHeaders } from "../_shared/safe-cors.ts";
 import {
   buildVoiceCaptureNoteBody,
   getVoiceCaptureContactName,
@@ -11,12 +12,6 @@ import {
   writeVoiceCaptureToLocalCrm,
   type VoiceCaptureExtractedDealData,
 } from "../_shared/voice-capture-crm.ts";
-
-const ALLOWED_ORIGINS = [
-  "https://qualityequipmentparts.netlify.app",
-  "https://qep.blackrockai.co",
-  "http://localhost:5173",
-];
 
 type ExtractedDealData = VoiceCaptureExtractedDealData;
 
@@ -31,19 +26,43 @@ interface CaptureRow {
   hubspot_task_id: string | null;
 }
 
-function corsHeaders(origin: string | null): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin) ? origin : "",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Vary": "Origin",
-  };
-}
-
 function jsonError(message: string, status: number, headers: Record<string, string>): Response {
   return new Response(JSON.stringify({ error: message }), {
     status,
     headers: { ...headers, "Content-Type": "application/json" },
   });
+}
+
+async function resolveCaptureWorkspaceId(
+  supabase: SupabaseClient,
+  capture: Pick<CaptureRow, "user_id" | "hubspot_deal_id">,
+  fallbackWorkspaceId: string,
+): Promise<string> {
+  if (capture.hubspot_deal_id && isUuid(capture.hubspot_deal_id)) {
+    const { data: deal } = await supabase
+      .from("crm_deals")
+      .select("workspace_id")
+      .eq("id", capture.hubspot_deal_id)
+      .maybeSingle();
+    const dealWorkspaceId = (deal as { workspace_id?: unknown } | null)?.workspace_id;
+    if (typeof dealWorkspaceId === "string" && dealWorkspaceId.trim().length > 0) {
+      return dealWorkspaceId;
+    }
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("active_workspace_id")
+    .eq("id", capture.user_id)
+    .maybeSingle();
+  const ownerWorkspaceId = (profile as { active_workspace_id?: unknown } | null)?.active_workspace_id;
+  return typeof ownerWorkspaceId === "string" && ownerWorkspaceId.trim().length > 0
+    ? ownerWorkspaceId
+    : fallbackWorkspaceId;
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 async function getValidToken(
@@ -111,7 +130,7 @@ async function getValidToken(
 }
 
 Deno.serve(async (req) => {
-  const headers = corsHeaders(req.headers.get("origin"));
+  const headers = safeCorsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers });
   }
@@ -129,6 +148,7 @@ Deno.serve(async (req) => {
     }
     const supabase = auth.supabase;
     const user = { id: auth.userId };
+    const workspaceId = auth.workspaceId;
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -153,8 +173,20 @@ Deno.serve(async (req) => {
       return jsonError("Voice capture not found", 404, headers);
     }
 
-    if (capture.user_id !== user.id && !["admin", "manager", "owner"].includes(profile.role)) {
-      return jsonError("You can only sync your own captures.", 403, headers);
+    const canSyncAnyCapture = ["admin", "manager", "owner"].includes(auth.role);
+    const captureWorkspaceId = await resolveCaptureWorkspaceId(
+      supabaseAdmin,
+      capture,
+      workspaceId,
+    );
+
+    if (capture.user_id !== user.id) {
+      if (!canSyncAnyCapture) {
+        return jsonError("You can only sync your own captures.", 403, headers);
+      }
+      if (captureWorkspaceId !== workspaceId) {
+        return jsonError("You can only sync captures in your active workspace.", 403, headers);
+      }
     }
 
     if (!capture.transcript || capture.transcript.trim().length === 0) {
@@ -163,7 +195,7 @@ Deno.serve(async (req) => {
 
     const extracted = normalizeVoiceCaptureExtractedDealData(capture.extracted_data);
     const localCrmSync = await writeVoiceCaptureToLocalCrm(supabaseAdmin, {
-      workspaceId: "default",
+      workspaceId: captureWorkspaceId,
       actorUserId: user.id,
       captureId,
       dealId: capture.hubspot_deal_id,

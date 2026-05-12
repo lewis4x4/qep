@@ -6,7 +6,7 @@
  * cadence — all in <10 seconds.
  *
  * Pipeline:
- *   1. Accept audio → upload to storage → transcribe via Whisper
+ *   1. Accept audio → upload to storage → transcribe via OpenAI Audio API
  *   2. Extract ALL fields via enhanced GPT prompt (VoiceQrmExtraction schema)
  *   3. Fuzzy match or auto-create contact + company
  *   4. Auto-create or update deal in correct pipeline stage
@@ -15,12 +15,17 @@
  *   7. Generate QRM narrative in owner's format
  *   8. Return complete result with all entity IDs
  *
- * Auth: rep/manager/owner
+ * Auth: rep/admin/manager/owner
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { audioExtensionFromMimeType, canonicalizeAudioMimeType } from "../_shared/audio-mime.ts";
+import {
+  resolveVoiceToQrmModelConfig,
+  VOICE_TRANSCRIPTION_DOMAIN_PROMPT,
+  WHISPER_TRANSCRIPTION_MODEL,
+} from "../_shared/voice-model-config.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { resolveProfileActiveWorkspaceId } from "../_shared/workspace.ts";
@@ -244,14 +249,15 @@ Deno.serve(async (req) => {
   const pipelineStart = Date.now();
 
   try {
-    // Canonical ES256-safe JWT auth; tighten to rep/manager/owner (no admin).
+    // Canonical ES256-safe JWT auth; route-aligned rep/admin/manager/owner role gate.
     const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
     if (!auth.ok) return auth.response;
-    if (!["rep", "manager", "owner"].includes(auth.role)) {
+    if (!["rep", "admin", "manager", "owner"].includes(auth.role)) {
       return safeJsonError("Your role does not have access to voice-to-QRM.", 403, origin);
     }
     const supabase = auth.supabase;
     const user = { id: auth.userId };
+    const modelConfig = resolveVoiceToQrmModelConfig();
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -299,20 +305,27 @@ Deno.serve(async (req) => {
       return safeJsonError("Failed to store audio file", 500, origin);
     }
 
-    // ── 3. Transcribe via Whisper ─────────────��───────────────────────────
+    // ── 3. Transcribe via OpenAI Audio API ─────────────────────────────────
     const openAiKey = OPENAI_API_KEY || Deno.env.get("OPENAI_KEY");
     if (!openAiKey) {
       return safeJsonError("OpenAI API key not configured", 500, origin);
     }
 
-    const whisperForm = new FormData();
-    whisperForm.append("file", new File([audioBuffer], `recording.${ext}`, { type: audioMimeType }));
-    whisperForm.append("model", "whisper-1");
+    const transcriptionModel = modelConfig.transcriptionModel;
+    const transcriptionForm = new FormData();
+    transcriptionForm.append("file", new File([audioBuffer], `recording.${ext}`, { type: audioMimeType }));
+    transcriptionForm.append("model", transcriptionModel);
+    if (transcriptionModel === WHISPER_TRANSCRIPTION_MODEL) {
+      transcriptionForm.append("response_format", "json");
+    } else {
+      transcriptionForm.append("response_format", "json");
+      transcriptionForm.append("prompt", VOICE_TRANSCRIPTION_DOMAIN_PROMPT);
+    }
 
     const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
       headers: { Authorization: `Bearer ${openAiKey}` },
-      body: whisperForm,
+      body: transcriptionForm,
       signal: AbortSignal.timeout(30_000),
     });
 
@@ -332,13 +345,13 @@ Deno.serve(async (req) => {
     // ── 3.5. Idea / process-improvement short-circuit ─────────────────────
     // Two-pass detection:
     //   Pass A: regex over known lead phrases (fast, zero network cost)
-    //   Pass B: GPT-4o-mini classifier if regex missed and transcript is
+    //   Pass B: configured lightweight classifier if regex missed and transcript is
     //           short enough (<300 chars) that it's PROBABLY a standalone
     //           thought rather than customer field notes
     //
     // The classifier also buckets the idea into a category so we can
     // later route by tag.
-    const ideaSignal = await detectIdea(transcript, openAiKey);
+    const ideaSignal = await detectIdea(transcript, openAiKey, modelConfig.extractionModel);
 
     if (ideaSignal.isIdea) {
       const rawTitle = ideaSignal.title || transcript.substring(0, 200);
@@ -391,7 +404,7 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: modelConfig.extractionModel,
         response_format: { type: "json_object" },
         messages: [
           {
@@ -1147,7 +1160,11 @@ const IDEA_LEAD_PATTERNS: Array<{ re: RegExp; category: IdeaCategory }> = [
  *   Pass A (regex, zero-cost) — known lead phrases
  *   Pass B (GPT classifier, only for short transcripts) — natural phrasings
  */
-async function detectIdea(transcript: string, openAiKey: string): Promise<IdeaSignal> {
+async function detectIdea(
+  transcript: string,
+  openAiKey: string,
+  classifierModel: string,
+): Promise<IdeaSignal> {
   // Pass A: regex — fast path
   for (const { re, category } of IDEA_LEAD_PATTERNS) {
     if (re.test(transcript)) {
@@ -1183,7 +1200,7 @@ async function detectIdea(transcript: string, openAiKey: string): Promise<IdeaSi
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: classifierModel,
         response_format: { type: "json_object" },
         messages: [
           {

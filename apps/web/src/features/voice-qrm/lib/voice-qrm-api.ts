@@ -76,7 +76,9 @@ export interface VoiceIdeaBacklogResponse {
   idea_id: string | null;
   title: string;
   transcript: string;
-  matched_pattern: string;
+  category?: string;
+  confidence?: number;
+  matched_via?: "regex" | "classifier";
 }
 
 export type VoiceQrmResult = VoiceQrmResponse | VoiceIdeaBacklogResponse;

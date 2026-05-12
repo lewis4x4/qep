@@ -7,6 +7,7 @@ import {
   getMicrophoneSupportProblem,
   type MicrophoneProblem,
 } from "@/lib/microphone-access";
+import { chooseRecordingFormat, getFallbackRecordingFormat } from "@/lib/audio-recording-format";
 
 interface VoiceRecorderProps {
   onRecorded: (audioBlob: Blob, fileName: string) => void;
@@ -14,26 +15,6 @@ interface VoiceRecorderProps {
 }
 
 type RecorderState = "idle" | "recording" | "ready";
-
-/** Picks the best supported mimeType in the current browser. */
-function pickMimeType(): { mimeType: string; fileName: string } {
-  const candidates = [
-    { mimeType: "audio/webm;codecs=opus", fileName: "recording.webm" },
-    { mimeType: "audio/webm", fileName: "recording.webm" },
-    { mimeType: "audio/mp4", fileName: "recording.m4a" },
-    { mimeType: "audio/ogg;codecs=opus", fileName: "recording.ogg" },
-  ];
-
-  for (const c of candidates) {
-    // Some Safari versions don't have MediaRecorder.isTypeSupported
-    const isSupported =
-      typeof MediaRecorder !== "undefined" &&
-      typeof MediaRecorder.isTypeSupported === "function" &&
-      MediaRecorder.isTypeSupported(c.mimeType);
-    if (isSupported) return c;
-  }
-  return { mimeType: "", fileName: "recording.webm" };
-}
 
 export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
   const [state, setState] = useState<RecorderState>("idle");
@@ -98,7 +79,8 @@ export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      const { mimeType, fileName } = pickMimeType();
+      const recordingFormat = chooseRecordingFormat() ?? getFallbackRecordingFormat();
+      const { mimeType, fileName } = recordingFormat;
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       recorderRef.current = recorder;
       setRecordedFileName(fileName);

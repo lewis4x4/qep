@@ -46,6 +46,9 @@ verify_jwt = false
 [functions.voice-capture-sync]
 verify_jwt = false
 
+[functions.voice-realtime-session]
+verify_jwt = false
+
 [functions.ingest]
 verify_jwt = false
 

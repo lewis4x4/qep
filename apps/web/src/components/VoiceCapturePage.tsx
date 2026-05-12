@@ -79,8 +79,14 @@ import {
   enqueueVoiceNote,
   getQueuedVoiceNotes,
   removeQueuedVoiceNotes,
+  updateQueuedVoiceNote,
   type QueuedVoiceNote,
 } from "@/features/sales/lib/offline-store";
+import { chooseRecordingFormat, type RecordingFormat } from "@/lib/audio-recording-format";
+import {
+  startRealtimeTranscript,
+  type RealtimeTranscriptSession,
+} from "@/lib/voice-realtime-client";
 
 interface VoiceCapturePageProps {
   userRole: UserRole;
@@ -114,12 +120,6 @@ interface DealLookupOption {
   id: string;
   name: string;
   companyName: string | null;
-}
-
-interface RecordingFormat {
-  mimeType: string;
-  fileName: string;
-  previewTypes: string[];
 }
 
 interface SpeechRecognitionLike {
@@ -172,7 +172,7 @@ interface VoiceCaptureStatusMeta {
   summary: string;
 }
 
-type RecentStatusFilter = "all" | "synced" | "queued" | "needs_match";
+type RecentStatusFilter = "all" | "synced" | "queued" | "failed" | "needs_match";
 type RecentDateFilter = "all" | "today" | "week";
 
 interface RecentRecordingRow {
@@ -184,7 +184,7 @@ interface RecentRecordingRow {
   durationSeconds: number | null;
   recorder: string;
   dealId: string | null;
-  syncStatus: "synced" | "queued" | "needs_match" | "review_sync" | "processing";
+  syncStatus: "synced" | "queued" | "needs_match" | "review_sync" | "processing" | "failed";
   statusLabel: string;
   statusDetail: string;
   actionLabel: string;
@@ -202,37 +202,64 @@ const DEAL_STAGE_LABELS: Record<string, string> = {
   closed_lost: "Closed Lost",
 };
 
-const PROCESSING_STEPS = [
-  { label: "Uploading", icon: CloudUpload },
-  { label: "Transcribing", icon: FileText },
-  { label: "Extracting", icon: Cpu },
-  { label: "Done", icon: Sparkles },
+type ProcessingPhase = "uploading" | "transcribing" | "extracting" | "saving" | "syncing" | "done";
+
+interface ProcessingStatus {
+  phase: ProcessingPhase;
+  detail: string;
+}
+
+type TranscriptPreviewMode = "off" | "starting" | "realtime" | "browser" | "unavailable";
+
+const PROCESSING_STEPS: Array<{
+  phase: ProcessingPhase;
+  label: string;
+  detail: string;
+  icon: typeof CloudUpload;
+}> = [
+  {
+    phase: "uploading",
+    label: "Uploading",
+    detail: "Sending encrypted audio to Iron.",
+    icon: CloudUpload,
+  },
+  {
+    phase: "transcribing",
+    label: "Transcribing",
+    detail: "Server transcript is the source of truth.",
+    icon: FileText,
+  },
+  {
+    phase: "extracting",
+    label: "Extracting",
+    detail: "Looking for customer, machine, deal, and next-step signals.",
+    icon: Cpu,
+  },
+  {
+    phase: "saving",
+    label: "Saving",
+    detail: "Persisting the capture and extracted fields.",
+    icon: DatabaseIcon,
+  },
+  {
+    phase: "syncing",
+    label: "Syncing",
+    detail: "Checking QRM timeline and HubSpot handoff status.",
+    icon: RefreshCw,
+  },
+  {
+    phase: "done",
+    label: "Trusted result",
+    detail: "Review the server transcript and extracted fields below.",
+    icon: Sparkles,
+  },
 ];
+
+const PROCESSING_PHASE_INDEX = new Map(
+  PROCESSING_STEPS.map((step, index) => [step.phase, index] as const),
+);
 
 const WORKFLOW_STEPS = ["Record", "Review", "Extract", "Match to deal", "Synced"];
-
-const RECORDING_FORMATS: RecordingFormat[] = [
-  {
-    mimeType: "audio/mp4;codecs=mp4a.40.2",
-    fileName: "recording.m4a",
-    previewTypes: ["audio/mp4; codecs=mp4a.40.2", "audio/mp4", "audio/aac"],
-  },
-  {
-    mimeType: "audio/mp4",
-    fileName: "recording.m4a",
-    previewTypes: ["audio/mp4", "audio/aac"],
-  },
-  {
-    mimeType: "audio/webm;codecs=opus",
-    fileName: "recording.webm",
-    previewTypes: ["audio/webm; codecs=opus", "audio/webm"],
-  },
-  {
-    mimeType: "audio/webm",
-    fileName: "recording.webm",
-    previewTypes: ["audio/webm"],
-  },
-];
 
 const CONFIDENCE_TONE: Record<
   "high" | "medium" | "low" | "unknown",
@@ -323,38 +350,6 @@ function getVoiceCaptureStatusMeta(
   }
 }
 
-function canPreviewAudioMimeType(mimeType: string): boolean {
-  if (typeof document === "undefined") return true;
-  const audio = document.createElement("audio");
-  return audio.canPlayType(mimeType).replace(/no/i, "").trim().length > 0;
-}
-
-function chooseRecordingFormat(): RecordingFormat | null {
-  if (typeof MediaRecorder === "undefined") {
-    return null;
-  }
-
-  if (typeof MediaRecorder.isTypeSupported !== "function") {
-    return RECORDING_FORMATS[0] ?? null;
-  }
-
-  const playableFormats = RECORDING_FORMATS.filter(
-    (format) =>
-      MediaRecorder.isTypeSupported(format.mimeType) &&
-      format.previewTypes.some((previewType) => canPreviewAudioMimeType(previewType)),
-  );
-
-  if (playableFormats.length > 0) {
-    return playableFormats[0];
-  }
-
-  const supportedFormat = RECORDING_FORMATS.find((format) =>
-    MediaRecorder.isTypeSupported(format.mimeType),
-  );
-
-  return supportedFormat ?? null;
-}
-
 function formatStageLabel(value: ExtractedDealData["opportunity"]["dealStage"]): string | null {
   if (!value) return null;
   return DEAL_STAGE_LABELS[value] ?? value;
@@ -378,8 +373,61 @@ function formatMaybeDate(value: string | null | undefined): string | null {
   });
 }
 
+function isLowSignalFieldNoteTranscript(
+  transcript: string | null | undefined,
+  durationSeconds: number | null | undefined,
+): boolean {
+  const normalized = transcript
+    ?.trim()
+    .toLowerCase()
+    .replace(/[\s.,!?;:'"“”‘’()\[\]-]+/g, " ")
+    .trim();
+  if (!normalized) return false;
+
+  const words = normalized.split(/\s+/).filter(Boolean);
+  const genericNoise = new Set([
+    "you",
+    "thank you",
+    "thanks",
+    "okay",
+    "ok",
+    "yeah",
+    "yes",
+    "no",
+    "uh",
+    "um",
+    "hmm",
+  ]);
+
+  if (genericNoise.has(normalized)) return true;
+  if (typeof durationSeconds === "number" && durationSeconds >= 10 && words.length < 3) return true;
+  if (typeof durationSeconds === "number" && durationSeconds >= 20 && words.length < 5) return true;
+  return false;
+}
+
+function fieldNoteTranscriptPreview(
+  transcript: string | null | undefined,
+  durationSeconds: number | null | undefined,
+): string | null {
+  const trimmed = transcript?.trim();
+  if (!trimmed) return null;
+  return isLowSignalFieldNoteTranscript(trimmed, durationSeconds)
+    ? "Transcript was too short to trust. Replay audio or re-record the field note."
+    : trimmed;
+}
+
 /** Edge pipeline holds the blob in memory more than once; oversized uploads often fail with a generic 500. */
 const MAX_VOICE_CAPTURE_BYTES = 24 * 1024 * 1024;
+
+class VoiceCaptureRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | null,
+  ) {
+    super(message);
+    this.name = "VoiceCaptureRequestError";
+  }
+}
 
 export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }: VoiceCapturePageProps) {
   const { toast } = useToast();
@@ -397,7 +445,10 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const [result, setResult] = useState<CaptureResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [microphoneProblem, setMicrophoneProblem] = useState<MicrophoneProblem | null>(null);
-  const [processingStep, setProcessingStep] = useState(0);
+  const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({
+    phase: "uploading",
+    detail: PROCESSING_STEPS[0].detail,
+  });
   const [pushingToHubspot, setPushingToHubspot] = useState(false);
   const [recentCaptures, setRecentCaptures] = useState<RecentCapture[]>([]);
   const [recentLoading, setRecentLoading] = useState(true);
@@ -418,8 +469,10 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     id: string;
     url: string;
     isObjectUrl: boolean;
+    error?: string;
   } | null>(null);
   const [liveTranscript, setLiveTranscript] = useState("");
+  const [transcriptPreviewMode, setTranscriptPreviewMode] = useState<TranscriptPreviewMode>("off");
 
   // Track viewport width for responsive tooltip positioning (QUA-75)
   useEffect(() => {
@@ -452,6 +505,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordingFormatRef = useRef<RecordingFormat | null>(null);
   const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const realtimeTranscriptRef = useRef<RealtimeTranscriptSession | null>(null);
+  const liveTranscriptAbortRef = useRef<AbortController | null>(null);
+  const queuedSyncingRef = useRef(false);
 
   // Load recent captures on mount
   useEffect(() => {
@@ -654,46 +710,107 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   async function loadQueuedVoiceNotes(): Promise<void> {
     try {
       const notes = await getQueuedVoiceNotes();
-      setQueuedVoiceNotes(notes.sort((a, b) => b.queuedAt.localeCompare(a.queuedAt)));
+      const staleSyncingCutoff = Date.now() - 2 * 60 * 1000;
+      setQueuedVoiceNotes(
+        notes
+          .map((note) => {
+            const normalized = { status: "queued" as const, attemptCount: 0, lastError: null, ...note };
+            if (normalized.status !== "syncing") return normalized;
+
+            const lastAttemptMs = normalized.lastAttemptAt ? new Date(normalized.lastAttemptAt).getTime() : 0;
+            return Number.isFinite(lastAttemptMs) && lastAttemptMs > staleSyncingCutoff
+              ? normalized
+              : { ...normalized, status: "queued" as const };
+          })
+          .sort((a, b) => b.queuedAt.localeCompare(a.queuedAt)),
+      );
     } catch (err) {
       console.warn("Could not load queued voice notes", err);
       setQueuedVoiceNotes([]);
     }
   }
 
+  function getQueueSyncErrorMessage(err: unknown): string {
+    if (err instanceof Error) return err.message;
+    return "Sync failed. The recording is still stored on this device.";
+  }
+
+  function shouldStopQueueSync(err: unknown): boolean {
+    if (isLikelyNetworkFailure(err)) return true;
+    if (!(err instanceof VoiceCaptureRequestError)) return false;
+    return err.status === 401 || err.status === 403 || err.status === 429;
+  }
+
   async function syncQueuedVoiceNotes(): Promise<void> {
-    if (queuedSyncing || typeof navigator !== "undefined" && !navigator.onLine) return;
+    if (
+      queuedSyncingRef.current ||
+      queuedSyncing ||
+      (typeof navigator !== "undefined" && !navigator.onLine)
+    ) return;
+
+    queuedSyncingRef.current = true;
+    setQueuedSyncing(true);
 
     const notes = await getQueuedVoiceNotes().catch(() => []);
     if (notes.length === 0) {
       setQueuedVoiceNotes([]);
+      queuedSyncingRef.current = false;
+      setQueuedSyncing(false);
       return;
     }
-
-    setQueuedSyncing(true);
-    const syncedIds: string[] = [];
+    let syncedCount = 0;
+    let failedCount = 0;
     try {
-      for (const note of notes) {
+      for (const note of notes.sort((a, b) => a.queuedAt.localeCompare(b.queuedAt))) {
+        const attemptCount = (note.attemptCount ?? 0) + 1;
+        const lastAttemptAt = new Date().toISOString();
+        await updateQueuedVoiceNote(note.id, {
+          status: "syncing",
+          lastError: null,
+          attemptCount,
+          lastAttemptAt,
+        });
+        await loadQueuedVoiceNotes();
+
         try {
           await submitVoiceBlob(note.audioBlob, {
             dealId: note.dealId,
             fileName: note.fileName,
+            durationSeconds: note.durationSeconds,
           });
-          syncedIds.push(note.id);
+          await removeQueuedVoiceNotes([note.id]);
+          syncedCount += 1;
+          await loadQueuedVoiceNotes();
         } catch (err) {
+          failedCount += 1;
+          const message = getQueueSyncErrorMessage(err);
+          await updateQueuedVoiceNote(note.id, {
+            status: "failed",
+            lastError: message,
+            attemptCount,
+            lastAttemptAt,
+          });
+          await loadQueuedVoiceNotes();
           console.warn("Queued voice note sync failed", err);
-          break;
+          if (shouldStopQueueSync(err)) break;
         }
       }
 
-      if (syncedIds.length > 0) {
-        await removeQueuedVoiceNotes(syncedIds);
+      if (syncedCount > 0) {
         toast({
           title: "Offline notes synced",
-          description: `${syncedIds.length} field note${syncedIds.length === 1 ? "" : "s"} reached QRM processing.`,
+          description: `${syncedCount} field note${syncedCount === 1 ? "" : "s"} reached QRM processing.`,
+        });
+      }
+      if (failedCount > 0) {
+        toast({
+          title: "Some offline notes still need retry",
+          description: "Failed recordings stayed on this device with retry details.",
+          variant: "destructive",
         });
       }
     } finally {
+      queuedSyncingRef.current = false;
       setQueuedSyncing(false);
       await loadQueuedVoiceNotes();
       void loadRecentCaptures();
@@ -757,29 +874,58 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     };
   }, [audioBlobUrl]);
 
-  // Advance processing steps while processing
+  useEffect(() => {
+    return () => {
+      liveTranscriptAbortRef.current?.abort();
+      try {
+        realtimeTranscriptRef.current?.stop();
+      } catch {
+        // Best-effort route-change cleanup.
+      }
+      try {
+        speechRecognitionRef.current?.stop();
+      } catch {
+        // Browser speech recognition can throw if it already stopped.
+      }
+    };
+  }, []);
+
+  // Advance optimistic processing phases while the synchronous edge pipeline works.
   useEffect(() => {
     if (recordingState !== "processing") {
-      setProcessingStep(0);
+      setProcessingStatus({ phase: "uploading", detail: PROCESSING_STEPS[0].detail });
       return;
     }
-    setProcessingStep(0);
-    const advance = (step: number) => {
-      if (step >= 2) return; // hold at "Extracting" until result arrives
+
+    const optimisticPhases: ProcessingPhase[] = ["uploading", "transcribing", "extracting"];
+    let index = 0;
+    setProcessingStatus({ phase: "uploading", detail: PROCESSING_STEPS[0].detail });
+
+    const advance = () => {
+      if (index >= optimisticPhases.length - 1) return;
       stepTimerRef.current = setTimeout(() => {
-        setProcessingStep(step + 1);
-        advance(step + 1);
-      }, 2000);
+        index += 1;
+        const phase = optimisticPhases[index];
+        const step = PROCESSING_STEPS.find((item) => item.phase === phase) ?? PROCESSING_STEPS[0];
+        setProcessingStatus({ phase, detail: step.detail });
+        advance();
+      }, index === 0 ? 1200 : 2200);
     };
-    advance(0);
+
+    advance();
     return () => {
       if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
     };
   }, [recordingState]);
 
-  function startLiveTranscript(): void {
-    setLiveTranscript("");
+  function appendLiveTranscript(text: string): void {
+    setLiveTranscript((prev) => {
+      const next = `${prev} ${text}`.trim();
+      return next.length > 360 ? next.slice(next.length - 360) : next;
+    });
+  }
 
+  function startBrowserLiveTranscript(): void {
     const recognitionCtor =
       typeof window === "undefined"
         ? null
@@ -792,7 +938,10 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
           }).webkitSpeechRecognition ??
           null);
 
-    if (!recognitionCtor) return;
+    if (!recognitionCtor) {
+      setTranscriptPreviewMode("unavailable");
+      return;
+    }
 
     try {
       const recognition = new recognitionCtor();
@@ -804,26 +953,69 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
         for (let i = event.resultIndex; i < event.results.length; i += 1) {
           text += event.results[i][0].transcript;
         }
-        setLiveTranscript((prev) => {
-          const next = `${prev} ${text}`.trim();
-          return next.length > 360 ? next.slice(next.length - 360) : next;
-        });
+        appendLiveTranscript(text);
       };
       recognition.onerror = () => undefined;
       speechRecognitionRef.current = recognition;
       recognition.start();
+      setTranscriptPreviewMode("browser");
     } catch {
       speechRecognitionRef.current = null;
+      setTranscriptPreviewMode("unavailable");
     }
   }
 
+  function startLiveTranscript(stream?: MediaStream): void {
+    setLiveTranscript("");
+    stopLiveTranscript();
+
+    const realtimeEnabled = import.meta.env.VITE_VOICE_REALTIME_ENABLED === "true";
+    if (!realtimeEnabled || !stream) {
+      startBrowserLiveTranscript();
+      return;
+    }
+
+    const abortController = new AbortController();
+    liveTranscriptAbortRef.current = abortController;
+    setTranscriptPreviewMode("starting");
+
+    void startRealtimeTranscript({
+      stream,
+      signal: abortController.signal,
+      onDelta: appendLiveTranscript,
+      onError: (error) => {
+        console.warn("Realtime transcript preview failed; falling back to browser speech recognition", error);
+      },
+    }).then((session) => {
+      if (abortController.signal.aborted) {
+        session?.stop();
+        return;
+      }
+      if (session) {
+        realtimeTranscriptRef.current = session;
+        setTranscriptPreviewMode("realtime");
+        return;
+      }
+      startBrowserLiveTranscript();
+    });
+  }
+
   function stopLiveTranscript(): void {
+    liveTranscriptAbortRef.current?.abort();
+    liveTranscriptAbortRef.current = null;
+    try {
+      realtimeTranscriptRef.current?.stop();
+    } catch {
+      // Realtime preview cleanup is best-effort.
+    }
+    realtimeTranscriptRef.current = null;
     try {
       speechRecognitionRef.current?.stop();
     } catch {
       // Browser speech recognition can throw if it already stopped.
     }
     speechRecognitionRef.current = null;
+    setTranscriptPreviewMode("off");
   }
 
   const startRecording = useCallback(async () => {
@@ -877,7 +1069,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     setRecordingState("recording");
     setElapsedSeconds(0);
     setMicrophoneProblem(null);
-    startLiveTranscript();
+    startLiveTranscript(stream);
 
     timerRef.current = setInterval(() => {
       setElapsedSeconds((s) => s + 1);
@@ -910,7 +1102,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     if (mediaRecorderRef.current?.state === "paused") {
       mediaRecorderRef.current.resume();
     }
-    startLiveTranscript();
+    startLiveTranscript(streamRef.current ?? undefined);
     timerRef.current = setInterval(() => {
       setElapsedSeconds((s) => s + 1);
     }, 1000);
@@ -1004,6 +1196,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     }
 
     setRecordingState("processing");
+    setProcessingStatus({ phase: "uploading", detail: PROCESSING_STEPS[0].detail });
     setErrorMessage(null);
 
     try {
@@ -1011,11 +1204,22 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       const data = await submitVoiceBlob(audioBlob, {
         dealId: hubspotDealId.trim() || null,
         fileName: recordingFileName,
+        durationSeconds: elapsedSeconds,
       });
 
-      // Mark final step complete before showing results
-      setProcessingStep(3);
-      await new Promise((r) => setTimeout(r, 600));
+      setProcessingStatus({
+        phase: "saving",
+        detail: "Server returned the transcript; saving cockpit trust state.",
+      });
+      await new Promise((r) => setTimeout(r, 250));
+      setProcessingStatus({
+        phase: "syncing",
+        detail: data.local_crm_saved || data.hubspot_synced
+          ? "QRM timeline sync confirmed by the capture response."
+          : "Capture saved safely; deal matching still needs review.",
+      });
+      await new Promise((r) => setTimeout(r, 250));
+      setProcessingStatus({ phase: "done", detail: PROCESSING_STEPS[PROCESSING_STEPS.length - 1].detail });
 
       setResult(data);
       setRecordingState("done");
@@ -1095,15 +1299,18 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
   async function submitVoiceBlob(
     blob: Blob,
-    opts: { dealId: string | null; fileName: string },
+    opts: { dealId: string | null; fileName: string; durationSeconds?: number | null },
   ): Promise<CaptureResult> {
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    if (!session) throw new Error("Not authenticated");
+    if (!session) throw new VoiceCaptureRequestError("Not authenticated", 401);
 
     const form = new FormData();
     form.append("audio", blob, opts.fileName);
+    if (typeof opts.durationSeconds === "number" && opts.durationSeconds > 0) {
+      form.append("duration_seconds", String(opts.durationSeconds));
+    }
     if (opts.dealId?.trim()) {
       form.append("crm_deal_id", opts.dealId.trim());
     }
@@ -1122,7 +1329,10 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: "Unknown error" }));
-      throw new Error((err as { error?: string }).error ?? "Processing failed");
+      throw new VoiceCaptureRequestError(
+        (err as { error?: string }).error ?? "Processing failed",
+        res.status,
+      );
     }
 
     return (await res.json()) as CaptureResult;
@@ -1150,6 +1360,10 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       dealId: hubspotDealId.trim() || null,
       dealLabel: selectedDealLabel,
       queuedAt: new Date().toISOString(),
+      status: "queued",
+      lastError: null,
+      attemptCount: 0,
+      lastAttemptAt: null,
     });
     await loadQueuedVoiceNotes();
     toast({
@@ -1184,32 +1398,67 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       return;
     }
 
-    if (!row.audioStoragePath) return;
-    const { data } = await supabase.storage
-      .from("voice-recordings")
-      .createSignedUrl(row.audioStoragePath, 3600);
-    if (data?.signedUrl) {
+    if (!row.audioStoragePath) {
       setInlineAudio({
         id: row.id,
-        url: data.signedUrl,
+        url: "",
         isObjectUrl: false,
+        error: "This note does not have a recording file attached.",
       });
+      return;
     }
+
+    const { data, error } = await supabase.storage
+      .from("voice-recordings")
+      .createSignedUrl(row.audioStoragePath, 3600);
+
+    if (error || !data?.signedUrl) {
+      setInlineAudio({
+        id: row.id,
+        url: "",
+        isObjectUrl: false,
+        error: "Could not create a secure playback link for this recording.",
+      });
+      toast({
+        title: "Playback unavailable",
+        description: error?.message ?? "The recording file could not be opened.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setInlineAudio({
+      id: row.id,
+      url: data.signedUrl,
+      isObjectUrl: false,
+    });
   }
 
   function buildRemoteRow(cap: RecentCapture): RecentRecordingRow {
     const hasDeal = Boolean(cap.hubspot_deal_id || cap.linked_deal_id);
-    const transcript = cap.transcript?.trim() || null;
+    const rawTranscript = cap.transcript?.trim() || null;
+    const lowSignalTranscript = isLowSignalFieldNoteTranscript(rawTranscript, cap.duration_seconds);
+    const transcript = fieldNoteTranscriptPreview(rawTranscript, cap.duration_seconds);
     let syncStatus: RecentRecordingRow["syncStatus"] = "review_sync";
     let statusLabel = "Review & Sync";
     let statusDetail = "Needs review before QRM timeline sync";
     let actionLabel = "Review & Sync";
 
-    if (cap.sync_status === "processing") {
+    if (lowSignalTranscript) {
+      syncStatus = "review_sync";
+      statusLabel = "Re-record";
+      statusDetail = "Transcript too short to trust";
+      actionLabel = "Open audio";
+    } else if (cap.sync_status === "processing") {
       syncStatus = "processing";
       statusLabel = "Review & Sync";
       statusDetail = "Transcription and extraction are still running";
       actionLabel = "Check progress";
+    } else if (cap.sync_status === "failed") {
+      syncStatus = "failed";
+      statusLabel = "Review needed";
+      statusDetail = cap.sync_error ?? "Server processing failed; open the note to review.";
+      actionLabel = "Open note";
     } else if (cap.sync_status === "synced" && hasDeal) {
       syncStatus = "synced";
       statusLabel = "Synced to QRM";
@@ -1230,7 +1479,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     return {
       id: cap.id,
       source: "remote",
-      title: transcript?.split(/[.!?\n]/)[0]?.slice(0, 54) || "Untitled field note",
+      title: lowSignalTranscript
+        ? "Transcript needs re-record"
+        : rawTranscript?.split(/[.!?\n]/)[0]?.slice(0, 54) || "Untitled field note",
       transcript,
       createdAt: cap.created_at,
       durationSeconds: cap.duration_seconds,
@@ -1245,21 +1496,31 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   }
 
   function buildQueuedRow(note: QueuedVoiceNote): RecentRecordingRow {
+    const status = note.status ?? "queued";
+    const attemptLabel = note.attemptCount ? ` · ${note.attemptCount} attempt${note.attemptCount === 1 ? "" : "s"}` : "";
+    const baseDestination = note.dealId
+      ? `Will sync to ${formatDealReference(note.dealId) ?? "selected deal"}`
+      : "Will auto-match after upload";
+
     return {
       id: note.id,
       source: "queued",
       title: note.dealLabel ?? "Offline field note",
-      transcript: "Audio is stored on this device. Transcript and QRM extraction will run after sync.",
+      transcript: status === "failed" && note.lastError
+        ? `Audio is safe on this device. Last retry failed: ${note.lastError}`
+        : "Audio is stored on this device. Transcript and QRM extraction will run after sync.",
       createdAt: note.queuedAt,
       durationSeconds: note.durationSeconds,
       recorder: _userEmail ?? "This device",
       dealId: note.dealId,
-      syncStatus: "queued",
-      statusLabel: "Queued locally",
-      statusDetail: note.dealId
-        ? `Will sync to ${formatDealReference(note.dealId) ?? "selected deal"}`
-        : "Will auto-match after upload",
-      actionLabel: "Manage offline",
+      syncStatus: status === "failed" ? "failed" : status === "syncing" ? "processing" : "queued",
+      statusLabel: status === "failed" ? "Retry needed" : status === "syncing" ? "Syncing now" : "Queued locally",
+      statusDetail: status === "failed"
+        ? `${note.lastError ?? "Upload retry failed"}${attemptLabel}`
+        : status === "syncing"
+          ? "Uploading queued audio to QRM now"
+          : baseDestination,
+      actionLabel: status === "failed" ? "Retry sync" : status === "syncing" ? "Syncing..." : "Sync now",
       audioStoragePath: null,
       audioBlob: note.audioBlob,
     };
@@ -1337,6 +1598,16 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     : selectedDealLabel;
   const activeDealReference = formatDealReference(activeDealId);
   const queuedCount = queuedVoiceNotes.length;
+  const queuedFailedCount = queuedVoiceNotes.filter((note) => note.status === "failed").length;
+  const queuedSyncingCount = queuedVoiceNotes.filter((note) => note.status === "syncing").length;
+  const queuedHealthyCount = queuedCount - queuedFailedCount - queuedSyncingCount;
+  const queueStatusDetail = queuedFailedCount > 0
+    ? `${queuedFailedCount} need retry${queuedSyncingCount > 0 ? ` · ${queuedSyncingCount} syncing` : ""}`
+    : queuedSyncingCount > 0
+      ? `${queuedSyncingCount} syncing now`
+      : queuedHealthyCount > 0
+        ? "Waiting to sync"
+        : "No local backlog";
   const matchConfidenceClass = activeDealId
     ? "border-green-500/30 bg-green-500/10 text-green-300"
     : "border-amber-500/30 bg-amber-500/10 text-amber-300";
@@ -1377,11 +1648,13 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     {
       label: "Queued",
       value: `${queuedCount} notes`,
-      detail: queuedCount === 1 ? "Waiting to sync" : "Waiting to sync",
+      detail: queueStatusDetail,
       icon: DatabaseIcon,
-      className: queuedCount > 0
-        ? "border-qep-orange/30 bg-qep-orange/10 text-qep-orange"
-        : "border-border bg-background/50 text-foreground",
+      className: queuedFailedCount > 0
+        ? "border-red-500/30 bg-red-500/10 text-red-300"
+        : queuedCount > 0
+          ? "border-qep-orange/30 bg-qep-orange/10 text-qep-orange"
+          : "border-border bg-background/50 text-foreground",
     },
   ];
 
@@ -1409,13 +1682,33 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     });
   }, [queuedVoiceNotes, recentCaptures, recentSearch, recentStatusFilter, recentDateFilter]);
 
-  const hasTranscriptContent = Boolean(liveTranscript || result?.transcript);
-  const liveTranscriptText =
-    liveTranscript ||
-    result?.transcript ||
-    (recordingState === "recording"
-      ? "Listening for customer, equipment, stage, budget, and next steps..."
-      : "Transcript preview appears here after recording.");
+  const finalServerTranscript = result?.transcript?.trim() || null;
+  const shouldShowFinalTranscript = recordingState === "done" && Boolean(finalServerTranscript);
+  const transcriptDisplayText = shouldShowFinalTranscript
+    ? finalServerTranscript
+    : liveTranscript ||
+      finalServerTranscript ||
+      (recordingState === "recording"
+        ? "Listening for customer, equipment, stage, budget, and next steps..."
+        : "Transcript preview appears here after recording.");
+  const hasTranscriptContent = Boolean(
+    transcriptDisplayText &&
+      transcriptDisplayText !== "Transcript preview appears here after recording." &&
+      transcriptDisplayText !== "Listening for customer, equipment, stage, budget, and next steps...",
+  );
+  const transcriptSourceLabel = shouldShowFinalTranscript
+    ? "Final server transcript"
+    : transcriptPreviewMode === "realtime"
+      ? "Realtime AI preview"
+      : transcriptPreviewMode === "starting"
+        ? "Connecting realtime"
+        : transcriptPreviewMode === "browser"
+          ? "Browser preview"
+          : transcriptPreviewMode === "unavailable"
+            ? "Preview unavailable"
+            : recordingState === "recording"
+              ? "Listening"
+              : "Ready";
 
   return (
     <TooltipProvider>
@@ -1572,10 +1865,19 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
                   <div className="space-y-5 p-5">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Live transcript</p>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          {shouldShowFinalTranscript ? "Final transcript" : "Live transcript"}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          {shouldShowFinalTranscript
+                            ? "Review this final server transcript before adding the note to QRM."
+                            : "Preview only — final server transcript wins."}
+                        </p>
+                      </div>
                       <span className={cn("inline-flex items-center gap-1.5 text-xs", recordingState === "recording" ? "text-green-400" : "text-muted-foreground")}>
                         <span className="h-2 w-2 rounded-full bg-current" />
-                        {recordingState === "recording" ? "Live" : "Ready"}
+                        {transcriptSourceLabel}
                       </span>
                     </div>
                     <div
@@ -1584,7 +1886,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                         !hasTranscriptContent && "text-muted-foreground/70 italic",
                       )}
                     >
-                      {liveTranscriptText}
+                      {transcriptDisplayText}
                     </div>
                     <div className="flex h-16 items-center gap-1 overflow-hidden rounded-lg border border-border bg-background/40 px-3" aria-label="Recording waveform">
                       {Array.from({ length: 52 }).map((_, i) => (
@@ -1615,20 +1917,31 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                       </div>
                     )}
                     {recordingState === "processing" && (
-                      <div className="grid gap-2 sm:grid-cols-4">
-                        {PROCESSING_STEPS.map((step, index) => {
-                          const StepIcon = step.icon;
-                          const active = processingStep === index;
-                          const complete = processingStep > index;
-                          return (
-                            <div key={step.label} className={cn("rounded-lg border border-border p-3 text-sm", active && "border-qep-orange/50 bg-qep-orange/10", complete && "border-green-500/40 bg-green-500/10")}>
-                              <div className="mb-2 flex items-center gap-2">
-                                {complete ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : active ? <Loader2 className="h-4 w-4 animate-spin text-qep-orange" /> : <StepIcon className="h-4 w-4 text-muted-foreground" />}
-                                <span className="font-medium text-foreground">{step.label}</span>
+                      <div className="space-y-3">
+                        <div className="rounded-lg border border-qep-orange/30 bg-qep-orange/10 p-3">
+                          <p className="text-sm font-semibold text-foreground">Processing trust cue</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {processingStatus.detail} Live preview is advisory; final transcript comes from the server capture pipeline.
+                          </p>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                          {PROCESSING_STEPS.map((step) => {
+                            const StepIcon = step.icon;
+                            const activeIndex = PROCESSING_PHASE_INDEX.get(processingStatus.phase) ?? 0;
+                            const stepIndex = PROCESSING_PHASE_INDEX.get(step.phase) ?? 0;
+                            const active = processingStatus.phase === step.phase;
+                            const complete = activeIndex > stepIndex;
+                            return (
+                              <div key={step.label} className={cn("rounded-lg border border-border p-3 text-sm", active && "border-qep-orange/50 bg-qep-orange/10", complete && "border-green-500/40 bg-green-500/10")}>
+                                <div className="mb-2 flex items-center gap-2">
+                                  {complete ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : active ? <Loader2 className="h-4 w-4 animate-spin text-qep-orange" /> : <StepIcon className="h-4 w-4 text-muted-foreground" />}
+                                  <span className="font-medium text-foreground">{step.label}</span>
+                                </div>
+                                <p className="text-xs text-muted-foreground">{step.detail}</p>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                     {recordingState === "error" && (
@@ -1735,6 +2048,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                       <option value="all">All</option>
                       <option value="synced">Synced</option>
                       <option value="queued">Queued</option>
+                      <option value="failed">Needs retry</option>
                       <option value="needs_match">Needs match</option>
                     </select>
                   </label>
@@ -1798,13 +2112,45 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                                       <span className="font-medium text-muted-foreground">Transcript preview:</span> {row.transcript ?? "No transcript captured yet."}
                                     </p>
                                     {inlineAudio?.id === row.id && (
-                                      <audio
-                                        controls
-                                        autoPlay
-                                        src={inlineAudio.url}
-                                        className="mt-3 h-8 w-full max-w-md"
-                                        onEnded={() => setInlineAudio(null)}
-                                      />
+                                      <div className="mt-3 space-y-2">
+                                        {inlineAudio.url && !inlineAudio.error ? (
+                                          <audio
+                                            controls
+                                            autoPlay
+                                            preload="metadata"
+                                            src={inlineAudio.url}
+                                            className="h-8 w-full max-w-md"
+                                            onEnded={() => setInlineAudio(null)}
+                                            onError={() =>
+                                              setInlineAudio((current) =>
+                                                current?.id === row.id
+                                                  ? {
+                                                      ...current,
+                                                      error:
+                                                        "Browser playback failed for this stored recording. Open it directly or re-record if the file is corrupted.",
+                                                    }
+                                                  : current,
+                                              )
+                                            }
+                                          />
+                                        ) : null}
+                                        {inlineAudio.error ? (
+                                          <div className="flex max-w-md flex-wrap items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+                                            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                                            <span className="min-w-0 flex-1">{inlineAudio.error}</span>
+                                            {inlineAudio.url ? (
+                                              <a
+                                                href={inlineAudio.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="inline-flex items-center gap-1 font-semibold text-red-100 underline-offset-4 hover:underline"
+                                              >
+                                                Open audio <ExternalLink className="h-3 w-3" />
+                                              </a>
+                                            ) : null}
+                                          </div>
+                                        ) : null}
+                                      </div>
                                     )}
                                   </div>
                                 </div>
@@ -1819,6 +2165,8 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                                     "mb-1",
                                     row.syncStatus === "synced" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
                                     row.syncStatus === "queued" && "border-sky-500/30 bg-sky-500/10 text-sky-300",
+                                    row.syncStatus === "processing" && "border-blue-500/30 bg-blue-500/10 text-blue-300",
+                                    row.syncStatus === "failed" && "border-red-500/30 bg-red-500/10 text-red-300",
                                     row.syncStatus === "needs_match" && "border-amber-500/30 bg-amber-500/10 text-amber-300",
                                     row.syncStatus === "review_sync" && "border-qep-orange/30 bg-qep-orange/10 text-qep-orange",
                                   )}
@@ -1829,8 +2177,22 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                               </td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-2">
-                                  <Button type="button" variant={row.syncStatus === "review_sync" ? "default" : "ghost"} size="sm" onClick={() => cap && void openRecentCapture(cap)}>
-                                    {row.syncStatus === "needs_match" ? (
+                                  <Button
+                                    type="button"
+                                    variant={row.syncStatus === "review_sync" || row.syncStatus === "failed" ? "default" : "ghost"}
+                                    size="sm"
+                                    onClick={() => {
+                                      if (row.source === "queued") {
+                                        void syncQueuedVoiceNotes();
+                                        return;
+                                      }
+                                      if (cap) void openRecentCapture(cap);
+                                    }}
+                                    disabled={row.source === "queued" && (!isOnline || queuedSyncing)}
+                                  >
+                                    {row.source === "queued" ? (
+                                      queuedSyncing || row.syncStatus === "processing" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />
+                                    ) : row.syncStatus === "needs_match" ? (
                                       <Pencil className="h-3.5 w-3.5" />
                                     ) : (
                                       <FileText className="h-3.5 w-3.5" />
@@ -1927,11 +2289,18 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                 <CardContent className="space-y-3 text-sm text-muted-foreground">
                   <p>
                     {isOnline
-                      ? queuedCount > 0
-                        ? "Connection is back. Queued notes can sync automatically or manually now."
-                        : "You are online. Field notes process immediately after upload."
+                      ? queuedFailedCount > 0
+                        ? `${queuedFailedCount} offline note${queuedFailedCount === 1 ? "" : "s"} need retry. Audio remains safely on this device.`
+                        : queuedCount > 0
+                          ? "Connection is back. Queued notes can sync automatically or manually now."
+                          : "You are online. Field notes process immediately after upload."
                       : "You are offline. Notes are saved locally and will sync automatically when you are back online."}
                   </p>
+                  {queuedCount > 0 && (
+                    <p className="rounded-lg border border-border bg-background/50 px-3 py-2 text-xs">
+                      {queueStatusDetail}
+                    </p>
+                  )}
                   <Button variant="ghost" className="px-0 text-qep-orange hover:bg-transparent" onClick={() => void syncQueuedVoiceNotes()} disabled={!isOnline || queuedSyncing || queuedCount === 0}>
                     {queuedSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radio className="h-4 w-4" />}
                     Manage offline notes
@@ -2072,10 +2441,17 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                         </CardHeader>
                         <CardContent className="space-y-3">
                           <p className="text-sm leading-6 text-foreground whitespace-pre-wrap">
-                            {selectedRecentCapture.transcript?.trim() || "No transcript captured yet."}
+                            {fieldNoteTranscriptPreview(
+                              selectedRecentCapture.transcript,
+                              selectedRecentCapture.duration_seconds,
+                            ) || "No transcript captured yet."}
                           </p>
                           <div className="flex flex-wrap gap-2">
-                            {selectedRecentCapture.transcript?.trim() && (
+                            {selectedRecentCapture.transcript?.trim() &&
+                              !isLowSignalFieldNoteTranscript(
+                                selectedRecentCapture.transcript,
+                                selectedRecentCapture.duration_seconds,
+                              ) && (
                               <Button
                                 type="button"
                                 variant="outline"

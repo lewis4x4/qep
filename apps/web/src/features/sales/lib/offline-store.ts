@@ -15,6 +15,8 @@ interface OfflineQueueItem {
   queued_at: string;
 }
 
+export type QueuedVoiceNoteStatus = "queued" | "syncing" | "failed";
+
 export interface QueuedVoiceNote {
   id: string;
   audioBlob: Blob;
@@ -24,6 +26,10 @@ export interface QueuedVoiceNote {
   dealId: string | null;
   dealLabel: string | null;
   queuedAt: string;
+  status?: QueuedVoiceNoteStatus;
+  lastError?: string | null;
+  attemptCount?: number;
+  lastAttemptAt?: string | null;
 }
 
 function openDB(): Promise<IDBDatabase> {
@@ -184,6 +190,37 @@ export async function enqueueVoiceNote(item: QueuedVoiceNote): Promise<void> {
 
 export async function getQueuedVoiceNotes(): Promise<QueuedVoiceNote[]> {
   return getAll<QueuedVoiceNote>("voice_note_queue");
+}
+
+export async function updateQueuedVoiceNote(
+  id: string,
+  patch: Partial<QueuedVoiceNote>,
+): Promise<void> {
+  const db = await openDB();
+  const tx = db.transaction("voice_note_queue", "readwrite");
+  const store = tx.objectStore("voice_note_queue");
+  const request = store.get(id);
+
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => {
+      const existing = request.result as QueuedVoiceNote | undefined;
+      if (existing) {
+        store.put({ ...existing, ...patch, id });
+      }
+    };
+    request.onerror = () => {
+      db.close();
+      reject(request.error);
+    };
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
 }
 
 export async function removeQueuedVoiceNotes(ids: string[]): Promise<void> {
