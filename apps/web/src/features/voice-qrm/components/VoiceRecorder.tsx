@@ -92,7 +92,7 @@ export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
       };
 
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: mimeType || "audio/webm" });
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || mimeType || "audio/webm" });
         setRecordedBlob(blob);
         setState("ready");
         stopTimer();

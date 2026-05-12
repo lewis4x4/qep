@@ -82,7 +82,12 @@ import {
   updateQueuedVoiceNote,
   type QueuedVoiceNote,
 } from "@/features/sales/lib/offline-store";
-import { chooseRecordingFormat, type RecordingFormat } from "@/lib/audio-recording-format";
+import {
+  chooseRecordingFormat,
+  inferAudioMimeTypeFromFileName,
+  makeBrowserPlayableAudioBlob,
+  type RecordingFormat,
+} from "@/lib/audio-recording-format";
 import {
   startRealtimeTranscript,
   type RealtimeTranscriptSession,
@@ -115,6 +120,7 @@ interface CaptureResult {
   local_crm_note_id?: string | null;
   local_crm_task_id?: string | null;
 }
+
 
 interface DealLookupOption {
   id: string;
@@ -373,7 +379,7 @@ function formatMaybeDate(value: string | null | undefined): string | null {
   });
 }
 
-function isLowSignalFieldNoteTranscript(
+export function isLowSignalFieldNoteTranscript(
   transcript: string | null | undefined,
   durationSeconds: number | null | undefined,
 ): boolean {
@@ -397,11 +403,23 @@ function isLowSignalFieldNoteTranscript(
     "uh",
     "um",
     "hmm",
+    "hello",
+    "hi",
+    "bye",
+    "goodbye",
+    "you you",
+    "okay thank you",
+    "ok thank you",
+    "yeah okay",
   ]);
+  const hasActionableHint =
+    /(^|\s)(\d+[a-z]?|call|text|email|follow|tomorrow|today|quote|demo|budget|rental|rent|lease|finance|buy|sold|deal|customer|contact|job|site|machine|equipment|excavator|loader|dozer|skid|steer|tractor|mulcher|bucket|parts|service|repair|trade|deere|cat|komatsu|case|bobcat|volvo)(\s|$)/i.test(
+      normalized,
+    );
 
   if (genericNoise.has(normalized)) return true;
-  if (typeof durationSeconds === "number" && durationSeconds >= 10 && words.length < 3) return true;
-  if (typeof durationSeconds === "number" && durationSeconds >= 20 && words.length < 5) return true;
+  if (words.length <= 1) return true;
+  if (typeof durationSeconds === "number" && durationSeconds >= 10 && words.length <= 2 && !hasActionableHint) return true;
   return false;
 }
 
@@ -509,6 +527,151 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const realtimeTranscriptRef = useRef<RealtimeTranscriptSession | null>(null);
   const liveTranscriptAbortRef = useRef<AbortController | null>(null);
   const queuedSyncingRef = useRef(false);
+  const recentAudioObjectUrlRef = useRef<string | null>(null);
+  const recordingStartedAtRef = useRef<number | null>(null);
+  const accumulatedRecordingMsRef = useRef(0);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioAnalyserRef = useRef<AnalyserNode | null>(null);
+  const micSignalTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const peakMicAmplitudeRef = useRef(0);
+  const micSignalSamplesRef = useRef(0);
+  const micSignalPositiveSamplesRef = useRef(0);
+
+  function getRecordingClockNow(): number {
+    return typeof performance !== "undefined" && typeof performance.now === "function"
+      ? performance.now()
+      : Date.now();
+  }
+
+  function getCurrentRecordingDurationSeconds(): number {
+    const activeStartedAt = recordingStartedAtRef.current;
+    const activeMs = activeStartedAt == null ? 0 : getRecordingClockNow() - activeStartedAt;
+    return Math.max(0, Math.round((accumulatedRecordingMsRef.current + activeMs) / 1000));
+  }
+
+  function refreshElapsedSecondsFromClock(): void {
+    setElapsedSeconds(getCurrentRecordingDurationSeconds());
+  }
+
+  function pauseRecordingClock(): number {
+    if (recordingStartedAtRef.current != null) {
+      accumulatedRecordingMsRef.current += Math.max(0, getRecordingClockNow() - recordingStartedAtRef.current);
+      recordingStartedAtRef.current = null;
+    }
+    const seconds = getCurrentRecordingDurationSeconds();
+    setElapsedSeconds(seconds);
+    return seconds;
+  }
+
+  function resetMicSignalDiagnostics(): void {
+    peakMicAmplitudeRef.current = 0;
+    micSignalSamplesRef.current = 0;
+    micSignalPositiveSamplesRef.current = 0;
+  }
+
+  function stopMicSignalMonitor(): void {
+    if (micSignalTimerRef.current) {
+      clearInterval(micSignalTimerRef.current);
+      micSignalTimerRef.current = null;
+    }
+    try {
+      audioContextRef.current?.close();
+    } catch {
+      // AudioContext cleanup is best-effort.
+    }
+    audioContextRef.current = null;
+    audioAnalyserRef.current = null;
+  }
+
+  function startMicSignalMonitor(stream: MediaStream): void {
+    resetMicSignalDiagnostics();
+    stopMicSignalMonitor();
+    const AudioContextCtor =
+      typeof window === "undefined"
+        ? null
+        : window.AudioContext ??
+          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext ??
+          null;
+    if (!AudioContextCtor) return;
+
+    try {
+      const context = new AudioContextCtor();
+      const source = context.createMediaStreamSource(stream);
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 1024;
+      source.connect(analyser);
+      audioContextRef.current = context;
+      audioAnalyserRef.current = analyser;
+
+      const samples = new Uint8Array(analyser.fftSize);
+      micSignalTimerRef.current = setInterval(() => {
+        analyser.getByteTimeDomainData(samples);
+        let peak = 0;
+        for (const sample of samples) {
+          peak = Math.max(peak, Math.abs(sample - 128) / 128);
+        }
+        peakMicAmplitudeRef.current = Math.max(peakMicAmplitudeRef.current, peak);
+        micSignalSamplesRef.current += 1;
+        if (peak > 0.015) {
+          micSignalPositiveSamplesRef.current += 1;
+        }
+      }, 200);
+    } catch {
+      stopMicSignalMonitor();
+    }
+  }
+
+  function getMicSignalRatio(): number | null {
+    if (micSignalSamplesRef.current <= 0) return null;
+    return micSignalPositiveSamplesRef.current / micSignalSamplesRef.current;
+  }
+
+  function setRecentAudioPlaybackUrl(url: string | null, isObjectUrl = false): void {
+    if (recentAudioObjectUrlRef.current) {
+      URL.revokeObjectURL(recentAudioObjectUrlRef.current);
+      recentAudioObjectUrlRef.current = null;
+    }
+    if (url && isObjectUrl) {
+      recentAudioObjectUrlRef.current = url;
+    }
+    setRecentAudioUrl(url);
+  }
+
+  async function fetchPlayableAudioObjectUrl(signedUrl: string, audioStoragePath: string): Promise<string> {
+    const response = await fetch(signedUrl);
+    if (!response.ok) {
+      throw new Error(`Storage returned HTTP ${response.status}`);
+    }
+
+    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+    const responseClone = response.clone();
+    const blob = await response.blob();
+    const inferredMimeType = inferAudioMimeTypeFromFileName(audioStoragePath);
+    const isGenericBinary =
+      contentType === "application/octet-stream" ||
+      contentType === "binary/octet-stream" ||
+      contentType.length === 0;
+    const isLikelyAudio = contentType.startsWith("audio/") || (isGenericBinary && Boolean(inferredMimeType));
+
+    if (blob.size === 0) {
+      throw new Error("The stored recording is empty.");
+    }
+
+    if (!isLikelyAudio) {
+      const bodyPreview = await responseClone.text().catch(() => "");
+      throw new Error(
+        bodyPreview
+          ? `Storage returned ${contentType}: ${bodyPreview.slice(0, 120)}`
+          : `Storage returned ${contentType || "a non-audio response"}.`,
+      );
+    }
+
+    const playableBlob = makeBrowserPlayableAudioBlob(blob, {
+      contentType,
+      fileName: audioStoragePath,
+    });
+    return URL.createObjectURL(playableBlob);
+  }
 
   // Load recent captures on mount
   useEffect(() => {
@@ -852,14 +1015,22 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     });
     setRecentCaptureLoading(false);
 
-    // Generate signed URL for audio playback
-    setRecentAudioUrl(null);
+    // Generate signed URL for audio playback and repair generic storage MIME for browser playback.
+    setRecentAudioPlaybackUrl(null);
     if (captureRow.audio_storage_path) {
       const { data: signedData } = await supabase.storage
         .from("voice-recordings")
         .createSignedUrl(captureRow.audio_storage_path, 3600);
       if (signedData?.signedUrl) {
-        setRecentAudioUrl(signedData.signedUrl);
+        try {
+          const playableUrl = await fetchPlayableAudioObjectUrl(
+            signedData.signedUrl,
+            captureRow.audio_storage_path,
+          );
+          setRecentAudioPlaybackUrl(playableUrl, true);
+        } catch {
+          setRecentAudioPlaybackUrl(signedData.signedUrl);
+        }
       }
     }
   }
@@ -868,6 +1039,8 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   useEffect(() => {
     return () => {
       if (audioBlobUrl) URL.revokeObjectURL(audioBlobUrl);
+      if (recentAudioObjectUrlRef.current) URL.revokeObjectURL(recentAudioObjectUrlRef.current);
+      stopMicSignalMonitor();
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
@@ -1058,23 +1231,26 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     };
 
     recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: recordingFormat.mimeType });
+      const blobMimeType = recorder.mimeType || recordingFormat.mimeType;
+      const blob = new Blob(chunksRef.current, { type: blobMimeType });
       const url = URL.createObjectURL(blob);
       setAudioBlob(blob);
       setAudioBlobUrl(url);
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
+      mediaRecorderRef.current = null;
     };
 
-    recorder.start(250);
+    recorder.start();
+    recordingStartedAtRef.current = getRecordingClockNow();
+    accumulatedRecordingMsRef.current = 0;
     setRecordingState("recording");
     setElapsedSeconds(0);
     setMicrophoneProblem(null);
+    startMicSignalMonitor(stream);
     startLiveTranscript(stream);
 
-    timerRef.current = setInterval(() => {
-      setElapsedSeconds((s) => s + 1);
-    }, 1000);
+    timerRef.current = setInterval(refreshElapsedSecondsFromClock, 1000);
   }, []);
 
   const stopRecording = useCallback(() => {
@@ -1082,7 +1258,12 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    mediaRecorderRef.current?.stop();
+    pauseRecordingClock();
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+    }
+    stopMicSignalMonitor();
     stopLiveTranscript();
     setRecordingState("recorded");
   }, []);
@@ -1095,6 +1276,8 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
+    pauseRecordingClock();
+    stopMicSignalMonitor();
     stopLiveTranscript();
     setRecordingState("paused");
   }, []);
@@ -1103,19 +1286,24 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     if (mediaRecorderRef.current?.state === "paused") {
       mediaRecorderRef.current.resume();
     }
+    recordingStartedAtRef.current = getRecordingClockNow();
+    if (streamRef.current) startMicSignalMonitor(streamRef.current);
     startLiveTranscript(streamRef.current ?? undefined);
-    timerRef.current = setInterval(() => {
-      setElapsedSeconds((s) => s + 1);
-    }, 1000);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(refreshElapsedSecondsFromClock, 1000);
     setRecordingState("recording");
   }, []);
 
   const resetCapture = useCallback(() => {
     stopLiveTranscript();
+    stopMicSignalMonitor();
     if (audioBlobUrl) URL.revokeObjectURL(audioBlobUrl);
     setAudioBlob(null);
     setAudioBlobUrl(null);
     setAudioPreviewFailed(false);
+    recordingStartedAtRef.current = null;
+    accumulatedRecordingMsRef.current = 0;
+    resetMicSignalDiagnostics();
     setElapsedSeconds(0);
     setHubspotDealId("");
     setDealLookupQuery("");
@@ -1202,10 +1390,11 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
     try {
       const recordingFileName = recordingFormatRef.current?.fileName ?? "recording.webm";
+      const durationSeconds = getCurrentRecordingDurationSeconds() || elapsedSeconds;
       const data = await submitVoiceBlob(audioBlob, {
         dealId: hubspotDealId.trim() || null,
         fileName: recordingFileName,
-        durationSeconds: elapsedSeconds,
+        durationSeconds,
       });
 
       setProcessingStatus({
@@ -1312,6 +1501,17 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     if (typeof opts.durationSeconds === "number" && opts.durationSeconds > 0) {
       form.append("duration_seconds", String(opts.durationSeconds));
     }
+    form.append("client_blob_size", String(blob.size));
+    form.append("client_chunk_count", String(chunksRef.current.length));
+    form.append("client_mime_type", blob.type || recordingFormatRef.current?.mimeType || "");
+    if (typeof opts.durationSeconds === "number" && opts.durationSeconds > 0) {
+      form.append("client_elapsed_seconds", String(opts.durationSeconds));
+    }
+    form.append("client_peak_amplitude", String(peakMicAmplitudeRef.current));
+    const signalRatio = getMicSignalRatio();
+    if (signalRatio !== null) {
+      form.append("client_signal_ratio", String(signalRatio));
+    }
     if (opts.dealId?.trim()) {
       form.append("crm_deal_id", opts.dealId.trim());
     }
@@ -1357,7 +1557,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       audioBlob: blob,
       mimeType: blob.type || recordingFormatRef.current?.mimeType || "audio/webm",
       fileName: recordingFileName,
-      durationSeconds: elapsedSeconds,
+      durationSeconds: getCurrentRecordingDurationSeconds() || elapsedSeconds,
       dealId: hubspotDealId.trim() || null,
       dealLabel: selectedDealLabel,
       queuedAt: new Date().toISOString(),
@@ -1429,35 +1629,11 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     }
 
     try {
-      const response = await fetch(data.signedUrl);
-      if (!response.ok) {
-        throw new Error(`Storage returned HTTP ${response.status}`);
-      }
-
-      const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-      const responseClone = response.clone();
-      const blob = await response.blob();
-      const isLikelyAudio =
-        contentType.startsWith("audio/") ||
-        contentType === "application/octet-stream" ||
-        contentType.length === 0;
-
-      if (blob.size === 0) {
-        throw new Error("The stored recording is empty.");
-      }
-
-      if (!isLikelyAudio) {
-        const bodyPreview = await responseClone.text().catch(() => "");
-        throw new Error(
-          bodyPreview
-            ? `Storage returned ${contentType}: ${bodyPreview.slice(0, 120)}`
-            : `Storage returned ${contentType || "a non-audio response"}.`,
-        );
-      }
+      const playableUrl = await fetchPlayableAudioObjectUrl(data.signedUrl, row.audioStoragePath);
 
       setInlineAudio({
         id: row.id,
-        url: URL.createObjectURL(blob),
+        url: playableUrl,
         externalUrl: data.signedUrl,
         isObjectUrl: true,
       });
@@ -1481,8 +1657,13 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   function buildRemoteRow(cap: RecentCapture): RecentRecordingRow {
     const hasDeal = Boolean(cap.hubspot_deal_id || cap.linked_deal_id);
     const rawTranscript = cap.transcript?.trim() || null;
-    const lowSignalTranscript = isLowSignalFieldNoteTranscript(rawTranscript, cap.duration_seconds);
-    const transcript = fieldNoteTranscriptPreview(rawTranscript, cap.duration_seconds);
+    const retainedLowSignalCapture =
+      Boolean(cap.audio_storage_path) && (cap.sync_error?.startsWith("Low-confidence transcript") ?? false);
+    const lowSignalTranscript =
+      retainedLowSignalCapture || isLowSignalFieldNoteTranscript(rawTranscript, cap.duration_seconds);
+    const transcript = retainedLowSignalCapture && !rawTranscript
+      ? "No reliable transcript was produced. Replay audio or re-record the field note."
+      : fieldNoteTranscriptPreview(rawTranscript, cap.duration_seconds);
     let syncStatus: RecentRecordingRow["syncStatus"] = "review_sync";
     let statusLabel = "Review & Sync";
     let statusDetail = "Needs review before QRM timeline sync";

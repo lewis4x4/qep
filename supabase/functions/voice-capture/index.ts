@@ -25,7 +25,11 @@ import {
 } from "../_shared/voice-capture-crm.ts";
 import { processVoiceNoteIntelligence } from "../_shared/voice-note-intelligence.ts";
 import { safeCorsHeaders } from "../_shared/safe-cors.ts";
-import { audioExtensionFromMimeType, canonicalizeAudioMimeType } from "../_shared/audio-mime.ts";
+import {
+  isGenericAudioMimeType,
+  isSupportedAudioMimeType,
+  resolveAudioUploadMetadata,
+} from "../_shared/audio-mime.ts";
 import {
   resolveVoiceCaptureModelConfig,
   VOICE_TRANSCRIPTION_DOMAIN_PROMPT,
@@ -33,7 +37,20 @@ import {
 } from "../_shared/voice-model-config.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
+import {
+  analyzeTranscriptSignal,
+  isLowSignalTranscript,
+} from "../_shared/voice-transcript-signal.ts";
 type ExtractedDealData = VoiceCaptureExtractedDealData;
+
+interface ClientCaptureDiagnostics {
+  blobSize: number | null;
+  chunkCount: number | null;
+  mimeType: string | null;
+  elapsedSeconds: number | null;
+  peakAmplitude: number | null;
+  signalRatio: number | null;
+}
 
 Deno.serve(async (req) => {
   const ch = safeCorsHeaders(req.headers.get("origin"));
@@ -84,6 +101,7 @@ Deno.serve(async (req) => {
 
     const audioFile = formData.get("audio") as File | null;
     const submittedDurationSeconds = parseDurationSeconds(formData.get("duration_seconds"));
+    const clientCaptureDiagnostics = readClientCaptureDiagnostics(formData);
     const rawCrmDealId = (formData.get("crm_deal_id") as string | null)?.trim() || null;
     const rawLegacyHubspot = (formData.get("hubspot_deal_id") as string | null)?.trim() || null;
     const crmDealId = rawCrmDealId || null;
@@ -98,9 +116,6 @@ Deno.serve(async (req) => {
     }
 
     // ── Upload audio to Supabase Storage ──────────────────────────────────────
-    const audioMimeType = canonicalizeAudioMimeType(audioFile.type);
-    const extension = audioExtensionFromMimeType(audioMimeType);
-    const storagePath = `${user.id}/${Date.now()}.${extension}`;
     let audioBuffer: ArrayBuffer;
     try {
       audioBuffer = await audioFile.arrayBuffer();
@@ -112,6 +127,40 @@ Deno.serve(async (req) => {
         ch,
       );
     }
+
+    const audioMetadata = resolveAudioUploadMetadata(audioFile.type, audioFile.name, audioBuffer);
+    const audioMimeType = audioMetadata.mimeType;
+    const extension = audioMetadata.extension;
+
+    if (!isSupportedAudioMimeType(audioMimeType)) {
+      return jsonError(
+        "The uploaded recording is not a supported audio format. Please re-record and try again.",
+        415,
+        ch,
+      );
+    }
+
+    if (!audioMetadata.detectedMimeType && isGenericAudioMimeType(audioMetadata.declaredMimeType)) {
+      return jsonError(
+        "The uploaded recording does not look like a supported audio file. Please re-record and try again.",
+        415,
+        ch,
+      );
+    }
+
+    if (
+      audioMetadata.detectedMimeType &&
+      audioMetadata.declaredMimeType &&
+      audioMetadata.detectedMimeType !== audioMetadata.declaredMimeType
+    ) {
+      console.warn("voice-capture: corrected uploaded audio MIME from bytes", {
+        declared: audioMetadata.declaredMimeType,
+        detected: audioMetadata.detectedMimeType,
+        fileName: audioFile.name,
+      });
+    }
+
+    const storagePath = `${user.id}/${Date.now()}.${extension}`;
 
     const { error: uploadError } = await supabaseAdmin.storage
       .from("voice-recordings")
@@ -203,27 +252,61 @@ Deno.serve(async (req) => {
     }
 
     if (!transcript) {
+      const syncError = buildLowSignalSyncError({
+        reason: "empty transcript",
+        transcript,
+        durationSeconds,
+        submittedDurationSeconds,
+        audioFileSize: audioFile.size,
+        audioMimeType,
+        clientCaptureDiagnostics,
+      });
       await supabaseAdmin
         .from("voice_captures")
-        .update({ sync_status: "failed", sync_error: "Empty transcript — no speech detected" })
+        .update({
+          duration_seconds: durationSeconds,
+          sync_status: "failed",
+          sync_error: syncError,
+        })
         .eq("id", captureId);
-      return jsonError("No speech detected in the recording. Please try again.", 422, ch);
+      return jsonError("No speech detected in the recording. Please try again.", 422, ch, {
+        capture_id: captureId,
+        duration_seconds: durationSeconds,
+        audio_storage_path: storagePath,
+        replay_available: true,
+      });
     }
 
     if (isLowSignalTranscript(transcript, durationSeconds)) {
+      const syncError = buildLowSignalSyncError({
+        reason: "low-signal transcript",
+        transcript,
+        durationSeconds,
+        submittedDurationSeconds,
+        audioFileSize: audioFile.size,
+        audioMimeType,
+        clientCaptureDiagnostics,
+      });
       await supabaseAdmin
         .from("voice_captures")
         .update({
           transcript,
           duration_seconds: durationSeconds,
           sync_status: "failed",
-          sync_error: "Low-confidence transcript — recording produced too little usable speech text",
+          sync_error: syncError,
         })
         .eq("id", captureId);
       return jsonError(
         "The recording only produced a one-word or very short transcript, so it was not saved as a trusted field note. Check the microphone input and re-record.",
         422,
         ch,
+        {
+          capture_id: captureId,
+          transcript,
+          duration_seconds: durationSeconds,
+          audio_storage_path: storagePath,
+          replay_available: true,
+        },
       );
     }
 
@@ -699,8 +782,13 @@ Return ONLY valid JSON matching this exact structure:
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function jsonError(message: string, status: number, headers: Record<string, string>): Response {
-  return new Response(JSON.stringify({ error: message }), {
+function jsonError(
+  message: string,
+  status: number,
+  headers: Record<string, string>,
+  extra: Record<string, unknown> = {},
+): Response {
+  return new Response(JSON.stringify({ error: message, ...extra }), {
     status,
     headers: { ...headers, "Content-Type": "application/json" },
   });
@@ -752,39 +840,64 @@ async function checkVoiceCaptureRateLimit(
 }
 
 function parseDurationSeconds(value: FormDataEntryValue | null): number | null {
-  if (typeof value !== "string") return null;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return null;
-  return Math.round(parsed);
+  return parsePositiveNumber(value, { round: true });
 }
 
-function isLowSignalTranscript(transcript: string, durationSeconds: number | null): boolean {
-  const normalized = transcript
-    .trim()
-    .toLowerCase()
-    .replace(/[\s.,!?;:'"“”‘’()\[\]-]+/g, " ")
-    .trim();
-  if (!normalized) return true;
+function parsePositiveNumber(
+  value: FormDataEntryValue | null,
+  opts: { round?: boolean; allowZero?: boolean } = {},
+): number | null {
+  if (typeof value !== "string") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || (opts.allowZero ? parsed < 0 : parsed <= 0)) return null;
+  return opts.round ? Math.round(parsed) : parsed;
+}
 
-  const words = normalized.split(/\s+/).filter(Boolean);
-  const genericNoise = new Set([
-    "you",
-    "thank you",
-    "thanks",
-    "okay",
-    "ok",
-    "yeah",
-    "yes",
-    "no",
-    "uh",
-    "um",
-    "hmm",
-  ]);
+function readClientCaptureDiagnostics(formData: FormData): ClientCaptureDiagnostics {
+  return {
+    blobSize: parsePositiveNumber(formData.get("client_blob_size"), { round: true }),
+    chunkCount: parsePositiveNumber(formData.get("client_chunk_count"), { round: true }),
+    mimeType: typeof formData.get("client_mime_type") === "string"
+      ? String(formData.get("client_mime_type")).slice(0, 120)
+      : null,
+    elapsedSeconds: parsePositiveNumber(formData.get("client_elapsed_seconds"), { round: true }),
+    peakAmplitude: parsePositiveNumber(formData.get("client_peak_amplitude"), { allowZero: true }),
+    signalRatio: parsePositiveNumber(formData.get("client_signal_ratio"), { allowZero: true }),
+  };
+}
 
-  if (genericNoise.has(normalized)) return true;
-  if (durationSeconds !== null && durationSeconds >= 10 && words.length < 3) return true;
-  if (durationSeconds !== null && durationSeconds >= 20 && words.length < 5) return true;
-  return false;
+function formatNullableNumber(value: number | null, digits = 2): string {
+  return value === null ? "unknown" : value.toFixed(digits);
+}
+
+function buildLowSignalSyncError(input: {
+  reason: string;
+  transcript: string;
+  durationSeconds: number | null;
+  submittedDurationSeconds: number | null;
+  audioFileSize: number;
+  audioMimeType: string;
+  clientCaptureDiagnostics: ClientCaptureDiagnostics;
+}): string {
+  const signal = analyzeTranscriptSignal(input.transcript);
+  const client = input.clientCaptureDiagnostics;
+  const serverDuration = input.durationSeconds ?? input.submittedDurationSeconds;
+  return [
+    "Low-confidence transcript — recording produced too little usable speech text, but audio was retained for replay/debug.",
+    `reason=${input.reason}`,
+    `words=${signal.wordCount}`,
+    `generic_noise=${signal.isGenericNoise}`,
+    `duration_seconds=${serverDuration ?? "unknown"}`,
+    `submitted_duration_seconds=${input.submittedDurationSeconds ?? "unknown"}`,
+    `audio_bytes=${input.audioFileSize}`,
+    `audio_mime=${input.audioMimeType}`,
+    `client_blob_bytes=${client.blobSize ?? "unknown"}`,
+    `client_chunks=${client.chunkCount ?? "unknown"}`,
+    `client_mime=${client.mimeType ?? "unknown"}`,
+    `client_elapsed_seconds=${client.elapsedSeconds ?? "unknown"}`,
+    `client_peak_amplitude=${formatNullableNumber(client.peakAmplitude, 4)}`,
+    `client_signal_ratio=${formatNullableNumber(client.signalRatio, 4)}`,
+  ].join(" | ");
 }
 
 function humanizeVoiceCaptureError(

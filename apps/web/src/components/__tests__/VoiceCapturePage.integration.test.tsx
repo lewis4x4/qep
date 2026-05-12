@@ -182,7 +182,16 @@ mock.module("@/features/sales/lib/offline-store", () => ({
   updateQueuedVoiceNote: mock(async () => undefined),
 }));
 
-import { VoiceCapturePage } from "../VoiceCapturePage";
+import { VoiceCapturePage, isLowSignalFieldNoteTranscript } from "../VoiceCapturePage";
+
+describe("VoiceCapturePage transcript signal guard", () => {
+  test("rejects OpenAI filler hallucinations but allows short actionable notes", () => {
+    expect(isLowSignalFieldNoteTranscript("You", 21)).toBe(true);
+    expect(isLowSignalFieldNoteTranscript("hello there", 16)).toBe(true);
+    expect(isLowSignalFieldNoteTranscript("call John tomorrow", 21)).toBe(false);
+    expect(isLowSignalFieldNoteTranscript("210G excavator", 16)).toBe(false);
+  });
+});
 
 describe("VoiceCapturePage redesign", () => {
   test("renders the /sales/field-note voice cockpit with match, offline, and recent-note controls", async () => {
