@@ -97,13 +97,53 @@ describe("isDraftEmpty", () => {
 });
 
 describe("save/load/clear round-trip", () => {
-  test("saved draft round-trips through load", () => {
+  test("saved draft round-trips non-PII quote structure through load", () => {
     const key = buildLocalDraftKey({ userId: "u1", dealId: "D1" });
-    const draft = makeDraft({ customerName: "Thomas Sykes", customerCompany: "Sykes Excavation" });
+    const draft = makeDraft({
+      customerName: "Thomas Sykes",
+      customerCompany: "Sykes Excavation",
+      customerEmail: "thomas@example.com",
+      customerPhone: "555-1212",
+      equipment: [{ kind: "equipment", title: "CAT 320", quantity: 1, unitPrice: 80_000 }],
+    });
     saveLocalDraft(key, draft);
     const loaded = loadLocalDraft(key);
-    expect(loaded?.customerName).toBe("Thomas Sykes");
-    expect(loaded?.customerCompany).toBe("Sykes Excavation");
+    expect(loaded?.customerName).toBeUndefined();
+    expect(loaded?.customerCompany).toBeUndefined();
+    expect(loaded?.customerEmail).toBeUndefined();
+    expect(loaded?.customerPhone).toBeUndefined();
+    expect(loaded?.equipment?.[0]?.title).toBe("CAT 320");
+  });
+
+  test("saved drafts redact voice and transcript-style recommendation excerpts", () => {
+    const key = buildLocalDraftKey({ userId: "u1", dealId: "D1" });
+    saveLocalDraft(key, makeDraft({
+      voiceSummary: "Customer needs equipment near 123 Main St.",
+      recommendation: {
+        machine: "CTL",
+        attachments: ["Bucket"],
+        reasoning: "Fits the job.",
+        alternative: null,
+        jobConsiderations: null,
+        jobFacts: null,
+        transcriptHighlights: [{ quote: "Call me at 555-1212", supports: "follow-up" }],
+        trigger: {
+          triggerType: "voice_transcript",
+          sourceField: "voice",
+          excerpt: "Call me at 555-1212",
+          createdAt: "2026-05-12T12:00:00Z",
+        },
+      },
+    }));
+
+    const raw = (globalThis as unknown as { window: { localStorage: MemoryStorage } })
+      .window.localStorage.getItem("qep.quote-builder.local-draft.u1.deal:D1");
+    expect(raw).not.toContain("123 Main");
+    expect(raw).not.toContain("555-1212");
+    const loaded = loadLocalDraft(key);
+    expect(loaded?.voiceSummary).toBeNull();
+    expect(loaded?.recommendation?.transcriptHighlights).toBeNull();
+    expect(loaded?.recommendation?.trigger?.excerpt).toBeNull();
   });
 
   test("load returns null for an unknown key", () => {
@@ -119,16 +159,22 @@ describe("save/load/clear round-trip", () => {
   });
 
   test("keys are isolated per deal", () => {
-    saveLocalDraft(buildLocalDraftKey({ userId: "u1", dealId: "A" }), makeDraft({ customerName: "Alpha" }));
-    saveLocalDraft(buildLocalDraftKey({ userId: "u1", dealId: "B" }), makeDraft({ customerName: "Bravo" }));
-    expect(loadLocalDraft(buildLocalDraftKey({ userId: "u1", dealId: "A" }))?.customerName).toBe("Alpha");
-    expect(loadLocalDraft(buildLocalDraftKey({ userId: "u1", dealId: "B" }))?.customerName).toBe("Bravo");
+    saveLocalDraft(buildLocalDraftKey({ userId: "u1", dealId: "A" }), makeDraft({
+      equipment: [{ kind: "equipment", title: "Alpha", quantity: 1, unitPrice: 1 }],
+    }));
+    saveLocalDraft(buildLocalDraftKey({ userId: "u1", dealId: "B" }), makeDraft({
+      equipment: [{ kind: "equipment", title: "Bravo", quantity: 1, unitPrice: 1 }],
+    }));
+    expect(loadLocalDraft(buildLocalDraftKey({ userId: "u1", dealId: "A" }))?.equipment?.[0]?.title).toBe("Alpha");
+    expect(loadLocalDraft(buildLocalDraftKey({ userId: "u1", dealId: "B" }))?.equipment?.[0]?.title).toBe("Bravo");
   });
 
   test("one user cannot load another user's draft even on the same deal", () => {
     const aKey = buildLocalDraftKey({ userId: "alice", dealId: "shared" });
     const bKey = buildLocalDraftKey({ userId: "bob", dealId: "shared" });
-    saveLocalDraft(aKey, makeDraft({ customerName: "Alice's customer" }));
+    saveLocalDraft(aKey, makeDraft({
+      equipment: [{ kind: "equipment", title: "Alice's machine", quantity: 1, unitPrice: 1 }],
+    }));
     expect(loadLocalDraft(bKey)).toBeNull();
   });
 
@@ -198,35 +244,43 @@ describe("save/load/clear round-trip", () => {
 
 describe("listLocalDraftsForUser", () => {
   test("returns only drafts belonging to the requested user, newest first", async () => {
-    const oldDraft = makeDraft({ customerName: "Old" });
-    const newDraft = makeDraft({ customerName: "New" });
+    const oldDraft = makeDraft({ equipment: [{ kind: "equipment", title: "Old", quantity: 1, unitPrice: 1 }] });
+    const newDraft = makeDraft({ equipment: [{ kind: "equipment", title: "New", quantity: 1, unitPrice: 1 }] });
     saveLocalDraft(buildLocalDraftKey({ userId: "alice", dealId: "old" }), oldDraft);
     // Nudge timestamps apart so the sort is observable.
     await new Promise((r) => setTimeout(r, 5));
     saveLocalDraft(buildLocalDraftKey({ userId: "alice", dealId: "new" }), newDraft);
-    saveLocalDraft(buildLocalDraftKey({ userId: "bob", dealId: "shared" }), makeDraft({ customerName: "Bob's" }));
+    saveLocalDraft(buildLocalDraftKey({ userId: "bob", dealId: "shared" }), makeDraft({
+      equipment: [{ kind: "equipment", title: "Bob's", quantity: 1, unitPrice: 1 }],
+    }));
 
     const records = listLocalDraftsForUser("alice");
     expect(records.map((r) => r.dealId)).toEqual(["new", "old"]);
-    expect(records.every((r) => r.draft.customerName !== "Bob's")).toBe(true);
+    expect(records.every((r) => r.draft.equipment?.[0]?.title !== "Bob's")).toBe(true);
   });
 
   test("skips empty drafts", () => {
     saveLocalDraft(buildLocalDraftKey({ userId: "alice", dealId: "empty" }), makeDraft());
-    saveLocalDraft(buildLocalDraftKey({ userId: "alice", dealId: "real" }), makeDraft({ customerName: "Real" }));
+    saveLocalDraft(buildLocalDraftKey({ userId: "alice", dealId: "real" }), makeDraft({
+      equipment: [{ kind: "equipment", title: "Real", quantity: 1, unitPrice: 1 }],
+    }));
     expect(listLocalDraftsForUser("alice")).toHaveLength(1);
   });
 
   test("skips malformed draft envelopes", () => {
     (globalThis as unknown as { window: { localStorage: MemoryStorage } })
       .window.localStorage.setItem("qep.quote-builder.local-draft.alice.deal:bad", JSON.stringify({ draft: null }));
-    saveLocalDraft(buildLocalDraftKey({ userId: "alice", dealId: "real" }), makeDraft({ customerName: "Real" }));
+    saveLocalDraft(buildLocalDraftKey({ userId: "alice", dealId: "real" }), makeDraft({
+      equipment: [{ kind: "equipment", title: "Real", quantity: 1, unitPrice: 1 }],
+    }));
 
     expect(listLocalDraftsForUser("alice").map((record) => record.dealId)).toEqual(["real"]);
   });
 
   test("returns empty list for unknown user", () => {
-    saveLocalDraft(buildLocalDraftKey({ userId: "alice", dealId: "x" }), makeDraft({ customerName: "A" }));
+    saveLocalDraft(buildLocalDraftKey({ userId: "alice", dealId: "x" }), makeDraft({
+      equipment: [{ kind: "equipment", title: "A", quantity: 1, unitPrice: 1 }],
+    }));
     expect(listLocalDraftsForUser("nobody")).toHaveLength(0);
   });
 

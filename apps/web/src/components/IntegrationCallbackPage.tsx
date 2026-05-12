@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 
+const ONE_DRIVE_OAUTH_STATE_KEY = "qep.onedrive.oauth.state";
+
 interface CallbackState {
   phase: "loading" | "success" | "error";
   message: string;
@@ -19,6 +21,7 @@ export function IntegrationCallbackPage() {
     const error = searchParams.get("error");
     const errorDescription = searchParams.get("error_description");
     const code = searchParams.get("code");
+    const returnedState = searchParams.get("state");
 
     if (error) {
       setState({
@@ -32,6 +35,16 @@ export function IntegrationCallbackPage() {
       setState({
         phase: "error",
         message: "No authorization code received from OneDrive.",
+      });
+      return;
+    }
+
+    const expectedState = window.localStorage.getItem(ONE_DRIVE_OAUTH_STATE_KEY);
+    window.localStorage.removeItem(ONE_DRIVE_OAUTH_STATE_KEY);
+    if (!returnedState || !expectedState || returnedState !== expectedState) {
+      setState({
+        phase: "error",
+        message: "OneDrive authorization state did not match. Start the connection again.",
       });
       return;
     }

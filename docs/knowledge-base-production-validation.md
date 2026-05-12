@@ -42,7 +42,7 @@ Required workspace-isolation guard when retrieval, auth, RLS, or workspace scopi
 
 ```bash
 SUPABASE_URL=... \
-SUPABASE_SERVICE_ROLE_KEY=... \
+SUPABASE_SERVICE_ROLE_KEY=<set in secret manager only>
 KB_ISOLATION_CASES='[{"workspace_id":"default","query":"What are our core values?","forbidden_title_contains":["Finance"]}]' \
 KB_ISOLATION_REQUIRED=true \
 bun run kb:workspace-isolation

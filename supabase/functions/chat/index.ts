@@ -2705,7 +2705,7 @@ ${toolInstructions}`;
         });
 
         // Execute tools and add results
-        const toolResults = await executeToolCalls(adminClient, result.toolCalls, traceId);
+        const toolResults = await executeToolCalls(callerClient, result.toolCalls, traceId);
         for (const tr of toolResults) {
           messages.push(tr);
         }

@@ -71,6 +71,8 @@ Deno.test("reconcileSucceededPayment recomputes health score once when company p
   const supabase = createMockSupabase({
     paymentIntent: {
       id: "intent-row-1",
+      workspace_id: "workspace-1",
+      company_id: "company-1",
       invoice_id: "invoice-1",
       amount_cents: 10000,
       stripe_payment_intent_id: "pi_1",
@@ -78,6 +80,7 @@ Deno.test("reconcileSucceededPayment recomputes health score once when company p
     },
     invoice: {
       id: "invoice-1",
+      workspace_id: "workspace-1",
       total: 100,
       amount_paid: 0,
       status: "sent",
@@ -106,6 +109,8 @@ Deno.test("reconcileSucceededPayment is fail-soft when recompute errors", async 
   const supabase = createMockSupabase({
     paymentIntent: {
       id: "intent-row-1",
+      workspace_id: "workspace-1",
+      company_id: "company-1",
       invoice_id: "invoice-1",
       amount_cents: 10000,
       stripe_payment_intent_id: "pi_1",
@@ -113,6 +118,7 @@ Deno.test("reconcileSucceededPayment is fail-soft when recompute errors", async 
     },
     invoice: {
       id: "invoice-1",
+      workspace_id: "workspace-1",
       total: 100,
       amount_paid: 0,
       status: "sent",
@@ -138,5 +144,49 @@ Deno.test("reconcileSucceededPayment is fail-soft when recompute errors", async 
   assertEquals(
     (paymentIntentUpdate?.args?.metadata as Record<string, unknown>)?.health_score_recompute_error,
     "rpc failed",
+  );
+});
+
+Deno.test("reconcileSucceededPayment blocks underpaid invoice application", async () => {
+  const supabase = createMockSupabase({
+    paymentIntent: {
+      id: "intent-row-1",
+      workspace_id: "workspace-1",
+      company_id: "company-1",
+      invoice_id: "invoice-1",
+      amount_cents: 100,
+      stripe_payment_intent_id: "pi_1",
+      metadata: {},
+    },
+    invoice: {
+      id: "invoice-1",
+      workspace_id: "workspace-1",
+      total: 100,
+      amount_paid: 0,
+      status: "sent",
+      paid_at: null,
+      payment_reference: null,
+      crm_company_id: "company-1",
+    },
+  });
+
+  await reconcileSucceededPayment({
+    supabaseAdmin: supabase as never,
+    eventId: "evt_1",
+    stripePaymentIntentId: "pi_1",
+    checkoutSessionId: null,
+    fallbackAmountCents: null,
+  });
+
+  const invoiceUpdates = supabase.calls.filter((call) =>
+    call.type === "update" && call.table === "customer_invoices"
+  );
+  const paymentIntentUpdate = supabase.calls.find((call) =>
+    call.type === "update" && call.table === "portal_payment_intents"
+  );
+  assertEquals(invoiceUpdates.length, 0);
+  assertEquals(
+    (paymentIntentUpdate?.args?.metadata as Record<string, unknown>)?.invoice_payment_blocked_reason,
+    "amount_below_invoice_balance",
   );
 });

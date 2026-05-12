@@ -247,9 +247,11 @@ Deno.serve(async (req) => {
     } else {
       const { data: users } = await adminClient
         .from("profiles")
-        .select("id")
+        .select("id, audience")
         .in("role", ["rep", "manager", "admin", "owner"]);
-      targetUserIds = (users ?? []).map((u: Record<string, unknown>) => u.id as string);
+      targetUserIds = (users ?? [])
+        .filter((u: Record<string, unknown>) => u.audience !== "stakeholder")
+        .map((u: Record<string, unknown>) => u.id as string);
     }
   } else {
     const caller = await resolveCallerContext(req, adminClient);
@@ -259,6 +261,19 @@ Deno.serve(async (req) => {
         headers: { ...ch, "Content-Type": "application/json" },
       });
     }
+
+    const { data: callerProfile } = await adminClient
+      .from("profiles")
+      .select("audience")
+      .eq("id", caller.userId)
+      .maybeSingle();
+    if ((callerProfile as Record<string, unknown> | null)?.audience === "stakeholder") {
+      return new Response(JSON.stringify({ error: "Use stakeholder-morning-brief for stakeholder users." }), {
+        status: 403,
+        headers: { ...ch, "Content-Type": "application/json" },
+      });
+    }
+
     targetUserIds = [caller.userId];
   }
 
@@ -309,6 +324,7 @@ Deno.serve(async (req) => {
         user_id: userId,
         briefing_date: today,
         content,
+        audience: "internal",
         data: {
           pipeline_total: data.pipelineTotal,
           open_deal_count: data.openDealCount,

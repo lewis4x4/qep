@@ -48,21 +48,21 @@ bun run demo:reseed
 ```bash
 cd /Users/brianlewis/client-projects/qep
 SUPABASE_URL="https://<project>.supabase.co" \
-SUPABASE_SERVICE_ROLE_KEY="<service-role-key>" \
+SUPABASE_SERVICE_ROLE_KEY=<set in secret manager only>
 bun run demo:seed
 ```
 
 ```bash
 cd /Users/brianlewis/client-projects/qep
 SUPABASE_URL="https://<project>.supabase.co" \
-SUPABASE_SERVICE_ROLE_KEY="<service-role-key>" \
+SUPABASE_SERVICE_ROLE_KEY=<set in secret manager only>
 bun run demo:reset
 ```
 
 ```bash
 cd /Users/brianlewis/client-projects/qep
 SUPABASE_URL="https://<project>.supabase.co" \
-SUPABASE_SERVICE_ROLE_KEY="<service-role-key>" \
+SUPABASE_SERVICE_ROLE_KEY=<set in secret manager only>
 bun run demo:reseed
 ```
 

@@ -260,6 +260,26 @@ function normalizeLocalDraftEnvelope(value: unknown): {
   };
 }
 
+function sanitizeDraftForLocalStorage(draft: QuoteWorkspaceDraft): Partial<QuoteWorkspaceDraft> {
+  return {
+    ...draft,
+    customerName: "",
+    customerCompany: "",
+    customerPhone: "",
+    customerEmail: "",
+    voiceSummary: null,
+    recommendation: draft.recommendation
+      ? {
+          ...draft.recommendation,
+          transcriptHighlights: null,
+          trigger: draft.recommendation.trigger
+            ? { ...draft.recommendation.trigger, excerpt: null }
+            : draft.recommendation.trigger,
+        }
+      : draft.recommendation,
+  };
+}
+
 // Keys are scoped by the authenticated user so a shared device (or a
 // sign-out / sign-in in the same browser profile) never leaks one rep's
 // partial draft into another rep's view.
@@ -290,7 +310,7 @@ export function saveLocalDraft(key: string, draft: QuoteWorkspaceDraft): void {
   try {
     window.localStorage.setItem(
       `${LOCAL_DRAFT_PREFIX}${key}`,
-      JSON.stringify({ draft, savedAt: new Date().toISOString() }),
+      JSON.stringify({ draft: sanitizeDraftForLocalStorage(draft), savedAt: new Date().toISOString() }),
     );
   } catch {
     // Quota exceeded or serialization error — drop silently so a failed

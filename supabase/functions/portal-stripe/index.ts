@@ -60,7 +60,6 @@ Deno.serve(async (req) => {
     // ── /create-checkout ──────────────────────────────────────────────
     if (action === "create-checkout" && req.method === "POST") {
       const body = await req.json().catch(() => ({}));
-      const amountCents: number = Number(body.amount_cents);
       const invoiceId: string | undefined = body.invoice_id;
       const companyId: string | undefined = body.company_id;
       const customerEmail: string | undefined = body.customer_email;
@@ -68,10 +67,29 @@ Deno.serve(async (req) => {
       const successUrl: string = body.success_url || `${origin}/portal/invoices?paid=1`;
       const cancelUrl: string = body.cancel_url || `${origin}/portal/invoices`;
 
-      if (!amountCents || amountCents < 50) {
-        return safeJsonError("amount_cents required (min 50)", 400, origin);
-      }
+      if (!invoiceId) return safeJsonError("invoice_id required", 400, origin);
       if (!companyId) return safeJsonError("company_id required", 400, origin);
+
+      const { data: invoice, error: invoiceErr } = await supabaseAdmin
+        .from("customer_invoices")
+        .select("id, workspace_id, crm_company_id, total, amount_paid, status")
+        .eq("id", invoiceId)
+        .eq("workspace_id", workspace)
+        .maybeSingle();
+      if (invoiceErr) return safeJsonError(invoiceErr.message, 500, origin);
+      if (!invoice) return safeJsonError("invoice not found", 404, origin);
+      if (invoice.crm_company_id !== companyId) {
+        return safeJsonError("invoice/company mismatch", 400, origin);
+      }
+
+      const balanceCents = Math.round(Math.max(Number(invoice.total ?? 0) - Number(invoice.amount_paid ?? 0), 0) * 100);
+      if (balanceCents < 50) {
+        return safeJsonError("invoice has no payable balance", 409, origin);
+      }
+      if (body.amount_cents != null && Number(body.amount_cents) !== balanceCents) {
+        return safeJsonError("amount_cents must match the current invoice balance", 400, origin);
+      }
+      const amountCents = balanceCents;
 
       // Zero-blocking fallback: STRIPE_SECRET_KEY missing → mailto path
       if (!STRIPE_SECRET_KEY) {
@@ -135,7 +153,13 @@ Deno.serve(async (req) => {
         currency: "usd",
         status: "requires_payment_method",
         customer_email: customerEmail ?? null,
-        metadata: { checkout_session_id: session.id, invoice_id: invoiceId ?? null },
+        metadata: {
+          checkout_session_id: session.id,
+          invoice_id: invoiceId,
+          company_id: companyId,
+          workspace_id: workspace,
+          expected_balance_cents: amountCents,
+        },
         created_by: user.id,
       });
 

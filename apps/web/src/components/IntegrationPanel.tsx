@@ -4,7 +4,7 @@
  * Per blueprint §6.2 and CDO design direction §1 (Drawer pattern).
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type MouseEvent } from "react";
 import { CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw, Clock, Database, Copy } from "lucide-react";
 import {
   Sheet,
@@ -36,6 +36,8 @@ import { supabase } from "@/lib/supabase";
 import { trackIntegrationEvent } from "@/lib/track-event";
 import { useToast } from "@/hooks/use-toast";
 import { BRAND_NAME } from "@/components/BrandLogo";
+
+const ONE_DRIVE_OAUTH_STATE_KEY = "qep.onedrive.oauth.state";
 
 // Per-integration sync scope definitions
 const SYNC_SCOPES: Record<string, { key: string; label: string; description: string }[]> = {
@@ -594,9 +596,22 @@ export function IntegrationPanel({
   );
   const oneDriveSyncStateId =
     typeof integration?.config?.sync_state_id === "string" ? integration.config.sync_state_id : null;
-  const oneDriveConnectUrl = import.meta.env.VITE_MSGRAPH_CLIENT_ID
-    ? `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${import.meta.env.VITE_MSGRAPH_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(window.location.origin + "/auth/onedrive/callback")}&scope=files.read.all+offline_access&response_mode=query`
-    : null;
+  const oneDriveClientId = import.meta.env.VITE_MSGRAPH_CLIENT_ID;
+  const oneDriveConnectUrl = oneDriveClientId ? "#" : null;
+  function handleOneDriveConnect(event: MouseEvent<HTMLAnchorElement>): void {
+    if (!oneDriveClientId) return;
+    event.preventDefault();
+    const state = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    window.localStorage.setItem(ONE_DRIVE_OAUTH_STATE_KEY, state);
+    const url = new URL("https://login.microsoftonline.com/common/oauth2/v2.0/authorize");
+    url.searchParams.set("client_id", oneDriveClientId);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("redirect_uri", `${window.location.origin}/auth/onedrive/callback`);
+    url.searchParams.set("scope", "files.read.all offline_access");
+    url.searchParams.set("response_mode", "query");
+    url.searchParams.set("state", state);
+    window.location.assign(url.toString());
+  }
 
   useEffect(() => {
     if (!isHubSpot) {
@@ -1458,7 +1473,7 @@ export function IntegrationPanel({
                         size="sm"
                         className="bg-qep-orange text-white hover:bg-qep-orange-hover focus-visible:ring-qep-orange"
                       >
-                        <a href={oneDriveConnectUrl}>
+                        <a href={oneDriveConnectUrl} onClick={handleOneDriveConnect}>
                           {integration.status === "connected" ? "Reconnect OneDrive" : "Connect OneDrive"}
                         </a>
                       </Button>

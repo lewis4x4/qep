@@ -3,6 +3,11 @@ import { encryptCredential } from "../_shared/integration-crypto.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { createEventTracker, emitIntegrationConfigUpdated } from "../_shared/event-tracker.ts";
 import { emitAuthzDenialAuditEvent } from "./authz-audit.ts";
+import {
+  filterAuthUsersToProfiles,
+  filterProfilesToWorkspace,
+  workspaceProfileIdSet,
+} from "./workspace-scope.ts";
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
   "https://qep.blackrockai.co",
@@ -144,6 +149,32 @@ async function resolveCallerWorkspaceId(callerDb) {
   }
   return data.trim();
 }
+async function loadWorkspaceProfileIds(workspaceId) {
+  const { data, error } = await adminClient
+    .from("profile_workspaces")
+    .select("profile_id")
+    .eq("workspace_id", workspaceId);
+  if (error) throw error;
+  return workspaceProfileIdSet(data);
+}
+async function targetUserBelongsToWorkspace(userId, workspaceId) {
+  const { data: membership, error: membershipError } = await adminClient
+    .from("profile_workspaces")
+    .select("profile_id")
+    .eq("profile_id", userId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (membershipError) throw membershipError;
+  if (membership) return true;
+
+  const { data: profile, error: profileError } = await adminClient
+    .from("profiles")
+    .select("active_workspace_id")
+    .eq("id", userId)
+    .maybeSingle();
+  if (profileError) throw profileError;
+  return profile?.active_workspace_id === workspaceId;
+}
 async function getCallerProfile(jwt) {
   // ES256-safe token validation via GoTrue. supabase-js v2's local verifier
   // rejects this project's ES256 tokens; hit /auth/v1/user directly instead.
@@ -219,6 +250,7 @@ Deno.serve(async (req)=>{
       ch,
       route,
       action: queryAction,
+      callerUserId: null,
       reasonCode: "missing_authorization_header",
       status: 401,
       error: "Missing authorization"
@@ -243,62 +275,42 @@ Deno.serve(async (req)=>{
     role: callerProfile.role
   };
   const callerDb = createCallerClient(jwt);
+  let callerWorkspaceId;
+  try {
+    callerWorkspaceId = await resolveCallerWorkspaceId(callerDb);
+  } catch {
+    return deniedResponse({
+      ch,
+      route,
+      action: queryAction,
+      callerUserId: caller.id,
+      reasonCode: "workspace_resolution_failed",
+      status: 403,
+      error: "Unable to resolve caller workspace"
+    });
+  }
   try {
     const action = req.method === "GET" ? url.searchParams.get("action") : null;
     // ── LIST USERS ──────────────────────────────────────────────────────────
     if (req.method === "GET" && action === "list") {
+      const workspaceProfileIds = await loadWorkspaceProfileIds(callerWorkspaceId);
       // Fetch profiles + auth metadata in parallel for faster response
       const [profileResult, authResult] = await Promise.all([
-        adminClient.from("profiles").select("id, full_name, email, role, iron_role, is_active, created_at, updated_at").order("created_at", { ascending: false }),
+        workspaceProfileIds.size > 0
+          ? adminClient.from("profiles").select("id, full_name, email, role, iron_role, is_active, active_workspace_id, created_at, updated_at").in("id", [...workspaceProfileIds]).order("created_at", { ascending: false })
+          : Promise.resolve({ data: [], error: null }),
         adminClient.rpc("get_auth_user_metadata").then(
           (r) => r,
           (e) => { console.warn("[admin-users] get_auth_user_metadata failed:", e); return { data: null, error: e }; }
         ),
       ]);
       if (profileResult.error) throw profileResult.error;
-      const profiles = profileResult.data;
+      const profiles = filterProfilesToWorkspace(profileResult.data, callerWorkspaceId, workspaceProfileIds);
       let authUsers: Array<{ id: string; email?: string | null; last_sign_in_at?: string | null; email_confirmed_at?: string | null; banned_until?: string | null; raw_user_meta_data?: Record<string, unknown> | null }> = [];
       if (!authResult.error && authResult.data) {
-        authUsers = authResult.data;
+        authUsers = filterAuthUsersToProfiles(authResult.data, new Set(profiles.map((p: { id: string }) => p.id)));
       } else if (authResult.error) {
         console.warn("[admin-users] get_auth_user_metadata degraded:", authResult.error?.message ?? "no data");
-      }
-
-      // Auto-backfill: detect auth users with no matching profile row
-      const profileIds = new Set((profiles ?? []).map((p: { id: string }) => p.id));
-      const orphanedAuthUsers = authUsers.filter((au) => !profileIds.has(au.id));
-      if (orphanedAuthUsers.length > 0) {
-        console.log(`[admin-users] Auto-backfilling ${orphanedAuthUsers.length} orphaned auth user(s)`);
-        for (const orphan of orphanedAuthUsers) {
-          try {
-            const fullName = (orphan.raw_user_meta_data as Record<string, unknown>)?.full_name as string ?? orphan.email ?? "Unknown";
-            // Use atomic RPC that handles trigger/FK chicken-and-egg
-            const { error: bfErr } = await adminClient.rpc("backfill_profile", {
-              p_id: orphan.id,
-              p_email: orphan.email ?? null,
-              p_full_name: fullName,
-              p_role: "rep",
-              p_iron_role: null,
-              p_workspace: "default",
-            });
-            if (bfErr) {
-              console.warn(`[admin-users] Backfill RPC failed for ${orphan.id}:`, bfErr.message);
-            } else {
-              console.log(`[admin-users] Backfilled profile for ${orphan.email}`);
-            }
-          } catch (e) {
-            console.warn(`[admin-users] Backfill failed for ${orphan.id}:`, e);
-          }
-        }
-        // Re-fetch profiles after backfill
-        const { data: refreshed } = await adminClient.from("profiles")
-          .select("id, full_name, email, role, iron_role, is_active, created_at, updated_at")
-          .order("created_at", { ascending: false });
-        if (refreshed) {
-          // Replace profiles with refreshed data
-          profiles.length = 0;
-          profiles.push(...refreshed);
-        }
       }
 
       const authMap = new Map(authUsers.map((u)=>[
@@ -421,9 +433,16 @@ Deno.serve(async (req)=>{
           const profilePatch: Record<string, unknown> = {
             role: body.role,
             full_name: body.full_name,
+            active_workspace_id: callerWorkspaceId,
           };
           if (body.iron_role) profilePatch.iron_role = body.iron_role;
           await adminClient.from("profiles").update(profilePatch).eq("id", newUser.user.id);
+          await adminClient.from("profile_workspaces").upsert({
+            profile_id: newUser.user.id,
+            workspace_id: callerWorkspaceId,
+          }, {
+            onConflict: "profile_id,workspace_id"
+          });
         }
         return new Response(JSON.stringify({
           success: true,
@@ -509,7 +528,7 @@ Deno.serve(async (req)=>{
           // Ensure workspace membership exists
           const { error: pwErr } = await adminClient.from("profile_workspaces").upsert({
             profile_id: newUser.user.id,
-            workspace_id: "default"
+            workspace_id: callerWorkspaceId
           }, {
             onConflict: "profile_id,workspace_id"
           });
@@ -522,7 +541,7 @@ Deno.serve(async (req)=>{
             email: body.email,
             full_name: body.full_name,
             role: body.role,
-            active_workspace_id: "default",
+            active_workspace_id: callerWorkspaceId,
             is_active: true,
           };
           if (body.iron_role) profileData.iron_role = body.iron_role;
@@ -580,6 +599,17 @@ Deno.serve(async (req)=>{
             }
           });
         }
+        if (!(await targetUserBelongsToWorkspace(body.userId, callerWorkspaceId))) {
+          return deniedResponse({
+            ch,
+            route,
+            action: body.action,
+            callerUserId: caller.id,
+            reasonCode: "target_user_outside_workspace",
+            status: 403,
+            error: "Target user is not in your workspace"
+          });
+        }
         const { error: updateErr } = await adminClient.from("profiles").update({
           role: body.role,
           updated_at: new Date().toISOString()
@@ -607,6 +637,13 @@ Deno.serve(async (req)=>{
         if (!body.userId || body.iron_role === undefined) {
           return new Response(JSON.stringify({ error: "userId and iron_role are required" }), {
             status: 400, headers: { ...ch, "Content-Type": "application/json" }
+          });
+        }
+        if (!(await targetUserBelongsToWorkspace(body.userId, callerWorkspaceId))) {
+          return deniedResponse({
+            ch, route, action: body.action, callerUserId: caller.id,
+            reasonCode: "target_user_outside_workspace",
+            status: 403, error: "Target user is not in your workspace"
           });
         }
         const { error: updateErr } = await adminClient.from("profiles").update({
@@ -642,6 +679,23 @@ Deno.serve(async (req)=>{
           });
         }
         const au = authUser.user;
+        if (await targetUserBelongsToWorkspace(au.id, callerWorkspaceId)) {
+          // Existing in-workspace user; allow profile repair below.
+        } else {
+          const { data: existingProfile, error: existingProfileError } = await adminClient
+            .from("profiles")
+            .select("id")
+            .eq("id", au.id)
+            .maybeSingle();
+          if (existingProfileError) throw existingProfileError;
+          if (existingProfile) {
+            return deniedResponse({
+              ch, route, action: body.action, callerUserId: caller.id,
+              reasonCode: "target_user_outside_workspace",
+              status: 403, error: "Target user is not in your workspace"
+            });
+          }
+        }
         // Use atomic RPC that handles trigger/FK chicken-and-egg
         const { error: profileErr } = await adminClient.rpc("backfill_profile", {
           p_id: au.id,
@@ -649,7 +703,7 @@ Deno.serve(async (req)=>{
           p_full_name: body.full_name ?? au.user_metadata?.full_name ?? au.email,
           p_role: body.role ?? "rep",
           p_iron_role: body.iron_role ?? null,
-          p_workspace: "default",
+          p_workspace: callerWorkspaceId,
         });
         if (profileErr) throw profileErr;
         return new Response(JSON.stringify({ success: true, userId: au.id }), {
@@ -689,6 +743,17 @@ Deno.serve(async (req)=>{
               ...ch,
               "Content-Type": "application/json"
             }
+          });
+        }
+        if (!(await targetUserBelongsToWorkspace(body.userId, callerWorkspaceId))) {
+          return deniedResponse({
+            ch,
+            route,
+            action: body.action,
+            callerUserId: caller.id,
+            reasonCode: "target_user_outside_workspace",
+            status: 403,
+            error: "Target user is not in your workspace"
           });
         }
         // Update profile flag

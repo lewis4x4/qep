@@ -21,9 +21,12 @@ import { sendResendEmail } from "../_shared/resend-email.ts";
 import { computeQuoteDocumentHash } from "../_shared/quote-document-hash.ts";
 import { quoteManagerApproval } from "../_shared/flow-workflows/quote-manager-approval.ts";
 import {
+  assertPublicQuoteAcceptReady,
+  assertPublicQuoteReadReady,
   assertQuoteCustomerContentReady,
   buildCustomerProposalEmailText,
   buildPublicDealRoomPayload,
+  validatePublicSignatureDataUrl,
 } from "./quote-public-safety.ts";
 import {
   allowedQuoteVersionScopesForConditions,
@@ -261,6 +264,74 @@ function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Re
         : {},
     }];
   });
+}
+
+function computeQuoteFinancials(body: Record<string, unknown>): Record<string, number> {
+  const lines = normalizeQuotePackageLineItems(body);
+  const saleLineTypes = new Set([
+    "equipment",
+    "attachment",
+    "option",
+    "accessory",
+    "warranty",
+    "financing",
+    "pdi",
+    "freight",
+    "good_faith",
+    "doc_fee",
+    "title",
+    "tag",
+    "registration",
+    "custom",
+  ]);
+  const discountLineTypes = new Set(["discount", "rebate_mfg", "rebate_dealer", "loyalty_discount"]);
+
+  const equipmentTotal = lines
+    .filter((line) => line.line_type === "equipment")
+    .reduce((sum, line) => sum + clampCurrency(line.extended_price), 0);
+  const attachmentTotal = lines
+    .filter((line) => line.line_type !== "equipment" && saleLineTypes.has(String(line.line_type)))
+    .reduce((sum, line) => sum + clampCurrency(line.extended_price), 0);
+  const subtotal = clampCurrency(equipmentTotal + attachmentTotal);
+  const lineDiscountTotal = lines
+    .filter((line) => discountLineTypes.has(String(line.line_type)))
+    .reduce((sum, line) => sum + clampCurrency(line.extended_price), 0);
+  const commercialDiscountType = body.commercial_discount_type === "percent" ? "percent" : "flat";
+  const commercialDiscountValue = clampCurrency(body.commercial_discount_value);
+  const commercialDiscount = commercialDiscountType === "percent"
+    ? clampCurrency(subtotal * Math.min(100, commercialDiscountValue) / 100)
+    : commercialDiscountValue;
+  const discountTotal = clampCurrency(lineDiscountTotal + commercialDiscount);
+  const tradeCredit = clampCurrency(body.trade_credit ?? body.trade_allowance);
+  const netTotal = clampCurrency(subtotal - discountTotal - tradeCredit);
+  const taxTotal = clampCurrency(body.tax_total);
+  const customerTotal = clampCurrency(netTotal + taxTotal);
+  const cashDown = clampCurrency(body.cash_down);
+  const amountFinanced = clampCurrency(customerTotal - cashDown);
+  const dealerCost = lines
+    .filter((line) => saleLineTypes.has(String(line.line_type)))
+    .reduce((sum, line) => {
+      const unitCost = clampCurrency(line.quoted_dealer_cost);
+      const quantity = Math.max(1, Math.round(lineNumber(line.quantity, 1)));
+      return sum + unitCost * quantity;
+    }, 0);
+  const marginAmount = clampCurrency(netTotal - dealerCost);
+  const marginPct = netTotal > 0 ? Math.round((marginAmount / netTotal) * 10_000) / 100 : 0;
+
+  return {
+    equipment_total: equipmentTotal,
+    attachment_total: attachmentTotal,
+    subtotal,
+    discount_total: discountTotal,
+    trade_credit: tradeCredit,
+    net_total: netTotal,
+    tax_total: taxTotal,
+    customer_total: customerTotal,
+    cash_down: cashDown,
+    amount_financed: amountFinanced,
+    margin_amount: marginAmount,
+    margin_pct: marginPct,
+  };
 }
 
 async function syncQuotePackageLineItems(input: {
@@ -1533,9 +1604,9 @@ async function handlePublicDealRoomRead(url: URL, origin: string | null): Promis
     return safeJsonError("Quote is not shareable in its current state", 403, origin);
   }
 
-  const contentGate = assertQuoteCustomerContentReady(quote as Record<string, unknown>);
-  if (!contentGate.ok) {
-    return safeJsonErrorWithFields(contentGate.message, 403, origin, { blockers: contentGate.blockers });
+  const readGate = assertPublicQuoteReadReady(quote as Record<string, unknown>);
+  if (!readGate.ok) {
+    return safeJsonErrorWithFields(readGate.message, readGate.status, origin, { blockers: readGate.blockers ?? [] });
   }
   const availabilityGate = await assertQuoteAvailabilitySendable({
     admin,
@@ -1595,11 +1666,15 @@ async function handlePublicTradeEstimate(
   // valuation tables. Costs one indexed SELECT.
   const { data: quote, error: quoteErr } = await admin
     .from("quote_packages")
-    .select("id")
+    .select("id, status, expires_at, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
     .eq("share_token", token)
     .maybeSingle();
   if (quoteErr) return safeJsonError("Failed to validate token", 500, origin);
   if (!quote) return safeJsonError("Quote not found", 404, origin);
+  const readGate = assertPublicQuoteReadReady(quote as Record<string, unknown>);
+  if (!readGate.ok) {
+    return safeJsonErrorWithFields(readGate.message, readGate.status, origin, { blockers: readGate.blockers ?? [] });
+  }
 
   const estimates: Array<{ low: number; mid: number; high: number; confidence: "high" | "medium" | "low" }> = [];
 
@@ -1751,11 +1826,15 @@ async function handlePublicChatTurn(
   const admin = createAdminClient();
   const { data: quote, error: quoteErr } = await admin
     .from("quote_packages")
-    .select("id, equipment, customer_name, customer_company, customer_total, amount_financed, financing_scenarios, branch_slug, why_this_machine, why_this_machine_confirmed")
+    .select("id, status, expires_at, equipment, customer_name, customer_company, customer_total, amount_financed, financing_scenarios, branch_slug, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
     .eq("share_token", token)
     .maybeSingle();
   if (quoteErr) return safeJsonError("Failed to load quote", 500, origin);
   if (!quote) return safeJsonError("Quote not found", 404, origin);
+  const readGate = assertPublicQuoteReadReady(quote as Record<string, unknown>);
+  if (!readGate.ok) {
+    return safeJsonErrorWithFields(readGate.message, readGate.status, origin, { blockers: readGate.blockers ?? [] });
+  }
 
   const branchSlug = typeof quote.branch_slug === "string" ? quote.branch_slug : null;
   let branch: Record<string, unknown> | null = null;
@@ -1883,17 +1962,12 @@ async function handlePublicAccept(
   const body = await req.json().catch(() => ({}));
   const signerName = typeof body.signer_name === "string" ? body.signer_name.trim().slice(0, 200) : "";
   const signerEmail = typeof body.signer_email === "string" ? body.signer_email.trim().slice(0, 200) : "";
-  const signatureDataUrl = typeof body.signature_data_url === "string" ? body.signature_data_url : "";
+  const signatureDataUrl = validatePublicSignatureDataUrl(body.signature_data_url);
   const configRaw = body.customer_configuration;
 
   if (!signerName) return safeJsonError("Please enter your name to sign.", 400, origin);
-  // Keep the signature payload reasonable — a 320×160 PNG @ base64 is
-  // well under 100KB; reject anything much larger than that.
-  if (!signatureDataUrl.startsWith("data:image/")) {
-    return safeJsonError("Signature is required.", 400, origin);
-  }
-  if (signatureDataUrl.length > 250_000) {
-    return safeJsonError("Signature image too large.", 413, origin);
+  if (!signatureDataUrl.ok) {
+    return safeJsonError(signatureDataUrl.message, signatureDataUrl.status, origin);
   }
   if (!configRaw || typeof configRaw !== "object" || Array.isArray(configRaw)) {
     return safeJsonError("Missing configuration snapshot.", 400, origin);
@@ -1902,17 +1976,14 @@ async function handlePublicAccept(
   const admin = createAdminClient();
   const { data: quote, error: quoteErr } = await admin
     .from("quote_packages")
-    .select("id, workspace_id, deal_id, status")
+    .select("id, workspace_id, deal_id, status, expires_at, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
     .eq("share_token", token)
     .maybeSingle();
   if (quoteErr) return safeJsonError("Failed to load quote", 500, origin);
   if (!quote) return safeJsonError("Quote not found", 404, origin);
-
-  // Guard against re-accepting or overwriting a terminal state. A rep
-  // rotating the token is still a safe way to re-open for acceptance.
-  const terminalStates = new Set(["rejected", "expired"]);
-  if (terminalStates.has(String(quote.status))) {
-    return safeJsonError(`This quote is ${quote.status} and cannot be signed.`, 409, origin);
+  const acceptGate = assertPublicQuoteAcceptReady(quote as Record<string, unknown>);
+  if (!acceptGate.ok) {
+    return safeJsonErrorWithFields(acceptGate.message, acceptGate.status, origin, { blockers: acceptGate.blockers ?? [] });
   }
 
   const configuration = {
@@ -1938,7 +2009,7 @@ async function handlePublicAccept(
       signer_email: signerEmail || null,
       signer_ip: sigIp,
       signer_user_agent: sigUa,
-      signature_image_url: signatureDataUrl,
+      signature_image_url: signatureDataUrl.value,
       signed_snapshot: configuration,
       signed_via: "deal_room",
       document_hash: documentHash,
@@ -1999,11 +2070,15 @@ async function handlePublicSocialProof(url: URL, origin: string | null): Promise
   const admin = createAdminClient();
   const { data: quote, error: quoteErr } = await admin
     .from("quote_packages")
-    .select("id, equipment")
+    .select("id, status, expires_at, equipment, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
     .eq("share_token", token)
     .maybeSingle();
   if (quoteErr) return safeJsonError("Failed to load quote", 500, origin);
   if (!quote) return safeJsonError("Quote not found", 404, origin);
+  const readGate = assertPublicQuoteReadReady(quote as Record<string, unknown>);
+  if (!readGate.ok) {
+    return safeJsonErrorWithFields(readGate.message, readGate.status, origin, { blockers: readGate.blockers ?? [] });
+  }
 
   const equipment = Array.isArray(quote.equipment) ? quote.equipment : [];
   const primary = equipment[0] as Record<string, unknown> | undefined;
@@ -2113,7 +2188,7 @@ async function handlePublicAttachmentsRead(url: URL, origin: string | null): Pro
   const admin = createAdminClient();
   const { data: quote, error: quoteErr } = await admin
     .from("quote_packages")
-    .select("id, equipment, workspace_id")
+    .select("id, status, expires_at, equipment, workspace_id, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
     .eq("share_token", token)
     .maybeSingle();
   if (quoteErr) {
@@ -2121,6 +2196,10 @@ async function handlePublicAttachmentsRead(url: URL, origin: string | null): Pro
     return safeJsonError("Failed to load quote", 500, origin);
   }
   if (!quote) return safeJsonError("Quote not found", 404, origin);
+  const readGate = assertPublicQuoteReadReady(quote as Record<string, unknown>);
+  if (!readGate.ok) {
+    return safeJsonErrorWithFields(readGate.message, readGate.status, origin, { blockers: readGate.blockers ?? [] });
+  }
 
   const equipment = Array.isArray(quote.equipment) ? quote.equipment : [];
   const primary = equipment[0] as Record<string, unknown> | undefined;
@@ -2721,6 +2800,7 @@ function buildQuoteVersionArtifacts(input: {
   computedMetrics: Record<string, unknown>;
 } {
   const normalizedLines = normalizeQuotePackageLineItems(input.body);
+  const financials = computeQuoteFinancials(input.body);
   const equipment = normalizedLines.filter((row) => row.line_type === "equipment");
   const attachments = normalizedLines.filter((row) => row.line_type !== "equipment");
   const snapshot = buildQuoteVersionSnapshot({
@@ -2739,12 +2819,12 @@ function buildQuoteVersionArtifacts(input: {
     taxProfile: typeof input.body.tax_profile === "string"
       ? input.body.tax_profile as QuoteVersionSnapshot["taxProfile"]
       : "standard",
-    taxTotal: Number(input.body.tax_total ?? 0) || 0,
-    netTotal: Number(input.body.net_total ?? 0) || 0,
-    customerTotal: Number(input.body.customer_total ?? 0) || 0,
-    amountFinanced: Number(input.body.amount_financed ?? 0) || 0,
-    marginPct: typeof input.body.margin_pct === "number" ? input.body.margin_pct : Number(input.body.margin_pct ?? 0),
-    amount: typeof input.body.net_total === "number" ? input.body.net_total : Number(input.body.net_total ?? 0),
+    taxTotal: financials.tax_total,
+    netTotal: financials.net_total,
+    customerTotal: financials.customer_total,
+    amountFinanced: financials.amount_financed,
+    marginPct: financials.margin_pct,
+    amount: financials.net_total,
     equipment: equipment.map((row) => ({
       id: typeof row.catalog_entry_id === "string" ? row.catalog_entry_id : null,
       title: typeof row.description === "string" ? row.description : [row.make, row.model].filter(Boolean).join(" ").trim(),
@@ -2771,17 +2851,7 @@ function buildQuoteVersionArtifacts(input: {
   return {
     snapshot,
     computedMetrics: {
-      equipment_total: Number(input.body.equipment_total ?? 0) || 0,
-      attachment_total: Number(input.body.attachment_total ?? 0) || 0,
-      subtotal: Number(input.body.subtotal ?? 0) || 0,
-      discount_total: Number(input.body.discount_total ?? 0) || 0,
-      net_total: Number(input.body.net_total ?? 0) || 0,
-      tax_total: Number(input.body.tax_total ?? 0) || 0,
-      customer_total: Number(input.body.customer_total ?? 0) || 0,
-      cash_down: Number(input.body.cash_down ?? 0) || 0,
-      amount_financed: Number(input.body.amount_financed ?? 0) || 0,
-      margin_amount: Number(input.body.margin_amount ?? 0) || 0,
-      margin_pct: Number(input.body.margin_pct ?? 0) || 0,
+      ...financials,
       saved_at: new Date().toISOString(),
     },
   };
@@ -5090,6 +5160,7 @@ Deno.serve(async (req) => {
         dealId: resolvedDealId,
         status: provisionalStatus,
       });
+      const financials = provisionalArtifacts.computedMetrics as Record<string, number>;
 
       const changedScopes = latestVersion
         ? diffQuoteVersionScopes(latestVersion.snapshot, provisionalArtifacts.snapshot)
@@ -5136,20 +5207,20 @@ Deno.serve(async (req) => {
           equipment,
           attachments_included: body.attachments_included || [],
           trade_in_valuation_id: body.trade_in_valuation_id,
-          trade_allowance: body.trade_allowance,
+          trade_allowance: financials.trade_credit,
           financing_scenarios: body.financing_scenarios || [],
-          equipment_total: body.equipment_total || 0,
-          attachment_total: body.attachment_total || 0,
-          subtotal: body.subtotal || 0,
+          equipment_total: financials.equipment_total,
+          attachment_total: financials.attachment_total,
+          subtotal: financials.subtotal,
           branch_slug: typeof body.branch_slug === "string" ? body.branch_slug : null,
           commercial_discount_type: typeof body.commercial_discount_type === "string" ? body.commercial_discount_type : "flat",
           commercial_discount_value: body.commercial_discount_value || 0,
-          discount_total: body.discount_total || 0,
-          trade_credit: body.trade_credit || 0,
-          net_total: body.net_total || 0,
-          tax_total: body.tax_total || 0,
-          cash_down: body.cash_down || 0,
-          amount_financed: body.amount_financed || 0,
+          discount_total: financials.discount_total,
+          trade_credit: financials.trade_credit,
+          net_total: financials.net_total,
+          tax_total: financials.tax_total,
+          cash_down: financials.cash_down,
+          amount_financed: financials.amount_financed,
           tax_profile: typeof body.tax_profile === "string" ? body.tax_profile : "standard",
           selected_finance_scenario: typeof body.selected_finance_scenario === "string" ? body.selected_finance_scenario : null,
           wizard_step: Number.isFinite(Number(body.wizard_step)) ? Math.max(1, Math.min(11, Math.round(Number(body.wizard_step)))) : null,
@@ -5166,8 +5237,8 @@ Deno.serve(async (req) => {
           tax_override_amount: taxOverrideAmount,
           tax_override_reason: taxOverrideReason,
           selected_promotion_ids: selectedPromotionIds,
-          margin_amount: body.margin_amount,
-          margin_pct: body.margin_pct,
+          margin_amount: financials.margin_amount,
+          margin_pct: financials.margin_pct,
           ai_recommendation: body.ai_recommendation,
           entry_mode: ["voice", "ai_chat", "manual", "trade_photo"].includes(String(body.entry_mode ?? ""))
             ? body.entry_mode

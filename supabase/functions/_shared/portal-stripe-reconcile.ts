@@ -2,6 +2,8 @@ import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
 export interface PortalPaymentIntentRow {
   id: string;
+  workspace_id: string | null;
+  company_id: string | null;
   invoice_id: string | null;
   amount_cents: number;
   stripe_payment_intent_id: string;
@@ -10,6 +12,7 @@ export interface PortalPaymentIntentRow {
 
 export interface PortalInvoiceRow {
   id: string;
+  workspace_id: string | null;
   total: number;
   amount_paid: number | null;
   status: string;
@@ -31,7 +34,7 @@ export async function findPortalPaymentIntent(
   if (stripePaymentIntentId) {
     const { data } = await supabaseAdmin
       .from("portal_payment_intents")
-      .select("id, invoice_id, amount_cents, stripe_payment_intent_id, metadata")
+      .select("id, workspace_id, company_id, invoice_id, amount_cents, stripe_payment_intent_id, metadata")
       .eq("stripe_payment_intent_id", stripePaymentIntentId)
       .maybeSingle();
     if (data) return data as PortalPaymentIntentRow;
@@ -40,7 +43,7 @@ export async function findPortalPaymentIntent(
   if (checkoutSessionId) {
     const { data } = await supabaseAdmin
       .from("portal_payment_intents")
-      .select("id, invoice_id, amount_cents, stripe_payment_intent_id, metadata")
+      .select("id, workspace_id, company_id, invoice_id, amount_cents, stripe_payment_intent_id, metadata")
       .contains("metadata", { checkout_session_id: checkoutSessionId })
       .maybeSingle();
     if (data) return data as PortalPaymentIntentRow;
@@ -144,17 +147,30 @@ export async function reconcileSucceededPayment(input: {
   if (!alreadyAppliedAt && paymentIntent.invoice_id && amountCents > 0) {
     const { data: invoiceRow } = await input.supabaseAdmin
       .from("customer_invoices")
-      .select("id, total, amount_paid, status, paid_at, payment_reference, crm_company_id")
+      .select("id, workspace_id, total, amount_paid, status, paid_at, payment_reference, crm_company_id")
       .eq("id", paymentIntent.invoice_id)
       .maybeSingle();
 
     if (invoiceRow) {
       const invoice = invoiceRow as PortalInvoiceRow;
-      const amount = amountCents / 100;
       const currentAmountPaid = Number(invoice.amount_paid ?? 0);
       const invoiceTotal = Number(invoice.total ?? 0);
       const balance = Math.max(invoiceTotal - currentAmountPaid, 0);
-      if (balance > 0) {
+      const balanceCents = Math.round(balance * 100);
+      const workspaceMismatch = paymentIntent.workspace_id && invoice.workspace_id && paymentIntent.workspace_id !== invoice.workspace_id;
+      const companyMismatch = paymentIntent.company_id && invoice.crm_company_id && paymentIntent.company_id !== invoice.crm_company_id;
+      const underpaid = amountCents < balanceCents;
+      if (workspaceMismatch || companyMismatch || underpaid) {
+        nextMetadata = {
+          ...nextMetadata,
+          invoice_payment_blocked_reason: workspaceMismatch
+            ? "workspace_mismatch"
+            : companyMismatch
+              ? "company_mismatch"
+              : "amount_below_invoice_balance",
+        };
+      } else if (balance > 0) {
+        const amount = amountCents / 100;
         const appliedAmount = Math.min(balance, amount);
         const nextAmountPaid = currentAmountPaid + appliedAmount;
         await input.supabaseAdmin

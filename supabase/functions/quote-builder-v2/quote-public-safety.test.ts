@@ -1,8 +1,11 @@
 import { assert, assertEquals } from "jsr:@std/assert@1";
 import {
+  assertPublicQuoteAcceptReady,
+  assertPublicQuoteReadReady,
   assertQuoteCustomerContentReady,
   buildCustomerProposalEmailText,
   buildPublicDealRoomPayload,
+  validatePublicSignatureDataUrl,
 } from "./quote-public-safety.ts";
 
 Deno.test("public deal-room payload sanitizes line items and AI recommendation internals", () => {
@@ -183,6 +186,72 @@ Deno.test("public recommendation context is withheld without a confirmed narrati
   });
 
   assertEquals(payload.ai_recommendation, null);
+});
+
+Deno.test("public quote access rejects expired links", () => {
+  const expired = assertPublicQuoteReadReady({
+    status: "sent",
+    expires_at: "2026-05-11T00:00:00Z",
+    why_this_machine: "Confirmed narrative.",
+    why_this_machine_confirmed: true,
+    tax_profile: "standard",
+    tax_total: 100,
+  }, Date.parse("2026-05-12T00:00:00Z"));
+
+  assertEquals(expired, {
+    ok: false,
+    message: "This quote link has expired.",
+    status: 410,
+  });
+});
+
+Deno.test("public accept rejects stale statuses and expired quotes", () => {
+  assertEquals(
+    assertPublicQuoteAcceptReady({
+      status: "accepted",
+      expires_at: "2026-05-13T00:00:00Z",
+      why_this_machine: "Confirmed narrative.",
+      why_this_machine_confirmed: true,
+      tax_profile: "standard",
+      tax_total: 100,
+    }, Date.parse("2026-05-12T00:00:00Z")),
+    {
+      ok: false,
+      message: "This quote has already been accepted.",
+      status: 409,
+    },
+  );
+
+  assertEquals(
+    assertPublicQuoteAcceptReady({
+      status: "sent",
+      expires_at: "2026-05-11T00:00:00Z",
+      why_this_machine: "Confirmed narrative.",
+      why_this_machine_confirmed: true,
+      tax_profile: "standard",
+      tax_total: 100,
+    }, Date.parse("2026-05-12T00:00:00Z")),
+    {
+      ok: false,
+      message: "This quote has expired and cannot be signed.",
+      status: 409,
+    },
+  );
+});
+
+Deno.test("public signature validation only accepts bounded PNG data URLs", () => {
+  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ";
+  assertEquals(validatePublicSignatureDataUrl(png), { ok: true, value: png });
+  assertEquals(validatePublicSignatureDataUrl("data:image/svg+xml;base64,PHN2Zy8+"), {
+    ok: false,
+    message: "Signature must be a PNG image.",
+    status: 400,
+  });
+  assertEquals(validatePublicSignatureDataUrl("data:image/png;base64,AAAA"), {
+    ok: false,
+    message: "Signature must be a PNG image.",
+    status: 400,
+  });
 });
 
 Deno.test("customer proposal email is a safe notification, not a raw proposal dump", () => {

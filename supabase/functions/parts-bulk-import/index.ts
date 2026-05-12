@@ -54,6 +54,7 @@ import {
   type VendorContactGroup,
   type VendorOrderScheduleParsed,
 } from "../_shared/parts-import-vendor-contacts.ts";
+import { validatePartsImportStoragePath } from "./storage-path.ts";
 
 // ── types ───────────────────────────────────────────────────────────────────
 
@@ -170,6 +171,10 @@ async function handlePreview(
   }
 
   const workspaceId = await getWorkspace(supabase, actorId);
+  const storagePathGate = validatePartsImportStoragePath(body.storage_path, actorId);
+  if (!storagePathGate.ok) {
+    return safeJsonError(storagePathGate.error, 403, origin);
+  }
   const { buffer, hash, size } = await readStorageFile(body.storage_path);
 
   // Dedup: if the same hash is already committed for this workspace + file_type, short-circuit.

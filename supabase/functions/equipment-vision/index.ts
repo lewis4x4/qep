@@ -48,6 +48,18 @@ Deno.serve(async (req) => {
     const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
     if (!auth.ok) return auth.response;
     const user = { id: auth.userId };
+    const callerDb = auth.supabase;
+    const equipmentId = new URL(req.url).searchParams.get("equipmentId");
+    if (equipmentId) {
+      const { data: equipmentAccess, error: equipmentAccessErr } = await callerDb
+        .from("crm_equipment")
+        .select("id")
+        .eq("id", equipmentId)
+        .maybeSingle();
+      if (equipmentAccessErr || !equipmentAccess) {
+        return safeJsonError("Equipment not found", 404, origin);
+      }
+    }
 
     const contentType = req.headers.get("content-type") ?? "";
     let imageBase64: string;
@@ -171,7 +183,6 @@ Be specific about make/model when identifiable. Note any brand logos, model numb
 
     // Save the photo to Supabase Storage so it persists across page refreshes
     let savedImageUrl: string | null = null;
-    const equipmentId = new URL(req.url).searchParams.get("equipmentId");
     try {
       const ext = imageMimeType.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
       const fileName = `${equipmentId ?? user.id}/${crypto.randomUUID()}.${ext}`;
@@ -268,7 +279,7 @@ Be specific about make/model when identifiable. Note any brand logos, model numb
 
     if (makeModel) {
       const [inventoryResult, valuationResult] = await Promise.all([
-        adminDb
+        callerDb
           .from("crm_equipment")
           .select("id, name, make, model, year, serial_number, condition, status, list_price, rental_rate_daily")
           .or(`make.ilike.%${analysis.equipment.make ?? ""}%,model.ilike.%${analysis.equipment.model ?? ""}%`)

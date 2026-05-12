@@ -11,6 +11,20 @@ const TAX_EXEMPT_PROFILES = new Set([
   "government_exempt",
   "resale_exempt",
 ]);
+const PUBLIC_ACCEPT_STATUSES = new Set([
+  "sent",
+  "viewed",
+  "countered",
+  "approved",
+  "approved_with_conditions",
+]);
+const TERMINAL_PUBLIC_ACCEPT_STATUSES = new Set([
+  "accepted",
+  "converted_to_deal",
+  "archived",
+  "rejected",
+  "expired",
+]);
 
 export type QuoteCustomerContentReadyResult =
   | { ok: true }
@@ -19,6 +33,19 @@ export type QuoteCustomerContentReadyResult =
     message: string;
     blockers: Array<{ code: string; message: string }>;
   };
+
+export type PublicQuoteAccessReadyResult =
+  | { ok: true }
+  | {
+    ok: false;
+    message: string;
+    status: number;
+    blockers?: Array<{ code: string; message: string }>;
+  };
+
+export type PublicSignatureDataUrlResult =
+  | { ok: true; value: string }
+  | { ok: false; message: string; status: number };
 
 export interface CustomerProposalEmailInput {
   contactName: string;
@@ -60,6 +87,29 @@ function numberValue(value: unknown): number | null {
 
 function booleanValue(value: unknown): boolean {
   return value === true;
+}
+
+function isExpiredAt(value: unknown, now = Date.now()): boolean {
+  const raw = text(value, 120);
+  if (!raw) return false;
+  const expiresAt = Date.parse(raw);
+  return Number.isFinite(expiresAt) && expiresAt <= now;
+}
+
+export function validatePublicSignatureDataUrl(
+  value: unknown,
+): PublicSignatureDataUrlResult {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return { ok: false, message: "Signature is required.", status: 400 };
+  }
+  if (value.length > 250_000) {
+    return { ok: false, message: "Signature image too large.", status: 413 };
+  }
+  const match = value.match(/^data:image\/png;base64,([A-Za-z0-9+/=]+)$/);
+  if (!match || !match[1].startsWith("iVBORw0KGgo")) {
+    return { ok: false, message: "Signature must be a PNG image.", status: 400 };
+  }
+  return { ok: true, value };
 }
 
 function stringArray(value: unknown, maxItems = 12, maxChars = 240): string[] {
@@ -299,6 +349,56 @@ export function assertQuoteCustomerContentReady(
       ? blockers[0].message
       : "Resolve customer-facing proposal readiness blockers before sharing or sending.",
   };
+}
+
+export function assertPublicQuoteReadReady(
+  row: Record<string, unknown>,
+  now = Date.now(),
+): PublicQuoteAccessReadyResult {
+  if (isExpiredAt(row.expires_at, now)) {
+    return { ok: false, message: "This quote link has expired.", status: 410 };
+  }
+
+  const contentGate = assertQuoteCustomerContentReady(row);
+  if (!contentGate.ok) {
+    return {
+      ok: false,
+      message: contentGate.message,
+      status: 403,
+      blockers: contentGate.blockers,
+    };
+  }
+
+  return { ok: true };
+}
+
+export function assertPublicQuoteAcceptReady(
+  row: Record<string, unknown>,
+  now = Date.now(),
+): PublicQuoteAccessReadyResult {
+  if (isExpiredAt(row.expires_at, now)) {
+    return { ok: false, message: "This quote has expired and cannot be signed.", status: 409 };
+  }
+
+  const status = text(row.status, 80) ?? "draft";
+  if (TERMINAL_PUBLIC_ACCEPT_STATUSES.has(status)) {
+    return {
+      ok: false,
+      message: status === "accepted"
+        ? "This quote has already been accepted."
+        : `This quote is ${status} and cannot be signed.`,
+      status: 409,
+    };
+  }
+  if (!PUBLIC_ACCEPT_STATUSES.has(status)) {
+    return {
+      ok: false,
+      message: `This quote cannot be signed while status is ${status}.`,
+      status: 409,
+    };
+  }
+
+  return assertPublicQuoteReadReady(row, now);
 }
 
 function formatCurrency(value: unknown): string | null {

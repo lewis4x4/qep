@@ -17,6 +17,8 @@
  *               If still failing, leave in queue for next session.
  */
 
+import { redactDeep } from "./redactPII";
+
 const DB_NAME = "flare_pending_submissions";
 const DB_VERSION = 1;
 const STORE_NAME = "queue";
@@ -28,6 +30,17 @@ interface QueueRecord<T> {
   attempts: number;
   lastError: string | null;
   queuedAt: number;
+}
+
+function sanitizeQueuedPayload<T>(payload: T): T {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const record = payload as Record<string, unknown>;
+  return {
+    ...record,
+    screenshot_base64: "",
+    dom_snapshot_gzipped: "",
+    context: redactDeep(record.context),
+  } as T;
 }
 
 function isAvailable(): boolean {
@@ -70,7 +83,7 @@ export async function enqueueSubmission<T>(payload: T, lastError: string): Promi
           };
         }
         const record: QueueRecord<T> = {
-          payload,
+          payload: sanitizeQueuedPayload(payload),
           attempts: 0,
           lastError,
           queuedAt: Date.now(),
