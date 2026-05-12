@@ -1,6 +1,7 @@
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import {
   resolveVoiceRealtimeModelConfig,
   VOICE_TRANSCRIPTION_DOMAIN_PROMPT,
@@ -29,6 +30,15 @@ Deno.serve(async (req) => {
       return safeJsonError("Your role does not have access to realtime voice capture.", 403, origin);
     }
 
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const allowed = await checkRealtimeVoiceRateLimit(supabaseAdmin, auth.userId);
+    if (!allowed) {
+      return safeJsonError("Too many realtime voice session requests. Please wait a minute and try again.", 429, origin);
+    }
+
     const openAiKey = Deno.env.get("OPENAI_API_KEY");
     if (!openAiKey) {
       return safeJsonError(
@@ -52,6 +62,9 @@ Deno.serve(async (req) => {
       provider: "openai",
       mode: session.mode,
       model: session.realtimeModel,
+      sdp_url: session.mode === "client_secret"
+        ? "https://api.openai.com/v1/realtime/calls"
+        : `https://api.openai.com/v1/realtime?model=${encodeURIComponent(session.realtimeModel)}`,
       transcription_model: modelConfig.transcriptionModel,
       language,
       session: session.payload,
@@ -158,4 +171,49 @@ function normalizeLanguage(value: string | null | undefined): string {
   if (typeof value !== "string") return "en";
   const trimmed = value.trim();
   return /^[a-z]{2}(?:-[A-Z]{2})?$/.test(trimmed) ? trimmed : "en";
+}
+
+async function checkRealtimeVoiceRateLimit(
+  supabaseAdmin: SupabaseClient,
+  userId: string,
+): Promise<boolean> {
+  const rpcResult = await supabaseAdmin.rpc("check_rate_limit", {
+    p_user_id: userId,
+    p_endpoint: "voice-realtime-session",
+    p_max_requests: 10,
+    p_window_seconds: 60,
+  });
+
+  if (!rpcResult.error) {
+    return rpcResult.data !== false;
+  }
+
+  console.warn("voice-realtime-session check_rate_limit RPC unavailable, using table fallback", rpcResult.error);
+
+  const windowStartIso = new Date(Date.now() - 60_000).toISOString();
+  const countResult = await supabaseAdmin
+    .from("rate_limit_log")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("endpoint", "voice-realtime-session")
+    .gte("created_at", windowStartIso);
+
+  if (countResult.error) {
+    console.error("voice-realtime-session rate limit fallback count failed:", countResult.error);
+    return true;
+  }
+
+  if ((countResult.count ?? 0) >= 10) {
+    return false;
+  }
+
+  const insertResult = await supabaseAdmin
+    .from("rate_limit_log")
+    .insert({ user_id: userId, endpoint: "voice-realtime-session" });
+
+  if (insertResult.error) {
+    console.error("voice-realtime-session rate limit fallback insert failed:", insertResult.error);
+  }
+
+  return true;
 }

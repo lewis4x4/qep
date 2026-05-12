@@ -104,8 +104,8 @@ Deno.serve(async (req) => {
     const clientCaptureDiagnostics = readClientCaptureDiagnostics(formData);
     const rawCrmDealId = (formData.get("crm_deal_id") as string | null)?.trim() || null;
     const rawLegacyHubspot = (formData.get("hubspot_deal_id") as string | null)?.trim() || null;
-    const crmDealId = rawCrmDealId || null;
-    const hubspotDealId = crmDealId ?? rawLegacyHubspot;
+    const requestedCrmDealId = rawCrmDealId ?? (rawLegacyHubspot && isUuid(rawLegacyHubspot) ? rawLegacyHubspot : null);
+    let hubspotDealId = rawLegacyHubspot && !isUuid(rawLegacyHubspot) ? rawLegacyHubspot : null;
 
     if (!audioFile || audioFile.size === 0) {
       return jsonError("audio field is required", 400, ch);
@@ -113,6 +113,27 @@ Deno.serve(async (req) => {
 
     if (audioFile.size > 50 * 1024 * 1024) {
       return jsonError("Audio file exceeds 50MB limit", 400, ch);
+    }
+
+    if (requestedCrmDealId) {
+      const { data: authorizedDeal, error: dealLookupError } = await supabaseAdmin
+        .from("crm_deals")
+        .select("id")
+        .eq("id", requestedCrmDealId)
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (dealLookupError) {
+        console.error("voice-capture: deal authorization lookup failed", dealLookupError);
+        return jsonError("Could not verify the selected QRM deal.", 500, ch);
+      }
+
+      if (!authorizedDeal) {
+        return jsonError("Selected QRM deal was not found in your workspace.", 404, ch);
+      }
+
+      hubspotDealId = authorizedDeal.id;
     }
 
     // ── Upload audio to Supabase Storage ──────────────────────────────────────
@@ -179,6 +200,7 @@ Deno.serve(async (req) => {
       .from("voice_captures")
       .insert({
         user_id: user.id,
+        workspace_id: workspaceId,
         audio_storage_path: storagePath,
         hubspot_deal_id: hubspotDealId,
         sync_status: "processing",
@@ -272,7 +294,6 @@ Deno.serve(async (req) => {
       return jsonError("No speech detected in the recording. Please try again.", 422, ch, {
         capture_id: captureId,
         duration_seconds: durationSeconds,
-        audio_storage_path: storagePath,
         replay_available: true,
       });
     }
@@ -302,9 +323,7 @@ Deno.serve(async (req) => {
         ch,
         {
           capture_id: captureId,
-          transcript,
           duration_seconds: durationSeconds,
-          audio_storage_path: storagePath,
           replay_available: true,
         },
       );
@@ -461,7 +480,7 @@ Return ONLY valid JSON matching this exact structure:
         workspaceId,
         actorUserId: user.id,
         captureId,
-        dealId: crmDealId,
+        dealId: requestedCrmDealId,
         occurredAtIso: captureRecord.created_at as string,
         transcript,
         extracted,
@@ -520,7 +539,7 @@ Return ONLY valid JSON matching this exact structure:
         userId: user.id,
         transcript,
         extracted,
-        existingDealId: crmDealId,
+        existingDealId: requestedCrmDealId,
         workspaceId,
       });
     } catch (intelErr) {
@@ -590,7 +609,7 @@ Return ONLY valid JSON matching this exact structure:
             }
           }
 
-          if (resolvedDealId) {
+          if (isHubSpotObjectId(resolvedDealId)) {
             // Create note engagement on the deal
             const noteBody = buildVoiceCaptureNoteBody(transcript, extracted);
             const noteRes = await fetch("https://api.hubapi.com/engagements/v1/engagements", {
@@ -677,6 +696,8 @@ Return ONLY valid JSON matching this exact structure:
             }
 
             hubspotSynced = Boolean(noteId) && Boolean(taskId);
+          } else if (resolvedDealId) {
+            externalSyncErrors.push("Skipped HubSpot sync because the resolved QRM deal is not a HubSpot object id.");
           }
         }
       }
@@ -781,6 +802,15 @@ Return ONLY valid JSON matching this exact structure:
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function isHubSpotObjectId(value: string | null | undefined): value is string {
+  return typeof value === "string" && /^[0-9]+$/.test(value);
+}
+
+function isUuid(value: string | null | undefined): value is string {
+  return typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
 
 function jsonError(
   message: string,

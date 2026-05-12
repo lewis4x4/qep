@@ -18,6 +18,7 @@ type ExtractedDealData = VoiceCaptureExtractedDealData;
 interface CaptureRow {
   id: string;
   user_id: string;
+  workspace_id: string | null;
   transcript: string | null;
   extracted_data: unknown;
   hubspot_deal_id: string | null;
@@ -35,34 +36,28 @@ function jsonError(message: string, status: number, headers: Record<string, stri
 
 async function resolveCaptureWorkspaceId(
   supabase: SupabaseClient,
-  capture: Pick<CaptureRow, "user_id" | "hubspot_deal_id">,
-  fallbackWorkspaceId: string,
-): Promise<string> {
-  if (capture.hubspot_deal_id && isUuid(capture.hubspot_deal_id)) {
-    const { data: deal } = await supabase
-      .from("crm_deals")
-      .select("workspace_id")
-      .eq("id", capture.hubspot_deal_id)
-      .maybeSingle();
-    const dealWorkspaceId = (deal as { workspace_id?: unknown } | null)?.workspace_id;
-    if (typeof dealWorkspaceId === "string" && dealWorkspaceId.trim().length > 0) {
-      return dealWorkspaceId;
-    }
-  }
+  capture: Pick<CaptureRow, "hubspot_deal_id">,
+): Promise<string | null> {
+  if (!capture.hubspot_deal_id || !isUuid(capture.hubspot_deal_id)) return null;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("active_workspace_id")
-    .eq("id", capture.user_id)
+  const { data: deal } = await supabase
+    .from("crm_deals")
+    .select("workspace_id")
+    .eq("id", capture.hubspot_deal_id)
+    .is("deleted_at", null)
     .maybeSingle();
-  const ownerWorkspaceId = (profile as { active_workspace_id?: unknown } | null)?.active_workspace_id;
-  return typeof ownerWorkspaceId === "string" && ownerWorkspaceId.trim().length > 0
-    ? ownerWorkspaceId
-    : fallbackWorkspaceId;
+  const dealWorkspaceId = (deal as { workspace_id?: unknown } | null)?.workspace_id;
+  return typeof dealWorkspaceId === "string" && dealWorkspaceId.trim().length > 0
+    ? dealWorkspaceId
+    : null;
 }
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isHubSpotObjectId(value: string | null | undefined): value is string {
+  return typeof value === "string" && /^[0-9]+$/.test(value);
 }
 
 async function getValidToken(
@@ -163,7 +158,7 @@ Deno.serve(async (req) => {
 
     const { data: captureData, error: captureError } = await supabaseAdmin
       .from("voice_captures")
-      .select("id, user_id, transcript, extracted_data, hubspot_deal_id, hubspot_contact_id, hubspot_note_id, hubspot_task_id")
+      .select("id, user_id, workspace_id, transcript, extracted_data, hubspot_deal_id, hubspot_contact_id, hubspot_note_id, hubspot_task_id")
       .eq("id", captureId)
       .single();
 
@@ -174,19 +169,22 @@ Deno.serve(async (req) => {
     }
 
     const canSyncAnyCapture = ["admin", "manager", "owner"].includes(auth.role);
-    const captureWorkspaceId = await resolveCaptureWorkspaceId(
-      supabaseAdmin,
-      capture,
-      workspaceId,
-    );
+    const captureWorkspaceId = capture.workspace_id ?? await resolveCaptureWorkspaceId(supabaseAdmin, capture);
 
-    if (capture.user_id !== user.id) {
-      if (!canSyncAnyCapture) {
-        return jsonError("You can only sync your own captures.", 403, headers);
-      }
-      if (captureWorkspaceId !== workspaceId) {
-        return jsonError("You can only sync captures in your active workspace.", 403, headers);
-      }
+    if (!captureWorkspaceId) {
+      return jsonError(
+        "This legacy capture has no verified workspace. Re-record it or run the voice_captures workspace backfill before syncing.",
+        409,
+        headers,
+      );
+    }
+
+    if (captureWorkspaceId !== workspaceId) {
+      return jsonError("You can only sync captures in your active workspace.", 403, headers);
+    }
+
+    if (capture.user_id !== user.id && !canSyncAnyCapture) {
+      return jsonError("You can only sync your own captures.", 403, headers);
     }
 
     if (!capture.transcript || capture.transcript.trim().length === 0) {
@@ -198,7 +196,7 @@ Deno.serve(async (req) => {
       workspaceId: captureWorkspaceId,
       actorUserId: user.id,
       captureId,
-      dealId: capture.hubspot_deal_id,
+      dealId: isUuid(capture.hubspot_deal_id ?? "") ? capture.hubspot_deal_id : null,
       occurredAtIso: new Date().toISOString(),
       transcript: capture.transcript,
       extracted,
@@ -310,6 +308,40 @@ Deno.serve(async (req) => {
         })
         .eq("id", captureId);
       return jsonError("Could not resolve a HubSpot deal for this capture.", 409, headers);
+    }
+
+    if (!isHubSpotObjectId(resolvedDealId)) {
+      if (localCrmSync.saved) {
+        await supabaseAdmin
+          .from("voice_captures")
+          .update({
+            sync_status: "synced",
+            sync_error: "Skipped HubSpot sync because the resolved QRM deal is not a HubSpot object id.",
+            hubspot_deal_id: localCrmSync.dealId,
+            hubspot_contact_id: localCrmSync.contactId,
+            hubspot_note_id: localCrmSync.noteActivityId,
+            hubspot_task_id: localCrmSync.taskActivityId,
+            hubspot_synced_at: new Date().toISOString(),
+          })
+          .eq("id", captureId);
+
+        return new Response(
+          JSON.stringify({
+            id: captureId,
+            hubspot_synced: false,
+            hubspot_deal_id: localCrmSync.dealId,
+            hubspot_note_id: localCrmSync.noteActivityId,
+            hubspot_task_id: localCrmSync.taskActivityId,
+            local_crm_saved: true,
+          }),
+          {
+            status: 200,
+            headers: { ...headers, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      return jsonError("Resolved QRM deal is not linked to a HubSpot object id.", 409, headers);
     }
 
     if (!noteId) {

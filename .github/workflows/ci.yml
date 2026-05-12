@@ -58,6 +58,21 @@ jobs:
           KB_ISOLATION_REQUIRED: "true"
         run: node ./scripts/kb-eval/workspace-isolation.mjs
 
+      - name: Voice field note regression tests
+        run: |
+          bun test \
+            apps/web/src/lib/audio-recording-format.test.ts \
+            apps/web/src/lib/voice-realtime-client.test.ts \
+            apps/web/src/components/__tests__/VoiceCapturePage.integration.test.tsx
+          deno test \
+            supabase/functions/_shared/audio-mime.test.ts \
+            supabase/functions/_shared/voice-transcript-signal.test.ts
+          deno check \
+            supabase/functions/voice-capture/index.ts \
+            supabase/functions/voice-capture-sync/index.ts \
+            supabase/functions/voice-realtime-session/index.ts \
+            supabase/functions/voice-to-qrm/index.ts
+
       - name: Build (full gate)
         env:
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}

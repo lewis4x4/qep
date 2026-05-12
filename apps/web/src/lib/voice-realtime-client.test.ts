@@ -19,6 +19,29 @@ describe("voice-realtime-client", () => {
       model: "gpt-realtime",
       rtc_url: undefined,
       sdp_url: undefined,
+      value: undefined,
+      ephemeral_key: undefined,
+      token: undefined,
+    });
+  });
+
+  test("preserves current OpenAI client-secret value payload shape", () => {
+    expect(
+      normalizeRealtimeSessionPayload({
+        provider: "openai",
+        mode: "client_secret",
+        model: "gpt-realtime-2",
+        sdp_url: "https://api.openai.com/v1/realtime/calls",
+        session: {
+          value: "ek_current_openai_secret",
+        },
+      }),
+    ).toEqual({
+      value: "ek_current_openai_secret",
+      model: "gpt-realtime-2",
+      sdp_url: "https://api.openai.com/v1/realtime/calls",
+      rtc_url: undefined,
+      client_secret: undefined,
       ephemeral_key: undefined,
       token: undefined,
     });
@@ -40,6 +63,7 @@ describe("voice-realtime-client", () => {
       model: "nested-model",
       sdp_url: "https://nested.example/sdp",
       rtc_url: "https://top-level.example/realtime",
+      value: undefined,
       client_secret: undefined,
       ephemeral_key: undefined,
     });

@@ -12,6 +12,7 @@ interface StartRealtimeTranscriptInput {
 }
 
 export type RealtimeSessionPayload = {
+  value?: string;
   client_secret?: { value?: string } | string;
   ephemeral_key?: string;
   token?: string;
@@ -37,6 +38,7 @@ export function normalizeRealtimeSessionPayload(
     model: nestedSession.model ?? response.model,
     rtc_url: nestedSession.rtc_url ?? response.rtc_url,
     sdp_url: nestedSession.sdp_url ?? response.sdp_url,
+    value: nestedSession.value ?? response.value,
     client_secret: nestedSession.client_secret ?? response.client_secret,
     ephemeral_key: nestedSession.ephemeral_key ?? response.ephemeral_key,
     token: nestedSession.token ?? response.token,
@@ -44,6 +46,7 @@ export function normalizeRealtimeSessionPayload(
 }
 
 function getEphemeralToken(payload: RealtimeSessionPayload): string | null {
+  if (payload.value) return payload.value;
   if (typeof payload.client_secret === "string") return payload.client_secret;
   if (payload.client_secret?.value) return payload.client_secret.value;
   return payload.ephemeral_key ?? payload.token ?? null;
@@ -155,7 +158,7 @@ export async function startRealtimeTranscript({
     const realtimeUrl =
       payload.sdp_url ??
       payload.rtc_url ??
-      `https://api.openai.com/v1/realtime?model=${encodeURIComponent(payload.model ?? "gpt-realtime")}`;
+      "https://api.openai.com/v1/realtime/calls";
 
     const sdpResponse = await fetch(realtimeUrl, {
       method: "POST",

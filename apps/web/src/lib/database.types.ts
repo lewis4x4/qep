@@ -38617,6 +38617,7 @@ export type Database = {
           transcript: string | null
           updated_at: string
           user_id: string
+          workspace_id: string | null
         }
         Insert: {
           audio_storage_path?: string | null
@@ -38641,6 +38642,7 @@ export type Database = {
           transcript?: string | null
           updated_at?: string
           user_id: string
+          workspace_id?: string | null
         }
         Update: {
           audio_storage_path?: string | null
@@ -38665,6 +38667,7 @@ export type Database = {
           transcript?: string | null
           updated_at?: string
           user_id?: string
+          workspace_id?: string | null
         }
         Relationships: [
           {

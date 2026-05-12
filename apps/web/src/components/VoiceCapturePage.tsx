@@ -441,6 +441,7 @@ class VoiceCaptureRequestError extends Error {
   constructor(
     message: string,
     readonly status: number | null,
+    readonly payload: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = "VoiceCaptureRequestError";
@@ -1035,18 +1036,36 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     }
   }
 
-  // Clean up object URL on unmount
+  // Revoke the previous recording preview URL whenever a new one replaces it.
   useEffect(() => {
     return () => {
       if (audioBlobUrl) URL.revokeObjectURL(audioBlobUrl);
+    };
+  }, [audioBlobUrl]);
+
+  // Clean up active recording resources on unmount.
+  useEffect(() => {
+    return () => {
       if (recentAudioObjectUrlRef.current) URL.revokeObjectURL(recentAudioObjectUrlRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
+      const recorder = mediaRecorderRef.current;
+      if (recorder) {
+        recorder.ondataavailable = null;
+        recorder.onstop = null;
+      }
+      if (recorder && recorder.state !== "inactive") {
+        recorder.stop();
+      }
+      timerRef.current = null;
+      mediaRecorderRef.current = null;
       stopMicSignalMonitor();
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
+      streamRef.current = null;
       if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
     };
-  }, [audioBlobUrl]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -1221,27 +1240,40 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
     recordingFormatRef.current = recordingFormat;
 
-    const recorder = new MediaRecorder(stream, { mimeType: recordingFormat.mimeType });
-    mediaRecorderRef.current = recorder;
-    chunksRef.current = [];
-    setAudioPreviewFailed(false);
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(stream, { mimeType: recordingFormat.mimeType });
+      mediaRecorderRef.current = recorder;
+      chunksRef.current = [];
+      setAudioPreviewFailed(false);
 
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
-    };
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
 
-    recorder.onstop = () => {
-      const blobMimeType = recorder.mimeType || recordingFormat.mimeType;
-      const blob = new Blob(chunksRef.current, { type: blobMimeType });
-      const url = URL.createObjectURL(blob);
-      setAudioBlob(blob);
-      setAudioBlobUrl(url);
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
+      recorder.onstop = () => {
+        const blobMimeType = recorder.mimeType || recordingFormat.mimeType;
+        const blob = new Blob(chunksRef.current, { type: blobMimeType });
+        const url = URL.createObjectURL(blob);
+        setAudioBlob(blob);
+        setAudioBlobUrl(url);
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        mediaRecorderRef.current = null;
+      };
+
+      recorder.start();
+    } catch (err) {
       mediaRecorderRef.current = null;
-    };
-
-    recorder.start();
+      stream.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      const message = err instanceof Error
+        ? `Could not start recording: ${err.message}`
+        : "Could not start recording in this browser.";
+      setErrorMessage(message);
+      setRecordingState("error");
+      return;
+    }
     recordingStartedAtRef.current = getRecordingClockNow();
     accumulatedRecordingMsRef.current = 0;
     setRecordingState("recording");
@@ -1434,6 +1466,18 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
         );
         return;
       }
+      if (
+        err instanceof VoiceCaptureRequestError &&
+        err.status === 422 &&
+        err.payload.replay_available === true
+      ) {
+        void loadRecentCaptures();
+        toast({
+          title: "Recording retained for review",
+          description: "The transcript was not trusted, but the audio was saved in Recent recordings for replay or re-record.",
+          variant: "destructive",
+        });
+      }
       const message =
         err instanceof Error
           ? err.message
@@ -1533,6 +1577,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       throw new VoiceCaptureRequestError(
         (err as { error?: string }).error ?? "Processing failed",
         res.status,
+        err as Record<string, unknown>,
       );
     }
 
@@ -2538,7 +2583,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       </div>
       <Sheet open={recentCaptureSheetOpen} onOpenChange={(open) => {
         setRecentCaptureSheetOpen(open);
-        if (!open) setRecentAudioUrl(null);
+        if (!open) setRecentAudioPlaybackUrl(null);
       }}>
         <SheetContent className="sm:max-w-xl overflow-y-auto">
           <SheetHeader>

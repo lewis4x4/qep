@@ -17,10 +17,14 @@
  *
  * Auth: rep/admin/manager/owner
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
-import { audioExtensionFromMimeType, canonicalizeAudioMimeType } from "../_shared/audio-mime.ts";
+import {
+  isGenericAudioMimeType,
+  isSupportedAudioMimeType,
+  resolveAudioUploadMetadata,
+} from "../_shared/audio-mime.ts";
 import {
   resolveVoiceToQrmModelConfig,
   VOICE_TRANSCRIPTION_DOMAIN_PROMPT,
@@ -265,6 +269,10 @@ Deno.serve(async (req) => {
     );
 
     const workspace = await resolveProfileActiveWorkspaceId(supabaseAdmin, user.id);
+    const allowed = await checkVoiceToQrmRateLimit(supabaseAdmin, user.id);
+    if (!allowed) {
+      return safeJsonError("Too many voice-to-QRM requests. Please wait a minute and try again.", 429, origin);
+    }
 
     // ── 1. Parse multipart form data ───���──────────────────────────────────
     const contentType = req.headers.get("content-type") || "";
@@ -274,7 +282,7 @@ Deno.serve(async (req) => {
 
     const formData = await req.formData();
     const audioFile = formData.get("audio") as File | null;
-    const dealIdParam = formData.get("deal_id") as string | null;
+    const dealIdParam = ((formData.get("deal_id") as string | null) ?? "").trim() || null;
 
     if (!audioFile) {
       return safeJsonError("audio field is required", 400, origin);
@@ -284,10 +292,42 @@ Deno.serve(async (req) => {
       return safeJsonError("Audio file exceeds 50MB limit", 400, origin);
     }
 
+    let authorizedDealId: string | null = null;
+    if (dealIdParam) {
+      const { data: authorizedDeal, error: dealLookupError } = await supabaseAdmin
+        .from("crm_deals")
+        .select("id")
+        .eq("id", dealIdParam)
+        .eq("workspace_id", workspace)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (dealLookupError) {
+        console.error("voice-to-qrm deal authorization lookup failed:", dealLookupError);
+        return safeJsonError("Could not verify the selected deal.", 500, origin);
+      }
+
+      if (!authorizedDeal) {
+        return safeJsonError("Selected QRM deal was not found in your workspace.", 404, origin);
+      }
+
+      authorizedDealId = authorizedDeal.id;
+    }
+
     // ── 2. Upload audio to storage ────────��───────────────────────────────
     const audioBuffer = await audioFile.arrayBuffer();
-    const audioMimeType = canonicalizeAudioMimeType(audioFile.type);
-    const ext = audioFile.name?.split(".").pop()?.toLowerCase() || audioExtensionFromMimeType(audioMimeType);
+    const audioMetadata = resolveAudioUploadMetadata(audioFile.type, audioFile.name, audioBuffer);
+    const audioMimeType = audioMetadata.mimeType;
+    const ext = audioMetadata.extension;
+
+    if (!isSupportedAudioMimeType(audioMimeType)) {
+      return safeJsonError("The uploaded recording is not a supported audio format. Please re-record and try again.", 415, origin);
+    }
+
+    if (!audioMetadata.detectedMimeType && isGenericAudioMimeType(audioMetadata.declaredMimeType)) {
+      return safeJsonError("The uploaded recording does not look like a supported audio file. Please re-record and try again.", 415, origin);
+    }
+
     // Keep Voice Quote recordings in the same private bucket + user-folder
     // layout as the working voice-capture pipeline so storage policy and
     // operator expectations stay aligned.
@@ -527,7 +567,7 @@ Deno.serve(async (req) => {
     }
 
     // 5c. Deal resolution
-    let dealId: string | null = dealIdParam;
+    let dealId: string | null = authorizedDealId;
     let dealAction: string | null = null;
 
     if (!dealId) {
@@ -582,7 +622,9 @@ Deno.serve(async (req) => {
         await supabaseAdmin
           .from("crm_deals")
           .update(updates)
-          .eq("id", dealId);
+          .eq("id", dealId)
+          .eq("workspace_id", workspace)
+          .is("deleted_at", null);
         dealAction = "updated";
       }
     }
@@ -633,7 +675,9 @@ Deno.serve(async (req) => {
         await supabaseAdmin
           .from("crm_deals")
           .update({ needs_assessment_id: assessment.id })
-          .eq("id", dealId);
+          .eq("id", dealId)
+          .eq("workspace_id", workspace)
+          .is("deleted_at", null);
       }
     }
 
@@ -715,11 +759,12 @@ Deno.serve(async (req) => {
     let budgetCaptured = false;
     if (extracted.budget_timeline && (extracted.budget_timeline.cycle_month || extracted.budget_timeline.fiscal_year_end_month)) {
       if (companyId) {
-        // Upsert customer_profiles_extended with budget fields (matched by company_name)
+        // Upsert customer_profiles_extended with budget fields. This DGE table is not
+        // workspace-scoped, so anchor updates to the workspace-owned CRM company id.
         const { data: existingProfile } = await supabaseAdmin
           .from("customer_profiles_extended")
           .select("id")
-          .eq("company_name", extracted.company?.name ?? "")
+          .eq("crm_company_id", companyId)
           .maybeSingle();
 
         if (existingProfile) {
@@ -730,13 +775,15 @@ Deno.serve(async (req) => {
               fiscal_year_end_month: extracted.budget_timeline.fiscal_year_end_month ?? undefined,
               budget_cycle_notes: extracted.budget_timeline.notes ?? undefined,
             })
-            .eq("id", existingProfile.id);
+            .eq("id", existingProfile.id)
+            .eq("crm_company_id", companyId);
           budgetCaptured = true;
         } else if (extracted.company?.name) {
           // Create new profile with budget timeline
           await supabaseAdmin
             .from("customer_profiles_extended")
             .insert({
+              crm_company_id: companyId,
               customer_name: extracted.company.name,
               company_name: extracted.company.name,
               budget_cycle_month: extracted.budget_timeline.cycle_month ?? null,
@@ -933,14 +980,24 @@ Deno.serve(async (req) => {
           .maybeSingle();
 
         if (routingRule) {
-          // Find users matching the target role
+          // Find users matching the target role inside this workspace only.
+          // profiles.active_workspace_id is validated against profile_workspaces
+          // by migration 203 and is the existing workspace-scoping contract used
+          // by QRM/quote routing functions.
           const targetUsers: string[] = [];
           if (routingRule.route_to_user_id) {
-            targetUsers.push(routingRule.route_to_user_id);
+            const { data: routedUser } = await supabaseAdmin
+              .from("profiles")
+              .select("id")
+              .eq("id", routingRule.route_to_user_id)
+              .eq("active_workspace_id", workspace)
+              .maybeSingle();
+            if (routedUser?.id) targetUsers.push(routedUser.id as string);
           } else if (routingRule.route_to_role) {
             const { data: roleUsers } = await supabaseAdmin
               .from("profiles")
               .select("id")
+              .eq("active_workspace_id", workspace)
               .eq("iron_role", routingRule.route_to_role)
               .limit(5);
             if (roleUsers) targetUsers.push(...roleUsers.map((u: { id: string }) => u.id));
@@ -1128,6 +1185,51 @@ Deno.serve(async (req) => {
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }
 });
+
+async function checkVoiceToQrmRateLimit(
+  supabaseAdmin: SupabaseClient,
+  userId: string,
+): Promise<boolean> {
+  const rpcResult = await supabaseAdmin.rpc("check_rate_limit", {
+    p_user_id: userId,
+    p_endpoint: "voice-to-qrm",
+    p_max_requests: 5,
+    p_window_seconds: 60,
+  });
+
+  if (!rpcResult.error) {
+    return rpcResult.data !== false;
+  }
+
+  console.warn("voice-to-qrm check_rate_limit RPC unavailable, using table fallback", rpcResult.error);
+
+  const windowStartIso = new Date(Date.now() - 60_000).toISOString();
+  const countResult = await supabaseAdmin
+    .from("rate_limit_log")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("endpoint", "voice-to-qrm")
+    .gte("created_at", windowStartIso);
+
+  if (countResult.error) {
+    console.error("voice-to-qrm rate limit fallback count failed:", countResult.error);
+    return true;
+  }
+
+  if ((countResult.count ?? 0) >= 5) {
+    return false;
+  }
+
+  const insertResult = await supabaseAdmin
+    .from("rate_limit_log")
+    .insert({ user_id: userId, endpoint: "voice-to-qrm" });
+
+  if (insertResult.error) {
+    console.error("voice-to-qrm rate limit fallback insert failed:", insertResult.error);
+  }
+
+  return true;
+}
 
 /* ── Idea detection helpers (Enhancement 2) ─────────────────────── */
 

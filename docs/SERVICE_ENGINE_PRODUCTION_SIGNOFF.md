@@ -90,12 +90,32 @@ See also: [supabase/functions/secrets.example.env](../supabase/functions/secrets
 
    - `VITE_SUPABASE_URL` = `https://iciddijgonywtxoelous.supabase.co`
    - `VITE_SUPABASE_ANON_KEY` = project **anon** public key
+   - `VITE_VOICE_REALTIME_ENABLED` = `true` only after OpenAI realtime CSP + Supabase secrets are deployed; otherwise use `false`
 
 3. **Supabase → Authentication → URL configuration**: add production site URL and redirect URLs (e.g. Netlify `https://*.netlify.app` or custom domain). Align with [../supabase/config.toml](../supabase/config.toml) patterns.
 
 4. Redeploy the web app after changing env vars.
 
 Reference template: [apps/web/.env.example](../apps/web/.env.example).
+
+### Voice field note runtime controls
+
+Supabase Edge Function secrets:
+
+- `OPENAI_API_KEY` — required for `voice-capture`, `voice-to-qrm`, and `voice-realtime-session`.
+- `OPENAI_TRANSCRIPTION_MODEL` — optional; default `gpt-4o-transcribe`.
+- `OPENAI_VOICE_CAPTURE_EXTRACTION_MODEL` — optional; default `gpt-5.4-mini`.
+- `OPENAI_VOICE_QRM_EXTRACTION_MODEL` — optional; default `gpt-5.4-mini`.
+- `OPENAI_REALTIME_MODEL` — optional; default `gpt-realtime-2`.
+- `OPENAI_REALTIME_TRANSCRIPTION_MODEL` — optional; default `gpt-4o-transcribe`.
+
+Rollout order:
+
+1. Set/verify Supabase Edge secrets.
+2. Deploy `voice-capture`, `voice-to-qrm`, and `voice-realtime-session`.
+3. Deploy Netlify with CSP allowing `https://api.openai.com`.
+4. Enable `VITE_VOICE_REALTIME_ENABLED=true`.
+5. Record a new field note and verify transcript, extraction, replay, and recent-row failure diagnostics.
 
 ---
 
