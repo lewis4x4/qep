@@ -40,4 +40,10 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          # Push-to-main grants a 3-minute grace window so this check
+          # doesn't email a false failure when the commit that adds a
+          # new migration arrives before the manual Apply Supabase
+          # migrations workflow has had time to land it. PR runs leave
+          # it at 0 so reviewers still get fast feedback.
+          CHECK_MIGRATIONS_GRACE_SECONDS: ${{ github.event_name == 'push' && '180' || '0' }}
         run: node scripts/check-migrations-applied.mjs

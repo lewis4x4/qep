@@ -88,6 +88,17 @@ async function fetchAppliedMigrations(projectRef, token) {
   return { versions, names, total: body.length };
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Compute pending migrations against a fresh applied set. */
+async function computePending(projectRef, token, repo) {
+  const applied = await fetchAppliedMigrations(projectRef, token);
+  const isApplied = (r) => applied.versions.has(r.version) || applied.names.has(r.name);
+  return { pending: repo.filter((r) => !isApplied(r)), applied };
+}
+
 async function main() {
   const token = process.env.SUPABASE_ACCESS_TOKEN;
   const projectRef = process.env.SUPABASE_PROJECT_REF;
@@ -103,19 +114,52 @@ async function main() {
 
   info(`found ${repo.length} migration files in repo (newest: ${repo[repo.length - 1].version})`);
 
-  const applied = await fetchAppliedMigrations(projectRef, token);
+  // Grace window: when this workflow fires from `push: main`, the
+  // commit that lands a new migration is created BEFORE the manual
+  // `Apply Supabase migrations` workflow runs. Without a grace window
+  // the check inevitably fails for ~1-2 minutes between push and
+  // apply, sending a misleading "all jobs have failed" email even
+  // though the apply lands cleanly seconds later.
+  //
+  // Configure CHECK_MIGRATIONS_GRACE_SECONDS in the workflow YAML to
+  // tolerate that window. PR runs leave it at 0 so reviewers still
+  // get fast feedback when a PR adds a migration file that hasn't
+  // been applied yet.
+  const graceRaw = process.env.CHECK_MIGRATIONS_GRACE_SECONDS;
+  const graceSeconds = Number.isFinite(Number(graceRaw)) ? Math.max(0, Number(graceRaw)) : 0;
+  const pollIntervalMs = 15_000;
+
+  let attempt = 0;
+  const startedAt = Date.now();
+  // First pass: always run.
+  let { pending, applied } = await computePending(projectRef, token, repo);
   info(`schema_migrations reports ${applied.total} applied versions`);
 
-  const isApplied = (r) => applied.versions.has(r.version) || applied.names.has(r.name);
-  const pending = repo.filter((r) => !isApplied(r));
+  while (pending.length > 0 && (Date.now() - startedAt) / 1000 < graceSeconds) {
+    attempt += 1;
+    info(
+      `${pending.length} pending after attempt ${attempt}; waiting ${pollIntervalMs / 1000}s ` +
+        `(grace ${graceSeconds}s) for the Apply Supabase migrations workflow to land...`,
+    );
+    await sleep(pollIntervalMs);
+    ({ pending, applied } = await computePending(projectRef, token, repo));
+  }
+
   if (pending.length === 0) {
-    info("no drift — every migration in the repo is applied to prod");
+    if (attempt > 0) {
+      info(`drift resolved after ${attempt} retry attempt(s); ${applied.total} applied versions`);
+    } else {
+      info("no drift — every migration in the repo is applied to prod");
+    }
     process.exit(0);
   }
 
   console.error(`[check-migrations] FAIL: ${pending.length} pending migration(s):`);
   for (const p of pending) {
     console.error(`  - ${p.filename}`);
+  }
+  if (graceSeconds > 0) {
+    console.error(`\n(waited ${graceSeconds}s for the apply workflow before failing)`);
   }
   console.error("\nApply via the 'Apply Supabase migrations' workflow in GitHub Actions,");
   console.error("or locally via mcp__claude_ai_Supabase__apply_migration.");
