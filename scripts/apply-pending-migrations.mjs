@@ -49,7 +49,7 @@ function repoMigrations() {
   return out.sort((a, b) => a.version.localeCompare(b.version));
 }
 
-async function fetchAppliedVersions(projectRef, token) {
+async function fetchAppliedMigrations(projectRef, token) {
   const res = await fetch(
     `https://api.supabase.com/v1/projects/${projectRef}/database/migrations`,
     { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } },
@@ -59,9 +59,22 @@ async function fetchAppliedVersions(projectRef, token) {
     fail(`Management API GET returned ${res.status}: ${body.slice(0, 400)}`);
   }
   const body = await res.json();
+  // We have to match on EITHER version OR name because how a migration row
+  // was created determines which field carries the repo's identifier:
+  //   - Legacy `supabase db push` writes `version = "001"` (the file prefix).
+  //   - This script POSTs without an explicit version, so the Management API
+  //     synthesizes a YYYYMMDDHHMMSS timestamp for `version` and stores the
+  //     POSTed `name` (the snake_case body without the prefix) in `name`.
+  // Comparing only on version made script-applied migrations look forever
+  // pending. Returning both sets lets the caller resolve a repo file against
+  // either historic path.
   const versions = new Set();
-  for (const row of body) if (typeof row?.version === "string") versions.add(row.version);
-  return versions;
+  const names = new Set();
+  for (const row of body) {
+    if (typeof row?.version === "string") versions.add(row.version);
+    if (typeof row?.name === "string") names.add(row.name);
+  }
+  return { versions, names, total: body.length };
 }
 
 async function applyOne(projectRef, token, migration) {
@@ -94,10 +107,11 @@ async function main() {
   }
 
   const repo = repoMigrations();
-  const applied = await fetchAppliedVersions(projectRef, token);
-  const pending = repo.filter((r) => !applied.has(r.version));
+  const applied = await fetchAppliedMigrations(projectRef, token);
+  const isApplied = (r) => applied.versions.has(r.version) || applied.names.has(r.name);
+  const pending = repo.filter((r) => !isApplied(r));
 
-  info(`repo has ${repo.length} migrations, ${applied.size} applied, ${pending.length} pending`);
+  info(`repo has ${repo.length} migrations, ${applied.total} applied, ${pending.length} pending`);
 
   if (pending.length === 0) {
     info("no drift — nothing to apply");
@@ -133,8 +147,9 @@ async function main() {
   }
 
   // Verify drift is now zero.
-  const finalApplied = await fetchAppliedVersions(projectRef, token);
-  const stillPending = repo.filter((r) => !finalApplied.has(r.version));
+  const finalApplied = await fetchAppliedMigrations(projectRef, token);
+  const isAppliedFinal = (r) => finalApplied.versions.has(r.version) || finalApplied.names.has(r.name);
+  const stillPending = repo.filter((r) => !isAppliedFinal(r));
   if (stillPending.length > 0) {
     fail(`post-apply verification shows ${stillPending.length} still pending — inspect manually`);
   }

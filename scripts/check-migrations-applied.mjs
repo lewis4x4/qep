@@ -33,7 +33,7 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const MIGRATIONS_DIR = join(process.cwd(), "supabase", "migrations");
-const MIGRATION_FILE_RE = /^(\d{3})_[a-z0-9_]+\.sql$/;
+const MIGRATION_FILE_RE = /^(\d{3})_([a-z0-9_]+)\.sql$/;
 
 function info(msg) {
   console.log(`[check-migrations] ${msg}`);
@@ -53,14 +53,19 @@ function repoVersions() {
   for (const name of files) {
     const m = name.match(MIGRATION_FILE_RE);
     if (!m) continue;
-    out.push({ version: m[1], filename: name });
+    out.push({ version: m[1], name: m[2], filename: name });
   }
   return out.sort((a, b) => a.version.localeCompare(b.version));
 }
 
 /** Management API returns each applied migration as `{ version, name, ... }`.
- *  For this project `version` is the 3-digit prefix as a string. */
-async function fetchAppliedVersions(projectRef, token) {
+ *  Older rows applied via `supabase db push` carry `version = "001"` (the
+ *  3-digit prefix). Rows applied via this repo's apply-pending-migrations.mjs
+ *  script — which POSTs without an explicit version — get a synthesized
+ *  `YYYYMMDDHHMMSS` timestamp in `version` and the POSTed snake_case body in
+ *  `name`. We return both sets so callers can match a repo file against
+ *  either historic path. */
+async function fetchAppliedMigrations(projectRef, token) {
   const url = `https://api.supabase.com/v1/projects/${projectRef}/database/migrations`;
   const res = await fetch(url, {
     headers: {
@@ -75,10 +80,12 @@ async function fetchAppliedVersions(projectRef, token) {
   const body = await res.json();
   if (!Array.isArray(body)) fail(`unexpected response shape (not an array): ${JSON.stringify(body).slice(0, 200)}`);
   const versions = new Set();
+  const names = new Set();
   for (const row of body) {
     if (typeof row?.version === "string") versions.add(row.version);
+    if (typeof row?.name === "string") names.add(row.name);
   }
-  return versions;
+  return { versions, names, total: body.length };
 }
 
 async function main() {
@@ -96,10 +103,11 @@ async function main() {
 
   info(`found ${repo.length} migration files in repo (newest: ${repo[repo.length - 1].version})`);
 
-  const applied = await fetchAppliedVersions(projectRef, token);
-  info(`schema_migrations reports ${applied.size} applied versions`);
+  const applied = await fetchAppliedMigrations(projectRef, token);
+  info(`schema_migrations reports ${applied.total} applied versions`);
 
-  const pending = repo.filter((r) => !applied.has(r.version));
+  const isApplied = (r) => applied.versions.has(r.version) || applied.names.has(r.name);
+  const pending = repo.filter((r) => !isApplied(r));
   if (pending.length === 0) {
     info("no drift — every migration in the repo is applied to prod");
     process.exit(0);
