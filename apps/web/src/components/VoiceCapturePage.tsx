@@ -469,6 +469,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     id: string;
     url: string;
     isObjectUrl: boolean;
+    externalUrl?: string;
     error?: string;
   } | null>(null);
   const [liveTranscript, setLiveTranscript] = useState("");
@@ -1427,11 +1428,54 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       return;
     }
 
-    setInlineAudio({
-      id: row.id,
-      url: data.signedUrl,
-      isObjectUrl: false,
-    });
+    try {
+      const response = await fetch(data.signedUrl);
+      if (!response.ok) {
+        throw new Error(`Storage returned HTTP ${response.status}`);
+      }
+
+      const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+      const responseClone = response.clone();
+      const blob = await response.blob();
+      const isLikelyAudio =
+        contentType.startsWith("audio/") ||
+        contentType === "application/octet-stream" ||
+        contentType.length === 0;
+
+      if (blob.size === 0) {
+        throw new Error("The stored recording is empty.");
+      }
+
+      if (!isLikelyAudio) {
+        const bodyPreview = await responseClone.text().catch(() => "");
+        throw new Error(
+          bodyPreview
+            ? `Storage returned ${contentType}: ${bodyPreview.slice(0, 120)}`
+            : `Storage returned ${contentType || "a non-audio response"}.`,
+        );
+      }
+
+      setInlineAudio({
+        id: row.id,
+        url: URL.createObjectURL(blob),
+        externalUrl: data.signedUrl,
+        isObjectUrl: true,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "The recording file could not be opened.";
+      setInlineAudio({
+        id: row.id,
+        url: data.signedUrl,
+        externalUrl: data.signedUrl,
+        isObjectUrl: false,
+        error: "Could not load audio bytes for browser playback. Open the stored file directly or re-record this note.",
+      });
+      toast({
+        title: "Playback unavailable",
+        description: message,
+        variant: "destructive",
+      });
+    }
   }
 
   function buildRemoteRow(cap: RecentCapture): RecentRecordingRow {
@@ -2138,9 +2182,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                                           <div className="flex max-w-md flex-wrap items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
                                             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                                             <span className="min-w-0 flex-1">{inlineAudio.error}</span>
-                                            {inlineAudio.url ? (
+                                            {inlineAudio.externalUrl || inlineAudio.url ? (
                                               <a
-                                                href={inlineAudio.url}
+                                                href={inlineAudio.externalUrl ?? inlineAudio.url}
                                                 target="_blank"
                                                 rel="noreferrer"
                                                 className="inline-flex items-center gap-1 font-semibold text-red-100 underline-offset-4 hover:underline"
