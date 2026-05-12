@@ -5,6 +5,10 @@
  * Default mode is a dry run. Apply requires both:
  *   bun run intellidealer:seed:purge -- --apply --confirm-non-parts-seed-purge
  *
+ * Legacy null-audience morning_briefings are excluded by default because they
+ * may be real generated history. After exporting/reviewing them, include:
+ *   --include-legacy-briefings
+ *
  * This intentionally refuses to touch any table whose name is parts-related.
  * Rows that are non-parts but still referenced by protected parts data are
  * reported as deferred so we do not trigger FK cascades into parts history.
@@ -19,10 +23,12 @@ import {
 
 const APPLY_FLAG = "--apply";
 const CONFIRM_FLAG = "--confirm-non-parts-seed-purge";
+const LEGACY_BRIEFINGS_FLAG = "--include-legacy-briefings";
 
 const args = new Set(process.argv.slice(2));
 const shouldApply = args.has(APPLY_FLAG);
 const isConfirmed = args.has(CONFIRM_FLAG);
+const includeLegacyBriefings = args.has(LEGACY_BRIEFINGS_FLAG);
 
 const url =
   process.env.SUPABASE_URL ??
@@ -140,12 +146,22 @@ async function countStep(step) {
   return countByIds(step.table, step.ids);
 }
 
-async function deleteByIds(table, ids) {
-  const cleanIds = unique(ids);
+async function deleteStep(step) {
+  if (step.filters) {
+    return requestJson(
+      "DELETE",
+      step.table,
+      step.filters,
+      { select: "id" },
+      "return=representation,count=exact",
+    );
+  }
+
+  const cleanIds = unique(step.ids);
   if (cleanIds.length === 0) return { missing: false, count: 0 };
   return requestJson(
     "DELETE",
-    table,
+    step.table,
     { id: inFilter(cleanIds) },
     { select: "id" },
     "return=representation,count=exact",
@@ -172,6 +188,14 @@ const buPulseRentalContractIds = Array.from({ length: 10 }, (_, i) => {
 });
 
 const purgePlan = [
+  ...(includeLegacyBriefings
+    ? [{
+      table: "morning_briefings",
+      filters: { audience: "is.null" },
+      reason:
+        "legacy pre-audience internal brief rows can contain stale generated pipeline snapshot prose",
+    }]
+    : []),
   {
     table: "crm_hubspot_import_errors",
     ids: flatten(DEMO_IDS.hubspotImportErrors),
@@ -330,6 +354,12 @@ console.log(
 );
 console.log("Protected parts tables are counted only and will not be deleted.");
 
+if (!includeLegacyBriefings) {
+  console.log(
+    `Legacy null-audience morning_briefings are excluded by default; add ${LEGACY_BRIEFINGS_FLAG} to purge them after exporting/reviewing those rows.`,
+  );
+}
+
 console.log("\nPurge candidates:");
 let purgeTotal = 0;
 for (const step of purgePlan) {
@@ -360,14 +390,14 @@ if (!shouldApply) {
     `\nDry run complete. ${purgeTotal} known non-parts seed rows are eligible for deletion; ${protectedTotal} known parts rows are protected.`,
   );
   console.log(
-    `To apply: bun run intellidealer:seed:purge -- ${APPLY_FLAG} ${CONFIRM_FLAG}`,
+    `To apply: bun run intellidealer:seed:purge -- ${APPLY_FLAG} ${CONFIRM_FLAG}${includeLegacyBriefings ? ` ${LEGACY_BRIEFINGS_FLAG}` : ""}`,
   );
   process.exit(0);
 }
 
 console.log("\nDeleting eligible non-parts seed rows:");
 for (const step of purgePlan) {
-  const result = await deleteByIds(step.table, step.ids);
+  const result = await deleteStep(step);
   const suffix = result.missing ? " (table missing; skipped)" : "";
   console.log(`  ${step.table}: ${result.count} deleted${suffix}`);
 }

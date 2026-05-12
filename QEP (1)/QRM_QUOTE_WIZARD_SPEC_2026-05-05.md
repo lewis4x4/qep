@@ -575,3 +575,130 @@ Add to the Section 6 acceptance criteria:
 13. Side-by-side review against IntelliDealer Q02699 shows no missing element. Architect signs off in writing before C3 closes.
 
 ---
+
+## 11. CUSTOMER-FACING PDF REFINEMENTS (2026-05-07 BRIAN PASS)
+
+First-look design feedback from Brian on the rendered draft. These refinements modify Sections 10.x where noted and become required acceptance items for C3 closure.
+
+### 11.1 Typography — bump base size
+
+Body type is too small for comfortable read in the current draft. Scale the entire type system one step up:
+
+- Body: 11pt → **12pt** (Inter)
+- Table cells: 9pt → **10pt** (Inter)
+- Section headers / subheads: scale proportionally (Montserrat ExtraBold)
+- Primary headlines (Bebas Neue / Barlow Condensed Bold) hold or scale up
+- Numbers / KPI (Montserrat Bold) scale up with body
+
+Goal: customer reads the quote on phone or print without zoom.
+
+### 11.2 Drop redundant header text
+
+Remove the metadata line that repeats the quote test name, quote number, and expiry date to the right of the `EQUIPMENT ESTIMATE - NOT AN INVOICE` banner. Quote number and expiry already appear in the top-right metadata box (10.2) and the column header row (10.5). Keep the banner clean and centered. Do not triple-print the same fields.
+
+### 11.3 Prepared by / Rep card — fill the space
+
+Increase font size on the "Prepared by" rep card so it fills its container. Canonical rep card layout (use as the spec):
+
+```
+RYLEE MCKENZIE
+Iron Manager
+
+Mobile:  (386) 292-3743
+Office:  (386) 754-6189
+Email:   rylee@qepusa.com
+```
+
+Type stack on the card:
+- Rep name: Bebas Neue or Barlow Condensed Bold, large
+- Title: Montserrat ExtraBold, mid
+- Contact rows: Inter, bumped from 11.1 base
+
+Card reads at a glance. No wasted whitespace inside the box.
+
+### 11.4 Trade-in — remove comparable market range from customer copy
+
+Strike the ADR-005 "COMPARABLE MARKET RANGE — NOT A GUARANTEED OFFER" block from the customer-facing PDF. The comp range is internal context for the rep, not for the customer.
+
+- Customer PDF: trade allowance line only (already in 10.7).
+- Rep portal "Deal IQ" sidebar (Moonshot M6): comp range renders here.
+- Internal QRM trade detail view: comp range renders here.
+
+This amends Moonshot M4 in the QRM Quote Moonshot Handoff: M4 is rep-facing only.
+
+### 11.5 Misc Charges / Additional Parts / Trade-In — conditional rendering
+
+Empty sections do not render at all. No header, no divider, no body — section is removed and content below pushes up.
+
+Inside Miscellaneous Charges/Credits:
+- Do not pre-print empty `PDI`, `Freight`, `Doc Fee`, `Title`, `Tag`, `Registration` rows.
+- Only render line items the rep actually selected and populated.
+- If zero line items are populated, the entire Misc Charges/Credits section is suppressed.
+
+Same rule for Additional Parts and Trade Ins sections.
+
+This amends parity checklist items 17, 18, and 19 in Section 10.15: empty sections are suppressed.
+
+### 11.6 Totals + Signature — two-column layout
+
+Subtotal/totals block sits in a left column. Customer authorization signature line sits in a right column directly across from it on the same row, vertically aligned. Replaces the single-row authorization layout in 10.10.
+
+Layout:
+
+```
+┌──────────────────────────────────┬──────────────────────────────────┐
+│ Subtotal:           XXX,XXX.XX   │                                  │
+│ Florida State 6.00%:    X,XXX.XX │  Authorization:                  │
+│ COLUMBIA COUNTY:           XX.XX │  ______________________________  │
+│ Quote Total:        XXX,XXX.XX   │  Date: _____________             │
+└──────────────────────────────────┴──────────────────────────────────┘
+```
+
+This amends parity checklist item 23 in Section 10.15: signature line moves to right-column position.
+
+### 11.7 Financing box — payment is the hero
+
+The monthly payment is the largest, boldest text in the financing block. Customer's eye lands on the payment first. In current market conditions Brian is pushing payment-first selling — the PDF reinforces that.
+
+Apply across:
+- Single-payment display: monthly payment renders in Montserrat Bold at headline scale. Term, rate, total of payments, APR attribution, and TILA disclaimer all sit below at standard body size.
+- Multi-term comparison grid (10.13): the `$Payment` row uses Montserrat Bold at a larger size than the `Months` and `%Rate` rows.
+
+ADR-006 TILA disclaimer still renders on every payment-math surface. Verbatim financing disclaimer from 10.12 still prints. The bolding is on the number — the legal text holds its standard size.
+
+### 11.8 One-page priority
+
+Default target: single page. The generator collapses empty sections (per 11.5) and tightens vertical spacing to keep simple quotes on one page.
+
+- Single-unit quote, no trade, no parts, no misc → MUST render on one page.
+- Multi-unit with parts, trade, and financing comparison → 2–3 pages acceptable.
+- Page break rules:
+  - Cover (letterhead + customer block + equipment header) stays intact.
+  - Each equipment line's spec list stays intact — no orphan section headers.
+  - Totals + Signature block, Comments box, and Financing Options grid MUST stay together on the same page. If they would split across pages, push the whole block to the next page rather than orphan.
+  - Repeating header/footer prints on every page regardless of count.
+
+### 11.9 Section 10 parity checklist amendments
+
+- Item 17 (Trade Ins section): renders only when populated. Empty = suppressed.
+- Item 18 (Additional Parts section): renders only when populated. Empty = suppressed.
+- Item 19 (Misc Charges/Credits section): renders only when populated. Empty = suppressed.
+- Item 23 (Authorization signature line): moves to right-column position across from the totals block per 11.6.
+
+### 11.10 Moonshot handoff amendments
+
+These refinements modify the QRM Quote Moonshot Handoff (`QRM_QUOTE_MOONSHOT_HANDOFF_2026-05-07.md`):
+
+- **M4 (Trade-in market context)**: rep-facing only. Removed from customer-facing PDF and customer acceptance page. Renders on the M6 Deal IQ sidebar and the internal QRM trade detail view.
+- **M3 (Financing comparison)**: payment column is the hero — bold, large, leads the customer's eye per 11.7.
+- New moonshot move **M11 — One-page priority** is added per 11.8.
+
+### 11.11 Acceptance addition to Section 6 (continued)
+
+14. PDF renders single-unit, no-trade, no-parts, no-misc quote on exactly one page including letterhead, customer, equipment, totals, signature, financing options, comments, and footer.
+15. Monthly payment is the largest/boldest typographic element in the financing block on every quote that includes a financing scenario.
+16. Empty Misc Charges/Credits, Additional Parts, and Trade Ins sections produce zero rendered output (no header, no divider, no body).
+17. Customer-facing PDF contains no comparable market range / ADR-005 internal context text.
+18. Rep card renders the canonical layout in 11.3 with the contact rows visible and readable at body scale.
+
+---
