@@ -243,6 +243,7 @@ type QrmBellRow = {
   title: string;
   body: string | null;
   deal_id: string | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
   read_at: string | null;
 };
@@ -291,7 +292,7 @@ function useTopBarBell(profileId: string) {
           .is("read_at", null),
         supabase
           .from("crm_in_app_notifications")
-          .select("id, title, body, deal_id, created_at, read_at")
+          .select("id, title, body, deal_id, metadata, created_at, read_at")
           .eq("user_id", profileId)
           .order("created_at", { ascending: false })
           .limit(20),
@@ -917,34 +918,44 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-80 max-h-[min(70vh,420px)] overflow-y-auto">
               <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-                Follow-up alerts
+                Notifications
                 {crmUnread > 0 ? (
                   <span className="ml-2 text-qep-orange tabular-nums">({crmUnread} unread)</span>
                 ) : null}
               </DropdownMenuLabel>
               {crmRows.length === 0 ? (
-                <p className="px-2 pb-2 text-xs text-muted-foreground">No follow-up notifications.</p>
+                <p className="px-2 pb-2 text-xs text-muted-foreground">No notifications.</p>
               ) : (
-                crmRows.map((row) => (
-                  <DropdownMenuItem
-                    key={row.id}
-                    className="flex cursor-pointer flex-col items-start gap-0.5 py-2"
-                    disabled={!row.deal_id}
-                    onClick={() => {
-                      if (!row.deal_id) return;
-                      void markCrmNotificationRead(row.id);
-                      navigate(`/qrm/deals/${row.deal_id}`);
-                    }}
-                  >
-                    <span className="text-sm font-medium text-foreground">{row.title}</span>
-                    {row.body ? (
-                      <span className="line-clamp-2 text-xs text-muted-foreground">{row.body}</span>
-                    ) : null}
-                    <span className="text-[10px] text-muted-foreground">
-                      {row.read_at ? "Read" : "Unread — opens deal"}
-                    </span>
-                  </DropdownMenuItem>
-                ))
+                crmRows.map((row) => {
+                  const metadataLink = row.metadata?.link;
+                  const hasLink = typeof metadataLink === "string" && metadataLink.length > 0;
+                  const canNavigate = hasLink || !!row.deal_id;
+
+                  return (
+                    <DropdownMenuItem
+                      key={row.id}
+                      className="flex cursor-pointer flex-col items-start gap-0.5 py-2"
+                      disabled={!canNavigate}
+                      onClick={() => {
+                        if (!canNavigate) return;
+                        void markCrmNotificationRead(row.id);
+                        if (hasLink) {
+                          navigate(metadataLink);
+                        } else if (row.deal_id) {
+                          navigate(`/qrm/deals/${row.deal_id}`);
+                        }
+                      }}
+                    >
+                      <span className="text-sm font-medium text-foreground">{row.title}</span>
+                      {row.body ? (
+                        <span className="line-clamp-2 text-xs text-muted-foreground">{row.body}</span>
+                      ) : null}
+                      <span className="text-[10px] text-muted-foreground">
+                        {row.read_at ? "Read" : (hasLink ? "Unread — opens link" : "Unread — opens deal")}
+                      </span>
+                    </DropdownMenuItem>
+                  );
+                })
               )}
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">

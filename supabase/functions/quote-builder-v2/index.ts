@@ -2221,6 +2221,37 @@ async function ensureQuoteApprovalWorkflow(
   return String(created.id);
 }
 
+type QuoteApprovalNotificationRecipient = {
+  id: string;
+  fullName: string | null;
+  email: string | null;
+  role: string | null;
+};
+
+type QuoteApprovalNotificationContext = {
+  workspaceId: string;
+  approvalCaseId: string;
+  flowApprovalId: string;
+  quotePackageId: string;
+  quotePackageVersionId: string;
+  versionNumber: number;
+  dealId: string | null;
+  quoteNumber: string | null;
+  customerLabel: string;
+  branchName: string;
+  routeMode: QuoteApprovalRouteMode;
+  assignedRole: string | null;
+  netTotal: number | null;
+  marginPct: number | null;
+  submittedByName: string | null;
+};
+
+type QuoteApprovalNotificationRoute = {
+  assignedTo: string | null;
+  assignedRole: string | null;
+  routeMode: QuoteApprovalRouteMode;
+};
+
 async function resolveQuoteApprovalAssignee(input: {
   // deno-lint-ignore no-explicit-any
   admin: any;
@@ -2359,6 +2390,259 @@ async function resolveQuoteApprovalAssignee(input: {
     assignedRole: input.ownerEscalationRole,
     routeMode: input.ownerEscalationRole === "admin" ? "admin_queue" : "owner_queue",
   };
+}
+
+function isQuoteApprovalDemoEmail(email: string | null | undefined): boolean {
+  const normalized = typeof email === "string" ? email.trim().toLowerCase() : "";
+  return normalized.endsWith("@qep-demo.local") || normalized.endsWith("@example.com");
+}
+
+function toQuoteApprovalNotificationRecipient(profile: Record<string, unknown>): QuoteApprovalNotificationRecipient | null {
+  const id = typeof profile.id === "string" ? profile.id : null;
+  if (!id) return null;
+  const role = typeof profile.role === "string" ? profile.role : null;
+  const email = typeof profile.email === "string" && profile.email.trim().length > 0 ? profile.email.trim() : null;
+  return {
+    id,
+    fullName: typeof profile.full_name === "string" && profile.full_name.trim().length > 0 ? profile.full_name.trim() : null,
+    email,
+    role,
+  };
+}
+
+async function resolveQuoteApprovalNotificationRecipients(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  workspaceId: string;
+  approvalRoute: QuoteApprovalNotificationRoute;
+}): Promise<QuoteApprovalNotificationRecipient[]> {
+  const allowedDirectRoles = ["manager", "admin", "owner"];
+
+  if (input.approvalRoute.assignedTo) {
+    const { data: profile, error } = await input.admin
+      .from("profiles")
+      .select("id, full_name, email, role, is_active")
+      .eq("id", input.approvalRoute.assignedTo)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("quote approval notification recipient lookup failed:", error);
+      return [];
+    }
+
+    const role = typeof profile?.role === "string" ? profile.role : "";
+    if (!profile?.id || profile.is_active !== true || !allowedDirectRoles.includes(role) || isQuoteApprovalDemoEmail(profile.email)) {
+      console.warn("quote approval notification skipped: resolved assignee is not a notifyable real manager/admin/owner", {
+        assignedTo: input.approvalRoute.assignedTo,
+        routeMode: input.approvalRoute.routeMode,
+      });
+      return [];
+    }
+
+    const recipient = toQuoteApprovalNotificationRecipient(profile as Record<string, unknown>);
+    return recipient ? [recipient] : [];
+  }
+
+  if (!input.approvalRoute.assignedRole) {
+    console.warn("quote approval notification skipped: approval route has no assigned user or role", {
+      routeMode: input.approvalRoute.routeMode,
+    });
+    return [];
+  }
+
+  const roleCandidates = input.approvalRoute.assignedRole === "manager"
+    ? ["manager"]
+    : input.approvalRoute.assignedRole === "owner"
+      ? ["owner", "admin"]
+      : input.approvalRoute.assignedRole === "admin"
+        ? ["admin", "owner"]
+        : [];
+
+  if (roleCandidates.length === 0) {
+    console.warn("quote approval notification skipped: unsupported assigned role", {
+      assignedRole: input.approvalRoute.assignedRole,
+      routeMode: input.approvalRoute.routeMode,
+    });
+    return [];
+  }
+
+  const { data: profiles, error } = await input.admin
+    .from("profiles")
+    .select("id, full_name, email, role, is_active, active_workspace_id")
+    .eq("active_workspace_id", input.workspaceId)
+    .eq("is_active", true)
+    .in("role", roleCandidates)
+    .limit(100);
+
+  if (error) {
+    console.warn("quote approval notification queue recipient lookup failed:", error);
+    return [];
+  }
+
+  const recipients = new Map<string, QuoteApprovalNotificationRecipient>();
+  for (const profile of profiles ?? []) {
+    if (isQuoteApprovalDemoEmail(profile.email)) continue;
+    const recipient = toQuoteApprovalNotificationRecipient(profile as Record<string, unknown>);
+    if (recipient) recipients.set(recipient.id, recipient);
+  }
+
+  if (recipients.size === 0) {
+    console.warn("quote approval notification skipped: no active recipients found for role queue", {
+      workspaceId: input.workspaceId,
+      assignedRole: input.approvalRoute.assignedRole,
+      routeMode: input.approvalRoute.routeMode,
+    });
+  }
+
+  return [...recipients.values()];
+}
+
+function quoteApprovalAmountLabel(value: number | null): string | null {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? `$${Math.round(amount).toLocaleString("en-US")}` : null;
+}
+
+function quoteApprovalMarginLabel(value: number | null): string | null {
+  const margin = Number(value);
+  return Number.isFinite(margin) ? `${margin.toFixed(1)}% margin` : null;
+}
+
+function buildQuoteApprovalNotificationBody(context: QuoteApprovalNotificationContext): string {
+  const quoteLabel = context.quoteNumber ? `Quote ${context.quoteNumber}` : context.customerLabel;
+  const metrics = [quoteApprovalAmountLabel(context.netTotal), quoteApprovalMarginLabel(context.marginPct)].filter(Boolean).join(" · ");
+  const submittedBy = context.submittedByName ? ` Submitted by ${context.submittedByName}.` : "";
+  return `${quoteLabel} requires approval before it can be sent to the customer.${metrics ? ` ${metrics}.` : ""} Routed through ${context.branchName}.${submittedBy}`;
+}
+
+function quoteApprovalAppUrl(): string {
+  const base = Deno.env.get("APP_BASE_URL") ?? Deno.env.get("PUBLIC_APP_URL") ?? Deno.env.get("SITE_URL") ?? "https://qualityequipmentparts.netlify.app";
+  return `${base.replace(/\/+$/, "")}/qrm/command/approvals`;
+}
+
+function isUniqueConstraintError(error: { code?: string; message?: string } | null | undefined): boolean {
+  return error?.code === "23505" || Boolean(error?.message?.toLowerCase().includes("duplicate key"));
+}
+
+async function insertQuoteApprovalBellNotification(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  recipient: QuoteApprovalNotificationRecipient,
+  context: QuoteApprovalNotificationContext,
+): Promise<"inserted" | "duplicate" | "error"> {
+  try {
+    const { data: existing, error: existingErr } = await admin
+      .from("crm_in_app_notifications")
+      .select("id")
+      .eq("user_id", recipient.id)
+      .eq("kind", "quote_approval_pending")
+      .eq("metadata->>quote_approval_case_id", context.approvalCaseId)
+      .maybeSingle();
+
+    if (existing?.id) return "duplicate";
+    if (existingErr) {
+      console.warn("quote approval notification duplicate check failed; attempting insert:", existingErr);
+    }
+
+    const { error } = await admin
+      .from("crm_in_app_notifications")
+      .insert({
+        workspace_id: context.workspaceId,
+        user_id: recipient.id,
+        kind: "quote_approval_pending",
+        title: "Quote approval required",
+        body: buildQuoteApprovalNotificationBody(context),
+        deal_id: context.dealId,
+        metadata: {
+          type: "quote_approval_pending",
+          link: "/qrm/command/approvals",
+          approval_center_path: "/qrm/command/approvals",
+          quote_approval_case_id: context.approvalCaseId,
+          flow_approval_id: context.flowApprovalId,
+          quote_package_id: context.quotePackageId,
+          quote_package_version_id: context.quotePackageVersionId,
+          version_number: context.versionNumber,
+          quote_number: context.quoteNumber,
+          route_mode: context.routeMode,
+          assigned_role: context.assignedRole,
+          branch_name: context.branchName,
+        },
+      });
+
+    if (isUniqueConstraintError(error)) return "duplicate";
+    if (error) {
+      console.warn("quote approval notification insert failed:", error);
+      return "error";
+    }
+    return "inserted";
+  } catch (error) {
+    console.warn("quote approval notification insert threw:", error);
+    return "error";
+  }
+}
+
+async function sendQuoteApprovalEmail(
+  recipient: QuoteApprovalNotificationRecipient,
+  context: QuoteApprovalNotificationContext,
+): Promise<"sent" | "skipped" | "error"> {
+  if (!recipient.email || !recipient.email.includes("@") || isQuoteApprovalDemoEmail(recipient.email)) return "skipped";
+  const firstName = recipient.fullName?.split(/\s+/)[0] ?? "there";
+  const quoteLabel = context.quoteNumber ? `Quote ${context.quoteNumber}` : context.customerLabel;
+  const metrics = [quoteApprovalAmountLabel(context.netTotal), quoteApprovalMarginLabel(context.marginPct)].filter(Boolean).join(" · ");
+  const approvalUrl = quoteApprovalAppUrl();
+
+  try {
+    const result = await sendResendEmail({
+      to: recipient.email,
+      subject: `[QEP OS] Quote approval required — ${quoteLabel}`,
+      timeoutMs: 4000,
+      text: [
+        `Hi ${firstName},`,
+        "",
+        `${quoteLabel} has been submitted for approval and cannot be sent to the customer until it is approved.`,
+        metrics ? `Financial snapshot: ${metrics}.` : null,
+        `Branch / route: ${context.branchName} · ${context.routeMode}${context.assignedRole ? ` (${context.assignedRole} queue)` : ""}.`,
+        context.submittedByName ? `Submitted by: ${context.submittedByName}.` : null,
+        "",
+        `Open the Approval Center: ${approvalUrl}`,
+      ].filter((line): line is string => typeof line === "string").join("\n"),
+    });
+    if (result.skipped) return "skipped";
+    if (!result.ok) {
+      console.warn("quote approval notification email returned non-ok response", { recipientId: recipient.id });
+      return "error";
+    }
+    return "sent";
+  } catch (error) {
+    console.warn("quote approval notification email failed:", error);
+    return "error";
+  }
+}
+
+async function notifyQuoteApprovalSubmitted(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  context: QuoteApprovalNotificationContext,
+  approvalRoute: QuoteApprovalNotificationRoute,
+): Promise<void> {
+  try {
+    const recipients = await resolveQuoteApprovalNotificationRecipients({
+      admin,
+      workspaceId: context.workspaceId,
+      approvalRoute,
+    });
+
+    await Promise.all(recipients.map(async (recipient) => {
+      try {
+        const bellResult = await insertQuoteApprovalBellNotification(admin, recipient, context);
+        if (bellResult === "duplicate") return;
+        await sendQuoteApprovalEmail(recipient, context);
+      } catch (error) {
+        console.warn("quote approval notification recipient dispatch failed:", error);
+      }
+    }));
+  } catch (error) {
+    console.warn("quote approval notification dispatch failed:", error);
+  }
 }
 
 function defaultQuoteApprovalPolicy(workspaceId: string): QuoteApprovalPolicy {
@@ -5299,6 +5583,28 @@ Deno.serve(async (req) => {
           .eq("id", runRow.id);
         return safeJsonError(approvalCaseErr?.message ?? "Failed to create quote approval case", 500, origin);
       }
+
+      await notifyQuoteApprovalSubmitted(
+        admin,
+        {
+          workspaceId: pkgRow.workspace_id || "default",
+          approvalCaseId: String(approvalCase.id),
+          flowApprovalId: String(approvalId),
+          quotePackageId: pkgRow.id,
+          quotePackageVersionId: latestVersion.id,
+          versionNumber: latestVersion.versionNumber,
+          dealId: pkgRow.deal_id ?? null,
+          quoteNumber: pkgRow.quote_number,
+          customerLabel,
+          branchName: approvalRoute.branchName,
+          routeMode: approvalRoute.routeMode,
+          assignedRole: approvalRoute.assignedRole,
+          netTotal: pkgRow.net_total,
+          marginPct: pkgRow.margin_pct,
+          submittedByName: typeof submitterProfile?.full_name === "string" ? submitterProfile.full_name : null,
+        },
+        approvalRoute,
+      );
 
       const { error: statusErr } = await supabase
         .from("quote_packages")

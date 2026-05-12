@@ -5,6 +5,7 @@ export async function sendResendEmail(opts: {
   to: string;
   subject: string;
   text: string;
+  timeoutMs?: number;
 }): Promise<{ ok: boolean; skipped: boolean }> {
   const key = Deno.env.get("RESEND_API_KEY");
   const from = Deno.env.get("RESEND_FROM") ?? "QEP Service <onboarding@resend.dev>";
@@ -17,6 +18,7 @@ export async function sendResendEmail(opts: {
       Authorization: `Bearer ${key}`,
       "Content-Type": "application/json",
     },
+    ...(opts.timeoutMs ? { signal: AbortSignal.timeout(opts.timeoutMs) } : {}),
     body: JSON.stringify({
       from,
       to: [opts.to.trim()],
