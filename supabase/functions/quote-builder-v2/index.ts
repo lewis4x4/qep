@@ -2656,6 +2656,10 @@ function defaultQuoteApprovalPolicy(workspaceId: string): QuoteApprovalPolicy {
     submitSlaHours: 24,
     escalationSlaHours: 48,
     ownerEscalationRole: "owner",
+    // QEP has historically forced approvals to owner/admin; keep that as
+    // the default so workspaces that never edit the policy stay on the
+    // path the edge function used to hard-pin.
+    authorityBand: "owner_admin",
     namedBranchSalesManagerPrimary: true,
     namedBranchGeneralManagerFallback: true,
     allowedConditionTypes: [
@@ -2695,6 +2699,7 @@ async function loadQuoteApprovalPolicy(input: {
     submitSlaHours: Number(data.submit_sla_hours ?? defaultPolicy.submitSlaHours),
     escalationSlaHours: Number(data.escalation_sla_hours ?? defaultPolicy.escalationSlaHours),
     ownerEscalationRole: data.owner_escalation_role === "admin" ? "admin" : "owner",
+    authorityBand: data.authority_band === "branch_manager" ? "branch_manager" : "owner_admin",
     namedBranchSalesManagerPrimary: data.named_branch_sales_manager_primary !== false,
     namedBranchGeneralManagerFallback: data.named_branch_general_manager_fallback !== false,
     allowedConditionTypes: Array.isArray(data.allowed_condition_types)
@@ -5417,18 +5422,24 @@ Deno.serve(async (req) => {
         workspaceId: pkgRow.workspace_id || "default",
       });
       // QEP requires every quote to land in front of the owners (Ryan +
-      // Rylee McKenzie). The branch-manager tier is retained in code
-      // for other tenants' policies, but for QEP we force the authority
-      // band to owner_admin on every submission. This bypasses the
-      // branch_sales_manager and branch_general_manager resolution
-      // paths entirely — the route always lands on an owner/admin.
-      const _computedAuthorityBand = resolveQuoteApprovalAuthorityBand({
-        marginPct: pkgRow.margin_pct,
-        amount: pkgRow.net_total,
-        policy,
-      });
-      const authorityBand: "branch_manager" | "owner_admin" = "owner_admin";
-      void _computedAuthorityBand; // keep the function call for future tenants
+      // Policy.authorityBand (Flow Admin → Quote approval policy, persisted on
+      // quote_approval_policies.authority_band) decides which routing path runs.
+      //   - "owner_admin"   → notifications go to active workspace owners/admins
+      //     (today's QEP default; matches the legacy hard-pin).
+      //   - "branch_manager" → resolveQuoteApprovalAuthorityBand decides per quote
+      //     based on margin/amount thresholds, and the resolver walks branch
+      //     sales manager → branch GM → manager queue.
+      // Keeping resolveQuoteApprovalAuthorityBand in the branch_manager branch
+      // preserves the margin/amount gating that escalates oversized deals to
+      // owners even when the band is otherwise branch-managed.
+      const authorityBand: "branch_manager" | "owner_admin" =
+        policy.authorityBand === "branch_manager"
+          ? resolveQuoteApprovalAuthorityBand({
+              marginPct: pkgRow.margin_pct,
+              amount: pkgRow.net_total,
+              policy,
+            })
+          : "owner_admin";
       const approvalRoute = await resolveQuoteApprovalAssignee({
         admin,
         workspaceId: pkgRow.workspace_id || "default",
@@ -5656,6 +5667,11 @@ Deno.serve(async (req) => {
         submitSlaHours: Number(body.submit_sla_hours ?? existing.submitSlaHours) || existing.submitSlaHours,
         escalationSlaHours: Number(body.escalation_sla_hours ?? existing.escalationSlaHours) || existing.escalationSlaHours,
         ownerEscalationRole: body.owner_escalation_role === "admin" ? "admin" : existing.ownerEscalationRole,
+        authorityBand: body.authority_band === "branch_manager"
+          ? "branch_manager"
+          : body.authority_band === "owner_admin"
+            ? "owner_admin"
+            : existing.authorityBand,
         namedBranchSalesManagerPrimary: body.named_branch_sales_manager_primary == null
           ? existing.namedBranchSalesManagerPrimary
           : body.named_branch_sales_manager_primary === true,
@@ -5679,6 +5695,7 @@ Deno.serve(async (req) => {
           submit_sla_hours: nextPolicy.submitSlaHours,
           escalation_sla_hours: nextPolicy.escalationSlaHours,
           owner_escalation_role: nextPolicy.ownerEscalationRole,
+          authority_band: nextPolicy.authorityBand,
           named_branch_sales_manager_primary: nextPolicy.namedBranchSalesManagerPrimary,
           named_branch_general_manager_fallback: nextPolicy.namedBranchGeneralManagerFallback,
           allowed_condition_types: nextPolicy.allowedConditionTypes,

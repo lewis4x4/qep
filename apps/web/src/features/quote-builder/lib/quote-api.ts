@@ -517,6 +517,9 @@ export function normalizeQuoteApprovalPolicy(value: unknown): QuoteApprovalPolic
     ownerEscalationRole: record.ownerEscalationRole === "admin" || record.owner_escalation_role === "admin"
       ? "admin"
       : "owner",
+    authorityBand: record.authorityBand === "branch_manager" || record.authority_band === "branch_manager"
+      ? "branch_manager"
+      : "owner_admin",
     namedBranchSalesManagerPrimary: record.namedBranchSalesManagerPrimary === true || record.named_branch_sales_manager_primary === true,
     namedBranchGeneralManagerFallback: record.namedBranchGeneralManagerFallback === true || record.named_branch_general_manager_fallback === true,
     allowedConditionTypes: allowed.map((item) => normalizeApprovalConditionType(item)),
@@ -1548,6 +1551,7 @@ export async function saveQuoteApprovalPolicy(policy: Partial<QuoteApprovalPolic
       submit_sla_hours: policy.submitSlaHours,
       escalation_sla_hours: policy.escalationSlaHours,
       owner_escalation_role: policy.ownerEscalationRole,
+      authority_band: policy.authorityBand,
       named_branch_sales_manager_primary: policy.namedBranchSalesManagerPrimary,
       named_branch_general_manager_fallback: policy.namedBranchGeneralManagerFallback,
       allowed_condition_types: policy.allowedConditionTypes,

@@ -744,6 +744,31 @@ export function FlowAdminPage() {
                   <option value="admin">Admin</option>
                 </select>
               </label>
+              <label className="block space-y-1 sm:col-span-2">
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Approval routing band
+                </span>
+                <select
+                  value={quotePolicyDraft.authorityBand}
+                  onChange={(event) => setQuotePolicyDraft((current) => current ? {
+                    ...current,
+                    authorityBand: event.target.value === "branch_manager" ? "branch_manager" : "owner_admin",
+                  } : current)}
+                  className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="owner_admin">
+                    Owner / Admin — every submission routes to a workspace owner or admin
+                  </option>
+                  <option value="branch_manager">
+                    Branch Manager — route through branch sales manager → branch GM → manager queue
+                  </option>
+                </select>
+                <span className="block text-[11px] text-muted-foreground">
+                  {quotePolicyDraft.authorityBand === "branch_manager"
+                    ? "Margin/amount thresholds above still escalate oversized deals to owners. Make sure each active branch has a Sales Manager and General Manager assigned in Admin → Branches."
+                    : "Notifications fire to active owners/admins in this workspace. Demo emails (@qep-demo.local, @example.com) are filtered automatically."}
+                </span>
+              </label>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">

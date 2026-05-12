@@ -19,6 +19,7 @@ const policy: QuoteApprovalPolicy = {
   submitSlaHours: 24,
   escalationSlaHours: 48,
   ownerEscalationRole: "owner",
+  authorityBand: "branch_manager",
   namedBranchSalesManagerPrimary: true,
   namedBranchGeneralManagerFallback: true,
   allowedConditionTypes: [

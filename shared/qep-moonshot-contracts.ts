@@ -314,6 +314,16 @@ export interface QuoteApprovalPolicy {
   submitSlaHours: number;
   escalationSlaHours: number;
   ownerEscalationRole: "owner" | "admin";
+  /**
+   * Drives which resolver path the edge function uses on submission.
+   * - "owner_admin": route notifications to active workspace owners/admins.
+   * - "branch_manager": route through branch sales manager → branch general
+   *   manager → manager-role queue, with margin/amount gating.
+   *
+   * Persisted on quote_approval_policies.authority_band (migration 555);
+   * configurable from Flow Admin → Quote approval policy.
+   */
+  authorityBand: "branch_manager" | "owner_admin";
   namedBranchSalesManagerPrimary: boolean;
   namedBranchGeneralManagerFallback: boolean;
   allowedConditionTypes: QuoteApprovalConditionType[];

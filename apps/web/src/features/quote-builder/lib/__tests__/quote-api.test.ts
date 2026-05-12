@@ -686,12 +686,23 @@ describe("quote approval normalizers", () => {
     expect(policy.branchManagerMinMarginPct).toBe(9.5);
     expect(policy.branchManagerMaxQuoteAmount).toBe(250000);
     expect(policy.ownerEscalationRole).toBe("admin");
+    // Omitted authority_band falls back to the safe legacy default so
+    // policies written before migration 555 keep their behaviour.
+    expect(policy.authorityBand).toBe("owner_admin");
     expect(policy.allowedConditionTypes).toEqual([
       "required_cash_down",
       "min_margin_pct",
       "expiry_hours",
     ]);
     expect(policy.updatedBy).toBe("admin-1");
+  });
+
+  test("normalizes authority_band override into the camelCase contract", () => {
+    const policy = normalizeQuoteApprovalPolicy({
+      workspace_id: "workspace-2",
+      authority_band: "branch_manager",
+    });
+    expect(policy.authorityBand).toBe("branch_manager");
   });
 });
 
