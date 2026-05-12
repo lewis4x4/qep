@@ -51,8 +51,20 @@ Voice: direct, operational, shop-floor useful. No hype. No AI language. No bulle
 Rules:
 - Exactly one sentence, maximum 28 words.
 - Ground the sentence in the snapshot. If the snapshot is thin, say what queue or signal is ready instead of inventing facts.
-- Use QEP's wording: approvals, stale deals, parts orders, service tickets, inventory, supplier health.
+- Use only the work terms appropriate for the supplied Iron role guidance.
 - Never mention "dashboard", "preview", "Claude", "AI", or "data unavailable".`;
+
+const ROLE_NARRATIVE_GUIDANCE: Record<string, string> = {
+  iron_owner: "Owner: business health, revenue pace, at-risk customers, and operating queues.",
+  iron_manager: "Sales manager: approvals, stale deals, rep pipeline pressure, forecast, and coaching moves.",
+  iron_advisor: "Sales advisor: only active deals, quotes, follow-ups, lead response, customer visits, decision-stage pressure, and the next sales action. Do not mention parts, inventory, stockouts, service tickets/jobs, supplier health, dead capital, or rentals.",
+  iron_woman: "Deal desk / admin: deposits, credit applications, invoice blockers, order processing, and approvals.",
+  iron_man: "Service operations: open service tickets, prep, PDI, demos, parts blockers, and delivery readiness.",
+  iron_parts_counter: "Parts counter: serial lookup, counter inquiries, quote drafts, and open parts orders.",
+  iron_parts_manager: "Parts manager: demand, inventory, replenishment, open parts orders, lost sales, and supplier health.",
+};
+
+const ADVISOR_OPS_TERMS = /\b(parts?|stockouts?|inventory|replenish(?:ment)?|reorder|supplier|dead capital|service tickets?|service jobs?|work orders?|rentals?)\b/i;
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
@@ -80,7 +92,7 @@ Deno.serve(async (req) => {
 
     if (!refresh) {
       const cached = await loadFreshCache(service, workspaceId, ironRole);
-      if (cached) {
+      if (cached && isNarrativeRelevantForRole(ironRole, cached.narrative_text)) {
         return safeJsonOk({
           narrative_text: cached.narrative_text,
           generated_at: cached.generated_at,
@@ -92,7 +104,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    const snapshot = await buildSnapshot(service, workspaceId, ironRole);
+    const snapshot = await buildSnapshot(service, workspaceId, ironRole, auth.userId);
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     const generatedAt = new Date();
     const expiresAt = new Date(generatedAt.getTime() + CACHE_TTL_MS);
@@ -105,10 +117,15 @@ Deno.serve(async (req) => {
     if (anthropicKey) {
       try {
         const generated = await callClaude(anthropicKey, ironRole, snapshot);
-        if (generated) {
+        if (generated && isNarrativeRelevantForRole(ironRole, generated)) {
           text = generated;
           fallback = false;
           model = MODEL;
+        } else if (generated) {
+          errorSnapshot = {
+            message: "Generated narrative failed role relevance policy",
+            at: generatedAt.toISOString(),
+          };
         }
       } catch (error) {
         errorSnapshot = {
@@ -195,7 +212,41 @@ async function buildSnapshot(
   supabase: SupabaseClient,
   workspaceId: string,
   ironRole: string,
+  userId: string,
 ): Promise<Record<string, unknown>> {
+  if (ironRole === "iron_advisor") {
+    const [deals, followUps, quotes] = await Promise.allSettled([
+      supabase
+        .from("qrm_deals")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId)
+        .eq("assigned_rep_id", userId)
+        .is("deleted_at", null)
+        .is("closed_at", null),
+      supabase
+        .from("follow_up_touchpoints")
+        .select("id, cadence:follow_up_cadences!inner(assigned_to)", { count: "exact", head: true })
+        .in("status", ["pending", "scheduled"])
+        .eq("cadence.assigned_to", userId),
+      supabase
+        .from("quote_packages")
+        .select("id", { count: "exact", head: true })
+        .eq("created_by", userId)
+        .not("status", "in", '("archived","converted_to_deal")'),
+    ]);
+
+    return {
+      workspace_id: workspaceId,
+      iron_role: ironRole,
+      generated_at: new Date().toISOString(),
+      advisor_sales: {
+        active_deal_count: settledCount(deals),
+        open_follow_up_count: settledCount(followUps),
+        active_quote_count: settledCount(quotes),
+      },
+    };
+  }
+
   const [summary, events, invoices, serviceJobs, partsOrders] = await Promise.allSettled([
     supabase.rpc("owner_dashboard_summary", { p_workspace: workspaceId }),
     supabase.rpc("owner_event_feed", { p_workspace: workspaceId, p_hours_back: 24 }),
@@ -245,6 +296,11 @@ function deterministicNarrative(ironRole: string, snapshot: Record<string, unkno
   const partsOrders = snapshot.open_parts_order_count as number | null;
   const serviceTickets = snapshot.open_service_ticket_count as number | null;
   const invoices = snapshot.pending_invoice_count as number | null;
+  const advisorSales = snapshot.advisor_sales as {
+    active_deal_count?: number | null;
+    open_follow_up_count?: number | null;
+    active_quote_count?: number | null;
+  } | null;
 
   switch (ironRole) {
     case "iron_owner":
@@ -254,6 +310,9 @@ function deterministicNarrative(ironRole: string, snapshot: Record<string, unkno
     case "iron_manager":
       return `${invoices ?? 0} invoice blockers, ${serviceTickets ?? 0} open service tickets, and stale deal pressure are staged for review.`;
     case "iron_advisor":
+      if (advisorSales) {
+        return `${advisorSales.active_quote_count ?? 0} active quotes, ${advisorSales.open_follow_up_count ?? 0} follow-ups, and ${advisorSales.active_deal_count ?? 0} open deals are staged for the next sales move.`;
+      }
       return "Your active deals, follow-ups, and quote signals are staged by urgency so the first useful move is visible.";
     case "iron_woman":
       return `${invoices ?? 0} invoice rows and the office blockers behind open deals are ready to clear.`;
@@ -288,7 +347,7 @@ async function callClaude(
       messages: [
         {
           role: "user",
-          content: `Iron role: ${ironRole}\nSnapshot:\n${JSON.stringify(snapshot, null, 2)}\n\nWrite the one sentence.`,
+          content: `Iron role: ${ironRole}\nRole guidance: ${ROLE_NARRATIVE_GUIDANCE[ironRole] ?? "Use only role-appropriate work."}\nSnapshot:\n${JSON.stringify(snapshot, null, 2)}\n\nWrite the one sentence.`,
         },
       ],
     }),
@@ -306,4 +365,10 @@ async function callClaude(
     .trim();
   if (!text) throw new Error("anthropic returned empty narrative");
   return text.split(/\n/)[0].slice(0, 220);
+}
+
+function isNarrativeRelevantForRole(ironRole: string, narrative: string): boolean {
+  if (!narrative.trim()) return false;
+  if (ironRole === "iron_advisor") return !ADVISOR_OPS_TERMS.test(narrative);
+  return true;
 }

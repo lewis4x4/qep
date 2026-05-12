@@ -249,9 +249,9 @@ export function FloorPage({
               ? narrative.text
               : "Your role home is loading the current workspace signals."}
           </p>
-          {narrative.model ? (
+          {narrative.generatedAt && narrative.fresh ? (
             <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Last 24h · {narrative.model}
+              Last 24h
             </p>
           ) : null}
         </section>

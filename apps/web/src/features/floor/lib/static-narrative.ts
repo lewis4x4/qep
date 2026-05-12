@@ -23,3 +23,20 @@ export function buildStaticNarrative(role: IronRole, firstName: string): string 
       return `${greeting}stock health, demand, and supplier pressure are grouped for review.`;
   }
 }
+
+const ADVISOR_OPS_TERMS = /\b(parts?|stockouts?|inventory|replenish(?:ment)?|reorder|supplier|dead capital|service tickets?|service jobs?|work orders?|rentals?)\b/i;
+
+/**
+ * Guardrail for cached/generated Floor copy. The edge function can return a
+ * stale cached sentence, so the role home keeps a local policy check before
+ * showing generated text to the employee.
+ */
+export function isNarrativeRelevantForRole(role: IronRole, narrative: string): boolean {
+  if (!narrative.trim()) return false;
+
+  if (role === "iron_advisor") {
+    return !ADVISOR_OPS_TERMS.test(narrative);
+  }
+
+  return true;
+}
