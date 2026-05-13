@@ -2,10 +2,7 @@ import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import {
-  resolveVoiceRealtimeModelConfig,
-  VOICE_TRANSCRIPTION_DOMAIN_PROMPT,
-} from "../_shared/voice-model-config.ts";
+import { resolveVoiceRealtimeModelConfig } from "../_shared/voice-model-config.ts";
 
 type RealtimeSessionRequest = {
   language?: string | null;
@@ -92,7 +89,6 @@ async function createRealtimeClientSecret(
           transcription: {
             model: input.transcriptionModel,
             language: input.language,
-            prompt: VOICE_TRANSCRIPTION_DOMAIN_PROMPT,
           },
           turn_detection: {
             type: "server_vad",
@@ -140,11 +136,9 @@ async function createRealtimeClientSecret(
     body: JSON.stringify({
       model: input.realtimeModel,
       modalities: ["audio", "text"],
-      instructions: VOICE_TRANSCRIPTION_DOMAIN_PROMPT,
       input_audio_transcription: {
         model: input.transcriptionModel,
         language: input.language,
-        prompt: VOICE_TRANSCRIPTION_DOMAIN_PROMPT,
       },
       turn_detection: {
         type: "server_vad",
