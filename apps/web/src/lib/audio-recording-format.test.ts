@@ -56,7 +56,7 @@ afterEach(() => {
 });
 
 describe("audio-recording-format", () => {
-  test("prefers replay-safe webm when a non-Safari browser can record and preview it", () => {
+  test("prefers replay-safe m4a when a non-Safari browser can record and preview it", () => {
     installNavigatorMock("Mozilla/5.0 Chrome/125.0.0.0 Safari/537.36");
     installMediaRecorderMock(["audio/mp4;codecs=mp4a.40.2", "audio/webm;codecs=opus"]);
     installAudioPreviewMock([
@@ -67,9 +67,9 @@ describe("audio-recording-format", () => {
     ]);
 
     expect(chooseRecordingFormat()).toEqual({
-      mimeType: "audio/webm;codecs=opus",
-      fileName: "recording.webm",
-      previewTypes: ["audio/webm; codecs=opus", "audio/webm"],
+      mimeType: "audio/mp4;codecs=mp4a.40.2",
+      fileName: "recording.m4a",
+      previewTypes: ["audio/mp4; codecs=mp4a.40.2", "audio/mp4", "audio/aac"],
     });
   });
 

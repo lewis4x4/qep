@@ -27,7 +27,6 @@ import {
 } from "../_shared/audio-mime.ts";
 import {
   resolveVoiceToQrmModelConfig,
-  VOICE_TRANSCRIPTION_DOMAIN_PROMPT,
   WHISPER_TRANSCRIPTION_MODEL,
 } from "../_shared/voice-model-config.ts";
 
@@ -359,7 +358,6 @@ Deno.serve(async (req) => {
       transcriptionForm.append("response_format", "json");
     } else {
       transcriptionForm.append("response_format", "json");
-      transcriptionForm.append("prompt", VOICE_TRANSCRIPTION_DOMAIN_PROMPT);
     }
 
     const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {

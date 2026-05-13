@@ -1240,6 +1240,13 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
     recordingFormatRef.current = recordingFormat;
 
+    if (audioBlobUrl) URL.revokeObjectURL(audioBlobUrl);
+    setAudioBlob(null);
+    setAudioBlobUrl(null);
+    setAudioPreviewFailed(false);
+    setResult(null);
+    setLiveTranscript("");
+
     let recorder: MediaRecorder;
     try {
       recorder = new MediaRecorder(stream, { mimeType: recordingFormat.mimeType });
@@ -1257,6 +1264,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
         const url = URL.createObjectURL(blob);
         setAudioBlob(blob);
         setAudioBlobUrl(url);
+        setRecordingState("recorded");
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
         mediaRecorderRef.current = null;
@@ -1283,7 +1291,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     startLiveTranscript(stream);
 
     timerRef.current = setInterval(refreshElapsedSecondsFromClock, 1000);
-  }, []);
+  }, [audioBlobUrl]);
 
   const stopRecording = useCallback(() => {
     if (timerRef.current) {
@@ -1297,7 +1305,6 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     }
     stopMicSignalMonitor();
     stopLiveTranscript();
-    setRecordingState("recorded");
   }, []);
 
   const pauseRecording = useCallback(() => {
@@ -1419,6 +1426,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     setRecordingState("processing");
     setProcessingStatus({ phase: "uploading", detail: PROCESSING_STEPS[0].detail });
     setErrorMessage(null);
+    setResult(null);
 
     try {
       const recordingFileName = recordingFormatRef.current?.fileName ?? "recording.webm";

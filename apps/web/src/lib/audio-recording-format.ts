@@ -5,16 +5,8 @@ export interface RecordingFormat {
 }
 
 export const RECORDING_FORMATS: RecordingFormat[] = [
-  {
-    mimeType: "audio/webm;codecs=opus",
-    fileName: "recording.webm",
-    previewTypes: ["audio/webm; codecs=opus", "audio/webm"],
-  },
-  {
-    mimeType: "audio/webm",
-    fileName: "recording.webm",
-    previewTypes: ["audio/webm"],
-  },
+  // Prefer MP4/AAC when the browser can record it. It is the safest format for
+  // replay across Safari, Chrome, mobile browsers, and Supabase signed URLs.
   {
     mimeType: "audio/mp4;codecs=mp4a.40.2",
     fileName: "recording.m4a",
@@ -24,6 +16,16 @@ export const RECORDING_FORMATS: RecordingFormat[] = [
     mimeType: "audio/mp4",
     fileName: "recording.m4a",
     previewTypes: ["audio/mp4", "audio/aac"],
+  },
+  {
+    mimeType: "audio/webm;codecs=opus",
+    fileName: "recording.webm",
+    previewTypes: ["audio/webm; codecs=opus", "audio/webm"],
+  },
+  {
+    mimeType: "audio/webm",
+    fileName: "recording.webm",
+    previewTypes: ["audio/webm"],
   },
   {
     mimeType: "audio/ogg;codecs=opus",
