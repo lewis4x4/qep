@@ -22,7 +22,13 @@ export type UndoHandler = (
   admin: SupabaseClient,
   runMetadata: Record<string, unknown>,
   workspaceId: string,
-) => Promise<{ ok: true; log: CompensationStep[] } | { ok: false; error: string; log: CompensationStep[] }>;
+) => Promise<
+  { ok: true; log: CompensationStep[] } | {
+    ok: false;
+    error: string;
+    log: CompensationStep[];
+  }
+>;
 
 function getResult(meta: Record<string, unknown>): Record<string, unknown> {
   const r = meta.result;
@@ -54,7 +60,11 @@ const undo_iron_pull_part: UndoHandler = async (admin, meta, _workspace) => {
     return { ok: true, log };
   }
   if (order.status !== "draft") {
-    return { ok: false, error: `cannot undo: order is in status ${order.status}`, log };
+    return {
+      ok: false,
+      error: `cannot undo: order is in status ${order.status}`,
+      log,
+    };
   }
 
   // Append a reversal event for the audit trail (BEFORE the cascade delete
@@ -72,7 +82,11 @@ const undo_iron_pull_part: UndoHandler = async (admin, meta, _workspace) => {
     });
     log.push({ step: "append_reversal_event", ok: true });
   } catch (err) {
-    log.push({ step: "append_reversal_event", ok: false, detail: (err as Error).message });
+    log.push({
+      step: "append_reversal_event",
+      ok: false,
+      detail: (err as Error).message,
+    });
   }
 
   // Delete the order (parts_order_lines + parts_order_events cascade via FK)
@@ -105,7 +119,11 @@ const undo_iron_add_customer: UndoHandler = async (admin, meta, _workspace) => {
     .eq("id", contactId)
     .is("deleted_at", null);
   if (error) {
-    return { ok: false, error: `soft delete crm_contacts: ${error.message}`, log };
+    return {
+      ok: false,
+      error: `soft delete crm_contacts: ${error.message}`,
+      log,
+    };
   }
   log.push({ step: "soft_delete_crm_contact", ok: true, detail: contactId });
   return { ok: true, log };
@@ -113,7 +131,11 @@ const undo_iron_add_customer: UndoHandler = async (admin, meta, _workspace) => {
 
 /* ─── 3. iron_add_equipment undo ────────────────────────────────────────── */
 
-const undo_iron_add_equipment: UndoHandler = async (admin, meta, _workspace) => {
+const undo_iron_add_equipment: UndoHandler = async (
+  admin,
+  meta,
+  _workspace,
+) => {
   const log: CompensationStep[] = [];
   const result = getResult(meta);
   const equipId = result.entity_id;
@@ -127,7 +149,11 @@ const undo_iron_add_equipment: UndoHandler = async (admin, meta, _workspace) => 
     .select("id", { count: "exact", head: true })
     .eq("equipment_id", equipId);
   if ((dealCount ?? 0) > 0) {
-    return { ok: false, error: "cannot undo: equipment is referenced by deals", log };
+    return {
+      ok: false,
+      error: "cannot undo: equipment is referenced by deals",
+      log,
+    };
   }
 
   const { error } = await admin
@@ -136,7 +162,11 @@ const undo_iron_add_equipment: UndoHandler = async (admin, meta, _workspace) => 
     .eq("id", equipId)
     .is("deleted_at", null);
   if (error) {
-    return { ok: false, error: `soft delete crm_equipment: ${error.message}`, log };
+    return {
+      ok: false,
+      error: `soft delete crm_equipment: ${error.message}`,
+      log,
+    };
   }
   log.push({ step: "soft_delete_crm_equipment", ok: true, detail: equipId });
   return { ok: true, log };
@@ -150,7 +180,11 @@ const undo_iron_add_equipment: UndoHandler = async (admin, meta, _workspace) => 
 // progressed past that stage; the user must use the normal service
 // cancellation flow instead.
 
-const undo_iron_log_service_call: UndoHandler = async (admin, meta, _workspace) => {
+const undo_iron_log_service_call: UndoHandler = async (
+  admin,
+  meta,
+  _workspace,
+) => {
   const log: CompensationStep[] = [];
   const result = getResult(meta);
   const jobId = result.entity_id;
@@ -181,7 +215,11 @@ const undo_iron_log_service_call: UndoHandler = async (admin, meta, _workspace) 
     .eq("id", jobId)
     .eq("current_stage", "request_received");
   if (error) {
-    return { ok: false, error: `soft delete service_jobs: ${error.message}`, log };
+    return {
+      ok: false,
+      error: `soft delete service_jobs: ${error.message}`,
+      log,
+    };
   }
   log.push({ step: "soft_delete_service_job", ok: true, detail: jobId });
   return { ok: true, log };
@@ -206,9 +244,161 @@ const undo_iron_draft_email: UndoHandler = async (admin, meta, _workspace) => {
   return { ok: true, log };
 };
 
-/* ─── 6. iron_initiate_rental_return undo ───────────────────────────────── */
+/* ─── 6. iron_schedule_follow_up undo ───────────────────────────────────── */
 
-const undo_iron_initiate_rental_return: UndoHandler = async (admin, meta, _workspace) => {
+const undo_iron_schedule_follow_up: UndoHandler = async (
+  admin,
+  meta,
+  workspaceId,
+) => {
+  const log: CompensationStep[] = [];
+  const result = getResult(meta);
+  const dealId = result.deal_id;
+  const reminderId = result.reminder_id ?? result.entity_id;
+  const taskActivityId = result.task_activity_id;
+  const followUpAt = result.follow_up_at;
+  const previousNextFollowUpAt = result.previous_next_follow_up_at;
+
+  if (typeof dealId !== "string" || typeof reminderId !== "string") {
+    return {
+      ok: false,
+      error: "missing deal_id or reminder_id in run metadata",
+      log,
+    };
+  }
+
+  const { data: reminder, error: reminderFetchErr } = await admin
+    .from("crm_reminder_instances")
+    .select("id, status")
+    .eq("id", reminderId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+
+  if (reminderFetchErr) {
+    return {
+      ok: false,
+      error: `fetch reminder: ${reminderFetchErr.message}`,
+      log,
+    };
+  }
+  if (reminder) {
+    if (reminder.status !== "scheduled" && reminder.status !== "superseded") {
+      return {
+        ok: false,
+        error: `cannot undo: reminder is ${reminder.status}`,
+        log,
+      };
+    }
+    const { error } = await admin
+      .from("crm_reminder_instances")
+      .update({ status: "superseded", updated_at: new Date().toISOString() })
+      .eq("id", reminderId)
+      .eq("workspace_id", workspaceId);
+    if (error) {
+      return { ok: false, error: `supersede reminder: ${error.message}`, log };
+    }
+    log.push({
+      step: "supersede_follow_up_reminder",
+      ok: true,
+      detail: reminderId,
+    });
+  } else {
+    log.push({
+      step: "fetch_follow_up_reminder",
+      ok: true,
+      detail: "already gone",
+    });
+  }
+
+  if (typeof taskActivityId === "string") {
+    const { error } = await admin
+      .from("crm_activities")
+      .update({
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", taskActivityId)
+      .eq("workspace_id", workspaceId)
+      .is("deleted_at", null);
+    if (error) {
+      return {
+        ok: false,
+        error: `soft delete task activity: ${error.message}`,
+        log,
+      };
+    }
+    log.push({
+      step: "soft_delete_follow_up_task",
+      ok: true,
+      detail: taskActivityId,
+    });
+  }
+
+  const { data: deal, error: dealFetchErr } = await admin
+    .from("crm_deals")
+    .select("id, next_follow_up_at")
+    .eq("id", dealId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (dealFetchErr) {
+    return { ok: false, error: `fetch deal: ${dealFetchErr.message}`, log };
+  }
+  if (!deal) {
+    log.push({ step: "fetch_deal", ok: true, detail: "deal already gone" });
+    return { ok: true, log };
+  }
+
+  const current = typeof deal.next_follow_up_at === "string"
+    ? new Date(deal.next_follow_up_at).getTime()
+    : NaN;
+  const created = typeof followUpAt === "string"
+    ? new Date(followUpAt).getTime()
+    : NaN;
+  if (
+    Number.isFinite(current) && Number.isFinite(created) && current !== created
+  ) {
+    log.push({
+      step: "restore_next_follow_up_at",
+      ok: true,
+      detail: "skipped; deal follow-up changed after Iron run",
+    });
+    return { ok: true, log };
+  }
+
+  const restoreValue = typeof previousNextFollowUpAt === "string"
+    ? previousNextFollowUpAt
+    : null;
+  const { error: restoreErr } = await admin
+    .from("crm_deals")
+    .update({
+      next_follow_up_at: restoreValue,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", dealId)
+    .eq("workspace_id", workspaceId);
+  if (restoreErr) {
+    return {
+      ok: false,
+      error: `restore deal follow-up: ${restoreErr.message}`,
+      log,
+    };
+  }
+  log.push({
+    step: "restore_next_follow_up_at",
+    ok: true,
+    detail: restoreValue ?? "cleared",
+  });
+
+  return { ok: true, log };
+};
+
+/* ─── 7. iron_initiate_rental_return undo ───────────────────────────────── */
+
+const undo_iron_initiate_rental_return: UndoHandler = async (
+  admin,
+  meta,
+  _workspace,
+) => {
   const log: CompensationStep[] = [];
   const result = getResult(meta);
   const returnId = result.entity_id;
@@ -227,7 +417,11 @@ const undo_iron_initiate_rental_return: UndoHandler = async (admin, meta, _works
     return { ok: true, log };
   }
   if (row.status !== "inspection_pending") {
-    return { ok: false, error: `cannot undo: rental return is in status ${row.status}`, log };
+    return {
+      ok: false,
+      error: `cannot undo: rental return is in status ${row.status}`,
+      log,
+    };
   }
 
   const { error } = await admin
@@ -250,5 +444,6 @@ export const IRON_UNDO_HANDLERS: Record<string, UndoHandler> = {
   iron_add_equipment: undo_iron_add_equipment,
   iron_log_service_call: undo_iron_log_service_call,
   iron_draft_email: undo_iron_draft_email,
+  iron_schedule_follow_up: undo_iron_schedule_follow_up,
   iron_initiate_rental_return: undo_iron_initiate_rental_return,
 };

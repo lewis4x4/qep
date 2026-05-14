@@ -14,6 +14,7 @@
  */
 import {
   AlertCircle,
+  CalendarClock,
   ClipboardList,
   CreditCard,
   FileText,
@@ -81,6 +82,15 @@ export const IRON_TEMPLATES: IronTemplate[] = [
     phrase: "draft a follow-up to ",
     roles: ["rep", "admin", "manager", "owner"],
     flow_slug: "draft_follow_up_email",
+  },
+  {
+    id: "schedule_follow_up",
+    label: "Schedule follow-up",
+    description: "Set the next customer touch and create the CRM reminder",
+    icon: CalendarClock,
+    phrase: "schedule a follow-up for ",
+    roles: ["rep", "admin", "manager", "owner"],
+    flow_slug: "schedule_follow_up",
   },
   {
     id: "start_quote",

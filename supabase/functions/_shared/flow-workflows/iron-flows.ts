@@ -1,7 +1,7 @@
 /**
  * Wave 7 Iron Companion — v1 conversational flow definitions.
  *
- * Six flows whose backing tables are verified to exist in the repo today.
+ * Seven flows whose backing tables are verified to exist in the repo today.
  * Each flow is a `FlowWorkflowDefinition` with `surface = 'iron_conversational'`,
  * which the flow-runner auto-syncs into `flow_workflow_definitions` on every
  * tick (carrying iron_metadata, undo_handler, etc.).
@@ -36,14 +36,16 @@ export const ironPullPart: FlowWorkflowDefinition = {
   trigger_event_pattern: "iron.intent.pull_part",
   affects_modules: ["parts"],
   undo_handler: "iron_pull_part",
-  undo_semantic_rule: "select status = 'draft' from public.parts_orders where id = $1",
+  undo_semantic_rule:
+    "select status = 'draft' from public.parts_orders where id = $1",
   feature_flag: "iron.flow.pull_part",
   roles_allowed: ["rep", "admin", "manager", "owner"],
   actions: [
     {
       action_key: "iron_pull_part",
       params: {},
-      description: "Insert parts_orders header + parts_order_lines + parts_order_events('created')",
+      description:
+        "Insert parts_orders header + parts_order_lines + parts_order_events('created')",
     },
   ],
   iron_metadata: {
@@ -72,7 +74,8 @@ export const ironPullPart: FlowWorkflowDefinition = {
         required: true,
         entity_table: "qrm_companies",
         entity_search_column: "name",
-        helper_text: "Type to search a company. Iron pre-fills from the page you're on.",
+        helper_text:
+          "Type to search a company. Iron pre-fills from the page you're on.",
         merge_strategy: "auto_if_unrelated",
       },
       {
@@ -80,7 +83,8 @@ export const ironPullPart: FlowWorkflowDefinition = {
         label: "Parts",
         type: "line_items",
         required: true,
-        helper_text: "Add part numbers, quantities, and prices. Voice: 'add part 4521, two of them, twenty bucks each'.",
+        helper_text:
+          "Add part numbers, quantities, and prices. Voice: 'add part 4521, two of them, twenty bucks each'.",
       },
       {
         id: "order_source",
@@ -128,9 +132,15 @@ export const ironAddCustomer: FlowWorkflowDefinition = {
   iron_metadata: {
     iron_role: "iron_advisor",
     short_label: "Add customer",
-    voice_intent_keywords: ["add customer", "new customer", "create contact", "add contact"],
+    voice_intent_keywords: [
+      "add customer",
+      "new customer",
+      "create contact",
+      "add contact",
+    ],
     voice_open_prompt: "What's the customer's first name?",
-    voice_review_prompt: "Adding ${first_name} ${last_name}${company_suffix}. Sound good?",
+    voice_review_prompt:
+      "Adding ${first_name} ${last_name}${company_suffix}. Sound good?",
     action_key: "iron_add_customer",
     slot_schema: [
       { id: "first_name", label: "First name", type: "text", required: true },
@@ -157,7 +167,8 @@ export const ironAddEquipment: FlowWorkflowDefinition = {
   ...SHARED,
   slug: "iron.add_equipment",
   name: "Iron · Add equipment",
-  description: "Add a new equipment record (make/model/year/serial) to the CRM.",
+  description:
+    "Add a new equipment record (make/model/year/serial) to the CRM.",
   trigger_event_pattern: "iron.intent.add_equipment",
   affects_modules: ["qrm"],
   undo_handler: "iron_add_equipment",
@@ -167,16 +178,32 @@ export const ironAddEquipment: FlowWorkflowDefinition = {
   iron_metadata: {
     iron_role: "iron_advisor",
     short_label: "Add equipment",
-    voice_intent_keywords: ["add equipment", "new equipment", "register machine", "log equipment"],
+    voice_intent_keywords: [
+      "add equipment",
+      "new equipment",
+      "register machine",
+      "log equipment",
+    ],
     voice_open_prompt: "What's the equipment make?",
-    voice_review_prompt: "Adding ${year} ${make} ${model}${serial_suffix}. Sound right?",
+    voice_review_prompt:
+      "Adding ${year} ${make} ${model}${serial_suffix}. Sound right?",
     action_key: "iron_add_equipment",
     slot_schema: [
       { id: "make", label: "Make", type: "text", required: true },
       { id: "model", label: "Model", type: "text", required: true },
       { id: "year", label: "Year", type: "number", required: false },
-      { id: "serial_number", label: "Serial number", type: "text", required: false },
-      { id: "stock_number", label: "Stock number", type: "text", required: false },
+      {
+        id: "serial_number",
+        label: "Serial number",
+        type: "text",
+        required: false,
+      },
+      {
+        id: "stock_number",
+        label: "Stock number",
+        type: "text",
+        required: false,
+      },
       { id: "hours", label: "Hours", type: "number", required: false },
       {
         id: "condition",
@@ -219,9 +246,15 @@ export const ironLogServiceCall: FlowWorkflowDefinition = {
   iron_metadata: {
     iron_role: "iron_advisor",
     short_label: "Log service call",
-    voice_intent_keywords: ["log service", "service call", "create service job", "open ticket"],
+    voice_intent_keywords: [
+      "log service",
+      "service call",
+      "create service job",
+      "open ticket",
+    ],
     voice_open_prompt: "Which customer is this for?",
-    voice_review_prompt: "Opening a ${priority} priority service job for ${customer_name}. Confirm?",
+    voice_review_prompt:
+      "Opening a ${priority} priority service job for ${customer_name}. Confirm?",
     action_key: "iron_log_service_call",
     slot_schema: [
       {
@@ -232,7 +265,8 @@ export const ironLogServiceCall: FlowWorkflowDefinition = {
         // service_jobs.customer_id FKs to crm_companies, despite the name
         entity_table: "qrm_companies",
         entity_search_column: "name",
-        helper_text: "Search by company name. Iron boosts the customer you last touched.",
+        helper_text:
+          "Search by company name. Iron boosts the customer you last touched.",
       },
       {
         id: "contact_id",
@@ -281,7 +315,8 @@ export const ironDraftEmail: FlowWorkflowDefinition = {
   ...SHARED,
   slug: "iron.draft_email",
   name: "Iron · Draft a follow-up email",
-  description: "Draft an email for a customer awaiting operator review. Never sent automatically.",
+  description:
+    "Draft an email for a customer awaiting operator review. Never sent automatically.",
   trigger_event_pattern: "iron.intent.draft_email",
   affects_modules: ["communications", "qrm"],
   undo_handler: "iron_draft_email",
@@ -291,26 +326,123 @@ export const ironDraftEmail: FlowWorkflowDefinition = {
   iron_metadata: {
     iron_role: "iron_advisor",
     short_label: "Draft email",
-    voice_intent_keywords: ["draft email", "follow up", "send email", "compose email", "write email"],
+    voice_intent_keywords: [
+      "draft email",
+      "follow up",
+      "send email",
+      "compose email",
+      "write email",
+    ],
     voice_open_prompt: "Who's the email for?",
-    voice_review_prompt: "Drafting an email to ${to_email} subject ${subject_short}. Save as draft?",
+    voice_review_prompt:
+      "Drafting an email to ${to_email} subject ${subject_short}. Save as draft?",
     action_key: "iron_draft_email",
     slot_schema: [
       { id: "to_email", label: "To", type: "text", required: true },
       { id: "subject", label: "Subject", type: "text", required: true },
-      { id: "body", label: "Body", type: "longtext", required: true, placeholder: "Iron can draft this if you give it a few words" },
+      {
+        id: "body",
+        label: "Body",
+        type: "longtext",
+        required: true,
+        placeholder: "Iron can draft this if you give it a few words",
+      },
       { id: "review", label: "Review", type: "review", required: true },
     ],
   },
 };
 
-/* ─── 6. iron.initiate_rental_return ────────────────────────────────────── */
+/* ─── 6. iron.schedule_follow_up ────────────────────────────────────────── */
+
+export const ironScheduleFollowUp: FlowWorkflowDefinition = {
+  ...SHARED,
+  slug: "iron.schedule_follow_up",
+  name: "Iron · Schedule a follow-up",
+  description:
+    "Schedule the next customer touch on an open CRM deal. Updates next_follow_up_at, supersedes the old scheduled reminder, and creates the native follow-up reminder/task.",
+  trigger_event_pattern: "iron.intent.schedule_follow_up",
+  affects_modules: ["qrm", "sales"],
+  undo_handler: "iron_schedule_follow_up",
+  undo_semantic_rule:
+    "select status = 'scheduled' from public.crm_reminder_instances where id = $1",
+  feature_flag: "iron.flow.schedule_follow_up",
+  roles_allowed: ["rep", "admin", "manager", "owner"],
+  actions: [{ action_key: "iron_schedule_follow_up", params: {} }],
+  iron_metadata: {
+    iron_role: "iron_advisor",
+    short_label: "Schedule follow-up",
+    voice_intent_keywords: [
+      "schedule follow up",
+      "schedule a follow-up",
+      "set a follow up",
+      "set follow up",
+      "next touch",
+      "remind me to follow up",
+      "call them next",
+    ],
+    voice_open_prompt:
+      "Let's get going — which open deal should this follow-up attach to?",
+    voice_review_prompt:
+      "Scheduling a ${channel} follow-up for ${follow_up_at} about ${purpose}. Confirm?",
+    action_key: "iron_schedule_follow_up",
+    slot_schema: [
+      {
+        id: "deal_id",
+        label: "Open deal",
+        type: "entity_picker",
+        required: true,
+        entity_table: "crm_deals",
+        entity_search_column: "name",
+        helper_text:
+          "Search the customer's open deal. Follow-ups attach to a deal so the pipeline and reminders stay in sync.",
+        merge_strategy: "auto_if_unrelated",
+      },
+      {
+        id: "follow_up_at",
+        label: "When",
+        type: "text",
+        required: true,
+        placeholder: "Tomorrow 9 AM, next Tuesday, or 2026-05-20 14:00",
+        helper_text:
+          "Use a date and time if you know it. If you only give a day, Iron defaults to the morning.",
+      },
+      {
+        id: "channel",
+        label: "Channel",
+        type: "choice",
+        required: false,
+        default_value: "call",
+        choices: [
+          { value: "call", label: "Call" },
+          { value: "email", label: "Email" },
+          { value: "text", label: "Text" },
+          { value: "visit", label: "Visit" },
+          { value: "voice_note", label: "Voice note" },
+        ],
+      },
+      {
+        id: "purpose",
+        label: "Purpose",
+        type: "longtext",
+        required: true,
+        placeholder:
+          "Confirm quote options, check timing, ask about trade-in photos…",
+        helper_text:
+          "Iron stores this as the reason for the next touch, not a generic 'checking in'.",
+      },
+      { id: "review", label: "Review", type: "review", required: true },
+    ],
+  },
+};
+
+/* ─── 7. iron.initiate_rental_return ────────────────────────────────────── */
 
 export const ironInitiateRentalReturn: FlowWorkflowDefinition = {
   ...SHARED,
   slug: "iron.initiate_rental_return",
   name: "Iron · Start a rental return",
-  description: "Open a rental_returns inspection record. Inspector + condition photos handled in the existing return UI afterwards.",
+  description:
+    "Open a rental_returns inspection record. Inspector + condition photos handled in the existing return UI afterwards.",
   trigger_event_pattern: "iron.intent.initiate_rental_return",
   affects_modules: ["rental"],
   owner_role: "rental",
@@ -321,9 +453,15 @@ export const ironInitiateRentalReturn: FlowWorkflowDefinition = {
   iron_metadata: {
     iron_role: "iron_advisor",
     short_label: "Start return",
-    voice_intent_keywords: ["return rental", "rental return", "start return", "inspect return"],
+    voice_intent_keywords: [
+      "return rental",
+      "rental return",
+      "start return",
+      "inspect return",
+    ],
     voice_open_prompt: "Which equipment is coming back?",
-    voice_review_prompt: "Opening a return inspection for ${equipment_label}. Confirm?",
+    voice_review_prompt:
+      "Opening a return inspection for ${equipment_label}. Confirm?",
     action_key: "iron_initiate_rental_return",
     slot_schema: [
       {
@@ -355,5 +493,6 @@ export const IRON_FLOW_DEFINITIONS: FlowWorkflowDefinition[] = [
   ironAddEquipment,
   ironLogServiceCall,
   ironDraftEmail,
+  ironScheduleFollowUp,
   ironInitiateRentalReturn,
 ];

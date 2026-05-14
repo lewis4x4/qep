@@ -9,6 +9,12 @@ import { buildQuoteProposalData } from "../quote-proposal-data";
 import { computeQuoteWorkspace } from "../quote-workspace";
 import type { QuoteFinanceScenario, QuoteWorkspaceDraft } from "../../../../../../../shared/qep-moonshot-contracts";
 
+function resolvePublicRoot(): string {
+  const cwdPublic = resolve(process.cwd(), "public");
+  if (existsSync(cwdPublic)) return cwdPublic;
+  return resolve(process.cwd(), "apps/web/public");
+}
+
 function makeDraft(overrides: Partial<QuoteWorkspaceDraft> = {}): QuoteWorkspaceDraft {
   return {
     entryMode: "manual",
@@ -357,7 +363,7 @@ describe("buildQuoteProposalData", () => {
 
   test("production quote brand assets exist at public paths", () => {
     const data = build();
-    const publicRoot = resolve(process.cwd(), "apps/web/public");
+    const publicRoot = resolvePublicRoot();
     const assetPaths = [
       data.brandAssets.qepLogo?.src,
       ...data.brandAssets.vendorLogos.map((asset) => asset.src),

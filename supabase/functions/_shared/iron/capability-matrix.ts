@@ -257,18 +257,15 @@ export const IRON_CAPABILITY_MATRIX: IronCapability[] = [
     next_tool_guidance: "Expose integration availability/readiness tool in global surface.",
   },
   {
-    id: "global-follow-up-intake-gap",
+    id: "global-follow-up-intake",
     surface: "iron_global",
     domain: "follow_up",
     intent_kind: "action",
     question: "Schedule a follow-up with Big Oak next Tuesday.",
     expected_tool: "iron_flow_follow_up",
-    status: "known_gap",
-    reason: "Follow-up scheduling needs a first-class Iron flow or action tool with confirmation and undo.",
-    user_next_step: "Ask for missing customer/date/details, then route to the follow-up UI until the write flow exists.",
-    owner: "crm-platform",
-    risk: "high",
-    next_tool_guidance: "Add a safe follow-up scheduling flow backed by crm_reminders/tasks with idempotency and undo.",
+    status: "supported",
+    reason: "Follow-up scheduling has a first-class Iron flow backed by crm_deals.next_follow_up_at and crm_reminder_instances.",
+    user_next_step: "Open the follow-up flow, ask for the open deal, date, channel, and purpose, then create the reminder with undo.",
   },
 ];
 
@@ -310,10 +307,10 @@ export const IRON_OWNER_GAUNTLET: IronOwnerGauntletCase[] = [
     expected_outcome: "explain_gap_with_next_step",
   },
   {
-    id: "owner-follow-up-gap",
+    id: "owner-follow-up",
     phrase: "Schedule a follow-up with Big Oak next Tuesday.",
     domain: "follow_up",
-    expected_outcome: "route_with_context",
+    expected_outcome: "open_flow",
   },
 ];
 
