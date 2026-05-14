@@ -70,6 +70,42 @@ export interface CustomerSearchCompany {
 
 export type CustomerSearchResult = CustomerSearchContact | CustomerSearchCompany;
 
+export interface QuoteBuilderCustomerIdentity {
+  contactId: string | null;
+  companyId: string | null;
+  customerName: string;
+  customerCompany: string;
+  customerPhone: string;
+  customerEmail: string;
+  matchKind: "contact" | "company";
+}
+
+export function toQuoteBuilderCustomerIdentity(
+  result: CustomerSearchResult,
+): QuoteBuilderCustomerIdentity {
+  if (result.kind === "contact") {
+    return {
+      contactId: result.contactId,
+      companyId: result.companyId,
+      customerName: result.contactName,
+      customerCompany: result.companyName ?? "",
+      customerPhone: result.contactPhone ?? "",
+      customerEmail: result.contactEmail ?? "",
+      matchKind: "contact",
+    };
+  }
+
+  return {
+    contactId: null,
+    companyId: result.companyId,
+    customerName: "",
+    customerCompany: result.companyName,
+    customerPhone: result.companyPhone ?? "",
+    customerEmail: "",
+    matchKind: "company",
+  };
+}
+
 export interface CustomerSearchContactRow {
   id: string;
   first_name: string | null;
@@ -310,18 +346,33 @@ export async function searchCustomers(
   const query = rawQuery.trim();
   if (query.length < MIN_QUERY_CHARS) return [];
 
-  // Sanitize ilike wildcards — chars that would change pattern semantics
+  // Sanitize ilike wildcards — chars that would change pattern semantics.
+  // Also search individual name tokens so "John Smith" can match a row stored
+  // as first_name="John", last_name="Smith" instead of only looking for the
+  // full string in each column independently.
   const sanitized = query.replace(/[\\%_]/g, "");
   const pattern = `%${sanitized}%`;
+  const nameTokens = sanitized
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length >= MIN_QUERY_CHARS)
+    .slice(0, 4);
+  const contactTerms = Array.from(new Set([sanitized, ...nameTokens]));
+  const contactOr = [
+    ...contactTerms.flatMap((term) => {
+      const tokenPattern = `%${term}%`;
+      return [`first_name.ilike.${tokenPattern}`, `last_name.ilike.${tokenPattern}`];
+    }),
+    `email.ilike.${pattern}`,
+    `phone.ilike.${pattern}`,
+  ].join(",");
 
   const [contactsRes, companiesRes] = await Promise.all([
     supabase
       .from("crm_contacts")
       .select("id, first_name, last_name, title, email, phone, primary_company_id")
       .is("deleted_at", null)
-      .or(
-        `first_name.ilike.${pattern},last_name.ilike.${pattern},email.ilike.${pattern},phone.ilike.${pattern}`,
-      )
+      .or(contactOr)
       .limit(MAX_CONTACTS),
     supabase
       .from("crm_companies")

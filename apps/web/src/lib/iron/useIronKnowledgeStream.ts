@@ -10,8 +10,8 @@
  * transitions thinking → speaking → idle automatically.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import { pushPresence } from "./presence";
+import { requireIronAccessToken } from "./auth";
 import type { IronLaunchContext } from "./types";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -99,29 +99,11 @@ export function useIronKnowledgeStream(): IronKnowledgeStreamApi {
       // user hits Enter, even before the first token arrives.
       presenceReleaseRef.current = pushPresence("iron-knowledge", "thinking");
 
-      // getSession() returns whatever's in localStorage, even if expired.
-      // Check expiry with a 30s skew and refresh if needed — same defense
-      // as iron/api.ts requireUserAccessToken().
-      let accessToken: string | null = null;
+      let accessToken: string;
       try {
-        const sessionResult = await supabase.auth.getSession();
-        const session = sessionResult.data.session;
-        const nowSeconds = Math.floor(Date.now() / 1000);
-        const expiresAt = session?.expires_at ?? 0;
-        if (session?.access_token && (!expiresAt || expiresAt >= nowSeconds + 30)) {
-          accessToken = session.access_token;
-        } else if (session?.access_token) {
-          // Token expired or about to — force refresh
-          const refreshed = await supabase.auth.refreshSession();
-          accessToken = refreshed.data.session?.access_token ?? null;
-        }
+        accessToken = await requireIronAccessToken();
       } catch (err) {
-        console.error("[useIronKnowledgeStream] auth lookup failed", err);
-      }
-      if (!accessToken) {
-        setError(
-          "Iron: not signed in or session expired. Please reload the page and sign in again.",
-        );
+        setError(err instanceof Error ? err.message : "Iron auth failed");
         setStatus("error");
         releasePresence();
         return;
@@ -130,39 +112,50 @@ export function useIronKnowledgeStream(): IronKnowledgeStreamApi {
       const controller = new AbortController();
       abortRef.current = controller;
 
+      const requestBody = JSON.stringify({
+        message: input.message,
+        conversation_id: input.conversationId,
+        route: input.route,
+        enable_web: input.enableWeb !== false,
+        context: input.context
+          ? {
+              kind: input.context.kind,
+              entity_id: input.context.entityId ?? null,
+              title: input.context.title,
+              route: input.context.route,
+              evidence: input.context.evidence ?? null,
+            }
+          : undefined,
+      });
+
+      const fetchKnowledge = (token: string) => fetch(`${SUPABASE_URL}/functions/v1/iron-knowledge`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "apikey": SUPABASE_ANON_KEY,
+          "Content-Type": "application/json",
+        },
+        body: requestBody,
+        signal: controller.signal,
+      });
+
       let res: Response;
       try {
-        res = await fetch(`${SUPABASE_URL}/functions/v1/iron-knowledge`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "apikey": SUPABASE_ANON_KEY,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            message: input.message,
-            conversation_id: input.conversationId,
-            route: input.route,
-            enable_web: input.enableWeb !== false,
-            context: input.context
-              ? {
-                  kind: input.context.kind,
-                  entity_id: input.context.entityId ?? null,
-                  title: input.context.title,
-                  route: input.context.route,
-                  evidence: input.context.evidence ?? null,
-                }
-              : undefined,
-          }),
-          signal: controller.signal,
-        });
+        res = await fetchKnowledge(accessToken);
+        if (res.status === 401 || res.status === 403) {
+          const freshToken = await requireIronAccessToken({ forceRefresh: true });
+          res = await fetchKnowledge(freshToken);
+        }
       } catch (err) {
         if ((err as { name?: string })?.name === "AbortError") {
           setStatus("idle");
           releasePresence();
           return;
         }
-        setError(err instanceof Error ? err.message : "fetch failed");
+        const message = err instanceof TypeError
+          ? "Iron could not reach the knowledge service. Check connection and try again."
+          : err instanceof Error ? err.message : "fetch failed";
+        setError(message);
         setStatus("error");
         releasePresence();
         return;

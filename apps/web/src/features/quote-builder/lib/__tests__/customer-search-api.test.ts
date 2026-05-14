@@ -7,11 +7,13 @@ import {
   normalizeCustomerSearchCompanyRefRows,
   normalizeCustomerSearchCompanyRows,
   normalizeCustomerSearchContactRows,
+  toQuoteBuilderCustomerIdentity,
   EMPTY_SIGNALS,
   WARM_DAYS_MAX,
   COOL_DAYS_MAX,
   type CompanySignals,
   type CustomerSearchContact,
+  type CustomerSearchCompany,
 } from "../customer-search-api";
 
 // ── row normalizers ─────────────────────────────────────────────────────
@@ -148,6 +150,90 @@ describe("deriveWarmth", () => {
   test("beyond COOL → dormant", () => {
     expect(deriveWarmth({ ...EMPTY_SIGNALS, lastContactDaysAgo: COOL_DAYS_MAX + 1 })).toBe("dormant");
     expect(deriveWarmth({ ...EMPTY_SIGNALS, lastContactDaysAgo: 365 })).toBe("dormant");
+  });
+});
+
+// ── customer identity mapping ───────────────────────────────────────────
+
+describe("toQuoteBuilderCustomerIdentity", () => {
+  test("maps contact result with company", () => {
+    const result: CustomerSearchContact = {
+      kind: "contact",
+      contactId: "ct-1",
+      contactName: "Angela Peterson",
+      contactTitle: "Owner",
+      contactEmail: "angela@example.com",
+      contactPhone: "555-0100",
+      companyId: "co-1",
+      companyName: "Acme Landscaping",
+      companyCity: "Lake City",
+      companyState: "FL",
+      signals: EMPTY_SIGNALS,
+      warmth: "new",
+    };
+
+    expect(toQuoteBuilderCustomerIdentity(result)).toEqual({
+      contactId: "ct-1",
+      companyId: "co-1",
+      customerName: "Angela Peterson",
+      customerCompany: "Acme Landscaping",
+      customerPhone: "555-0100",
+      customerEmail: "angela@example.com",
+      matchKind: "contact",
+    });
+  });
+
+  test("maps contact result without company", () => {
+    const result: CustomerSearchContact = {
+      kind: "contact",
+      contactId: "ct-2",
+      contactName: "Lonely Contact",
+      contactTitle: null,
+      contactEmail: null,
+      contactPhone: null,
+      companyId: null,
+      companyName: null,
+      companyCity: null,
+      companyState: null,
+      signals: EMPTY_SIGNALS,
+      warmth: "new",
+    };
+
+    expect(toQuoteBuilderCustomerIdentity(result)).toEqual({
+      contactId: "ct-2",
+      companyId: null,
+      customerName: "Lonely Contact",
+      customerCompany: "",
+      customerPhone: "",
+      customerEmail: "",
+      matchKind: "contact",
+    });
+  });
+
+  test("maps company result", () => {
+    const result: CustomerSearchCompany = {
+      kind: "company",
+      companyId: "co-1",
+      companyName: "Big Oak",
+      companyDba: null,
+      companyPhone: "555-0200",
+      companyCity: "Ocala",
+      companyState: "FL",
+      companyClassification: "landscape",
+      contactCount: 2,
+      signals: EMPTY_SIGNALS,
+      warmth: "new",
+    };
+
+    expect(toQuoteBuilderCustomerIdentity(result)).toEqual({
+      contactId: null,
+      companyId: "co-1",
+      customerName: "",
+      customerCompany: "Big Oak",
+      customerPhone: "555-0200",
+      customerEmail: "",
+      matchKind: "company",
+    });
   });
 });
 

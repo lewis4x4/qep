@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -118,6 +118,11 @@ import {
   clearVoiceQuoteHandoff,
   readVoiceQuoteHandoff,
 } from "@/features/voice-quote/lib/voice-quote-handoff";
+import {
+  clearIronQuoteHandoff,
+  normalizeIronQuoteHandoff,
+  readIronQuoteHandoff,
+} from "../lib/iron-quote-handoff";
 import { toast } from "@/hooks/use-toast";
 import {
   ConversationalDealEngine,
@@ -571,11 +576,15 @@ function isUuid(value: string): boolean {
 
 export function QuoteBuilderV2Page() {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const packageId = searchParams.get("package_id") || "";
   const dealId = searchParams.get("deal_id") || searchParams.get("crm_deal_id") || "";
   const contactId = searchParams.get("contact_id") || searchParams.get("crm_contact_id") || "";
+  const companyId = searchParams.get("company_id") || searchParams.get("crm_company_id") || "";
   const equipmentId = searchParams.get("equipment_id") || searchParams.get("crm_equipment_id") || "";
   const voiceSessionId = searchParams.get("voice_session_id") || "";
+  const ironQuoteHandoffId = searchParams.get("iron_quote_intake_id") || "";
+  const ironQuoteHandoffState = (location.state as { ironQuoteHandoff?: unknown } | null)?.ironQuoteHandoff;
   const [step, setStep] = useState<Step>("customer");
   const [builderMode] = useState<BuilderMode>("guided");
   const [reviewSendOpen, setReviewSendOpen] = useState(false);
@@ -610,6 +619,7 @@ export function QuoteBuilderV2Page() {
   const [draft, setDraft] = useState<QuoteWorkspaceDraft>({
     dealId: dealId || undefined,
     contactId: contactId || undefined,
+    companyId: companyId || undefined,
     entryMode: "manual",
     branchSlug: "",
     recommendation: null,
@@ -690,6 +700,7 @@ export function QuoteBuilderV2Page() {
   const { profile } = useAuth();
   const existingQuoteHydrationKeyRef = useRef<string | null>(null);
   const voiceHandoffHydrationKeyRef = useRef<string | null>(null);
+  const ironQuoteHandoffHydrationKeyRef = useRef<string | null>(null);
 
   const existingQuoteQuery = useQuery({
     queryKey: ["quote-builder", "saved-quote", packageId, dealId],
@@ -883,6 +894,10 @@ export function QuoteBuilderV2Page() {
       setLocalDraftHydrationComplete(true);
       return;
     }
+    if (ironQuoteHandoffId) {
+      setLocalDraftHydrationComplete(true);
+      return;
+    }
     const stored = loadLocalDraft(localDraftKey);
     if (stored && !isDraftEmpty(stored)) {
       setDraft((current) => ({ ...current, ...stored }));
@@ -892,6 +907,7 @@ export function QuoteBuilderV2Page() {
     existingQuote,
     existingQuoteQuery.isFetching,
     existingQuoteQuery.isLoading,
+    ironQuoteHandoffId,
     localDraftHydrationComplete,
     localDraftKey,
   ]);
@@ -1020,13 +1036,14 @@ export function QuoteBuilderV2Page() {
     );
     if (hasCustomer) return;
     if (existingQuoteQuery.isLoading || existingQuote) return;
-    if (!contactId && !dealId) return;
+    if (!contactId && !companyId && !dealId) return;
 
     let cancelled = false;
     (async () => {
       try {
         const hydrated = await hydrateCustomerById({
           contactId: contactId || null,
+          companyId: companyId || null,
           dealId:    dealId || null,
         });
         if (!hydrated || cancelled) return;
@@ -1048,11 +1065,61 @@ export function QuoteBuilderV2Page() {
     return () => { cancelled = true; };
   }, [
     contactId,
+    companyId,
     dealId,
     draft.customerCompany,
     draft.customerName,
     existingQuote,
     existingQuoteQuery.isLoading,
+  ]);
+
+  // Iron quote intake handoff: a lightweight bridge from Iron's natural-
+  // language operator/trainer surface into Quote Builder. Saved quote/deal
+  // hydration still wins; this only seeds a new draft with raw intake notes
+  // and best-effort customer identity so reps verify customer first, then
+  // configure equipment/options/timeframe.
+  useEffect(() => {
+    if (!ironQuoteHandoffId) return;
+    if (packageId || dealId) return;
+    if (existingQuoteQuery.isFetching || existingQuoteQuery.isLoading) return;
+    if (existingQuote) return;
+    if (ironQuoteHandoffHydrationKeyRef.current === ironQuoteHandoffId) return;
+    ironQuoteHandoffHydrationKeyRef.current = ironQuoteHandoffId;
+
+    const handoff = readIronQuoteHandoff(ironQuoteHandoffId)
+      ?? normalizeIronQuoteHandoff(ironQuoteHandoffState, { expectedHandoffId: ironQuoteHandoffId });
+    if (!handoff) {
+      toast({
+        title: "Quote intake expired",
+        description: "Start manually or ask Iron again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    clearIronQuoteHandoff();
+    setDraft((current) => ({
+      ...current,
+      entryMode: "ai_chat",
+      contactId: handoff.resolvedContactId ?? current.contactId,
+      companyId: handoff.resolvedCompanyId ?? current.companyId,
+      customerName: current.customerName || handoff.resolvedCustomerName || "",
+      customerCompany: current.customerCompany || handoff.resolvedCustomerCompany || "",
+      customerPhone: current.customerPhone || handoff.resolvedCustomerPhone || "",
+      customerEmail: current.customerEmail || handoff.resolvedCustomerEmail || "",
+      voiceSummary: current.voiceSummary || handoff.rawText,
+    }));
+    setAiPrompt(handoff.rawText);
+    setAiIntakeMessage("Iron brought this quote intake over. Verify the customer, then configure equipment/options/timeframe before pricing.");
+    setStep("customer");
+  }, [
+    dealId,
+    existingQuote,
+    existingQuoteQuery.isFetching,
+    existingQuoteQuery.isLoading,
+    ironQuoteHandoffId,
+    ironQuoteHandoffState,
+    packageId,
   ]);
 
   // Slice 14: pick up a pending voice-quote handoff only when the URL's

@@ -25,7 +25,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate, type NavigateFunction } from "react-router-dom";
 import {
   Bot,
   Loader2,
@@ -59,12 +59,122 @@ import {
 import { AssistantResponseRenderer } from "@/components/assistant/AssistantResponseRenderer";
 import { pushPresence } from "./presence";
 import { supabase } from "@/lib/supabase";
+import {
+  searchCustomers,
+  toQuoteBuilderCustomerIdentity,
+  type QuoteBuilderCustomerIdentity,
+} from "@/features/quote-builder/lib/customer-search-api";
+import {
+  writeIronQuoteHandoff,
+  type IronQuoteHandoff,
+} from "@/features/quote-builder/lib/iron-quote-handoff";
+import {
+  extractIronQuoteIntakeIntent,
+  type IronQuoteIntakeIntent,
+} from "./quote-intake";
 
 interface SendOptions {
   /** "voice" auto-narrates the response. */
   mode?: "text" | "voice";
   /** When true, skip the classifier and go straight to iron-knowledge. */
   knowledgeOnly?: boolean;
+}
+
+interface QuoteIntakeCustomerResolution {
+  identity: QuoteBuilderCustomerIdentity | null;
+  query: string | null;
+  failed: boolean;
+}
+
+async function resolveQuoteIntakeCustomer(
+  intent: IronQuoteIntakeIntent,
+): Promise<QuoteIntakeCustomerResolution> {
+  for (const candidate of intent.customerSearchCandidates) {
+    try {
+      const results = await searchCustomers(candidate, 5);
+      const best = results[0] ?? null;
+      if (best) {
+        return {
+          identity: toQuoteBuilderCustomerIdentity(best),
+          query: candidate,
+          failed: false,
+        };
+      }
+    } catch (err) {
+      console.warn("[IronBar] quote-intake customer search failed", err);
+      return { identity: null, query: candidate, failed: true };
+    }
+  }
+
+  return {
+    identity: null,
+    query: intent.customerSearchCandidates[0] ?? intent.targetText ?? null,
+    failed: false,
+  };
+}
+
+async function openQuoteBuilderForIntake(
+  intent: IronQuoteIntakeIntent,
+  conversationId: string | null,
+  navigate: NavigateFunction,
+  chatAppend: (message: IronChatMessage) => void,
+  setError: (message: string | null) => void,
+): Promise<void> {
+  const resolution = await resolveQuoteIntakeCustomer(intent);
+  const identity = resolution.identity;
+  const handoffId = crypto.randomUUID();
+  const params = new URLSearchParams({ iron_quote_intake_id: handoffId });
+
+  if (identity?.contactId) params.set("crm_contact_id", identity.contactId);
+  if (identity?.companyId) params.set("crm_company_id", identity.companyId);
+
+  const handoff: IronQuoteHandoff = {
+    handoffId,
+    at: new Date().toISOString(),
+    rawText: intent.rawText,
+    targetText: intent.targetText,
+    sourceConversationId: conversationId,
+    resolvedContactId: identity?.contactId ?? null,
+    resolvedCompanyId: identity?.companyId ?? null,
+    resolvedCustomerName: identity?.customerName || null,
+    resolvedCustomerCompany: identity?.customerCompany || null,
+    resolvedCustomerPhone: identity?.customerPhone || null,
+    resolvedCustomerEmail: identity?.customerEmail || null,
+    customerSearchQuery: resolution.query,
+    customerMatchKind: identity?.matchKind ?? "none",
+  };
+
+  try {
+    const stored = writeIronQuoteHandoff(handoff);
+    if (!stored) {
+      setError("Opened Quote Builder using in-memory intake handoff; browser session storage was unavailable.");
+    }
+  } catch (err) {
+    console.warn("[IronBar] quote-intake handoff storage failed", err);
+    setError("Opened Quote Builder using in-memory intake handoff; browser session storage was unavailable.");
+  }
+
+  const content = identity?.matchKind === "contact"
+    ? `Opening Quote Builder for ${identity.customerCompany ? `${identity.customerName} · ${identity.customerCompany}` : identity.customerName}. Review the customer, then configure equipment/options/timeframe.`
+    : identity?.matchKind === "company"
+      ? `Opening Quote Builder for ${identity.customerCompany}. Review the customer, then configure equipment/options/timeframe.`
+      : resolution.failed
+        ? "Customer search failed; opened Quote Builder with your intake notes. Review the customer, then configure equipment/options/timeframe."
+        : "Opening Quote Builder with your quote intake notes. Review the customer, then configure equipment/options/timeframe.";
+
+  if (resolution.failed) {
+    setError("Customer search failed; opened Quote Builder with intake notes.");
+  }
+
+  chatAppend({
+    id: crypto.randomUUID(),
+    role: "assistant",
+    content,
+    createdAt: Date.now(),
+  });
+  navigate(`/quote-v2?${params.toString()}`, {
+    state: { ironQuoteHandoff: handoff },
+  });
 }
 
 export function IronBar() {
@@ -92,6 +202,7 @@ export function IronBar() {
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
+  const navigate = useNavigate();
   const recorder = useIronVoiceRecorder();
   const knowledge = useIronKnowledgeStream();
   const pttActiveRef = useRef(false);
@@ -229,6 +340,26 @@ export function IronBar() {
         return;
       }
 
+      const quoteIntent = extractIronQuoteIntakeIntent(text);
+      if (quoteIntent) {
+        setClassifying(true);
+        const quoteRelease = pushPresence("iron-quote-intake", "thinking");
+        try {
+          await openQuoteBuilderForIntake(
+            quoteIntent,
+            state.conversationId ?? null,
+            navigate,
+            chatAppend,
+            setError,
+          );
+          closeBar();
+          return;
+        } finally {
+          quoteRelease();
+          setClassifying(false);
+        }
+      }
+
       // Otherwise, classify first.
       setClassifying(true);
       const classifyRelease = pushPresence("iron-classify", "thinking");
@@ -310,11 +441,19 @@ export function IronBar() {
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Iron call failed";
-        chatAppend({
+        console.warn("[IronBar] orchestrator failed; falling back to knowledge", err);
+        const placeholder: IronChatMessage = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: msg,
+          content: "",
+          pending: true,
           createdAt: Date.now(),
+        };
+        chatAppend(placeholder);
+        await knowledgeStart({
+          message: text,
+          conversationId: state.conversationId ?? undefined,
+          route: location.pathname,
         });
         setError(msg);
         pushPresence("iron-error", "alert", { ttlMs: 3000 });
@@ -335,6 +474,8 @@ export function IronBar() {
       setLastInputMode,
       startFlow,
       setConversationId,
+      navigate,
+      closeBar,
     ],
   );
 

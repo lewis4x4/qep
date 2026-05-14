@@ -89,7 +89,8 @@ export const IRON_TEMPLATES: IronTemplate[] = [
     icon: FileText,
     phrase: "start a quote for ",
     roles: ["rep", "admin", "manager", "owner"],
-    flow_slug: "start_quote",
+    // Client-side quote intake routes this deterministically into Quote Builder
+    // with preserved notes; no backend start_quote flow exists for this action.
   },
   {
     id: "add_customer",

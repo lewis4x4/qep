@@ -26,6 +26,7 @@
  *    message instead of letting the anon key reach the function.
  */
 import { supabase } from "@/lib/supabase";
+import { requireIronAccessToken } from "./auth";
 import type {
   IronExecuteResponse,
   IronOrchestratorResponse,
@@ -87,73 +88,6 @@ async function explainInvokeError(error: InvokeError, fallback: string): Promise
   return error.message ?? fallback;
 }
 
-/**
- * Resolve the current user's FRESH access token, refreshing if needed.
- *
- * Why this is more than a one-liner: `auth.getSession()` is a passive
- * read of localStorage. It returns whatever token is stored, even if it
- * expired hours ago. supabase-js's auto-refresh runs in the background
- * on focus events and a few other triggers, but it does NOT run when
- * you call `getSession()` for an expired token. So if a user signs in,
- * walks away for >1 hour (the default jwt_expiry), and comes back, every
- * call to `getSession()` returns the dead access token until something
- * else triggers a refresh.
- *
- * This helper:
- *   1. Reads the current session
- *   2. Checks expires_at against now() with a 30s skew
- *   3. If expired or about to expire, explicitly calls refreshSession()
- *      which uses the still-valid refresh_token to mint a new access_token
- *   4. Returns whichever access_token is now fresh
- *   5. Throws a friendly "please reload + sign in" if the refresh itself
- *      fails (refresh_token revoked/expired) — which means the user has
- *      to actually re-authenticate
- */
-async function requireUserAccessToken(): Promise<string> {
-  const sb = supabase as unknown as {
-    auth: {
-      getSession: () => Promise<{
-        data: { session: { access_token?: string | null; expires_at?: number | null } | null };
-        error: { message?: string } | null;
-      }>;
-      refreshSession: () => Promise<{
-        data: { session: { access_token?: string | null } | null };
-        error: { message?: string } | null;
-      }>;
-    };
-  };
-
-  const { data, error } = await sb.auth.getSession();
-  if (error) {
-    throw new Error(`Iron auth: ${error.message ?? "session lookup failed"}`);
-  }
-  const session = data?.session;
-  if (!session?.access_token) {
-    throw new Error(
-      "Iron: not signed in. Please reload the page and sign in again.",
-    );
-  }
-
-  // Check expiry with a 30-second clock-skew buffer. If the token is
-  // expired or within 30s of expiring, force a refresh BEFORE sending
-  // it to the function. Without this, every Iron call after the 1-hour
-  // jwt_expiry mark fails with "Invalid JWT" until something else
-  // triggers supabase-js's auto-refresh.
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  const expiresAt = session.expires_at ?? 0;
-  if (expiresAt && expiresAt < nowSeconds + 30) {
-    const { data: refreshed, error: refreshError } = await sb.auth.refreshSession();
-    if (refreshError || !refreshed?.session?.access_token) {
-      throw new Error(
-        "Iron: session expired and refresh failed. Please reload the page and sign in again.",
-      );
-    }
-    return refreshed.session.access_token;
-  }
-
-  return session.access_token;
-}
-
 async function invokeIron<T>(
   name: string,
   body: unknown,
@@ -162,7 +96,7 @@ async function invokeIron<T>(
   // ALWAYS resolve the user's JWT explicitly. Don't trust supabase-js's
   // fetchWithAuth fallback — it will silently substitute the anon key
   // and the function will reject it as "Invalid JWT".
-  const accessToken = await requireUserAccessToken();
+  const accessToken = await requireIronAccessToken();
   const fns = (supabase as unknown as SupabaseWithFunctions).functions;
   const { data, error } = await fns.invoke<T>(name, {
     body,
