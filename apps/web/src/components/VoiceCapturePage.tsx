@@ -527,6 +527,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const realtimeTranscriptRef = useRef<RealtimeTranscriptSession | null>(null);
   const liveTranscriptAbortRef = useRef<AbortController | null>(null);
+  const browserFinalTranscriptRef = useRef("");
   const queuedSyncingRef = useRef(false);
   const recentAudioObjectUrlRef = useRef<string | null>(null);
   const recordingStartedAtRef = useRef<number | null>(null);
@@ -1111,9 +1112,31 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     };
   }, [recordingState]);
 
-  function appendLiveTranscript(text: string): void {
+  function setLiveTranscriptPreview(text: string): void {
+    const normalized = text.replace(/\s+/g, " ").trim();
+    setLiveTranscript(normalized.length > 360 ? normalized.slice(normalized.length - 360) : normalized);
+  }
+
+  function appendLiveTranscriptDelta(text: string): void {
+    const incoming = text.replace(/\s+/g, " ").trim();
+    if (!incoming) return;
+
     setLiveTranscript((prev) => {
-      const next = `${prev} ${text}`.trim();
+      const current = prev.replace(/\s+/g, " ").trim();
+      if (!current) return incoming.length > 360 ? incoming.slice(incoming.length - 360) : incoming;
+      if (current.endsWith(incoming)) return current;
+      if (incoming.startsWith(current)) return incoming.length > 360 ? incoming.slice(incoming.length - 360) : incoming;
+
+      let overlap = 0;
+      const maxOverlap = Math.min(current.length, incoming.length);
+      for (let i = maxOverlap; i > 0; i -= 1) {
+        if (current.endsWith(incoming.slice(0, i))) {
+          overlap = i;
+          break;
+        }
+      }
+
+      const next = `${current} ${incoming.slice(overlap)}`.replace(/\s+/g, " ").trim();
       return next.length > 360 ? next.slice(next.length - 360) : next;
     });
   }
@@ -1142,11 +1165,20 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       recognition.interimResults = true;
       recognition.lang = "en-US";
       recognition.onresult = (event) => {
-        let text = "";
+        let finalText = event.resultIndex === 0 ? "" : browserFinalTranscriptRef.current;
+        let interimText = "";
+
         for (let i = event.resultIndex; i < event.results.length; i += 1) {
-          text += event.results[i][0].transcript;
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalText = `${finalText} ${transcript}`.trim();
+          } else {
+            interimText = `${interimText} ${transcript}`.trim();
+          }
         }
-        appendLiveTranscript(text);
+
+        browserFinalTranscriptRef.current = finalText;
+        setLiveTranscriptPreview(`${finalText} ${interimText}`);
       };
       recognition.onerror = () => undefined;
       speechRecognitionRef.current = recognition;
@@ -1160,6 +1192,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
   function startLiveTranscript(stream?: MediaStream): void {
     setLiveTranscript("");
+    browserFinalTranscriptRef.current = "";
     stopLiveTranscript();
 
     const realtimeEnabled = import.meta.env.VITE_VOICE_REALTIME_ENABLED === "true";
@@ -1175,7 +1208,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     void startRealtimeTranscript({
       stream,
       signal: abortController.signal,
-      onDelta: appendLiveTranscript,
+      onDelta: appendLiveTranscriptDelta,
       onError: (error) => {
         console.warn("Realtime transcript preview failed; falling back to browser speech recognition", error);
       },
@@ -1246,6 +1279,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     setAudioPreviewFailed(false);
     setResult(null);
     setLiveTranscript("");
+    browserFinalTranscriptRef.current = "";
 
     let recorder: MediaRecorder;
     try {
@@ -1353,6 +1387,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     setErrorMessage(null);
     setMicrophoneProblem(null);
     setLiveTranscript("");
+    browserFinalTranscriptRef.current = "";
     setRecordingState("idle");
   }, [audioBlobUrl]);
 

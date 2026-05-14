@@ -57,6 +57,10 @@ function extractTranscriptDelta(event: unknown): string | null {
   const record = event as Record<string, unknown>;
   const eventType = typeof record.type === "string" ? record.type : "";
 
+  // Realtime transcript preview must only append true deltas. Some events carry
+  // a full/interim transcript snapshot; appending those snapshots creates the
+  // repeated phrase soup users saw while speaking. The final server transcript
+  // remains authoritative after processing.
   if (
     eventType.includes("transcript") ||
     eventType.includes("transcription") ||
@@ -64,9 +68,6 @@ function extractTranscriptDelta(event: unknown): string | null {
   ) {
     const delta = record.delta;
     if (typeof delta === "string" && delta.trim()) return delta;
-
-    const transcript = record.transcript;
-    if (typeof transcript === "string" && transcript.trim()) return transcript;
   }
 
   return null;
