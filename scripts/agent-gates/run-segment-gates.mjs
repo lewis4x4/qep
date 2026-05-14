@@ -198,6 +198,12 @@ await pushCheck({
 });
 
 await pushCheck({
+  id: "qa.iron-capability-audit",
+  command: "bun run iron:capability-audit",
+  required: true,
+});
+
+await pushCheck({
   id: "qa.parts-pressure-matrix",
   command: "bun run pressure:parts",
   required: true,

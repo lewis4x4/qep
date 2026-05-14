@@ -10,6 +10,7 @@ import {
   LIST_MY_TOUCHES_TEXT_CAP,
   MAX_PROPOSE_MOVES_PER_REQUEST,
   normalizeListMyTouchesInput,
+  normalizeLookupQuoteInput,
   normalizeMoveFilters,
   normalizeProposeMoveInput,
   normalizeSearchInput,
@@ -204,7 +205,7 @@ function makeCtx(
 
 // ── Catalog ────────────────────────────────────────────────────────────────
 
-Deno.test("ASK_IRON_TOOLS exposes the fourteen tools", () => {
+Deno.test("ASK_IRON_TOOLS exposes the fifteen tools", () => {
   const names = ASK_IRON_TOOLS.map((t) => t.name).sort();
   assertEquals(names, [
     "get_company_detail",
@@ -212,6 +213,7 @@ Deno.test("ASK_IRON_TOOLS exposes the fourteen tools", () => {
     "list_my_moves",
     "list_my_touches",
     "list_recent_signals",
+    "lookup_quote",
     "propose_move",
     "search_entities",
     "summarize_company",
@@ -320,6 +322,35 @@ Deno.test("normalizeSearchInput trims the query string", () => {
 Deno.test("normalizeSearchInput drops unknown entity types", () => {
   const f = normalizeSearchInput({ query: "acme", types: ["company", "bogus"] });
   assertEquals(f.types, ["company"]);
+});
+
+// ── normalizeLookupQuoteInput ───────────────────────────────────────────────
+
+Deno.test("normalizeLookupQuoteInput maps pending approval status variants", () => {
+  const f = normalizeLookupQuoteInput({ status: "  pending approval  " });
+  assertEquals(f.status, "pending approval");
+  assertEquals(f.statusCandidates.includes("pending_approval"), true);
+  assertEquals(f.statusCandidates.includes("approval_pending"), true);
+});
+
+Deno.test("normalizeLookupQuoteInput accepts status-only filters", () => {
+  const f = normalizeLookupQuoteInput({ status: "draft" });
+  assertEquals(f.customerName, null);
+  assertEquals(f.statusCandidates, ["draft"]);
+});
+
+Deno.test("normalizeLookupQuoteInput throws on empty filter", () => {
+  try {
+    normalizeLookupQuoteInput({});
+    throw new Error("expected throw");
+  } catch (err) {
+    assertEquals((err as Error).message, "VALIDATION_ERROR:quote_filter");
+  }
+});
+
+Deno.test("normalizeLookupQuoteInput clamps limit to 25", () => {
+  const f = normalizeLookupQuoteInput({ status: "sent", limit: 999 });
+  assertEquals(f.limit, 25);
 });
 
 // ── executor: list_my_moves ─────────────────────────────────────────────────
@@ -468,6 +499,185 @@ Deno.test("executeAskIronTool search_entities respects explicit types=[company]"
   assertEquals(tables.includes("crm_companies"), true);
   assertEquals(tables.includes("crm_contacts"), false);
   assertEquals(tables.includes("crm_deals_rep_safe"), false);
+  assertEquals(tables.includes("crm_equipment"), false);
+  assertEquals(tables.includes("rental_contracts"), false);
+});
+
+Deno.test("executeAskIronTool search_entities returns equipment matches", async () => {
+  const { client } = makeStubClient({
+    crm_companies: { data: [], error: null },
+    crm_contacts: { data: [], error: null },
+    crm_deals_rep_safe: { data: [], error: null },
+    crm_equipment: {
+      data: [{
+        id: "eq-1",
+        name: "CAT 320",
+        asset_tag: "EX-042",
+        serial_number: "CAT320-99887",
+        make: "CAT",
+        model: "320",
+      }],
+      error: null,
+    },
+    rental_contracts: { data: [], error: null },
+  });
+  const ctx = makeCtx(client, { role: "rep" });
+
+  const res = await executeAskIronTool(ctx, "search_entities", {
+    query: "cat 320",
+    types: ["equipment"],
+  });
+  assertEquals(res.ok, true);
+  const data = res.data as { matches: Array<{ type: string; id: string }> };
+  assertEquals(data.matches.length, 1);
+  assertEquals(data.matches[0].type, "equipment");
+  assertEquals(data.matches[0].id, "eq-1");
+});
+
+Deno.test("executeAskIronTool search_entities returns rental matches", async () => {
+  const { client } = makeStubClient({
+    crm_companies: { data: [], error: null },
+    crm_contacts: { data: [], error: null },
+    crm_deals_rep_safe: { data: [], error: null },
+    crm_equipment: { data: [], error: null },
+    rental_contracts: {
+      data: [{
+        id: "rc-1",
+        status: "active",
+        request_type: "rental",
+        requested_make: "CAT",
+        requested_model: "320",
+        requested_category: "excavator",
+      }],
+      error: null,
+    },
+  });
+  const ctx = makeCtx(client, { role: "rep" });
+
+  const res = await executeAskIronTool(ctx, "search_entities", {
+    query: "excavator",
+    types: ["rental"],
+  });
+  assertEquals(res.ok, true);
+  const data = res.data as { matches: Array<{ type: string; id: string }> };
+  assertEquals(data.matches.length, 1);
+  assertEquals(data.matches[0].type, "rental");
+  assertEquals(data.matches[0].id, "rc-1");
+});
+
+Deno.test("executeAskIronTool search_entities reads equipment/rental through callerDb", async () => {
+  const { captures, makeRoleClient } = makeStubClient({
+    crm_companies: { data: [], error: null },
+    crm_contacts: { data: [], error: null },
+    crm_deals_rep_safe: { data: [], error: null },
+    crm_equipment: { data: [], error: null },
+    rental_contracts: { data: [], error: null },
+  });
+  const admin = makeRoleClient("admin");
+  const callerDb = makeRoleClient("callerDb");
+  const ctx = makeCtx(callerDb, { role: "rep", admin, callerDb });
+
+  await executeAskIronTool(ctx, "search_entities", {
+    query: "cat",
+    types: ["equipment", "rental"],
+  });
+
+  for (const table of ["crm_equipment", "rental_contracts"]) {
+    const capture = captures.find((entry) => entry.table === table);
+    if (!capture) throw new Error(`missing capture for ${table}`);
+    assertEquals(capture.role, "callerDb");
+  }
+});
+
+// ── executor: lookup_quote ───────────────────────────────────────────────────
+
+Deno.test("executeAskIronTool lookup_quote supports status-only pending approval queries", async () => {
+  const { client, captures } = makeStubClient({
+    quote_packages: {
+      data: [{
+        id: "q-1",
+        deal_id: "d-1",
+        contact_id: "ct-1",
+        customer_name: "Rita Smith",
+        customer_company: "Acme",
+        customer_email: "rita@acme.com",
+        customer_phone: "555-1212",
+        status: "pending_approval",
+        quote_number: "Q-1001",
+        branch_slug: "okc",
+        equipment: [{ sku: "CAT-320" }],
+        subtotal: 100000,
+        discount_total: 5000,
+        trade_credit: 0,
+        net_total: 95000,
+        tax_total: 7600,
+        cash_down: 5000,
+        amount_financed: 97600,
+        customer_total: 102600,
+        selected_finance_scenario: { term: 60 },
+        financing_scenarios: [{ term: 60 }],
+        ai_recommendation: "Recommend 60 months",
+        created_at: "2026-05-01T00:00:00Z",
+        updated_at: "2026-05-02T00:00:00Z",
+        sent_at: "2026-05-03T00:00:00Z",
+      }],
+      error: null,
+    },
+  });
+  const ctx = makeCtx(client, { role: "rep", workspaceId: "ws-q" });
+
+  const res = await executeAskIronTool(ctx, "lookup_quote", {
+    status: "pending approval",
+  });
+  assertEquals(res.ok, true);
+
+  const q = captures.find((c) => c.table === "quote_packages");
+  if (!q) throw new Error("quote_packages query not captured");
+  const ws = q.filters.find((f) => f.column === "workspace_id" && f.op === "eq");
+  assertEquals(ws?.value, "ws-q");
+  const status = q.filters.find((f) => f.column === "status" && f.op === "in");
+  assertEquals(Array.isArray(status?.value), true);
+  assertEquals((status?.value as string[]).includes("pending_approval"), true);
+
+  const data = res.data as { count: number; quotes: Array<{ status: string }> };
+  assertEquals(data.count, 1);
+  assertEquals(data.quotes[0]?.status, "pending_approval");
+});
+
+Deno.test("executeAskIronTool lookup_quote combines customer_company with status", async () => {
+  const { client, captures } = makeStubClient({
+    quote_packages: { data: [], error: null },
+  });
+  const ctx = makeCtx(client, { role: "rep" });
+
+  const res = await executeAskIronTool(ctx, "lookup_quote", {
+    customer_company: "Acme",
+    status: "pending approval",
+  });
+  assertEquals(res.ok, true);
+
+  const q = captures.find((c) => c.table === "quote_packages");
+  if (!q) throw new Error("quote_packages query not captured");
+  const status = q.filters.find((f) => f.column === "status" && f.op === "in");
+  assertEquals(Boolean(status), true);
+  const orFilter = q.filters.find((f) => f.op === "or");
+  assertEquals(typeof orFilter?.value, "string");
+  assertEquals(String(orFilter?.value).includes("customer_company.ilike."), true);
+});
+
+Deno.test("executeAskIronTool lookup_quote returns empty quote list for unmatched status", async () => {
+  const { client } = makeStubClient({
+    quote_packages: { data: [], error: null },
+  });
+  const ctx = makeCtx(client, { role: "rep" });
+
+  const res = await executeAskIronTool(ctx, "lookup_quote", {
+    status: "pending approval",
+  });
+  assertEquals(res.ok, true);
+  const data = res.data as { count: number; quotes: unknown[] };
+  assertEquals(data.count, 0);
+  assertEquals(data.quotes, []);
 });
 
 // ── executor: get_deal_detail / get_company_detail ──────────────────────────
@@ -4209,6 +4419,33 @@ Deno.test(
       moveCaps[0].role,
       "callerDb",
       "summarize_day.active_moves must not hit admin (service-role) client",
+    );
+  },
+);
+
+Deno.test(
+  "executeAskIronTool lookup_quote reads quote_packages through callerDb (RLS backstop)",
+  async () => {
+    const { captures, makeRoleClient } = makeStubClient({
+      quote_packages: { data: [], error: null },
+    });
+    const admin = makeRoleClient("admin");
+    const callerDb = makeRoleClient("callerDb");
+    const ctx = makeCtx(callerDb, {
+      role: "rep",
+      userId: "rep-me",
+      admin,
+      callerDb,
+    });
+
+    await executeAskIronTool(ctx, "lookup_quote", { status: "pending approval" });
+
+    const quoteCap = captures.find((c) => c.table === "quote_packages");
+    if (!quoteCap) throw new Error("quote_packages query not captured");
+    assertEquals(
+      quoteCap.role,
+      "callerDb",
+      "lookup_quote must not hit admin (service-role) client",
     );
   },
 );

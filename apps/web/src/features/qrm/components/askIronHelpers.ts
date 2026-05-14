@@ -50,6 +50,8 @@ export function humanizeToolName(tool: string): string {
       return "Checked signals";
     case "search_entities":
       return "Searched graph";
+    case "lookup_quote":
+      return "Checked quotes";
     case "get_deal_detail":
       return "Pulled deal detail";
     case "get_company_detail":

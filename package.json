@@ -32,6 +32,7 @@
     "floor:seed-layouts": "bun ./scripts/floor/seed-layouts-for-workspace.mjs",
     "floor:verify-production": "bun ./scripts/verify/floor-production-audit.mjs",
     "quote:status-smoke": "bun ./scripts/verify/quote-status-constraint-smoke.mjs",
+    "iron:capability-audit": "deno test supabase/functions/_shared/iron/capability-matrix.test.ts supabase/functions/_shared/iron/tools.test.ts supabase/functions/_shared/qrm-ask-iron.test.ts --allow-read",
     "kb:eval": "node ./scripts/kb-eval/run-eval.mjs",
     "kb:eval:report": "node ./scripts/kb-eval/eval-report.mjs",
     "kb:workspace-isolation": "node ./scripts/kb-eval/workspace-isolation.mjs",

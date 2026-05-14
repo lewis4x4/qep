@@ -17,6 +17,7 @@
  *   - list_my_moves        — today's moves for the caller (rep → own; elevated → all)
  *   - list_recent_signals  — recent signal stream, with severity/kind filters
  *   - search_entities      — fuzzy search across contacts/companies/deals
+ *   - lookup_quote         — quote/proposal lookup by status/customer/id
  *   - get_deal_detail      — drill into a single deal (id known)
  *   - get_company_detail   — drill into a single company (id known)
  *   - propose_move         — create a new move in Today (Slice 6: write surface)
@@ -130,6 +131,25 @@ export const ASK_IRON_TOOLS: AskIronTool[] = [
         limit: { type: "integer", minimum: 1, maximum: 25 },
       },
       required: ["query"],
+    },
+  },
+  {
+    name: "lookup_quote",
+    description:
+      "Find saved quote packages/proposals by status, customer name/company, or quote id. Use for quote-status questions like 'Are there any quotes pending approval?', 'show draft quotes', 'sent proposals for Acme', or 'what quotes are waiting on approval'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        customer_name: { type: "string" },
+        customer_company: { type: "string" },
+        quote_id: { type: "string" },
+        status: {
+          type: "string",
+          description:
+            "Natural-language quote status (for example: 'pending approval', 'draft', 'sent', 'approved').",
+        },
+        limit: { type: "integer", minimum: 1, maximum: 25 },
+      },
     },
   },
   {
@@ -725,6 +745,14 @@ function sanitizeSearchTerm(raw: string): string {
     .trim();
 }
 
+function sanitizeQuoteFilterTerm(raw: string): string {
+  return raw
+    .replace(/[,%_()\\.]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
+
 export function normalizeSearchInput(
   input: Record<string, unknown>,
 ): NormalizedSearchInput {
@@ -740,6 +768,100 @@ export function normalizeSearchInput(
     ? Math.min(Math.max(Math.trunc(limitRaw), 1), 25)
     : 10;
   return { query, types, limit };
+}
+
+export interface NormalizedLookupQuoteInput {
+  customerName: string | null;
+  customerCompany: string | null;
+  quoteId: string | null;
+  status: string | null;
+  statusCandidates: string[];
+  limit: number;
+}
+
+function normalizeQuoteStatusCandidates(raw: unknown): string[] {
+  if (typeof raw !== "string") return [];
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+
+  const normalized = trimmed.toLowerCase().replace(/[_-]/g, " ").replace(/\s+/g, " ").trim();
+  const out = new Set<string>();
+  const add = (...values: string[]) => {
+    for (const value of values) {
+      const cleaned = value.trim();
+      if (cleaned.length > 0) out.add(cleaned);
+    }
+  };
+
+  switch (normalized) {
+    case "pending approval":
+    case "approval pending":
+      add("pending_approval", "approval_pending", normalized);
+      break;
+    case "pending":
+      add("pending", "pending_approval");
+      break;
+    case "draft":
+      add("draft");
+      break;
+    case "sent":
+      add("sent");
+      break;
+    case "approved":
+    case "accepted":
+      add("approved", "accepted");
+      break;
+    case "rejected":
+    case "declined":
+      add("rejected", "declined");
+      break;
+    case "expired":
+      add("expired");
+      break;
+    case "cancelled":
+    case "canceled":
+      add("cancelled", "canceled");
+      break;
+    default:
+      add(normalized, normalized.replace(/\s+/g, "_"), trimmed);
+      break;
+  }
+
+  return Array.from(out);
+}
+
+export function normalizeLookupQuoteInput(
+  input: Record<string, unknown>,
+): NormalizedLookupQuoteInput {
+  const customerName = typeof input.customer_name === "string"
+    ? input.customer_name.trim() || null
+    : null;
+  const customerCompany = typeof input.customer_company === "string"
+    ? input.customer_company.trim() || null
+    : null;
+  const quoteId = typeof input.quote_id === "string"
+    ? input.quote_id.trim() || null
+    : null;
+  const status = typeof input.status === "string" ? input.status.trim() || null : null;
+  const statusCandidates = normalizeQuoteStatusCandidates(status);
+
+  const limitRaw = Number(input.limit ?? 10);
+  const limit = Number.isFinite(limitRaw)
+    ? Math.min(Math.max(Math.trunc(limitRaw), 1), 25)
+    : 10;
+
+  if (!customerName && !customerCompany && !quoteId && statusCandidates.length === 0) {
+    throw new Error("VALIDATION_ERROR:quote_filter");
+  }
+
+  return {
+    customerName,
+    customerCompany,
+    quoteId,
+    status,
+    statusCandidates,
+    limit,
+  };
 }
 
 // ── propose_move normalization ─────────────────────────────────────────────
@@ -1368,6 +1490,8 @@ export async function executeAskIronTool(
         return { ok: true, data: await toolListRecentSignals(ctx, input) };
       case "search_entities":
         return { ok: true, data: await toolSearchEntities(ctx, input) };
+      case "lookup_quote":
+        return { ok: true, data: await toolLookupQuote(ctx, input) };
       case "get_deal_detail":
         return { ok: true, data: await toolGetDealDetail(ctx, input) };
       case "get_company_detail":
@@ -1602,7 +1726,150 @@ async function toolSearchEntities(
     }
   }
 
+  if (types?.has("equipment")) {
+    const { data, error } = await ctx.callerDb
+      .from("crm_equipment")
+      .select("id, name, asset_tag, serial_number, make, model")
+      .eq("workspace_id", ctx.workspaceId)
+      .is("deleted_at", null)
+      .or(
+        `name.ilike.${like},asset_tag.ilike.${like},serial_number.ilike.${like},make.ilike.${like},model.ilike.${like}`,
+      )
+      .limit(f.limit);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      const subtitle = [
+        row.asset_tag ? `tag ${String(row.asset_tag)}` : null,
+        row.serial_number ? `sn ${String(row.serial_number)}` : null,
+      ].filter(Boolean).join(" · ");
+      const label = [row.make, row.model].filter(Boolean).join(" ");
+      results.push({
+        type: "equipment",
+        id: String(row.id),
+        title: String(row.name ?? label ?? "Unnamed equipment"),
+        subtitle: subtitle || null,
+      });
+    }
+  }
+
+  if (types?.has("rental")) {
+    const { data, error } = await ctx.callerDb
+      .from("rental_contracts")
+      .select("id, status, request_type, requested_make, requested_model, requested_category")
+      .eq("workspace_id", ctx.workspaceId)
+      .or(
+        `requested_make.ilike.${like},requested_model.ilike.${like},requested_category.ilike.${like},request_type.ilike.${like}`,
+      )
+      .limit(f.limit);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      const requested = [row.requested_make, row.requested_model, row.requested_category]
+        .filter(Boolean)
+        .join(" ");
+      results.push({
+        type: "rental",
+        id: String(row.id),
+        title: requested ? `Rental ${requested}` : `Rental ${String(row.id)}`,
+        subtitle: row.status ? String(row.status) : null,
+      });
+    }
+  }
+
   return { matches: results.slice(0, f.limit) };
+}
+
+async function toolLookupQuote(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeLookupQuoteInput(input);
+
+  let q = ctx.callerDb
+    .from("quote_packages")
+    .select(
+      "id, deal_id, contact_id, customer_name, customer_company, customer_email, customer_phone, status, quote_number, branch_slug, equipment, subtotal, discount_total, trade_credit, net_total, tax_total, cash_down, amount_financed, customer_total, selected_finance_scenario, financing_scenarios, ai_recommendation, created_at, updated_at, sent_at",
+    )
+    .eq("workspace_id", ctx.workspaceId);
+
+  if (n.quoteId) {
+    q = q.eq("id", n.quoteId);
+  }
+
+  if (n.statusCandidates.length > 0) {
+    q = q.in("status", n.statusCandidates);
+  }
+
+  if (!n.quoteId) {
+    const clauses: string[] = [];
+    if (n.customerName) {
+      const cleaned = sanitizeQuoteFilterTerm(n.customerName);
+      if (cleaned.length > 0) {
+        const like = `%${cleaned}%`;
+        clauses.push(`customer_name.ilike.${like}`);
+      }
+    }
+    if (n.customerCompany) {
+      const cleaned = sanitizeQuoteFilterTerm(n.customerCompany);
+      if (cleaned.length > 0) {
+        const like = `%${cleaned}%`;
+        clauses.push(`customer_company.ilike.${like}`);
+      }
+    }
+    if (clauses.length > 0) {
+      q = q.or(clauses.join(","));
+    }
+  }
+
+  const { data, error } = await q
+    .order("created_at", { ascending: false })
+    .limit(n.limit);
+  if (error) throw error;
+
+  const quotes = (data ?? []).map((row) => {
+    const equipment = Array.isArray(row.equipment)
+      ? row.equipment as Array<Record<string, unknown>>
+      : [];
+
+    return {
+      id: row.id,
+      quote_number: row.quote_number,
+      status: row.status,
+      customer_name: row.customer_name,
+      customer_company: row.customer_company,
+      customer_email: row.customer_email,
+      customer_phone: row.customer_phone,
+      deal_id: row.deal_id,
+      branch_slug: row.branch_slug,
+      primary_equipment: equipment[0] ?? null,
+      equipment_count: equipment.length,
+      subtotal: row.subtotal,
+      discount_total: row.discount_total,
+      trade_credit: row.trade_credit,
+      net_total: row.net_total,
+      tax_total: row.tax_total,
+      cash_down: row.cash_down,
+      amount_financed: row.amount_financed,
+      customer_total: row.customer_total,
+      selected_financing: row.selected_finance_scenario,
+      reasoning: row.ai_recommendation,
+      job_facts: row.financing_scenarios,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      sent_at: row.sent_at,
+    };
+  });
+
+  return {
+    count: quotes.length,
+    filter: {
+      customer_name: n.customerName,
+      customer_company: n.customerCompany,
+      quote_id: n.quoteId,
+      status: n.status,
+      normalized_statuses: n.statusCandidates,
+    },
+    quotes,
+  };
 }
 
 async function toolGetDealDetail(
@@ -2790,6 +3057,7 @@ Rules:
 - For questions about the operator's own work — "did I call <customer>", "what did I do yesterday", "any touches on <deal> this week", "how many follow-ups" — call list_my_touches. This is the operator's outbound log; it is NOT the same as list_recent_signals (inbound events). For "what did I do" questions where system-generated activity rows would be noise, filter to the touch types operators actually log (activity_types: ['call','email','meeting','follow_up','note']).
 - For morning-briefing questions — "what's on my plate", "brief me on my day", "where should I start", "catch me up" — call summarize_day. It bundles active moves, moves completed in the window, recent touches, and workspace signals into one round-trip. Do NOT chain list_my_moves + list_my_touches + list_recent_signals for these questions; summarize_day returns all four in a single call. Note: open_signals in the result is workspace-wide, so describe it as "on the yard's radar" or "across the workspace" rather than "on your accounts".
 - For narrative deal questions — "what's the story on X", "where does this deal stand", "brief me on X", "status of X" — call search_entities to get the deal_id, then call summarize_deal. Do not chain get_deal_detail + list_recent_signals for narrative questions; summarize_deal bundles both in one round trip.
+- For quote/proposal status questions — "quotes pending approval", "pending quotes", "draft proposals", "sent quotes for Acme" — call lookup_quote. Pass status for status terms (for example "pending approval"), and include customer_name or customer_company when provided.
 - For narrative account questions — "what's going on at <company>", "brief me on <company>", "status at <company>", "anything happening at Acme" — call search_entities to get the company_id, then call summarize_company. Disambiguation rule: if search_entities returns both a deal and a company matching the name, pick by the operator's phrasing — "deal" / "quote" / "pipeline" → summarize_deal; "account" / "at Acme" / "with Acme" / bare company name → summarize_company. When a rep asks about a company, describe open_deals as "deals you can see" — the list may be filtered by your visibility rules.
 - For person-centric narrative questions — "who is <name>", "brief me on <person>", "before I call <contact>", "what's the status with <person>", "anything new on <name>" — call search_entities to get the contact_id, then call summarize_contact. Disambiguation rule: if the operator names a person (not a company), prefer summarize_contact over summarize_company even when both match in search. related_deals in the result is computed from the contact's company, so describe it as "deals you can see on their company" rather than "their deals".
 - For signal-centric triage questions — "triage this signal", "why is this signal hot", "what's going on with this <kind> signal", "brief me on this alert on <entity>" — call summarize_signal with the signal_id (obtain via list_recent_signals if only the kind/title is known). It bundles the signal row, the parent entity, other related signals on that entity, and moves the signal triggered. Do NOT chain list_recent_signals + search_entities + a summarize_* on the parent for triage questions; summarize_signal returns all four in one shot. parent_entity may be null for equipment/rental/activity/workspace signals — say so plainly rather than guessing.

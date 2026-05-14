@@ -237,13 +237,14 @@ export const IRON_TOOL_DEFINITIONS: AnthropicToolDef[] = [
   {
     name: "lookup_quote",
     description:
-      "Find saved equipment proposals (quote packages) by customer name, company name, or quote id. Returns the quote's customer, equipment, totals, cash down, amount financed, financing scenarios, status, and the AI reasoning used to build it (which often captures budget and job context). USE THIS WHEN: the user asks about a quoted deal, a prospect who doesn't have a full CRM contact yet, or anything about numbers on a specific proposal (e.g. 'how much was John gonna put down', 'what's the budget on the Coker deal', 'which SR175 quote have we sent recently'). Falls through to this when lookup_contact returns nothing for a known prospect name.",
+      "Find saved equipment proposals (quote packages) by status, customer name, company name, or quote id. Returns the quote's customer, equipment, totals, cash down, amount financed, financing scenarios, status, and the AI reasoning used to build it (which often captures budget and job context). USE THIS WHEN: the user asks about quote/proposal status ('quotes pending approval', 'pending quotes', 'draft quotes', 'approved quotes for Acme') or numbers on a specific proposal. Pass natural-language status values like 'pending approval' in status. Falls through to this when lookup_contact returns nothing for a known prospect name.",
     input_schema: {
       type: "object",
       properties: {
         customer_name: { type: "string", description: "Buyer's full or partial name (e.g. 'John Coker')" },
         customer_company: { type: "string", description: "Company name on the proposal" },
         quote_id: { type: "string", description: "Exact quote_packages.id UUID if known" },
+        status: { type: "string", description: "Optional quote status (natural-language allowed, e.g. 'pending approval', 'draft', 'sent')" },
         limit: { type: "number", description: "Max results (default 10)" },
       },
     },
@@ -351,6 +352,7 @@ export async function executeIronTool(
           input.customer_name as string | undefined,
           input.customer_company as string | undefined,
           input.quote_id as string | undefined,
+          input.status as string | undefined,
           (input.limit as number | undefined) ?? 10,
           ctx,
         );
@@ -981,15 +983,69 @@ async function toolSearchPlatform(
   };
 }
 
+function sanitizeQuoteFilterTerm(raw: string): string {
+  return raw
+    .replace(/[,%_()\\.]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
+
+function normalizeQuoteStatuses(status: string | undefined): string[] {
+  if (!status || typeof status !== "string") return [];
+  const trimmed = status.trim();
+  if (!trimmed) return [];
+  const normalized = trimmed.toLowerCase().replace(/[_-]/g, " ").replace(/\s+/g, " ").trim();
+  const aliases = new Set<string>();
+
+  const add = (value: string) => {
+    if (!value) return;
+    aliases.add(value);
+  };
+
+  const withUnderscore = normalized.replace(/\s+/g, "_");
+  add(normalized);
+  add(withUnderscore);
+  add(trimmed);
+
+  if (normalized === "pending approval" || normalized === "approval pending") {
+    add("pending_approval");
+    add("approval_pending");
+    add("pending approval");
+  } else if (normalized === "pending") {
+    add("pending");
+    add("pending_approval");
+  } else if (normalized === "draft") {
+    add("draft");
+  } else if (normalized === "sent") {
+    add("sent");
+  } else if (normalized === "approved" || normalized === "accepted") {
+    add("approved");
+    add("accepted");
+  } else if (normalized === "rejected" || normalized === "declined") {
+    add("rejected");
+    add("declined");
+  } else if (normalized === "expired") {
+    add("expired");
+  } else if (normalized === "cancelled" || normalized === "canceled") {
+    add("cancelled");
+    add("canceled");
+  }
+
+  return Array.from(aliases);
+}
+
 async function toolLookupQuote(
   customerName: string | undefined,
   customerCompany: string | undefined,
   quoteId: string | undefined,
+  status: string | undefined,
   limit: number,
   ctx: ToolContext,
 ) {
-  if (!customerName && !customerCompany && !quoteId) {
-    return { error: "customer_name, customer_company, or quote_id is required" };
+  const normalizedStatuses = normalizeQuoteStatuses(status);
+  if (!customerName && !customerCompany && !quoteId && normalizedStatuses.length === 0) {
+    return { error: "customer_name, customer_company, quote_id, or status is required" };
   }
   let q = ctx.admin
     .from("quote_packages")
@@ -999,24 +1055,42 @@ async function toolLookupQuote(
     .eq("workspace_id", ctx.workspaceId)
     .order("created_at", { ascending: false })
     .limit(Math.min(limit, 25));
+  if (normalizedStatuses.length > 0) {
+    q = q.in("status", normalizedStatuses);
+  }
+
   if (quoteId) {
     q = q.eq("id", quoteId);
   } else {
     const filters: string[] = [];
     if (customerName) {
-      const term = customerName.replace(/[%_]/g, "").slice(0, 80);
-      filters.push(`customer_name.ilike.%${term}%`);
+      const term = sanitizeQuoteFilterTerm(customerName);
+      if (term) filters.push(`customer_name.ilike.%${term}%`);
     }
     if (customerCompany) {
-      const term = customerCompany.replace(/[%_]/g, "").slice(0, 80);
-      filters.push(`customer_company.ilike.%${term}%`);
+      const term = sanitizeQuoteFilterTerm(customerCompany);
+      if (term) filters.push(`customer_company.ilike.%${term}%`);
     }
-    if (filters.length === 0) return { count: 0, quotes: [] };
-    q = q.or(filters.join(","));
+    if (filters.length === 0 && normalizedStatuses.length === 0) return { count: 0, filter: { customer_name: customerName ?? null, customer_company: customerCompany ?? null, quote_id: quoteId ?? null, status: status ?? null, normalized_statuses: normalizedStatuses }, quotes: [] };
+    if (filters.length > 0) {
+      q = q.or(filters.join(","));
+    }
   }
   const { data, error } = await q;
   if (error) return { error: error.message };
-  if (!data || data.length === 0) return { count: 0, quotes: [] };
+  if (!data || data.length === 0) {
+    return {
+      count: 0,
+      filter: {
+        customer_name: customerName ?? null,
+        customer_company: customerCompany ?? null,
+        quote_id: quoteId ?? null,
+        status: status ?? null,
+        normalized_statuses: normalizedStatuses,
+      },
+      quotes: [],
+    };
+  }
 
   const shapedQuotes = data.map((row: Record<string, unknown>) => {
     const equipment = Array.isArray(row.equipment) ? row.equipment : [];
@@ -1075,7 +1149,17 @@ async function toolLookupQuote(
     };
   });
 
-  return { count: shapedQuotes.length, quotes: shapedQuotes };
+  return {
+    count: shapedQuotes.length,
+    filter: {
+      customer_name: customerName ?? null,
+      customer_company: customerCompany ?? null,
+      quote_id: quoteId ?? null,
+      status: status ?? null,
+      normalized_statuses: normalizedStatuses,
+    },
+    quotes: shapedQuotes,
+  };
 }
 
 async function toolSearchEquipment(
