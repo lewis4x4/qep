@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildIronQuoteIntakeQuestion,
   buildQuoteCustomerSearchCandidates,
   extractIronQuoteIntakeIntent,
+  extractIronQuoteStructuredIntake,
+  isIronQuoteIntakeReady,
+  mergeIronQuoteIntakeIntent,
 } from "./quote-intake";
 
 describe("Iron quote intake intent", () => {
@@ -12,6 +16,9 @@ describe("Iron quote intake intent", () => {
     expect(intent?.rawText).toBe("start a quote for big oak underbrushing");
     expect(intent?.targetText).toBe("big oak underbrushing");
     expect(intent?.customerSearchCandidates).toContain("big oak");
+    expect(intent?.structuredIntake.customerText).toBe("big oak");
+    expect(intent?.structuredIntake.applicationText).toBe("underbrushing");
+    expect(intent?.structuredIntake.missingFields).toContain("equipment");
   });
 
   test("routes messy spoken equipment/customer/options/timeframe phrase and preserves raw context", () => {
@@ -22,6 +29,9 @@ describe("Iron quote intake intent", () => {
     expect(intent?.rawText).toBe(phrase);
     expect(intent?.targetText).toBe("this customer and he wants these options in this timeframe");
     expect(intent?.confidence).toBe("high");
+    expect(intent?.structuredIntake.customerText).toBeNull();
+    expect(intent?.structuredIntake.equipmentText).toBeNull();
+    expect(intent?.structuredIntake.missingFields).toEqual(["customer", "equipment", "options", "timeframe"]);
   });
 
   test("routes pricing/proposal creation phrases", () => {
@@ -33,6 +43,39 @@ describe("Iron quote intake intent", () => {
     const intent = extractIronQuoteIntakeIntent("create proposal for Anderson next week");
 
     expect(intent?.customerSearchCandidates).toContain("anderson");
+  });
+
+  test("extracts complete structured quote intake", () => {
+    const structured = extractIronQuoteStructuredIntake(
+      "quote a Bobcat T770 for Big Oak with forestry mulcher and beacon kit by next week",
+    );
+
+    expect(structured.customerText).toBe("Big Oak");
+    expect(structured.equipmentText).toBe("Bobcat T770");
+    expect(structured.optionsText).toBe("forestry mulcher and beacon kit");
+    expect(structured.timeframeText).toBe("by next week");
+    expect(structured.missingFields).toEqual([]);
+  });
+
+  test("asks for missing intake fields before opening Quote Builder", () => {
+    const intent = extractIronQuoteIntakeIntent("start a quote for big oak underbrushing");
+
+    expect(intent).not.toBeNull();
+    expect(isIronQuoteIntakeReady(intent!)).toBe(false);
+    expect(buildIronQuoteIntakeQuestion(intent!)).toContain("What machine");
+  });
+
+  test("merges follow-up answers into a ready structured intake", () => {
+    const intent = extractIronQuoteIntakeIntent("start a quote for big oak underbrushing");
+    const merged = mergeIronQuoteIntakeIntent(
+      intent!,
+      "Bobcat T770 with forestry mulcher, needs it next week",
+    );
+
+    expect(merged.structuredIntake.equipmentText).toBe("Bobcat T770");
+    expect(merged.structuredIntake.optionsText).toBe("forestry mulcher");
+    expect(merged.structuredIntake.timeframeText).toBe("next week");
+    expect(isIronQuoteIntakeReady(merged)).toBe(true);
   });
 
   test("does not intercept quote status or lookup questions", () => {

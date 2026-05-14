@@ -22,6 +22,12 @@ function makeHandoff(overrides: Partial<IronQuoteHandoff> = {}): IronQuoteHandof
     resolvedCustomerEmail: null,
     customerSearchQuery: "big oak",
     customerMatchKind: "company",
+    structuredCustomerText: "big oak",
+    structuredEquipmentText: "Bobcat T770",
+    structuredOptionsText: "forestry mulcher",
+    structuredTimeframeText: "next week",
+    structuredApplicationText: "underbrushing",
+    structuredMissingFields: [],
     ...overrides,
   };
 }
@@ -35,6 +41,8 @@ describe("Iron quote handoff", () => {
 
     expect(handoff?.rawText).toBe("start a quote for big oak underbrushing");
     expect(handoff?.customerMatchKind).toBe("company");
+    expect(handoff?.structuredEquipmentText).toBe("Bobcat T770");
+    expect(handoff?.structuredMissingFields).toEqual([]);
   });
 
   test("rejects mismatched or expired handoff", () => {
@@ -47,6 +55,17 @@ describe("Iron quote handoff", () => {
       expectedHandoffId: "handoff-1",
       nowMs: new Date("2026-05-13T23:00:01.000Z").getTime(),
     })).toBeNull();
+  });
+
+  test("normalizes structured missing fields safely", () => {
+    const handoff = normalizeIronQuoteHandoff(makeHandoff({
+      structuredMissingFields: ["equipment", "bad" as never, "timeframe", "equipment"],
+    }), {
+      expectedHandoffId: "handoff-1",
+      nowMs: new Date("2026-05-13T22:05:00.000Z").getTime(),
+    });
+
+    expect(handoff?.structuredMissingFields).toEqual(["equipment", "timeframe"]);
   });
 
   test("reports unavailable storage", () => {

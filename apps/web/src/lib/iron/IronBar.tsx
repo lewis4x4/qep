@@ -69,7 +69,10 @@ import {
   type IronQuoteHandoff,
 } from "@/features/quote-builder/lib/iron-quote-handoff";
 import {
+  buildIronQuoteIntakeQuestion,
   extractIronQuoteIntakeIntent,
+  isIronQuoteIntakeReady,
+  mergeIronQuoteIntakeIntent,
   type IronQuoteIntakeIntent,
 } from "./quote-intake";
 
@@ -142,6 +145,12 @@ async function openQuoteBuilderForIntake(
     resolvedCustomerEmail: identity?.customerEmail || null,
     customerSearchQuery: resolution.query,
     customerMatchKind: identity?.matchKind ?? "none",
+    structuredCustomerText: intent.structuredIntake.customerText,
+    structuredEquipmentText: intent.structuredIntake.equipmentText,
+    structuredOptionsText: intent.structuredIntake.optionsText,
+    structuredTimeframeText: intent.structuredIntake.timeframeText,
+    structuredApplicationText: intent.structuredIntake.applicationText,
+    structuredMissingFields: intent.structuredIntake.missingFields,
   };
 
   try {
@@ -197,6 +206,7 @@ export function IronBar() {
 
   const [input, setInput] = useState("");
   const [classifying, setClassifying] = useState(false);
+  const [quoteIntakeSession, setQuoteIntakeSession] = useState<IronQuoteIntakeIntent | null>(null);
   const [voicePending, setVoicePending] = useState(false);
   const [userRole, setUserRole] = useState<string>("rep");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -245,6 +255,7 @@ export function IronBar() {
     } else {
       setInput("");
       setClassifying(false);
+      setQuoteIntakeSession(null);
     }
   }, [state.barOpen]);
 
@@ -322,6 +333,49 @@ export function IronBar() {
       };
       chatAppend(userMsg);
 
+      if (quoteIntakeSession && /^\s*(?:cancel|nevermind|never\s+mind|stop|forget\s+it)\s*$/i.test(text)) {
+        setQuoteIntakeSession(null);
+        chatAppend({
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "No problem — I canceled that quote intake.",
+          createdAt: Date.now(),
+        });
+        return;
+      }
+
+      if (quoteIntakeSession) {
+        const mergedQuoteIntent = mergeIronQuoteIntakeIntent(quoteIntakeSession, text);
+        if (!isIronQuoteIntakeReady(mergedQuoteIntent)) {
+          setQuoteIntakeSession(mergedQuoteIntent);
+          chatAppend({
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: buildIronQuoteIntakeQuestion(mergedQuoteIntent),
+            createdAt: Date.now(),
+          });
+          return;
+        }
+
+        setQuoteIntakeSession(null);
+        setClassifying(true);
+        const quoteRelease = pushPresence("iron-quote-intake", "thinking");
+        try {
+          await openQuoteBuilderForIntake(
+            mergedQuoteIntent,
+            state.conversationId ?? null,
+            navigate,
+            chatAppend,
+            setError,
+          );
+          closeBar();
+          return;
+        } finally {
+          quoteRelease();
+          setClassifying(false);
+        }
+      }
+
       // Knowledge-only path: skip the classifier and stream directly.
       if (options.knowledgeOnly) {
         const placeholder: IronChatMessage = {
@@ -342,6 +396,17 @@ export function IronBar() {
 
       const quoteIntent = extractIronQuoteIntakeIntent(text);
       if (quoteIntent) {
+        if (!isIronQuoteIntakeReady(quoteIntent)) {
+          setQuoteIntakeSession(quoteIntent);
+          chatAppend({
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: buildIronQuoteIntakeQuestion(quoteIntent),
+            createdAt: Date.now(),
+          });
+          return;
+        }
+
         setClassifying(true);
         const quoteRelease = pushPresence("iron-quote-intake", "thinking");
         try {
@@ -465,6 +530,7 @@ export function IronBar() {
     [
       input,
       classifying,
+      quoteIntakeSession,
       knowledgeStatus,
       knowledgeStart,
       state.conversationId,

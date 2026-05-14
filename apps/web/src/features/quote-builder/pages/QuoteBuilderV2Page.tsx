@@ -122,6 +122,7 @@ import {
   clearIronQuoteHandoff,
   normalizeIronQuoteHandoff,
   readIronQuoteHandoff,
+  type IronQuoteHandoff,
 } from "../lib/iron-quote-handoff";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -572,6 +573,74 @@ function statusLabel(status: string | null | undefined): string {
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+function splitIronOptionLines(value: string | null): string[] {
+  if (!value || value === "none specified") return [];
+  const normalized = value
+    .replace(/\b(?:and|plus)\b/gi, ",")
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 2);
+  return [...new Set(normalized)].slice(0, 8);
+}
+
+function buildIronQuoteIntakeSummary(handoff: IronQuoteHandoff): string {
+  const lines = [
+    `Iron intake: ${handoff.rawText}`,
+    handoff.structuredCustomerText ? `Customer: ${handoff.structuredCustomerText}` : null,
+    handoff.structuredApplicationText ? `Application/job: ${handoff.structuredApplicationText}` : null,
+    handoff.structuredEquipmentText ? `Equipment: ${handoff.structuredEquipmentText}` : null,
+    handoff.structuredOptionsText ? `Options/attachments: ${handoff.structuredOptionsText}` : null,
+    handoff.structuredTimeframeText ? `Timeframe: ${handoff.structuredTimeframeText}` : null,
+  ].filter(Boolean);
+  return lines.join("\n");
+}
+
+function buildIronQuoteIntakeEquipmentLine(handoff: IronQuoteHandoff): QuoteLineItemDraft | null {
+  if (!handoff.structuredEquipmentText) return null;
+  return {
+    id: `iron-intake-equipment-${handoff.handoffId}`,
+    kind: "equipment",
+    sourceCatalog: "manual",
+    sourceId: null,
+    dealerCost: null,
+    title: handoff.structuredEquipmentText,
+    quantity: 1,
+    unitPrice: 0,
+    metadata: {
+      source: "iron_quote_intake",
+      application_text: handoff.structuredApplicationText,
+      options_text: handoff.structuredOptionsText,
+      timeframe_text: handoff.structuredTimeframeText,
+      price_status: "needs_pricing",
+    },
+  };
+}
+
+function buildIronQuoteIntakeOptionLines(handoff: IronQuoteHandoff): QuoteLineItemDraft[] {
+  return splitIronOptionLines(handoff.structuredOptionsText).map((title, index) => ({
+    id: `iron-intake-option-${handoff.handoffId}-${index}`,
+    kind: "option",
+    sourceCatalog: "manual",
+    sourceId: null,
+    dealerCost: null,
+    title,
+    quantity: 1,
+    unitPrice: 0,
+    metadata: {
+      source: "iron_quote_intake",
+      timeframe_text: handoff.structuredTimeframeText,
+      price_status: "needs_pricing",
+    },
+  }));
+}
+
+function appendMissingIronLines(current: QuoteLineItemDraft[], incoming: QuoteLineItemDraft[]): QuoteLineItemDraft[] {
+  if (incoming.length === 0) return current;
+  const titles = new Set(current.map((item) => item.title.trim().toLowerCase()).filter(Boolean));
+  const additions = incoming.filter((item) => !titles.has(item.title.trim().toLowerCase()));
+  return additions.length > 0 ? [...current, ...additions] : current;
 }
 
 export function QuoteBuilderV2Page() {
@@ -1098,20 +1167,29 @@ export function QuoteBuilderV2Page() {
     }
 
     clearIronQuoteHandoff();
+    const intakeSummary = buildIronQuoteIntakeSummary(handoff);
+    const equipmentLine = buildIronQuoteIntakeEquipmentLine(handoff);
+    const optionLines = buildIronQuoteIntakeOptionLines(handoff);
     setDraft((current) => ({
       ...current,
       entryMode: "ai_chat",
       contactId: handoff.resolvedContactId ?? current.contactId,
       companyId: handoff.resolvedCompanyId ?? current.companyId,
-      customerName: current.customerName || handoff.resolvedCustomerName || "",
-      customerCompany: current.customerCompany || handoff.resolvedCustomerCompany || "",
+      customerName: current.customerName || handoff.resolvedCustomerName || handoff.structuredCustomerText || "",
+      customerCompany: current.customerCompany || handoff.resolvedCustomerCompany || handoff.structuredCustomerText || "",
       customerPhone: current.customerPhone || handoff.resolvedCustomerPhone || "",
       customerEmail: current.customerEmail || handoff.resolvedCustomerEmail || "",
-      voiceSummary: current.voiceSummary || handoff.rawText,
+      voiceSummary: current.voiceSummary || intakeSummary,
+      equipment: current.equipment.length > 0 || !equipmentLine ? current.equipment : [equipmentLine],
+      attachments: appendMissingIronLines(current.attachments, optionLines),
     }));
-    setAiPrompt(handoff.rawText);
-    setAiIntakeMessage("Iron brought this quote intake over. Verify the customer, then configure equipment/options/timeframe before pricing.");
-    setStep("customer");
+    setAiPrompt(intakeSummary);
+    setAiIntakeMessage(
+      handoff.structuredEquipmentText
+        ? "Iron captured the quote intake and created starter equipment/options lines. Verify customer, price the lines, then continue the quote."
+        : "Iron brought this quote intake over. Verify the customer, then configure equipment/options/timeframe before pricing.",
+    );
+    setStep(equipmentLine ? "equipment" : "customer");
   }, [
     dealId,
     existingQuote,

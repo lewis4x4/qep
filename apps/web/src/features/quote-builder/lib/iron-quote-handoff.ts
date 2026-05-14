@@ -2,6 +2,7 @@ export const IRON_QUOTE_HANDOFF_KEY = "qep.ironQuote.pendingIntake";
 export const IRON_QUOTE_HANDOFF_MAX_AGE_MS = 30 * 60 * 1000;
 
 export type IronQuoteCustomerMatchKind = "contact" | "company" | "none";
+export type IronQuoteIntakeMissingField = "customer" | "equipment" | "options" | "timeframe";
 
 export interface IronQuoteHandoff {
   handoffId: string;
@@ -19,6 +20,13 @@ export interface IronQuoteHandoff {
 
   customerSearchQuery: string | null;
   customerMatchKind: IronQuoteCustomerMatchKind;
+
+  structuredCustomerText: string | null;
+  structuredEquipmentText: string | null;
+  structuredOptionsText: string | null;
+  structuredTimeframeText: string | null;
+  structuredApplicationText: string | null;
+  structuredMissingFields: IronQuoteIntakeMissingField[];
 }
 
 interface ParseOptions {
@@ -51,6 +59,17 @@ function nullableString(value: unknown, maxLength: number): string | null {
 
 function normalizeMatchKind(value: unknown): IronQuoteCustomerMatchKind {
   return value === "contact" || value === "company" ? value : "none";
+}
+
+function normalizeMissingFields(value: unknown): IronQuoteIntakeMissingField[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<IronQuoteIntakeMissingField>();
+  for (const item of value) {
+    if (item === "customer" || item === "equipment" || item === "options" || item === "timeframe") {
+      seen.add(item);
+    }
+  }
+  return [...seen];
 }
 
 export function normalizeIronQuoteHandoff(
@@ -87,6 +106,12 @@ export function normalizeIronQuoteHandoff(
     resolvedCustomerEmail: nullableString(value.resolvedCustomerEmail, 320),
     customerSearchQuery: nullableString(value.customerSearchQuery, 500),
     customerMatchKind: normalizeMatchKind(value.customerMatchKind),
+    structuredCustomerText: nullableString(value.structuredCustomerText, 500),
+    structuredEquipmentText: nullableString(value.structuredEquipmentText, 500),
+    structuredOptionsText: nullableString(value.structuredOptionsText, 1000),
+    structuredTimeframeText: nullableString(value.structuredTimeframeText, 500),
+    structuredApplicationText: nullableString(value.structuredApplicationText, 500),
+    structuredMissingFields: normalizeMissingFields(value.structuredMissingFields),
   };
 }
 
