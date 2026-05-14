@@ -347,10 +347,12 @@ export async function searchCustomers(
   if (query.length < MIN_QUERY_CHARS) return [];
 
   // Sanitize ilike wildcards — chars that would change pattern semantics.
+  // Strip commas so PostgREST `.or(a,b,c)` filter strings are not broken by
+  // user input containing `,`.
   // Also search individual name tokens so "John Smith" can match a row stored
   // as first_name="John", last_name="Smith" instead of only looking for the
   // full string in each column independently.
-  const sanitized = query.replace(/[\\%_]/g, "");
+  const sanitized = query.replace(/[\\%_,]/g, "");
   const pattern = `%${sanitized}%`;
   const nameTokens = sanitized
     .split(/\s+/)
@@ -367,6 +369,22 @@ export async function searchCustomers(
     `phone.ilike.${pattern}`,
   ].join(",");
 
+  // Company match: legal + IntelliDealer search keys + legacy customer #, not
+  // only display `name` / `dba` (imports often park alternate spellings in
+  // search_1 / search_2 / legal_name).
+  const companyOr = [
+    "name",
+    "dba",
+    "phone",
+    "legal_name",
+    "search_1",
+    "search_2",
+    "owner_name",
+    "legacy_customer_number",
+  ]
+    .map((col) => `${col}.ilike.${pattern}`)
+    .join(",");
+
   const [contactsRes, companiesRes] = await Promise.all([
     supabase
       .from("crm_contacts")
@@ -378,9 +396,16 @@ export async function searchCustomers(
       .from("crm_companies")
       .select("id, name, dba, phone, city, state, classification")
       .is("deleted_at", null)
-      .or(`name.ilike.${pattern},dba.ilike.${pattern},phone.ilike.${pattern}`)
+      .or(companyOr)
       .limit(MAX_COMPANIES),
   ]);
+
+  if (contactsRes.error) {
+    throw new Error(contactsRes.error.message || "Contact search failed");
+  }
+  if (companiesRes.error) {
+    throw new Error(companiesRes.error.message || "Company search failed");
+  }
 
   const contacts = normalizeCustomerSearchContactRows(contactsRes.data);
   const companies = normalizeCustomerSearchCompanyRows(companiesRes.data);
@@ -419,10 +444,13 @@ export async function searchCustomers(
   }
   const missingCompanyIds = contactCompanyIds.filter((id) => !companyById.has(id));
   if (missingCompanyIds.length > 0) {
-    const { data: extras } = await supabase
+    const { data: extras, error: extrasErr } = await supabase
       .from("crm_companies")
       .select("id, name, city, state")
       .in("id", missingCompanyIds);
+    if (extrasErr) {
+      throw new Error(extrasErr.message || "Company hydrate failed");
+    }
     for (const row of normalizeCustomerSearchCompanyRefRows(extras)) {
       companyById.set(row.id, row);
     }

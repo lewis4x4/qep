@@ -79,6 +79,7 @@ export function CustomerPicker({
 }: CustomerPickerProps) {
   const [results, setResults] = useState<CustomerSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -92,10 +93,12 @@ export function CustomerPicker({
     if (timerRef.current) clearTimeout(timerRef.current);
     if (query.trim().length < MIN_QUERY_CHARS) {
       setResults([]);
+      setSearchError(null);
       setLoading(false);
       return;
     }
     setLoading(true);
+    setSearchError(null);
     let cancelled = false;
     timerRef.current = setTimeout(async () => {
       try {
@@ -103,6 +106,11 @@ export function CustomerPicker({
         if (!cancelled) {
           setResults(out);
           setHighlight(0);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setResults([]);
+          setSearchError(err instanceof Error ? err.message : "Search failed");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -236,10 +244,19 @@ export function CustomerPicker({
 
       {open && query.trim().length >= MIN_QUERY_CHARS && (
         <div className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
-          {loading && rows.length === 0 ? (
+          {searchError && (
+            <div className="border-b border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+              {searchError}
+            </div>
+          )}
+          {!searchError && !loading && results.length === 0 && (
+            <div className="border-b border-border bg-muted/20 p-3 text-[11px] text-muted-foreground leading-relaxed">
+              No CRM accounts matched this text (including legal name and legacy search fields).
+              Reps only see companies assigned to them or linked through their contacts — managers/owners see the full workspace.
+            </div>
+          )}
+          {loading && results.length === 0 && !searchError ? (
             <div className="p-3 text-xs text-muted-foreground">Searching…</div>
-          ) : rows.length === 0 ? (
-            <div className="p-3 text-xs text-muted-foreground">No matches.</div>
           ) : (
             <ul role="listbox" aria-label="Customer results">
               {rows.map((row, i) => (
