@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { pushPresence } from "./presence";
 import { requireIronAccessToken } from "./auth";
+import { buildIronNoDeadEndMessage } from "./no-dead-end";
 import type { IronLaunchContext } from "./types";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -103,7 +104,11 @@ export function useIronKnowledgeStream(): IronKnowledgeStreamApi {
       try {
         accessToken = await requireIronAccessToken();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Iron auth failed");
+        setError(buildIronNoDeadEndMessage({
+          surface: "knowledge",
+          action: "answer the question",
+          error: err instanceof Error ? err.message : "Iron auth failed",
+        }));
         setStatus("error");
         releasePresence();
         return;
@@ -155,7 +160,11 @@ export function useIronKnowledgeStream(): IronKnowledgeStreamApi {
         const message = err instanceof TypeError
           ? "Iron could not reach the knowledge service. Check connection and try again."
           : err instanceof Error ? err.message : "fetch failed";
-        setError(message);
+        setError(buildIronNoDeadEndMessage({
+          surface: "knowledge",
+          action: "answer the question",
+          error: message,
+        }));
         setStatus("error");
         releasePresence();
         return;
@@ -163,7 +172,11 @@ export function useIronKnowledgeStream(): IronKnowledgeStreamApi {
 
       if (!res.ok || !res.body) {
         const body = await res.text().catch(() => "");
-        setError(`iron-knowledge ${res.status}: ${body.slice(0, 200)}`);
+        setError(buildIronNoDeadEndMessage({
+          surface: "knowledge",
+          action: "answer the question",
+          error: `iron-knowledge ${res.status}: ${body.slice(0, 200)}`,
+        }));
         setStatus("error");
         releasePresence();
         return;
@@ -193,7 +206,11 @@ export function useIronKnowledgeStream(): IronKnowledgeStreamApi {
           releasePresence();
           return;
         } catch {
-          setError("Iron returned a non-streaming response we couldn't parse.");
+          setError(buildIronNoDeadEndMessage({
+            surface: "knowledge",
+            action: "answer the question",
+            error: "Iron returned a non-streaming response we couldn't parse.",
+          }));
           setStatus("error");
           releasePresence();
           return;
@@ -251,7 +268,11 @@ export function useIronKnowledgeStream(): IronKnowledgeStreamApi {
         }
       } catch (streamErr) {
         if ((streamErr as { name?: string })?.name !== "AbortError") {
-          setError(streamErr instanceof Error ? streamErr.message : "stream error");
+          setError(buildIronNoDeadEndMessage({
+            surface: "knowledge",
+            action: "finish streaming the answer",
+            error: streamErr instanceof Error ? streamErr.message : "stream error",
+          }));
           setStatus("error");
           releasePresence();
           return;

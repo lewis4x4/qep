@@ -1,7 +1,10 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import {
   IRON_CAPABILITY_MATRIX,
+  IRON_NO_DEAD_END_CONTRACT,
+  IRON_OWNER_GAUNTLET,
   IRON_TOOLS_BY_SURFACE,
+  buildIronCapabilityGuidance,
   type IronSurface,
 } from "./capability-matrix.ts";
 
@@ -33,7 +36,19 @@ Deno.test("quote pending approval capability is present and supported on both su
   assertEquals(global?.status, "supported");
 });
 
-Deno.test("known gaps must include owner, risk, and next tool guidance", () => {
+Deno.test("all capabilities have operator-facing no-dead-end next steps", () => {
+  for (const capability of IRON_CAPABILITY_MATRIX) {
+    assertEquals(Boolean(capability.domain), true, `${capability.id} missing domain`);
+    assertEquals(Boolean(capability.intent_kind), true, `${capability.id} missing intent kind`);
+    assertEquals(
+      Boolean(capability.user_next_step && capability.user_next_step.trim().length > 0),
+      true,
+      `${capability.id} missing user_next_step`,
+    );
+  }
+});
+
+Deno.test("known gaps must include owner, risk, next tool guidance, and concrete user next step", () => {
   for (const capability of IRON_CAPABILITY_MATRIX) {
     if (capability.status !== "known_gap") continue;
     assertEquals(Boolean(capability.owner && capability.owner.trim().length > 0), true, `${capability.id} missing owner`);
@@ -42,6 +57,11 @@ Deno.test("known gaps must include owner, risk, and next tool guidance", () => {
       Boolean(capability.next_tool_guidance && capability.next_tool_guidance.trim().length > 0),
       true,
       `${capability.id} missing next_tool_guidance`,
+    );
+    assertEquals(
+      /route|say|search|ask|direct|explain/i.test(capability.user_next_step),
+      true,
+      `${capability.id} user_next_step is not actionable`,
     );
   }
 });
@@ -55,4 +75,18 @@ Deno.test("qrm equipment and rental search capabilities stay declared as support
   assertEquals(rental?.surface, "qrm_ask_iron");
   assertEquals(rental?.expected_tool, "search_entities");
   assertEquals(rental?.status, "supported");
+});
+
+Deno.test("owner gauntlet covers the core Iron domains", () => {
+  const domains = new Set(IRON_OWNER_GAUNTLET.map((item) => item.domain));
+  for (const domain of ["quote", "parts", "service", "sop", "rental", "follow_up"] as const) {
+    assertEquals(domains.has(domain), true, `owner gauntlet missing ${domain}`);
+  }
+});
+
+Deno.test("capability guidance includes the no-dead-end contract and known gap instructions", () => {
+  const guidance = buildIronCapabilityGuidance("iron_global");
+  assertEquals(guidance.includes(IRON_NO_DEAD_END_CONTRACT[0]), true);
+  assertEquals(guidance.includes("Known gap rental"), true);
+  assertEquals(guidance.includes("do not pretend it is connected"), true);
 });

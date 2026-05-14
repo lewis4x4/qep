@@ -46,6 +46,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ironOrchestrate } from "./api";
+import { buildIronNoDeadEndMessage } from "./no-dead-end";
 import { useIronStore, type IronChatMessage } from "./store";
 import { useIronVoiceRecorder } from "./voice/useIronVoiceRecorder";
 import { ironTranscribe } from "./voice/api";
@@ -505,7 +506,11 @@ export function IronBar() {
           route: location.pathname,
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Iron call failed";
+        const msg = buildIronNoDeadEndMessage({
+          surface: "orchestrator",
+          action: "route that request",
+          error: err instanceof Error ? err.message : "Iron call failed",
+        });
         console.warn("[IronBar] orchestrator failed; falling back to knowledge", err);
         const placeholder: IronChatMessage = {
           id: crypto.randomUUID(),

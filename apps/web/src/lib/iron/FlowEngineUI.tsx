@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, X, ChevronLeft, ChevronRight, CheckCircle2, AlertOctagon, Sparkles } from "lucide-react";
 import { useIronStore, computeIronFlowTotalCents } from "./store";
 import { ironExecuteFlowStep, ironSearchEntities, ironBumpMemory } from "./api";
+import { buildIronNoDeadEndMessage } from "./no-dead-end";
 import { VoiceFillButton } from "./voice/VoiceFillButton";
 import { ironSpeak, cancelIronSpeech } from "./voice/tts";
 import { pushPresence } from "./presence";
@@ -440,7 +441,11 @@ function ReviewStep() {
           setErrorMessage(res.message ?? "A linked record changed — please refresh.");
           return;
         }
-        setErrorMessage(res.error ?? res.message ?? "Iron flow failed.");
+        setErrorMessage(buildIronNoDeadEndMessage({
+          surface: "flow",
+          action: meta.short_label.toLowerCase(),
+          error: res.message ?? res.error ?? "Iron flow failed.",
+        }));
         return;
       }
 
@@ -453,7 +458,11 @@ function ReviewStep() {
         expires_at: res.undo_deadline ? new Date(res.undo_deadline).getTime() : Date.now() + 60_000,
       });
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Iron call failed");
+      setErrorMessage(buildIronNoDeadEndMessage({
+        surface: "flow",
+        action: meta.short_label.toLowerCase(),
+        error: err instanceof Error ? err.message : "Iron call failed",
+      }));
     } finally {
       setSubmitting(false);
     }

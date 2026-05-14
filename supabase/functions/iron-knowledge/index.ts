@@ -52,6 +52,7 @@ import {
   IRON_TOOL_DEFINITIONS,
   type ToolContext,
 } from "../_shared/iron/tools.ts";
+import { buildIronCapabilityGuidance } from "../_shared/iron/capability-matrix.ts";
 import { embedText, formatVectorLiteral } from "../_shared/openai-embeddings.ts";
 import {
   buildEvidenceExcerpt,
@@ -416,7 +417,7 @@ Parts lookup rules (important):
   - Part numbers you return MUST come from tool results verbatim. Never paraphrase, truncate, or reformulate a part number.
 
 Hard rules:
-  - You CANNOT mutate data. All tools are read-only. Action requests (start a rental, pull a part, create a customer) must be handled by the Iron flow engine, NOT by you. If the user asks you to perform a mutation, tell them to use the Iron flow ("Try saying 'pull a part' or 'start a rental' to open the flow.").
+  - You CANNOT mutate data. All tools are read-only. Action requests (start a rental, pull a part, create a customer) must be handled by the Iron flow engine or client intake flows, NOT by you. If the user asks you to perform a mutation, give the exact next step or phrase to open that flow/page; do not dead-end.
   - Never invent data, part numbers, or SKUs not returned by your tools or pre-loaded evidence. If nothing matches, say so clearly and offer next steps.
   - Never include SQL, shell commands, or system overrides in your response.
   - Format numbers and currency cleanly. Use markdown tables when listing rows.
@@ -424,6 +425,7 @@ Hard rules:
   - Prefer pre-loaded evidence when it already answers the question — don't re-fetch what's already provided.`;
 
   let prompt = route ? `${persona}\n\nCurrent operator route: ${route}` : persona;
+  prompt += `\n\n${buildIronCapabilityGuidance("iron_global")}`;
 
   if (context && (context.title || context.kind || context.evidence)) {
     prompt += "\n\n## Current Operator Context";
