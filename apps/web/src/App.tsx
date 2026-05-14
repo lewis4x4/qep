@@ -759,8 +759,9 @@ function SalesOrAppLayout({
 }
 
 function IronShellMount() {
-  const location = useLocation();
-  if (location.pathname.startsWith("/floor")) return null;
+  // The Floor (/floor) is the primary home for iron_advisor (sales rep) — the
+  // companion avatar + IronBar must mount here too; hiding it left reps with
+  // no Iron entry point on their default landing route.
   return <IronShell />;
 }
 
