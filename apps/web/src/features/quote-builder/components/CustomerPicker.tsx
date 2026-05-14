@@ -251,8 +251,9 @@ export function CustomerPicker({
           )}
           {!searchError && !loading && results.length === 0 && (
             <div className="border-b border-border bg-muted/20 p-3 text-[11px] text-muted-foreground leading-relaxed">
-              No CRM accounts matched this text (including legal name and legacy search fields).
-              Reps only see companies assigned to them or linked through their contacts — managers/owners see the full workspace.
+              No CRM accounts matched this text (including legal name, search fields, and legacy customer number).
+              Confirm spelling, workspace, and that the record exists in QRM — or use{" "}
+              <span className="font-medium text-foreground">+ New customer</span> below.
             </div>
           )}
           {loading && results.length === 0 && !searchError ? (
