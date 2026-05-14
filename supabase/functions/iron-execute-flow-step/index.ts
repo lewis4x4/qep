@@ -287,6 +287,7 @@ Deno.serve(async (req) => {
       "id, slug, name, workspace_id, surface, iron_metadata, feature_flag, undo_handler, undo_semantic_rule, high_value_threshold_cents, roles_allowed, enabled, action_chain, dry_run",
     )
     .eq("id", body.flow_id)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
 
   if (defErr || !flowDef) return safeJsonError("flow_not_found", 404, origin);

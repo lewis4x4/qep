@@ -95,11 +95,14 @@ const iron_pull_part: FlowAction = {
       return { status: "failed", error: "iron_pull_part: too many line items", retryable: false };
     }
 
-    // Resolve workspace from the company row (matches parts-order-manager pattern)
+    // Resolve the company inside the caller workspace. This action runs with the
+    // service-role client, so every entity id from slots must be explicitly
+    // scoped before any writes happen.
     const { data: company, error: companyErr } = await deps.admin
       .from("crm_companies")
       .select("id, workspace_id")
       .eq("id", crmCompanyId)
+      .eq("workspace_id", deps.workspace_id)
       .maybeSingle();
     if (companyErr) {
       return { status: "failed", error: `iron_pull_part: company lookup failed: ${companyErr.message}`, retryable: true };
@@ -125,7 +128,7 @@ const iron_pull_part: FlowAction = {
     const { data: order, error: insErr } = await deps.admin
       .from("parts_orders")
       .insert({
-        workspace_id: company.workspace_id,
+        workspace_id: deps.workspace_id,
         status: "draft",
         portal_customer_id: null,
         crm_company_id: crmCompanyId,
@@ -150,7 +153,7 @@ const iron_pull_part: FlowAction = {
     // Insert structured line rows (counter sale path uses parts_order_lines too)
     const lineRows = lineItems.map((line, idx) => ({
       parts_order_id: orderId,
-      workspace_id: company.workspace_id,
+      workspace_id: deps.workspace_id,
       part_number: String(line.part_number),
       description: line.description as string | null,
       quantity: Number(line.quantity) || 1,
@@ -171,7 +174,7 @@ const iron_pull_part: FlowAction = {
     // Append a creation event so the order timeline matches the manual path
     try {
       await deps.admin.from("parts_order_events").insert({
-        workspace_id: company.workspace_id,
+        workspace_id: deps.workspace_id,
         parts_order_id: orderId,
         event_type: "created",
         source: "system",

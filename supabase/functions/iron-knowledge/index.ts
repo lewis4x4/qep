@@ -740,6 +740,7 @@ Deno.serve(async (req) => {
   const toolCtx: ToolContext = {
     admin,
     workspaceId,
+    userId,
     userRole: role,
     tavilyApiKey: TAVILY_API_KEY,
   };

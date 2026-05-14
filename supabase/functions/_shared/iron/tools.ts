@@ -256,6 +256,7 @@ export const IRON_TOOL_DEFINITIONS: AnthropicToolDef[] = [
 export interface ToolContext {
   admin: SupabaseClient;
   workspaceId: string;
+  userId: string;
   userRole: string;
   tavilyApiKey: string;
   /** Stashed by the dispatcher for KB hydration — not part of the public contract */
@@ -1057,6 +1058,10 @@ async function toolLookupQuote(
     .limit(Math.min(limit, 25));
   if (normalizedStatuses.length > 0) {
     q = q.in("status", normalizedStatuses);
+  }
+  if (!["admin", "manager", "owner"].includes(ctx.userRole)) {
+    if (!ctx.userId) return { error: "user_id is required for rep-scoped quote lookup" };
+    q = q.eq("created_by", ctx.userId);
   }
 
   if (quoteId) {

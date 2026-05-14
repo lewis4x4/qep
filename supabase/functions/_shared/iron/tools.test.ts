@@ -8,6 +8,7 @@ import {
 type QuoteRow = {
   id: string;
   workspace_id: string;
+  created_by: string | null;
   customer_name: string | null;
   customer_company: string | null;
   status: string;
@@ -118,11 +119,12 @@ class MockSupabaseClient {
   }
 }
 
-function makeContext(rows: QuoteRow[]): ToolContext {
+function makeContext(rows: QuoteRow[], overrides: Partial<Pick<ToolContext, "userId" | "userRole">> = {}): ToolContext {
   return {
     admin: new MockSupabaseClient(rows) as unknown as ToolContext["admin"],
     workspaceId: "ws-1",
-    userRole: "owner",
+    userId: overrides.userId ?? "user-owner",
+    userRole: overrides.userRole ?? "owner",
     tavilyApiKey: "",
   };
 }
@@ -131,6 +133,7 @@ function makeQuote(overrides: Partial<QuoteRow>): QuoteRow {
   return {
     id: overrides.id ?? crypto.randomUUID(),
     workspace_id: overrides.workspace_id ?? "ws-1",
+    created_by: overrides.created_by ?? "user-owner",
     customer_name: overrides.customer_name ?? "John Coker",
     customer_company: overrides.customer_company ?? "Acme Construction",
     status: overrides.status ?? "draft",
@@ -199,6 +202,21 @@ Deno.test("executeIronTool lookup_quote sanitizes customer/company OR terms and 
 
   assertEquals(result.count, 1);
   assertEquals(result.quotes[0]?.id, "q-acme-pending");
+});
+
+Deno.test("executeIronTool lookup_quote keeps reps scoped to their own quote packages", async () => {
+  const ctx = makeContext([
+    makeQuote({ id: "q-own", status: "pending_approval", created_by: "rep-a" }),
+    makeQuote({ id: "q-other", status: "pending_approval", created_by: "rep-b" }),
+  ], { userRole: "rep", userId: "rep-a" });
+
+  const result = await executeIronTool("lookup_quote", { status: "pending approval" }, ctx) as {
+    count: number;
+    quotes: Array<{ id: string }>;
+  };
+
+  assertEquals(result.count, 1);
+  assertEquals(result.quotes[0]?.id, "q-own");
 });
 
 Deno.test("executeIronTool lookup_quote returns concrete empty payload for zero results", async () => {

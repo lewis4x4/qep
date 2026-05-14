@@ -1985,7 +1985,7 @@ export function QuoteBuilderV2Page() {
       return;
     }
     if (canSubmitForApproval) {
-      void submitApprovalMutation.mutateAsync();
+      submitApprovalMutation.mutate();
       return;
     }
     void handleSaveClick();
@@ -4256,7 +4256,7 @@ export function QuoteBuilderV2Page() {
                 <p className="text-sm font-semibold text-foreground">Approval handoff</p>
                 <p className="mt-1 text-xs text-muted-foreground">Submit routes through the existing approval-case workflow. Future document/send steps should trust activeApprovalCase.canSend, not a duplicate UI flag.</p>
               </div>
-              <Button onClick={() => void submitApprovalMutation.mutateAsync()} disabled={!canSubmitForApproval || submitApprovalMutation.isPending}>
+              <Button onClick={() => submitApprovalMutation.mutate()} disabled={!canSubmitForApproval || submitApprovalMutation.isPending}>
                 {submitApprovalMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
                 {approvalPending ? "Approval pending" : approvalGranted ? "Approved" : "Submit for approval"}
               </Button>

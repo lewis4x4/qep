@@ -54,12 +54,12 @@ end $$;
 drop policy if exists "voice_captures_select" on public.voice_captures;
 create policy "voice_captures_select" on public.voice_captures
   for select using (
-    user_id = auth.uid()
+    user_id = (select auth.uid())
     or (
-      workspace_id = public.get_my_workspace()
+      workspace_id = (select public.get_my_workspace())
       and exists (
         select 1 from public.profiles p
-        where p.id = auth.uid() and p.role in ('admin', 'manager', 'owner')
+        where p.id = (select auth.uid()) and p.role in ('admin', 'manager', 'owner')
       )
     )
   );
@@ -67,34 +67,34 @@ create policy "voice_captures_select" on public.voice_captures
 drop policy if exists "voice_captures_insert" on public.voice_captures;
 create policy "voice_captures_insert" on public.voice_captures
   for insert with check (
-    user_id = auth.uid()
-    and (workspace_id is null or workspace_id = public.get_my_workspace())
+    user_id = (select auth.uid())
+    and (workspace_id is null or workspace_id = (select public.get_my_workspace()))
   );
 
 drop policy if exists "voice_captures_update" on public.voice_captures;
 create policy "voice_captures_update" on public.voice_captures
   for update using (
     (
-      user_id = auth.uid()
-      and (workspace_id is null or workspace_id = public.get_my_workspace())
+      user_id = (select auth.uid())
+      and (workspace_id is null or workspace_id = (select public.get_my_workspace()))
     )
     or (
-      workspace_id = public.get_my_workspace()
+      workspace_id = (select public.get_my_workspace())
       and exists (
         select 1 from public.profiles p
-        where p.id = auth.uid() and p.role in ('admin', 'manager', 'owner')
+        where p.id = (select auth.uid()) and p.role in ('admin', 'manager', 'owner')
       )
     )
   ) with check (
     (
-      user_id = auth.uid()
-      and (workspace_id is null or workspace_id = public.get_my_workspace())
+      user_id = (select auth.uid())
+      and (workspace_id is null or workspace_id = (select public.get_my_workspace()))
     )
     or (
-      workspace_id = public.get_my_workspace()
+      workspace_id = (select public.get_my_workspace())
       and exists (
         select 1 from public.profiles p
-        where p.id = auth.uid() and p.role in ('admin', 'manager', 'owner')
+        where p.id = (select auth.uid()) and p.role in ('admin', 'manager', 'owner')
       )
     )
   );
