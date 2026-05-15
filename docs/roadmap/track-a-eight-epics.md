@@ -21,7 +21,8 @@ This file **exports** the eight operator-roadmap items that previously lived onl
 
 **Epic #41 (customer PDF line visibility):** [epic-41-customer-pdf-line-visibility.md](./epic-41-customer-pdf-line-visibility.md)  
 **Epic #42 (post-approval routing):** [epic-42-post-approval-routing.md](./epic-42-post-approval-routing.md)  
-**Epic #43 (M365 + IntelliDealer observability):** [epic-43-m365-intellidealer-observability.md](./epic-43-m365-intellidealer-observability.md)
+**Epic #43 (M365 + IntelliDealer observability):** [epic-43-m365-intellidealer-observability.md](./epic-43-m365-intellidealer-observability.md)  
+**Epic #44 (trade valuation + comp-range UI):** [epic-44-trade-valuation-audit.md](./epic-44-trade-valuation-audit.md)
 
 ---
 

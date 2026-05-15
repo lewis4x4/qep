@@ -37,3 +37,4 @@ bun test apps/web/src/features/quote-builder/lib/__tests__/local-draft.test.ts
 
 - [Epic #41 — Customer PDF / proposal line visibility](./epic-41-customer-pdf-line-visibility.md) (internal vs customer packet lines).
 - [Epic #43 — M365 + IntelliDealer observability](./epic-43-m365-intellidealer-observability.md) (cron, logs, staging counts).
+- [Epic #44 — Trade valuation audit](./epic-44-trade-valuation-audit.md) (Point-Shoot / trade step vs PDF).

@@ -74,3 +74,4 @@ deno check supabase/functions/m365-token-refresh/index.ts supabase/functions/m36
 ## See also
 
 - [Epic #42 — Post-approval routing](./epic-42-post-approval-routing.md)
+- [Epic #44 — Trade valuation audit](./epic-44-trade-valuation-audit.md) (comp-range UI vs customer PDF boundary).

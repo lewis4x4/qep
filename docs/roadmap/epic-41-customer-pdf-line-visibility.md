@@ -47,3 +47,4 @@ bun test apps/web/src/features/quote-builder/lib/__tests__/quote-proposal-data.t
 
 - [Epic #42 — Post-approval routing](./epic-42-post-approval-routing.md) (customer send after approval vs return to rep).
 - [Epic #43 — M365 + IntelliDealer observability](./epic-43-m365-intellidealer-observability.md) (cron health, staging SQL).
+- [Epic #44 — Trade valuation audit](./epic-44-trade-valuation-audit.md) (comp-range on rep surfaces vs customer PDF).
