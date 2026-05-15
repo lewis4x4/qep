@@ -5363,6 +5363,9 @@ Deno.serve(async (req) => {
         ...(existingRowMeta ?? {}),
         ...(bodyMetadata ?? {}),
       };
+      if ("prospect_conversion_source" in body && body.prospect_conversion_source === null) {
+        delete mergedMetadata.prospect_conversion_source;
+      }
       if (prospectNorm !== null) {
         mergedMetadata.prospect_conversion_source = prospectNorm;
       }
@@ -5377,7 +5380,17 @@ Deno.serve(async (req) => {
           prospectQuoteCols.customer_warmth = null;
         } else if (typeof rawW === "string") {
           const w = rawW.trim().toLowerCase();
-          if (CUSTOMER_WARMTH_VALUES.has(w)) prospectQuoteCols.customer_warmth = w;
+          if (CUSTOMER_WARMTH_VALUES.has(w)) {
+            prospectQuoteCols.customer_warmth = w;
+          } else {
+            return safeJsonError(
+              "Invalid customer_warmth: use warm, cool, dormant, new, null, or an empty string.",
+              400,
+              origin,
+            );
+          }
+        } else {
+          return safeJsonError("customer_warmth must be a string, null, or empty string.", 400, origin);
         }
       }
       const expectedUpdatedAt = typeof body.expected_updated_at === "string" ? body.expected_updated_at : null;
@@ -6600,57 +6613,42 @@ Deno.serve(async (req) => {
         documentArtifactId = artifactRow?.id ?? null;
       }
 
-      const { data: deliveryEvent, error: deliveryEventErr } = await admin
-        .from("quote_delivery_events")
-        .insert({
-          workspace_id: typeof pkg.workspace_id === "string" ? pkg.workspace_id : userWorkspaceId,
-          quote_package_id: body.quote_package_id,
-          document_artifact_id: documentArtifactId,
-          channel: "email",
-          status: "sent",
-          recipient: toEmail,
-          subject: "Equipment Proposal from Quality Equipment & Parts",
-          message_body: emailBody,
-          provider: "resend_email",
-          provider_message_id: null,
-          error_message: null,
-          follow_up_at: followUpAt,
-          created_by: user.id,
-          metadata: {
-            sent_at: sentAt,
-            share_token: shareToken,
-            public_url: publicUrl,
-            route: "quote-builder-v2/send-package",
-            provider_mode: "resend_email_fallback",
-          },
-        })
-        .select("id")
-        .maybeSingle();
-      if (deliveryEventErr) {
-        console.error("quote delivery event insert error:", deliveryEventErr);
+      const workspaceIdForSend = typeof pkg.workspace_id === "string" ? pkg.workspace_id : userWorkspaceId;
+      const deliveryMetadata = {
+        sent_at: sentAt,
+        share_token: shareToken,
+        public_url: publicUrl,
+        route: "quote-builder-v2/send-package",
+        provider_mode: "resend_email_fallback",
+      };
+      const { data: commitDeliveryId, error: commitErr } = await admin.rpc("quote_send_package_commit", {
+        p_workspace_id: workspaceIdForSend,
+        p_quote_package_id: body.quote_package_id,
+        p_sent_at: sentAt,
+        p_document_artifact_id: documentArtifactId,
+        p_recipient: toEmail,
+        p_subject: "Equipment Proposal from Quality Equipment & Parts",
+        p_message_body: emailBody,
+        p_provider: "resend_email",
+        p_follow_up_at: followUpAt,
+        p_created_by: user.id,
+        p_metadata: deliveryMetadata,
+      });
+      if (commitErr) {
+        console.error("quote_send_package_commit rpc error:", commitErr);
         return safeJsonError(
-          deliveryEventErr.message || "Email was sent but the delivery audit row failed to save. Retry or check logs.",
+          commitErr.message
+            || "Email was sent but saving delivery + quote status failed atomically. Check logs and reconcile.",
           500,
           origin,
         );
       }
-
-      const { error: pkgUpdateErr } = await supabase
-        .from("quote_packages")
-        .update({
-          status: "sent",
-          sent_at: sentAt,
-          sent_via: "email",
-        })
-        .eq("id", body.quote_package_id);
-      if (pkgUpdateErr) {
-        console.error("send-package quote status update error:", pkgUpdateErr);
-        return safeJsonError(
-          pkgUpdateErr.message || "Delivery was logged but updating the quote package failed.",
-          500,
-          origin,
-        );
-      }
+      const deliveryEventId =
+        typeof commitDeliveryId === "string" && commitDeliveryId.length > 0
+          ? commitDeliveryId
+          : commitDeliveryId != null
+            ? String(commitDeliveryId)
+            : null;
 
       await advanceQuoteDealStage({
         admin,
@@ -6666,7 +6664,7 @@ Deno.serve(async (req) => {
         to_email: toEmail,
         share_token: shareToken,
         public_url: publicUrl,
-        delivery_event_id: deliveryEvent?.id ?? null,
+        delivery_event_id: deliveryEventId,
       }, origin);
     }
 

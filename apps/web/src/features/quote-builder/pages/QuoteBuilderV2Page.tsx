@@ -1016,6 +1016,7 @@ export function QuoteBuilderV2Page() {
 
   useEffect(() => {
     if (!prospectConverted || !companyId) return;
+    if (packageId && (existingQuoteQuery.isLoading || existingQuoteQuery.isFetching)) return;
     let cancelled = false;
     (async () => {
       try {
@@ -1042,7 +1043,7 @@ export function QuoteBuilderV2Page() {
       }
     })();
     return () => { cancelled = true; };
-  }, [companyId, packageId, prospectConverted]);
+  }, [companyId, existingQuoteQuery.isFetching, existingQuoteQuery.isLoading, packageId, prospectConverted]);
 
   // Local draft persistence: lets a rep leave the builder mid-entry and
   // resume from the deal page without losing their partial work. DB save
@@ -1752,6 +1753,22 @@ export function QuoteBuilderV2Page() {
     }, 450);
     return () => window.clearTimeout(tid);
   }, [draftSaveSignature, localDraftHydrationComplete, localDraftKey, localPersistEnabled]);
+
+  useEffect(() => {
+    if (!localDraftHydrationComplete || !localPersistEnabled || !localDraftKey) return;
+    const flush = () => {
+      const key = localDraftKey;
+      if (!key) return;
+      const d = draftRef.current;
+      if (!isDraftEmpty(d)) saveLocalDraft(key, d);
+    };
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+    };
+  }, [localDraftHydrationComplete, localDraftKey, localPersistEnabled]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
