@@ -56,8 +56,6 @@
   "unregistered_in_config": [
     "analytics-alert-evaluator",
     "analytics-snapshot-runner",
-    "data-quality-audit",
-    "deal-composite",
     "demo-admin",
     "embed-qrm",
     "escalation-router",
@@ -68,7 +66,6 @@
     "flow-runner",
     "flow-synthesize",
     "follow-up-engine",
-    "handoff-trust-scorer",
     "iron-execute-flow-step",
     "iron-orchestrator",
     "iron-pattern-mining",
@@ -76,7 +73,6 @@
     "iron-transcribe",
     "iron-undo-flow-run",
     "kb-maintenance",
-    "needs-assessment",
     "nudge-scheduler",
     "parts-identify-photo",
     "parts-network-optimizer",
@@ -89,11 +85,9 @@
     "process-offline-queue",
     "process-parts-request",
     "prospecting-nudge",
-    "prospecting-tracker",
     "publish-price-sheet",
     "qb-calculate",
     "qb-recommend-programs",
-    "qrm-absence-engine-nightly",
     "qrm-hubspot-import",
     "qrm-prediction-scorer",
     "service-billing-post",
@@ -121,12 +115,6 @@
     "voice-to-parts-order"
   ],
   "argless_get_user": [
-    "data-quality-audit",
-    "deal-composite",
-    "handoff-trust-scorer",
-    "integration-test-connection",
-    "needs-assessment",
-    "prospecting-tracker",
-    "qrm-absence-engine-nightly"
+    "integration-test-connection"
   ]
 }

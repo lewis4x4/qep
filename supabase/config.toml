@@ -109,6 +109,9 @@ verify_jwt = false
 [functions.customer-profile]
 verify_jwt = false
 
+[functions.data-quality-audit]
+verify_jwt = false
+
 [functions.dge-refresh-worker]
 verify_jwt = false
 
@@ -202,10 +205,18 @@ verify_jwt = false
 [functions.news-mention-scan]
 verify_jwt = false
 
+[functions.needs-assessment]
+verify_jwt = false
+
 [functions.m365-token-refresh]
 verify_jwt = false
 
 [functions.m365-mailbox-sync]
+verify_jwt = false
+
+# Nightly cron + occasional manager/owner manual POST; cron-auth for service,
+# requireServiceUser for ES256-safe JWT (manager/owner only).
+[functions.qrm-absence-engine-nightly]
 verify_jwt = false
 
 # Ask Iron — the QRM assistant. verify_jwt = false so the function can pull
@@ -331,10 +342,16 @@ verify_jwt = false
 [functions.flare-notify-fixed]
 verify_jwt = false
 
+[functions.handoff-trust-scorer]
+verify_jwt = false
+
 [functions.health-score-refresh]
 verify_jwt = false
 
 [functions.health-score-single]
+verify_jwt = false
+
+[functions.deal-composite]
 verify_jwt = false
 
 [functions.deal-timing-scan]
@@ -373,6 +390,9 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.dge-optimizer]
+verify_jwt = false
+
+[functions.prospecting-tracker]
 verify_jwt = false
 
 [functions.prep-sheet]

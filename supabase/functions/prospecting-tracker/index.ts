@@ -9,10 +9,10 @@
  *
  * Auth: rep/admin/manager/owner
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
-import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
 
@@ -21,26 +21,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) {
-      return safeJsonError("Unauthorized", 401, origin);
-    }
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) return auth.response;
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return safeJsonError("Unauthorized", 401, origin);
-    }
+    const supabase = auth.supabase;
+    const user = { id: auth.userId };
 
     // ── GET: KPI status ──────────────────────────────────────────────────
     if (req.method === "GET") {

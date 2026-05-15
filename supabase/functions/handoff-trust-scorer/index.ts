@@ -18,6 +18,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 import {
   assessDealOutcome,
   buildHandoffEvidence,
@@ -114,21 +115,9 @@ Deno.serve(async (req) => {
     );
 
     if (!isServiceRole) {
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader! } } },
-      );
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error || !user) return safeJsonError("Unauthorized", 401, origin);
-
-      const { data: profile } = await admin
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (!profile || !["manager", "owner"].includes(profile.role)) {
+      const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+      if (!auth.ok) return auth.response;
+      if (auth.role !== "manager" && auth.role !== "owner") {
         return safeJsonError("Requires manager or owner role", 403, origin);
       }
     }
