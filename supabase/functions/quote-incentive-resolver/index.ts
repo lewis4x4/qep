@@ -18,16 +18,7 @@ import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors
 import { requireServiceUser } from "../_shared/service-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
-interface Incentive {
-  id: string;
-  manufacturer: string;
-  program_name: string;
-  discount_type: "flat" | "pct" | "apr_buydown" | "cash_back";
-  discount_value: number;
-  stackable: boolean;
-  stack_kind?: "cash_alt" | "finance_addon" | "always_on" | null;
-  requires_approval: boolean;
-}
+import { normalizeIncentive, resolveIncentiveStack } from "./logic.ts";
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
@@ -60,39 +51,11 @@ Deno.serve(async (req) => {
       .rpc("match_quote_incentives", { p_quote_package_id: quoteId });
     if (matchErr) return safeJsonError("Match RPC failed", 500, origin);
 
-    const incentives = (matches ?? []) as Incentive[];
-
-    // Resolve stackability — for each manufacturer, allow ALL stackables and
-    // at most ONE non-stackable (the highest-value one).
-    const byMfr = new Map<string, Incentive[]>();
-    for (const inc of incentives) {
-      const k = inc.manufacturer.toLowerCase();
-      if (!byMfr.has(k)) byMfr.set(k, []);
-      byMfr.get(k)!.push(inc);
-    }
-
-    const applied: Array<{ incentive: Incentive; amount: number }> = [];
-    const skipped: Array<{ incentive: Incentive; reason: string }> = [];
-
-    for (const [, group] of byMfr) {
-      const stackables = group.filter((g) => g.stackable);
-      const nonStackables = group.filter((g) => !g.stackable);
-      const chosenNonStackable = nonStackables.length > 0
-        ? nonStackables.reduce((a, b) => (computeAmount(a, quote) > computeAmount(b, quote) ? a : b))
-        : null;
-
-      for (const stk of stackables) {
-        applied.push({ incentive: stk, amount: computeAmount(stk, quote) });
-      }
-      if (chosenNonStackable) {
-        applied.push({ incentive: chosenNonStackable, amount: computeAmount(chosenNonStackable, quote) });
-        for (const ns of nonStackables) {
-          if (ns.id !== chosenNonStackable.id) {
-            skipped.push({ incentive: ns, reason: "non-stackable, lower value than peer" });
-          }
-        }
-      }
-    }
+    const incentives = (matches ?? []).flatMap((match: unknown) => {
+      const normalized = normalizeIncentive(match);
+      return normalized ? [normalized] : [];
+    });
+    const { applied, skipped } = resolveIncentiveStack(incentives, quote);
 
     const totalSavings = applied.reduce((sum, a) => sum + a.amount, 0);
 
@@ -125,7 +88,7 @@ Deno.serve(async (req) => {
         program_name: a.incentive.program_name,
         manufacturer: a.incentive.manufacturer,
         discount_type: a.incentive.discount_type,
-        stack_kind: a.incentive.stack_kind ?? "always_on",
+        stack_kind: a.incentive.stack_kind,
         amount: a.amount,
         requires_approval: a.incentive.requires_approval,
         stackable: a.incentive.stackable,
@@ -144,18 +107,3 @@ Deno.serve(async (req) => {
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }
 });
-
-function computeAmount(incentive: Incentive, quote: { subtotal: number | null; equipment_total: number | null }): number {
-  const base = (quote.equipment_total ?? quote.subtotal ?? 0) as number;
-  switch (incentive.discount_type) {
-    case "flat":
-    case "cash_back":
-      return Number(incentive.discount_value);
-    case "pct":
-      return Math.round(base * (Number(incentive.discount_value) / 100) * 100) / 100;
-    case "apr_buydown":
-      // Buydown represents a financing cost reduction; surface as a flat
-      // estimate of (discount_value * base / 100) for the customer-facing total.
-      return Math.round(base * (Number(incentive.discount_value) / 100) * 100) / 100;
-  }
-}
