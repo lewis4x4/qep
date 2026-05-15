@@ -12,7 +12,8 @@ import { decryptOneDriveToken, encryptOneDriveToken } from "../_shared/integrati
 import { captureEdgeException } from "../_shared/sentry.ts";
 
 const TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
-const GRAPH_PROBE_URL = "https://graph.microsoft.com/v1.0/me/drive?$select=id,driveType";
+const GRAPH_DRIVE_PROBE_URL = "https://graph.microsoft.com/v1.0/me/drive?$select=id,driveType";
+const GRAPH_MAIL_PROBE_URL = "https://graph.microsoft.com/v1.0/me/mailFolders/inbox?$select=id,displayName";
 const REFRESH_WINDOW_MS = 30 * 60 * 1000;
 
 type SyncState = {
@@ -191,9 +192,15 @@ async function requestRefresh(refreshToken: string): Promise<Record<string, unkn
 }
 
 async function probeGraph(accessToken: string): Promise<boolean> {
-  const response = await fetch(GRAPH_PROBE_URL, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    signal: AbortSignal.timeout(10_000),
-  }).catch(() => null);
-  return response?.ok === true;
+  const [driveResponse, mailResponse] = await Promise.all([
+    fetch(GRAPH_DRIVE_PROBE_URL, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(10_000),
+    }).catch(() => null),
+    fetch(GRAPH_MAIL_PROBE_URL, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(10_000),
+    }).catch(() => null),
+  ]);
+  return driveResponse?.ok === true && mailResponse?.ok === true;
 }

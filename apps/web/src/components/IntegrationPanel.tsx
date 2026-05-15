@@ -38,6 +38,13 @@ import { useToast } from "@/hooks/use-toast";
 import { BRAND_NAME } from "@/components/BrandLogo";
 
 const ONE_DRIVE_OAUTH_STATE_KEY = "qep.onedrive.oauth.state";
+const M365_OAUTH_SCOPES = [
+  "User.Read",
+  "Files.Read.All",
+  "Mail.Read",
+  "Mail.Send",
+  "offline_access",
+].join(" ");
 
 // Per-integration sync scope definitions
 const SYNC_SCOPES: Record<string, { key: string; label: string; description: string }[]> = {
@@ -607,7 +614,7 @@ export function IntegrationPanel({
     url.searchParams.set("client_id", oneDriveClientId);
     url.searchParams.set("response_type", "code");
     url.searchParams.set("redirect_uri", `${window.location.origin}/auth/onedrive/callback`);
-    url.searchParams.set("scope", "files.read.all offline_access");
+    url.searchParams.set("scope", M365_OAUTH_SCOPES);
     url.searchParams.set("response_mode", "query");
     url.searchParams.set("state", state);
     window.location.assign(url.toString());
@@ -2264,7 +2271,7 @@ export function IntegrationPanel({
                 <div className="rounded-lg border border-border bg-muted/30 p-3">
                   <p className="text-sm font-medium text-foreground">Microsoft 365 OAuth connection</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    OneDrive is authorized through Microsoft OAuth. Use the connect button above to rotate access, then run a sync when you want to refresh indexed documents.
+                    Microsoft 365 is authorized through OAuth for documents and advisor mailbox actions. Use the connect button above to rotate access, then run a sync when you want to refresh indexed documents.
                   </p>
                   {typeof integration.config?.drive_id === "string" && integration.config.drive_id ? (
                     <p className="mt-2 text-xs text-muted-foreground">

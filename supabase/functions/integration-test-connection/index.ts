@@ -463,29 +463,36 @@ Deno.serve(async (req): Promise<Response> => {
       }
 
       try {
-        const response = await fetch(
-          "https://graph.microsoft.com/v1.0/me/drive?$select=id,driveType",
-          {
+        const [driveResponse, mailResponse] = await Promise.all([
+          fetch("https://graph.microsoft.com/v1.0/me/drive?$select=id,driveType", {
             headers: {
               Authorization: `Bearer ${accessToken}`,
             },
             signal: AbortSignal.timeout(10_000),
-          },
-        );
+          }),
+          fetch("https://graph.microsoft.com/v1.0/me/mailFolders/inbox?$select=id,displayName", {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+            signal: AbortSignal.timeout(10_000),
+          }),
+        ]);
 
-        if (!response.ok) {
+        if (!driveResponse.ok || !mailResponse.ok) {
+          const failedResponse = !driveResponse.ok ? driveResponse : mailResponse;
+          const failedCapability = !driveResponse.ok ? "OneDrive" : "Mail";
           return ok(
             {
               success: false,
               latencyMs: Date.now() - startedAt,
               mode: "live",
               error: {
-                code: response.status === 401
+                code: failedResponse.status === 401 || failedResponse.status === 403
                   ? "ONEDRIVE_REAUTH_REQUIRED"
                   : "ONEDRIVE_UPSTREAM_ERROR",
-                message: response.status === 401
-                  ? "Microsoft rejected the stored token. Reconnect OneDrive."
-                  : `Microsoft Graph test failed (${response.status}).`,
+                message: failedResponse.status === 401 || failedResponse.status === 403
+                  ? `Microsoft rejected the stored token for ${failedCapability}. Reconnect Microsoft 365 with mail and file scopes.`
+                  : `Microsoft Graph ${failedCapability} test failed (${failedResponse.status}).`,
               },
             },
             { origin },
