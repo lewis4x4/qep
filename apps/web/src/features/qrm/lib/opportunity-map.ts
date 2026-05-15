@@ -40,6 +40,10 @@ export interface OpportunityMapMarkerRow {
   reasons: string[];
   routeCandidate: boolean;
   openDealCount: number;
+  source?: "ucc_csv";
+  lender?: string | null;
+  filingDate?: string | null;
+  collateral?: string | null;
 }
 
 export interface UccProspectRow {
@@ -304,6 +308,10 @@ export function buildOpportunityMapBoard(input: {
       ].filter((reason): reason is string => Boolean(reason)),
       routeCandidate: true,
       openDealCount: 0,
+      source: prospect.source,
+      lender: prospect.lender ?? null,
+      filingDate: prospect.filingDate ?? null,
+      collateral: prospect.collateral ?? null,
     });
   }
 

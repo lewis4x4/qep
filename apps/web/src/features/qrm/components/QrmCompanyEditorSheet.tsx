@@ -49,6 +49,10 @@ interface QrmCompanyEditorSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   company?: QrmCompanySummary | null;
+  initialValues?: Partial<Pick<
+    QrmCompanySummary,
+    "name" | "search1" | "search2" | "addressLine1" | "addressLine2" | "city" | "state" | "postalCode" | "country" | "status" | "productCategory" | "arType" | "paymentTermsCode" | "termsCode" | "territoryCode" | "pricingLevel" | "doNotContact" | "optOutSalePi"
+  >> | null;
   canManageEin?: boolean;
   onSaved?: (company: QrmCompanySummary) => void;
   onArchived?: () => void;
@@ -58,6 +62,7 @@ export function QrmCompanyEditorSheet({
   open,
   onOpenChange,
   company,
+  initialValues,
   canManageEin = false,
   onSaved,
   onArchived,
@@ -88,27 +93,28 @@ export function QrmCompanyEditorSheet({
 
   useEffect(() => {
     if (!open) return;
-    setName(company?.name ?? "");
-    setSearch1(company?.search1 ?? "");
-    setSearch2(company?.search2 ?? "");
-    setAddressLine1(company?.addressLine1 ?? "");
-    setAddressLine2(company?.addressLine2 ?? "");
-    setCity(company?.city ?? "");
-    setState(company?.state ?? "");
-    setPostalCode(company?.postalCode ?? "");
-    setCountry(company?.country ?? "");
+    const seed = company ? null : initialValues;
+    setName(company?.name ?? seed?.name ?? "");
+    setSearch1(company?.search1 ?? seed?.search1 ?? "");
+    setSearch2(company?.search2 ?? seed?.search2 ?? "");
+    setAddressLine1(company?.addressLine1 ?? seed?.addressLine1 ?? "");
+    setAddressLine2(company?.addressLine2 ?? seed?.addressLine2 ?? "");
+    setCity(company?.city ?? seed?.city ?? "");
+    setState(company?.state ?? seed?.state ?? "");
+    setPostalCode(company?.postalCode ?? seed?.postalCode ?? "");
+    setCountry(company?.country ?? seed?.country ?? "");
     setEin(company?.ein && !company.einMasked ? company.ein : "");
-    setStatus(company?.status ?? "");
-    setProductCategory(company?.productCategory ?? "");
-    setArType(company?.arType ?? "");
-    setPaymentTermsCode(company?.paymentTermsCode ?? "");
-    setTermsCode(company?.termsCode ?? "");
-    setTerritoryCode(company?.territoryCode ?? "");
-    setPricingLevel(company?.pricingLevel == null ? "" : String(company.pricingLevel));
-    setDoNotContact(company?.doNotContact ?? false);
-    setOptOutSalePi(company?.optOutSalePi ?? false);
+    setStatus(company?.status ?? seed?.status ?? "");
+    setProductCategory(company?.productCategory ?? seed?.productCategory ?? "");
+    setArType(company?.arType ?? seed?.arType ?? "");
+    setPaymentTermsCode(company?.paymentTermsCode ?? seed?.paymentTermsCode ?? "");
+    setTermsCode(company?.termsCode ?? seed?.termsCode ?? "");
+    setTerritoryCode(company?.territoryCode ?? seed?.territoryCode ?? "");
+    setPricingLevel(company?.pricingLevel == null ? (seed?.pricingLevel == null ? "" : String(seed.pricingLevel)) : String(company.pricingLevel));
+    setDoNotContact(company?.doNotContact ?? seed?.doNotContact ?? false);
+    setOptOutSalePi(company?.optOutSalePi ?? seed?.optOutSalePi ?? false);
     setFormError(null);
-  }, [company, open]);
+  }, [company, initialValues, open]);
 
   const mutation = useMutation({
     mutationFn: async ({ archive }: { archive: boolean }) => {

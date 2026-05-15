@@ -43,6 +43,17 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function buildProspectCompanyCreateHref(row: { label: string; source?: string | null; lender?: string | null }): string {
+  const params = new URLSearchParams({
+    new: "1",
+    name: row.label,
+    status: "Prospect",
+    source: row.source ?? "ucc_csv",
+  });
+  if (row.lender) params.set("lender", row.lender);
+  return `/qrm/companies?${params.toString()}`;
+}
+
 export function OpportunityMapPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
@@ -452,6 +463,14 @@ export function OpportunityMapPage() {
                         </Link>
                       </Button>
                     </div>
+                  ) : row.kind === "prospect" ? (
+                    <div className="mt-1">
+                      <Button asChild size="sm" variant="ghost" className="h-6 px-0 font-mono text-[10px] uppercase tracking-[0.1em] text-qep-orange hover:text-qep-orange/80">
+                        <Link to={buildProspectCompanyCreateHref(row)}>
+                          Create customer <ArrowUpRight className="ml-1 h-3 w-3" />
+                        </Link>
+                      </Button>
+                    </div>
                   ) : null}
                 </div>
               ))
@@ -487,6 +506,12 @@ export function OpportunityMapPage() {
                         <Button asChild size="sm" variant="outline" className="h-7 px-2 font-mono text-[10px] uppercase tracking-[0.08em]">
                           <Link to={buildAccountCommandHref(selectedRow.companyId)}>
                             Open account <ArrowUpRight className="ml-1 h-3 w-3" />
+                          </Link>
+                        </Button>
+                      ) : selectedRow.kind === "prospect" ? (
+                        <Button asChild size="sm" variant="outline" className="h-7 px-2 font-mono text-[10px] uppercase tracking-[0.08em]">
+                          <Link to={buildProspectCompanyCreateHref(selectedRow)}>
+                            Create customer <ArrowUpRight className="ml-1 h-3 w-3" />
                           </Link>
                         </Button>
                       ) : null}

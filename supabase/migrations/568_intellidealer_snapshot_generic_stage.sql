@@ -89,35 +89,35 @@ alter table public.qrm_intellidealer_service_history_stage enable row level secu
 
 create policy "qrm_intellidealer_equipment_stage_service_all"
   on public.qrm_intellidealer_equipment_master_stage for all
-  using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+  using ((select auth.role()) = 'service_role') with check ((select auth.role()) = 'service_role');
 create policy "qrm_intellidealer_equipment_stage_elevated_all"
   on public.qrm_intellidealer_equipment_master_stage for all
-  using (workspace_id = public.get_my_workspace() and public.get_my_role() in ('admin', 'manager', 'owner'))
-  with check (workspace_id = public.get_my_workspace() and public.get_my_role() in ('admin', 'manager', 'owner'));
+  using (workspace_id = (select public.get_my_workspace()) and (select public.get_my_role()) in ('admin', 'manager', 'owner'))
+  with check (workspace_id = (select public.get_my_workspace()) and (select public.get_my_role()) in ('admin', 'manager', 'owner'));
 
 create policy "qrm_intellidealer_quotes_stage_service_all"
   on public.qrm_intellidealer_quotes_history_stage for all
-  using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+  using ((select auth.role()) = 'service_role') with check ((select auth.role()) = 'service_role');
 create policy "qrm_intellidealer_quotes_stage_elevated_all"
   on public.qrm_intellidealer_quotes_history_stage for all
-  using (workspace_id = public.get_my_workspace() and public.get_my_role() in ('admin', 'manager', 'owner'))
-  with check (workspace_id = public.get_my_workspace() and public.get_my_role() in ('admin', 'manager', 'owner'));
+  using (workspace_id = (select public.get_my_workspace()) and (select public.get_my_role()) in ('admin', 'manager', 'owner'))
+  with check (workspace_id = (select public.get_my_workspace()) and (select public.get_my_role()) in ('admin', 'manager', 'owner'));
 
 create policy "qrm_intellidealer_parts_stage_service_all"
   on public.qrm_intellidealer_parts_master_stage for all
-  using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+  using ((select auth.role()) = 'service_role') with check ((select auth.role()) = 'service_role');
 create policy "qrm_intellidealer_parts_stage_elevated_all"
   on public.qrm_intellidealer_parts_master_stage for all
-  using (workspace_id = public.get_my_workspace() and public.get_my_role() in ('admin', 'manager', 'owner'))
-  with check (workspace_id = public.get_my_workspace() and public.get_my_role() in ('admin', 'manager', 'owner'));
+  using (workspace_id = (select public.get_my_workspace()) and (select public.get_my_role()) in ('admin', 'manager', 'owner'))
+  with check (workspace_id = (select public.get_my_workspace()) and (select public.get_my_role()) in ('admin', 'manager', 'owner'));
 
 create policy "qrm_intellidealer_service_stage_service_all"
   on public.qrm_intellidealer_service_history_stage for all
-  using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+  using ((select auth.role()) = 'service_role') with check ((select auth.role()) = 'service_role');
 create policy "qrm_intellidealer_service_stage_elevated_all"
   on public.qrm_intellidealer_service_history_stage for all
-  using (workspace_id = public.get_my_workspace() and public.get_my_role() in ('admin', 'manager', 'owner'))
-  with check (workspace_id = public.get_my_workspace() and public.get_my_role() in ('admin', 'manager', 'owner'));
+  using (workspace_id = (select public.get_my_workspace()) and (select public.get_my_role()) in ('admin', 'manager', 'owner'))
+  with check (workspace_id = (select public.get_my_workspace()) and (select public.get_my_role()) in ('admin', 'manager', 'owner'));
 
 comment on table public.qrm_intellidealer_equipment_master_stage is
   'Lossless staging table for IntelliDealer equipment snapshot CSV exports.';

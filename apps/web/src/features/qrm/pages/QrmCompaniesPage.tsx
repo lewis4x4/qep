@@ -29,6 +29,14 @@ type CustomerHealthProfileRow = Pick<
 
 type CompanySortMode = "default" | "coverageRisk";
 
+function readPrefillParam(searchParams: URLSearchParams, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const value = searchParams.get(key)?.trim();
+    if (value) return value;
+  }
+  return null;
+}
+
 function toneFromHealth(score: number | null | undefined): StatusTone {
   if (score == null) return "cool";
   if (score >= 80) return "hot";
@@ -55,6 +63,21 @@ export function QrmCompaniesPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [healthDrawerProfileId, setHealthDrawerProfileId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const newCompanyInitialValues = useMemo(() => {
+    if (!(searchParams.get("new") === "1" || searchParams.get("action") === "new")) return null;
+    const name = readPrefillParam(searchParams, "name", "company", "company_name");
+    const status = readPrefillParam(searchParams, "status");
+    const search1 = readPrefillParam(searchParams, "search1", "source");
+    const search2 = readPrefillParam(searchParams, "search2", "lender", "secured_party");
+    if (!name && !status && !search1 && !search2) return null;
+    return {
+      name: name ?? "",
+      status: status ?? "Prospect",
+      search1,
+      search2,
+      productCategory: "business" as const,
+    };
+  }, [searchParams]);
 
   useEffect(() => {
     if (window.matchMedia("(min-width: 1024px)").matches) {
@@ -522,6 +545,7 @@ export function QrmCompaniesPage() {
       <QrmCompanyEditorSheet
         open={editorOpen}
         onOpenChange={setEditorOpen}
+        initialValues={newCompanyInitialValues}
         onSaved={(company) => navigate(buildAccountCommandHref(company.id))}
       />
       <HealthScoreDrawer
