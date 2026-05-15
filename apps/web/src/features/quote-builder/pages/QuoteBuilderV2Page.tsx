@@ -3393,6 +3393,7 @@ export function QuoteBuilderV2Page() {
         steps={WIZARD_STEPS}
         currentStep={step}
         maxCompletedStepIndex={Math.max(0, (draft.wizardStep ?? 1) - 1)}
+        compact
         onJumpTo={setStep}
       />
 
@@ -5595,11 +5596,13 @@ function QuoteWizardProgress({
   steps,
   currentStep,
   maxCompletedStepIndex,
+  compact = false,
   onJumpTo,
 }: {
   steps: WizardStepMeta[];
   currentStep: Step;
   maxCompletedStepIndex: number;
+  compact?: boolean;
   onJumpTo: (step: Step) => void;
 }) {
   const currentIndex = steps.findIndex((item) => item.id === currentStep);
@@ -5615,10 +5618,14 @@ function QuoteWizardProgress({
           Step {Math.max(1, currentIndex + 1)} of {steps.length}
         </span>
       </div>
-      <p className="mt-3 text-[11px] text-muted-foreground">
-        Finished steps remain editable. Use the green buttons to jump back without losing later draft work.
-      </p>
-      <div className="mt-3 grid grid-flow-col gap-2 overflow-x-auto pb-1 [grid-auto-columns:minmax(7.5rem,1fr)]">
+      {!compact ? (
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          Finished steps remain editable. Use the green buttons to jump back without losing later draft work.
+        </p>
+      ) : null}
+      <div className={`mt-3 grid grid-flow-col gap-2 overflow-x-auto pb-1 ${
+        compact ? "[grid-auto-columns:minmax(4.75rem,1fr)] sm:[grid-auto-columns:minmax(7.5rem,1fr)]" : "[grid-auto-columns:minmax(7.5rem,1fr)]"
+      }`}>
         {steps.map((item, index) => {
           const isCurrent = item.id === currentStep;
           const isReachable = index <= maxCompletedIndex;
@@ -5630,7 +5637,9 @@ function QuoteWizardProgress({
               type="button"
               onClick={() => { if (isReachable) onJumpTo(item.id); }}
               disabled={isFuture}
-              className={`min-h-[4.25rem] rounded-lg border px-3 py-2 text-left text-[11px] leading-tight transition ${
+              aria-current={isCurrent ? "step" : undefined}
+              aria-label={`${item.number}. ${item.label}: ${isCurrent ? "current step" : isComplete ? "editable step" : "locked step"}`}
+              className={`${compact ? "min-h-[3.25rem] px-2 py-1.5 sm:min-h-[4.25rem] sm:px-3 sm:py-2" : "min-h-[4.25rem] px-3 py-2"} rounded-lg border text-left text-[11px] leading-tight transition ${
                 isCurrent
                   ? "border-qep-orange bg-qep-orange/10 text-qep-orange shadow-[0_0_0_1px_rgba(249,115,22,0.25)]"
                   : isComplete
@@ -5639,8 +5648,8 @@ function QuoteWizardProgress({
               }`}
             >
               <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] opacity-80">{item.number}.</span>
-              <span className="mt-1 block whitespace-normal break-words font-semibold">{item.shortLabel}</span>
-              <span className="mt-1 block text-[10px] opacity-80">
+              <span className={`${compact ? "sr-only sm:not-sr-only sm:mt-1 sm:block" : "mt-1 block"} whitespace-normal break-words font-semibold`}>{item.shortLabel}</span>
+              <span className={`${compact ? "mt-0.5 sm:mt-1" : "mt-1"} block text-[10px] opacity-80`}>
                 {isCurrent ? "Now" : isComplete ? "Edit" : item.owner === "placeholder" ? "Later" : "Locked"}
               </span>
             </button>
