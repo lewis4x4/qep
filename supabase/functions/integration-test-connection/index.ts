@@ -1,4 +1,4 @@
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { AempMockAdapter } from "../_shared/adapters/aemp-mock.ts";
 import { AuctionDataMockAdapter } from "../_shared/adapters/auction-data-mock.ts";
 import { FinancingMockAdapter } from "../_shared/adapters/financing-mock.ts";
@@ -10,9 +10,10 @@ import { ManufacturerIncentivesMockAdapter } from "../_shared/adapters/manufactu
 import { RouseMockAdapter } from "../_shared/adapters/rouse-mock.ts";
 import { checkRateLimit } from "../_shared/dge-rate-limit.ts";
 import { fail, ok, optionsResponse, readJsonObject } from "../_shared/dge-http.ts";
-import { createEventTracker } from "../_shared/event-tracker.ts";
+import { createEventTracker, type UserRole } from "../_shared/event-tracker.ts";
 import { decryptCredential, decryptOneDriveToken } from "../_shared/integration-crypto.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 import type {
   AdapterConfig,
   IntegrationAdapter,
@@ -22,11 +23,6 @@ import type {
 
 interface TestConnectionBody {
   integration_key?: string;
-}
-
-interface ProfileRow {
-  id: string;
-  role: "rep" | "admin" | "manager" | "owner";
 }
 
 interface IntegrationStatusRow {
@@ -71,7 +67,6 @@ const DEFERRED_PROVIDER_KEYS = new Set<SupportedIntegrationKey>([
 ]);
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const MOCK_ADAPTERS: Record<IntegrationKey, IntegrationAdapter<unknown, unknown>> = {
@@ -89,22 +84,13 @@ const LIVE_ADAPTERS: Partial<Record<IntegrationKey, IntegrationAdapter<unknown, 
   fred_usda: new FredUsdaLiveAdapter(),
 };
 
-function createUserClient(jwt: string) {
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-    global: { headers: { Authorization: `Bearer ${jwt}` } },
-  });
-}
-
 function createAdminClient() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }
 
-async function resolveWorkspaceId(
-  userClient: ReturnType<typeof createUserClient>,
-): Promise<string> {
+async function resolveWorkspaceId(userClient: SupabaseClient): Promise<string> {
   const { data, error } = await userClient.rpc("get_my_workspace");
   if (error || typeof data !== "string" || data.trim().length === 0) {
     throw new Error("WORKSPACE_RESOLUTION_FAILED");
@@ -343,38 +329,12 @@ Deno.serve(async (req): Promise<Response> => {
   }
 
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return fail({
-      origin,
-      status: 401,
-      code: "UNAUTHORIZED",
-      message: "Missing bearer token.",
-    });
-  }
-
-  const jwt = authHeader.replace("Bearer ", "").trim();
-  const userClient = createUserClient(jwt);
   const adminClient = createAdminClient();
 
   try {
-    const { data: authData, error: authError } = await userClient.auth.getUser();
-    const userId = authData.user?.id ?? null;
-    if (authError || !userId) {
-      return fail({
-        origin,
-        status: 401,
-        code: "UNAUTHORIZED",
-        message: "Invalid authentication token.",
-      });
-    }
-
-    const { data: profile, error: profileError } = await userClient
-      .from("profiles")
-      .select("id, role")
-      .eq("id", userId)
-      .single<ProfileRow>();
-
-    if (profileError || !profile || !["admin", "owner"].includes(profile.role)) {
+    const auth = await requireServiceUser(authHeader, origin);
+    if (!auth.ok) return auth.response;
+    if (!["admin", "owner"].includes(auth.role)) {
       return fail({
         origin,
         status: 403,
@@ -382,6 +342,10 @@ Deno.serve(async (req): Promise<Response> => {
         message: "Only admins and owners can test integrations.",
       });
     }
+
+    const userClient = auth.supabase;
+    const userId = auth.userId;
+    const trackerRole = auth.role as UserRole;
 
     const workspaceId = await resolveWorkspaceId(userClient);
 
@@ -712,7 +676,7 @@ Deno.serve(async (req): Promise<Response> => {
     await tracker.trackEvent({
       event_name: "integration_test_connection_result",
       user_id: userId,
-      role: profile.role,
+      role: trackerRole,
       source: "edge",
       entity_type: "integration",
       entity_id: integrationKey,
@@ -729,7 +693,7 @@ Deno.serve(async (req): Promise<Response> => {
       await tracker.trackEvent({
         event_name: "integration_status_changed",
         user_id: userId,
-        role: profile.role,
+        role: trackerRole,
         source: "edge",
         entity_type: "integration",
         entity_id: integrationKey,
@@ -746,7 +710,7 @@ Deno.serve(async (req): Promise<Response> => {
       await tracker.trackEvent({
         event_name: "integration_fallback_activated",
         user_id: userId,
-        role: profile.role,
+        role: trackerRole,
         source: "edge",
         entity_type: "integration",
         entity_id: integrationKey,
@@ -764,7 +728,7 @@ Deno.serve(async (req): Promise<Response> => {
       await tracker.trackEvent({
         event_name: "integration_fallback_cleared",
         user_id: userId,
-        role: profile.role,
+        role: trackerRole,
         source: "edge",
         entity_type: "integration",
         entity_id: integrationKey,

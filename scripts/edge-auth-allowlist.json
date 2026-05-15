@@ -54,24 +54,6 @@
     "       - onedrive-oauth"
   ],
   "unregistered_in_config": [
-    "analytics-alert-evaluator",
-    "analytics-snapshot-runner",
-    "demo-admin",
-    "embed-qrm",
-    "escalation-router",
-    "exec-packet-generator",
-    "exec-summary-generator",
-    "extract-machine-profiles",
-    "extract-price-sheet",
-    "flow-runner",
-    "flow-synthesize",
-    "follow-up-engine",
-    "iron-execute-flow-step",
-    "iron-orchestrator",
-    "iron-pattern-mining",
-    "iron-redteam-nightly",
-    "iron-transcribe",
-    "iron-undo-flow-run",
     "kb-maintenance",
     "nudge-scheduler",
     "parts-identify-photo",
@@ -114,7 +96,5 @@
     "service-vendor-inbound",
     "voice-to-parts-order"
   ],
-  "argless_get_user": [
-    "integration-test-connection"
-  ]
+  "argless_get_user": []
 }
