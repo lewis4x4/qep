@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { buildOpportunityMapBoard, buildOpportunityRoute, type OpportunityMapMarkerRow } from "./opportunity-map";
+import { buildOpportunityMapBoard, buildOpportunityRoute, parseUccProspectCsv, type OpportunityMapMarkerRow } from "./opportunity-map";
 
 describe("buildOpportunityMapBoard", () => {
   it("groups account signals on customer-owned equipment coordinates and keeps rentals separate", () => {
@@ -147,6 +147,47 @@ describe("buildOpportunityMapBoard", () => {
     expect(board.summary.criticalAccounts).toBe(1);
     expect(board.summary.routeCandidates).toBe(2);
   });
+
+  it("adds uploaded UCC prospects as hot route candidates without a CRM account", () => {
+    const prospects = parseUccProspectCsv([
+      "Company,Latitude,Longitude,Secured Party,Filing Date,Collateral",
+      '"Delta Dirt",35.148,-90.049,"Kubota Credit","2026-05-01","Excavator"',
+    ].join("\n"));
+
+    const board = buildOpportunityMapBoard({
+      equipment: [],
+      deals: [],
+      visitRecommendations: [],
+      tradeSignals: [],
+      uccProspects: prospects,
+    });
+
+    expect(prospects).toEqual([{
+      id: "delta-dirt-1",
+      label: "Delta Dirt",
+      lat: 35.148,
+      lng: -90.049,
+      source: "ucc_csv",
+      lender: "Kubota Credit",
+      filingDate: "2026-05-01",
+      collateral: "Excavator",
+    }]);
+    expect(board.summary.mappedAccounts).toBe(1);
+    expect(board.summary.routeCandidates).toBe(1);
+    expect(board.rows[0]).toMatchObject({
+      id: "prospect:delta-dirt-1",
+      companyId: null,
+      kind: "prospect",
+      urgency: "hot",
+      routeCandidate: true,
+      reasons: [
+        "UCC prospect import",
+        "Lender: Kubota Credit",
+        "Filed: 2026-05-01",
+        "Collateral: Excavator",
+      ],
+    });
+  });
 });
 
 describe("buildOpportunityRoute", () => {
@@ -204,5 +245,23 @@ describe("buildOpportunityRoute", () => {
     expect(single.googleMapsUrl).toContain("destination=41.8781%2C-87.6298");
     expect(single.googleMapsUrl).not.toContain("waypoints=");
     expect(single.estimatedMiles).toBe(0);
+  });
+
+  it("includes routeable UCC prospects in the drive plan", () => {
+    const route = buildOpportunityRoute([
+      makeRow({
+        id: "prospect:delta-dirt-1",
+        label: "Delta Dirt",
+        lat: 35.148,
+        lng: -90.049,
+        kind: "prospect",
+        urgency: "hot",
+        routeCandidate: true,
+        score: 55,
+      }),
+    ]);
+
+    expect(route.stops.map((stop) => stop.id)).toEqual(["prospect:delta-dirt-1"]);
+    expect(route.googleMapsUrl).toContain("destination=35.148%2C-90.049");
   });
 });

@@ -3,12 +3,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { MapWithSidebar, MapLibreCanvas, type MapMarker, type MapOverlay } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
-import { ArrowUpRight, Map as MapIcon, RotateCcw } from "lucide-react";
+import { ArrowUpRight, Map as MapIcon, RotateCcw, Upload } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/format";
 import { buildAccountCommandHref } from "../lib/account-command";
-import { buildOpportunityMapBoard, buildOpportunityRoute } from "../lib/opportunity-map";
+import { buildOpportunityMapBoard, buildOpportunityRoute, parseUccProspectCsv, type UccProspectRow } from "../lib/opportunity-map";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
 
@@ -50,10 +50,12 @@ export function OpportunityMapPage() {
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [minOpenRevenue, setMinOpenRevenue] = useState<number>(0);
   const [signalFilter, setSignalFilter] = useState<"all" | "open_revenue" | "visit_targets" | "trade_signals" | "rentals">("all");
+  const [uccProspects, setUccProspects] = useState<UccProspectRow[]>([]);
+  const [uccImportError, setUccImportError] = useState<string | null>(null);
   const today = new Date().toISOString().split("T")[0];
 
   const boardQuery = useQuery({
-    queryKey: ["qrm", "opportunity-map", profile?.id, today],
+    queryKey: ["qrm", "opportunity-map", profile?.id, today, uccProspects],
     enabled: Boolean(profile?.id),
     queryFn: async () => {
       const [equipmentResult, dealsResult, visitsResult, tradesResult] = await Promise.all([
@@ -128,6 +130,7 @@ export function OpportunityMapPage() {
         })),
         visitRecommendations,
         tradeSignals: (tradesResult.data ?? []).map((row) => ({ equipmentId: row.equipment_id })),
+        uccProspects,
       });
 
       return {
@@ -176,7 +179,15 @@ export function OpportunityMapPage() {
 
   const markers: MapMarker[] = useMemo(
     () => visibleRows.map((row) => {
-      const tone = row.kind === "rental" ? "violet" : row.tradeSignalCount > 0 ? "orange" : row.visitTargetCount > 0 ? "green" : "blue";
+      const tone = row.kind === "rental"
+        ? "violet"
+        : row.kind === "prospect"
+          ? "neutral"
+          : row.tradeSignalCount > 0
+            ? "orange"
+            : row.visitTargetCount > 0
+              ? "green"
+              : "blue";
 
       if (row.kind === "rental") {
         return {
@@ -257,6 +268,21 @@ export function OpportunityMapPage() {
           : criticalAccounts > 0
             ? `${criticalAccounts} critical account${criticalAccounts === 1 ? "" : "s"} need action now. ${routeCandidates} route candidate${routeCandidates === 1 ? "" : "s"} are ready for command routing.`
             : `${mappedAccounts} mapped account${mappedAccounts === 1 ? "" : "s"} are live on the canvas with ${routeCandidates} route candidate${routeCandidates === 1 ? "" : "s"} and ${visitTargets} visit target${visitTargets === 1 ? "" : "s"}.`;
+
+  async function handleUccCsvUpload(file: File | null): Promise<void> {
+    if (!file) return;
+    try {
+      const prospects = parseUccProspectCsv(await file.text());
+      setUccProspects(prospects);
+      setUccImportError(prospects.length === 0
+        ? "No routeable UCC prospects found. Include latitude/longitude columns."
+        : null);
+      setSignalFilter("all");
+    } catch (error) {
+      setUccProspects([]);
+      setUccImportError(error instanceof Error ? error.message : "Could not parse CSV.");
+    }
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 pb-2 pt-2 sm:px-6 lg:px-8">
@@ -345,6 +371,36 @@ export function OpportunityMapPage() {
                   <p className="mt-1 text-[10.5px] text-muted-foreground">No visible route candidates yet.</p>
                 )}
               </div>
+              <div className="rounded-md border border-qep-deck-rule/70 bg-background/70 p-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                      UCC prospect import
+                    </p>
+                    <p className="mt-1 text-[10.5px] text-muted-foreground">
+                      CSV needs company/name plus lat/lng. Pins stay local until saved to CRM.
+                    </p>
+                  </div>
+                  <label className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-qep-deck-rule px-2 font-mono text-[10px] uppercase tracking-[0.08em] text-qep-orange hover:bg-qep-orange/10">
+                    <Upload className="h-3 w-3" />
+                    Upload
+                    <input
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="sr-only"
+                      onChange={(event) => void handleUccCsvUpload(event.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                </div>
+                {uccProspects.length > 0 ? (
+                  <p className="mt-2 text-[10.5px] text-emerald-300">
+                    {uccProspects.length} UCC prospect{uccProspects.length === 1 ? "" : "s"} loaded into the map.
+                  </p>
+                ) : null}
+                {uccImportError ? (
+                  <p className="mt-2 text-[10.5px] text-amber-300">{uccImportError}</p>
+                ) : null}
+              </div>
             </div>
             {isLoading ? (
               <div className="p-3 text-xs text-muted-foreground">Loading opportunity rows and diagnostics…</div>
@@ -377,10 +433,12 @@ export function OpportunityMapPage() {
                   >
                     <p className="truncate text-[13px] font-medium text-foreground">{row.label}</p>
                     <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                      {row.kind === "rental" ? "Rental" : row.urgency}
+                      {row.kind === "rental" ? "Rental" : row.kind === "prospect" ? "UCC prospect" : row.urgency}
                     </p>
                     <p className="mt-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
-                      {formatCurrency(row.openRevenue)} open · {row.openDealCount} deal{row.openDealCount === 1 ? "" : "s"} · {row.visitTargetCount} visit{row.visitTargetCount === 1 ? "" : "s"}
+                      {row.kind === "prospect"
+                        ? "Imported prospect · route candidate"
+                        : `${formatCurrency(row.openRevenue)} open · ${row.openDealCount} deal${row.openDealCount === 1 ? "" : "s"} · ${row.visitTargetCount} visit${row.visitTargetCount === 1 ? "" : "s"}`}
                     </p>
                     {row.reasons.length > 0 && (
                       <p className="mt-0.5 text-[10.5px] text-muted-foreground">{row.reasons.slice(0, 2).join(" · ")}</p>
@@ -414,10 +472,12 @@ export function OpportunityMapPage() {
                   <div className="pointer-events-auto rounded-md border border-qep-deck-rule bg-background/95 p-3 shadow-md backdrop-blur-sm">
                     <p className="truncate text-sm font-semibold text-foreground">{selectedRow.label}</p>
                     <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                      {selectedRow.kind === "rental" ? "Rental" : selectedRow.urgency}
+                      {selectedRow.kind === "rental" ? "Rental" : selectedRow.kind === "prospect" ? "UCC prospect" : selectedRow.urgency}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {formatCurrency(selectedRow.openRevenue)} open · {selectedRow.openDealCount} deal{selectedRow.openDealCount === 1 ? "" : "s"} · {selectedRow.visitTargetCount} visit target{selectedRow.visitTargetCount === 1 ? "" : "s"} · {selectedRow.tradeSignalCount} trade signal{selectedRow.tradeSignalCount === 1 ? "" : "s"}
+                      {selectedRow.kind === "prospect"
+                        ? "Imported UCC prospect · route candidate"
+                        : `${formatCurrency(selectedRow.openRevenue)} open · ${selectedRow.openDealCount} deal${selectedRow.openDealCount === 1 ? "" : "s"} · ${selectedRow.visitTargetCount} visit target${selectedRow.visitTargetCount === 1 ? "" : "s"} · ${selectedRow.tradeSignalCount} trade signal${selectedRow.tradeSignalCount === 1 ? "" : "s"}`}
                     </p>
                     {selectedRow.reasons.length > 0 ? (
                       <p className="mt-1.5 text-xs text-muted-foreground">{selectedRow.reasons.slice(0, 3).join(" · ")}</p>

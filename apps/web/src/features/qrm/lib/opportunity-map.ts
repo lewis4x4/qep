@@ -31,7 +31,7 @@ export interface OpportunityMapMarkerRow {
   label: string;
   lat: number;
   lng: number;
-  kind: "account" | "rental";
+  kind: "account" | "rental" | "prospect";
   openRevenue: number;
   visitTargetCount: number;
   tradeSignalCount: number;
@@ -40,6 +40,17 @@ export interface OpportunityMapMarkerRow {
   reasons: string[];
   routeCandidate: boolean;
   openDealCount: number;
+}
+
+export interface UccProspectRow {
+  id: string;
+  label: string;
+  lat: number;
+  lng: number;
+  source: "ucc_csv";
+  lender?: string | null;
+  filingDate?: string | null;
+  collateral?: string | null;
 }
 
 export interface OpportunityMapSummary {
@@ -96,6 +107,9 @@ function getReasons(row: OpportunityMapMarkerRow): string[] {
   if (row.kind === "rental") {
     return ["Active rental unit in field"];
   }
+  if (row.kind === "prospect") {
+    return row.reasons.length > 0 ? row.reasons : ["UCC prospect import"];
+  }
 
   const reasons: string[] = [];
   if (row.openRevenue > 0) reasons.push(`$${Math.round(row.openRevenue).toLocaleString()} open revenue`);
@@ -127,7 +141,7 @@ function distanceMiles(a: { lat: number; lng: number }, b: { lat: number; lng: n
 
 export function buildOpportunityRoute(rows: OpportunityMapMarkerRow[], limit = 8): OpportunityRoutePlan {
   const selected = rows
-    .filter((row) => row.kind === "account" && row.routeCandidate)
+    .filter((row) => (row.kind === "account" || row.kind === "prospect") && row.routeCandidate)
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
       if (b.openRevenue !== a.openRevenue) return b.openRevenue - a.openRevenue;
@@ -183,6 +197,7 @@ export function buildOpportunityMapBoard(input: {
   deals: OpportunityMapDeal[];
   visitRecommendations: OpportunityMapVisitRecommendation[];
   tradeSignals: OpportunityMapTradeSignal[];
+  uccProspects?: UccProspectRow[];
 }): OpportunityMapBoard {
   const rows = new Map<string, OpportunityMapMarkerRow>();
   const equipmentById = new Map(input.equipment.map((row) => [row.id, row]));
@@ -268,11 +283,39 @@ export function buildOpportunityMapBoard(input: {
     target.tradeSignalCount += 1;
   }
 
+  for (const prospect of input.uccProspects ?? []) {
+    rows.set(`prospect:${prospect.id}`, {
+      id: `prospect:${prospect.id}`,
+      companyId: null,
+      label: prospect.label,
+      lat: prospect.lat,
+      lng: prospect.lng,
+      kind: "prospect",
+      openRevenue: 0,
+      visitTargetCount: 1,
+      tradeSignalCount: 0,
+      score: 55,
+      urgency: "hot",
+      reasons: [
+        "UCC prospect import",
+        prospect.lender ? `Lender: ${prospect.lender}` : null,
+        prospect.filingDate ? `Filed: ${prospect.filingDate}` : null,
+        prospect.collateral ? `Collateral: ${prospect.collateral}` : null,
+      ].filter((reason): reason is string => Boolean(reason)),
+      routeCandidate: true,
+      openDealCount: 0,
+    });
+  }
+
   for (const row of rows.values()) {
     if (row.kind === "account") {
       row.score = getAccountScore(row);
       row.urgency = getAccountUrgency(row.score);
       row.routeCandidate = row.urgency === "critical" || row.urgency === "hot";
+    } else if (row.kind === "prospect") {
+      row.score = Math.max(row.score, 55);
+      row.urgency = "hot";
+      row.routeCandidate = true;
     } else {
       row.score = 0;
       row.urgency = "rental";
@@ -289,7 +332,7 @@ export function buildOpportunityMapBoard(input: {
 
   return {
     summary: {
-      mappedAccounts: list.filter((row) => row.kind === "account").length,
+      mappedAccounts: list.filter((row) => row.kind === "account" || row.kind === "prospect").length,
       openRevenue: list.reduce((sum, row) => sum + row.openRevenue, 0),
       visitTargets: list.reduce((sum, row) => sum + row.visitTargetCount, 0),
       activeRentals: list.filter((row) => row.kind === "rental").length,
@@ -299,4 +342,64 @@ export function buildOpportunityMapBoard(input: {
     },
     rows: list,
   };
+}
+
+function csvCells(line: string): string[] {
+  const cells: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      current += '"';
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      cells.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function firstPresent(record: Record<string, string>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = record[key]?.trim();
+    if (value) return value;
+  }
+  return null;
+}
+
+function parseCoord(value: string | null): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function parseUccProspectCsv(csv: string): UccProspectRow[] {
+  const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (lines.length < 2) return [];
+  const headers = csvCells(lines[0] as string).map((header) => header.trim().toLowerCase());
+  return lines.slice(1).flatMap((line, index) => {
+    const values = csvCells(line);
+    const record = Object.fromEntries(headers.map((header, cellIndex) => [header, values[cellIndex] ?? ""]));
+    const lat = parseCoord(firstPresent(record, ["lat", "latitude"]));
+    const lng = parseCoord(firstPresent(record, ["lng", "lon", "long", "longitude"]));
+    if (lat == null || lng == null) return [];
+    const label = firstPresent(record, ["company", "company name", "debtor", "debtor name", "name", "business name"]) ?? `UCC prospect ${index + 1}`;
+    return [{
+      id: firstPresent(record, ["id", "ucc id", "filing number"]) ?? `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${index + 1}`,
+      label,
+      lat,
+      lng,
+      source: "ucc_csv" as const,
+      lender: firstPresent(record, ["lender", "secured party", "secured party name"]),
+      filingDate: firstPresent(record, ["filing date", "filed", "date"]),
+      collateral: firstPresent(record, ["collateral", "equipment", "description"]),
+    }];
+  });
 }
