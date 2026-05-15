@@ -210,7 +210,7 @@ export function AdvisorActionCards() {
           <QuickToolLink
             to="/qrm/opportunity-map"
             label="Prospecting map"
-            subLabel="Route and target the next stop"
+            subLabel="Upload UCC CSV and route the next stop"
             icon={<MapPinned className="h-3.5 w-3.5" aria-hidden="true" />}
           />
           <QuickToolLink
