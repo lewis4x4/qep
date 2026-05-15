@@ -46,6 +46,14 @@ def parse_row(row: dict[str, str]) -> dict[str, Any]:
     return out
 
 
+GENERIC_STAGE_TABLES = {
+    "equipment_master",
+    "quotes_history",
+    "parts_master",
+    "service_history",
+}
+
+
 @dataclass
 class SupabaseRest:
     url: str
@@ -122,6 +130,17 @@ def run_stage(
             })
             if extra_metadata:
                 normalized["stage_metadata"] = extra_metadata
+            if dataset_name in GENERIC_STAGE_TABLES:
+                normalized = {
+                    "workspace_id": args.workspace,
+                    "source": args.source,
+                    "source_dataset": dataset_name,
+                    "source_row_number": idx,
+                    "source_file_name": input_path.name,
+                    "snapshot_loaded_at": normalized["snapshot_loaded_at"],
+                    "payload": normalized,
+                    "stage_metadata": extra_metadata or {},
+                }
             rows.append(normalized)
 
     out_path = Path(args.out)
