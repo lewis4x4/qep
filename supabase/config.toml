@@ -205,6 +205,9 @@ verify_jwt = false
 [functions.m365-token-refresh]
 verify_jwt = false
 
+[functions.m365-mailbox-sync]
+verify_jwt = false
+
 # Ask Iron — the QRM assistant. verify_jwt = false so the function can pull
 # the auth header itself via resolveCallerContext; requireCaller() inside
 # rejects anonymous traffic with 401.
