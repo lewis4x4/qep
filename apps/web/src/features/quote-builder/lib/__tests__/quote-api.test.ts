@@ -618,13 +618,25 @@ describe("quote recommendation and send normalizers", () => {
   });
 
   test("normalizes send-package edge responses", () => {
-    expect(normalizeSendQuotePackageResponse({ sent: true, toEmail: "buyer@example.com" })).toEqual({
+    expect(normalizeSendQuotePackageResponse({
+      sent: true,
+      toEmail: "buyer@example.com",
+      shareToken: "share-1",
+      publicUrl: "https://example.com/q/share-1",
+      deliveryEventId: "event-1",
+    })).toEqual({
       sent: true,
       to_email: "buyer@example.com",
+      share_token: "share-1",
+      public_url: "https://example.com/q/share-1",
+      delivery_event_id: "event-1",
     });
     expect(normalizeSendQuotePackageResponse({ sent: "yes", to_email: 42 })).toEqual({
       sent: false,
       to_email: "",
+      share_token: null,
+      public_url: null,
+      delivery_event_id: null,
     });
   });
 });

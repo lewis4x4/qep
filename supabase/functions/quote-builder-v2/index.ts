@@ -6503,15 +6503,66 @@ Deno.serve(async (req) => {
         return safeJsonError("Email delivery failed", 502, origin);
       }
 
+      const sentAt = new Date().toISOString();
+      let documentArtifactId = typeof body.document_artifact_id === "string" && UUID_RE.test(body.document_artifact_id)
+        ? body.document_artifact_id
+        : null;
+      const followUpAt = typeof body.follow_up_at === "string" && body.follow_up_at.trim()
+        ? body.follow_up_at.trim()
+        : null;
+      if (documentArtifactId) {
+        const { data: artifactRow, error: artifactErr } = await admin
+          .from("quote_document_artifacts")
+          .select("id")
+          .eq("id", documentArtifactId)
+          .eq("quote_package_id", body.quote_package_id)
+          .eq("workspace_id", typeof pkg.workspace_id === "string" ? pkg.workspace_id : userWorkspaceId)
+          .maybeSingle();
+        if (artifactErr) {
+          console.warn("quote document artifact validation failed:", artifactErr);
+        }
+        documentArtifactId = artifactRow?.id ?? null;
+      }
+
       // Update quote package status
       await supabase
         .from("quote_packages")
         .update({
           status: "sent",
-          sent_at: new Date().toISOString(),
+          sent_at: sentAt,
           sent_via: "email",
         })
         .eq("id", body.quote_package_id);
+
+      const { data: deliveryEvent, error: deliveryEventErr } = await admin
+        .from("quote_delivery_events")
+        .insert({
+          workspace_id: typeof pkg.workspace_id === "string" ? pkg.workspace_id : userWorkspaceId,
+          quote_package_id: body.quote_package_id,
+          document_artifact_id: documentArtifactId,
+          channel: "email",
+          status: "sent",
+          recipient: toEmail,
+          subject: "Equipment Proposal from Quality Equipment & Parts",
+          message_body: emailBody,
+          provider: "resend_email",
+          provider_message_id: null,
+          error_message: null,
+          follow_up_at: followUpAt,
+          created_by: user.id,
+          metadata: {
+            sent_at: sentAt,
+            share_token: shareToken,
+            public_url: publicUrl,
+            route: "quote-builder-v2/send-package",
+            provider_mode: "resend_email_fallback",
+          },
+        })
+        .select("id")
+        .maybeSingle();
+      if (deliveryEventErr) {
+        console.error("quote delivery event insert error:", deliveryEventErr);
+      }
 
       await advanceQuoteDealStage({
         admin,
@@ -6522,7 +6573,13 @@ Deno.serve(async (req) => {
       });
 
       console.log(`[quote-builder-v2] sent package ${body.quote_package_id} to ${toEmail}`);
-      return safeJsonOk({ sent: true, to_email: toEmail, share_token: shareToken, public_url: publicUrl }, origin);
+      return safeJsonOk({
+        sent: true,
+        to_email: toEmail,
+        share_token: shareToken,
+        public_url: publicUrl,
+        delivery_event_id: deliveryEvent?.id ?? null,
+      }, origin);
     }
 
     return safeJsonError("Unknown action", 400, origin);

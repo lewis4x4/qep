@@ -79,6 +79,7 @@ import {
   requestQuoteAvailability,
   saveQuotePackage,
   searchCatalog,
+  sendQuotePackage,
   submitQuoteForApproval,
   type QuoteAvailabilityRequest,
   type QuotePackageCatalogItem,
@@ -2126,16 +2127,23 @@ export function QuoteBuilderV2Page() {
         return;
       }
 
-      const graphEnabled = import.meta.env.VITE_FEATURE_QRM_GRAPH_EMAIL === "true";
       const textEnabled = import.meta.env.VITE_FEATURE_QRM_TEXT_QUOTE === "true";
-      const providerReady = channel === "email" ? graphEnabled : textEnabled;
-      const providerName = channel === "email" ? "Microsoft Graph" : "Twilio";
-      if (!providerReady) {
-        setDeliveryActionMessage(`${providerName} is not configured. No customer message was sent and no delivery event was logged.`);
+      if (channel === "email") {
+        const result = await sendQuotePackage(activeQuotePackageId, {
+          documentArtifactId: documentArtifact?.id ?? null,
+          followUpAt: draft.followUpAt ?? null,
+        });
+        setDraft((current) => ({ ...current, quoteStatus: "sent" }));
+        setDeliveryActionMessage(`Quote emailed to ${result.to_email}. Delivery event ${result.delivery_event_id ? "logged" : "recorded by quote status"} and follow-up preserved.`);
         return;
       }
 
-      setDeliveryActionError(`${providerName} flag is enabled, but the send endpoint is not implemented yet. No customer message was sent or logged.`);
+      if (!textEnabled) {
+        setDeliveryActionMessage("Twilio is not configured. No customer text was sent and no delivery event was logged.");
+        return;
+      }
+
+      setDeliveryActionError("Twilio flag is enabled, but the text send endpoint is not implemented yet. No customer message was sent or logged.");
     } catch (error) {
       setDeliveryActionError(error instanceof Error ? error.message : "Quote delivery action failed.");
     } finally {
@@ -2579,7 +2587,6 @@ export function QuoteBuilderV2Page() {
     : documentFallbackGeneratedAt
       ? "Printable fallback generated"
       : "Not generated";
-  const graphEmailEnabled = import.meta.env.VITE_FEATURE_QRM_GRAPH_EMAIL === "true";
   const textQuoteEnabled = import.meta.env.VITE_FEATURE_QRM_TEXT_QUOTE === "true";
   const approvalBlocker = approvalBlockerMessage();
   const whyThisMachineRequired = isQuoteWhyThisMachineConfirmationRequired(draft);
@@ -5069,9 +5076,8 @@ export function QuoteBuilderV2Page() {
               <QuoteSendActionCard
                 icon={<Mail className="h-4 w-4" />}
                 title="Email Quote"
-                detail={graphEmailEnabled ? "Graph flag enabled, but provider endpoint must be wired before customer send." : "Microsoft Graph email is not configured; no email will be sent."}
+                detail="Send the guarded customer proposal email through the existing backend email route and log the delivery event."
                 readiness={emailReadiness}
-                setupBlocked={!graphEmailEnabled}
                 busy={deliveryActionBusy === "email"}
                 onClick={() => void handleQuoteSendAction("email")}
               />

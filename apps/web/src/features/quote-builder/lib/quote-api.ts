@@ -372,11 +372,22 @@ export function normalizeQuoteRecommendation(value: unknown): QuoteRecommendatio
   };
 }
 
-export function normalizeSendQuotePackageResponse(value: unknown): { sent: boolean; to_email: string } {
+export interface SendQuotePackageResponse {
+  sent: boolean;
+  to_email: string;
+  share_token: string | null;
+  public_url: string | null;
+  delivery_event_id: string | null;
+}
+
+export function normalizeSendQuotePackageResponse(value: unknown): SendQuotePackageResponse {
   const record = recordOrEmpty(value);
   return {
     sent: record.sent === true,
     to_email: firstString(record.to_email, record.toEmail) ?? "",
+    share_token: nullableString(record.share_token ?? record.shareToken),
+    public_url: nullableString(record.public_url ?? record.publicUrl),
+    delivery_event_id: nullableString(record.delivery_event_id ?? record.deliveryEventId),
   };
 }
 
@@ -1442,10 +1453,14 @@ export async function saveQuotePackage(data: Record<string, unknown>): Promise<Q
   return res.json();
 }
 
-export async function sendQuotePackage(quotePackageId: string): Promise<{ sent: boolean; to_email: string }> {
+export async function sendQuotePackage(quotePackageId: string, options?: { documentArtifactId?: string | null; followUpAt?: string | null }): Promise<SendQuotePackageResponse> {
   const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/send-package`, {
     method: "POST",
-    body: JSON.stringify({ quote_package_id: quotePackageId }),
+    body: JSON.stringify({
+      quote_package_id: quotePackageId,
+      document_artifact_id: options?.documentArtifactId ?? null,
+      follow_up_at: options?.followUpAt ?? null,
+    }),
   });
   if (!res.ok) {
     const err = await readJsonRecord(res);
