@@ -12,6 +12,15 @@ describe("OneDrive OAuth state binding", () => {
     expect(source).toContain('url.searchParams.set("state", state)');
   });
 
+  test("connect URL requests file, mail, and refresh scopes", () => {
+    const source = readFileSync(resolve(root, "src/components/IntegrationPanel.tsx"), "utf8");
+    expect(source).toContain('"Files.Read.All"');
+    expect(source).toContain('"Mail.Read"');
+    expect(source).toContain('"Mail.Send"');
+    expect(source).toContain('"offline_access"');
+    expect(source).toContain('url.searchParams.set("scope", M365_OAUTH_SCOPES)');
+  });
+
   test("callback requires returned state to match the stored nonce", () => {
     const source = readFileSync(resolve(root, "src/components/IntegrationCallbackPage.tsx"), "utf8");
     expect(source).toContain("returnedState !== expectedState");
