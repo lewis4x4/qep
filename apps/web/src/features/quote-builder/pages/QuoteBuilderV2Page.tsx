@@ -1539,7 +1539,6 @@ export function QuoteBuilderV2Page() {
     staleTime: 5_000,
   });
   const activeApprovalCase = activeApprovalCaseQuery.data ?? null;
-  const approvalCaseCanSend = activeApprovalCase?.canSend === true;
 
   const currentWizardStepNumber = wizardIndexForStep(step);
 
@@ -1570,6 +1569,10 @@ export function QuoteBuilderV2Page() {
 
   const quoteStatus = draft.quoteStatus ?? "draft";
   const approvalPending = quoteStatus === "pending_approval";
+  const bypassApprovedWithoutCase =
+    !activeApprovalCase
+    && (quoteStatus === "approved" || quoteStatus === "sent" || quoteStatus === "accepted");
+  const approvalCaseCanSend = activeApprovalCase?.canSend === true || bypassApprovedWithoutCase;
   const approvalGranted =
     quoteStatus === "approved"
     || quoteStatus === "approved_with_conditions"
@@ -1966,6 +1969,7 @@ export function QuoteBuilderV2Page() {
   function approvalBlockerMessage(): string | null {
     if (!activeQuotePackageId) return "Save the quote package before generating customer-facing documents.";
     if (activeApprovalCaseQuery.isLoading) return "Checking the approval case before customer-facing actions unlock.";
+    if (bypassApprovedWithoutCase) return null;
     if (!activeApprovalCase) return "Submit this quote for owner approval before generating or sending customer-facing material.";
     if (activeApprovalCase.canSend) return null;
     if (activeApprovalCase.status === "pending" || activeApprovalCase.status === "escalated") {
@@ -1992,6 +1996,7 @@ export function QuoteBuilderV2Page() {
     }
     const refreshed = await activeApprovalCaseQuery.refetch();
     if (refreshed.error) return "Could not recheck owner approval after saving. Try again before customer-facing actions.";
+    if (!refreshed.data && bypassApprovedWithoutCase) return null;
     return refreshed.data?.canSend === true
       ? null
       : "Approval case is no longer clean after saving the latest quote changes. Resubmit or wait for owner approval before customer-facing actions.";
