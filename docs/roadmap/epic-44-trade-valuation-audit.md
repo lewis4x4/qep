@@ -28,4 +28,5 @@ bun test apps/web/src/features/quote-builder/lib/__tests__/point-shoot-trade-api
 ## See also
 
 - [Epic #41 — Customer PDF / proposal line visibility](./epic-41-customer-pdf-line-visibility.md)
+- [Epic #45 — Advisor floor + prospect](./epic-45-advisor-floor-handoff.md) (`/floor`, quote-sent prospect UX).
 - [Epic #43 — M365 + IntelliDealer observability](./epic-43-m365-intellidealer-observability.md)

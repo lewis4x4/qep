@@ -75,3 +75,4 @@ deno check supabase/functions/m365-token-refresh/index.ts supabase/functions/m36
 
 - [Epic #42 — Post-approval routing](./epic-42-post-approval-routing.md)
 - [Epic #44 — Trade valuation audit](./epic-44-trade-valuation-audit.md) (comp-range UI vs customer PDF boundary).
+- [Epic #46 — Merge ordering + staging verification](./epic-46-intellidealer-merge-staging-verification.md) (commit scripts, import dashboard, acceptance scripts).
