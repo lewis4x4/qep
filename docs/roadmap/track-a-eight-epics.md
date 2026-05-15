@@ -19,6 +19,10 @@ This file **exports** the eight operator-roadmap items that previously lived onl
 | 7 | Advisor home v1 (`iron_advisor` /floor) + prospect at quote-sent | https://github.com/lewis4x4/qep/issues/45 |
 | 8 | Merge ordering, conflicts, 28-criteria staging verification | https://github.com/lewis4x4/qep/issues/46 |
 
+**Epic #41 (customer PDF line visibility):** [epic-41-customer-pdf-line-visibility.md](./epic-41-customer-pdf-line-visibility.md)  
+**Epic #42 (post-approval routing):** [epic-42-post-approval-routing.md](./epic-42-post-approval-routing.md)  
+**Epic #43 (M365 + IntelliDealer observability):** [epic-43-m365-intellidealer-observability.md](./epic-43-m365-intellidealer-observability.md)
+
 ---
 
 ## Shared definition of done (all epics)
