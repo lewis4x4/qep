@@ -369,6 +369,9 @@ verify_jwt = false
 [functions.demo-manager]
 verify_jwt = false
 
+[functions.deposit-calculator]
+verify_jwt = false
+
 [functions.dge-optimizer]
 verify_jwt = false
 

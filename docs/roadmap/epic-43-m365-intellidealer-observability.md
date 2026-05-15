@@ -71,6 +71,8 @@ bun run migrations:check
 deno check supabase/functions/m365-token-refresh/index.ts supabase/functions/m365-mailbox-sync/index.ts
 ```
 
+Or: `bun run verify:track-a-epics` (includes `deno check` for these two plus Track B + quote/floor tests + `audit:secrets`).
+
 ## See also
 
 - [Epic #42 — Post-approval routing](./epic-42-post-approval-routing.md)

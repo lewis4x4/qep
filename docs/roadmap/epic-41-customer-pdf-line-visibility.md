@@ -43,6 +43,8 @@ Behavior is locked in `apps/web/src/features/quote-builder/lib/__tests__/quote-p
 bun test apps/web/src/features/quote-builder/lib/__tests__/quote-proposal-data.test.ts
 ```
 
+Or run the full Track A automated bundle: `bun run verify:track-a-epics`.
+
 ## See also
 
 - [Epic #42 — Post-approval routing](./epic-42-post-approval-routing.md) (customer send after approval vs return to rep).

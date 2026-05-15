@@ -18,6 +18,13 @@ IntelliDealer **staging → review → commit** paths, **deterministic merge ord
 | Customer master stage + optional RPC commit | `scripts/stage-intellidealer-customer-master.py` (`--commit`, `--commit-canonical`); RPC `commit_intellidealer_customer_import` |
 | Shared stage helper | `scripts/_shared/intellidealer_snapshot_stage.py` |
 
+## Repo-wide bundle (does not replace staging row counts)
+
+```bash
+cd /Users/brianlewis/Projects/qep-knowledge-assistant
+bun run verify:track-a-epics
+```
+
 ## Verification scripts (repo)
 
 Run against a configured Supabase URL + service role unless noted.

@@ -25,6 +25,8 @@ bun test apps/web/src/features/quote-builder/lib/__tests__/trade-valuation-range
 bun test apps/web/src/features/quote-builder/lib/__tests__/point-shoot-trade-api.test.ts
 ```
 
+Or: `bun run verify:track-a-epics`.
+
 ## See also
 
 - [Epic #41 — Customer PDF / proposal line visibility](./epic-41-customer-pdf-line-visibility.md)

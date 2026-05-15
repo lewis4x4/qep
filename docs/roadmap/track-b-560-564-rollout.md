@@ -45,6 +45,12 @@ This slice is the **schema + contract** foundation for cost visibility, PDI hist
 bun run verify:track-b-560-564
 ```
 
+For the broader **Track A #39–#46** automated bundle (includes this script plus proposal/trade/floor tests and M365 edge `deno check`):
+
+```bash
+bun run verify:track-a-epics
+```
+
 This runs, in order:
 
 1. `migrations:check` — filename sequence and no gaps through max migration number.

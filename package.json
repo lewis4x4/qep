@@ -29,6 +29,7 @@
     "test:pricing": "bun test apps/web/src/lib/pricing apps/web/src/lib/programs",
     "migrations:check": "bun ./scripts/check-migration-order.mjs",
     "verify:track-b-560-564": "bun run migrations:check && bun run audit:rls-initplan && bun test apps/web/src/features/quote-builder/lib/__tests__/quote-api.test.ts && deno test supabase/functions/quote-incentive-resolver/logic.test.ts --allow-env",
+    "verify:track-a-epics": "bun run verify:track-b-560-564 && bun test apps/web/src/features/quote-builder/lib/__tests__/quote-builder-page-normalizers.test.ts apps/web/src/features/quote-builder/lib/__tests__/quote-proposal-data.test.ts apps/web/src/features/quote-builder/lib/__tests__/local-draft.test.ts apps/web/src/features/quote-builder/lib/__tests__/trade-valuation-range.test.ts apps/web/src/features/quote-builder/lib/__tests__/point-shoot-trade-api.test.ts apps/web/src/features/floor && bun run audit:secrets && deno check supabase/functions/m365-token-refresh/index.ts supabase/functions/m365-mailbox-sync/index.ts",
     "floor:validate-layouts": "bun ./scripts/floor/validate-floor-layouts.mjs",
     "floor:seed-layouts": "bun ./scripts/floor/seed-layouts-for-workspace.mjs",
     "floor:verify-production": "bun ./scripts/verify/floor-production-audit.mjs",

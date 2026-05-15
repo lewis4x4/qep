@@ -29,12 +29,20 @@
 
 - `is_prospect_quote: true` on quote list rows surfaces when the package was a **walk-in prospect** path; UI shows a badge for **sent** / **viewed** (see `MyQuotesByStatusWidget` in `RoleHomeWidgets.tsx`).
 
+## Phase A — data audit (staging SQL)
+
+Run in Supabase SQL editor (replace `<ADVISOR_UUID>` once):
+
+- **[`scripts/verify/advisor-floor-phase-a.sql`](../../scripts/verify/advisor-floor-phase-a.sql)**
+
 ## Verification (repo)
 
 ```bash
 cd /Users/brianlewis/Projects/qep-knowledge-assistant
 bun test apps/web/src/features/floor
 ```
+
+Or: `bun run verify:track-a-epics` (includes floor tests plus quote-builder + Track B checks).
 
 ## See also
 

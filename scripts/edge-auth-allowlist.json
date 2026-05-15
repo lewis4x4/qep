@@ -59,7 +59,6 @@
     "data-quality-audit",
     "deal-composite",
     "demo-admin",
-    "deposit-calculator",
     "embed-qrm",
     "escalation-router",
     "exec-packet-generator",
@@ -124,7 +123,6 @@
   "argless_get_user": [
     "data-quality-audit",
     "deal-composite",
-    "deposit-calculator",
     "handoff-trust-scorer",
     "integration-test-connection",
     "needs-assessment",

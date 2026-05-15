@@ -31,6 +31,8 @@ bun run migrations:check
 bun test apps/web/src/features/quote-builder/lib/__tests__/local-draft.test.ts
 ```
 
+Or: `bun run verify:track-a-epics` (includes the above plus Track B + floor + trade tests).
+
 *(End-to-end auto-send requires approved package + live `send-package` prerequisites — exercise in staging with a test quote.)*
 
 ## See also
