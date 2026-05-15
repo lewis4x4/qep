@@ -1457,6 +1457,91 @@ export async function sendQuotePackage(quotePackageId: string): Promise<{ sent: 
 export type QuoteDeliveryEventChannel = "preview" | "email" | "text" | "link" | "print";
 export type QuoteDeliveryEventStatus = "draft" | "attempted" | "sent" | "failed";
 
+export interface QuoteDocumentArtifactInput {
+  quotePackageId: string;
+  quotePackageVersionId?: string | null;
+  blob: Blob;
+  filename: string;
+  generatedAt: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface QuoteDocumentArtifactResult {
+  id: string;
+  storageBucket: string;
+  storageKey: string;
+}
+
+function safeDocumentPathSegment(value: string, fallback: string): string {
+  const safe = value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return safe || fallback;
+}
+
+export async function persistQuoteDocumentArtifact(input: QuoteDocumentArtifactInput): Promise<QuoteDocumentArtifactResult> {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user?.id) {
+    throw new Error(userError?.message || "Sign in again before generating a stored quote document.");
+  }
+
+  const storageBucket = "documents";
+  const generatedDate = input.generatedAt.slice(0, 10) || new Date().toISOString().slice(0, 10);
+  const filename = safeDocumentPathSegment(input.filename, "quote-proposal.pdf");
+  const packageId = safeDocumentPathSegment(input.quotePackageId, "quote");
+  const storageKey = [
+    userData.user.id,
+    "quote-documents",
+    packageId,
+    `${generatedDate}-${Date.now()}-${filename}`,
+  ].join("/");
+
+  const { error: uploadError } = await supabase.storage
+    .from(storageBucket)
+    .upload(storageKey, input.blob, {
+      contentType: input.blob.type || "application/pdf",
+      upsert: false,
+    });
+  if (uploadError) {
+    throw new Error(uploadError.message || "Failed to upload quote document artifact.");
+  }
+
+  const { data, error } = await supabase
+    .from("quote_document_artifacts")
+    .insert({
+      quote_package_id: input.quotePackageId,
+      quote_package_version_id: input.quotePackageVersionId ?? null,
+      artifact_type: "customer_quote_pdf",
+      storage_bucket: storageBucket,
+      storage_key: storageKey,
+      status: "generated",
+      generated_at: input.generatedAt,
+      generated_by: userData.user.id,
+      metadata: {
+        filename,
+        content_type: input.blob.type || "application/pdf",
+        size_bytes: input.blob.size,
+        ...(input.metadata ?? {}),
+      },
+    })
+    .select("id, storage_bucket, storage_key")
+    .maybeSingle();
+  if (error || !data?.id) {
+    await supabase.storage.from(storageBucket).remove([storageKey]).catch(() => {
+      // The artifact row is the source of truth; a failed cleanup should not hide the real insert error.
+    });
+    throw new Error(error?.message || "Failed to register quote document artifact.");
+  }
+
+  return {
+    id: String(data.id),
+    storageBucket: String(data.storage_bucket || storageBucket),
+    storageKey: String(data.storage_key || storageKey),
+  };
+}
+
 export interface QuoteDeliveryEventInput {
   quotePackageId: string;
   documentArtifactId?: string | null;

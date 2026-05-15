@@ -75,6 +75,7 @@ import {
   getSavedQuotePackage,
   listQuoteAvailabilityRequests,
   logQuoteDeliveryEvent,
+  persistQuoteDocumentArtifact,
   requestQuoteAvailability,
   saveQuotePackage,
   searchCatalog,
@@ -742,6 +743,7 @@ export function QuoteBuilderV2Page() {
   const [shareBusy, setShareBusy] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [documentFallbackGeneratedAt, setDocumentFallbackGeneratedAt] = useState<string | null>(null);
+  const [documentArtifact, setDocumentArtifact] = useState<{ id: string; storageBucket: string; storageKey: string; generatedAt: string } | null>(null);
   const [documentActionError, setDocumentActionError] = useState<string | null>(null);
   const [deliveryActionMessage, setDeliveryActionMessage] = useState<string | null>(null);
   const [deliveryActionError, setDeliveryActionError] = useState<string | null>(null);
@@ -1705,6 +1707,7 @@ export function QuoteBuilderV2Page() {
     if (documentDraftSignatureRef.current === draftSaveSignature) return;
     documentDraftSignatureRef.current = "";
     setDocumentFallbackGeneratedAt(null);
+    setDocumentArtifact(null);
   }, [documentFallbackGeneratedAt, draftSaveSignature]);
 
   useEffect(() => {
@@ -2019,23 +2022,48 @@ export function QuoteBuilderV2Page() {
         setDocumentActionError(approvalRefreshBlocker);
         return;
       }
-      await downloadPDF(quotePdfData);
+      const pdfResult = await downloadPDF(quotePdfData);
       const generatedAt = new Date().toISOString();
+      let artifact: { id: string; storageBucket: string; storageKey: string; generatedAt: string } | null = null;
+      if (activeQuotePackageId && pdfResult.blob) {
+        const persisted = await persistQuoteDocumentArtifact({
+          quotePackageId: activeQuotePackageId,
+          quotePackageVersionId: saveMutation.data?.quote_package_version_id ?? null,
+          blob: pdfResult.blob,
+          filename: pdfResult.filename,
+          generatedAt,
+          metadata: {
+            step: 10,
+            mode: pdfResult.mode,
+            draft_signature: draftSaveSignature,
+          },
+        });
+        artifact = { ...persisted, generatedAt };
+        setDocumentArtifact(artifact);
+      } else {
+        setDocumentArtifact(null);
+      }
       documentDraftSignatureRef.current = draftSaveSignature;
       setDocumentFallbackGeneratedAt(generatedAt);
       if (activeQuotePackageId) {
         await logQuoteDeliveryEvent({
           quotePackageId: activeQuotePackageId,
+          documentArtifactId: artifact?.id ?? null,
           channel: "preview",
           status: "draft",
-          provider: "local_preview",
+          provider: artifact ? "stored_pdf_preview" : "local_preview",
           recipient: draft.customerEmail || draft.customerPhone || draft.customerName || draft.customerCompany || null,
           followUpAt: draft.followUpAt ?? null,
           metadata: {
             step: 10,
-            fallback_document: true,
+            fallback_document: !artifact,
+            document_artifact_id: artifact?.id ?? null,
             generated_at: generatedAt,
-            note: "Local PDF/print fallback only; no stored final artifact was created.",
+            storage_bucket: artifact?.storageBucket ?? null,
+            storage_key: artifact?.storageKey ?? null,
+            note: artifact
+              ? "Customer quote PDF stored as a quote document artifact."
+              : "Printable fallback opened; no stored PDF artifact was created.",
           },
         });
       }
@@ -2076,15 +2104,23 @@ export function QuoteBuilderV2Page() {
           setDeliveryActionError("Blocked: trade-in photos are still loading. Try again in a moment.");
           return;
         }
-        await downloadPDF(quotePdfData);
+        const pdfResult = await downloadPDF(quotePdfData);
+        const generatedAt = new Date().toISOString();
         await logQuoteDeliveryEvent({
           quotePackageId: activeQuotePackageId,
+          documentArtifactId: documentArtifact?.id ?? null,
           channel: "preview",
           status: "draft",
-          provider: "local_preview",
+          provider: documentArtifact ? "stored_pdf_preview" : "local_preview",
           recipient: draft.customerEmail || draft.customerPhone || draft.customerName || draft.customerCompany || null,
           followUpAt: draft.followUpAt ?? null,
-          metadata: { step: 11, fallback_document: true },
+          metadata: {
+            step: 11,
+            fallback_document: !documentArtifact,
+            document_artifact_id: documentArtifact?.id ?? null,
+            generated_at: generatedAt,
+            mode: pdfResult.mode,
+          },
         });
         setDeliveryActionMessage("Preview opened and logged. This does not mark the quote sent.");
         return;
@@ -2538,6 +2574,11 @@ export function QuoteBuilderV2Page() {
   ));
 
   const documentReady = Boolean(documentFallbackGeneratedAt);
+  const documentPersistenceLabel = documentArtifact
+    ? "Stored customer PDF artifact"
+    : documentFallbackGeneratedAt
+      ? "Printable fallback generated"
+      : "Not generated";
   const graphEmailEnabled = import.meta.env.VITE_FEATURE_QRM_GRAPH_EMAIL === "true";
   const textQuoteEnabled = import.meta.env.VITE_FEATURE_QRM_TEXT_QUOTE === "true";
   const approvalBlocker = approvalBlockerMessage();
@@ -4915,14 +4956,14 @@ export function QuoteBuilderV2Page() {
           <div>
             <h2 className="text-lg font-semibold text-foreground">Step 10: Document preview</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Generate a customer-facing PDF preview. Until stored document artifacts are wired, this is a local PDF/print fallback and not a final persisted artifact.
+              Generate a customer-facing PDF, store the artifact when the renderer succeeds, and keep a printable fallback available for browser/runtime failures.
             </p>
           </div>
 
           <Card className="border-blue-500/20 bg-blue-500/5 p-4">
-            <p className="text-sm font-semibold text-blue-100">Preview/fallback mode</p>
+            <p className="text-sm font-semibold text-blue-100">Stored document artifact</p>
             <p className="mt-1 text-xs text-blue-100/90">
-              The wizard reuses the existing Quote PDF renderer and printable fallback. No R2/object-storage artifact is created in this slice.
+              Successful PDF renders are uploaded to the private documents bucket and registered on the quote package for downstream send, audit, and signature workflows.
             </p>
           </Card>
 
@@ -4943,10 +4984,13 @@ export function QuoteBuilderV2Page() {
                   <SummaryRow label="Customer total" value={money(customerTotal)} emphasize />
                   <SummaryRow label="Equipment lines" value={String(draft.equipment.length)} />
                   <SummaryRow label="Financing" value={financeMethodLabel} />
+                  <SummaryRow label="Artifact status" value={documentPersistenceLabel} />
                 </div>
                 <div className="mt-4 rounded-lg border border-border/70 bg-background/50 p-3 text-xs text-muted-foreground">
                   {documentFallbackGeneratedAt
-                    ? `Preview generated ${shortDateTime(documentFallbackGeneratedAt)}. This confirms only the local fallback document, not stored final artifact persistence.`
+                    ? documentArtifact
+                      ? `PDF artifact generated ${shortDateTime(documentFallbackGeneratedAt)} and stored for customer delivery.`
+                      : `Preview generated ${shortDateTime(documentFallbackGeneratedAt)} using the printable fallback; no stored PDF artifact is available from this render.`
                     : "Click Generate Preview PDF to open/download the current proposal preview."}
                 </div>
               </div>
@@ -4987,7 +5031,7 @@ export function QuoteBuilderV2Page() {
           <Card className="p-4">
             <div className="grid gap-3 sm:grid-cols-3">
               <ReadinessRow label="Approval case" ready={approvalCaseCanSend} detail={approvalBlocker ?? "canSend is true"} />
-              <ReadinessRow label="Document" ready={documentReady} detail={documentReady ? "Local preview fallback generated" : "Generate Step 10 preview first"} />
+              <ReadinessRow label="Document" ready={documentReady} detail={documentReady ? documentPersistenceLabel : "Generate Step 10 preview first"} />
               <ReadinessRow label="Follow-up" ready={Boolean(draft.followUpAt)} detail={draft.followUpAt ? (shortDateTime(draft.followUpAt) ?? "Scheduled") : "Required before email/text"} />
               <ReadinessRow label="Tax" ready={taxResolved} detail={taxResolutionBlocker ?? "Tax preview resolved"} />
               <ReadinessRow label="Why this machine" ready={!whyThisMachineRequired || draft.whyThisMachineConfirmed === true} detail={whyThisMachineBlocker ?? "Rep confirmed or not required"} />
@@ -5017,7 +5061,7 @@ export function QuoteBuilderV2Page() {
               <QuoteSendActionCard
                 icon={<FileText className="h-4 w-4" />}
                 title="Preview Quote"
-                detail="Open the local PDF/print fallback and log a preview event. Does not mark sent."
+                detail="Open the latest quote PDF/print preview and log a preview event. Does not mark sent."
                 readiness={previewReadiness}
                 busy={deliveryActionBusy === "preview" || pdfGenerating}
                 onClick={() => void handleQuoteSendAction("preview")}
