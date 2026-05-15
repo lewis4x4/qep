@@ -519,9 +519,18 @@ function QuoteRow({
       </td>
       <td className="px-5 py-5 align-middle">
         <div className="space-y-1">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="truncate text-sm font-medium text-foreground">{item.customer_company || item.customer_name || "Unnamed customer"}</span>
+            {item.is_prospect_quote && (item.status === "sent" || item.status === "viewed") ? (
+              <Badge
+                variant="outline"
+                className="shrink-0 border-sky-500/50 bg-sky-500/10 px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-200"
+                title="Quote started as a prospect before CRM link"
+              >
+                Prospect
+              </Badge>
+            ) : null}
           </div>
           <div className={`flex min-w-0 items-center gap-2 text-sm ${isMissingContact(item) ? "text-muted-foreground/60" : "text-muted-foreground"}`}>
             <User className="h-4 w-4 shrink-0" />

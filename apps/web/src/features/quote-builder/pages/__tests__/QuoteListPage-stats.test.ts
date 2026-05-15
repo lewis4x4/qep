@@ -25,6 +25,7 @@ function q(partial: Partial<QuoteListItem> & Pick<QuoteListItem, "id" | "status"
     updated_at: partial.updated_at ?? "2026-04-02T10:00:00.000Z",
     accepted_at: partial.accepted_at ?? null,
     win_probability_score: partial.win_probability_score ?? null,
+    is_prospect_quote: partial.is_prospect_quote ?? false,
   };
 }
 

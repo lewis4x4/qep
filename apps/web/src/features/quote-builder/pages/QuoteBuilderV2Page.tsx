@@ -92,6 +92,7 @@ import {
   computeQuoteWorkspace,
   isQuoteWhyThisMachineConfirmationRequired,
   isTaxProfileExempt,
+  quoteLineCostVisibility,
   type QuoteSendActionChannel,
 } from "../lib/quote-workspace";
 import { hydrateDraftFromSavedQuote } from "../lib/saved-quote-draft";
@@ -186,10 +187,12 @@ const WIZARD_STEPS: WizardStepMeta[] = [
 const WIZARD_STEP_IDS = WIZARD_STEPS.map((item) => item.id);
 
 function readinessChipLabel(missing: string): string {
-  if (missing.includes("customer")) return "Customer";
-  if (missing.includes("equipment")) return "Equipment";
+  if (missing.includes("customer-facing equipment")) return "Visible machine";
+  if (missing.includes("equipment selection")) return "Equipment";
+  if (missing.includes("customer or prospect")) return "Customer";
   if (missing.includes("branch")) return "Branch";
   if (missing.includes("email")) return "Email";
+  if (missing.includes("customer")) return "Customer";
   return missing;
 }
 
@@ -299,6 +302,10 @@ interface CatalogEntryMatch {
   media_kind?: string | null;
   availabilityStatus?: EquipmentAvailabilityStatus;
   availability_status?: EquipmentAvailabilityStatus;
+  /** ISO yard/stock receipt — forwarded to line metadata for approval bypass (stock age). */
+  received_at?: string | null;
+  /** When true, sets `metadata.hot_list` for approval bypass rules that require it. */
+  hot_list?: boolean;
   attachments?: Array<{ id: string; name: string; price: number }>;
 }
 
@@ -378,6 +385,12 @@ function metadataForCatalogEntry(entry: CatalogEntryMatch): Record<string, unkno
   if (entry.spec_bullets?.length) metadata.spec_bullets = entry.spec_bullets.filter(Boolean).slice(0, 8);
   const mediaKind = mediaKindForEntry(entry);
   if (mediaKind) metadata.media_kind = mediaKind;
+  if (typeof entry.received_at === "string" && entry.received_at.trim().length > 0) {
+    metadata.received_at = entry.received_at.trim();
+  }
+  if (entry.hot_list === true) {
+    metadata.hot_list = true;
+  }
   return metadata;
 }
 
@@ -568,10 +581,6 @@ function wizardIndexForStep(step: Step): number {
 function stepForWizardIndex(index: number | null | undefined): Step | null {
   if (!Number.isFinite(index ?? NaN)) return null;
   return WIZARD_STEPS.find((item) => item.number === Number(index))?.id ?? null;
-}
-
-function defaultCostVisibilityForKind(kind: QuoteLineItemDraft["kind"]): CostVisibility {
-  return kind === "pdi" || kind === "good_faith" ? "internal" : "customer";
 }
 
 function readPersistedStep(quotePackageId: string | null): Step | null {
@@ -825,6 +834,7 @@ export function QuoteBuilderV2Page() {
   const {
     equipmentTotal,
     attachmentTotal,
+    internalCostLoadTotal,
     pricingLineTotal,
     taxableBasis,
     subtotal,
@@ -1403,6 +1413,8 @@ export function QuoteBuilderV2Page() {
       }
       setLocalPersistEnabled(false);
       queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case"] });
+      queryClient.invalidateQueries({ queryKey: ["quote-builder", "saved-quote"] });
+      queryClient.invalidateQueries({ queryKey: ["quote-builder", "list"] });
       if (result.warning || result.partial_error) {
         toast({
           title: "Quote saved with a sync warning",
@@ -1436,13 +1448,14 @@ export function QuoteBuilderV2Page() {
     onSuccess: (result) => {
       setDraft((current) => ({
         ...current,
-        quoteStatus: result.status === "approved" ? "approved" : "pending_approval",
+        quoteStatus:
+          result.status === "approved" || result.status === "approved_with_conditions"
+            ? result.status
+            : "pending_approval",
       }));
       queryClient.invalidateQueries({ queryKey: ["quote-builder", "list"] });
       queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case", activeQuotePackageId] });
-      if (draft.dealId) {
-        queryClient.invalidateQueries({ queryKey: ["quote-builder", "saved-quote", packageId, draft.dealId] });
-      }
+      queryClient.invalidateQueries({ queryKey: ["quote-builder", "saved-quote"] });
     },
   });
 
@@ -2537,7 +2550,7 @@ export function QuoteBuilderV2Page() {
       title: title ?? fieldOrKind,
       helper: "",
       step: 1,
-      costVisibility: costVisibility ?? defaultCostVisibilityForKind(fieldOrKind),
+      costVisibility: costVisibility ?? quoteLineCostVisibility({ kind: fieldOrKind }),
     };
   }
 
@@ -2611,9 +2624,14 @@ export function QuoteBuilderV2Page() {
         };
       }
       const currentLine = existing.find((line) => line.metadata?.promotion_placeholder_id === promo.id);
+      const promoMetadata = {
+        ...(currentLine?.metadata ?? {}),
+        promotion_placeholder_id: promo.id,
+        promotion_source: promo.source,
+      };
       const nextLine: QuoteLineItemDraft = {
         kind: promo.kind,
-        costVisibility: defaultCostVisibilityForKind(promo.kind),
+        costVisibility: quoteLineCostVisibility({ kind: promo.kind, metadata: promoMetadata }),
         id: currentLine?.id ?? `${promo.kind}-${Date.now()}`,
         sourceCatalog: "manual",
         sourceId: null,
@@ -2621,11 +2639,7 @@ export function QuoteBuilderV2Page() {
         title: promo.title,
         quantity: 1,
         unitPrice: promo.amount,
-        metadata: {
-          ...(currentLine?.metadata ?? {}),
-          promotion_placeholder_id: promo.id,
-          promotion_source: promo.source,
-        },
+        metadata: promoMetadata,
       };
       return {
         ...current,
@@ -2764,6 +2778,18 @@ export function QuoteBuilderV2Page() {
       : step === "document" && !documentReady
         ? "Generate the document preview before send/log."
         : "Completed steps stay editable — click any finished step below to jump back.";
+  const pricingWizardIndex = WIZARD_STEPS.findIndex((item) => item.id === "pricing");
+  const wizardMaxStepIndex0 = Math.max(0, (draft.wizardStep ?? 1) - 1);
+  const wizardCurrentIndex0 = WIZARD_STEPS.findIndex((item) => item.id === step);
+  const wizardReachableMaxIndex0 = Math.min(
+    Math.max(wizardMaxStepIndex0, wizardCurrentIndex0 >= 0 ? wizardCurrentIndex0 : 0),
+    WIZARD_STEPS.length - 1,
+  );
+  const wizardPricingJumpAllowed =
+    signalsReady
+    && pricingWizardIndex !== -1
+    && pricingWizardIndex <= wizardReachableMaxIndex0
+    && step !== "pricing";
 
   function handleQuoteForProspect(): void {
     setDraft((cur) => ({
@@ -2779,7 +2805,7 @@ export function QuoteBuilderV2Page() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-4 pb-[calc(6rem+env(safe-area-inset-bottom,0px))] pt-2 sm:px-6 lg:px-8">
       <div className="sticky top-0 z-30 rounded-xl border border-border/70 bg-background/95 p-3 shadow-sm backdrop-blur">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
@@ -2814,6 +2840,7 @@ export function QuoteBuilderV2Page() {
                   {packetReadiness.draft.missing.map((missing) => (
                     <span
                       key={missing}
+                      title={missing}
                       className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 font-semibold text-amber-300"
                     >
                       {readinessChipLabel(missing)}
@@ -3035,7 +3062,11 @@ export function QuoteBuilderV2Page() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Package</p>
-                  <p className="mt-1 text-sm text-muted-foreground">One quote, many line items. Single equipment quotes are just a subset.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    One quote, many line items. Single equipment quotes are just a subset.
+                    {" "}
+                    Use <span className="font-medium text-foreground">Internal only</span> on an attachment row when it should not print on the customer proposal.
+                  </p>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => setPackageToolsOpen((value) => !value)}>
                   <PackagePlus className="mr-1 h-4 w-4" /> Add item
@@ -3071,6 +3102,13 @@ export function QuoteBuilderV2Page() {
                         key={`attachment-${index}-${item.id ?? item.title}`}
                         label={item.title.includes(":") ? item.title.split(":")[0] ?? "Attachment" : "Attachment"}
                         item={item}
+                        costVisibilityEditable
+                        onCostVisibilityChange={(next) => setDraft((current) => ({
+                          ...current,
+                          attachments: current.attachments.map((line, rowIndex) => (
+                            rowIndex === index ? { ...line, costVisibility: next } : line
+                          )),
+                        }))}
                         onPriceChange={(value: number) => setDraft((current) => ({
                           ...current,
                           attachments: current.attachments.map((line, rowIndex) => rowIndex === index ? { ...line, unitPrice: value } : line),
@@ -3182,6 +3220,7 @@ export function QuoteBuilderV2Page() {
                   <PointShootTradeCard
                     dealId={draft.dealId ?? null}
                     appliedAllowanceDollars={draft.tradeAllowance || null}
+                    appliedValuationSnapshot={tradeValuationProposalQuery.data ?? null}
                     onApply={handlePointShootTradeApply}
                     onClear={() => setDraft((cur) => ({
                       ...cur,
@@ -3499,6 +3538,24 @@ export function QuoteBuilderV2Page() {
                 </span>
                 <span className="text-sm font-semibold text-foreground">{STEP_LABELS[step]}</span>
               </div>
+              <p className="text-[11px] leading-snug text-muted-foreground" role="status" aria-live="polite">
+                {signalsReady ? (
+                  <>
+                    <span className="font-semibold uppercase tracking-[0.12em] text-muted-foreground">Live margin </span>
+                    <span className="font-semibold text-foreground">{marginPct.toFixed(1)}%</span>
+                    <span> · </span>
+                    <span className="font-semibold text-foreground">{money(marginAmount)}</span>
+                    <span> est. net</span>
+                  </>
+                ) : (
+                  "Live margin updates once this quote has a customer and at least one machine."
+                )}
+              </p>
+              {wizardPricingJumpAllowed ? (
+                <Button type="button" variant="link" title="Open step 5 — Pricing build" className="h-auto justify-start p-0 text-xs font-semibold text-qep-orange" onClick={() => setStep("pricing")}>
+                  Pricing →
+                </Button>
+              ) : null}
               {branches.length > 0 && (
                 <label className="block max-w-xl space-y-1 text-sm">
                   <span className="text-xs font-medium text-muted-foreground">Quoting branch</span>
@@ -3544,12 +3601,85 @@ export function QuoteBuilderV2Page() {
         onJumpTo={setStep}
       />
 
+      <div className="sticky bottom-[max(0.5rem,env(safe-area-inset-bottom,0px))] z-20 flex flex-col gap-2 rounded-xl border border-border/70 bg-card/95 p-3 shadow-md backdrop-blur md:hidden">
+        {signalsReady ? (
+          <p className="text-center text-[10px] leading-tight text-muted-foreground" role="status" aria-live="polite">
+            <span className="font-semibold text-foreground">{marginPct.toFixed(1)}%</span>
+            {" · "}
+            <span className="font-semibold text-foreground">{money(marginAmount)}</span>
+            <span> net</span>
+          </p>
+        ) : null}
+        {wizardPricingJumpAllowed ? (
+          <Button type="button" variant="outline" size="sm" className="h-7 w-full text-[10px] font-semibold" title="Open step 5 — Pricing build" onClick={() => setStep("pricing")}>
+            Pricing
+          </Button>
+        ) : null}
+        <div className={`flex gap-2 ${previousWizardStep && nextWizardStep ? "" : "flex-col sm:flex-row"}`}>
+          {previousWizardStep ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={nextWizardStep ? "min-w-0 flex-1" : "w-full"}
+              onClick={() => setStep(previousWizardStep)}
+            >
+              <ArrowLeft className="mr-1 h-4 w-4 shrink-0" /> Back
+            </Button>
+          ) : (
+            nextWizardStep ? <span className="flex-1" aria-hidden="true" /> : null
+          )}
+          {nextWizardStep ? (
+            <Button
+              type="button"
+              className={previousWizardStep ? "min-w-0 flex-1" : "w-full"}
+              onClick={() => setStep(nextWizardStep)}
+              disabled={wizardNextDisabled}
+            >
+              <span className="truncate">{nextWizardLabel}</span>
+              <ArrowRight className="ml-1 h-4 w-4 shrink-0" />
+            </Button>
+          ) : null}
+        </div>
+        {step === "customer" && !hasCustomer ? (
+          <Button type="button" variant="outline" className="w-full" onClick={handleQuoteForProspect}>
+            Quote for prospect
+          </Button>
+        ) : null}
+      </div>
+
       {step === "customer" && (
         <div className="space-y-4">
           <div>
             <h2 className="text-lg font-semibold text-foreground">Step 1: Choose the customer</h2>
             <p className="mt-1 text-sm text-muted-foreground">Search first, then add a new customer only if there is no match. Keep the rest of the quote out of view until this is clear.</p>
           </div>
+
+          <Card className="border-border/70 bg-muted/20 p-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">Customer vs equipment.</span>{" "}
+              This step anchors CRM identity and deal signals. The primary machine row starts in{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 2 — Equipment"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("equipment")}
+              >
+                Equipment
+              </Button>
+              ; catalog package lines and visibility land in{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 3 — Configure the package"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("configure")}
+              >
+                Configure
+              </Button>
+              .
+            </p>
+          </Card>
 
           <CustomerSection
             draft={draft}
@@ -3703,20 +3833,9 @@ export function QuoteBuilderV2Page() {
 
           {!hasCustomer && (
             <p className="text-[11px] text-muted-foreground">
-              Select or add a customer, or use "Quote for prospect" from the controls above for a walk-in.
+              Select or add a customer, or use "Quote for prospect" from the mobile step bar below for a walk-in.
             </p>
           )}
-
-          <div className="flex flex-col-reverse gap-2 rounded-xl border border-border/70 bg-card/80 p-3 shadow-sm md:hidden">
-            {!hasCustomer && (
-              <Button variant="outline" onClick={handleQuoteForProspect}>
-                Quote for prospect
-              </Button>
-            )}
-            <Button onClick={() => setStep("equipment")} disabled={wizardNextDisabled}>
-              {nextWizardLabel ?? "Equipment"} <ArrowRight className="ml-1 h-4 w-4" />
-            </Button>
-          </div>
         </div>
       )}
 
@@ -3726,6 +3845,33 @@ export function QuoteBuilderV2Page() {
             <h2 className="text-lg font-semibold text-foreground">Step 2: Pick the machine</h2>
             <p className="mt-1 text-sm text-muted-foreground">Search first. Add one machine, confirm whether it is ready to sell, then move on.</p>
           </div>
+
+          <Card className="border-border/70 bg-muted/20 p-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">Equipment vs configure.</span>{" "}
+              This step is the primary machine and availability only. Package lines and internal vs customer visibility live in{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 3 — Configure the package"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("configure")}
+              >
+                Configure
+              </Button>
+              . The customer waterfall is built in{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 5 — Pricing build"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("pricing")}
+              >
+                Pricing
+              </Button>
+              {" "}after trade-in.
+            </p>
+          </Card>
 
           <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} shadowCalibration={shadowCalibration} />
 
@@ -3918,8 +4064,42 @@ export function QuoteBuilderV2Page() {
         <div className="space-y-4">
           <div>
             <h2 className="text-lg font-semibold text-foreground">Step 3: Configure the package</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Attachments, options, accessories, parts, and warranty stay separated so reps do not scroll through one overloaded list.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Attachments, options, accessories, parts, and warranty stay separated so reps do not scroll through one overloaded list.
+              {" "}
+              Mark a row <span className="font-medium text-foreground">Internal</span> when it should stay off the customer PDF (still included in dealer margin math).
+              {" "}
+              Freight, PDI, doc fees, discounts, and the customer total waterfall are built in{" "}
+              <span className="font-medium text-foreground">Pricing</span> (step 5) after trade-in.
+            </p>
           </div>
+
+          <Card className="border-border/70 bg-muted/20 p-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">Configure vs pricing.</span>{" "}
+              This step is catalog package lines and visibility only. Continue to{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 4 — Trade-in"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("tradeIn")}
+              >
+                Trade-in
+              </Button>
+              , then{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 5 — Pricing build"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("pricing")}
+              >
+                Pricing
+              </Button>
+              , for trade dollars and the customer waterfall.
+            </p>
+          </Card>
 
           <Card className="p-4">
             <div className="flex flex-wrap gap-2">
@@ -4011,6 +4191,13 @@ export function QuoteBuilderV2Page() {
                     key={`${item.kind}-${item.id ?? item.title}-${index}`}
                     label={configureTab}
                     item={item}
+                    costVisibilityEditable
+                    onCostVisibilityChange={(next) => setDraft((current) => ({
+                      ...current,
+                      attachments: current.attachments.map((line, rowIndex) => (
+                        rowIndex === realIndex ? { ...line, costVisibility: next } : line
+                      )),
+                    }))}
                     onPriceChange={(value) => setDraft((current) => ({
                       ...current,
                       attachments: current.attachments.map((line, rowIndex) => rowIndex === realIndex ? { ...line, unitPrice: value } : line),
@@ -4074,6 +4261,33 @@ export function QuoteBuilderV2Page() {
             <p className="mt-1 text-sm text-muted-foreground">Capture the trade once. If the provisional checklist is not complete, this screen shows manager-approval-required messaging for the handoff.</p>
           </div>
 
+          <Card className="border-border/70 bg-muted/20 p-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">Configure vs pricing.</span>{" "}
+              Package lines and per-row internal vs customer visibility are edited in{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 3 — Configure the package"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("configure")}
+              >
+                Configure
+              </Button>
+              . Freight, PDI, discounts, and the customer waterfall are in{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 5 — Pricing build"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("pricing")}
+              >
+                Pricing
+              </Button>
+              .
+            </p>
+          </Card>
+
           {draft.dealId && (
             <TradeInSection
               dealId={draft.dealId}
@@ -4090,6 +4304,7 @@ export function QuoteBuilderV2Page() {
           <PointShootTradeCard
             dealId={draft.dealId ?? null}
             appliedAllowanceDollars={draft.tradeAllowance || null}
+            appliedValuationSnapshot={tradeValuationProposalQuery.data ?? null}
             onApply={handlePointShootTradeApply}
             onClear={() => setDraft((cur) => ({
               ...cur,
@@ -4173,12 +4388,36 @@ export function QuoteBuilderV2Page() {
             <p className="mt-1 text-sm text-muted-foreground">A simple waterfall: machine, configuration, adders, discount, trade, tax, and customer total.</p>
           </div>
 
+          <Card className="border-border/70 bg-muted/20 p-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">Configure vs pricing.</span>{" "}
+              Catalog package lines (attachments, options, parts, warranty) and per-row{" "}
+              <span className="font-medium text-foreground">Internal</span> / customer visibility are edited in{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 3 — Configure the package"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("configure")}
+              >
+                Configure
+              </Button>
+              . This step covers sell-price overrides, standard adders, discounts, and totals.
+            </p>
+          </Card>
+
           <Card className="overflow-hidden border-qep-orange/20">
             <div className="bg-qep-orange/5 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pricing waterfall</p>
               <div className="mt-3 space-y-2 text-sm">
                 <SummaryRow label="Equipment" value={money(equipmentTotal)} />
-                <SummaryRow label="Configuration" value={money(attachmentTotal)} />
+                <SummaryRow label="Configuration (customer)" value={money(attachmentTotal)} />
+                {internalCostLoadTotal > 0 ? (
+                  <SummaryRow
+                    label="Internal cost load (not on customer quote)"
+                    value={money(internalCostLoadTotal)}
+                  />
+                ) : null}
                 <SummaryRow label="Customer-facing adders" value={money(pricingLineTotal)} />
                 <SummaryRow label="Subtotal" value={money(subtotal)} emphasize />
                 <SummaryRow label="Discounts + promos" value={`-${money(discountTotal)}`} positive />
@@ -4593,6 +4832,33 @@ export function QuoteBuilderV2Page() {
             <p className="mt-1 text-sm text-muted-foreground">Use seeded incentives when they exist. If no program data is present, these clear starter rows keep the skeleton moving.</p>
           </div>
 
+          <Card className="border-border/70 bg-muted/20 p-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">Promotions vs pricing.</span>{" "}
+              OEM and dealer incentives stack on the sell price from{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 5 — Pricing build"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("pricing")}
+              >
+                Pricing
+              </Button>
+              . Cash and payment scenarios are modeled in{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 7 — Financing scenarios"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("financing")}
+              >
+                Financing
+              </Button>
+              .
+            </p>
+          </Card>
+
           {activeQuotePackageId ? (
             <IncentiveStack quotePackageId={activeQuotePackageId} />
           ) : (
@@ -4639,6 +4905,33 @@ export function QuoteBuilderV2Page() {
             <h2 className="text-lg font-semibold text-foreground">Step 7: Financing scenarios</h2>
             <p className="mt-1 text-sm text-muted-foreground">Pick cash, finance, or view the disabled lease path. Payment math is an estimate and includes TILA guidance.</p>
           </div>
+
+          <Card className="border-border/70 bg-muted/20 p-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">Financing vs promos & details.</span>{" "}
+              Incentive stacks live in{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 6 — Rebates & promotions"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("promotions")}
+              >
+                Promos
+              </Button>
+              . Expiry, follow-up, and rep-confirmed narrative move forward in{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 8 — Quote details"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("details")}
+              >
+                Details
+              </Button>
+              .
+            </p>
+          </Card>
 
           <Card className="p-4">
             <div className="flex flex-wrap gap-2">
@@ -4782,6 +5075,33 @@ export function QuoteBuilderV2Page() {
             <p className="mt-1 text-sm text-muted-foreground">Set the handoff details the customer will ask about before anyone sends a document.</p>
           </div>
 
+          <Card className="border-border/70 bg-muted/20 p-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">Details vs finance & review.</span>{" "}
+              Cash and payment scenarios sit in{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 7 — Financing scenarios"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("financing")}
+              >
+                Financing
+              </Button>
+              . The approval-ready snapshot is{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 9 — Review + approval"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("review")}
+              >
+                Review
+              </Button>
+              .
+            </p>
+          </Card>
+
           <Card className="p-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1 text-sm">
@@ -4871,6 +5191,33 @@ export function QuoteBuilderV2Page() {
             <h2 className="text-lg font-semibold text-foreground">Step 9: Review + approval</h2>
             <p className="mt-1 text-sm text-muted-foreground">Everything in one plain-English summary. Approval case status is the authoritative gate before document generation and customer delivery.</p>
           </div>
+
+          <Card className="border-border/70 bg-muted/20 p-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">Review vs details & document.</span>{" "}
+              Dates and special terms stay in{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 8 — Quote details"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("details")}
+              >
+                Details
+              </Button>
+              . Customer PDF preview and artifact storage are{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 10 — Document preview"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("document")}
+              >
+                PDF
+              </Button>
+              .
+            </p>
+          </Card>
 
           <Card className="p-4">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -4965,6 +5312,19 @@ export function QuoteBuilderV2Page() {
               <div>
                 <p className="text-sm font-semibold text-foreground">Approval handoff</p>
                 <p className="mt-1 text-xs text-muted-foreground">Submit routes through the existing approval-case workflow. Future document/send steps should trust activeApprovalCase.canSend, not a duplicate UI flag.</p>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  Workspace auto-approve rules (for example aged stocked inventory) read yard age from the primary machine line&apos;s{" "}
+                  <span className="font-medium text-foreground">metadata.received_at</span> when CRM provides it, optional{" "}
+                  <span className="font-medium text-foreground">metadata.hot_list</span> for hot-list gates, plus in-stock and margin checks.
+                  {" "}
+                  When a rule sets a max discount %, the saved quote&apos;s{" "}
+                  <span className="font-medium text-foreground">discount_total</span> relative to{" "}
+                  <span className="font-medium text-foreground">subtotal</span> must stay within that cap.
+                  {" "}
+                  If a rule matches, the server sets the quote to <span className="font-medium text-foreground">Approved</span> or{" "}
+                  <span className="font-medium text-foreground">Approved with conditions</span> according to that rule&apos;s{" "}
+                  <span className="font-medium text-foreground">bypass_to_status</span> (only those two targets are allowed).
+                </p>
               </div>
               <Button onClick={() => submitApprovalMutation.mutate()} disabled={!canSubmitForApproval || submitApprovalMutation.isPending}>
                 {submitApprovalMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
@@ -5001,11 +5361,13 @@ export function QuoteBuilderV2Page() {
                 </button>
               </div>
             </div>
-            {submitApprovalMutation.data?.status === "approved" && submitApprovalMutation.data?.bypassRuleName && (
+            {(submitApprovalMutation.data?.status === "approved" || submitApprovalMutation.data?.status === "approved_with_conditions") && submitApprovalMutation.data?.bypassRuleName && (
               <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-300">Auto-approved</p>
                 <p className="mt-1 text-xs text-emerald-100">
-                  Approval bypass applied: <span className="font-semibold">{submitApprovalMutation.data.bypassRuleName}</span>
+                  Approval bypass applied
+                  {submitApprovalMutation.data.status === "approved_with_conditions" ? " — quote status is approved with conditions" : ""}
+                  : <span className="font-semibold">{submitApprovalMutation.data.bypassRuleName}</span>
                 </p>
               </div>
             )}
@@ -5072,6 +5434,33 @@ export function QuoteBuilderV2Page() {
             </p>
           </div>
 
+          <Card className="border-border/70 bg-muted/20 p-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">Document vs review & send.</span>{" "}
+              Approval context and final numbers are confirmed in{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 9 — Review + approval"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("review")}
+              >
+                Review
+              </Button>
+              . Email, text, and logging live in{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 11 — Send & log"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("send")}
+              >
+                Send
+              </Button>
+              .
+            </p>
+          </Card>
+
           <Card className="border-blue-500/20 bg-blue-500/5 p-4">
             <p className="text-sm font-semibold text-blue-100">Stored document artifact</p>
             <p className="mt-1 text-xs text-blue-100/90">
@@ -5132,6 +5521,33 @@ export function QuoteBuilderV2Page() {
             <h2 className="text-lg font-semibold text-foreground">Step 11: Send & log</h2>
             <p className="mt-1 text-sm text-muted-foreground">Preview, email, or text the quote only after clean approval and a follow-up date are present.</p>
           </div>
+
+          <Card className="border-border/70 bg-muted/20 p-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">Send vs document & review.</span>{" "}
+              Regenerate the customer PDF in{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 10 — Document preview"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("document")}
+              >
+                PDF
+              </Button>
+              . If totals or approval change, return to{" "}
+              <Button
+                type="button"
+                variant="link"
+                title="Step 9 — Review + approval"
+                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+                onClick={() => setStep("review")}
+              >
+                Review
+              </Button>
+              .
+            </p>
+          </Card>
 
           {customerFacingDocumentBlocker && (
             <Card className="border-amber-500/20 bg-amber-500/5 p-4">
@@ -5621,37 +6037,69 @@ function QuoteWorkspaceLineRow({
   item,
   onPriceChange,
   onRemove,
+  costVisibilityEditable,
+  onCostVisibilityChange,
 }: {
   label: string;
   item: QuoteLineItemDraft;
   onPriceChange: (value: number) => void;
   onRemove: () => void;
+  costVisibilityEditable?: boolean;
+  onCostVisibilityChange?: (next: CostVisibility) => void;
 }) {
   const title = item.title || [item.make, item.model].filter(Boolean).join(" ") || "Line item";
+  const effectiveVisibility: CostVisibility = quoteLineCostVisibility(item);
   return (
-    <div className="grid gap-3 rounded-lg border border-border/70 bg-card/50 p-3 sm:grid-cols-[120px_minmax(0,1fr)_150px_auto] sm:items-center">
-      <span className="rounded-full bg-muted px-2 py-1 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {label}
-      </span>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-foreground">{title}</p>
-        <p className="text-xs text-muted-foreground">Qty {item.quantity}</p>
+    <div className="space-y-2">
+      <div className="grid gap-3 rounded-lg border border-border/70 bg-card/50 p-3 sm:grid-cols-[120px_minmax(0,1fr)_150px_auto] sm:items-center">
+        <span className="rounded-full bg-muted px-2 py-1 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          {label}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+          <p className="text-xs text-muted-foreground">Qty {item.quantity}</p>
+        </div>
+        <label className="flex items-center gap-1 rounded border border-input bg-background px-2 py-1">
+          <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+          <input
+            type="number"
+            min={0}
+            step={100}
+            value={item.unitPrice}
+            onChange={(event) => onPriceChange(Number(event.target.value) || 0)}
+            className="w-full bg-transparent text-right text-sm font-semibold outline-none"
+            aria-label={`Price for ${title}`}
+          />
+        </label>
+        <Button size="icon" variant="ghost" onClick={onRemove} aria-label={`Remove ${title}`}>
+          <X className="h-4 w-4" />
+        </Button>
       </div>
-      <label className="flex items-center gap-1 rounded border border-input bg-background px-2 py-1">
-        <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-        <input
-          type="number"
-          min={0}
-          step={100}
-          value={item.unitPrice}
-          onChange={(event) => onPriceChange(Number(event.target.value) || 0)}
-          className="w-full bg-transparent text-right text-sm font-semibold outline-none"
-          aria-label={`Price for ${title}`}
-        />
-      </label>
-      <Button size="icon" variant="ghost" onClick={onRemove} aria-label={`Remove ${title}`}>
-        <X className="h-4 w-4" />
-      </Button>
+      {costVisibilityEditable && onCostVisibilityChange ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-muted/15 px-2 py-1.5 sm:pl-[132px]">
+          <span className="text-[11px] text-muted-foreground">Customer proposal</span>
+          <div className="inline-flex gap-0.5 rounded-md border border-border bg-background p-0.5">
+            <Button
+              type="button"
+              size="sm"
+              variant={effectiveVisibility === "customer" ? "secondary" : "ghost"}
+              className="h-7 px-2 text-[11px]"
+              onClick={() => onCostVisibilityChange("customer")}
+            >
+              Show line
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={effectiveVisibility === "internal" ? "secondary" : "ghost"}
+              className="h-7 px-2 text-[11px]"
+              onClick={() => onCostVisibilityChange("internal")}
+            >
+              Internal only
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -5809,7 +6257,7 @@ function QuoteWizardProgress({
               }`}
             >
               <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] opacity-80">{item.number}.</span>
-              <span className={`${compact ? "sr-only sm:not-sr-only sm:mt-1 sm:block" : "mt-1 block"} whitespace-normal break-words font-semibold`}>{item.shortLabel}</span>
+              <span className={`${compact ? "mt-0.5 block text-[10px] leading-snug sm:text-[11px]" : "mt-1 block"} whitespace-normal break-words font-semibold`}>{item.shortLabel}</span>
               <span className={`${compact ? "mt-0.5 sm:mt-1" : "mt-1"} block text-[10px] opacity-80`}>
                 {isCurrent ? "Now" : isComplete ? "Edit" : item.owner === "placeholder" ? "Later" : "Locked"}
               </span>

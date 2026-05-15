@@ -1,4 +1,4 @@
-import type { TradeValuationProposalSnapshot } from "./point-shoot-trade-api";
+import type { BookValueRange, TradeValuationProposalSnapshot } from "./point-shoot-trade-api";
 
 export interface TradeRangeSummary {
   low: number;
@@ -86,4 +86,81 @@ export function inferTradeRangeSummary(
     confidence: null,
     isSynthetic: false,
   };
+}
+
+/** Which dollar path the quote builder uses for trade credit (rep-facing; mirrors apply order). */
+export type TradeCreditBasis = "final" | "preliminary" | "comps_midpoint" | "none";
+
+function isFiniteMoney(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+/**
+ * One-line audit for operators: clarifies whether credit follows final desk, preliminary, or comp-only math.
+ */
+export function describeTradeCreditBasis(params: {
+  finalValue: number | null;
+  preliminaryValue: number | null;
+  inferredRange: TradeRangeSummary | null;
+}): { basis: TradeCreditBasis; line: string } {
+  const { finalValue, preliminaryValue, inferredRange } = params;
+
+  if (isFiniteMoney(finalValue)) {
+    return {
+      basis: "final",
+      line: "Trade credit follows the final appraisal value (overrides comp range).",
+    };
+  }
+  if (isFiniteMoney(preliminaryValue)) {
+    return {
+      basis: "preliminary",
+      line: "Trade credit follows the preliminary desk value.",
+    };
+  }
+  if (inferredRange) {
+    return {
+      basis: "comps_midpoint",
+      line: "Trade credit follows the comp-range midpoint until a desk value is on file.",
+    };
+  }
+
+  return { basis: "none", line: "" };
+}
+
+/** Map book-value-range sources into the same comp inference used for desk valuations. */
+export function tradeRangeSummaryFromBookValueRange(range: BookValueRange): TradeRangeSummary | null {
+  const marketComps = range.sources.map((s) => {
+    const row: Record<string, unknown> = { source: s.name };
+    if (s.low_cents != null && s.high_cents != null) {
+      row.low = s.low_cents / 100;
+      row.high = s.high_cents / 100;
+    }
+    if (Number.isFinite(s.value_cents)) {
+      row.price = s.value_cents / 100;
+    }
+    return row;
+  });
+  return inferTradeRangeSummary({
+    marketComps,
+    auctionValue: null,
+    preliminaryValue: null,
+    finalValue: null,
+  });
+}
+
+/**
+ * Rep-facing line for Point-Shoot-Trade before apply: credit will use comp midpoint until desk values exist.
+ */
+export function describePointShootApplyCreditLine(range: BookValueRange): string {
+  const inferred = tradeRangeSummaryFromBookValueRange(range);
+  const { basis, line } = describeTradeCreditBasis({
+    finalValue: null,
+    preliminaryValue: null,
+    inferredRange: inferred,
+  });
+  if (basis !== "none" && line) return line;
+  if (Number.isFinite(range.midCents)) {
+    return "Apply uses the displayed book-value midpoint until a desk value is on file.";
+  }
+  return "";
 }

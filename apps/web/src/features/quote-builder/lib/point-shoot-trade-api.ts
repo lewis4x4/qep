@@ -163,6 +163,7 @@ export interface TradeValuationProposalSnapshot {
   discountedValue: number | null;
   reconditioningEstimate: number | null;
   preliminaryValue: number | null;
+  finalValue: number | null;
   conditionalLanguage: string | null;
   aiConditionNotes: string | null;
   operationalStatus: string | null;
@@ -256,6 +257,7 @@ export function normalizeTradeValuationProposalSnapshot(payload: unknown): Trade
     discountedValue: numberOrNull(payload.discounted_value ?? payload.discountedValue),
     reconditioningEstimate: numberOrNull(payload.reconditioning_estimate ?? payload.reconditioningEstimate),
     preliminaryValue: numberOrNull(payload.preliminary_value ?? payload.preliminaryValue),
+    finalValue: numberOrNull(payload.final_value ?? payload.finalValue),
     conditionalLanguage: firstString(payload.conditional_language, payload.conditionalLanguage),
     aiConditionNotes: firstString(payload.ai_condition_notes, payload.aiConditionNotes),
     operationalStatus: firstString(payload.operational_status, payload.operationalStatus),
@@ -429,7 +431,7 @@ export async function getTradeValuationProposalSnapshot(
 ): Promise<TradeValuationProposalSnapshot | null> {
   const { data, error } = await supabase
     .from("trade_valuations")
-    .select("id, make, model, year, serial_number, hours, photos, market_comps, auction_value, discounted_value, reconditioning_estimate, preliminary_value, conditional_language, ai_condition_notes, operational_status")
+    .select("id, make, model, year, serial_number, hours, photos, market_comps, auction_value, discounted_value, reconditioning_estimate, preliminary_value, final_value, conditional_language, ai_condition_notes, operational_status")
     .eq("id", valuationId)
     .maybeSingle();
   if (error) throw error;

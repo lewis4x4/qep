@@ -26,6 +26,7 @@ import type { ClosedDealAuditRow } from "./closed-deals-audit";
 import type { DealFactorObservation } from "./factor-attribution";
 import type { FactorVerdict } from "./factor-verdict";
 import type { CalibrationObservation, CalibrationOutcome } from "./scorer-calibration";
+import { quoteLineCostVisibility } from "./quote-workspace";
 
 const QUOTE_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/quote-builder-v2`;
 
@@ -243,6 +244,7 @@ export function normalizeQuoteListItem(value: unknown): QuoteListItem | null {
     updated_at: requiredString(value.updated_at),
     accepted_at: nullableString(value.accepted_at),
     win_probability_score: numOrNull(value.win_probability_score),
+    is_prospect_quote: value.is_prospect_quote === true,
   };
 }
 
@@ -501,7 +503,11 @@ export function normalizeQuoteApprovalCaseSummary(value: unknown): QuoteApproval
 export function normalizeQuoteApprovalSubmitResult(value: unknown): QuoteApprovalSubmitResult {
   const record = recordOrEmpty(value);
   const statusRaw = firstString(record.status);
-  const status = statusRaw === "approved" ? "approved" : "pending_approval";
+  const status: QuoteApprovalSubmitResult["status"] = statusRaw === "approved"
+    ? "approved"
+    : statusRaw === "approved_with_conditions"
+      ? "approved_with_conditions"
+      : "pending_approval";
   const autoSendRecord = recordOrEmpty(record.auto_send ?? record.autoSend);
   return {
     approvalCaseId: firstString(record.approvalCaseId, record.approval_case_id) ?? "",
@@ -1257,6 +1263,19 @@ function normalizeEquipmentAvailability(value: unknown): "in_stock" | "in_transi
   return "source_required";
 }
 
+/** True if any of the keys is boolean true, 1, or common truthy strings (matches edge `boolMetadata`). */
+function metadataBooleanTrue(metadata: Record<string, unknown>, keys: readonly string[]): boolean {
+  for (const key of keys) {
+    const value = metadata[key];
+    if (value === true || value === 1) return true;
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === "true" || normalized === "1" || normalized === "yes") return true;
+    }
+  }
+  return false;
+}
+
 export interface CrmEquipmentQuoteSeed {
   id: string;
   sourceCatalog: "catalog_entries";
@@ -1279,6 +1298,10 @@ export interface CrmEquipmentQuoteSeed {
   media_source_id: string;
   media_kind: "actual";
   availabilityStatus: "in_stock" | "in_transit" | "source_required";
+  /** ISO timestamp: physical yard / stock receipt — used by approval bypass rules (e.g. min stock age). */
+  received_at: string | null;
+  /** Hot-list / priority merchandising flag from CRM — forwarded to line metadata for `requires_hot_list` bypass rules. */
+  hot_list: boolean;
   attachments: Array<{ id: string; name: string; price: number }>;
 }
 
@@ -1303,6 +1326,14 @@ export function normalizeCrmEquipmentQuoteSeed(row: unknown): CrmEquipmentQuoteS
     firstString(metadata.lift_capacity) ? `Lift capacity: ${firstString(metadata.lift_capacity)}` : null,
   ].flatMap((item) => item ? [item] : []);
   const warrantyExpiresOn = firstString(row.warranty_expires_on, metadata.warranty_expires_on);
+  const receivedAt = firstString(
+    metadata.received_at,
+    metadata.date_received_to_yard,
+    metadata.physical_received_at,
+    metadata.received_in_stock_at,
+    metadata.yard_received_at,
+  );
+  const hotList = metadataBooleanTrue(metadata, ["hot_list", "on_hot_list", "hotList"]);
   return {
     id,
     sourceCatalog: "catalog_entries",
@@ -1325,6 +1356,8 @@ export function normalizeCrmEquipmentQuoteSeed(row: unknown): CrmEquipmentQuoteS
     media_source_id: id,
     media_kind: "actual",
     availabilityStatus: normalizeEquipmentAvailability(row.availability ?? metadata.availability),
+    received_at: receivedAt,
+    hot_list: hotList,
     attachments: [],
   };
 }
@@ -1780,25 +1813,6 @@ export async function publishPortalRevision(data: {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LINE_DISCOUNT_REASON_CODES = new Set(["competitive_match", "volume_buyer", "aged_inventory", "loyalty", "other"]);
-const INTERNAL_COST_LINE_KINDS = new Set(["pdi", "good_faith"]);
-
-function freightDirectionFromMetadata(metadata: Record<string, unknown> | null | undefined): "inbound" | "outbound" | null {
-  const explicit = metadata?.freight_direction;
-  if (explicit === "inbound" || explicit === "outbound") return explicit;
-  const key = metadata?.pricing_field_key;
-  if (key === "inbound_freight") return "inbound";
-  if (key === "outbound_delivery") return "outbound";
-  return null;
-}
-
-function defaultCostVisibility(
-  kind: unknown,
-  metadata?: Record<string, unknown> | null,
-): "internal" | "customer" {
-  if (typeof kind === "string" && INTERNAL_COST_LINE_KINDS.has(kind)) return "internal";
-  if (kind === "freight" && freightDirectionFromMetadata(metadata) === "inbound") return "internal";
-  return "customer";
-}
 
 function safeLineReasonCode(item: QuoteWorkspaceDraft["equipment"][number]): string | undefined {
   return item.kind === "discount" && item.reasonCode && LINE_DISCOUNT_REASON_CODES.has(String(item.reasonCode))
@@ -1890,7 +1904,7 @@ export function buildQuoteSavePayload(
       display_order: index,
       reason_code: safeLineReasonCode(item),
       approval_required: item.approvalRequired === true,
-      cost_visibility: item.costVisibility ?? "customer",
+      cost_visibility: quoteLineCostVisibility(item),
       metadata: buildLineMetadata(item, {
         source_catalog: item.sourceCatalog ?? "qb_equipment_models",
         source_id: item.sourceId ?? item.id ?? null,
@@ -1911,7 +1925,7 @@ export function buildQuoteSavePayload(
       display_order: draft.equipment.length + index,
       reason_code: safeLineReasonCode(item),
       approval_required: item.approvalRequired === true,
-      cost_visibility: item.costVisibility ?? "customer",
+      cost_visibility: quoteLineCostVisibility(item),
       metadata: buildLineMetadata(item, {
         source_catalog: item.sourceCatalog ?? (item.kind === "attachment" ? "qb_attachments" : "manual"),
         source_id: item.sourceId ?? item.id ?? null,
@@ -1934,7 +1948,7 @@ export function buildQuoteSavePayload(
       display_order: draft.equipment.length + draft.attachments.length + index,
       reason_code: safeLineReasonCode(item),
       approval_required: item.approvalRequired === true,
-      cost_visibility: item.costVisibility ?? defaultCostVisibility(item.kind, item.metadata),
+      cost_visibility: quoteLineCostVisibility(item),
       metadata: buildLineMetadata(item, {
         source_catalog: item.sourceCatalog ?? "manual",
         source_id: item.sourceId ?? item.id ?? null,

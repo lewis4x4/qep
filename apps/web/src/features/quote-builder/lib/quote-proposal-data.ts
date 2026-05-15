@@ -1,6 +1,6 @@
 import type { QuotePDFData, QuoteProposalAsset } from "../components/QuotePDFDocument";
 import type { TradeValuationProposalSnapshot } from "./point-shoot-trade-api";
-import type { QuoteWorkspaceComputed } from "./quote-workspace";
+import { quoteLineCostVisibility, type QuoteWorkspaceComputed } from "./quote-workspace";
 import type {
   QuoteFinanceScenario,
   QuoteLineItemDraft,
@@ -19,8 +19,6 @@ const CREDIT_LINE_KINDS = new Set<QuoteLineItemKind>([
   "loyalty_discount",
   "trade_allowance",
 ]);
-const INTERNAL_COST_LINE_KINDS = new Set<QuoteLineItemKind>(["pdi", "good_faith"]);
-
 const TAX_PROFILE_LABELS: Record<QuoteTaxProfile, string> = {
   standard: "Standard taxable",
   agriculture_exempt: "Agriculture exempt",
@@ -221,14 +219,7 @@ function toProposalLine(line: QuoteLineItemDraft, fallbackType?: QuoteLineItemKi
 }
 
 function isCustomerVisibleLine(line: QuoteLineItemDraft): boolean {
-  if (line.costVisibility === "customer") return true;
-  if (line.costVisibility === "internal") return false;
-  if (line.kind === "freight") {
-    const direction = line.metadata?.freight_direction;
-    const fieldKey = line.metadata?.pricing_field_key;
-    if (direction === "inbound" || fieldKey === "inbound_freight") return false;
-  }
-  return !INTERNAL_COST_LINE_KINDS.has(line.kind);
+  return quoteLineCostVisibility(line) === "customer";
 }
 
 function formatInteger(value: number): string {
@@ -293,7 +284,7 @@ function buildLineItems(
   tradeValuation?: TradeValuationProposalSnapshot | null,
 ): QuotePDFData["lineItems"] {
   const lines = [
-    ...draft.equipment.map((line) => toProposalLine(line, "equipment")),
+    ...draft.equipment.filter(isCustomerVisibleLine).map((line) => toProposalLine(line, "equipment")),
     ...draft.attachments.filter(isCustomerVisibleLine).map((line) => toProposalLine(line, "attachment")),
     ...(draft.pricingLines ?? []).filter(isCustomerVisibleLine).map((line) => toProposalLine(line)),
   ];
@@ -440,7 +431,8 @@ export function buildQuoteProposalData(input: {
   const selectedPaymentKind = scenarioKind(selectedScenario);
   const hasDisplayedFinanceOrLease = financing.some((scenario) => isDisplayableProposalFinanceScenario(scenario) && scenario.type !== "cash");
   const tax = buildTaxDetail(draft);
-  const primaryEquipment = draft.equipment[0] ?? null;
+  const customerEquipment = draft.equipment.filter(isCustomerVisibleLine);
+  const primaryEquipment = customerEquipment[0] ?? null;
 
   return {
     dealName: draft.dealId || draft.customerCompany || draft.customerName || "Quote",
@@ -449,7 +441,7 @@ export function buildQuoteProposalData(input: {
     preparedBy: input.preparedBy,
     preparedDate: input.preparedDate,
     aiRecommendationSummary: null,
-    equipment: draft.equipment.map((item) => ({
+    equipment: customerEquipment.map((item) => ({
       make: item.make ?? "",
       model: item.model ?? item.title,
       year: item.year ?? null,
@@ -457,7 +449,7 @@ export function buildQuoteProposalData(input: {
       quantity: item.quantity,
       extendedPrice: money(lineExtendedAmount(item)),
     })),
-    attachments: draft.attachments.map((item) => ({
+    attachments: draft.attachments.filter(isCustomerVisibleLine).map((item) => ({
       name: item.title,
       price: money(item.unitPrice),
       quantity: item.quantity,

@@ -139,6 +139,52 @@ describe("buildQuoteProposalData", () => {
     expect(data.lineItems.every((line) => !("dealerCost" in line) && !("metadata" in line))).toBe(true);
   });
 
+  test("drops internal-visibility attachments from proposal attachment summary", () => {
+    const data = build({
+      attachments: [
+        { kind: "attachment", title: "Customer-facing add-on", quantity: 1, unitPrice: 2_500, costVisibility: "customer" },
+        { kind: "accessory", title: "Internal labor bundle", quantity: 1, unitPrice: 400, costVisibility: "internal" },
+      ],
+    });
+
+    expect(data.attachments.map((row) => row.name)).toEqual(["Customer-facing add-on"]);
+    expect(data.lineItems.map((line) => line.description)).toContain("Customer-facing add-on");
+    expect(data.lineItems.map((line) => line.description)).not.toContain("Internal labor bundle");
+    expect(data.attachmentTotal).toBe(2_500);
+  });
+
+  test("drops internal-visibility equipment from proposal equipment summary and line waterfall", () => {
+    const data = build({
+      equipment: [
+        {
+          kind: "equipment",
+          title: "Customer CTL",
+          make: "Bobcat",
+          model: "T66",
+          year: 2026,
+          quantity: 1,
+          unitPrice: 85_000,
+          costVisibility: "customer",
+        },
+        {
+          kind: "equipment",
+          title: "Internal bundle row",
+          make: "Bobcat",
+          model: "Bundle",
+          year: 2026,
+          quantity: 1,
+          unitPrice: 3_000,
+          costVisibility: "internal",
+        },
+      ],
+    });
+
+    expect(data.equipment.map((row) => row.model)).toEqual(["T66"]);
+    expect(data.lineItems.map((line) => line.description)).toContain("2026 Bobcat T66");
+    expect(data.lineItems.map((line) => line.description)).not.toContain("2026 Bobcat Bundle");
+    expect(data.equipmentTotal).toBe(85_000);
+  });
+
   test("does not expose inbound freight when visibility metadata marks it internal", () => {
     const data = build({
       pricingLines: [

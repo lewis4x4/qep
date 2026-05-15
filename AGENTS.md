@@ -59,6 +59,8 @@ bun run segment:gates --segment "<segment-id>" [--ui] [--no-chaos] [--strict-des
 
 The orchestrator runs **`migrations:check`**, **`pressure:parts`** (static parts/service guards), **`audit:edges`**, the **`apps/web`** production build, Deno tests for **`service-engine-smoke`** and **`vendor-inbound-contract`**, then optional chaos/design steps. It streams live output for each check and preserves CI-equivalent coverage without re-running the web build and migration checks through a nested root build.
 
+When **`supabase/functions/quote-builder-v2/index.ts`** changes financial totals, discount gates, or approval-bypass routing, also run **`deno test supabase/functions/quote-builder-v2/quote-financial-integrity-regression.test.ts --allow-read --allow-env`** locally before closing the segment, and keep using **`bun run segment:gates`** (above) for full gate coverage.
+
 Examples:
 
 ```bash

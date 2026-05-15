@@ -194,6 +194,7 @@ describe("computeQuoteWorkspace", () => {
     }));
 
     expect(result.subtotal).toBe(115_000);
+    expect(result.internalCostLoadTotal).toBe(0);
     expect(result.discountTotal).toBe(11_500);
     expect(result.discountedSubtotal).toBe(103_500);
     expect(result.netTotal).toBe(91_000);
@@ -227,6 +228,7 @@ describe("computeQuoteWorkspace", () => {
 
     expect(result.equipmentTotal).toBe(100_000);
     expect(result.attachmentTotal).toBe(5_000);
+    expect(result.internalCostLoadTotal).toBe(750);
     expect(result.pricingLineTotal).toBe(1_500);
     expect(result.subtotal).toBe(106_500);
     expect(result.discountTotal).toBe(3_000);
@@ -263,9 +265,64 @@ describe("computeQuoteWorkspace", () => {
     }));
 
     expect(result.subtotal).toBe(86_400);
+    expect(result.internalCostLoadTotal).toBe(1_800);
     expect(result.pricingLineTotal).toBe(2_400);
     expect(result.taxableBasis).toBe(86_400);
     expect(result.customerTotal).toBe(90_400);
+  });
+
+  test("excludes internal-visibility config attachments from customer attachment totals", () => {
+    const result = computeQuoteWorkspace(makeDraft({
+      branchSlug: "lake-city",
+      customerName: "Anderson",
+      customerEmail: "buyer@example.com",
+      equipment: [{ kind: "equipment", title: "Kubota U55", quantity: 1, unitPrice: 80_000 }],
+      attachments: [
+        { kind: "attachment", title: "Customer bucket", quantity: 1, unitPrice: 3_000, costVisibility: "customer" },
+        { kind: "accessory", title: "Internal shop prep", quantity: 1, unitPrice: 900, costVisibility: "internal" },
+      ],
+      taxTotal: 0,
+    }));
+
+    expect(result.attachmentTotal).toBe(3_000);
+    expect(result.internalCostLoadTotal).toBe(900);
+    expect(result.subtotal).toBe(83_000);
+  });
+
+  test("excludes internal-visibility equipment from customer subtotal and rolls it into internal cost load", () => {
+    const result = computeQuoteWorkspace(makeDraft({
+      branchSlug: "lake-city",
+      customerName: "Anderson",
+      customerEmail: "buyer@example.com",
+      equipment: [
+        { kind: "equipment", title: "Customer machine", quantity: 1, unitPrice: 90_000, costVisibility: "customer" },
+        { kind: "equipment", title: "Internal package line", quantity: 1, unitPrice: 5_000, costVisibility: "internal" },
+      ],
+      attachments: [],
+      taxTotal: 0,
+    }));
+
+    expect(result.equipmentTotal).toBe(90_000);
+    expect(result.internalCostLoadTotal).toBe(5_000);
+    expect(result.subtotal).toBe(90_000);
+  });
+
+  test("blocks save when every equipment line is internal-only (no customer-facing machine)", () => {
+    const result = computeQuoteWorkspace(makeDraft({
+      branchSlug: "lake-city",
+      customerName: "Anderson",
+      customerEmail: "buyer@example.com",
+      equipment: [
+        { kind: "equipment", title: "Internal only A", quantity: 1, unitPrice: 5_000, costVisibility: "internal" },
+        { kind: "equipment", title: "Internal only B", quantity: 1, unitPrice: 2_000, costVisibility: "internal" },
+      ],
+      taxTotal: 0,
+    }));
+
+    expect(result.packetReadiness.canSave).toBe(false);
+    expect(result.packetReadiness.draft.missing).toContain(
+      "customer-facing equipment (at least one machine line must not be internal-only)",
+    );
   });
 
   test("treats metadata-tagged inbound freight as internal when costVisibility is missing", () => {
@@ -287,6 +344,7 @@ describe("computeQuoteWorkspace", () => {
     }));
 
     expect(result.pricingLineTotal).toBe(0);
+    expect(result.internalCostLoadTotal).toBe(1_800);
     expect(result.subtotal).toBe(80_000);
     expect(result.customerTotal).toBe(83_000);
   });

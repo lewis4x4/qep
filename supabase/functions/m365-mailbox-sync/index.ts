@@ -89,19 +89,41 @@ Deno.serve(async (req) => {
     if (error) return safeJsonError(`Failed to load M365 sync state: ${error.message}`, 500, origin);
 
     const outcomes: RowOutcome[] = [];
+    const startedMs = Date.now();
     for (const row of (data ?? []) as SyncState[]) {
       outcomes.push(await syncMailbox(supabase, row, perMailboxLimit));
     }
 
+    const scannedMailboxes = outcomes.length;
+    const scannedMessages = outcomes.reduce((sum, outcome) => sum + outcome.scanned, 0);
+    const createdTotal = outcomes.reduce((sum, outcome) => sum + outcome.created, 0);
+    const dedupedTotal = outcomes.reduce((sum, outcome) => sum + outcome.deduped, 0);
+    const failed = outcomes.filter((outcome) => outcome.error).length;
+    const skipped = outcomes.filter((outcome) => outcome.skippedReason).length;
+
+    console.log(JSON.stringify({
+      event: "m365_mailbox_sync_complete",
+      mode: serviceCaller ? "cron" : "manual",
+      row_limit: rowLimit,
+      per_mailbox_limit: perMailboxLimit,
+      scanned_mailboxes: scannedMailboxes,
+      scanned_messages: scannedMessages,
+      created: createdTotal,
+      deduped: dedupedTotal,
+      failed,
+      skipped,
+      duration_ms: Date.now() - startedMs,
+    }));
+
     return safeJsonOk({
       ok: true,
       mode: serviceCaller ? "cron" : "manual",
-      scannedMailboxes: outcomes.length,
-      scannedMessages: outcomes.reduce((sum, outcome) => sum + outcome.scanned, 0),
-      created: outcomes.reduce((sum, outcome) => sum + outcome.created, 0),
-      deduped: outcomes.reduce((sum, outcome) => sum + outcome.deduped, 0),
-      failed: outcomes.filter((outcome) => outcome.error).length,
-      skipped: outcomes.filter((outcome) => outcome.skippedReason).length,
+      scannedMailboxes,
+      scannedMessages,
+      created: createdTotal,
+      deduped: dedupedTotal,
+      failed,
+      skipped,
       outcomes,
     }, origin);
   } catch (error) {

@@ -6,10 +6,35 @@ import type {
   QuoteTaxProfile,
   QuoteWorkspaceDraft,
 } from "../../../../../../shared/qep-moonshot-contracts";
+import { quoteLineCostVisibility } from "./quote-workspace";
 
 const LOCAL_DRAFT_PREFIX = "qep.quote-builder.local-draft.";
 const ENTRY_MODES: QuoteEntryMode[] = ["voice", "ai_chat", "manual", "trade_photo"];
-const LINE_ITEM_KINDS: QuoteLineItemKind[] = ["equipment", "attachment", "part", "warranty", "financing", "custom"];
+/** Must match `QuoteLineItemKind` so configure / pricing lines round-trip through localStorage. */
+const LINE_ITEM_KINDS: QuoteLineItemKind[] = [
+  "equipment",
+  "attachment",
+  "option",
+  "accessory",
+  "part",
+  "warranty",
+  "financing",
+  "pdi",
+  "freight",
+  "good_faith",
+  "doc_fee",
+  "title",
+  "tag",
+  "registration",
+  "discount",
+  "trade_allowance",
+  "rebate_mfg",
+  "rebate_dealer",
+  "loyalty_discount",
+  "tax_state",
+  "tax_county",
+  "custom",
+];
 const TAX_PROFILES: QuoteTaxProfile[] = [
   "standard",
   "agriculture_exempt",
@@ -93,10 +118,31 @@ function normalizeDiscountType(value: unknown): QuoteCommercialDiscountType | un
   return value === "percent" ? "percent" : value === "flat" ? "flat" : undefined;
 }
 
+function normalizePostApprovalAction(value: unknown): NonNullable<QuoteWorkspaceDraft["postApprovalAction"]> | undefined {
+  if (value === "auto_send_customer") return "auto_send_customer";
+  if (value === "return_to_rep") return "return_to_rep";
+  return undefined;
+}
+
+function normalizeFinancingPref(value: unknown): NonNullable<QuoteWorkspaceDraft["financingPref"]> | undefined {
+  if (value === "cash" || value === "financing" || value === "open") return value;
+  return undefined;
+}
+
+function normalizeCustomerWarmth(value: unknown): NonNullable<QuoteWorkspaceDraft["customerWarmth"]> | undefined {
+  if (value === "warm" || value === "cool" || value === "dormant" || value === "new") return value;
+  return undefined;
+}
+
 function normalizeLineItemKind(value: unknown): QuoteLineItemKind | undefined {
   for (const kind of LINE_ITEM_KINDS) {
     if (value === kind) return kind;
   }
+  return undefined;
+}
+
+function normalizeLineItemCostVisibility(value: unknown): QuoteLineItemDraft["costVisibility"] | undefined {
+  if (value === "internal" || value === "customer") return value;
   return undefined;
 }
 
@@ -121,8 +167,8 @@ function normalizeLineItems(value: unknown): QuoteLineItemDraft[] | undefined {
       kind,
       title,
       id: asString(record.id) || undefined,
-      sourceCatalog: normalizeSourceCatalog(record.sourceCatalog),
-      sourceId: asNullableString(record.sourceId),
+      sourceCatalog: normalizeSourceCatalog(record.sourceCatalog ?? record.source_catalog),
+      sourceId: asNullableString(record.sourceId ?? record.source_id),
       dealerCost: asNumber(record.dealerCost),
       make: asString(record.make) || undefined,
       model: asString(record.model) || undefined,
@@ -130,6 +176,24 @@ function normalizeLineItems(value: unknown): QuoteLineItemDraft[] | undefined {
       quantity: Math.max(1, Math.round(asNumber(record.quantity) ?? 1)),
       unitPrice: asNumber(record.unitPrice) ?? 0,
     };
+    const rawMeta = record.metadata;
+    if (rawMeta !== null && rawMeta !== undefined && typeof rawMeta === "object" && !Array.isArray(rawMeta)) {
+      line.metadata = { ...(rawMeta as Record<string, unknown>) };
+    }
+    const explicitVis = normalizeLineItemCostVisibility(record.costVisibility ?? record.cost_visibility);
+    line.costVisibility = quoteLineCostVisibility({
+      kind,
+      metadata: line.metadata,
+      ...(explicitVis ? { costVisibility: explicitVis } : {}),
+    });
+    const reasonRaw = record.reasonCode ?? record.reason_code;
+    if (typeof reasonRaw === "string") {
+      const trimmed = reasonRaw.trim();
+      if (trimmed) line.reasonCode = trimmed;
+    }
+    if (record.approvalRequired === true || record.approval_required === true) {
+      line.approvalRequired = true;
+    }
     return [line];
   });
   return items;
@@ -210,6 +274,10 @@ function normalizeLocalDraft(value: unknown): Partial<QuoteWorkspaceDraft> | nul
   if (equipment) draft.equipment = equipment;
   const attachments = normalizeLineItems(record.attachments);
   if (attachments) draft.attachments = attachments;
+  if ("pricingLines" in record) {
+    const pricingLines = normalizeLineItems(record.pricingLines);
+    if (pricingLines !== undefined) draft.pricingLines = pricingLines;
+  }
   const tradeAllowance = asNumber(record.tradeAllowance);
   if (tradeAllowance !== null) draft.tradeAllowance = tradeAllowance;
   if ("tradeValuationId" in record) draft.tradeValuationId = asNullableString(record.tradeValuationId);
@@ -228,6 +296,52 @@ function normalizeLocalDraft(value: unknown): Partial<QuoteWorkspaceDraft> | nul
   if ("selectedFinanceScenario" in record) {
     draft.selectedFinanceScenario = asNullableString(record.selectedFinanceScenario);
   }
+  if ("followUpAt" in record) draft.followUpAt = asNullableString(record.followUpAt);
+  if ("expiresAt" in record) draft.expiresAt = asNullableString(record.expiresAt);
+  if ("deliveryEta" in record) draft.deliveryEta = asNullableString(record.deliveryEta);
+  if ("deliveryState" in record) {
+    const state = asString(record.deliveryState);
+    if (state) draft.deliveryState = state;
+  }
+  if ("deliveryCounty" in record) {
+    const county = asString(record.deliveryCounty);
+    if (county) draft.deliveryCounty = county;
+  }
+  if ("specialTerms" in record) draft.specialTerms = asNullableString(record.specialTerms);
+  if ("whyThisMachine" in record) draft.whyThisMachine = asNullableString(record.whyThisMachine);
+  if ("whyThisMachineConfirmed" in record) {
+    draft.whyThisMachineConfirmed = record.whyThisMachineConfirmed === true;
+  }
+  if ("depositRequiredAmount" in record) {
+    const dep = asNumber(record.depositRequiredAmount);
+    if (dep !== null) draft.depositRequiredAmount = dep;
+  }
+  if ("taxJurisdictionId" in record) draft.taxJurisdictionId = asNullableString(record.taxJurisdictionId);
+  if ("taxOverrideAmount" in record) {
+    const taxOv = asNumber(record.taxOverrideAmount);
+    if (taxOv !== null) draft.taxOverrideAmount = taxOv;
+  }
+  if ("taxOverrideReason" in record) draft.taxOverrideReason = asNullableString(record.taxOverrideReason);
+  if ("financingPref" in record) {
+    const fp = normalizeFinancingPref(record.financingPref);
+    if (fp !== undefined) draft.financingPref = fp;
+  }
+  if ("customerWarmth" in record) {
+    const warmth = normalizeCustomerWarmth(record.customerWarmth);
+    if (warmth !== undefined) draft.customerWarmth = warmth;
+  }
+  if ("wizardStep" in record) {
+    const step = asNumber(record.wizardStep);
+    if (step !== null && Number.isInteger(step)) draft.wizardStep = step;
+  }
+  if ("selectedPromotionIds" in record && Array.isArray(record.selectedPromotionIds)) {
+    const ids = record.selectedPromotionIds.flatMap((id) => {
+      if (typeof id !== "string") return [];
+      const text = id.trim();
+      return text ? [text] : [];
+    });
+    draft.selectedPromotionIds = ids;
+  }
   for (const key of [
     "dealId",
     "contactId",
@@ -243,6 +357,8 @@ function normalizeLocalDraft(value: unknown): Partial<QuoteWorkspaceDraft> | nul
   }
   const quoteStatus = normalizeQuoteStatus(record.quoteStatus);
   if (quoteStatus) draft.quoteStatus = quoteStatus;
+  const postApprovalAction = normalizePostApprovalAction(record.postApprovalAction ?? record.post_approval_action);
+  if (postApprovalAction) draft.postApprovalAction = postApprovalAction;
   return draft;
 }
 
@@ -340,10 +456,16 @@ export function isDraftEmpty(draft: Partial<QuoteWorkspaceDraft> | null): boolea
   if (draft.companyId) return false;
   if (draft.equipment && draft.equipment.length > 0) return false;
   if (draft.attachments && draft.attachments.length > 0) return false;
+  if (draft.pricingLines && draft.pricingLines.length > 0) return false;
   if (draft.recommendation) return false;
   if (draft.voiceSummary) return false;
   if (draft.tradeAllowance && draft.tradeAllowance > 0) return false;
   if (draft.tradeValuationId) return false;
+  if (draft.followUpAt?.trim()) return false;
+  if (draft.deliveryState?.trim()) return false;
+  if (draft.deliveryCounty?.trim()) return false;
+  if (draft.whyThisMachine?.trim()) return false;
+  if (draft.specialTerms?.trim()) return false;
   return true;
 }
 

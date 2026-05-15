@@ -91,8 +91,23 @@ describe("isDraftEmpty", () => {
       equipment: [{ kind: "equipment", title: "CAT 320", quantity: 1, unitPrice: 80_000 }],
     }))).toBe(false);
   });
+  test("non-empty with pricing lines only", () => {
+    expect(isDraftEmpty(makeDraft({
+      pricingLines: [{ kind: "pdi", title: "PDI", quantity: 1, unitPrice: 500 }],
+    }))).toBe(false);
+  });
   test("non-empty with contactId (picked from CRM)", () => {
     expect(isDraftEmpty(makeDraft({ contactId: "abc-123" }))).toBe(false);
+  });
+  test("non-empty with follow-up date", () => {
+    expect(isDraftEmpty(makeDraft({ followUpAt: "2026-06-01T12:00:00.000Z" }))).toBe(false);
+  });
+  test("non-empty with delivery geography", () => {
+    expect(isDraftEmpty(makeDraft({ deliveryState: "FL", deliveryCounty: "Columbia" }))).toBe(false);
+  });
+  test("non-empty with why-this-machine or special terms", () => {
+    expect(isDraftEmpty(makeDraft({ whyThisMachine: "Fits the job." }))).toBe(false);
+    expect(isDraftEmpty(makeDraft({ specialTerms: "Net 30" }))).toBe(false);
   });
 });
 
@@ -113,6 +128,160 @@ describe("save/load/clear round-trip", () => {
     expect(loaded?.customerEmail).toBeUndefined();
     expect(loaded?.customerPhone).toBeUndefined();
     expect(loaded?.equipment?.[0]?.title).toBe("CAT 320");
+  });
+
+  test("round-trips postApprovalAction for approval routing prefs", () => {
+    const key = buildLocalDraftKey({ userId: "u1", dealId: "D-post-approval" });
+    const draft = makeDraft({
+      postApprovalAction: "auto_send_customer",
+      equipment: [{ kind: "equipment", title: "CAT 320", quantity: 1, unitPrice: 80_000 }],
+    });
+    saveLocalDraft(key, draft);
+    const loaded = loadLocalDraft(key);
+    expect(loaded?.postApprovalAction).toBe("auto_send_customer");
+  });
+
+  test("round-trips details and send fields (follow-up, delivery, why-this-machine)", () => {
+    const key = buildLocalDraftKey({ userId: "u1", dealId: "D-details-local" });
+    const draft = makeDraft({
+      equipment: [{ kind: "equipment", title: "CAT 320", quantity: 1, unitPrice: 80_000 }],
+      followUpAt: "2026-06-01T12:00:00.000Z",
+      deliveryState: "FL",
+      deliveryCounty: "Columbia",
+      whyThisMachine: "Right size for the clearing job.",
+      whyThisMachineConfirmed: true,
+      specialTerms: "Net 30 for established accounts.",
+      depositRequiredAmount: 5000,
+      taxOverrideAmount: 100,
+      taxOverrideReason: "County rate dispute",
+      financingPref: "financing",
+      customerWarmth: "warm",
+      wizardStep: 9,
+      selectedPromotionIds: ["promo-a", "promo-b"],
+    });
+    saveLocalDraft(key, draft);
+    const loaded = loadLocalDraft(key);
+    expect(loaded?.followUpAt).toBe("2026-06-01T12:00:00.000Z");
+    expect(loaded?.deliveryState).toBe("FL");
+    expect(loaded?.deliveryCounty).toBe("Columbia");
+    expect(loaded?.whyThisMachine).toBe("Right size for the clearing job.");
+    expect(loaded?.whyThisMachineConfirmed).toBe(true);
+    expect(loaded?.specialTerms).toBe("Net 30 for established accounts.");
+    expect(loaded?.depositRequiredAmount).toBe(5000);
+    expect(loaded?.taxOverrideAmount).toBe(100);
+    expect(loaded?.taxOverrideReason).toBe("County rate dispute");
+    expect(loaded?.financingPref).toBe("financing");
+    expect(loaded?.customerWarmth).toBe("warm");
+    expect(loaded?.wizardStep).toBe(9);
+    expect(loaded?.selectedPromotionIds).toEqual(["promo-a", "promo-b"]);
+  });
+
+  test("accepts post_approval_action snake_case from stored JSON", () => {
+    const key = buildLocalDraftKey({ userId: "u1", dealId: "snake-post-approval" });
+    (globalThis as unknown as { window: { localStorage: MemoryStorage } })
+      .window.localStorage.setItem(
+        `qep.quote-builder.local-draft.${key}`,
+        JSON.stringify({
+          draft: {
+            entryMode: "manual",
+            equipment: [{ kind: "equipment", title: "CAT 320", quantity: 1, unitPrice: 80_000 }],
+            post_approval_action: "auto_send_customer",
+          },
+          savedAt: "2026-05-15T12:00:00Z",
+        }),
+      );
+    const loaded = loadLocalDraft(key);
+    expect(loaded?.postApprovalAction).toBe("auto_send_customer");
+  });
+
+  test("round-trips line costVisibility and configure kinds (option)", () => {
+    const key = buildLocalDraftKey({ userId: "u1", dealId: "D-visibility" });
+    const draft = makeDraft({
+      equipment: [{ kind: "equipment", title: "CAT 320", quantity: 1, unitPrice: 80_000 }],
+      attachments: [
+        {
+          kind: "option",
+          id: "opt-1",
+          title: "High flow",
+          quantity: 1,
+          unitPrice: 2_000,
+          costVisibility: "internal",
+        },
+      ],
+    });
+    saveLocalDraft(key, draft);
+    const loaded = loadLocalDraft(key);
+    expect(loaded?.attachments?.[0]?.kind).toBe("option");
+    expect(loaded?.attachments?.[0]?.costVisibility).toBe("internal");
+  });
+
+  test("accepts cost_visibility snake_case from stored JSON", () => {
+    const key = buildLocalDraftKey({ userId: "u1", dealId: "snake-vis" });
+    (globalThis as unknown as { window: { localStorage: MemoryStorage } })
+      .window.localStorage.setItem(
+        `qep.quote-builder.local-draft.${key}`,
+        JSON.stringify({
+          draft: {
+            entryMode: "manual",
+            equipment: [{ kind: "equipment", title: "CAT 320", quantity: 1, unitPrice: 80_000 }],
+            attachments: [
+              { kind: "accessory", title: "Beacon", quantity: 1, unitPrice: 400, cost_visibility: "internal" },
+            ],
+          },
+          savedAt: "2026-05-15T12:00:00Z",
+        }),
+      );
+    const loaded = loadLocalDraft(key);
+    expect(loaded?.attachments?.[0]?.costVisibility).toBe("internal");
+  });
+
+  test("infers internal costVisibility for freight from inbound metadata when cost_visibility absent", () => {
+    const key = buildLocalDraftKey({ userId: "u1", dealId: "freight-infer-local" });
+    (globalThis as unknown as { window: { localStorage: MemoryStorage } })
+      .window.localStorage.setItem(
+        `qep.quote-builder.local-draft.${key}`,
+        JSON.stringify({
+          draft: {
+            entryMode: "manual",
+            equipment: [{ kind: "equipment", title: "CAT 320", quantity: 1, unitPrice: 80_000 }],
+            pricingLines: [
+              {
+                kind: "freight",
+                title: "Inbound freight to yard",
+                quantity: 1,
+                unitPrice: 1200,
+                metadata: { pricing_field_key: "inbound_freight", freight_direction: "inbound" },
+              },
+            ],
+          },
+          savedAt: "2026-05-15T12:00:00Z",
+        }),
+      );
+    const loaded = loadLocalDraft(key);
+    expect(loaded?.pricingLines?.[0]?.costVisibility).toBe("internal");
+  });
+
+  test("round-trips pricingLines including freight metadata", () => {
+    const key = buildLocalDraftKey({ userId: "u1", dealId: "D-pricing-local" });
+    const draft = makeDraft({
+      equipment: [{ kind: "equipment", title: "CAT 320", quantity: 1, unitPrice: 80_000 }],
+      pricingLines: [
+        {
+          kind: "freight",
+          title: "Inbound freight",
+          quantity: 1,
+          unitPrice: 1200,
+          costVisibility: "internal",
+          metadata: { pricing_field_key: "inbound_freight", freight_direction: "inbound" },
+        },
+      ],
+    });
+    saveLocalDraft(key, draft);
+    const loaded = loadLocalDraft(key);
+    expect(loaded?.pricingLines?.[0]?.kind).toBe("freight");
+    expect(loaded?.pricingLines?.[0]?.costVisibility).toBe("internal");
+    expect(loaded?.pricingLines?.[0]?.metadata?.pricing_field_key).toBe("inbound_freight");
+    expect(loaded?.pricingLines?.[0]?.metadata?.freight_direction).toBe("inbound");
   });
 
   test("saved drafts redact voice and transcript-style recommendation excerpts", () => {
@@ -228,6 +397,7 @@ describe("save/load/clear round-trip", () => {
         dealerCost: null,
         make: undefined,
         model: undefined,
+        costVisibility: "customer",
         year: null,
         quantity: 2,
         unitPrice: 45000,

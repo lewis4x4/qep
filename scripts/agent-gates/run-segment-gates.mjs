@@ -230,7 +230,8 @@ await pushCheck({
 
 await pushCheck({
   id: "qa.parity-edge-deno-check",
-  command: "deno check supabase/functions/integration-test-connection/index.ts supabase/functions/portal-api/index.ts",
+  command:
+    "deno check supabase/functions/integration-test-connection/index.ts supabase/functions/portal-api/index.ts supabase/functions/intellidealer-customer-import/index.ts",
   required: true,
 });
 

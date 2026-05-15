@@ -80,17 +80,34 @@ Deno.serve(async (req) => {
 
     const rows = (data ?? []) as SyncState[];
     const outcomes: RefreshOutcome[] = [];
+    const startedMs = Date.now();
     for (const row of rows) {
       outcomes.push(await refreshRow(supabase, row));
     }
+
+    const refreshed = outcomes.filter((outcome) => outcome.refreshed).length;
+    const failed = outcomes.filter((outcome) => outcome.error).length;
+    const graphOk = outcomes.filter((outcome) => outcome.graphReachable).length;
+
+    console.log(JSON.stringify({
+      event: "m365_token_refresh_complete",
+      mode: serviceCaller ? "cron" : "manual",
+      force,
+      limit,
+      scanned: rows.length,
+      refreshed,
+      failed,
+      graph_probe_ok: graphOk,
+      duration_ms: Date.now() - startedMs,
+    }));
 
     return safeJsonOk({
       ok: true,
       mode: serviceCaller ? "cron" : "manual",
       force,
       scanned: rows.length,
-      refreshed: outcomes.filter((outcome) => outcome.refreshed).length,
-      failed: outcomes.filter((outcome) => outcome.error).length,
+      refreshed,
+      failed,
       outcomes,
     }, origin);
   } catch (error) {

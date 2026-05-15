@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { getTradeValuation } from "../lib/quote-api";
 import { Button } from "@/components/ui/button";
 import { buildTradeWalkaroundHref } from "@/features/qrm/lib/trade-walkaround";
-import { inferTradeRangeSummary } from "../lib/trade-valuation-range";
+import { describeTradeCreditBasis, inferTradeRangeSummary } from "../lib/trade-valuation-range";
 
 interface TradeInSectionProps {
   dealId: string;
@@ -43,6 +43,11 @@ export function TradeInSection({ dealId, onTradeValueChange }: TradeInSectionPro
     auctionValue: valuation.auction_value ?? null,
     preliminaryValue: valuation.preliminary_value ?? null,
     finalValue: valuation.final_value ?? null,
+  });
+  const creditBasis = describeTradeCreditBasis({
+    finalValue: valuation.final_value ?? null,
+    preliminaryValue: valuation.preliminary_value ?? null,
+    inferredRange,
   });
   const hasValue = Boolean(valuation.preliminary_value || valuation.final_value || inferredRange);
   const tradeValue = valuation.final_value ?? valuation.preliminary_value ?? inferredRange?.midpoint ?? null;
@@ -84,6 +89,9 @@ export function TradeInSection({ dealId, onTradeValueChange }: TradeInSectionPro
             <p className="text-[11px] text-muted-foreground">
               Confidence: {inferredRange.confidence}{inferredRange.isSynthetic ? " · modeled until live feeds connect" : ""}
             </p>
+          )}
+          {creditBasis.basis !== "none" && creditBasis.line && (
+            <p className="mt-1 text-[11px] text-muted-foreground">{creditBasis.line}</p>
           )}
         </div>
       </div>

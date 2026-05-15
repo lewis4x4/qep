@@ -258,10 +258,6 @@ function lineNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
-function defaultCostVisibilityForLineType(lineType: string): "internal" | "customer" {
-  return INTERNAL_COST_LINE_TYPES.has(lineType) ? "internal" : "customer";
-}
-
 function freightDirectionFromMetadata(metadata: unknown): "inbound" | "outbound" | null {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
   const record = metadata as Record<string, unknown>;
@@ -273,12 +269,15 @@ function freightDirectionFromMetadata(metadata: unknown): "inbound" | "outbound"
   return null;
 }
 
+// Mirrors apps/web `quoteLineCostVisibility` (quote-workspace.ts): explicit
+// cost_visibility, inbound freight from metadata, then internal kinds
+// `pdi` / `good_faith`.
 function resolvedLineCostVisibility(line: Record<string, unknown>): "internal" | "customer" {
   const explicit = lineString(line.cost_visibility ?? line.costVisibility, 20);
   if (explicit && QUOTE_LINE_COST_VISIBILITY.has(explicit)) return explicit as "internal" | "customer";
   const lineType = lineString(line.line_type ?? line.lineType, 40) ?? "custom";
   if (lineType === "freight" && freightDirectionFromMetadata(line.metadata) === "inbound") return "internal";
-  return defaultCostVisibilityForLineType(lineType);
+  return INTERNAL_COST_LINE_TYPES.has(lineType) ? "internal" : "customer";
 }
 
 function isMiscCreditLine(line: Record<string, unknown>): boolean {
@@ -331,21 +330,13 @@ function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Re
       cost_visibility: row.cost_visibility ?? row.costVisibility,
       metadata: row.metadata,
     });
-    const freightDirection = lineType === "freight"
-      ? lineString(
-        metadata.freight_direction
-        ?? metadata.freightDirection
-        ?? metadata.pricing_field_key
-        ?? metadata.pricingFieldKey,
-        40,
-      )
-      : null;
+    const canonicalFreightDir = lineType === "freight" ? freightDirectionFromMetadata(row.metadata) : null;
     const inboundFreightRaw = lineNumber(row.inbound_freight_amount ?? row.inboundFreightAmount, 0);
     const outboundDeliveryRaw = lineNumber(row.outbound_delivery_amount ?? row.outboundDeliveryAmount, 0);
-    const inboundFreightAmount = lineType === "freight" && (freightDirection === "inbound" || freightDirection === "inbound_freight")
+    const inboundFreightAmount = lineType === "freight" && canonicalFreightDir === "inbound"
       ? (inboundFreightRaw > 0 ? inboundFreightRaw : extendedPrice)
       : null;
-    const outboundDeliveryAmount = lineType === "freight" && (freightDirection === "outbound" || freightDirection === "outbound_delivery" || !freightDirection)
+    const outboundDeliveryAmount = lineType === "freight" && canonicalFreightDir !== "inbound"
       ? (outboundDeliveryRaw > 0 ? outboundDeliveryRaw : extendedPrice)
       : null;
 
@@ -2921,16 +2912,28 @@ function ageDaysFromIso(value: unknown): number | null {
   return Math.max(0, Math.floor((Date.now() - parsed) / (24 * 60 * 60 * 1000)));
 }
 
+/** Maps `approval_bypass_rules.bypass_to_status` to a safe `quote_packages.status` (unknown → approved). */
+function sanitizeBypassTargetQuoteStatus(raw: unknown): "approved" | "approved_with_conditions" {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  if (s === "approved_with_conditions") return "approved_with_conditions";
+  return "approved";
+}
+
+/** First matching active workspace rule wins. When `max_discount_pct` > 0, require (discount_total/subtotal)*100 <= cap (quote_packages columns). */
 async function resolveApprovalBypassRule(input: {
   // deno-lint-ignore no-explicit-any
   admin: any;
   workspaceId: string;
   quotePackageId: string;
   marginPct: number | null;
-}): Promise<{ ruleId: string; ruleName: string } | null> {
+  /** Pre-tax subtotal (package columns) — used with discount_total for max_discount_pct cap. */
+  subtotal: number | null;
+  /** Total discounts/promos in currency — compared as % of subtotal when rule sets max_discount_pct. */
+  discountTotal: number | null;
+}): Promise<{ ruleId: string; ruleName: string; targetQuoteStatus: "approved" | "approved_with_conditions" } | null> {
   const { data: rules, error: rulesErr } = await input.admin
     .from("approval_bypass_rules")
-    .select("id, rule_name, min_stock_age_days, requires_in_stock, requires_hot_list, min_margin_pct, active")
+    .select("id, rule_name, min_stock_age_days, requires_in_stock, requires_hot_list, min_margin_pct, max_discount_pct, bypass_to_status, active")
     .eq("workspace_id", input.workspaceId)
     .eq("active", true)
     .is("deleted_at", null);
@@ -2951,22 +2954,34 @@ async function resolveApprovalBypassRule(input: {
   const stockAgeDays = ageDaysFromIso((metadata as Record<string, unknown>).received_at);
   const inStock = boolMetadata((metadata as Record<string, unknown>).in_stock)
     || String((metadata as Record<string, unknown>).availability_status ?? "").toLowerCase() === "in_stock";
-  const hotList = boolMetadata((metadata as Record<string, unknown>).hot_list);
+  const hotList = boolMetadata((metadata as Record<string, unknown>).hot_list)
+    || boolMetadata((metadata as Record<string, unknown>).on_hot_list)
+    || boolMetadata((metadata as Record<string, unknown>).hotList);
 
   for (const rule of rules as Array<Record<string, unknown>>) {
     const marginFloor = Number(rule.min_margin_pct ?? 0);
     const minAge = Number(rule.min_stock_age_days ?? 0);
     const requiresInStock = rule.requires_in_stock === true;
     const requiresHotList = rule.requires_hot_list === true;
+    const maxDiscountPct = Number(rule.max_discount_pct ?? 0);
 
     if (requiresInStock && !inStock) continue;
     if (requiresHotList && !hotList) continue;
     if (minAge > 0 && (stockAgeDays == null || stockAgeDays < minAge)) continue;
     if (marginFloor > 0 && (input.marginPct == null || input.marginPct < marginFloor)) continue;
+    if (maxDiscountPct > 0) {
+      const sub = input.subtotal;
+      const disc = Number(input.discountTotal ?? 0);
+      if (sub == null || !Number.isFinite(sub) || sub <= 0) continue;
+      if (!Number.isFinite(disc) || disc < 0) continue;
+      const discountPct = (disc / sub) * 100;
+      if (!Number.isFinite(discountPct) || discountPct > maxDiscountPct) continue;
+    }
 
     return {
       ruleId: String(rule.id ?? ""),
       ruleName: String(rule.rule_name ?? "Approval bypass"),
+      targetQuoteStatus: sanitizeBypassTargetQuoteStatus(rule.bypass_to_status),
     };
   }
   return null;
@@ -3575,7 +3590,7 @@ Deno.serve(async (req) => {
 
         let query = supabase
           .from("quote_packages")
-          .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, updated_at, accepted_at, win_probability_score, crm_contacts(first_name, last_name)")
+          .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, updated_at, accepted_at, win_probability_score, is_prospect_quote, crm_contacts(first_name, last_name)")
           .order("updated_at", { ascending: false })
           .limit(200);
 
@@ -3625,6 +3640,7 @@ Deno.serve(async (req) => {
             updated_at: row.updated_at ?? row.created_at,
             accepted_at: row.accepted_at ?? null,
             win_probability_score: winScore,
+            is_prospect_quote: row.is_prospect_quote === true,
           };
         });
 
@@ -4660,7 +4676,7 @@ Deno.serve(async (req) => {
           .from("quote_packages")
           .update({ status: "sent", sent_at: nowIso, sent_via: "manual" })
           .eq("id", quotePackageId)
-          .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, updated_at, accepted_at, win_probability_score")
+          .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, updated_at, accepted_at, win_probability_score, is_prospect_quote")
           .single();
         if (updateErr) return safeJsonError(updateErr.message, 500, origin);
         await advanceQuoteDealStage({
@@ -4678,7 +4694,7 @@ Deno.serve(async (req) => {
           .from("quote_packages")
           .update({ status: "archived" })
           .eq("id", quotePackageId)
-          .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, updated_at, accepted_at, win_probability_score")
+          .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, updated_at, accepted_at, win_probability_score, is_prospect_quote")
           .single();
         if (updateErr) return safeJsonError(updateErr.message, 500, origin);
         return safeJsonOk({ ok: true, quote: updated }, origin);
@@ -4725,7 +4741,7 @@ Deno.serve(async (req) => {
           pdf_generated_at: null,
           created_by: user.id,
         })
-        .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, updated_at, accepted_at, win_probability_score")
+        .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, updated_at, accepted_at, win_probability_score, is_prospect_quote")
         .single();
       if (createErr) return safeJsonError(createErr.message, 500, origin);
       const admin = createAdminClient();
@@ -5705,7 +5721,7 @@ Deno.serve(async (req) => {
 
       const { data: pkg, error: pkgErr } = await supabase
         .from("quote_packages")
-        .select("id, workspace_id, branch_slug, quote_number, deal_id, customer_name, customer_company, net_total, margin_pct, status")
+        .select("id, workspace_id, branch_slug, quote_number, deal_id, customer_name, customer_company, net_total, margin_pct, subtotal, discount_total, status")
         .eq("id", body.quote_package_id)
         .maybeSingle();
 
@@ -5722,6 +5738,8 @@ Deno.serve(async (req) => {
         customer_company: string | null;
         net_total: number | null;
         margin_pct: number | null;
+        subtotal: number | null;
+        discount_total: number | null;
         status: string;
       };
 
@@ -5778,11 +5796,13 @@ Deno.serve(async (req) => {
         workspaceId: pkgRow.workspace_id || "default",
         quotePackageId: pkgRow.id,
         marginPct: pkgRow.margin_pct,
+        subtotal: pkgRow.subtotal,
+        discountTotal: pkgRow.discount_total,
       });
       if (bypassRule) {
         const { error: bypassUpdateErr } = await admin
           .from("quote_packages")
-          .update({ status: "approved" })
+          .update({ status: bypassRule.targetQuoteStatus })
           .eq("id", pkgRow.id);
         if (bypassUpdateErr) {
           return safeJsonError(bypassUpdateErr.message, 500, origin);
@@ -5800,7 +5820,7 @@ Deno.serve(async (req) => {
           approval_id: null,
           quote_package_version_id: latestVersion.id,
           version_number: latestVersion.versionNumber,
-          status: "approved",
+          status: bypassRule.targetQuoteStatus,
           already_pending: false,
           bypass_rule_id: bypassRule.ruleId,
           bypass_rule_name: bypassRule.ruleName,

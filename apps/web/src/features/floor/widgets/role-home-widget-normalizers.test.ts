@@ -25,6 +25,7 @@ describe("role home widget normalizers", () => {
         viewed_at: null,
         updated_at: "2026-05-03T12:00:00.000Z",
         created_by: "user-1",
+        is_prospect_quote: true,
         deal: [{ id: "deal-1", assigned_rep_id: "rep-1", name: "Loader deal" }],
       },
       { id: "bad" },
@@ -42,6 +43,7 @@ describe("role home widget normalizers", () => {
         viewed_at: null,
         updated_at: "2026-05-03T12:00:00.000Z",
         created_by: "user-1",
+        is_prospect_quote: true,
         deal: { id: "deal-1", assigned_rep_id: "rep-1", name: "Loader deal" },
       },
     ]);

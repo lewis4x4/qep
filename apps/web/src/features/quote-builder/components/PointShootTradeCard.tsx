@@ -21,7 +21,7 @@
  * that transparently — moonshot requires trust, not magic black boxes.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +43,9 @@ import {
   type PointShootIdentification,
   type BookValueRange,
   type TradeApiErrorKind,
+  type TradeValuationProposalSnapshot,
 } from "../lib/point-shoot-trade-api";
+import { describePointShootApplyCreditLine, describeTradeCreditBasis, inferTradeRangeSummary } from "../lib/trade-valuation-range";
 
 export interface PointShootTradeCardProps {
   dealId: string | null;
@@ -57,6 +59,8 @@ export interface PointShootTradeCardProps {
   /** Currently-applied allowance (dollars) so the card can show an
    *  "applied" state if the trade was already locked in. */
   appliedAllowanceDollars?: number | null;
+  /** When set, compact "applied" state shows the same desk vs comp audit as TradeInSection. */
+  appliedValuationSnapshot?: TradeValuationProposalSnapshot | null;
 }
 
 type Phase =
@@ -82,6 +86,7 @@ export function PointShootTradeCard({
   onApply,
   onClear,
   appliedAllowanceDollars,
+  appliedValuationSnapshot = null,
 }: PointShootTradeCardProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
@@ -104,6 +109,21 @@ export function PointShootTradeCard({
   }, []);
 
   const isApplied = appliedAllowanceDollars != null && appliedAllowanceDollars > 0;
+
+  const persistedCreditBasisLine = useMemo(() => {
+    if (!appliedValuationSnapshot) return "";
+    const inferredRange = inferTradeRangeSummary({
+      marketComps: appliedValuationSnapshot.marketComps ?? [],
+      auctionValue: appliedValuationSnapshot.auctionValue ?? null,
+      preliminaryValue: appliedValuationSnapshot.preliminaryValue ?? null,
+      finalValue: appliedValuationSnapshot.finalValue ?? null,
+    });
+    return describeTradeCreditBasis({
+      finalValue: appliedValuationSnapshot.finalValue,
+      preliminaryValue: appliedValuationSnapshot.preliminaryValue,
+      inferredRange,
+    }).line;
+  }, [appliedValuationSnapshot]);
 
   // ── Handlers ──────────────────────────────────────────────────────────
 
@@ -238,6 +258,9 @@ export function PointShootTradeCard({
               <p className="text-[11px] text-muted-foreground">
                 Flows into the review step as a trade allowance.
               </p>
+              {persistedCreditBasisLine ? (
+                <p className="mt-1 text-[11px] text-muted-foreground">{persistedCreditBasisLine}</p>
+              ) : null}
             </div>
           </div>
           {onClear && (
@@ -432,6 +455,7 @@ export function PointShootTradeCard({
 // ── Sub-components ───────────────────────────────────────────────────────
 
 function RangeDisplay({ range }: { range: BookValueRange }) {
+  const applyBasisLine = describePointShootApplyCreditLine(range);
   return (
     <div className="rounded-lg border border-border/70 bg-background/60 p-3 space-y-2">
       <div className="flex items-baseline justify-between gap-2">
@@ -453,6 +477,10 @@ function RangeDisplay({ range }: { range: BookValueRange }) {
           Live market feeds pending — sources below are modeled from make/year/hours curves. Will auto-upgrade when Iron Solutions + auction feeds connect.
         </p>
       )}
+
+      {applyBasisLine ? (
+        <p className="text-[11px] text-muted-foreground">{applyBasisLine}</p>
+      ) : null}
 
       <ul className="space-y-1 pt-1">
         {range.sources.map((s, i) => (

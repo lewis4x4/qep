@@ -79,6 +79,26 @@ const STAGE_TABLES: Record<StageTableKey, string> = {
 const STAGE_TABLE_ORDER: StageTableKey[] = ["master", "contacts", "memos", "arAgencies", "profitability"];
 const COMMIT_PREFLIGHT_TOKEN_TTL_MS = 15 * 60 * 1000;
 
+/** Row shape returned from `loadRun` (subset of `qrm_intellidealer_customer_import_runs`). */
+type ImportRunRow = {
+  id: string;
+  status: string;
+  workspace_id: string;
+  source_file_hash: string | null;
+  master_rows: number;
+  contact_rows: number;
+  contact_memo_rows: number;
+  ar_agency_rows: number;
+  profitability_rows: number;
+  metadata: unknown;
+};
+
+type LoadRunResult = { ok: true; run: ImportRunRow } | { ok: false; error: string; status: number };
+
+type CountStageResult =
+  | { ok: true; counts: Record<StageTableKey, number> }
+  | { ok: false; error: string };
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   if (req.method === "OPTIONS") return optionsResponse(origin);
@@ -91,28 +111,51 @@ Deno.serve(async (req) => {
     }
 
     const body = (await req.json()) as RequestBody;
+    const startedMs = Date.now();
+    const action = typeof body.action === "string" ? body.action : "invalid";
+
+    let response: Response;
     switch (body.action) {
       case "preview":
-        return await handlePreview(auth.supabase, auth.workspaceId, auth.userId, body, origin);
+        response = await handlePreview(auth.supabase, auth.workspaceId, auth.userId, body, origin);
+        break;
       case "init_stage":
-        return await handleInitStage(auth.supabase, auth.workspaceId, body, origin);
+        response = await handleInitStage(auth.supabase, auth.workspaceId, body, origin);
+        break;
       case "stage_chunk":
-        return await handleStageChunk(auth.supabase, auth.workspaceId, body, origin);
+        response = await handleStageChunk(auth.supabase, auth.workspaceId, body, origin);
+        break;
       case "complete_stage":
-        return await handleCompleteStage(auth.supabase, auth.workspaceId, body, origin);
+        response = await handleCompleteStage(auth.supabase, auth.workspaceId, body, origin);
+        break;
       case "discard_stage":
-        return await handleDiscardStage(auth.supabase, auth.workspaceId, body, origin);
+        response = await handleDiscardStage(auth.supabase, auth.workspaceId, body, origin);
+        break;
       case "preflight_commit":
-        return await handlePreflightCommit(auth.supabase, auth.workspaceId, body, origin);
+        response = await handlePreflightCommit(auth.supabase, auth.workspaceId, body, origin);
+        break;
       case "status":
-        return await handleStatus(auth.supabase, auth.workspaceId, body, origin);
+        response = await handleStatus(auth.supabase, auth.workspaceId, body, origin);
+        break;
       case "cancel":
-        return await handleCancel(auth.supabase, auth.workspaceId, body, origin);
+        response = await handleCancel(auth.supabase, auth.workspaceId, body, origin);
+        break;
       case "commit":
-        return await handleCommit(auth.supabase, auth.workspaceId, body, origin);
+        response = await handleCommit(auth.supabase, auth.workspaceId, body, origin);
+        break;
       default:
-        return safeJsonError(`unknown action: ${(body as { action?: string }).action}`, 400, origin);
+        response = safeJsonError(`unknown action: ${(body as { action?: string }).action}`, 400, origin);
     }
+
+    console.log(JSON.stringify({
+      event: "intellidealer_customer_import_complete",
+      action,
+      http_status: response.status,
+      ok: response.ok,
+      duration_ms: Date.now() - startedMs,
+    }));
+
+    return response;
   } catch (error) {
     captureEdgeException(error, { fn: "intellidealer-customer-import" });
     return safeJsonError(error instanceof Error ? error.message : "IntelliDealer import failed", 500, origin);
@@ -198,7 +241,7 @@ async function handleInitStage(
   if (!body.run_id) return safeJsonError("run_id required", 400, origin);
 
   const loaded = await loadRun(supabase, workspaceId, body.run_id);
-  if (loaded.error) return safeJsonError(loaded.error, loaded.status, origin);
+  if (!loaded.ok) return safeJsonError(loaded.error, loaded.status, origin);
   const run = loaded.run;
   if (run.status !== "audited") {
     return safeJsonError(`Only audited preview runs can be staged. Current status is ${run.status}.`, 409, origin);
@@ -256,7 +299,7 @@ async function handleStageChunk(
   }
 
   const loaded = await loadRun(supabase, workspaceId, body.run_id);
-  if (loaded.error) return safeJsonError(loaded.error, loaded.status, origin);
+  if (!loaded.ok) return safeJsonError(loaded.error, loaded.status, origin);
   if (loaded.run.status !== "staging") {
     return safeJsonError(`Run must be staging before rows can be inserted. Current status is ${loaded.run.status}.`, 409, origin);
   }
@@ -287,14 +330,14 @@ async function handleCompleteStage(
   if (!body.run_id) return safeJsonError("run_id required", 400, origin);
 
   const loaded = await loadRun(supabase, workspaceId, body.run_id);
-  if (loaded.error) return safeJsonError(loaded.error, loaded.status, origin);
+  if (!loaded.ok) return safeJsonError(loaded.error, loaded.status, origin);
   const run = loaded.run;
   if (run.status !== "staging") {
     return safeJsonError(`Run must be staging before it can be completed. Current status is ${run.status}.`, 409, origin);
   }
 
   const counts = await countStageRows(supabase, workspaceId, body.run_id);
-  if (counts.error) return safeJsonError(counts.error, 500, origin);
+  if (!counts.ok) return safeJsonError(counts.error, 500, origin);
 
   const expected = {
     master: Number(run.master_rows ?? 0),
@@ -412,7 +455,7 @@ async function handleDiscardStage(
   if (!body.run_id) return safeJsonError("run_id required", 400, origin);
 
   const loaded = await loadRun(supabase, workspaceId, body.run_id);
-  if (loaded.error) return safeJsonError(loaded.error, loaded.status, origin);
+  if (!loaded.ok) return safeJsonError(loaded.error, loaded.status, origin);
   const run = loaded.run;
   if (!["staging", "staged", "failed"].includes(run.status)) {
     return safeJsonError(`Only staging, staged, or failed browser runs can be discarded. Current status is ${run.status}.`, 409, origin);
@@ -422,7 +465,7 @@ async function handleDiscardStage(
   }
 
   const counts = await countStageRows(supabase, workspaceId, body.run_id);
-  if (counts.error) return safeJsonError(counts.error, 500, origin);
+  if (!counts.ok) return safeJsonError(counts.error, 500, origin);
 
   for (const table of Object.values(STAGE_TABLES)) {
     const { error } = await supabase.from(table).delete().eq("run_id", body.run_id).eq("workspace_id", workspaceId);
@@ -465,7 +508,7 @@ async function handlePreflightCommit(
   if (!body.run_id) return safeJsonError("run_id required", 400, origin);
 
   const loaded = await loadRun(supabase, workspaceId, body.run_id);
-  if (loaded.error) return safeJsonError(loaded.error, loaded.status, origin);
+  if (!loaded.ok) return safeJsonError(loaded.error, loaded.status, origin);
   const run = loaded.run;
   const checks: Array<{ name: string; ok: boolean; detail: string }> = [];
   const warnings: string[] = [];
@@ -477,7 +520,7 @@ async function handlePreflightCommit(
   });
 
   const counts = await countStageRows(supabase, workspaceId, body.run_id);
-  if (counts.error) return safeJsonError(counts.error, 500, origin);
+  if (!counts.ok) return safeJsonError(counts.error, 500, origin);
   const expected = {
     master: Number(run.master_rows ?? 0),
     contacts: Number(run.contact_rows ?? 0),
@@ -593,41 +636,23 @@ async function loadRun(
   supabase: SupabaseClient,
   workspaceId: string,
   runId: string,
-): Promise<
-  | {
-    run: {
-      id: string;
-      status: string;
-      workspace_id: string;
-      source_file_hash: string | null;
-      master_rows: number;
-      contact_rows: number;
-      contact_memo_rows: number;
-      ar_agency_rows: number;
-      profitability_rows: number;
-      metadata: unknown;
-    };
-    error?: never;
-    status?: never;
-  }
-  | { error: string; status: number; run?: never }
-> {
+): Promise<LoadRunResult> {
   const { data, error } = await supabase
     .from("qrm_intellidealer_customer_import_runs")
     .select("id, status, workspace_id, source_file_hash, master_rows, contact_rows, contact_memo_rows, ar_agency_rows, profitability_rows, metadata")
     .eq("id", runId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
-  if (error) return { error: `failed to load import run: ${error.message}`, status: 500 };
-  if (!data) return { error: "import run not found", status: 404 };
-  return { run: data };
+  if (error) return { ok: false, error: `failed to load import run: ${error.message}`, status: 500 };
+  if (!data) return { ok: false, error: "import run not found", status: 404 };
+  return { ok: true, run: data as ImportRunRow };
 }
 
 async function countStageRows(
   supabase: SupabaseClient,
   workspaceId: string,
   runId: string,
-): Promise<{ counts: Record<StageTableKey, number>; error?: never } | { error: string; counts?: never }> {
+): Promise<CountStageResult> {
   const counts = {} as Record<StageTableKey, number>;
   for (const key of STAGE_TABLE_ORDER) {
     const { count, error } = await supabase
@@ -635,10 +660,10 @@ async function countStageRows(
       .select("id", { count: "exact", head: true })
       .eq("run_id", runId)
       .eq("workspace_id", workspaceId);
-    if (error) return { error: `failed to count ${key}: ${error.message}` };
+    if (error) return { ok: false, error: `failed to count ${key}: ${error.message}` };
     counts[key] = count ?? 0;
   }
-  return { counts };
+  return { ok: true, counts };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

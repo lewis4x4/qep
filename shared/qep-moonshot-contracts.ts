@@ -431,7 +431,7 @@ export interface QuoteApprovalSubmitResult {
   approvalId: string;
   quotePackageVersionId: string;
   versionNumber: number;
-  status: "pending_approval" | "approved";
+  status: "pending_approval" | "approved" | "approved_with_conditions";
   branchName: string | null;
   assignedToName: string | null;
   routeMode: QuoteApprovalRouteMode;
@@ -778,6 +778,8 @@ export interface QuoteListItem {
    * pill from this without pulling the full jsonb snapshot.
    */
   win_probability_score: number | null;
+  /** True when quote was started as a prospect before CRM link (migration 575). */
+  is_prospect_quote: boolean;
 }
 
 export interface PortalQuoteRevisionCompare {

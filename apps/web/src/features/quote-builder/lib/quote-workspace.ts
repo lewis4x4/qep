@@ -11,6 +11,8 @@ import type {
 export interface QuoteWorkspaceComputed {
   equipmentTotal: number;
   attachmentTotal: number;
+  /** PDI, inbound freight, internal-only config rows, etc. — excluded from customer subtotal / PDF. */
+  internalCostLoadTotal: number;
   pricingLineTotal: number;
   taxableBasis: number;
   subtotal: number;
@@ -82,7 +84,10 @@ function freightDirectionFromMetadata(metadata: Record<string, unknown> | null |
   return null;
 }
 
-function lineCostVisibility(item: QuoteLineItemDraft): "internal" | "customer" {
+/** Customer-facing vs internal load — shared by workspace totals, save payload, hydrated drafts, and customer PDF/proposal. */
+export function quoteLineCostVisibility(
+  item: Pick<QuoteLineItemDraft, "kind"> & Partial<Pick<QuoteLineItemDraft, "costVisibility" | "metadata">>,
+): "internal" | "customer" {
   if (item.costVisibility === "internal" || item.costVisibility === "customer") {
     return item.costVisibility;
   }
@@ -113,7 +118,7 @@ function sumDealerCost(items: QuoteLineItemDraft[]): number {
       ? Number(item.dealerCost)
       : ZERO_DEALER_COST_LINE_KINDS.has(item.kind)
         ? 0
-      : lineCostVisibility(item) === "internal"
+      : quoteLineCostVisibility(item) === "internal"
         ? item.unitPrice
         : item.unitPrice * 0.8;
     return sum + Math.max(0, unitCost) * item.quantity;
@@ -203,12 +208,28 @@ export function computeQuoteSendActionReadiness(input: QuoteSendActionReadinessI
 
 export function computeQuoteWorkspace(draft: QuoteWorkspaceDraft): QuoteWorkspaceComputed {
   const pricingLines = draft.pricingLines ?? [];
-  const customerPricingLines = pricingLines.filter((line) => lineCostVisibility(line) === "customer");
+  const customerPricingLines = pricingLines.filter((line) => quoteLineCostVisibility(line) === "customer");
   const legacyCustomerAttachmentPricing = draft.attachments.filter((line) =>
-    PRICING_ADDER_KINDS.has(line.kind) && lineCostVisibility(line) === "customer",
+    PRICING_ADDER_KINDS.has(line.kind) && quoteLineCostVisibility(line) === "customer",
   );
-  const equipmentTotal = sumLineItems(draft.equipment);
-  const attachmentTotal = sumLinesByKind(draft.attachments, CONFIG_LINE_KINDS);
+  const internalPricingLines = pricingLines.filter((line) => quoteLineCostVisibility(line) === "internal");
+  const internalLegacyAttachmentPricing = draft.attachments.filter((line) =>
+    PRICING_ADDER_KINDS.has(line.kind) && quoteLineCostVisibility(line) === "internal",
+  );
+  const internalConfigAttachments = draft.attachments.filter((line) => quoteLineCostVisibility(line) === "internal");
+  const internalPricingAdders = sumLinesByKind(internalPricingLines, PRICING_ADDER_KINDS);
+  const internalLegacyPricingTotal = sumLineItems(internalLegacyAttachmentPricing);
+  const internalAttachmentConfigTotal = sumLinesByKind(internalConfigAttachments, CONFIG_LINE_KINDS);
+  const internalEquipmentLines = draft.equipment.filter((line) => quoteLineCostVisibility(line) === "internal");
+  const internalEquipmentLoad = sumLineItems(internalEquipmentLines);
+  const internalCostLoadTotal = clampMoney(
+    internalPricingAdders + internalLegacyPricingTotal + internalAttachmentConfigTotal + internalEquipmentLoad,
+  );
+
+  const customerEquipmentLines = draft.equipment.filter((line) => quoteLineCostVisibility(line) === "customer");
+  const equipmentTotal = sumLineItems(customerEquipmentLines);
+  const customerConfigAttachments = draft.attachments.filter((line) => quoteLineCostVisibility(line) === "customer");
+  const attachmentTotal = sumLinesByKind(customerConfigAttachments, CONFIG_LINE_KINDS);
   const legacyAttachmentPricingTotal = sumLineItems(legacyCustomerAttachmentPricing);
   const pricingLineTotal = sumLinesByKind(customerPricingLines, PRICING_ADDER_KINDS) + legacyAttachmentPricingTotal;
   const subtotal = equipmentTotal + attachmentTotal + pricingLineTotal;
@@ -230,6 +251,9 @@ export function computeQuoteWorkspace(draft: QuoteWorkspaceDraft): QuoteWorkspac
 
   const draftMissing: string[] = [];
   if (draft.equipment.length === 0) draftMissing.push("equipment selection");
+  else if (customerEquipmentLines.length === 0) {
+    draftMissing.push("customer-facing equipment (at least one machine line must not be internal-only)");
+  }
   if (!hasQuoteCustomerIdentity(draft)) draftMissing.push("customer or prospect");
 
   const sendMissing = [...draftMissing];
@@ -259,6 +283,7 @@ export function computeQuoteWorkspace(draft: QuoteWorkspaceDraft): QuoteWorkspac
   return {
     equipmentTotal,
     attachmentTotal,
+    internalCostLoadTotal,
     pricingLineTotal,
     taxableBasis,
     subtotal,

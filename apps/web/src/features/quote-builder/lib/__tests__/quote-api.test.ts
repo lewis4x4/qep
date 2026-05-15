@@ -268,10 +268,51 @@ describe("normalizeCrmEquipmentQuoteSeed", () => {
       media_kind: "actual",
       availabilityStatus: "in_stock",
       vendor_logo_url: "https://cdn.qep.example/asv-logo.png",
+      received_at: null,
+      hot_list: false,
     });
     expect(seed?.spec_bullets).toContain("4.2 hours");
     expect(seed?.spec_bullets).toContain("Fuel type: Diesel");
     expect(seed?.spec_bullets).toContain("Operating capacity: 4,150 lb ROC");
+  });
+
+  test("maps yard receipt timestamps from CRM metadata for approval bypass rules", () => {
+    const seed = normalizeCrmEquipmentQuoteSeed({
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "Demo unit",
+      make: "Bobcat",
+      model: "T66",
+      year: 2024,
+      availability: "available",
+      metadata: { received_at: "2023-06-15T12:00:00.000Z" },
+    });
+    expect(seed?.received_at).toBe("2023-06-15T12:00:00.000Z");
+    expect(seed?.hot_list).toBe(false);
+  });
+
+  test("maps hot list flags from CRM metadata for approval bypass rules", () => {
+    expect(
+      normalizeCrmEquipmentQuoteSeed({
+        id: "33333333-3333-4333-8333-333333333333",
+        name: "Hot mover",
+        make: "Cat",
+        model: "299D3",
+        year: 2023,
+        availability: "available",
+        metadata: { on_hot_list: true },
+      })?.hot_list,
+    ).toBe(true);
+    expect(
+      normalizeCrmEquipmentQuoteSeed({
+        id: "44444444-4444-4444-8444-444444444444",
+        name: "Not hot",
+        make: "Cat",
+        model: "259D3",
+        year: 2023,
+        availability: "available",
+        metadata: { hot_list: "false" },
+      })?.hot_list,
+    ).toBe(false);
   });
 });
 
@@ -398,6 +439,31 @@ describe("quote list API helpers", () => {
     expect(normalized.items[0]?.id).toBe("quote-1");
     expect(normalized.items[0]?.net_total).toBe(125000);
     expect(normalized.items[0]?.win_probability_score).toBe(81);
+    expect(normalized.items[0]?.is_prospect_quote).toBe(false);
+  });
+
+  test("normalizeQuoteListItem treats is_prospect_quote as strict boolean", () => {
+    const normalized = normalizeQuoteListResponse({
+      items: [
+        {
+          id: "quote-p",
+          quote_number: null,
+          customer_name: "Pat",
+          customer_company: null,
+          contact_name: null,
+          status: "sent",
+          net_total: 0,
+          equipment_summary: "Skid",
+          entry_mode: null,
+          created_at: "2026-05-01T00:00:00Z",
+          updated_at: "2026-05-02T00:00:00Z",
+          accepted_at: null,
+          win_probability_score: null,
+          is_prospect_quote: true,
+        },
+      ],
+    });
+    expect(normalized.items[0]?.is_prospect_quote).toBe(true);
   });
 
   test("normalizeQuoteListActionResponse normalizes optional quote payload", () => {
@@ -688,6 +754,17 @@ describe("quote approval normalizers", () => {
     expect(result.bypassRuleId).toBe("rule-1");
     expect(result.bypassRuleName).toBe("Aged stocked inventory auto-approve");
     expect(result.autoSend).toBeNull();
+  });
+
+  test("normalizes bypass responses with approved_with_conditions status", () => {
+    const result = normalizeQuoteApprovalSubmitResult({
+      status: "approved_with_conditions",
+      bypass_rule_id: "rule-2",
+      bypass_rule_name: "Hot list fast path",
+    });
+    expect(result.status).toBe("approved_with_conditions");
+    expect(result.bypassRuleId).toBe("rule-2");
+    expect(result.bypassRuleName).toBe("Hot list fast path");
   });
 
   test("normalizes auto-send outcomes from submit approval responses", () => {

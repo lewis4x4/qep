@@ -29,6 +29,7 @@ export type QuoteRow = {
   viewed_at: string | null;
   updated_at: string;
   created_by: string | null;
+  is_prospect_quote: boolean;
   deal?: { id: string; assigned_rep_id: string | null; name: string | null } | null;
 };
 
@@ -172,6 +173,7 @@ function normalizeQuoteRow(value: unknown): QuoteRow | null {
     viewed_at: nullableString(value.viewed_at),
     updated_at: updatedAt,
     created_by: nullableString(value.created_by),
+    is_prospect_quote: value.is_prospect_quote === true,
     deal: dealId
       ? {
           id: dealId,

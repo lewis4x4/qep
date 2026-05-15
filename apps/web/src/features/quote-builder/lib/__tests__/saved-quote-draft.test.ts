@@ -77,6 +77,7 @@ describe("hydrateDraftFromSavedQuote", () => {
     expect(draft.equipment).toEqual([
       {
         kind: "equipment",
+        costVisibility: "customer",
         id: "machine-1",
         title: "Kubota KX040 (2024)",
         make: "Kubota",
@@ -89,6 +90,7 @@ describe("hydrateDraftFromSavedQuote", () => {
     expect(draft.attachments).toEqual([
       {
         kind: "attachment",
+        costVisibility: "customer",
         title: "Hydraulic thumb",
         quantity: 1,
         unitPrice: 4200,
@@ -125,6 +127,7 @@ describe("hydrateDraftFromSavedQuote", () => {
     expect(draft.equipment).toEqual([
       {
         kind: "equipment",
+        costVisibility: "customer",
         id: undefined,
         title: "ASV RT-135",
         make: "ASV",
@@ -135,6 +138,23 @@ describe("hydrateDraftFromSavedQuote", () => {
       },
     ]);
     expect(draft.attachments).toEqual([]);
+  });
+
+  test("legacy attachments_included infers freight internal from metadata when cost_visibility missing", () => {
+    const draft = hydrateDraftFromSavedQuote({
+      deal_id: "deal-legacy-freight",
+      attachments_included: [
+        {
+          name: "Inbound freight to yard",
+          line_type: "freight",
+          unit_price: 900,
+          metadata: { pricing_field_key: "inbound_freight", freight_direction: "inbound" },
+        },
+      ],
+    });
+
+    expect(draft.attachments?.[0]?.kind).toBe("freight");
+    expect(draft.attachments?.[0]?.costVisibility).toBe("internal");
   });
 
   test("normalizes saved line item kind and recommendation trigger without casts", () => {

@@ -1,3 +1,4 @@
+import { quoteLineCostVisibility } from "./quote-workspace";
 import type {
   QuoteEntryMode,
   QuoteFinanceScenarioDraft,
@@ -87,24 +88,14 @@ function isLineItemKind(value: string): value is QuoteLineItemKind {
   return LINE_ITEM_KINDS.some((kind) => kind === value);
 }
 
-function freightDirectionFromMetadata(metadata: Record<string, unknown> | null | undefined): "inbound" | "outbound" | null {
-  const explicit = asString(metadata?.freight_direction);
-  if (explicit === "inbound" || explicit === "outbound") return explicit;
-  const key = asString(metadata?.pricing_field_key);
-  if (key === "inbound_freight") return "inbound";
-  if (key === "outbound_delivery") return "outbound";
-  return null;
-}
-
 function normalizeCostVisibility(
   value: unknown,
   kind: QuoteLineItemKind,
   metadata?: Record<string, unknown> | null,
 ): "internal" | "customer" {
   const text = asString(value);
-  if (text === "internal" || text === "customer") return text;
-  if (kind === "freight" && freightDirectionFromMetadata(metadata) === "inbound") return "internal";
-  return kind === "pdi" || kind === "good_faith" ? "internal" : "customer";
+  const costVisibility = text === "internal" || text === "customer" ? text : undefined;
+  return quoteLineCostVisibility({ kind, metadata, costVisibility });
 }
 
 function isSourceCatalog(value: string): value is NonNullable<QuoteLineItemDraft["sourceCatalog"]> {
@@ -183,6 +174,15 @@ function toEquipmentDraft(item: unknown): QuoteLineItemDraft[] {
   if (isSourceCatalog(sourceCatalog)) line.sourceCatalog = sourceCatalog;
   if (sourceId) line.sourceId = sourceId;
   if (dealerCost !== null) line.dealerCost = dealerCost;
+  const metadataRecord = record.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata)
+    ? (record.metadata as Record<string, unknown>)
+    : undefined;
+  if (metadataRecord) line.metadata = { ...metadataRecord };
+  line.costVisibility = normalizeCostVisibility(
+    record.cost_visibility ?? record.costVisibility,
+    "equipment",
+    line.metadata,
+  );
   return [line];
 }
 
@@ -193,8 +193,13 @@ function toAttachmentDraft(item: unknown): QuoteLineItemDraft[] {
   const title = asString(record.name) || asString(record.title);
   if (!title) return [];
 
+  const kind = normalizeAttachmentKind(record.kind, record.line_type);
+  const metadataRecord = record.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata)
+    ? (record.metadata as Record<string, unknown>)
+    : undefined;
+
   const line: QuoteLineItemDraft = {
-    kind: normalizeAttachmentKind(record.kind, record.line_type),
+    kind,
     title,
     id: asString(record.id) || undefined,
     quantity: Math.max(1, Math.round(asNumber(record.quantity) ?? 1)),
@@ -210,6 +215,12 @@ function toAttachmentDraft(item: unknown): QuoteLineItemDraft[] {
   if (isSourceCatalog(sourceCatalog)) line.sourceCatalog = sourceCatalog;
   if (sourceId) line.sourceId = sourceId;
   if (dealerCost !== null) line.dealerCost = dealerCost;
+  if (metadataRecord) line.metadata = { ...metadataRecord };
+  line.costVisibility = normalizeCostVisibility(
+    record.cost_visibility ?? record.costVisibility,
+    kind,
+    line.metadata,
+  );
   return [line];
 }
 

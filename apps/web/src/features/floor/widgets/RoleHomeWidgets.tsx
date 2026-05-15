@@ -64,7 +64,7 @@ const BLOCKER_OPTIONS: Array<{ value: BlockerType; label: string }> = [
 
 const QUOTE_SELECT = `
   id, deal_id, quote_number, customer_company, customer_name, equipment,
-  net_total, status, sent_at, viewed_at, updated_at, created_by,
+  net_total, status, sent_at, viewed_at, updated_at, created_by, is_prospect_quote,
   deal:qrm_deals ( id, name, assigned_rep_id )
 `;
 
@@ -384,9 +384,19 @@ export function MyQuotesByStatusWidget() {
                                   {row.quote_number ?? row.id.slice(0, 8)}
                                 </td>
                                 <td className="px-3 py-2">
-                                  <p className="max-w-[180px] truncate font-semibold text-foreground">
-                                    {row.customer_company ?? row.customer_name ?? "Unassigned"}
-                                  </p>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <p className="max-w-[180px] truncate font-semibold text-foreground">
+                                      {row.customer_company ?? row.customer_name ?? "Unassigned"}
+                                    </p>
+                                    {row.is_prospect_quote && (row.status === "sent" || row.status === "viewed") ? (
+                                      <span
+                                        className="shrink-0 rounded-full border border-sky-500/45 bg-sky-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-sky-200"
+                                        title="Quote started as a prospect before CRM link"
+                                      >
+                                        Prospect
+                                      </span>
+                                    ) : null}
+                                  </div>
                                   {one(row.deal)?.name ? (
                                     <p className="max-w-[180px] truncate text-[11px] text-muted-foreground">
                                       {one(row.deal)?.name}
