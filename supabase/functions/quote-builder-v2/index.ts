@@ -179,6 +179,7 @@ const QUOTE_PACKAGE_LINE_TYPES = new Set([
   "attachment",
   "option",
   "accessory",
+  "part",
   "warranty",
   "financing",
   "pdi",
@@ -197,6 +198,8 @@ const QUOTE_PACKAGE_LINE_TYPES = new Set([
   "tax_county",
   "custom",
 ]);
+const QUOTE_LINE_COST_VISIBILITY = new Set(["internal", "customer"]);
+const INTERNAL_COST_LINE_TYPES = new Set(["pdi", "good_faith"]);
 const FINANCE_SCENARIO_KINDS = new Set(["cash", "finance", "lease_fmv", "lease_fppo"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -209,6 +212,10 @@ function lineString(value: unknown, max = 240): string | null {
 function lineNumber(value: unknown, fallback = 0): number {
   const numeric = Number(value ?? fallback);
   return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function defaultCostVisibilityForLineType(lineType: string): "internal" | "customer" {
+  return INTERNAL_COST_LINE_TYPES.has(lineType) ? "internal" : "customer";
 }
 
 function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Record<string, unknown>> {
@@ -243,6 +250,11 @@ function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Re
       ? rawReasonCode
       : null;
 
+    const costVisibilityRaw = lineString(row.cost_visibility ?? row.costVisibility, 20);
+    const costVisibility = costVisibilityRaw && QUOTE_LINE_COST_VISIBILITY.has(costVisibilityRaw)
+      ? costVisibilityRaw
+      : defaultCostVisibilityForLineType(lineType);
+
     return [{
       catalog_entry_id: catalogEntryId && UUID_RE.test(catalogEntryId) ? catalogEntryId : null,
       make: lineString(row.make, 80),
@@ -259,6 +271,7 @@ function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Re
       display_order: Math.round(lineNumber(row.display_order, index)),
       reason_code: reasonCode,
       approval_required: row.approval_required === true || row.approvalRequired === true,
+      cost_visibility: costVisibility,
       metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
         ? row.metadata
         : {},
@@ -273,6 +286,7 @@ function computeQuoteFinancials(body: Record<string, unknown>): Record<string, n
     "attachment",
     "option",
     "accessory",
+    "part",
     "warranty",
     "financing",
     "pdi",
@@ -285,15 +299,16 @@ function computeQuoteFinancials(body: Record<string, unknown>): Record<string, n
     "custom",
   ]);
   const discountLineTypes = new Set(["discount", "rebate_mfg", "rebate_dealer", "loyalty_discount"]);
+  const customerLines = lines.filter((line) => String(line.cost_visibility ?? defaultCostVisibilityForLineType(String(line.line_type))) === "customer");
 
-  const equipmentTotal = lines
+  const equipmentTotal = customerLines
     .filter((line) => line.line_type === "equipment")
     .reduce((sum, line) => sum + clampCurrency(line.extended_price), 0);
-  const attachmentTotal = lines
+  const attachmentTotal = customerLines
     .filter((line) => line.line_type !== "equipment" && saleLineTypes.has(String(line.line_type)))
     .reduce((sum, line) => sum + clampCurrency(line.extended_price), 0);
   const subtotal = clampCurrency(equipmentTotal + attachmentTotal);
-  const lineDiscountTotal = lines
+  const lineDiscountTotal = customerLines
     .filter((line) => discountLineTypes.has(String(line.line_type)))
     .reduce((sum, line) => sum + clampCurrency(line.extended_price), 0);
   const commercialDiscountType = body.commercial_discount_type === "percent" ? "percent" : "flat";
@@ -309,9 +324,15 @@ function computeQuoteFinancials(body: Record<string, unknown>): Record<string, n
   const cashDown = clampCurrency(body.cash_down);
   const amountFinanced = clampCurrency(customerTotal - cashDown);
   const dealerCost = lines
-    .filter((line) => saleLineTypes.has(String(line.line_type)))
+    .filter((line) => saleLineTypes.has(String(line.line_type)) || String(line.cost_visibility ?? "") === "internal")
     .reduce((sum, line) => {
-      const unitCost = clampCurrency(line.quoted_dealer_cost);
+      const visibility = String(line.cost_visibility ?? defaultCostVisibilityForLineType(String(line.line_type)));
+      const explicitCost = clampCurrency(line.quoted_dealer_cost);
+      const unitCost = explicitCost > 0
+        ? explicitCost
+        : visibility === "internal"
+          ? clampCurrency(line.unit_price)
+          : explicitCost;
       const quantity = Math.max(1, Math.round(lineNumber(line.quantity, 1)));
       return sum + unitCost * quantity;
     }, 0);
@@ -2790,6 +2811,73 @@ async function loadQuoteApprovalPolicy(input: {
   };
 }
 
+function boolMetadata(value: unknown): boolean {
+  if (value === true || value === 1) return true;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "yes";
+  }
+  return false;
+}
+
+function ageDaysFromIso(value: unknown): number | null {
+  if (typeof value !== "string" || value.trim().length === 0) return null;
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.floor((Date.now() - parsed) / (24 * 60 * 60 * 1000)));
+}
+
+async function resolveApprovalBypassRule(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  workspaceId: string;
+  quotePackageId: string;
+  marginPct: number | null;
+}): Promise<{ ruleId: string; ruleName: string } | null> {
+  const { data: rules, error: rulesErr } = await input.admin
+    .from("approval_bypass_rules")
+    .select("id, rule_name, min_stock_age_days, requires_in_stock, requires_hot_list, min_margin_pct, active")
+    .eq("workspace_id", input.workspaceId)
+    .eq("active", true)
+    .is("deleted_at", null);
+  if (rulesErr || !Array.isArray(rules) || rules.length === 0) return null;
+
+  const { data: equipmentLine } = await input.admin
+    .from("quote_package_line_items")
+    .select("metadata")
+    .eq("quote_package_id", input.quotePackageId)
+    .eq("line_type", "equipment")
+    .order("display_order", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const metadata = equipmentLine && typeof equipmentLine === "object" && !Array.isArray(equipmentLine)
+    ? ((equipmentLine as { metadata?: Record<string, unknown> }).metadata ?? {})
+    : {};
+  const stockAgeDays = ageDaysFromIso((metadata as Record<string, unknown>).received_at);
+  const inStock = boolMetadata((metadata as Record<string, unknown>).in_stock)
+    || String((metadata as Record<string, unknown>).availability_status ?? "").toLowerCase() === "in_stock";
+  const hotList = boolMetadata((metadata as Record<string, unknown>).hot_list);
+
+  for (const rule of rules as Array<Record<string, unknown>>) {
+    const marginFloor = Number(rule.min_margin_pct ?? 0);
+    const minAge = Number(rule.min_stock_age_days ?? 0);
+    const requiresInStock = rule.requires_in_stock === true;
+    const requiresHotList = rule.requires_hot_list === true;
+
+    if (requiresInStock && !inStock) continue;
+    if (requiresHotList && !hotList) continue;
+    if (minAge > 0 && (stockAgeDays == null || stockAgeDays < minAge)) continue;
+    if (marginFloor > 0 && (input.marginPct == null || input.marginPct < marginFloor)) continue;
+
+    return {
+      ruleId: String(rule.id ?? ""),
+      ruleName: String(rule.rule_name ?? "Approval bypass"),
+    };
+  }
+  return null;
+}
+
 function buildQuoteVersionArtifacts(input: {
   body: Record<string, unknown>;
   quotePackageId?: string | null;
@@ -4497,7 +4585,7 @@ Deno.serve(async (req) => {
       const admin = createAdminClient();
       const { data: sourceLines } = await admin
         .from("quote_package_line_items")
-        .select("workspace_id, catalog_entry_id, make, model, year, quoted_list_price, quoted_dealer_cost, quantity, source_location, line_type, description, unit_price, extended_price, display_order, reason_code, approval_required, metadata")
+        .select("workspace_id, catalog_entry_id, make, model, year, quoted_list_price, quoted_dealer_cost, quantity, source_location, line_type, description, unit_price, extended_price, display_order, reason_code, approval_required, cost_visibility, metadata")
         .eq("quote_package_id", quotePackageId)
         .order("display_order", { ascending: true });
       if (Array.isArray(sourceLines) && sourceLines.length > 0) {
@@ -5226,6 +5314,7 @@ Deno.serve(async (req) => {
           wizard_step: Number.isFinite(Number(body.wizard_step)) ? Math.max(1, Math.min(11, Math.round(Number(body.wizard_step)))) : null,
           expires_at: typeof body.expires_at === "string" ? body.expires_at : null,
           follow_up_at: typeof body.follow_up_at === "string" ? body.follow_up_at : null,
+          post_approval_action: body.post_approval_action === "auto_send_customer" ? "auto_send_customer" : "return_to_rep",
           deposit_required_amount: body.deposit_required_amount == null ? null : clampCurrency(body.deposit_required_amount),
           delivery_eta: typeof body.delivery_eta === "string" ? body.delivery_eta.trim().slice(0, 240) || null : null,
           delivery_state: typeof body.delivery_state === "string" ? body.delivery_state.trim().slice(0, 2).toUpperCase() || null : null,
@@ -5492,6 +5581,39 @@ Deno.serve(async (req) => {
         admin,
         workspaceId: pkgRow.workspace_id || "default",
       });
+
+      const bypassRule = await resolveApprovalBypassRule({
+        admin,
+        workspaceId: pkgRow.workspace_id || "default",
+        quotePackageId: pkgRow.id,
+        marginPct: pkgRow.margin_pct,
+      });
+      if (bypassRule) {
+        const { error: bypassUpdateErr } = await admin
+          .from("quote_packages")
+          .update({ status: "approved" })
+          .eq("id", pkgRow.id);
+        if (bypassUpdateErr) {
+          return safeJsonError(bypassUpdateErr.message, 500, origin);
+        }
+        await advanceQuoteDealStage({
+          admin,
+          workspaceId: pkgRow.workspace_id || "default",
+          dealId: pkgRow.deal_id,
+          target: QUOTE_PIPELINE_STAGE_TARGETS.quoteCreated,
+          source: "quote_submit_approval_bypass",
+        });
+        return safeJsonOk({
+          approval_case_id: null,
+          approval_id: null,
+          quote_package_version_id: latestVersion.id,
+          version_number: latestVersion.versionNumber,
+          status: "approved",
+          already_pending: false,
+          bypass_rule_id: bypassRule.ruleId,
+          bypass_rule_name: bypassRule.ruleName,
+        }, origin);
+      }
       // QEP requires every quote to land in front of the owners (Ryan +
       // Policy.authorityBand (Flow Admin → Quote approval policy, persisted on
       // quote_approval_policies.authority_band) decides which routing path runs.

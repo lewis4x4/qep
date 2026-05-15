@@ -19,6 +19,7 @@ const CREDIT_LINE_KINDS = new Set<QuoteLineItemKind>([
   "loyalty_discount",
   "trade_allowance",
 ]);
+const INTERNAL_COST_LINE_KINDS = new Set<QuoteLineItemKind>(["pdi", "good_faith"]);
 
 const TAX_PROFILE_LABELS: Record<QuoteTaxProfile, string> = {
   standard: "Standard taxable",
@@ -219,6 +220,12 @@ function toProposalLine(line: QuoteLineItemDraft, fallbackType?: QuoteLineItemKi
   };
 }
 
+function isCustomerVisibleLine(line: QuoteLineItemDraft): boolean {
+  if (line.costVisibility === "customer") return true;
+  if (line.costVisibility === "internal") return false;
+  return !INTERNAL_COST_LINE_KINDS.has(line.kind);
+}
+
 function formatInteger(value: number): string {
   return Math.round(value).toLocaleString("en-US");
 }
@@ -299,8 +306,8 @@ function buildLineItems(
 ): QuotePDFData["lineItems"] {
   const lines = [
     ...draft.equipment.map((line) => toProposalLine(line, "equipment")),
-    ...draft.attachments.map((line) => toProposalLine(line, "attachment")),
-    ...(draft.pricingLines ?? []).map((line) => toProposalLine(line)),
+    ...draft.attachments.filter(isCustomerVisibleLine).map((line) => toProposalLine(line, "attachment")),
+    ...(draft.pricingLines ?? []).filter(isCustomerVisibleLine).map((line) => toProposalLine(line)),
   ];
 
   const explicitCreditTotal = lines

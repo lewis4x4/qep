@@ -25,7 +25,7 @@ export function IncentiveStack({ quotePackageId, className = "" }: IncentiveStac
     queryFn: async () => {
       const { data, error } = await supabase
         .from("quote_incentive_applications")
-        .select("id, incentive_id, applied_amount, auto_applied, removed_at, manufacturer_incentives(program_name, manufacturer, discount_type, requires_approval, stackable)")
+        .select("id, incentive_id, applied_amount, auto_applied, removed_at, manufacturer_incentives(program_name, manufacturer, discount_type, stack_kind, requires_approval, stackable)")
         .eq("quote_package_id", quotePackageId)
         .is("removed_at", null);
       if (error) return [];
@@ -115,6 +115,11 @@ export function IncentiveStack({ quotePackageId, className = "" }: IncentiveStac
                           stackable
                         </span>
                       )}
+                      {inc.stack_kind !== "always_on" ? (
+                        <span className="rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-sky-300">
+                          {inc.stack_kind === "cash_alt" ? "cash alt" : "finance addon"}
+                        </span>
+                      ) : null}
                       {inc.requires_approval && (
                         <span className="flex items-center gap-0.5 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-400">
                           <Lock className="h-2 w-2" /> approval

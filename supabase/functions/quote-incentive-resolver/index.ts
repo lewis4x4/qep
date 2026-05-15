@@ -25,6 +25,7 @@ interface Incentive {
   discount_type: "flat" | "pct" | "apr_buydown" | "cash_back";
   discount_value: number;
   stackable: boolean;
+  stack_kind?: "cash_alt" | "finance_addon" | "always_on" | null;
   requires_approval: boolean;
 }
 
@@ -124,6 +125,7 @@ Deno.serve(async (req) => {
         program_name: a.incentive.program_name,
         manufacturer: a.incentive.manufacturer,
         discount_type: a.incentive.discount_type,
+        stack_kind: a.incentive.stack_kind ?? "always_on",
         amount: a.amount,
         requires_approval: a.incentive.requires_approval,
         stackable: a.incentive.stackable,

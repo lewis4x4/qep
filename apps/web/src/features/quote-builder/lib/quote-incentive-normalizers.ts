@@ -8,6 +8,7 @@ export interface AppliedIncentive {
     program_name: string;
     manufacturer: string;
     discount_type: string;
+    stack_kind: "cash_alt" | "finance_addon" | "always_on";
     requires_approval: boolean;
     stackable: boolean;
   } | null;
@@ -45,6 +46,13 @@ function booleanOrFalse(value: unknown): boolean {
   return typeof value === "boolean" ? value : false;
 }
 
+function normalizeStackKind(value: unknown): "cash_alt" | "finance_addon" | "always_on" {
+  if (value === "cash_alt" || value === "finance_addon" || value === "always_on") {
+    return value;
+  }
+  return "always_on";
+}
+
 function normalizeManufacturerIncentive(value: unknown): AppliedIncentive["manufacturer_incentives"] {
   const record = firstRecord(value);
   if (!record) return null;
@@ -55,6 +63,7 @@ function normalizeManufacturerIncentive(value: unknown): AppliedIncentive["manuf
     program_name: programName,
     manufacturer: requiredString(record.manufacturer) ?? "Unknown manufacturer",
     discount_type: discountType,
+    stack_kind: normalizeStackKind(record.stack_kind),
     requires_approval: booleanOrFalse(record.requires_approval),
     stackable: booleanOrFalse(record.stackable),
   };

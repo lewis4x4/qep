@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   Mic,
-  MessageSquare,
   FileText,
   FileDown,
   ArrowRight,
@@ -136,7 +135,6 @@ import {
   type ScenarioSelectionSource,
 } from "../lib/scenario-selection-draft";
 import type {
-  QuoteEntryMode,
   QuoteFinanceScenario,
   QuoteLineItemDraft,
   QuoteTaxProfile,
@@ -205,14 +203,16 @@ type PricingLineKind = Extract<QuoteLineItemDraft["kind"], "pdi" | "freight" | "
 type TradeChecklistKey = "hourMeter" | "undercarriage" | "hydraulicLeaks" | "serviceHours" | "tiresTracks" | "photos";
 type TradeCaptureDraft = Record<TradeChecklistKey, string>;
 
-const PRICING_ADDER_FIELDS: Array<{ kind: PricingLineKind; title: string; helper: string; step: number }> = [
-  { kind: "freight", title: "Freight", helper: "Shipping or transfer cost", step: 100 },
-  { kind: "pdi", title: "PDI", helper: "Prep / delivery inspection", step: 100 },
-  { kind: "good_faith", title: "1% good faith", helper: "Use when QEP policy supports it", step: 100 },
-  { kind: "doc_fee", title: "Doc fee", helper: "Dealer paperwork fee", step: 25 },
-  { kind: "title", title: "Title", helper: "Title processing", step: 25 },
-  { kind: "tag", title: "Tag", helper: "Tag / plate fee", step: 25 },
-  { kind: "registration", title: "Registration", helper: "Registration support", step: 25 },
+type CostVisibility = "internal" | "customer";
+
+const PRICING_ADDER_FIELDS: Array<{ kind: PricingLineKind; title: string; helper: string; step: number; costVisibility: CostVisibility }> = [
+  { kind: "freight", title: "Outbound delivery", helper: "Customer-facing outbound delivery charge", step: 100, costVisibility: "customer" },
+  { kind: "pdi", title: "PDI", helper: "Internal prep / inspection cost", step: 100, costVisibility: "internal" },
+  { kind: "good_faith", title: "1% good faith", helper: "Internal goodwill reserve", step: 100, costVisibility: "internal" },
+  { kind: "doc_fee", title: "Doc fee", helper: "Customer-facing paperwork fee", step: 25, costVisibility: "customer" },
+  { kind: "title", title: "Title", helper: "Customer-facing title processing", step: 25, costVisibility: "customer" },
+  { kind: "tag", title: "Tag", helper: "Customer-facing tag / plate fee", step: 25, costVisibility: "customer" },
+  { kind: "registration", title: "Registration", helper: "Customer-facing registration support", step: 25, costVisibility: "customer" },
 ];
 
 const DISCOUNT_REASON_OPTIONS: Array<{ value: string; label: string }> = [
@@ -507,6 +507,10 @@ function stepForWizardIndex(index: number | null | undefined): Step | null {
   return WIZARD_STEPS.find((item) => item.number === Number(index))?.id ?? null;
 }
 
+function defaultCostVisibilityForKind(kind: QuoteLineItemDraft["kind"]): CostVisibility {
+  return kind === "pdi" || kind === "good_faith" ? "internal" : "customer";
+}
+
 function readPersistedStep(quotePackageId: string | null): Step | null {
   if (!quotePackageId || typeof window === "undefined") return null;
   const raw = window.sessionStorage.getItem(`${STEP_STORAGE_PREFIX}${quotePackageId}`);
@@ -689,7 +693,7 @@ export function QuoteBuilderV2Page() {
     dealId: dealId || undefined,
     contactId: contactId || undefined,
     companyId: companyId || undefined,
-    entryMode: "manual",
+    entryMode: "ai_chat",
     branchSlug: "",
     recommendation: null,
     voiceSummary: null,
@@ -705,6 +709,7 @@ export function QuoteBuilderV2Page() {
     amountFinanced: 0,
     selectedFinanceScenario: null,
     pricingLines: [],
+    postApprovalAction: "return_to_rep",
     wizardStep: 1,
     customerName: "",
     customerCompany: "",
@@ -1471,9 +1476,9 @@ export function QuoteBuilderV2Page() {
 
   useEffect(() => {
     persistStep(activeQuotePackageId, step);
-    setDraft((current) => current.wizardStep === currentWizardStepNumber
+    setDraft((current) => current.wizardStep === Math.max(current.wizardStep ?? 1, currentWizardStepNumber)
       ? current
-      : { ...current, wizardStep: currentWizardStepNumber });
+      : { ...current, wizardStep: Math.max(current.wizardStep ?? 1, currentWizardStepNumber) });
   }, [activeQuotePackageId, currentWizardStepNumber, step]);
 
   useEffect(() => {
@@ -2090,6 +2095,52 @@ export function QuoteBuilderV2Page() {
   }
 
   const firstEquipment = draft.equipment[0];
+  const activeWorkspaceId = profile?.active_workspace_id ?? null;
+  const firstEquipmentMake = firstEquipment?.make?.trim().toLowerCase() ?? "";
+  const firstEquipmentModel = firstEquipment?.model?.trim().toLowerCase() ?? "";
+  const pdiAutofillEligible = firstEquipmentMake.length > 0 && firstEquipmentModel.length > 0;
+
+  const pdiAverageQuery = useQuery({
+    queryKey: ["pdi-average-by-model", activeWorkspaceId, firstEquipmentMake, firstEquipmentModel],
+    enabled: Boolean(activeWorkspaceId && pdiAutofillEligible),
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("pdi_average_by_model")
+        .select("avg_pdi_cost, sample_count")
+        .eq("workspace_id", activeWorkspaceId)
+        .eq("make", firstEquipmentMake)
+        .eq("model", firstEquipmentModel)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      const avg = Number((data as { avg_pdi_cost?: number | string }).avg_pdi_cost ?? 0);
+      if (!Number.isFinite(avg) || avg <= 0) return null;
+      return {
+        avgPdiCost: avg,
+        sampleCount: Number((data as { sample_count?: number | string }).sample_count ?? 0) || 0,
+      };
+    },
+  });
+
+  useEffect(() => {
+    if (!pdiAverageQuery.data || !pdiAutofillEligible) return;
+    const existingPdi = draft.pricingLines?.find((line) => line.kind === "pdi");
+    if (existingPdi && existingPdi.unitPrice > 0) return;
+    const nextAmount = Math.round(pdiAverageQuery.data.avgPdiCost);
+    if (nextAmount <= 0) return;
+    upsertPricingLine("pdi", "PDI", nextAmount, "internal", {
+      metadata: {
+        ...(existingPdi?.metadata ?? {}),
+        pdi_source: "rolling_average_by_model",
+        pdi_sample_count: pdiAverageQuery.data.sampleCount,
+      },
+    });
+  }, [
+    draft.pricingLines,
+    pdiAutofillEligible,
+    pdiAverageQuery.data,
+  ]);
 
   function liveAvailabilityRequestForLine(item: QuoteLineItemDraft): QuoteAvailabilityRequest | null {
     const requestId = availabilityRequestIdForLine(item);
@@ -2216,7 +2267,13 @@ export function QuoteBuilderV2Page() {
     return draft.pricingLines?.find((item) => item.kind === kind);
   }
 
-  function upsertPricingLine(kind: PricingLineKind, title: string, amount: number, patch: Partial<QuoteLineItemDraft> = {}): void {
+  function upsertPricingLine(
+    kind: PricingLineKind,
+    title: string,
+    amount: number,
+    costVisibility: CostVisibility = defaultCostVisibilityForKind(kind),
+    patch: Partial<QuoteLineItemDraft> = {},
+  ): void {
     const safeAmount = Number.isFinite(amount) ? Math.max(0, amount) : 0;
     setDraft((current) => {
       const existing = current.pricingLines ?? [];
@@ -2226,6 +2283,7 @@ export function QuoteBuilderV2Page() {
         sourceCatalog: "manual",
         sourceId: null,
         dealerCost: null,
+        costVisibility,
         title,
         quantity: 1,
         unitPrice: safeAmount,
@@ -2262,6 +2320,7 @@ export function QuoteBuilderV2Page() {
       const currentLine = existing.find((line) => line.metadata?.promotion_placeholder_id === promo.id);
       const nextLine: QuoteLineItemDraft = {
         kind: promo.kind,
+        costVisibility: defaultCostVisibilityForKind(promo.kind),
         id: currentLine?.id ?? `${promo.kind}-${Date.now()}`,
         sourceCatalog: "manual",
         sourceId: null,
@@ -2415,7 +2474,7 @@ export function QuoteBuilderV2Page() {
       customerName:    cur.customerName    || "Walk-in prospect",
       customerCompany: cur.customerCompany || "Walk-in prospect",
       customerSignals: null,
-      customerWarmth:  null,
+      customerWarmth:  cur.customerWarmth ?? "new",
     }));
     setStep("equipment");
   }
@@ -2610,59 +2669,62 @@ export function QuoteBuilderV2Page() {
 
           <main className="space-y-4">
             <Card className="p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Start quote</p>
-                  <p className="mt-1 text-sm text-muted-foreground">Choose the fastest entry path. All four routes land in this workspace.</p>
-                </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Start quote</p>
+                <p className="mt-1 text-sm text-muted-foreground">Describe what you want to quote. Type or use the mic in the same intake box.</p>
               </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-4">
-                {([
-                  { mode: "voice" as QuoteEntryMode, label: "Voice", icon: Mic, body: "Record the deal and seed customer need.", action: () => setDraft((cur) => ({ ...cur, entryMode: "voice" })) },
-                  { mode: "ai_chat" as QuoteEntryMode, label: "AI Chat", icon: MessageSquare, body: "Use the prompt below for recommendation.", action: () => setDraft((cur) => ({ ...cur, entryMode: "ai_chat" })) },
-                  { mode: "manual" as QuoteEntryMode, label: "Manual", icon: FileText, body: "Build package lines directly.", action: () => setDraft((cur) => ({ ...cur, entryMode: "manual" })) },
-                  { mode: "trade_photo" as QuoteEntryMode, label: "Trade Photo", icon: Camera, body: "Open trade capture first.", action: () => { setDraft((cur) => ({ ...cur, entryMode: "trade_photo" })); setTradeExpanded(true); } },
-                ]).map(({ mode, label, icon: Icon, body, action }) => (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={action}
-                    className={`min-h-[116px] rounded-lg border p-3 text-left transition hover:border-qep-orange/60 ${
-                      draft.entryMode === mode
-                        ? "border-qep-orange bg-qep-orange/5"
-                        : "border-border bg-card/40"
-                    }`}
-                  >
-                    <Icon className="h-5 w-5 text-qep-orange" />
-                    <p className="mt-2 text-sm font-semibold text-foreground">{label}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{body}</p>
-                  </button>
-                ))}
+              <div className="relative mt-4">
+                <textarea
+                  value={aiPrompt}
+                  onFocus={() => setDraft((cur) => ({ ...cur, entryMode: "ai_chat" }))}
+                  onChange={(event) => {
+                    setAiPrompt(event.target.value);
+                    setDraft((cur) => ({ ...cur, entryMode: "ai_chat" }));
+                  }}
+                  placeholder="Describe what you want to quote."
+                  className="min-h-[104px] w-full rounded border border-input bg-card px-3 py-2 pr-12 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setDraft((cur) => ({ ...cur, entryMode: "voice" }))}
+                  className={`absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border transition ${
+                    draft.entryMode === "voice"
+                      ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
+                      : "border-border bg-background/80 text-muted-foreground hover:border-qep-orange/50 hover:text-qep-orange"
+                  }`}
+                  aria-label="Use microphone intake"
+                  title="Use microphone intake"
+                >
+                  <Mic className="h-4 w-4" />
+                </button>
               </div>
-              {draft.entryMode === "ai_chat" && (
-                <div className="mt-4 rounded-lg border border-border/70 bg-background/50 p-3">
-                  <textarea
-                    value={aiPrompt}
-                    onChange={(event) => setAiPrompt(event.target.value)}
-                    placeholder="Describe the job, terrain, timeline, budget, and attachments."
-                    className="min-h-[88px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+              <div className="mt-2 flex justify-end">
+                <Button
+                  size="sm"
+                  onClick={() => aiIntakeMutation.mutate(aiPrompt.trim())}
+                  disabled={aiIntakeMutation.isPending || aiPrompt.trim().length < 12}
+                >
+                  {aiIntakeMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1 h-4 w-4" />}
+                  Build with AI
+                </Button>
+              </div>
+              {draft.entryMode === "voice" && (
+                <div className="mt-3 space-y-2 rounded-lg border border-border/70 bg-background/60 p-3">
+                  <p className="text-sm font-medium text-foreground">Record intake</p>
+                  <VoiceRecorder
+                    onRecorded={(audioBlob, fileName) => {
+                      setDraft((current) => ({ ...current, entryMode: "voice" }));
+                      voiceMutation.mutate({ blob: audioBlob, fileName });
+                    }}
+                    disabled={voiceMutation.isPending}
                   />
-                  <div className="mt-2 flex justify-end">
-                    <Button
-                      size="sm"
-                      onClick={() => aiIntakeMutation.mutate(aiPrompt.trim())}
-                      disabled={aiIntakeMutation.isPending || aiPrompt.trim().length < 12}
-                    >
-                      {aiIntakeMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1 h-4 w-4" />}
-                      Build with AI
-                    </Button>
-                  </div>
-                  {aiIntakeMessage && (
-                    <p className="mt-2 rounded border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-300">
-                      {aiIntakeMessage}
-                    </p>
-                  )}
+                  {voiceMutation.isPending && <p className="text-xs text-muted-foreground">Processing voice note…</p>}
                 </div>
+              )}
+              {aiIntakeMessage && (
+                <p className="mt-2 rounded border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-300">
+                  {aiIntakeMessage}
+                </p>
               )}
             </Card>
 
@@ -2976,7 +3038,7 @@ export function QuoteBuilderV2Page() {
                         ? "voice transcript"
                         : draft.entryMode === "ai_chat"
                           ? "AI chat prompt"
-                          : "manual recommendation request"}
+                          : "intake prompt"}
                     {draft.recommendation.trigger?.excerpt ? ` - "${draft.recommendation.trigger.excerpt}"` : ""}
                   </p>
                   <Button
@@ -3012,7 +3074,7 @@ export function QuoteBuilderV2Page() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Quote Builder</h1>
           <p className="text-sm text-muted-foreground">
-            Build quotes with voice, AI chat, or manual entry. Zero-blocking and commercial-grade.
+            Build quotes with a single typed+mic intake flow. Zero-blocking and commercial-grade.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -3142,7 +3204,7 @@ export function QuoteBuilderV2Page() {
             </div>
             <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
               {previousWizardStep && (
-                <Button variant="outline" onClick={() => setStep(previousWizardStep)}>
+                <Button variant="outline" className="hidden md:inline-flex" onClick={() => setStep(previousWizardStep)}>
                   <ArrowLeft className="mr-1 h-4 w-4" /> Back
                 </Button>
               )}
@@ -3152,7 +3214,7 @@ export function QuoteBuilderV2Page() {
                 </Button>
               )}
               {nextWizardStep && (
-                <Button onClick={() => setStep(nextWizardStep)} disabled={wizardNextDisabled}>
+                <Button className="hidden md:inline-flex" onClick={() => setStep(nextWizardStep)} disabled={wizardNextDisabled}>
                   {nextWizardLabel} <ArrowRight className="ml-1 h-4 w-4" />
                 </Button>
               )}
@@ -3163,7 +3225,8 @@ export function QuoteBuilderV2Page() {
       <QuoteWizardProgress
         steps={WIZARD_STEPS}
         currentStep={step}
-        onJumpBack={setStep}
+        maxCompletedStepIndex={Math.max(0, (draft.wizardStep ?? 1) - 1)}
+        onJumpTo={setStep}
       />
 
       {step === "customer" && (
@@ -3225,27 +3288,30 @@ export function QuoteBuilderV2Page() {
 
           <Card className="p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Fast intake</p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-4">
-              {([
-                { mode: "manual" as QuoteEntryMode, label: "Manual", body: "Use search and simple fields." },
-                { mode: "voice" as QuoteEntryMode, label: "Voice", body: "Record the need, then confirm." },
-                { mode: "ai_chat" as QuoteEntryMode, label: "AI chat", body: "Describe the job in plain English." },
-                { mode: "trade_photo" as QuoteEntryMode, label: "Trade photo", body: "Start with trade context." },
-              ]).map((option) => (
-                <button
-                  key={option.mode}
-                  type="button"
-                  onClick={() => setDraft((current) => ({ ...current, entryMode: option.mode }))}
-                  className={`rounded-lg border p-3 text-left transition ${
-                    draft.entryMode === option.mode
-                      ? "border-qep-orange bg-qep-orange/5"
-                      : "border-border bg-card/40 hover:border-qep-orange/40"
-                  }`}
-                >
-                  <p className="text-sm font-semibold text-foreground">{option.label}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{option.body}</p>
-                </button>
-              ))}
+            <div className="relative mt-3">
+              <textarea
+                value={aiPrompt}
+                onFocus={() => setDraft((current) => ({ ...current, entryMode: "ai_chat" }))}
+                onChange={(event) => {
+                  setAiPrompt(event.target.value);
+                  setDraft((current) => ({ ...current, entryMode: "ai_chat" }));
+                }}
+                placeholder="Describe what you want to quote."
+                className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 pr-12 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setDraft((current) => ({ ...current, entryMode: "voice" }))}
+                className={`absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border transition ${
+                  draft.entryMode === "voice"
+                    ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
+                    : "border-border bg-background/80 text-muted-foreground hover:border-qep-orange/50 hover:text-qep-orange"
+                }`}
+                aria-label="Use microphone intake"
+                title="Use microphone intake"
+              >
+                <Mic className="h-4 w-4" />
+              </button>
             </div>
 
             {draft.entryMode === "voice" && (
@@ -3262,29 +3328,19 @@ export function QuoteBuilderV2Page() {
               </div>
             )}
 
-            {draft.entryMode === "ai_chat" && (
-              <div className="mt-4 space-y-2 rounded-lg border border-border/70 bg-background/60 p-3">
-                <textarea
-                  value={aiPrompt}
-                  onChange={(event) => setAiPrompt(event.target.value)}
-                  placeholder="Example: Customer needs a compact track loader for land clearing with a mulcher."
-                  className="min-h-[88px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                />
-                <div className="flex justify-end">
-                  <Button
-                    size="sm"
-                    onClick={() => aiIntakeMutation.mutate(aiPrompt.trim())}
-                    disabled={aiIntakeMutation.isPending || aiPrompt.trim().length < 12}
-                  >
-                    {aiIntakeMutation.isPending ? "Building…" : "Build with AI"}
-                  </Button>
-                </div>
-                {aiIntakeMessage && (
-                  <p className="rounded border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-300">
-                    {aiIntakeMessage}
-                  </p>
-                )}
-              </div>
+            <div className="mt-3 flex justify-end">
+              <Button
+                size="sm"
+                onClick={() => aiIntakeMutation.mutate(aiPrompt.trim())}
+                disabled={aiIntakeMutation.isPending || aiPrompt.trim().length < 12}
+              >
+                {aiIntakeMutation.isPending ? "Building…" : "Build with AI"}
+              </Button>
+            </div>
+            {aiIntakeMessage && (
+              <p className="mt-2 rounded border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-300">
+                {aiIntakeMessage}
+              </p>
             )}
 
             <label className="mt-4 block space-y-1 text-sm">
@@ -3790,7 +3846,7 @@ export function QuoteBuilderV2Page() {
               <div className="mt-3 space-y-2 text-sm">
                 <SummaryRow label="Equipment" value={money(equipmentTotal)} />
                 <SummaryRow label="Configuration" value={money(attachmentTotal)} />
-                <SummaryRow label="Freight / PDI / fees" value={money(pricingLineTotal)} />
+                <SummaryRow label="Customer-facing adders" value={money(pricingLineTotal)} />
                 <SummaryRow label="Subtotal" value={money(subtotal)} emphasize />
                 <SummaryRow label="Discounts + promos" value={`-${money(discountTotal)}`} positive />
                 <SummaryRow label="Trade allowance" value={`-${money(draft.tradeAllowance)}`} positive />
@@ -3800,6 +3856,16 @@ export function QuoteBuilderV2Page() {
               </div>
             </div>
           </Card>
+          <MarginCheckBanner
+            marginPct={marginPct}
+            waterfall={{
+              equipmentTotal: subtotal,
+              dealerCost,
+              tradeAllowance: draft.tradeAllowance,
+              netTotal,
+              marginAmount,
+            }}
+          />
 
           <Card className="p-4">
             <div className="flex items-start justify-between gap-3">
@@ -3811,33 +3877,69 @@ export function QuoteBuilderV2Page() {
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => upsertPricingLine("good_faith", "1% good faith", Math.round(subtotal * 0.01))}
+                onClick={() => upsertPricingLine("good_faith", "1% good faith", Math.round(subtotal * 0.01), "internal")}
               >
                 Set 1% good faith
               </Button>
             </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {PRICING_ADDER_FIELDS.map((field) => {
-                const line = pricingLine(field.kind);
-                return (
-                  <label key={field.kind} className="rounded-lg border border-border/70 bg-card/50 p-3 text-sm">
-                    <span className="font-medium text-foreground">{field.title}</span>
-                    <span className="mt-0.5 block text-[11px] text-muted-foreground">{field.helper}</span>
-                    <div className="mt-2 flex items-center gap-1 rounded border border-input bg-background px-2 py-1">
-                      <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-                      <input
-                        type="number"
-                        min={0}
-                        step={field.step}
-                        value={line?.unitPrice ?? ""}
-                        onChange={(event) => upsertPricingLine(field.kind, field.title, Number(event.target.value) || 0)}
-                        placeholder="0"
-                        className="w-full bg-transparent text-right text-sm font-semibold outline-none"
-                      />
-                    </div>
-                  </label>
-                );
-              })}
+            <div className="mt-4 space-y-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Internal cost adders (not shown to customer)</p>
+                <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  {PRICING_ADDER_FIELDS.filter((field) => field.costVisibility === "internal").map((field) => {
+                    const line = pricingLine(field.kind);
+                    return (
+                      <label key={field.kind} className="rounded-lg border border-border/70 bg-card/50 p-3 text-sm">
+                        <span className="font-medium text-foreground">{field.title}</span>
+                        <span className="mt-0.5 block text-[11px] text-muted-foreground">{field.helper}</span>
+                        {field.kind === "pdi" && line?.metadata?.pdi_source === "rolling_average_by_model" && (
+                          <span className="mt-0.5 block text-[11px] text-qep-orange">
+                            Prefilled from model history ({Number(line.metadata?.pdi_sample_count ?? 0)} sample{Number(line.metadata?.pdi_sample_count ?? 0) === 1 ? "" : "s"})
+                          </span>
+                        )}
+                        <div className="mt-2 flex items-center gap-1 rounded border border-input bg-background px-2 py-1">
+                          <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                          <input
+                            type="number"
+                            min={0}
+                            step={field.step}
+                            value={line?.unitPrice ?? ""}
+                            onChange={(event) => upsertPricingLine(field.kind, field.title, Number(event.target.value) || 0, field.costVisibility)}
+                            placeholder="0"
+                            className="w-full bg-transparent text-right text-sm font-semibold outline-none"
+                          />
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Customer-facing charges (printed on quote)</p>
+                <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  {PRICING_ADDER_FIELDS.filter((field) => field.costVisibility === "customer").map((field) => {
+                    const line = pricingLine(field.kind);
+                    return (
+                      <label key={field.kind} className="rounded-lg border border-border/70 bg-card/50 p-3 text-sm">
+                        <span className="font-medium text-foreground">{field.title}</span>
+                        <span className="mt-0.5 block text-[11px] text-muted-foreground">{field.helper}</span>
+                        <div className="mt-2 flex items-center gap-1 rounded border border-input bg-background px-2 py-1">
+                          <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                          <input
+                            type="number"
+                            min={0}
+                            step={field.step}
+                            value={line?.unitPrice ?? ""}
+                            onChange={(event) => upsertPricingLine(field.kind, field.title, Number(event.target.value) || 0, field.costVisibility)}
+                            placeholder="0"
+                            className="w-full bg-transparent text-right text-sm font-semibold outline-none"
+                          />
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </Card>
 
@@ -3896,6 +3998,7 @@ export function QuoteBuilderV2Page() {
                       "discount",
                       "Manual discount",
                       Number(event.target.value) || 0,
+                      "customer",
                       { reasonCode: discountLine?.reasonCode ?? "competitive_match" },
                     )}
                     placeholder="0"
@@ -3911,6 +4014,7 @@ export function QuoteBuilderV2Page() {
                     "discount",
                     "Manual discount",
                     discountLine?.unitPrice ?? 0,
+                    "customer",
                     { reasonCode: event.target.value },
                   )}
                   className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
@@ -5050,13 +5154,16 @@ function ReadinessRow({
 function QuoteWizardProgress({
   steps,
   currentStep,
-  onJumpBack,
+  maxCompletedStepIndex,
+  onJumpTo,
 }: {
   steps: WizardStepMeta[];
   currentStep: Step;
-  onJumpBack: (step: Step) => void;
+  maxCompletedStepIndex: number;
+  onJumpTo: (step: Step) => void;
 }) {
   const currentIndex = steps.findIndex((item) => item.id === currentStep);
+  const maxCompletedIndex = Math.min(Math.max(maxCompletedStepIndex, currentIndex), steps.length - 1);
   return (
     <Card className="p-3">
       <div className="flex items-center justify-between gap-3">
@@ -5074,13 +5181,14 @@ function QuoteWizardProgress({
       <div className="mt-3 grid grid-flow-col gap-2 overflow-x-auto pb-1 [grid-auto-columns:minmax(7.5rem,1fr)]">
         {steps.map((item, index) => {
           const isCurrent = item.id === currentStep;
-          const isComplete = index < currentIndex;
-          const isFuture = index > currentIndex;
+          const isReachable = index <= maxCompletedIndex;
+          const isComplete = index < currentIndex || (index !== currentIndex && index <= maxCompletedIndex);
+          const isFuture = !isReachable;
           return (
             <button
               key={item.id}
               type="button"
-              onClick={() => { if (!isFuture) onJumpBack(item.id); }}
+              onClick={() => { if (isReachable) onJumpTo(item.id); }}
               disabled={isFuture}
               className={`min-h-[4.25rem] rounded-lg border px-3 py-2 text-left text-[11px] leading-tight transition ${
                 isCurrent

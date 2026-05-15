@@ -46,6 +46,7 @@ const CONFIG_LINE_KINDS = new Set<QuoteLineItemDraft["kind"]>([
   "attachment",
   "option",
   "accessory",
+  "part",
   "warranty",
 ]);
 
@@ -67,6 +68,17 @@ const PRICING_DISCOUNT_KINDS = new Set<QuoteLineItemDraft["kind"]>([
   "rebate_dealer",
   "loyalty_discount",
 ]);
+const INTERNAL_COST_LINE_KINDS = new Set<QuoteLineItemDraft["kind"]>([
+  "pdi",
+  "good_faith",
+]);
+
+function lineCostVisibility(item: QuoteLineItemDraft): "internal" | "customer" {
+  if (item.costVisibility === "internal" || item.costVisibility === "customer") {
+    return item.costVisibility;
+  }
+  return INTERNAL_COST_LINE_KINDS.has(item.kind) ? "internal" : "customer";
+}
 
 function lineExtendedAmount(item: QuoteLineItemDraft): number {
   return item.unitPrice * item.quantity;
@@ -89,7 +101,9 @@ function sumDealerCost(items: QuoteLineItemDraft[]): number {
       ? Number(item.dealerCost)
       : ZERO_DEALER_COST_LINE_KINDS.has(item.kind)
         ? 0
-      : item.unitPrice * 0.8;
+      : lineCostVisibility(item) === "internal"
+        ? item.unitPrice
+        : item.unitPrice * 0.8;
     return sum + Math.max(0, unitCost) * item.quantity;
   }, 0);
 }
@@ -177,16 +191,20 @@ export function computeQuoteSendActionReadiness(input: QuoteSendActionReadinessI
 
 export function computeQuoteWorkspace(draft: QuoteWorkspaceDraft): QuoteWorkspaceComputed {
   const pricingLines = draft.pricingLines ?? [];
+  const customerPricingLines = pricingLines.filter((line) => lineCostVisibility(line) === "customer");
+  const legacyCustomerAttachmentPricing = draft.attachments.filter((line) =>
+    PRICING_ADDER_KINDS.has(line.kind) && lineCostVisibility(line) === "customer",
+  );
   const equipmentTotal = sumLineItems(draft.equipment);
   const attachmentTotal = sumLinesByKind(draft.attachments, CONFIG_LINE_KINDS);
-  const legacyAttachmentPricingTotal = sumLinesByKind(draft.attachments, PRICING_ADDER_KINDS);
-  const pricingLineTotal = sumLinesByKind(pricingLines, PRICING_ADDER_KINDS) + legacyAttachmentPricingTotal;
+  const legacyAttachmentPricingTotal = sumLineItems(legacyCustomerAttachmentPricing);
+  const pricingLineTotal = sumLinesByKind(customerPricingLines, PRICING_ADDER_KINDS) + legacyAttachmentPricingTotal;
   const subtotal = equipmentTotal + attachmentTotal + pricingLineTotal;
   const discountTotal = computeCommercialDiscountTotal({
     subtotal,
     discountType: draft.commercialDiscountType,
     discountValue: draft.commercialDiscountValue,
-  }) + clampMoney(sumDiscountLines(pricingLines));
+  }) + clampMoney(sumDiscountLines(customerPricingLines));
   const discountedSubtotal = clampMoney(subtotal - discountTotal);
   const taxableBasis = clampMoney(discountedSubtotal - clampMoney(draft.tradeAllowance));
   const netTotal = taxableBasis;

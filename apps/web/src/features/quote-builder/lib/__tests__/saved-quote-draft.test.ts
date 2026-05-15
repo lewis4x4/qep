@@ -176,6 +176,7 @@ describe("hydrateDraftFromSavedQuote", () => {
     expect(draft.attachments).toEqual([
       {
         kind: "warranty",
+        costVisibility: "customer",
         id: "manual-1",
         title: "Extended warranty",
         make: undefined,
@@ -193,6 +194,7 @@ describe("hydrateDraftFromSavedQuote", () => {
     expect(draft.pricingLines).toEqual([
       {
         kind: "custom",
+        costVisibility: "customer",
         id: "line-2",
         title: "Custom setup",
         make: undefined,

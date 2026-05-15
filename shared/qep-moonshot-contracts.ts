@@ -1,10 +1,13 @@
 export type QuoteEntryMode = "voice" | "ai_chat" | "manual" | "trade_photo";
 export type QuoteCommercialDiscountType = "flat" | "percent";
+export type QuoteLineCostVisibility = "internal" | "customer";
+export type QuotePostApprovalAction = "auto_send_customer" | "return_to_rep";
 export type QuoteLineItemKind =
   | "equipment"
   | "attachment"
   | "option"
   | "accessory"
+  | "part"
   | "warranty"
   | "financing"
   | "pdi"
@@ -40,6 +43,7 @@ export type QuoteTaxProfile =
 
 export interface QuoteLineItemDraft {
   kind: QuoteLineItemKind;
+  costVisibility?: QuoteLineCostVisibility;
   id?: string;
   sourceCatalog?: "qb_equipment_models" | "qb_attachments" | "catalog_entries" | "manual";
   sourceId?: string | null;
@@ -194,6 +198,7 @@ export interface QuoteWorkspaceDraft {
   wizardStep?: number | null;
   expiresAt?: string | null;
   followUpAt?: string | null;
+  postApprovalAction?: QuotePostApprovalAction | null;
   depositRequiredAmount?: number | null;
   deliveryEta?: string | null;
   deliveryState?: string | null;

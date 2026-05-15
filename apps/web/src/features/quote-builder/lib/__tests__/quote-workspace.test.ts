@@ -227,11 +227,11 @@ describe("computeQuoteWorkspace", () => {
 
     expect(result.equipmentTotal).toBe(100_000);
     expect(result.attachmentTotal).toBe(5_000);
-    expect(result.pricingLineTotal).toBe(2_250);
-    expect(result.subtotal).toBe(107_250);
+    expect(result.pricingLineTotal).toBe(1_500);
+    expect(result.subtotal).toBe(106_500);
     expect(result.discountTotal).toBe(3_000);
-    expect(result.taxableBasis).toBe(94_250);
-    expect(result.customerTotal).toBe(99_845);
+    expect(result.taxableBasis).toBe(93_500);
+    expect(result.customerTotal).toBe(99_095);
   });
 
   test("legacy custom and financing attachment rows still contribute to totals", () => {

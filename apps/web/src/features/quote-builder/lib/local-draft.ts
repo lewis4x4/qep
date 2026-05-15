@@ -9,7 +9,7 @@ import type {
 
 const LOCAL_DRAFT_PREFIX = "qep.quote-builder.local-draft.";
 const ENTRY_MODES: QuoteEntryMode[] = ["voice", "ai_chat", "manual", "trade_photo"];
-const LINE_ITEM_KINDS: QuoteLineItemKind[] = ["equipment", "attachment", "warranty", "financing", "custom"];
+const LINE_ITEM_KINDS: QuoteLineItemKind[] = ["equipment", "attachment", "part", "warranty", "financing", "custom"];
 const TAX_PROFILES: QuoteTaxProfile[] = [
   "standard",
   "agriculture_exempt",

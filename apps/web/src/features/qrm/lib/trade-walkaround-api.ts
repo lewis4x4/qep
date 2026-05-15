@@ -29,6 +29,8 @@ export interface TradeValuationRecord {
   ai_condition_score: number | null;
   ai_condition_notes: string | null;
   ai_detected_damage: string[] | null;
+  market_comps: Array<Record<string, unknown>> | null;
+  auction_value: number | null;
   preliminary_value: number | null;
   final_value: number | null;
   conditional_language: string | null;
@@ -68,6 +70,11 @@ function stringArrayOrNull(value: unknown): string[] | null {
     : null;
 }
 
+function recordArrayOrNull(value: unknown): Array<Record<string, unknown>> | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((item): item is Record<string, unknown> => isRecord(item));
+}
+
 function mapTradeValuation(row: unknown): TradeValuationRecord {
   if (!isRecord(row)) {
     throw new Error("Trade valuation response was malformed.");
@@ -90,6 +97,8 @@ function mapTradeValuation(row: unknown): TradeValuationRecord {
     ai_condition_score: nullableNumber(row.ai_condition_score),
     ai_condition_notes: nullableString(row.ai_condition_notes),
     ai_detected_damage: stringArrayOrNull(row.ai_detected_damage),
+    market_comps: recordArrayOrNull(row.market_comps),
+    auction_value: nullableNumber(row.auction_value),
     preliminary_value: nullableNumber(row.preliminary_value),
     final_value: nullableNumber(row.final_value),
     conditional_language: nullableString(row.conditional_language),

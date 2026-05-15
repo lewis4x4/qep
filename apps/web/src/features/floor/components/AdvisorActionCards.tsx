@@ -6,6 +6,7 @@
  * the shared QRM-backed advisor-home-stats module so future briefing surfaces
  * can reuse the same source of truth without duplicating Supabase logic.
  */
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -13,7 +14,11 @@ import {
   AlertTriangle,
   ArrowRight,
   FileText,
+  MapPinned,
   Mic,
+  PlusCircle,
+  Radio,
+  Wrench,
   Target,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -189,6 +194,70 @@ export function AdvisorActionCards() {
           <p className="mt-auto text-[11px] text-amber-300">{pipelineDecisionText}</p>
         </Link>
       </div>
+
+      {/* Supporting launchpad — the fastest actions advisors asked for on /floor */}
+      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 lg:col-span-2">
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-300">
+          Advisor quick tools
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <QuickToolLink
+            to="/voice"
+            label="Voice note starter"
+            subLabel="Capture field context fast"
+            icon={<Radio className="h-3.5 w-3.5" aria-hidden="true" />}
+          />
+          <QuickToolLink
+            to="/qrm/opportunity-map"
+            label="Prospecting map"
+            subLabel="Route and target the next stop"
+            icon={<MapPinned className="h-3.5 w-3.5" aria-hidden="true" />}
+          />
+          <QuickToolLink
+            to="/service/intake"
+            label="Submit service request"
+            subLabel="Open intake without leaving floor"
+            icon={<Wrench className="h-3.5 w-3.5" aria-hidden="true" />}
+          />
+          <QuickToolLink
+            to="/qrm/companies"
+            label="Add customer"
+            subLabel="Create or find an account"
+            icon={<PlusCircle className="h-3.5 w-3.5" aria-hidden="true" />}
+          />
+        </div>
+      </section>
     </div>
+  );
+}
+
+function QuickToolLink({
+  to,
+  label,
+  subLabel,
+  icon,
+}: {
+  to: string;
+  label: string;
+  subLabel: string;
+  icon: ReactNode;
+}) {
+  return (
+    <Link
+      to={to}
+      className="group flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 transition-all hover:border-[#f28a07]/45 hover:bg-[#f28a07]/10"
+      aria-label={label}
+    >
+      <span className="flex min-w-0 items-center gap-2.5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f28a07]/15 text-[#f6a53a]">
+          {icon}
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-xs font-semibold text-white">{label}</span>
+          <span className="block truncate text-[11px] text-slate-400">{subLabel}</span>
+        </span>
+      </span>
+      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-[#f28a07]" aria-hidden="true" />
+    </Link>
   );
 }

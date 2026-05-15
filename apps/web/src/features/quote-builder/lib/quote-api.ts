@@ -1655,6 +1655,13 @@ export async function publishPortalRevision(data: {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LINE_DISCOUNT_REASON_CODES = new Set(["competitive_match", "volume_buyer", "aged_inventory", "loyalty", "other"]);
+const INTERNAL_COST_LINE_KINDS = new Set(["pdi", "good_faith"]);
+
+function defaultCostVisibility(kind: unknown): "internal" | "customer" {
+  return typeof kind === "string" && INTERNAL_COST_LINE_KINDS.has(kind)
+    ? "internal"
+    : "customer";
+}
 
 function safeLineReasonCode(item: QuoteWorkspaceDraft["equipment"][number]): string | undefined {
   return item.kind === "discount" && item.reasonCode && LINE_DISCOUNT_REASON_CODES.has(String(item.reasonCode))
@@ -1721,6 +1728,7 @@ export function buildQuoteSavePayload(
       display_order: index,
       reason_code: safeLineReasonCode(item),
       approval_required: item.approvalRequired === true,
+      cost_visibility: item.costVisibility ?? "customer",
       metadata: buildLineMetadata(item, {
         source_catalog: item.sourceCatalog ?? "qb_equipment_models",
         source_id: item.sourceId ?? item.id ?? null,
@@ -1741,6 +1749,7 @@ export function buildQuoteSavePayload(
       display_order: draft.equipment.length + index,
       reason_code: safeLineReasonCode(item),
       approval_required: item.approvalRequired === true,
+      cost_visibility: item.costVisibility ?? "customer",
       metadata: buildLineMetadata(item, {
         source_catalog: item.sourceCatalog ?? (item.kind === "attachment" ? "qb_attachments" : "manual"),
         source_id: item.sourceId ?? item.id ?? null,
@@ -1761,6 +1770,7 @@ export function buildQuoteSavePayload(
       display_order: draft.equipment.length + draft.attachments.length + index,
       reason_code: safeLineReasonCode(item),
       approval_required: item.approvalRequired === true,
+      cost_visibility: item.costVisibility ?? defaultCostVisibility(item.kind),
       metadata: buildLineMetadata(item, {
         source_catalog: item.sourceCatalog ?? "manual",
         source_id: item.sourceId ?? item.id ?? null,
@@ -1852,6 +1862,7 @@ export function buildQuoteSavePayload(
     wizard_step: draft.wizardStep ?? null,
     expires_at: draft.expiresAt ?? null,
     follow_up_at: draft.followUpAt ?? null,
+    post_approval_action: draft.postApprovalAction ?? "return_to_rep",
     deposit_required_amount: draft.depositRequiredAmount ?? null,
     delivery_eta: draft.deliveryEta ?? null,
     delivery_state: draft.deliveryState ?? null,

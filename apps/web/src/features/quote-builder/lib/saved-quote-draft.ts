@@ -13,6 +13,7 @@ const LINE_ITEM_KINDS: QuoteLineItemKind[] = [
   "attachment",
   "option",
   "accessory",
+  "part",
   "warranty",
   "financing",
   "pdi",
@@ -76,8 +77,20 @@ function isTaxProfile(value: string): value is QuoteTaxProfile {
   return TAX_PROFILES.some((profile) => profile === value);
 }
 
+function normalizePostApprovalAction(value: unknown): "auto_send_customer" | "return_to_rep" | null {
+  const text = asString(value);
+  if (text === "auto_send_customer" || text === "return_to_rep") return text;
+  return null;
+}
+
 function isLineItemKind(value: string): value is QuoteLineItemKind {
   return LINE_ITEM_KINDS.some((kind) => kind === value);
+}
+
+function normalizeCostVisibility(value: unknown, kind: QuoteLineItemKind): "internal" | "customer" {
+  const text = asString(value);
+  if (text === "internal" || text === "customer") return text;
+  return kind === "pdi" || kind === "good_faith" ? "internal" : "customer";
 }
 
 function isSourceCatalog(value: string): value is NonNullable<QuoteLineItemDraft["sourceCatalog"]> {
@@ -201,6 +214,7 @@ function toPackageLineItemDraft(item: unknown): QuoteLineItemDraft[] {
 
   const line: QuoteLineItemDraft = {
     kind,
+    costVisibility: normalizeCostVisibility(record.cost_visibility, kind),
     id: asString(metadata?.source_id) || asString(record.catalog_entry_id) || asString(record.id) || undefined,
     title,
     make: asString(record.make) || undefined,
@@ -378,6 +392,7 @@ export function hydrateDraftFromSavedQuote(
     wizardStep: asNumber(savedQuote.wizard_step),
     expiresAt: asString(savedQuote.expires_at) || null,
     followUpAt: asString(savedQuote.follow_up_at) || null,
+    postApprovalAction: normalizePostApprovalAction(savedQuote.post_approval_action) ?? "return_to_rep",
     depositRequiredAmount: asNumber(savedQuote.deposit_required_amount),
     deliveryEta: asString(savedQuote.delivery_eta) || null,
     deliveryState: asString(savedQuote.delivery_state) || null,
