@@ -28,6 +28,7 @@
     "test:kb-integration": "deno test supabase/functions/knowledge-base.integration.test.ts --allow-env --allow-net --allow-read",
     "test:pricing": "bun test apps/web/src/lib/pricing apps/web/src/lib/programs",
     "migrations:check": "bun ./scripts/check-migration-order.mjs",
+    "verify:track-b-560-564": "bun run migrations:check && bun test apps/web/src/features/quote-builder/lib/__tests__/quote-api.test.ts && deno test supabase/functions/quote-incentive-resolver/logic.test.ts --allow-env",
     "floor:validate-layouts": "bun ./scripts/floor/validate-floor-layouts.mjs",
     "floor:seed-layouts": "bun ./scripts/floor/seed-layouts-for-workspace.mjs",
     "floor:verify-production": "bun ./scripts/verify/floor-production-audit.mjs",

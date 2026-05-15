@@ -11,7 +11,7 @@ This file **exports** the eight operator-roadmap items that previously lived onl
 | # | Epic | GitHub |
 |---|------|--------|
 | 1 | Wizard UX refactor (intake, steps, live margin, mobile) | https://github.com/lewis4x4/qep/issues/39 |
-| 2 | Migrations 560–564 sequencing + verification | https://github.com/lewis4x4/qep/issues/40 |
+| 2 | Migrations 560–564 sequencing + verification ([rollout runbook](./track-b-560-564-rollout.md)) | https://github.com/lewis4x4/qep/issues/40 |
 | 3 | Step 3/5 UI regrouping + internal-line PDF/proposal rules | https://github.com/lewis4x4/qep/issues/41 |
 | 4 | Aged-inventory bypass + post-approval routing (migrations + edge) | https://github.com/lewis4x4/qep/issues/42 |
 | 5 | IntelliDealer snapshot ETL + M365 token refresh observability | https://github.com/lewis4x4/qep/issues/43 |
