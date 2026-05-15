@@ -64,9 +64,13 @@ export function OpportunityMapPage() {
   const [uccProspects, setUccProspects] = useState<UccProspectRow[]>([]);
   const [uccImportError, setUccImportError] = useState<string | null>(null);
   const today = new Date().toISOString().split("T")[0];
+  const uccProspectsQueryKey = useMemo(
+    () => uccProspects.map((row) => row.id).slice().sort().join(","),
+    [uccProspects],
+  );
 
   const boardQuery = useQuery({
-    queryKey: ["qrm", "opportunity-map", profile?.id, today, uccProspects],
+    queryKey: ["qrm", "opportunity-map", profile?.id, today, uccProspectsQueryKey],
     enabled: Boolean(profile?.id),
     queryFn: async () => {
       const [equipmentResult, dealsResult, visitsResult, tradesResult] = await Promise.all([

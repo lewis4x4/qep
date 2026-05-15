@@ -6,7 +6,7 @@
  * a browser download.
  */
 
-import { createElement, useState, useCallback } from "react";
+import { createElement, useState, useCallback, useRef } from "react";
 import type { QuotePDFData } from "../components/QuotePDFDocument";
 import { openPrintableQuoteSheet } from "../lib/quote-print-html";
 
@@ -26,8 +26,10 @@ function quotePdfFilename(data: QuotePDFData): string {
 export function useQuotePDF() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const generationDepthRef = useRef(0);
 
   const generateAndDownload = useCallback(async (data: QuotePDFData): Promise<QuotePdfGenerationResult> => {
+    generationDepthRef.current += 1;
     setGenerating(true);
     setError(null);
     const filename = quotePdfFilename(data);
@@ -71,7 +73,8 @@ export function useQuotePDF() {
         throw fallbackErr instanceof Error ? fallbackErr : err;
       }
     } finally {
-      setGenerating(false);
+      generationDepthRef.current = Math.max(0, generationDepthRef.current - 1);
+      if (generationDepthRef.current === 0) setGenerating(false);
     }
   }, []);
 

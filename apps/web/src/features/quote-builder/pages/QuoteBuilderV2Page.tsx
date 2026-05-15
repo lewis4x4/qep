@@ -788,6 +788,8 @@ export function QuoteBuilderV2Page() {
     customerWarmth: null,
     quoteStatus: "draft",
   });
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiIntakeMessage, setAiIntakeMessage] = useState<string | null>(null);
   const [intakeRecorderOpen, setIntakeRecorderOpen] = useState(false);
@@ -1030,13 +1032,17 @@ export function QuoteBuilderV2Page() {
           customerSignals: hydrated.signals,
           customerWarmth:  hydrated.warmth,
         }));
-        setStep("customer");
+        const nextStep =
+          readPersistedStep(packageId || null)
+          ?? stepForWizardIndex(draftRef.current.wizardStep)
+          ?? "customer";
+        setStep(nextStep);
       } catch {
         // Non-fatal: the company id still persists on next save.
       }
     })();
     return () => { cancelled = true; };
-  }, [companyId, prospectConverted]);
+  }, [companyId, packageId, prospectConverted]);
 
   // Local draft persistence: lets a rep leave the builder mid-entry and
   // resume from the deal page without losing their partial work. DB save
@@ -1085,17 +1091,6 @@ export function QuoteBuilderV2Page() {
     localDraftHydrationComplete,
     localDraftKey,
   ]);
-
-  useEffect(() => {
-    if (!localDraftHydrationComplete) return;
-    if (!localPersistEnabled) return;
-    if (!localDraftKey) return;
-    if (isDraftEmpty(draft)) {
-      clearLocalDraft(localDraftKey);
-      return;
-    }
-    saveLocalDraft(localDraftKey, draft);
-  }, [draft, localDraftHydrationComplete, localDraftKey, localPersistEnabled]);
 
   const financingInput = useMemo<QuoteFinancingRequest>(() => ({
     packageSubtotal: subtotal,
@@ -1743,6 +1738,22 @@ export function QuoteBuilderV2Page() {
   }, [documentFallbackGeneratedAt, draftSaveSignature]);
 
   useEffect(() => {
+    if (!localDraftHydrationComplete) return;
+    if (!localPersistEnabled) return;
+    if (!localDraftKey) return;
+    if (isDraftEmpty(draftRef.current)) {
+      clearLocalDraft(localDraftKey);
+      return;
+    }
+    const tid = window.setTimeout(() => {
+      const d = draftRef.current;
+      if (!localDraftKey || isDraftEmpty(d)) return;
+      saveLocalDraft(localDraftKey, d);
+    }, 450);
+    return () => window.clearTimeout(tid);
+  }, [draftSaveSignature, localDraftHydrationComplete, localDraftKey, localPersistEnabled]);
+
+  useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const mod = event.metaKey || event.ctrlKey;
       if (!mod || event.key.toLowerCase() !== "s") return;
@@ -2138,20 +2149,46 @@ export function QuoteBuilderV2Page() {
         }
         const pdfResult = await downloadPDF(quotePdfData);
         const generatedAt = new Date().toISOString();
+        let artifact: { id: string; storageBucket: string; storageKey: string; generatedAt: string } | null = null;
+        if (activeQuotePackageId && pdfResult.blob) {
+          const persisted = await persistQuoteDocumentArtifact({
+            quotePackageId: activeQuotePackageId,
+            quotePackageVersionId: saveMutation.data?.quote_package_version_id ?? null,
+            blob: pdfResult.blob,
+            filename: pdfResult.filename,
+            generatedAt,
+            metadata: {
+              step: 11,
+              mode: pdfResult.mode,
+              draft_signature: draftSaveSignature,
+            },
+          });
+          artifact = { ...persisted, generatedAt };
+          setDocumentArtifact(artifact);
+        } else {
+          setDocumentArtifact(null);
+        }
+        documentDraftSignatureRef.current = draftSaveSignature;
+        setDocumentFallbackGeneratedAt(generatedAt);
         await logQuoteDeliveryEvent({
           quotePackageId: activeQuotePackageId,
-          documentArtifactId: documentArtifact?.id ?? null,
+          documentArtifactId: artifact?.id ?? null,
           channel: "preview",
           status: "draft",
-          provider: documentArtifact ? "stored_pdf_preview" : "local_preview",
+          provider: artifact ? "stored_pdf_preview" : "local_preview",
           recipient: draft.customerEmail || draft.customerPhone || draft.customerName || draft.customerCompany || null,
           followUpAt: draft.followUpAt ?? null,
           metadata: {
             step: 11,
-            fallback_document: !documentArtifact,
-            document_artifact_id: documentArtifact?.id ?? null,
+            fallback_document: !artifact,
+            document_artifact_id: artifact?.id ?? null,
             generated_at: generatedAt,
             mode: pdfResult.mode,
+            storage_bucket: artifact?.storageBucket ?? null,
+            storage_key: artifact?.storageKey ?? null,
+            note: artifact
+              ? "Customer quote PDF stored as a quote document artifact."
+              : "Printable fallback opened; no stored PDF artifact was created.",
           },
         });
         setDeliveryActionMessage("Preview opened and logged. This does not mark the quote sent.");
@@ -5472,6 +5509,7 @@ export function QuoteBuilderV2Page() {
                   </p>
                 )}
                 {shareError && <p className="mt-2 text-xs text-rose-400">{shareError}</p>}
+                {pdfError && <p className="mt-2 text-xs text-rose-400">{pdfError}</p>}
               </Card>
 
               <Card className="p-4">

@@ -203,6 +203,50 @@ const INTERNAL_COST_LINE_TYPES = new Set(["pdi", "good_faith"]);
 const FINANCE_SCENARIO_KINDS = new Set(["cash", "finance", "lease_fmv", "lease_fppo"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const PROSPECT_CONVERSION_ALLOWED_KEYS = new Set([
+  "original_customer_name",
+  "original_customer_company",
+  "original_customer_phone",
+  "original_customer_email",
+  "conversion_status",
+]);
+
+const CUSTOMER_WARMTH_VALUES = new Set(["warm", "cool", "dormant", "new"]);
+
+function asPlainMetadataObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+/** Strips unknown keys and caps size so prospect payloads cannot bloat or poison metadata. */
+function normalizeProspectConversionSourcePayload(
+  raw: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!raw) return null;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (!PROSPECT_CONVERSION_ALLOWED_KEYS.has(k)) continue;
+    if (k === "conversion_status") {
+      if (typeof v === "string") {
+        const s = v.trim().slice(0, 64);
+        if (s.length > 0) out[k] = s;
+      }
+      continue;
+    }
+    if (v == null) {
+      out[k] = null;
+      continue;
+    }
+    if (typeof v === "string") {
+      const s = v.trim().slice(0, 500);
+      out[k] = s.length > 0 ? s : null;
+    }
+  }
+  if (Object.keys(out).length === 0) return null;
+  if (JSON.stringify(out).length > 8192) return null;
+  return out;
+}
+
 function lineString(value: unknown, max = 240): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -5195,14 +5239,6 @@ Deno.serve(async (req) => {
       const bodyMetadata = body.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata)
         ? body.metadata as Record<string, unknown>
         : null;
-      const metadataPatch = bodyMetadata || prospectConversionSource
-        ? {
-          metadata: {
-            ...(bodyMetadata ?? {}),
-            ...(prospectConversionSource ? { prospect_conversion_source: prospectConversionSource } : {}),
-          },
-        }
-        : {};
       const contactId = typeof body.contact_id === "string" ? body.contact_id : null;
       const companyId = typeof body.company_id === "string" ? body.company_id : null;
       const equipment = Array.isArray(body.equipment) ? body.equipment : [];
@@ -5217,7 +5253,6 @@ Deno.serve(async (req) => {
       // Slice 09 CP2: accept optional originating_log_id so the AI Request
       // Log time-to-quote column can join this quote back to the request
       // that led to it. Defensive typing — only persist when it's a uuid.
-      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const rawLogId = typeof body.originating_log_id === "string" ? body.originating_log_id : null;
       const originatingLogId = rawLogId && UUID_RE.test(rawLogId) ? rawLogId : null;
       const selectedPromotionIds = Array.isArray(body.selected_promotion_ids)
@@ -5272,7 +5307,7 @@ Deno.serve(async (req) => {
       const { data: existingQuoteById, error: existingQuoteByIdErr } = requestedQuotePackageId
         ? await admin
           .from("quote_packages")
-          .select("id, workspace_id, status, updated_at, created_by, deal_id")
+          .select("id, workspace_id, status, updated_at, created_by, deal_id, metadata")
           .eq("id", requestedQuotePackageId)
           .eq("workspace_id", userWorkspaceId)
           .maybeSingle()
@@ -5315,13 +5350,36 @@ Deno.serve(async (req) => {
         ? { data: null, error: null }
         : await admin
           .from("quote_packages")
-          .select("id, workspace_id, status, updated_at, created_by, deal_id")
+          .select("id, workspace_id, status, updated_at, created_by, deal_id, metadata")
           .eq("deal_id", resolvedDealId)
           .maybeSingle();
       if (existingQuoteErr) {
         return safeJsonError(existingQuoteErr.message, 500, origin);
       }
       const existingQuote = existingQuoteById?.id ? existingQuoteById : existingQuoteByDealId;
+      const prospectNorm = normalizeProspectConversionSourcePayload(prospectConversionSource);
+      const existingRowMeta = asPlainMetadataObject(existingQuote?.metadata);
+      const mergedMetadata: Record<string, unknown> = {
+        ...(existingRowMeta ?? {}),
+        ...(bodyMetadata ?? {}),
+      };
+      if (prospectNorm !== null) {
+        mergedMetadata.prospect_conversion_source = prospectNorm;
+      }
+      const metadataPatch = Object.keys(mergedMetadata).length > 0 ? { metadata: mergedMetadata } : {};
+      const prospectQuoteCols: Record<string, unknown> = {};
+      if ("is_prospect_quote" in body) {
+        prospectQuoteCols.is_prospect_quote = body.is_prospect_quote === true || body.is_prospect_quote === "true";
+      }
+      if ("customer_warmth" in body) {
+        const rawW = body.customer_warmth;
+        if (rawW === null || rawW === "") {
+          prospectQuoteCols.customer_warmth = null;
+        } else if (typeof rawW === "string") {
+          const w = rawW.trim().toLowerCase();
+          if (CUSTOMER_WARMTH_VALUES.has(w)) prospectQuoteCols.customer_warmth = w;
+        }
+      }
       const expectedUpdatedAt = typeof body.expected_updated_at === "string" ? body.expected_updated_at : null;
       if (
         existingQuote?.id &&
@@ -5457,6 +5515,7 @@ Deno.serve(async (req) => {
           customer_phone: customerPhone,
           customer_email: customerEmail,
           ...metadataPatch,
+          ...prospectQuoteCols,
           opportunity_description: opportunityDescription,
           voice_transcript: voiceTranscript,
           originating_log_id: originatingLogId,
@@ -6541,16 +6600,6 @@ Deno.serve(async (req) => {
         documentArtifactId = artifactRow?.id ?? null;
       }
 
-      // Update quote package status
-      await supabase
-        .from("quote_packages")
-        .update({
-          status: "sent",
-          sent_at: sentAt,
-          sent_via: "email",
-        })
-        .eq("id", body.quote_package_id);
-
       const { data: deliveryEvent, error: deliveryEventErr } = await admin
         .from("quote_delivery_events")
         .insert({
@@ -6579,6 +6628,28 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (deliveryEventErr) {
         console.error("quote delivery event insert error:", deliveryEventErr);
+        return safeJsonError(
+          deliveryEventErr.message || "Email was sent but the delivery audit row failed to save. Retry or check logs.",
+          500,
+          origin,
+        );
+      }
+
+      const { error: pkgUpdateErr } = await supabase
+        .from("quote_packages")
+        .update({
+          status: "sent",
+          sent_at: sentAt,
+          sent_via: "email",
+        })
+        .eq("id", body.quote_package_id);
+      if (pkgUpdateErr) {
+        console.error("send-package quote status update error:", pkgUpdateErr);
+        return safeJsonError(
+          pkgUpdateErr.message || "Delivery was logged but updating the quote package failed.",
+          500,
+          origin,
+        );
       }
 
       await advanceQuoteDealStage({

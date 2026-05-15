@@ -121,15 +121,18 @@ export function QrmCompaniesPage() {
   });
 
   const companies = companiesQuery.data?.pages.flatMap((page) => page.items) ?? [];
-  const companyIds = useMemo(() => companies.map((company) => company.id), [companies]);
+  const companyIdsForHealth = useMemo(
+    () => [...companies.map((company) => company.id)].sort(),
+    [companies],
+  );
   const { data: healthProfiles = [] } = useQuery({
-    queryKey: ["crm", "companies", "health-profiles", companyIds.join(",")],
-    enabled: companyIds.length > 0,
+    queryKey: ["crm", "companies", "health-profiles", companyIdsForHealth],
+    enabled: companyIdsForHealth.length > 0,
     queryFn: async () => {
       const { data, error } = await crmSupabase
         .from("customer_profiles_extended")
         .select("id, crm_company_id, health_score")
-        .in("crm_company_id", companyIds);
+        .in("crm_company_id", companyIdsForHealth);
       if (error) return [];
       return (data ?? []) satisfies CustomerHealthProfileRow[];
     },
@@ -489,6 +492,7 @@ export function QrmCompaniesPage() {
                       onClick={() =>
                         navigate(ASK_IRON_PATH, {
                           state: createAskIronSeedState(askIronQuestion, "graph", company.id),
+                          replace: true,
                         })
                       }
                       className="inline-flex shrink-0 items-center gap-1 rounded-full border border-qep-orange/30 bg-qep-orange/5 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-qep-orange opacity-100 transition-opacity hover:border-qep-orange/60 hover:bg-qep-orange/10 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-qep-orange/40 xl:opacity-0 xl:group-hover:opacity-100"
@@ -549,10 +553,10 @@ export function QrmCompaniesPage() {
         initialValues={newCompanyInitialValues}
         onSaved={(company) => {
           if (returnToQuotePackageId) {
-            navigate(`/quote-v2?package_id=${encodeURIComponent(returnToQuotePackageId)}&crm_company_id=${encodeURIComponent(company.id)}&prospect_converted=1`);
+            navigate(`/quote-v2?package_id=${encodeURIComponent(returnToQuotePackageId)}&crm_company_id=${encodeURIComponent(company.id)}&prospect_converted=1`, { replace: true });
             return;
           }
-          navigate(buildAccountCommandHref(company.id));
+          navigate(buildAccountCommandHref(company.id), { replace: true });
         }}
       />
       <HealthScoreDrawer
