@@ -237,6 +237,12 @@ function resolvedLineCostVisibility(line: Record<string, unknown>): "internal" |
   return defaultCostVisibilityForLineType(lineType);
 }
 
+function isMiscCreditLine(line: Record<string, unknown>): boolean {
+  const metadata = line.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return false;
+  return lineString((metadata as Record<string, unknown>).misc_line_kind, 40) === "credit";
+}
+
 function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Record<string, unknown>> {
   const rawLines = Array.isArray(body.line_items) ? body.line_items : [];
   const fallbackEquipment = Array.isArray(body.equipment)
@@ -250,8 +256,15 @@ function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Re
   return source.flatMap((item, index) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
     const row = item as Record<string, unknown>;
+    const metadata = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? row.metadata as Record<string, unknown>
+      : {};
     const lineTypeRaw = lineString(row.line_type ?? row.kind, 40) ?? "custom";
-    const lineType = QUOTE_PACKAGE_LINE_TYPES.has(lineTypeRaw) ? lineTypeRaw : "custom";
+    const lineType = lineString(metadata.misc_line_kind, 40) === "credit"
+      ? "discount"
+      : QUOTE_PACKAGE_LINE_TYPES.has(lineTypeRaw)
+        ? lineTypeRaw
+        : "custom";
     const quantity = Math.max(1, Math.round(lineNumber(row.quantity, 1)));
     const unitPrice = clampCurrency(row.unit_price ?? row.price ?? row.amount ?? row.quoted_list_price);
     const extendedPrice = clampCurrency(row.extended_price ?? unitPrice * quantity);
@@ -274,9 +287,6 @@ function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Re
       cost_visibility: row.cost_visibility ?? row.costVisibility,
       metadata: row.metadata,
     });
-    const metadata = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
-      ? row.metadata as Record<string, unknown>
-      : {};
     const freightDirection = lineType === "freight"
       ? lineString(
         metadata.freight_direction
@@ -349,7 +359,7 @@ function computeQuoteFinancials(body: Record<string, unknown>): Record<string, n
     .reduce((sum, line) => sum + clampCurrency(line.extended_price), 0);
   const subtotal = clampCurrency(equipmentTotal + attachmentTotal);
   const lineDiscountTotal = customerLines
-    .filter((line) => discountLineTypes.has(String(line.line_type)))
+    .filter((line) => discountLineTypes.has(String(line.line_type)) || isMiscCreditLine(line))
     .reduce((sum, line) => sum + clampCurrency(line.extended_price), 0);
   const commercialDiscountType = body.commercial_discount_type === "percent" ? "percent" : "flat";
   const commercialDiscountValue = clampCurrency(body.commercial_discount_value);

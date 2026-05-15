@@ -29,3 +29,10 @@ Deno.test("quote version snapshots use computed financial metrics for approval r
   assert(marginIndex > financialsIndex);
   assert(amountIndex > financialsIndex);
 });
+
+Deno.test("legacy misc credit rows are normalized before server financial totals", async () => {
+  const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
+  assert(source.includes("function isMiscCreditLine("));
+  assert(source.includes('lineString(metadata.misc_line_kind, 40) === "credit"'));
+  assert(source.includes('|| isMiscCreditLine(line)'));
+});
