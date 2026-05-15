@@ -48,8 +48,9 @@ bun run verify:track-b-560-564
 This runs, in order:
 
 1. `migrations:check` — filename sequence and no gaps through max migration number.
-2. `quote-api` unit tests — freight direction → `cost_visibility` + inbound/outbound amount columns on save payload.
-3. `quote-incentive-resolver` Deno tests — `stack_kind` grouping (`cash_alt` vs `finance_addon`).
+2. `audit:rls-initplan` — post-baseline migrations avoid known `initplan` RLS performance footguns (Track B DoD alignment).
+3. `quote-api` unit tests — freight direction → `cost_visibility` + inbound/outbound amount columns on save payload.
+4. `quote-incentive-resolver` Deno tests — `stack_kind` grouping (`cash_alt` vs `finance_addon`).
 
 For a broader gate after touching migrations or edges, use `bun run segment:gates --segment "<id>"` per `AGENTS.md`.
 

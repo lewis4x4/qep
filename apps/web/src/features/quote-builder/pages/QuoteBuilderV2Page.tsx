@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
@@ -799,6 +799,13 @@ export function QuoteBuilderV2Page() {
   });
   const draftRef = useRef(draft);
   draftRef.current = draft;
+
+  // Track A / Epic #39: when the wizard step changes, snap the window to the top
+  // so mobile operators see the new step title and first controls (not mid-page).
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [step]);
+
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiIntakeMessage, setAiIntakeMessage] = useState<string | null>(null);
   const [intakeRecorderOpen, setIntakeRecorderOpen] = useState(false);
@@ -3575,17 +3582,17 @@ export function QuoteBuilderV2Page() {
             </div>
             <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
               {previousWizardStep && (
-                <Button variant="outline" className="hidden md:inline-flex" onClick={() => setStep(previousWizardStep)}>
+                <Button variant="outline" className="hidden touch-manipulation md:inline-flex" onClick={() => setStep(previousWizardStep)}>
                   <ArrowLeft className="mr-1 h-4 w-4" /> Back
                 </Button>
               )}
               {step === "customer" && !hasCustomer && (
-                <Button variant="ghost" onClick={handleQuoteForProspect}>
+                <Button variant="ghost" className="touch-manipulation" onClick={handleQuoteForProspect}>
                   Quote for prospect
                 </Button>
               )}
               {nextWizardStep && (
-                <Button className="hidden md:inline-flex" onClick={() => setStep(nextWizardStep)} disabled={wizardNextDisabled}>
+                <Button className="hidden touch-manipulation md:inline-flex" onClick={() => setStep(nextWizardStep)} disabled={wizardNextDisabled}>
                   {nextWizardLabel} <ArrowRight className="ml-1 h-4 w-4" />
                 </Button>
               )}
@@ -3601,7 +3608,7 @@ export function QuoteBuilderV2Page() {
         onJumpTo={setStep}
       />
 
-      <div className="sticky bottom-[max(0.5rem,env(safe-area-inset-bottom,0px))] z-20 flex flex-col gap-2 rounded-xl border border-border/70 bg-card/95 p-3 shadow-md backdrop-blur md:hidden">
+      <div className="sticky bottom-[max(0.5rem,env(safe-area-inset-bottom,0px))] z-20 flex touch-manipulation flex-col gap-2 rounded-xl border border-border/70 bg-card/95 p-3 shadow-md backdrop-blur md:hidden">
         {signalsReady ? (
           <p className="text-center text-[10px] leading-tight text-muted-foreground" role="status" aria-live="polite">
             <span className="font-semibold text-foreground">{marginPct.toFixed(1)}%</span>
@@ -3611,7 +3618,7 @@ export function QuoteBuilderV2Page() {
           </p>
         ) : null}
         {wizardPricingJumpAllowed ? (
-          <Button type="button" variant="outline" size="sm" className="h-7 w-full text-[10px] font-semibold" title="Open step 5 — Pricing build" onClick={() => setStep("pricing")}>
+          <Button type="button" variant="outline" size="sm" className="h-7 w-full touch-manipulation text-[10px] font-semibold" title="Open step 5 — Pricing build" onClick={() => setStep("pricing")}>
             Pricing
           </Button>
         ) : null}
@@ -3620,7 +3627,7 @@ export function QuoteBuilderV2Page() {
             <Button
               type="button"
               variant="outline"
-              className={nextWizardStep ? "min-w-0 flex-1" : "w-full"}
+              className={nextWizardStep ? "min-w-0 flex-1 touch-manipulation" : "w-full touch-manipulation"}
               onClick={() => setStep(previousWizardStep)}
             >
               <ArrowLeft className="mr-1 h-4 w-4 shrink-0" /> Back
@@ -3631,7 +3638,7 @@ export function QuoteBuilderV2Page() {
           {nextWizardStep ? (
             <Button
               type="button"
-              className={previousWizardStep ? "min-w-0 flex-1" : "w-full"}
+              className={previousWizardStep ? "min-w-0 flex-1 touch-manipulation" : "w-full touch-manipulation"}
               onClick={() => setStep(nextWizardStep)}
               disabled={wizardNextDisabled}
             >
@@ -3641,7 +3648,7 @@ export function QuoteBuilderV2Page() {
           ) : null}
         </div>
         {step === "customer" && !hasCustomer ? (
-          <Button type="button" variant="outline" className="w-full" onClick={handleQuoteForProspect}>
+          <Button type="button" variant="outline" className="w-full touch-manipulation" onClick={handleQuoteForProspect}>
             Quote for prospect
           </Button>
         ) : null}
@@ -6248,7 +6255,7 @@ function QuoteWizardProgress({
               disabled={isFuture}
               aria-current={isCurrent ? "step" : undefined}
               aria-label={`${item.number}. ${item.label}: ${isCurrent ? "current step" : isComplete ? "editable step" : "locked step"}`}
-              className={`${compact ? "min-h-[3.25rem] px-2 py-1.5 sm:min-h-[4.25rem] sm:px-3 sm:py-2" : "min-h-[4.25rem] px-3 py-2"} rounded-lg border text-left text-[11px] leading-tight transition ${
+              className={`${compact ? "min-h-[3.25rem] px-2 py-1.5 sm:min-h-[4.25rem] sm:px-3 sm:py-2" : "min-h-[4.25rem] px-3 py-2"} touch-manipulation rounded-lg border text-left text-[11px] leading-tight transition ${
                 isCurrent
                   ? "border-qep-orange bg-qep-orange/10 text-qep-orange shadow-[0_0_0_1px_rgba(249,115,22,0.25)]"
                   : isComplete
