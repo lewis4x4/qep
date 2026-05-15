@@ -144,8 +144,8 @@ import type {
 } from "../../../../../../shared/qep-moonshot-contracts";
 
 // Item 2: the salesperson-facing flow is now the QRM 11-step wizard.
-// Steps 10–11 intentionally reuse local PDF/preview delivery while backend
-// persisted document and Graph/Twilio provider artifacts are still gated.
+// Steps 10–11 persist generated document artifacts and use the guarded
+// backend email route; text delivery remains gated by Twilio provisioning.
 type Step =
   | "customer"
   | "equipment"
@@ -4056,7 +4056,7 @@ export function QuoteBuilderV2Page() {
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep("configure")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
-            <Button onClick={() => setStep("pricing")}>Pricing placeholder <ArrowRight className="ml-1 h-4 w-4" /></Button>
+            <Button onClick={() => setStep("pricing")}>Pricing <ArrowRight className="ml-1 h-4 w-4" /></Button>
           </div>
         </div>
       )}
@@ -4764,7 +4764,7 @@ export function QuoteBuilderV2Page() {
         <div className="space-y-4">
           <div>
             <h2 className="text-lg font-semibold text-foreground">Step 9: Review + approval</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Everything in one plain-English summary. Approval case status is the authoritative gate before any future send step.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Everything in one plain-English summary. Approval case status is the authoritative gate before document generation and customer delivery.</p>
           </div>
 
           <Card className="p-4">
