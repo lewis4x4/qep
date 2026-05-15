@@ -4,66 +4,16 @@ import { Card } from "@/components/ui/card";
 import { getTradeValuation } from "../lib/quote-api";
 import { Button } from "@/components/ui/button";
 import { buildTradeWalkaroundHref } from "@/features/qrm/lib/trade-walkaround";
+import { inferTradeRangeSummary } from "../lib/trade-valuation-range";
 
 interface TradeInSectionProps {
   dealId: string;
   onTradeValueChange: (value: number | null, valuationId: string | null) => void;
 }
 
-interface TradeRange {
-  low: number;
-  high: number;
-  midpoint: number;
-  sources: string[];
-}
-
 function formatCurrency(value: number | null): string {
   if (value === null) return "—";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
-}
-
-function numberValue(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim().length > 0) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function inferTradeRange(valuation: {
-  market_comps?: Array<Record<string, unknown>> | null;
-  auction_value?: number | null;
-  preliminary_value?: number | null;
-  final_value?: number | null;
-}): TradeRange | null {
-  const points: number[] = [];
-  const sources = new Set<string>();
-  for (const comp of valuation.market_comps ?? []) {
-    const low = numberValue(comp.low ?? comp.low_cents);
-    const high = numberValue(comp.high ?? comp.high_cents);
-    const value = numberValue(comp.price ?? comp.value ?? comp.value_cents);
-    if (low != null && high != null) {
-      points.push(low > 10_000 ? low / 100 : low, high > 10_000 ? high / 100 : high);
-      sources.add("market comps");
-      continue;
-    }
-    if (value != null) {
-      points.push(value > 10_000 ? value / 100 : value);
-      sources.add("market comps");
-    }
-  }
-  if (valuation.auction_value != null && valuation.auction_value > 0) {
-    points.push(valuation.auction_value);
-    sources.add("auction");
-  }
-  if (points.length === 0) return null;
-  const low = Math.min(...points);
-  const high = Math.max(...points);
-  const midpoint = valuation.final_value ?? valuation.preliminary_value ?? (low + high) / 2;
-  if (valuation.final_value != null) sources.add("final appraisal");
-  else if (valuation.preliminary_value != null) sources.add("preliminary appraisal");
-  return { low, high, midpoint, sources: [...sources] };
 }
 
 export function TradeInSection({ dealId, onTradeValueChange }: TradeInSectionProps) {
@@ -88,7 +38,12 @@ export function TradeInSection({ dealId, onTradeValueChange }: TradeInSectionPro
     );
   }
 
-  const inferredRange = inferTradeRange(valuation);
+  const inferredRange = inferTradeRangeSummary({
+    marketComps: valuation.market_comps ?? [],
+    auctionValue: valuation.auction_value ?? null,
+    preliminaryValue: valuation.preliminary_value ?? null,
+    finalValue: valuation.final_value ?? null,
+  });
   const hasValue = Boolean(valuation.preliminary_value || valuation.final_value || inferredRange);
   const tradeValue = valuation.final_value ?? valuation.preliminary_value ?? inferredRange?.midpoint ?? null;
 
@@ -122,7 +77,12 @@ export function TradeInSection({ dealId, onTradeValueChange }: TradeInSectionPro
           )}
           {inferredRange && inferredRange.sources.length > 0 && (
             <p className="text-[11px] text-muted-foreground">
-              Source: {inferredRange.sources.join(" + ")}
+              Rep-facing comps: {inferredRange.sources.slice(0, 3).join(" + ")}
+            </p>
+          )}
+          {inferredRange?.confidence && (
+            <p className="text-[11px] text-muted-foreground">
+              Confidence: {inferredRange.confidence}{inferredRange.isSynthetic ? " · modeled until live feeds connect" : ""}
             </p>
           )}
         </div>

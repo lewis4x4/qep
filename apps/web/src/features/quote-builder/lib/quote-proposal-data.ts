@@ -244,20 +244,6 @@ function tradeConditionLabel(status: string | null): string | null {
   return status.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function marketCompSummary(comps: TradeValuationProposalSnapshot["marketComps"]): string | null {
-  const visible = comps
-    .filter((comp) => comp.source !== "_aggregate")
-    .flatMap((comp) => {
-      const source = typeof comp.source === "string" ? optionalText(comp.source) : null;
-      const price = typeof comp.price === "number" && Number.isFinite(comp.price)
-        ? formatCompactMoney(comp.price)
-        : null;
-      return source ? [`${source}${price ? ` ${price}` : ""}`] : [];
-    })
-    .slice(0, 3);
-  return visible.length > 0 ? `Market context: ${visible.join(" · ")}` : null;
-}
-
 function buildTradeAllowanceLine(
   draft: QuoteWorkspaceDraft,
   tradeValuation: TradeValuationProposalSnapshot | null | undefined,
@@ -272,9 +258,6 @@ function buildTradeAllowanceLine(
   const condition = tradeConditionLabel(tradeValuation?.operationalStatus ?? null);
   const specs = [
     tradeValuation?.hours != null ? `Hours: ${formatInteger(tradeValuation.hours)}` : null,
-    tradeValuation?.preliminaryValue != null ? `Preliminary value: ${formatCompactMoney(tradeValuation.preliminaryValue)}` : null,
-    tradeValuation?.auctionValue != null ? `Market midpoint: ${formatCompactMoney(tradeValuation.auctionValue)}` : null,
-    marketCompSummary(tradeValuation?.marketComps ?? []),
     tradeValuation?.conditionalLanguage ? `Condition note: ${tradeValuation.conditionalLanguage}` : null,
   ].flatMap((item) => {
     const text = optionalText(item ?? null);

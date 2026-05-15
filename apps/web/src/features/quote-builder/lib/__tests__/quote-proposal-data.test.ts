@@ -273,10 +273,11 @@ describe("buildQuoteProposalData", () => {
     expect(tradeLine?.media?.gallery.map((asset) => asset.src)).toEqual(["https://cdn.qep.example/trade-right.jpg"]);
     expect(tradeLine?.specBullets).toEqual(expect.arrayContaining([
       "Hours: 2,400",
-      "Preliminary value: $40,200",
-      "Market midpoint: $45,000",
-      "Market context: IronPlanet $43,000",
+      "Condition note: Traded machine must match evaluated condition",
     ]));
+    expect(JSON.stringify(tradeLine)).not.toContain("Preliminary value");
+    expect(JSON.stringify(tradeLine)).not.toContain("Market midpoint");
+    expect(JSON.stringify(tradeLine)).not.toContain("IronPlanet");
     expect(JSON.stringify(tradeLine)).not.toContain("trade-123");
     expect(JSON.stringify(tradeLine)).not.toContain("javascript:");
   });
