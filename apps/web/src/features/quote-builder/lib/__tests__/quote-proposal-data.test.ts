@@ -139,6 +139,30 @@ describe("buildQuoteProposalData", () => {
     expect(data.lineItems.every((line) => !("dealerCost" in line) && !("metadata" in line))).toBe(true);
   });
 
+  test("does not expose inbound freight when visibility metadata marks it internal", () => {
+    const data = build({
+      pricingLines: [
+        {
+          kind: "freight",
+          title: "Inbound freight",
+          quantity: 1,
+          unitPrice: 1_500,
+          metadata: { pricing_field_key: "inbound_freight", freight_direction: "inbound" },
+        },
+        {
+          kind: "freight",
+          title: "Outbound delivery",
+          quantity: 1,
+          unitPrice: 2_200,
+          metadata: { pricing_field_key: "outbound_delivery", freight_direction: "outbound" },
+        },
+      ],
+    });
+
+    expect(data.lineItems.map((line) => line.description)).not.toContain("Inbound freight");
+    expect(data.lineItems.map((line) => line.description)).toContain("Outbound delivery");
+  });
+
 
   test("projects only customer-safe media and spec metadata into proposal lines", () => {
     const data = build({

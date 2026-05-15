@@ -218,6 +218,25 @@ function defaultCostVisibilityForLineType(lineType: string): "internal" | "custo
   return INTERNAL_COST_LINE_TYPES.has(lineType) ? "internal" : "customer";
 }
 
+function freightDirectionFromMetadata(metadata: unknown): "inbound" | "outbound" | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const record = metadata as Record<string, unknown>;
+  const explicit = lineString(record.freight_direction ?? record.freightDirection, 40);
+  if (explicit === "inbound" || explicit === "outbound") return explicit;
+  const key = lineString(record.pricing_field_key ?? record.pricingFieldKey, 40);
+  if (key === "inbound_freight") return "inbound";
+  if (key === "outbound_delivery") return "outbound";
+  return null;
+}
+
+function resolvedLineCostVisibility(line: Record<string, unknown>): "internal" | "customer" {
+  const explicit = lineString(line.cost_visibility ?? line.costVisibility, 20);
+  if (explicit && QUOTE_LINE_COST_VISIBILITY.has(explicit)) return explicit as "internal" | "customer";
+  const lineType = lineString(line.line_type ?? line.lineType, 40) ?? "custom";
+  if (lineType === "freight" && freightDirectionFromMetadata(line.metadata) === "inbound") return "internal";
+  return defaultCostVisibilityForLineType(lineType);
+}
+
 function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Record<string, unknown>> {
   const rawLines = Array.isArray(body.line_items) ? body.line_items : [];
   const fallbackEquipment = Array.isArray(body.equipment)
@@ -250,10 +269,31 @@ function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Re
       ? rawReasonCode
       : null;
 
-    const costVisibilityRaw = lineString(row.cost_visibility ?? row.costVisibility, 20);
-    const costVisibility = costVisibilityRaw && QUOTE_LINE_COST_VISIBILITY.has(costVisibilityRaw)
-      ? costVisibilityRaw
-      : defaultCostVisibilityForLineType(lineType);
+    const costVisibility = resolvedLineCostVisibility({
+      line_type: lineType,
+      cost_visibility: row.cost_visibility ?? row.costVisibility,
+      metadata: row.metadata,
+    });
+    const metadata = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? row.metadata as Record<string, unknown>
+      : {};
+    const freightDirection = lineType === "freight"
+      ? lineString(
+        metadata.freight_direction
+        ?? metadata.freightDirection
+        ?? metadata.pricing_field_key
+        ?? metadata.pricingFieldKey,
+        40,
+      )
+      : null;
+    const inboundFreightRaw = lineNumber(row.inbound_freight_amount ?? row.inboundFreightAmount, 0);
+    const outboundDeliveryRaw = lineNumber(row.outbound_delivery_amount ?? row.outboundDeliveryAmount, 0);
+    const inboundFreightAmount = lineType === "freight" && (freightDirection === "inbound" || freightDirection === "inbound_freight")
+      ? (inboundFreightRaw > 0 ? inboundFreightRaw : extendedPrice)
+      : null;
+    const outboundDeliveryAmount = lineType === "freight" && (freightDirection === "outbound" || freightDirection === "outbound_delivery" || !freightDirection)
+      ? (outboundDeliveryRaw > 0 ? outboundDeliveryRaw : extendedPrice)
+      : null;
 
     return [{
       catalog_entry_id: catalogEntryId && UUID_RE.test(catalogEntryId) ? catalogEntryId : null,
@@ -272,9 +312,9 @@ function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Re
       reason_code: reasonCode,
       approval_required: row.approval_required === true || row.approvalRequired === true,
       cost_visibility: costVisibility,
-      metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
-        ? row.metadata
-        : {},
+      inbound_freight_amount: inboundFreightAmount,
+      outbound_delivery_amount: outboundDeliveryAmount,
+      metadata,
     }];
   });
 }
@@ -299,7 +339,7 @@ function computeQuoteFinancials(body: Record<string, unknown>): Record<string, n
     "custom",
   ]);
   const discountLineTypes = new Set(["discount", "rebate_mfg", "rebate_dealer", "loyalty_discount"]);
-  const customerLines = lines.filter((line) => String(line.cost_visibility ?? defaultCostVisibilityForLineType(String(line.line_type))) === "customer");
+  const customerLines = lines.filter((line) => resolvedLineCostVisibility(line) === "customer");
 
   const equipmentTotal = customerLines
     .filter((line) => line.line_type === "equipment")
@@ -326,7 +366,7 @@ function computeQuoteFinancials(body: Record<string, unknown>): Record<string, n
   const dealerCost = lines
     .filter((line) => saleLineTypes.has(String(line.line_type)) || String(line.cost_visibility ?? "") === "internal")
     .reduce((sum, line) => {
-      const visibility = String(line.cost_visibility ?? defaultCostVisibilityForLineType(String(line.line_type)));
+      const visibility = resolvedLineCostVisibility(line);
       const explicitCost = clampCurrency(line.quoted_dealer_cost);
       const unitCost = explicitCost > 0
         ? explicitCost
@@ -3343,6 +3383,58 @@ Deno.serve(async (req) => {
 
     const url = new URL(req.url);
     const action = url.pathname.split("/").pop() || "";
+    const functionBaseUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/quote-builder-v2`;
+
+    async function tryAutoSendApprovedQuote(input: { quotePackageId: string }): Promise<{
+      attempted: boolean;
+      sent: boolean;
+      reason?: string;
+      error?: string;
+    }> {
+      const admin = createAdminClient();
+      const { data: quoteRow, error: quoteErr } = await admin
+        .from("quote_packages")
+        .select("id, post_approval_action")
+        .eq("id", input.quotePackageId)
+        .maybeSingle();
+      if (quoteErr) {
+        return { attempted: true, sent: false, error: quoteErr.message };
+      }
+      if (!quoteRow?.id || quoteRow.post_approval_action !== "auto_send_customer") {
+        return { attempted: false, sent: false, reason: "post_approval_action_return_to_rep" };
+      }
+
+      try {
+        const sendResp = await fetch(`${functionBaseUrl}/send-package`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            apikey: Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+          },
+          body: JSON.stringify({ quote_package_id: input.quotePackageId }),
+        });
+        const payload = await sendResp.json().catch(() => ({}));
+        if (!sendResp.ok) {
+          return {
+            attempted: true,
+            sent: false,
+            error: typeof payload?.error === "string" ? payload.error : `HTTP ${sendResp.status}`,
+          };
+        }
+        return {
+          attempted: true,
+          sent: payload?.sent === true,
+          reason: payload?.sent === true ? "auto_send_succeeded" : "auto_send_not_sent",
+        };
+      } catch (error) {
+        return {
+          attempted: true,
+          sent: false,
+          error: error instanceof Error ? error.message : "auto-send request failed",
+        };
+      }
+    }
 
     async function getPortalReviewContext(dealId: string) {
       const { data: review, error: reviewErr } = await supabase
@@ -4585,7 +4677,7 @@ Deno.serve(async (req) => {
       const admin = createAdminClient();
       const { data: sourceLines } = await admin
         .from("quote_package_line_items")
-        .select("workspace_id, catalog_entry_id, make, model, year, quoted_list_price, quoted_dealer_cost, quantity, source_location, line_type, description, unit_price, extended_price, display_order, reason_code, approval_required, cost_visibility, metadata")
+        .select("workspace_id, catalog_entry_id, make, model, year, quoted_list_price, quoted_dealer_cost, quantity, source_location, line_type, description, unit_price, extended_price, inbound_freight_amount, outbound_delivery_amount, display_order, reason_code, approval_required, cost_visibility, metadata")
         .eq("quote_package_id", quotePackageId)
         .order("display_order", { ascending: true });
       if (Array.isArray(sourceLines) && sourceLines.length > 0) {
@@ -5603,6 +5695,7 @@ Deno.serve(async (req) => {
           target: QUOTE_PIPELINE_STAGE_TARGETS.quoteCreated,
           source: "quote_submit_approval_bypass",
         });
+        const autoSendResult = await tryAutoSendApprovedQuote({ quotePackageId: pkgRow.id });
         return safeJsonOk({
           approval_case_id: null,
           approval_id: null,
@@ -5612,6 +5705,7 @@ Deno.serve(async (req) => {
           already_pending: false,
           bypass_rule_id: bypassRule.ruleId,
           bypass_rule_name: bypassRule.ruleName,
+          auto_send: autoSendResult,
         }, origin);
       }
       // QEP requires every quote to land in front of the owners (Ryan +
@@ -6087,12 +6181,17 @@ Deno.serve(async (req) => {
           source: "quote_approval_decision",
         });
       }
+      const autoSendResult =
+        nextQuoteStatus === "approved" || nextQuoteStatus === "approved_with_conditions"
+          ? await tryAutoSendApprovedQuote({ quotePackageId: String(caseRow.quote_package_id) })
+          : { attempted: false, sent: false, reason: "quote_not_approved" };
 
       const refreshedCase = await getLatestQuoteApprovalCase({
         admin,
         quotePackageId: String(caseRow.quote_package_id),
       });
       return safeJsonOk({
+        auto_send: autoSendResult,
         approval_case: refreshedCase
           ? await buildQuoteApprovalCaseResponse({ admin, approvalCase: refreshedCase })
           : null,

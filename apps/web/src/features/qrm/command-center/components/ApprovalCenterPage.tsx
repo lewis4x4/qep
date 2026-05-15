@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { GlassPanel } from "@/components/primitives/GlassPanel";
 import { DashboardPivotToggle } from "@/components/primitives";
+import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
@@ -326,7 +327,20 @@ export function ApprovalCenterPage() {
             : [],
         }, {
           onError,
-          onSuccess: () => {
+          onSuccess: (result) => {
+            const autoSend = result?.autoSend;
+            if (autoSend?.attempted && !autoSend.sent) {
+              toast({
+                title: "Quote approved, auto-send did not complete",
+                description: autoSend.error ?? "Post-approval auto-send was attempted but did not complete.",
+                variant: "destructive",
+              });
+            } else if (autoSend?.attempted && autoSend.sent) {
+              toast({
+                title: "Quote approved and auto-sent",
+                description: "Post-approval routing auto-delivered the quote to the customer.",
+              });
+            }
             setQuoteDecisionTarget(null);
             resetQuoteDecisionState();
           },

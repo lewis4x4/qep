@@ -234,6 +234,63 @@ describe("computeQuoteWorkspace", () => {
     expect(result.customerTotal).toBe(99_095);
   });
 
+  test("keeps inbound freight internal while outbound delivery remains customer-facing", () => {
+    const result = computeQuoteWorkspace(makeDraft({
+      branchSlug: "lake-city",
+      customerName: "Anderson",
+      customerEmail: "buyer@example.com",
+      equipment: [{ kind: "equipment", title: "Kubota U55", quantity: 1, unitPrice: 80_000 }],
+      attachments: [{ kind: "attachment", title: "Hydraulic thumb", quantity: 1, unitPrice: 4_000 }],
+      pricingLines: [
+        {
+          kind: "freight",
+          title: "Inbound freight to yard",
+          quantity: 1,
+          unitPrice: 1_800,
+          costVisibility: "internal",
+          metadata: { pricing_field_key: "inbound_freight", freight_direction: "inbound" },
+        },
+        {
+          kind: "freight",
+          title: "Outbound delivery",
+          quantity: 1,
+          unitPrice: 2_400,
+          costVisibility: "customer",
+          metadata: { pricing_field_key: "outbound_delivery", freight_direction: "outbound" },
+        },
+      ],
+      taxTotal: 4_000,
+    }));
+
+    expect(result.subtotal).toBe(86_400);
+    expect(result.pricingLineTotal).toBe(2_400);
+    expect(result.taxableBasis).toBe(86_400);
+    expect(result.customerTotal).toBe(90_400);
+  });
+
+  test("treats metadata-tagged inbound freight as internal when costVisibility is missing", () => {
+    const result = computeQuoteWorkspace(makeDraft({
+      branchSlug: "lake-city",
+      customerName: "Anderson",
+      customerEmail: "buyer@example.com",
+      equipment: [{ kind: "equipment", title: "Kubota U55", quantity: 1, unitPrice: 80_000 }],
+      pricingLines: [
+        {
+          kind: "freight",
+          title: "Inbound freight to yard",
+          quantity: 1,
+          unitPrice: 1_800,
+          metadata: { pricing_field_key: "inbound_freight", freight_direction: "inbound" },
+        },
+      ],
+      taxTotal: 3_000,
+    }));
+
+    expect(result.pricingLineTotal).toBe(0);
+    expect(result.subtotal).toBe(80_000);
+    expect(result.customerTotal).toBe(83_000);
+  });
+
   test("legacy custom and financing attachment rows still contribute to totals", () => {
     const result = computeQuoteWorkspace(makeDraft({
       branchSlug: "lake-city",

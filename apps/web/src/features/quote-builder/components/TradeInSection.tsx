@@ -14,6 +14,7 @@ interface TradeRange {
   low: number;
   high: number;
   midpoint: number;
+  sources: string[];
 }
 
 function formatCurrency(value: number | null): string {
@@ -37,24 +38,32 @@ function inferTradeRange(valuation: {
   final_value?: number | null;
 }): TradeRange | null {
   const points: number[] = [];
+  const sources = new Set<string>();
   for (const comp of valuation.market_comps ?? []) {
     const low = numberValue(comp.low ?? comp.low_cents);
     const high = numberValue(comp.high ?? comp.high_cents);
     const value = numberValue(comp.price ?? comp.value ?? comp.value_cents);
     if (low != null && high != null) {
       points.push(low > 10_000 ? low / 100 : low, high > 10_000 ? high / 100 : high);
+      sources.add("market comps");
       continue;
     }
     if (value != null) {
       points.push(value > 10_000 ? value / 100 : value);
+      sources.add("market comps");
     }
   }
-  if (valuation.auction_value != null && valuation.auction_value > 0) points.push(valuation.auction_value);
+  if (valuation.auction_value != null && valuation.auction_value > 0) {
+    points.push(valuation.auction_value);
+    sources.add("auction");
+  }
   if (points.length === 0) return null;
   const low = Math.min(...points);
   const high = Math.max(...points);
   const midpoint = valuation.final_value ?? valuation.preliminary_value ?? (low + high) / 2;
-  return { low, high, midpoint };
+  if (valuation.final_value != null) sources.add("final appraisal");
+  else if (valuation.preliminary_value != null) sources.add("preliminary appraisal");
+  return { low, high, midpoint, sources: [...sources] };
 }
 
 export function TradeInSection({ dealId, onTradeValueChange }: TradeInSectionProps) {
@@ -109,6 +118,11 @@ export function TradeInSection({ dealId, onTradeValueChange }: TradeInSectionPro
           {tradeValue != null && (
             <p className="text-[11px] text-muted-foreground">
               Midpoint: {formatCurrency(tradeValue)}
+            </p>
+          )}
+          {inferredRange && inferredRange.sources.length > 0 && (
+            <p className="text-[11px] text-muted-foreground">
+              Source: {inferredRange.sources.join(" + ")}
             </p>
           )}
         </div>

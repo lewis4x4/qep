@@ -19,6 +19,7 @@ import {
 } from "../lib/quote-api";
 import { firstMutationErrorMessage } from "../lib/quote-review-workflow-normalizers";
 import type {
+  QuoteAutoSendResult,
   QuoteFinanceScenario,
   QuoteWorkspaceDraft,
 } from "../../../../../../shared/qep-moonshot-contracts";
@@ -45,6 +46,7 @@ interface QuoteReviewWorkflowPanelsProps {
   submitApprovalResult?: {
     assignedToName?: string | null;
     branchName?: string | null;
+    autoSend?: QuoteAutoSendResult | null;
   };
   quoteStatus: QuoteWorkspaceDraft["quoteStatus"];
   onQuoteStatusChange: (status: QuoteWorkspaceDraft["quoteStatus"]) => void;
@@ -262,6 +264,29 @@ export function QuoteReviewWorkflowPanels({
               </div>
             </div>
           )}
+        </Card>
+      )}
+      {submitApprovalResult?.autoSend?.attempted && (
+        <Card className={cn(
+          "p-4",
+          submitApprovalResult.autoSend.sent
+            ? "border-emerald-500/20 bg-emerald-500/5"
+            : "border-amber-500/20 bg-amber-500/5",
+        )}>
+          <p className={cn(
+            "text-sm font-medium",
+            submitApprovalResult.autoSend.sent ? "text-emerald-300" : "text-amber-300",
+          )}>
+            Post-approval auto-send
+          </p>
+          <p className={cn(
+            "mt-1 text-xs",
+            submitApprovalResult.autoSend.sent ? "text-emerald-200" : "text-amber-200",
+          )}>
+            {submitApprovalResult.autoSend.sent
+              ? "Quote auto-send completed after approval."
+              : `Auto-send attempted but did not complete${submitApprovalResult.autoSend.error ? `: ${submitApprovalResult.autoSend.error}` : "."}`}
+          </p>
         </Card>
       )}
 

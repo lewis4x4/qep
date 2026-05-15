@@ -161,7 +161,7 @@ export function useDecideQuoteApproval() {
         sortOrder?: number;
       }>;
     }) => {
-      await decideQuoteApprovalCase({
+      return decideQuoteApprovalCase({
         approvalCaseId: input.approvalCaseId,
         decision: input.decision,
         note: input.reason ?? null,

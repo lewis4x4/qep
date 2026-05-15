@@ -193,10 +193,10 @@ function lineDescription(line: QuoteLineItemDraft): string {
 
 function toProposalLine(line: QuoteLineItemDraft, fallbackType?: QuoteLineItemKind): QuotePDFData["lineItems"][number] {
   const lineType = line.kind ?? fallbackType ?? "custom";
-  const tone: ProposalLineTone = CREDIT_LINE_KINDS.has(lineType) ? "credit" : "charge";
+  const metadata = metadataRecord(line.metadata);
+  const tone: ProposalLineTone = CREDIT_LINE_KINDS.has(lineType) || metadata.misc_line_kind === "credit" ? "credit" : "charge";
   const extendedPrice = lineExtendedAmount(line);
   const description = lineDescription(line);
-  const metadata = metadataRecord(line.metadata);
   return {
     lineType,
     description,
@@ -223,6 +223,11 @@ function toProposalLine(line: QuoteLineItemDraft, fallbackType?: QuoteLineItemKi
 function isCustomerVisibleLine(line: QuoteLineItemDraft): boolean {
   if (line.costVisibility === "customer") return true;
   if (line.costVisibility === "internal") return false;
+  if (line.kind === "freight") {
+    const direction = line.metadata?.freight_direction;
+    const fieldKey = line.metadata?.pricing_field_key;
+    if (direction === "inbound" || fieldKey === "inbound_freight") return false;
+  }
   return !INTERNAL_COST_LINE_KINDS.has(line.kind);
 }
 

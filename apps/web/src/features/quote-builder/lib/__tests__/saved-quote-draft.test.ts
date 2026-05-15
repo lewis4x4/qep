@@ -211,4 +211,42 @@ describe("hydrateDraftFromSavedQuote", () => {
     expect(draft.recommendation?.alternative?.attachments).toEqual(["Mower"]);
     expect(draft.recommendation?.trigger).toBeNull();
   });
+
+  test("infers inbound freight as internal when visibility is missing", () => {
+    const draft = hydrateDraftFromSavedQuote({
+      quote_package_line_items: [
+        {
+          id: "freight-1",
+          line_type: "freight",
+          description: "Inbound freight to yard",
+          quantity: 1,
+          unit_price: 1400,
+          metadata: {
+            pricing_field_key: "inbound_freight",
+            freight_direction: "inbound",
+          },
+        },
+      ],
+    });
+
+    expect(draft.pricingLines).toEqual([
+      {
+        kind: "freight",
+        costVisibility: "internal",
+        id: "freight-1",
+        title: "Inbound freight to yard",
+        make: undefined,
+        model: undefined,
+        year: null,
+        quantity: 1,
+        unitPrice: 1400,
+        reasonCode: null,
+        approvalRequired: false,
+        metadata: {
+          pricing_field_key: "inbound_freight",
+          freight_direction: "inbound",
+        },
+      },
+    ]);
+  });
 });

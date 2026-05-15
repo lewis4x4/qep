@@ -15,6 +15,7 @@ const KIND_LABELS: Record<QuotePackageCatalogKind, string> = {
   attachment: "Attachments",
   option: "Options",
   accessory: "Accessories",
+  part: "Parts",
   warranty: "Warranty",
 };
 
@@ -22,6 +23,7 @@ const KIND_SINGULAR_LABELS: Record<QuotePackageCatalogKind, string> = {
   attachment: "Attachment",
   option: "Option",
   accessory: "Accessory",
+  part: "Part",
   warranty: "Warranty",
 };
 
@@ -52,6 +54,9 @@ export function PackageItemSearchDialog({
   const activeKindRef = useRef(kind);
   const selected = new Set(selectedIds);
   const kindLabel = KIND_LABELS[kind];
+  const searchPlaceholder = kind === "part"
+    ? "Search parts by part number, description, or manufacturer..."
+    : `Search ${kindLabel.toLowerCase()} by name or category...`;
 
   useEffect(() => {
     activeKindRef.current = kind;
@@ -102,7 +107,7 @@ export function PackageItemSearchDialog({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && searchMutation.mutate(query)}
-              placeholder={`Search ${kindLabel.toLowerCase()} by name or category...`}
+              placeholder={searchPlaceholder}
               className="rounded border border-input bg-card px-3 py-2 text-sm"
               autoFocus
             />
@@ -128,6 +133,9 @@ export function PackageItemSearchDialog({
             <div className="grid gap-3 md:grid-cols-2">
               {combinedResults.map((item) => {
                 const isSelected = selected.has(item.id) || selected.has(item.sourceId);
+                const qtyOnHand = typeof item.metadata?.qty_on_hand === "number"
+                  ? item.metadata.qty_on_hand
+                  : null;
                 return (
                   <div key={`${item.kind}-${item.id}`} className="rounded-xl border border-border/80 bg-card/70 p-3">
                     <div className="flex items-start justify-between gap-3">
@@ -144,6 +152,7 @@ export function PackageItemSearchDialog({
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
                         {item.universal ? "Universal" : KIND_SINGULAR_LABELS[item.kind]}
+                        {item.kind === "part" && qtyOnHand != null ? ` · ${qtyOnHand} on hand` : ""}
                       </span>
                       <Button
                         size="sm"

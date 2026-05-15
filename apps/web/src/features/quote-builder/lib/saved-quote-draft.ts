@@ -87,9 +87,23 @@ function isLineItemKind(value: string): value is QuoteLineItemKind {
   return LINE_ITEM_KINDS.some((kind) => kind === value);
 }
 
-function normalizeCostVisibility(value: unknown, kind: QuoteLineItemKind): "internal" | "customer" {
+function freightDirectionFromMetadata(metadata: Record<string, unknown> | null | undefined): "inbound" | "outbound" | null {
+  const explicit = asString(metadata?.freight_direction);
+  if (explicit === "inbound" || explicit === "outbound") return explicit;
+  const key = asString(metadata?.pricing_field_key);
+  if (key === "inbound_freight") return "inbound";
+  if (key === "outbound_delivery") return "outbound";
+  return null;
+}
+
+function normalizeCostVisibility(
+  value: unknown,
+  kind: QuoteLineItemKind,
+  metadata?: Record<string, unknown> | null,
+): "internal" | "customer" {
   const text = asString(value);
   if (text === "internal" || text === "customer") return text;
+  if (kind === "freight" && freightDirectionFromMetadata(metadata) === "inbound") return "internal";
   return kind === "pdi" || kind === "good_faith" ? "internal" : "customer";
 }
 
@@ -214,7 +228,7 @@ function toPackageLineItemDraft(item: unknown): QuoteLineItemDraft[] {
 
   const line: QuoteLineItemDraft = {
     kind,
-    costVisibility: normalizeCostVisibility(record.cost_visibility, kind),
+    costVisibility: normalizeCostVisibility(record.cost_visibility, kind, metadata),
     id: asString(metadata?.source_id) || asString(record.catalog_entry_id) || asString(record.id) || undefined,
     title,
     make: asString(record.make) || undefined,

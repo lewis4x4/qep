@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Building2, ChevronRight, Database, Download, MapPin, Plus, Search, Sparkles } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
 import { QrmCompanyEditorSheet } from "../components/QrmCompanyEditorSheet";
@@ -47,6 +47,7 @@ function cleanDisplayText(value: string | null | undefined): string {
 
 export function QrmCompaniesPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [includeExtendedFields, setIncludeExtendedFields] = useState(false);
@@ -60,6 +61,12 @@ export function QrmCompaniesPage() {
       searchRef.current?.focus();
     }
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("new") === "1" || searchParams.get("action") === "new") {
+      setEditorOpen(true);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

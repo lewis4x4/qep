@@ -76,7 +76,7 @@ describe("AdvisorActionCards", () => {
     expect(screen.getByRole("link", { name: /voice note starter/i }).getAttribute("href")).toBe("/voice");
     expect(screen.getByRole("link", { name: /prospecting map/i }).getAttribute("href")).toBe("/qrm/opportunity-map");
     expect(screen.getByRole("link", { name: /submit service request/i }).getAttribute("href")).toBe("/service/intake");
-    expect(screen.getByRole("link", { name: /add customer/i }).getAttribute("href")).toBe("/qrm/companies");
+    expect(screen.getByRole("link", { name: /add customer/i }).getAttribute("href")).toBe("/qrm/companies?new=1");
 
     await waitFor(() => {
       expect(screen.getByText("$125K")).toBeTruthy();

@@ -199,20 +199,47 @@ const STEP_LABELS: Record<Step, string> = WIZARD_STEPS.reduce((labels, item) => 
 
 type EquipmentAvailabilityStatus = "in_stock" | "in_transit" | "source_required";
 type FinanceStepTab = "cash" | "finance" | "lease";
-type PricingLineKind = Extract<QuoteLineItemDraft["kind"], "pdi" | "freight" | "good_faith" | "doc_fee" | "title" | "tag" | "registration" | "discount" | "rebate_mfg" | "rebate_dealer" | "loyalty_discount">;
+type PricingLineKind = Extract<QuoteLineItemDraft["kind"], "pdi" | "freight" | "good_faith" | "doc_fee" | "title" | "tag" | "registration" | "discount" | "rebate_mfg" | "rebate_dealer" | "loyalty_discount" | "custom">;
 type TradeChecklistKey = "hourMeter" | "undercarriage" | "hydraulicLeaks" | "serviceHours" | "tiresTracks" | "photos";
 type TradeCaptureDraft = Record<TradeChecklistKey, string>;
 
 type CostVisibility = "internal" | "customer";
 
-const PRICING_ADDER_FIELDS: Array<{ kind: PricingLineKind; title: string; helper: string; step: number; costVisibility: CostVisibility }> = [
-  { kind: "freight", title: "Outbound delivery", helper: "Customer-facing outbound delivery charge", step: 100, costVisibility: "customer" },
-  { kind: "pdi", title: "PDI", helper: "Internal prep / inspection cost", step: 100, costVisibility: "internal" },
-  { kind: "good_faith", title: "1% good faith", helper: "Internal goodwill reserve", step: 100, costVisibility: "internal" },
-  { kind: "doc_fee", title: "Doc fee", helper: "Customer-facing paperwork fee", step: 25, costVisibility: "customer" },
-  { kind: "title", title: "Title", helper: "Customer-facing title processing", step: 25, costVisibility: "customer" },
-  { kind: "tag", title: "Tag", helper: "Customer-facing tag / plate fee", step: 25, costVisibility: "customer" },
-  { kind: "registration", title: "Registration", helper: "Customer-facing registration support", step: 25, costVisibility: "customer" },
+type PricingAdderField = {
+  id: string;
+  kind: PricingLineKind;
+  title: string;
+  helper: string;
+  step: number;
+  costVisibility: CostVisibility;
+  metadata?: Record<string, unknown>;
+};
+
+const PRICING_ADDER_FIELDS: PricingAdderField[] = [
+  {
+    id: "inbound_freight",
+    kind: "freight",
+    title: "Inbound freight to yard",
+    helper: "Internal freight from vendor to QEP yard",
+    step: 100,
+    costVisibility: "internal",
+    metadata: { freight_direction: "inbound", pricing_field_key: "inbound_freight" },
+  },
+  {
+    id: "outbound_delivery",
+    kind: "freight",
+    title: "Outbound delivery",
+    helper: "Customer-facing outbound delivery charge",
+    step: 100,
+    costVisibility: "customer",
+    metadata: { freight_direction: "outbound", pricing_field_key: "outbound_delivery" },
+  },
+  { id: "pdi", kind: "pdi", title: "PDI", helper: "Internal prep / inspection cost", step: 100, costVisibility: "internal" },
+  { id: "good_faith", kind: "good_faith", title: "1% good faith", helper: "Internal goodwill reserve", step: 100, costVisibility: "internal" },
+  { id: "doc_fee", kind: "doc_fee", title: "Doc fee", helper: "Customer-facing paperwork fee", step: 25, costVisibility: "customer" },
+  { id: "title", kind: "title", title: "Title", helper: "Customer-facing title processing", step: 25, costVisibility: "customer" },
+  { id: "tag", kind: "tag", title: "Tag", helper: "Customer-facing tag / plate fee", step: 25, costVisibility: "customer" },
+  { id: "registration", kind: "registration", title: "Registration", helper: "Customer-facing registration support", step: 25, costVisibility: "customer" },
 ];
 
 const DISCOUNT_REASON_OPTIONS: Array<{ value: string; label: string }> = [
@@ -356,12 +383,42 @@ function packageKindLabel(kind: QuotePackageCatalogKind): string {
   if (kind === "attachment") return "attachments";
   if (kind === "option") return "options";
   if (kind === "accessory") return "accessories";
+  if (kind === "part") return "parts";
   return "warranty";
 }
 
 function metadataString(metadata: Record<string, unknown> | null | undefined, key: string): string | null {
   const value = metadata?.[key];
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function metadataNumber(metadata: Record<string, unknown> | null | undefined, key: string): number | null {
+  const value = metadata?.[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function equipmentSystemBasePrice(line: QuoteLineItemDraft): number {
+  return metadataNumber(line.metadata, "system_base_unit_price") ?? line.unitPrice;
+}
+
+function applyEquipmentOverridePrice(line: QuoteLineItemDraft, nextPrice: number): QuoteLineItemDraft {
+  const systemBase = equipmentSystemBasePrice(line);
+  const metadata = { ...(line.metadata ?? {}) };
+  if (Math.abs(nextPrice - systemBase) < 0.01) {
+    delete metadata.equipment_override_price;
+  } else {
+    metadata.equipment_override_price = nextPrice;
+  }
+  return {
+    ...line,
+    unitPrice: nextPrice,
+    metadata: Object.keys(metadata).length > 0 ? metadata : null,
+  };
 }
 
 function availabilityClientLineKey(item: QuoteLineItemDraft, index: number): string {
@@ -440,6 +497,10 @@ function isTypoLikeRewrite(prev: string, next: string): boolean {
 }
 
 function buildEquipmentLine(entry: CatalogEntryMatch): QuoteLineItemDraft {
+  const metadata = metadataForCatalogEntry(entry);
+  if (typeof entry.list_price === "number" && Number.isFinite(entry.list_price)) {
+    metadata.system_base_unit_price = entry.list_price;
+  }
   return {
     kind: "equipment",
     id: entry.id,
@@ -452,7 +513,7 @@ function buildEquipmentLine(entry: CatalogEntryMatch): QuoteLineItemDraft {
     year: entry.year,
     quantity: 1,
     unitPrice: entry.list_price ?? 0,
-    metadata: metadataForCatalogEntry(entry),
+    metadata,
   };
 }
 
@@ -670,6 +731,10 @@ export function QuoteBuilderV2Page() {
   const [packageItemSearchOpen, setPackageItemSearchOpen] = useState(false);
   const [customLineTitle, setCustomLineTitle] = useState("");
   const [customLinePrice, setCustomLinePrice] = useState(0);
+  const [miscChargeTitle, setMiscChargeTitle] = useState("");
+  const [miscChargeAmount, setMiscChargeAmount] = useState(0);
+  const [miscCreditTitle, setMiscCreditTitle] = useState("");
+  const [miscCreditAmount, setMiscCreditAmount] = useState(0);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [autoSaveState, setAutoSaveState] = useState<AutoSaveState>("idle");
   const [internalNotes, setInternalNotes] = useState("");
@@ -721,6 +786,7 @@ export function QuoteBuilderV2Page() {
   });
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiIntakeMessage, setAiIntakeMessage] = useState<string | null>(null);
+  const [intakeRecorderOpen, setIntakeRecorderOpen] = useState(false);
   const [dealAssistantOpen, setDealAssistantOpen] = useState(false);
   const [availableOptions, setAvailableOptions] = useState<Array<{ id: string; name: string; price: number }>>([]);
   const [availableOptionsLabel, setAvailableOptionsLabel] = useState<string | null>(null);
@@ -1337,8 +1403,11 @@ export function QuoteBuilderV2Page() {
       }
       return submitQuoteForApproval(quotePackageId);
     },
-    onSuccess: () => {
-      setDraft((current) => ({ ...current, quoteStatus: "pending_approval" }));
+    onSuccess: (result) => {
+      setDraft((current) => ({
+        ...current,
+        quoteStatus: result.status === "approved" ? "approved" : "pending_approval",
+      }));
       queryClient.invalidateQueries({ queryKey: ["quote-builder", "list"] });
       queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case", activeQuotePackageId] });
       if (draft.dealId) {
@@ -2058,6 +2127,39 @@ export function QuoteBuilderV2Page() {
     setPackageToolsOpen(false);
   }
 
+  function handleAddMiscPricingLine(kind: "charge" | "credit") {
+    const rawTitle = kind === "charge" ? miscChargeTitle : miscCreditTitle;
+    const rawAmount = kind === "charge" ? miscChargeAmount : miscCreditAmount;
+    const title = rawTitle.trim() || (kind === "charge" ? "Misc charge" : "Misc credit");
+    const amount = Number.isFinite(rawAmount) ? Math.max(0, rawAmount) : 0;
+    if (amount <= 0) return;
+    const id = `misc_${kind}_${Date.now()}`;
+    const field: PricingAdderField = {
+      id,
+      kind: kind === "credit" ? "discount" : "custom",
+      title,
+      helper: kind === "credit" ? "Customer-facing miscellaneous credit" : "Customer-facing miscellaneous charge",
+      step: 25,
+      costVisibility: "customer",
+      metadata: {
+        pricing_field_key: id,
+        misc_line_kind: kind,
+      },
+    };
+    upsertPricingLine(field, amount, {
+      title,
+      reasonCode: kind === "credit" ? "other" : null,
+      metadata: field.metadata,
+    });
+    if (kind === "charge") {
+      setMiscChargeTitle("");
+      setMiscChargeAmount(0);
+    } else {
+      setMiscCreditTitle("");
+      setMiscCreditAmount(0);
+    }
+  }
+
   function handlePrimaryAction() {
     if (quoteStatus === "sent" || quoteStatus === "accepted") {
       void handleSaveClick();
@@ -2125,11 +2227,13 @@ export function QuoteBuilderV2Page() {
 
   useEffect(() => {
     if (!pdiAverageQuery.data || !pdiAutofillEligible) return;
-    const existingPdi = draft.pricingLines?.find((line) => line.kind === "pdi");
+    const pdiField = PRICING_ADDER_FIELDS.find((field) => field.id === "pdi");
+    if (!pdiField) return;
+    const existingPdi = pricingLine(pdiField);
     if (existingPdi && existingPdi.unitPrice > 0) return;
     const nextAmount = Math.round(pdiAverageQuery.data.avgPdiCost);
     if (nextAmount <= 0) return;
-    upsertPricingLine("pdi", "PDI", nextAmount, "internal", {
+    upsertPricingLine(pdiField, nextAmount, {
       metadata: {
         ...(existingPdi?.metadata ?? {}),
         pdi_source: "rolling_average_by_model",
@@ -2168,6 +2272,7 @@ export function QuoteBuilderV2Page() {
     const request = liveAvailabilityRequestForLine(item);
     return request?.status === "not_available" && !request.managerOverrideAt;
   });
+  const inboundFreightEligible = draft.equipment.some((item) => availabilityStatusForLine(item) !== "in_stock");
   const equipmentCanContinue = hasEquipmentLine && sourceRequiredAwaitingConfirmation.length === 0 && sourceRequiredUnavailable.length === 0;
   const tradeChecklistComplete = Object.values(tradeChecklist).every(Boolean);
   const tradeManagerApprovalRequired = draft.tradeAllowance > 0 && !tradeChecklistComplete;
@@ -2229,6 +2334,15 @@ export function QuoteBuilderV2Page() {
     },
   });
 
+  useEffect(() => {
+    if (inboundFreightEligible) return;
+    const inboundField = PRICING_ADDER_FIELDS.find((field) => field.id === "inbound_freight");
+    if (!inboundField) return;
+    const existingInbound = pricingLine(inboundField);
+    if (!existingInbound) return;
+    upsertPricingLine(inboundField, 0);
+  }, [inboundFreightEligible, draft.pricingLines]);
+
   function markAvailabilityConfirmationRequested(index: number): void {
     const equipment = draft.equipment[index];
     if (!equipment) return;
@@ -2243,7 +2357,7 @@ export function QuoteBuilderV2Page() {
     });
   }
 
-  function addConfigLine(kind: "attachment" | "option" | "accessory" | "warranty", input?: { id?: string; title: string; unitPrice: number }): void {
+  function addConfigLine(kind: "attachment" | "option" | "accessory" | "part" | "warranty", input?: { id?: string; title: string; unitPrice: number }): void {
     const title = input?.title?.trim() || `${kind[0]!.toUpperCase()}${kind.slice(1)} line`;
     const line: QuoteLineItemDraft = {
       kind,
@@ -2263,38 +2377,83 @@ export function QuoteBuilderV2Page() {
     }));
   }
 
-  function pricingLine(kind: PricingLineKind): QuoteLineItemDraft | undefined {
-    return draft.pricingLines?.find((item) => item.kind === kind);
+  function pricingFieldKeyForLine(item: QuoteLineItemDraft): string {
+    const explicitKey = typeof item.metadata?.pricing_field_key === "string"
+      ? item.metadata.pricing_field_key
+      : null;
+    if (explicitKey) return explicitKey;
+    if (item.kind === "freight") {
+      const direction = typeof item.metadata?.freight_direction === "string"
+        ? item.metadata.freight_direction
+        : "outbound";
+      return direction === "inbound" ? "inbound_freight" : "outbound_delivery";
+    }
+    return item.kind;
+  }
+
+  function asPricingAdderField(
+    fieldOrKind: PricingAdderField | PricingLineKind,
+    title?: string,
+    costVisibility?: CostVisibility,
+  ): PricingAdderField {
+    if (typeof fieldOrKind === "object") return fieldOrKind;
+    return {
+      id: fieldOrKind,
+      kind: fieldOrKind,
+      title: title ?? fieldOrKind,
+      helper: "",
+      step: 1,
+      costVisibility: costVisibility ?? defaultCostVisibilityForKind(fieldOrKind),
+    };
+  }
+
+  function pricingLine(fieldOrKind: PricingAdderField | PricingLineKind): QuoteLineItemDraft | undefined {
+    const field = asPricingAdderField(fieldOrKind);
+    return draft.pricingLines?.find((item) => item.kind === field.kind && pricingFieldKeyForLine(item) === field.id);
   }
 
   function upsertPricingLine(
-    kind: PricingLineKind,
-    title: string,
+    fieldOrKind: PricingAdderField | PricingLineKind,
     amount: number,
-    costVisibility: CostVisibility = defaultCostVisibilityForKind(kind),
     patch: Partial<QuoteLineItemDraft> = {},
+    legacyTitle?: string,
+    legacyCostVisibility?: CostVisibility,
   ): void {
+    const field = asPricingAdderField(fieldOrKind, legacyTitle, legacyCostVisibility);
     const safeAmount = Number.isFinite(amount) ? Math.max(0, amount) : 0;
     setDraft((current) => {
       const existing = current.pricingLines ?? [];
+      const existingMatch = existing.find((item) =>
+        item.kind === field.kind && pricingFieldKeyForLine(item) === field.id);
+      const mergedMetadata = {
+        ...(field.metadata ?? {}),
+        ...(existingMatch?.metadata ?? {}),
+        ...((patch.metadata && typeof patch.metadata === "object" && !Array.isArray(patch.metadata))
+          ? patch.metadata
+          : {}),
+      };
       const nextLine: QuoteLineItemDraft = {
-        kind,
-        id: existing.find((item) => item.kind === kind)?.id ?? `${kind}-${Date.now()}`,
+        kind: field.kind,
+        id: existingMatch?.id ?? `${field.id}-${Date.now()}`,
         sourceCatalog: "manual",
         sourceId: null,
         dealerCost: null,
-        costVisibility,
-        title,
+        costVisibility: field.costVisibility,
+        title: field.title,
         quantity: 1,
         unitPrice: safeAmount,
+        metadata: mergedMetadata,
         ...patch,
       };
       return {
         ...current,
         pricingLines: safeAmount <= 0
-          ? existing.filter((item) => item.kind !== kind)
-          : existing.some((item) => item.kind === kind)
-            ? existing.map((item) => item.kind === kind ? { ...item, ...nextLine } : item)
+          ? existing.filter((item) => !(item.kind === field.kind && pricingFieldKeyForLine(item) === field.id))
+          : existingMatch
+            ? existing.map((item) =>
+              item.kind === field.kind && pricingFieldKeyForLine(item) === field.id
+                ? { ...item, ...nextLine }
+                : item)
             : [...existing, nextLine],
       };
     });
@@ -2473,6 +2632,8 @@ export function QuoteBuilderV2Page() {
       ...cur,
       customerName:    cur.customerName    || "Walk-in prospect",
       customerCompany: cur.customerCompany || "Walk-in prospect",
+      contactId:       undefined,
+      companyId:       undefined,
       customerSignals: null,
       customerWarmth:  cur.customerWarmth ?? "new",
     }));
@@ -2686,9 +2847,12 @@ export function QuoteBuilderV2Page() {
                 />
                 <button
                   type="button"
-                  onClick={() => setDraft((cur) => ({ ...cur, entryMode: "voice" }))}
+                  onClick={() => {
+                    setDraft((cur) => ({ ...cur, entryMode: "voice" }));
+                    setIntakeRecorderOpen((current) => !current);
+                  }}
                   className={`absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border transition ${
-                    draft.entryMode === "voice"
+                    intakeRecorderOpen
                       ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
                       : "border-border bg-background/80 text-muted-foreground hover:border-qep-orange/50 hover:text-qep-orange"
                   }`}
@@ -2698,6 +2862,7 @@ export function QuoteBuilderV2Page() {
                   <Mic className="h-4 w-4" />
                 </button>
               </div>
+              <p className="mt-2 text-xs text-muted-foreground">Use the mic to capture field notes, then build the quote from one intake stream.</p>
               <div className="mt-2 flex justify-end">
                 <Button
                   size="sm"
@@ -2708,7 +2873,7 @@ export function QuoteBuilderV2Page() {
                   Build with AI
                 </Button>
               </div>
-              {draft.entryMode === "voice" && (
+              {intakeRecorderOpen && (
                 <div className="mt-3 space-y-2 rounded-lg border border-border/70 bg-background/60 p-3">
                   <p className="text-sm font-medium text-foreground">Record intake</p>
                   <VoiceRecorder
@@ -2753,7 +2918,9 @@ export function QuoteBuilderV2Page() {
                         item={item}
                         onPriceChange={(value: number) => setDraft((current) => ({
                           ...current,
-                          equipment: current.equipment.map((line, rowIndex) => rowIndex === index ? { ...line, unitPrice: value } : line),
+                          equipment: current.equipment.map((line, rowIndex) => (
+                            rowIndex === index ? applyEquipmentOverridePrice(line, value) : line
+                          )),
                         }))}
                         onRemove={() => setDraft((current) => ({
                           ...current,
@@ -3301,9 +3468,12 @@ export function QuoteBuilderV2Page() {
               />
               <button
                 type="button"
-                onClick={() => setDraft((current) => ({ ...current, entryMode: "voice" }))}
+                onClick={() => {
+                  setDraft((current) => ({ ...current, entryMode: "voice" }));
+                  setIntakeRecorderOpen((open) => !open);
+                }}
                 className={`absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border transition ${
-                  draft.entryMode === "voice"
+                  intakeRecorderOpen
                     ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
                     : "border-border bg-background/80 text-muted-foreground hover:border-qep-orange/50 hover:text-qep-orange"
                 }`}
@@ -3313,8 +3483,9 @@ export function QuoteBuilderV2Page() {
                 <Mic className="h-4 w-4" />
               </button>
             </div>
+            <p className="mt-2 text-xs text-muted-foreground">Use the same intake box for typing and mic capture before AI builds the draft.</p>
 
-            {draft.entryMode === "voice" && (
+            {intakeRecorderOpen && (
               <div className="mt-4 space-y-2 rounded-lg border border-border/70 bg-background/60 p-3">
                 <p className="text-sm font-medium text-foreground">Record the customer need</p>
                 <VoiceRecorder
@@ -3507,7 +3678,9 @@ export function QuoteBuilderV2Page() {
                                 if (!Number.isFinite(parsed) || parsed < 0) return;
                                 setDraft((current) => ({
                                   ...current,
-                                  equipment: current.equipment.map((item, rowIndex) => rowIndex === index ? { ...item, unitPrice: parsed } : item),
+                                  equipment: current.equipment.map((item, rowIndex) => (
+                                    rowIndex === index ? applyEquipmentOverridePrice(item, parsed) : item
+                                  )),
                                 }));
                               }}
                               className="w-24 bg-transparent text-right text-sm outline-none"
@@ -3586,7 +3759,7 @@ export function QuoteBuilderV2Page() {
         <div className="space-y-4">
           <div>
             <h2 className="text-lg font-semibold text-foreground">Step 3: Configure the package</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Attachments, options, accessories, and warranty stay separated so reps do not scroll through one overloaded list.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Attachments, options, accessories, parts, and warranty stay separated so reps do not scroll through one overloaded list.</p>
           </div>
 
           <Card className="p-4">
@@ -3595,6 +3768,7 @@ export function QuoteBuilderV2Page() {
                 { id: "attachment", label: "Attachments" },
                 { id: "option", label: "Options" },
                 { id: "accessory", label: "Accessories" },
+                { id: "part", label: "Parts" },
                 { id: "warranty", label: "Warranty" },
               ] as Array<{ id: typeof configureTab; label: string }>).map((tab) => {
                 const count = draft.attachments.filter((item) => item.kind === tab.id).length;
@@ -3868,6 +4042,67 @@ export function QuoteBuilderV2Page() {
           />
 
           <Card className="p-4">
+            <p className="text-sm font-semibold text-foreground">Equipment base-price overrides</p>
+            <p className="mt-1 text-xs text-muted-foreground">Override price here without changing the machine's source/base price record.</p>
+            <div className="mt-3 space-y-2">
+              {draft.equipment.length === 0 ? (
+                <p className="rounded border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                  Add equipment first to set an override.
+                </p>
+              ) : draft.equipment.map((equipment, index) => {
+                const systemBase = equipmentSystemBasePrice(equipment);
+                const hasOverride = Math.abs(equipment.unitPrice - systemBase) > 0.01;
+                return (
+                  <div key={`pricing-override-${equipment.id ?? equipment.title}-${index}`} className="rounded-lg border border-border/70 bg-card/50 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground">{equipment.title || `${equipment.make ?? ""} ${equipment.model ?? ""}`.trim() || "Equipment"}</p>
+                      <span className="text-xs text-muted-foreground">System base {money(systemBase)}</span>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <label className="flex flex-1 items-center gap-1 rounded border border-input bg-background px-2 py-1 text-sm font-semibold text-foreground">
+                        <span className="text-muted-foreground">$</span>
+                        <input
+                          type="number"
+                          min={0}
+                          step={100}
+                          value={equipment.unitPrice}
+                          onChange={(event) => {
+                            const parsed = event.target.value === "" ? 0 : Number(event.target.value);
+                            if (!Number.isFinite(parsed) || parsed < 0) return;
+                            setDraft((current) => ({
+                              ...current,
+                              equipment: current.equipment.map((item, rowIndex) => (
+                                rowIndex === index ? applyEquipmentOverridePrice(item, parsed) : item
+                              )),
+                            }));
+                          }}
+                          className="w-full bg-transparent text-right outline-none"
+                          aria-label={`Override price for ${equipment.title}`}
+                        />
+                      </label>
+                      {hasOverride && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDraft((current) => ({
+                            ...current,
+                            equipment: current.equipment.map((item, rowIndex) => (
+                              rowIndex === index ? applyEquipmentOverridePrice(item, systemBase) : item
+                            )),
+                          }))}
+                        >
+                          Reset
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+
+          <Card className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-foreground">Price adders</p>
@@ -3877,7 +4112,11 @@ export function QuoteBuilderV2Page() {
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => upsertPricingLine("good_faith", "1% good faith", Math.round(subtotal * 0.01), "internal")}
+                onClick={() => {
+                  const goodFaithField = PRICING_ADDER_FIELDS.find((field) => field.id === "good_faith");
+                  if (!goodFaithField) return;
+                  upsertPricingLine(goodFaithField, Math.round(subtotal * 0.01));
+                }}
               >
                 Set 1% good faith
               </Button>
@@ -3886,10 +4125,13 @@ export function QuoteBuilderV2Page() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Internal cost adders (not shown to customer)</p>
                 <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                  {PRICING_ADDER_FIELDS.filter((field) => field.costVisibility === "internal").map((field) => {
-                    const line = pricingLine(field.kind);
+                  {PRICING_ADDER_FIELDS.filter((field) =>
+                    field.costVisibility === "internal"
+                    && (field.id !== "inbound_freight" || inboundFreightEligible))
+                    .map((field) => {
+                    const line = pricingLine(field);
                     return (
-                      <label key={field.kind} className="rounded-lg border border-border/70 bg-card/50 p-3 text-sm">
+                      <label key={field.id} className="rounded-lg border border-border/70 bg-card/50 p-3 text-sm">
                         <span className="font-medium text-foreground">{field.title}</span>
                         <span className="mt-0.5 block text-[11px] text-muted-foreground">{field.helper}</span>
                         {field.kind === "pdi" && line?.metadata?.pdi_source === "rolling_average_by_model" && (
@@ -3904,7 +4146,7 @@ export function QuoteBuilderV2Page() {
                             min={0}
                             step={field.step}
                             value={line?.unitPrice ?? ""}
-                            onChange={(event) => upsertPricingLine(field.kind, field.title, Number(event.target.value) || 0, field.costVisibility)}
+                            onChange={(event) => upsertPricingLine(field, Number(event.target.value) || 0)}
                             placeholder="0"
                             className="w-full bg-transparent text-right text-sm font-semibold outline-none"
                           />
@@ -3913,14 +4155,19 @@ export function QuoteBuilderV2Page() {
                     );
                   })}
                 </div>
+                {!inboundFreightEligible && (
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Inbound freight is hidden while all selected equipment is in stock because inbound cost is already baked into loaded machine cost.
+                  </p>
+                )}
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Customer-facing charges (printed on quote)</p>
                 <div className="mt-2 grid gap-3 sm:grid-cols-2">
                   {PRICING_ADDER_FIELDS.filter((field) => field.costVisibility === "customer").map((field) => {
-                    const line = pricingLine(field.kind);
+                    const line = pricingLine(field);
                     return (
-                      <label key={field.kind} className="rounded-lg border border-border/70 bg-card/50 p-3 text-sm">
+                      <label key={field.id} className="rounded-lg border border-border/70 bg-card/50 p-3 text-sm">
                         <span className="font-medium text-foreground">{field.title}</span>
                         <span className="mt-0.5 block text-[11px] text-muted-foreground">{field.helper}</span>
                         <div className="mt-2 flex items-center gap-1 rounded border border-input bg-background px-2 py-1">
@@ -3930,7 +4177,7 @@ export function QuoteBuilderV2Page() {
                             min={0}
                             step={field.step}
                             value={line?.unitPrice ?? ""}
-                            onChange={(event) => upsertPricingLine(field.kind, field.title, Number(event.target.value) || 0, field.costVisibility)}
+                            onChange={(event) => upsertPricingLine(field, Number(event.target.value) || 0)}
                             placeholder="0"
                             className="w-full bg-transparent text-right text-sm font-semibold outline-none"
                           />
@@ -3939,6 +4186,90 @@ export function QuoteBuilderV2Page() {
                     );
                   })}
                 </div>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-background/40 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Misc charges / credits</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">Use for wrap, down payment received, one-off charges, or customer-visible credits not covered above.</p>
+                <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-lg border border-border/60 bg-card/50 p-3">
+                    <p className="text-sm font-medium text-foreground">Misc charge</p>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px_auto]">
+                      <input
+                        value={miscChargeTitle}
+                        onChange={(event) => setMiscChargeTitle(event.target.value)}
+                        placeholder="e.g. Wrap, setup, special handling"
+                        className="rounded border border-input bg-background px-3 py-2 text-sm"
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        step={25}
+                        value={miscChargeAmount || ""}
+                        onChange={(event) => setMiscChargeAmount(Number(event.target.value) || 0)}
+                        placeholder="0"
+                        className="rounded border border-input bg-background px-3 py-2 text-sm"
+                      />
+                      <Button type="button" size="sm" onClick={() => handleAddMiscPricingLine("charge")}>
+                        Add
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-card/50 p-3">
+                    <p className="text-sm font-medium text-foreground">Misc credit</p>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px_auto]">
+                      <input
+                        value={miscCreditTitle}
+                        onChange={(event) => setMiscCreditTitle(event.target.value)}
+                        placeholder="e.g. Down payment received"
+                        className="rounded border border-input bg-background px-3 py-2 text-sm"
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        step={25}
+                        value={miscCreditAmount || ""}
+                        onChange={(event) => setMiscCreditAmount(Number(event.target.value) || 0)}
+                        placeholder="0"
+                        className="rounded border border-input bg-background px-3 py-2 text-sm"
+                      />
+                      <Button type="button" size="sm" variant="outline" onClick={() => handleAddMiscPricingLine("credit")}>
+                        Add
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                {(draft.pricingLines ?? []).some((line) => line.metadata?.misc_line_kind === "charge" || line.metadata?.misc_line_kind === "credit") && (
+                  <div className="mt-3 space-y-2">
+                    {(draft.pricingLines ?? [])
+                      .filter((line) => line.metadata?.misc_line_kind === "charge" || line.metadata?.misc_line_kind === "credit")
+                      .map((line) => (
+                        <div key={line.id ?? line.title} className="flex items-center justify-between gap-3 rounded border border-border/60 bg-card/50 px-3 py-2 text-sm">
+                          <div>
+                            <p className="font-medium text-foreground">{line.title}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {line.metadata?.misc_line_kind === "credit" ? "Credit" : "Charge"} · printed on customer quote
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={line.metadata?.misc_line_kind === "credit" ? "font-semibold text-emerald-400" : "font-semibold text-foreground"}>
+                              {line.metadata?.misc_line_kind === "credit" ? "-" : ""}{money(line.unitPrice)}
+                            </span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setDraft((current) => ({
+                                ...current,
+                                pricingLines: (current.pricingLines ?? []).filter((item) => item.id !== line.id),
+                              }))}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
             </div>
           </Card>
@@ -3994,13 +4325,9 @@ export function QuoteBuilderV2Page() {
                     min={0}
                     step={100}
                     value={discountLine?.unitPrice ?? ""}
-                    onChange={(event) => upsertPricingLine(
-                      "discount",
-                      "Manual discount",
-                      Number(event.target.value) || 0,
-                      "customer",
-                      { reasonCode: discountLine?.reasonCode ?? "competitive_match" },
-                    )}
+                    onChange={(event) => upsertPricingLine("discount", Number(event.target.value) || 0, {
+                      reasonCode: discountLine?.reasonCode ?? "competitive_match",
+                    }, "Manual discount", "customer")}
                     placeholder="0"
                     className="w-full bg-transparent text-right text-sm font-semibold outline-none"
                   />
@@ -4010,13 +4337,9 @@ export function QuoteBuilderV2Page() {
                 <span className="text-xs font-medium text-muted-foreground">Reason code</span>
                 <select
                   value={discountLine?.reasonCode ?? "competitive_match"}
-                  onChange={(event) => upsertPricingLine(
-                    "discount",
-                    "Manual discount",
-                    discountLine?.unitPrice ?? 0,
-                    "customer",
-                    { reasonCode: event.target.value },
-                  )}
+                  onChange={(event) => upsertPricingLine("discount", discountLine?.unitPrice ?? 0, {
+                    reasonCode: event.target.value,
+                  }, "Manual discount", "customer")}
                   className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
                 >
                   {DISCOUNT_REASON_OPTIONS.map((option) => (
@@ -4421,6 +4744,52 @@ export function QuoteBuilderV2Page() {
             </div>
           </Card>
 
+          <Card className="p-4">
+            <p className="text-sm font-semibold text-foreground">Equipment pricing at review</p>
+            <p className="mt-1 text-xs text-muted-foreground">Final opportunity to adjust machine price before approval submission.</p>
+            <div className="mt-3 space-y-2">
+              {draft.equipment.length === 0 ? (
+                <p className="rounded border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                  No equipment selected yet.
+                </p>
+              ) : draft.equipment.map((equipment, index) => {
+                const systemBase = equipmentSystemBasePrice(equipment);
+                const hasOverride = Math.abs(equipment.unitPrice - systemBase) > 0.01;
+                return (
+                  <div key={`review-override-${equipment.id ?? equipment.title}-${index}`} className="rounded-lg border border-border/70 bg-card/40 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground">{equipment.title || `${equipment.make ?? ""} ${equipment.model ?? ""}`.trim() || "Equipment"}</p>
+                      <span className="text-xs text-muted-foreground">
+                        {hasOverride ? `Override active (base ${money(systemBase)})` : `Base ${money(systemBase)}`}
+                      </span>
+                    </div>
+                    <label className="mt-2 flex items-center gap-1 rounded border border-input bg-background px-2 py-1 text-sm font-semibold text-foreground">
+                      <span className="text-muted-foreground">$</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={100}
+                        value={equipment.unitPrice}
+                        onChange={(event) => {
+                          const parsed = event.target.value === "" ? 0 : Number(event.target.value);
+                          if (!Number.isFinite(parsed) || parsed < 0) return;
+                          setDraft((current) => ({
+                            ...current,
+                            equipment: current.equipment.map((item, rowIndex) => (
+                              rowIndex === index ? applyEquipmentOverridePrice(item, parsed) : item
+                            )),
+                          }));
+                        }}
+                        className="w-full bg-transparent text-right outline-none"
+                        aria-label={`Review price for ${equipment.title}`}
+                      />
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+
           <MarginCheckBanner
             marginPct={marginPct}
             waterfall={{
@@ -4443,6 +4812,64 @@ export function QuoteBuilderV2Page() {
                 {approvalPending ? "Approval pending" : approvalGranted ? "Approved" : "Submit for approval"}
               </Button>
             </div>
+            <div className="mt-3 rounded-lg border border-border/70 bg-card/40 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Post-approval action</p>
+              <p className="mt-1 text-xs text-muted-foreground">Choose whether approved quotes auto-send to the customer or route back to the rep for final delivery timing.</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setDraft((current) => ({ ...current, postApprovalAction: "return_to_rep" }))}
+                  className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
+                    (draft.postApprovalAction ?? "return_to_rep") === "return_to_rep"
+                      ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <p className="font-semibold">Return to rep</p>
+                  <p className="mt-1 text-[11px]">Default path. Rep reviews and manually sends to customer.</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDraft((current) => ({ ...current, postApprovalAction: "auto_send_customer" }))}
+                  className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
+                    draft.postApprovalAction === "auto_send_customer"
+                      ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <p className="font-semibold">Auto-send customer</p>
+                  <p className="mt-1 text-[11px]">Queue approved quote for automatic customer delivery.</p>
+                </button>
+              </div>
+            </div>
+            {submitApprovalMutation.data?.status === "approved" && submitApprovalMutation.data?.bypassRuleName && (
+              <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-300">Auto-approved</p>
+                <p className="mt-1 text-xs text-emerald-100">
+                  Approval bypass applied: <span className="font-semibold">{submitApprovalMutation.data.bypassRuleName}</span>
+                </p>
+              </div>
+            )}
+            {submitApprovalMutation.data?.autoSend?.attempted && (
+              <div className={`mt-3 rounded-lg border px-3 py-2 ${
+                submitApprovalMutation.data.autoSend.sent
+                  ? "border-emerald-500/30 bg-emerald-500/5"
+                  : "border-amber-500/30 bg-amber-500/5"
+              }`}>
+                <p className={`text-xs font-semibold uppercase tracking-[0.12em] ${
+                  submitApprovalMutation.data.autoSend.sent ? "text-emerald-300" : "text-amber-300"
+                }`}>
+                  Post-approval auto-send
+                </p>
+                <p className={`mt-1 text-xs ${
+                  submitApprovalMutation.data.autoSend.sent ? "text-emerald-100" : "text-amber-100"
+                }`}>
+                  {submitApprovalMutation.data.autoSend.sent
+                    ? "Quote was auto-sent to the customer after approval."
+                    : `Auto-send attempted but did not complete${submitApprovalMutation.data.autoSend.error ? `: ${submitApprovalMutation.data.autoSend.error}` : "."}`}
+                </p>
+              </div>
+            )}
           </Card>
 
           {activeQuotePackageId ? (
@@ -4454,6 +4881,11 @@ export function QuoteBuilderV2Page() {
               sendReadiness={packetReadiness.send}
               requiresManagerApproval={approvalState.requiresManagerApproval}
               userRole={userRoleQuery.data ?? null}
+              submitApprovalResult={{
+                assignedToName: submitApprovalMutation.data?.assignedToName ?? null,
+                branchName: submitApprovalMutation.data?.branchName ?? null,
+                autoSend: submitApprovalMutation.data?.autoSend ?? null,
+              }}
               quoteStatus={quoteStatus}
               onQuoteStatusChange={handleQuoteStatusChange}
               showSendSection={false}
@@ -4553,6 +4985,14 @@ export function QuoteBuilderV2Page() {
               <ReadinessRow label="Follow-up" ready={Boolean(draft.followUpAt)} detail={draft.followUpAt ? (shortDateTime(draft.followUpAt) ?? "Scheduled") : "Required before email/text"} />
               <ReadinessRow label="Tax" ready={taxResolved} detail={taxResolutionBlocker ?? "Tax preview resolved"} />
               <ReadinessRow label="Why this machine" ready={!whyThisMachineRequired || draft.whyThisMachineConfirmed === true} detail={whyThisMachineBlocker ?? "Rep confirmed or not required"} />
+            </div>
+            <div className="mt-4 rounded-lg border border-border/70 bg-card/40 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Post-approval routing</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {(draft.postApprovalAction ?? "return_to_rep") === "auto_send_customer"
+                  ? "Auto-send to customer is selected. Once approval clears, the system attempts immediate customer delivery."
+                  : "Return-to-rep is selected. Approval clears the quote, but the rep controls final customer send timing."}
+              </p>
             </div>
             <label className="mt-4 block space-y-1 text-sm">
               <span className="text-xs font-medium text-muted-foreground">Required follow-up date</span>

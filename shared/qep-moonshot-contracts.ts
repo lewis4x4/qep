@@ -431,11 +431,31 @@ export interface QuoteApprovalSubmitResult {
   approvalId: string;
   quotePackageVersionId: string;
   versionNumber: number;
-  status: "pending_approval";
+  status: "pending_approval" | "approved";
   branchName: string | null;
   assignedToName: string | null;
   routeMode: QuoteApprovalRouteMode;
   alreadyPending?: boolean;
+  bypassRuleId?: string | null;
+  bypassRuleName?: string | null;
+  autoSend?: {
+    attempted: boolean;
+    sent: boolean;
+    reason?: string | null;
+    error?: string | null;
+  } | null;
+}
+
+export interface QuoteAutoSendResult {
+  attempted: boolean;
+  sent: boolean;
+  reason?: string | null;
+  error?: string | null;
+}
+
+export interface QuoteApprovalDecisionResult {
+  approvalCase: QuoteApprovalCaseSummary | null;
+  autoSend: QuoteAutoSendResult | null;
 }
 
 export interface QuoteApprovalDecisionPayload {

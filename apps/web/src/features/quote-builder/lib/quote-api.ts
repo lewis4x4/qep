@@ -6,6 +6,7 @@ import type {
   PortalQuoteRevisionDraft,
   PortalQuoteRevisionPublishState,
   QuoteApprovalCaseSummary,
+  QuoteApprovalDecisionResult,
   QuoteApprovalCaseStatus,
   QuoteApprovalCondition,
   QuoteApprovalConditionDraft,
@@ -488,16 +489,29 @@ export function normalizeQuoteApprovalCaseSummary(value: unknown): QuoteApproval
 
 export function normalizeQuoteApprovalSubmitResult(value: unknown): QuoteApprovalSubmitResult {
   const record = recordOrEmpty(value);
+  const statusRaw = firstString(record.status);
+  const status = statusRaw === "approved" ? "approved" : "pending_approval";
+  const autoSendRecord = recordOrEmpty(record.auto_send ?? record.autoSend);
   return {
     approvalCaseId: firstString(record.approvalCaseId, record.approval_case_id) ?? "",
     approvalId: firstString(record.approvalId, record.approval_id) ?? "",
     quotePackageVersionId: firstString(record.quotePackageVersionId, record.quote_package_version_id) ?? "",
     versionNumber: numOrNull(record.versionNumber ?? record.version_number) ?? 0,
-    status: "pending_approval",
+    status,
     branchName: nullableString(record.branchName ?? record.branch_name),
     assignedToName: nullableString(record.assignedToName ?? record.assigned_to_name),
     routeMode: normalizeApprovalRouteMode(record.routeMode ?? record.route_mode),
     alreadyPending: record.alreadyPending === true || record.already_pending === true,
+    bypassRuleId: nullableString(record.bypassRuleId ?? record.bypass_rule_id),
+    bypassRuleName: nullableString(record.bypassRuleName ?? record.bypass_rule_name),
+    autoSend: Object.keys(autoSendRecord).length > 0
+      ? {
+        attempted: autoSendRecord.attempted === true,
+        sent: autoSendRecord.sent === true,
+        reason: nullableString(autoSendRecord.reason),
+        error: nullableString(autoSendRecord.error),
+      }
+      : null,
   };
 }
 
@@ -1511,7 +1525,7 @@ export async function decideQuoteApprovalCase(input: {
   decision: QuoteApprovalDecision;
   note?: string | null;
   conditions?: QuoteApprovalConditionDraft[];
-}): Promise<QuoteApprovalCaseSummary | null> {
+}): Promise<QuoteApprovalDecisionResult> {
   const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/decide-approval-case`, {
     method: "POST",
     body: JSON.stringify({
@@ -1526,7 +1540,18 @@ export async function decideQuoteApprovalCase(input: {
     throw new Error(errorDetail(err) || "Failed to decide quote approval case");
   }
   const body = await readJsonRecord(res);
-  return normalizeQuoteApprovalCaseSummary(body.approval_case);
+  const autoSendRecord = recordOrEmpty(body.auto_send ?? body.autoSend);
+  return {
+    approvalCase: normalizeQuoteApprovalCaseSummary(body.approval_case),
+    autoSend: Object.keys(autoSendRecord).length > 0
+      ? {
+        attempted: autoSendRecord.attempted === true,
+        sent: autoSendRecord.sent === true,
+        reason: nullableString(autoSendRecord.reason),
+        error: nullableString(autoSendRecord.error),
+      }
+      : null,
+  };
 }
 
 export async function getQuoteApprovalPolicy(): Promise<QuoteApprovalPolicy> {
@@ -1657,10 +1682,22 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const LINE_DISCOUNT_REASON_CODES = new Set(["competitive_match", "volume_buyer", "aged_inventory", "loyalty", "other"]);
 const INTERNAL_COST_LINE_KINDS = new Set(["pdi", "good_faith"]);
 
-function defaultCostVisibility(kind: unknown): "internal" | "customer" {
-  return typeof kind === "string" && INTERNAL_COST_LINE_KINDS.has(kind)
-    ? "internal"
-    : "customer";
+function freightDirectionFromMetadata(metadata: Record<string, unknown> | null | undefined): "inbound" | "outbound" | null {
+  const explicit = metadata?.freight_direction;
+  if (explicit === "inbound" || explicit === "outbound") return explicit;
+  const key = metadata?.pricing_field_key;
+  if (key === "inbound_freight") return "inbound";
+  if (key === "outbound_delivery") return "outbound";
+  return null;
+}
+
+function defaultCostVisibility(
+  kind: unknown,
+  metadata?: Record<string, unknown> | null,
+): "internal" | "customer" {
+  if (typeof kind === "string" && INTERNAL_COST_LINE_KINDS.has(kind)) return "internal";
+  if (kind === "freight" && freightDirectionFromMetadata(metadata) === "inbound") return "internal";
+  return "customer";
 }
 
 function safeLineReasonCode(item: QuoteWorkspaceDraft["equipment"][number]): string | undefined {
@@ -1698,6 +1735,10 @@ export function buildQuoteSavePayload(
   },
 ): Record<string, unknown> {
   const pricingLines = draft.pricingLines ?? [];
+  const isProspectQuote = !draft.contactId && !draft.companyId && (
+    draft.customerWarmth === "new"
+    || /prospect/i.test(`${draft.customerName ?? ""} ${draft.customerCompany ?? ""}`)
+  );
   const financeScenarioSource = draft.savedFinanceScenarios?.length
     ? draft.savedFinanceScenarios
     : financeScenarios;
@@ -1711,6 +1752,18 @@ export function buildQuoteSavePayload(
     if (item.sourceCatalog !== "catalog_entries") return undefined;
     const candidate = item.sourceId ?? item.id;
     return candidate && UUID_RE.test(candidate) ? candidate : undefined;
+  };
+  const pricingFieldKey = (item: QuoteWorkspaceDraft["equipment"][number]): string | null => {
+    const value = item.metadata?.pricing_field_key;
+    return typeof value === "string" && value.length > 0 ? value : null;
+  };
+  const freightDirection = (item: QuoteWorkspaceDraft["equipment"][number]): "inbound" | "outbound" | null => {
+    const explicit = item.metadata?.freight_direction;
+    if (explicit === "inbound" || explicit === "outbound") return explicit;
+    const key = pricingFieldKey(item);
+    if (key === "inbound_freight") return "inbound";
+    if (key === "outbound_delivery") return "outbound";
+    return null;
   };
   const lineItems = [
     ...draft.equipment.map((item, index) => ({
@@ -1767,10 +1820,12 @@ export function buildQuoteSavePayload(
       unit_price: item.unitPrice,
       extended_price: item.unitPrice * item.quantity,
       quoted_dealer_cost: item.dealerCost ?? undefined,
+      inbound_freight_amount: item.kind === "freight" && freightDirection(item) === "inbound" ? item.unitPrice * item.quantity : undefined,
+      outbound_delivery_amount: item.kind === "freight" && freightDirection(item) !== "inbound" ? item.unitPrice * item.quantity : undefined,
       display_order: draft.equipment.length + draft.attachments.length + index,
       reason_code: safeLineReasonCode(item),
       approval_required: item.approvalRequired === true,
-      cost_visibility: item.costVisibility ?? defaultCostVisibility(item.kind),
+      cost_visibility: item.costVisibility ?? defaultCostVisibility(item.kind, item.metadata),
       metadata: buildLineMetadata(item, {
         source_catalog: item.sourceCatalog ?? "manual",
         source_id: item.sourceId ?? item.id ?? null,
@@ -1883,6 +1938,8 @@ export function buildQuoteSavePayload(
     customer_company: draft.customerCompany || null,
     customer_phone: draft.customerPhone || null,
     customer_email: draft.customerEmail || null,
+    customer_warmth: draft.customerWarmth ?? null,
+    is_prospect_quote: isProspectQuote,
     opportunity_description: draft.voiceSummary || null,
     voice_transcript: draft.entryMode === "voice" ? draft.voiceSummary || null : null,
     originating_log_id: draft.originatingLogId ?? null,
@@ -2088,7 +2145,7 @@ export async function searchQuoteAttachments(query: string) {
   });
 }
 
-export type QuotePackageCatalogKind = "attachment" | "option" | "accessory" | "warranty";
+export type QuotePackageCatalogKind = "attachment" | "option" | "accessory" | "part" | "warranty";
 
 export interface QuotePackageCatalogItem {
   id: string;
@@ -2259,6 +2316,143 @@ export async function searchQuotePackageItems(params: {
         compatibility: entry.universal ? "universal" : "catalog_match",
       },
     }));
+  }
+
+  if (params.kind === "part") {
+    try {
+      let inventoryQuery = supabase
+        .from("parts_inventory")
+        .select(
+          "part_number, qty_on_hand, catalog:parts_catalog!parts_inventory_catalog_id_fkey(id, part_number, description, category, manufacturer, list_price, cost_price)",
+        )
+        .is("deleted_at", null)
+        .limit(sanitized ? 200 : 400);
+
+      if (sanitized) {
+        inventoryQuery = inventoryQuery.or(`part_number.ilike.%${sanitized}%`);
+      }
+
+      const { data: inventoryRows, error: inventoryErr } = await inventoryQuery;
+      if (inventoryErr) throw inventoryErr;
+
+      const byPartNumber = new Map<string, {
+        partNumber: string;
+        qtyOnHand: number;
+        catalogId: string | null;
+        description: string;
+        category: string | null;
+        manufacturer: string | null;
+        listPrice: number;
+        costPrice: number | null;
+      }>();
+
+      for (const row of inventoryRows ?? []) {
+        const partNumber = typeof row.part_number === "string" ? row.part_number.trim() : "";
+        if (!partNumber) continue;
+        const key = partNumber.toLowerCase();
+        const qty = Number(row.qty_on_hand ?? 0);
+        const catalogRow = Array.isArray(row.catalog) ? row.catalog[0] : row.catalog;
+        const existing = byPartNumber.get(key);
+        const next = {
+          partNumber,
+          qtyOnHand: (existing?.qtyOnHand ?? 0) + (Number.isFinite(qty) ? qty : 0),
+          catalogId: typeof catalogRow?.id === "string" ? catalogRow.id : (existing?.catalogId ?? null),
+          description: typeof catalogRow?.description === "string" ? catalogRow.description : (existing?.description ?? ""),
+          category: typeof catalogRow?.category === "string" ? catalogRow.category : (existing?.category ?? null),
+          manufacturer: typeof catalogRow?.manufacturer === "string" ? catalogRow.manufacturer : (existing?.manufacturer ?? null),
+          listPrice: Number(catalogRow?.list_price ?? existing?.listPrice ?? 0),
+          costPrice: Number.isFinite(Number(catalogRow?.cost_price))
+            ? Number(catalogRow?.cost_price)
+            : (existing?.costPrice ?? null),
+        };
+        byPartNumber.set(key, next);
+      }
+
+      const inventoryItems = [...byPartNumber.values()]
+        .filter((row) => {
+          if (!sanitized) return true;
+          const needle = sanitized.toLowerCase();
+          return row.partNumber.toLowerCase().includes(needle)
+            || row.description.toLowerCase().includes(needle)
+            || (row.manufacturer ?? "").toLowerCase().includes(needle);
+        })
+        .sort((a, b) => b.qtyOnHand - a.qtyOnHand || a.partNumber.localeCompare(b.partNumber))
+        .slice(0, 40)
+        .map((row) => {
+          const title = row.description.length > 0
+            ? `${row.partNumber} — ${row.description}`
+            : row.partNumber;
+          const sourceId = row.catalogId ?? row.partNumber;
+          return {
+            id: `inventory-${row.partNumber}`,
+            kind: "part" as const,
+            name: title,
+            price: Number.isFinite(row.listPrice) ? row.listPrice : 0,
+            dealerCost: row.costPrice,
+            brandName: row.manufacturer,
+            category: row.category,
+            universal: false,
+            sourceCatalog: "manual" as const,
+            sourceId,
+            metadata: {
+              catalog_kind: "part",
+              source: "parts_inventory",
+              part_number: row.partNumber,
+              description: row.description || null,
+              qty_on_hand: row.qtyOnHand,
+              compatibility: "catalog_match",
+            },
+          };
+        });
+
+      if (inventoryItems.length > 0) return inventoryItems;
+
+      let partsQuery = supabase
+        .from("parts_catalog")
+        .select("id, part_number, description, category, manufacturer, list_price, cost_price")
+        .is("deleted_at", null)
+        .order("part_number", { ascending: true })
+        .limit(sanitized ? 25 : 100);
+
+      if (sanitized) {
+        partsQuery = partsQuery.or(
+          `part_number.ilike.%${sanitized}%,description.ilike.%${sanitized}%,manufacturer.ilike.%${sanitized}%`,
+        );
+      }
+
+      const { data, error } = await partsQuery;
+      if (error) throw error;
+
+      return (data ?? []).map((row) => {
+        const partNumber = row.part_number ?? "";
+        const description = row.description ?? "";
+        const title = description.length > 0
+          ? `${partNumber} — ${description}`
+          : partNumber;
+        const sourceId = row.id ?? partNumber;
+        return {
+          id: sourceId,
+          kind: "part" as const,
+          name: title,
+          price: row.list_price != null ? Number(row.list_price) : 0,
+          dealerCost: row.cost_price != null ? Number(row.cost_price) : null,
+          brandName: row.manufacturer ?? null,
+          category: row.category ?? null,
+          universal: false,
+          sourceCatalog: "manual" as const,
+          sourceId,
+          metadata: {
+            catalog_kind: "part",
+            source: "parts_catalog",
+            part_number: partNumber,
+            description: description || null,
+            compatibility: "catalog_match",
+          },
+        };
+      });
+    } catch {
+      return [];
+    }
   }
 
   const starterRows = starterPackageItems(params.kind, sanitized);

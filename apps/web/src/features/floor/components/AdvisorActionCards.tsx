@@ -220,7 +220,7 @@ export function AdvisorActionCards() {
             icon={<Wrench className="h-3.5 w-3.5" aria-hidden="true" />}
           />
           <QuickToolLink
-            to="/qrm/companies"
+            to="/qrm/companies?new=1"
             label="Add customer"
             subLabel="Create or find an account"
             icon={<PlusCircle className="h-3.5 w-3.5" aria-hidden="true" />}

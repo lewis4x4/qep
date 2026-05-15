@@ -74,6 +74,25 @@ const computedQuoteTotals = {
 };
 
 describe("buildQuoteSavePayload", () => {
+  test("marks walk-in prospect quotes without CRM ids", () => {
+    const payload = buildQuoteSavePayload(
+      makeQuoteDraft({
+        customerName: "Walk-in prospect",
+        customerCompany: "Walk-in prospect",
+        customerWarmth: "new",
+        contactId: undefined,
+        companyId: undefined,
+      }),
+      computedQuoteTotals,
+      [],
+    );
+
+    expect(payload.is_prospect_quote).toBe(true);
+    expect(payload.customer_warmth).toBe("new");
+    expect(payload.contact_id).toBeUndefined();
+    expect(payload.company_id).toBeUndefined();
+  });
+
   test("preserves availability request metadata on equipment line items", () => {
     const payload = buildQuoteSavePayload(
       makeQuoteDraft({
@@ -151,6 +170,49 @@ describe("buildQuoteSavePayload", () => {
     const lines = payload.line_items as Array<Record<string, unknown>>;
     expect(lines.find((line) => line.line_type === "rebate_mfg")?.reason_code).toBeUndefined();
     expect(lines.find((line) => line.line_type === "discount")?.reason_code).toBe("competitive_match");
+  });
+
+  test("maps inbound and outbound freight amounts from pricing metadata", () => {
+    const payload = buildQuoteSavePayload(
+      makeQuoteDraft({
+        pricingLines: [
+          {
+            kind: "freight",
+            id: "freight-inbound",
+            title: "Inbound freight to yard",
+            quantity: 1,
+            unitPrice: 1800,
+            metadata: {
+              pricing_field_key: "inbound_freight",
+              freight_direction: "inbound",
+            },
+          },
+          {
+            kind: "freight",
+            id: "freight-outbound",
+            title: "Outbound delivery",
+            quantity: 1,
+            unitPrice: 2400,
+            costVisibility: "customer",
+            metadata: {
+              pricing_field_key: "outbound_delivery",
+              freight_direction: "outbound",
+            },
+          },
+        ],
+      }),
+      computedQuoteTotals,
+      [],
+    );
+
+    const freightLines = (payload.line_items as Array<Record<string, unknown>>)
+      .filter((line) => line.line_type === "freight");
+    expect(freightLines.length).toBe(2);
+    expect(freightLines.find((line) => line.id === "freight-inbound")?.cost_visibility).toBe("internal");
+    expect(freightLines.find((line) => line.id === "freight-inbound")?.inbound_freight_amount).toBe(1800);
+    expect(freightLines.find((line) => line.id === "freight-inbound")?.outbound_delivery_amount).toBeUndefined();
+    expect(freightLines.find((line) => line.id === "freight-outbound")?.outbound_delivery_amount).toBe(2400);
+    expect(freightLines.find((line) => line.id === "freight-outbound")?.inbound_freight_amount).toBeUndefined();
   });
 });
 
@@ -590,6 +652,41 @@ describe("quote approval normalizers", () => {
       assignedToName: "Sales Manager",
       routeMode: "owner_direct",
       alreadyPending: true,
+      bypassRuleId: null,
+      bypassRuleName: null,
+      autoSend: null,
+    });
+  });
+
+  test("normalizes bypass auto-approval responses", () => {
+    const result = normalizeQuoteApprovalSubmitResult({
+      status: "approved",
+      bypass_rule_id: "rule-1",
+      bypass_rule_name: "Aged stocked inventory auto-approve",
+    });
+
+    expect(result.status).toBe("approved");
+    expect(result.bypassRuleId).toBe("rule-1");
+    expect(result.bypassRuleName).toBe("Aged stocked inventory auto-approve");
+    expect(result.autoSend).toBeNull();
+  });
+
+  test("normalizes auto-send outcomes from submit approval responses", () => {
+    const result = normalizeQuoteApprovalSubmitResult({
+      status: "approved",
+      auto_send: {
+        attempted: true,
+        sent: false,
+        reason: "auto_send_not_sent",
+        error: "Email service not configured",
+      },
+    });
+
+    expect(result.autoSend).toEqual({
+      attempted: true,
+      sent: false,
+      reason: "auto_send_not_sent",
+      error: "Email service not configured",
     });
   });
 

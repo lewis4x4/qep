@@ -73,9 +73,21 @@ const INTERNAL_COST_LINE_KINDS = new Set<QuoteLineItemDraft["kind"]>([
   "good_faith",
 ]);
 
+function freightDirectionFromMetadata(metadata: Record<string, unknown> | null | undefined): "inbound" | "outbound" | null {
+  const explicit = metadata?.freight_direction;
+  if (explicit === "inbound" || explicit === "outbound") return explicit;
+  const key = metadata?.pricing_field_key;
+  if (key === "inbound_freight") return "inbound";
+  if (key === "outbound_delivery") return "outbound";
+  return null;
+}
+
 function lineCostVisibility(item: QuoteLineItemDraft): "internal" | "customer" {
   if (item.costVisibility === "internal" || item.costVisibility === "customer") {
     return item.costVisibility;
+  }
+  if (item.kind === "freight" && freightDirectionFromMetadata(item.metadata) === "inbound") {
+    return "internal";
   }
   return INTERNAL_COST_LINE_KINDS.has(item.kind) ? "internal" : "customer";
 }
