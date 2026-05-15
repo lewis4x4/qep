@@ -78,6 +78,7 @@ export function QrmCompaniesPage() {
       productCategory: "business" as const,
     };
   }, [searchParams]);
+  const returnToQuotePackageId = searchParams.get("return_quote_package_id")?.trim() || null;
 
   useEffect(() => {
     if (window.matchMedia("(min-width: 1024px)").matches) {
@@ -546,7 +547,13 @@ export function QrmCompaniesPage() {
         open={editorOpen}
         onOpenChange={setEditorOpen}
         initialValues={newCompanyInitialValues}
-        onSaved={(company) => navigate(buildAccountCommandHref(company.id))}
+        onSaved={(company) => {
+          if (returnToQuotePackageId) {
+            navigate(`/quote-v2?package_id=${encodeURIComponent(returnToQuotePackageId)}&crm_company_id=${encodeURIComponent(company.id)}&prospect_converted=1`);
+            return;
+          }
+          navigate(buildAccountCommandHref(company.id));
+        }}
       />
       <HealthScoreDrawer
         customerProfileId={healthDrawerProfileId}

@@ -88,6 +88,13 @@ describe("buildQuoteSavePayload", () => {
     );
 
     expect(payload.is_prospect_quote).toBe(true);
+    expect(payload.prospect_conversion_source).toEqual({
+      original_customer_name: "Walk-in prospect",
+      original_customer_company: "Walk-in prospect",
+      original_customer_phone: null,
+      original_customer_email: "buyer@example.com",
+      conversion_status: "pending_crm_link",
+    });
     expect(payload.customer_warmth).toBe("new");
     expect(payload.contact_id).toBeUndefined();
     expect(payload.company_id).toBeUndefined();

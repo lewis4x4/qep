@@ -1839,6 +1839,15 @@ export function buildQuoteSavePayload(
     draft.customerWarmth === "new"
     || /prospect/i.test(`${draft.customerName ?? ""} ${draft.customerCompany ?? ""}`)
   );
+  const prospectConversionSource = isProspectQuote
+    ? {
+        original_customer_name: draft.customerName || null,
+        original_customer_company: draft.customerCompany || null,
+        original_customer_phone: draft.customerPhone || null,
+        original_customer_email: draft.customerEmail || null,
+        conversion_status: "pending_crm_link",
+      }
+    : null;
   const financeScenarioSource = draft.savedFinanceScenarios?.length
     ? draft.savedFinanceScenarios
     : financeScenarios;
@@ -2040,6 +2049,7 @@ export function buildQuoteSavePayload(
     customer_email: draft.customerEmail || null,
     customer_warmth: draft.customerWarmth ?? null,
     is_prospect_quote: isProspectQuote,
+    prospect_conversion_source: prospectConversionSource,
     opportunity_description: draft.voiceSummary || null,
     voice_transcript: draft.entryMode === "voice" ? draft.voiceSummary || null : null,
     originating_log_id: draft.originatingLogId ?? null,

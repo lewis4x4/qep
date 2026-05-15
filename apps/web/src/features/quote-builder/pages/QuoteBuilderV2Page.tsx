@@ -717,6 +717,7 @@ export function QuoteBuilderV2Page() {
   const dealId = searchParams.get("deal_id") || searchParams.get("crm_deal_id") || "";
   const contactId = searchParams.get("contact_id") || searchParams.get("crm_contact_id") || "";
   const companyId = searchParams.get("company_id") || searchParams.get("crm_company_id") || "";
+  const prospectConverted = searchParams.get("prospect_converted") === "1";
   const equipmentId = searchParams.get("equipment_id") || searchParams.get("crm_equipment_id") || "";
   const voiceSessionId = searchParams.get("voice_session_id") || "";
   const ironQuoteHandoffId = searchParams.get("iron_quote_intake_id") || "";
@@ -1003,9 +1004,39 @@ export function QuoteBuilderV2Page() {
     if (existingQuoteHydrationKeyRef.current === nextKey) return;
     existingQuoteHydrationKeyRef.current = nextKey;
     const hydratedDraft = hydrateDraftFromSavedQuote(existingQuote);
-    setDraft((current) => ({ ...current, ...hydratedDraft }));
+    setDraft((current) => ({
+      ...current,
+      ...hydratedDraft,
+      companyId: companyId || hydratedDraft.companyId,
+    }));
     setStep(readPersistedStep(nextKey) ?? stepForWizardIndex(hydratedDraft.wizardStep) ?? "review");
-  }, [dealId, existingQuote, packageId]);
+  }, [companyId, dealId, existingQuote, packageId]);
+
+  useEffect(() => {
+    if (!prospectConverted || !companyId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const hydrated = await hydrateCustomerById({ companyId });
+        if (!hydrated || cancelled) return;
+        setDraft((current) => ({
+          ...current,
+          contactId:       hydrated.contactId ?? current.contactId,
+          companyId:       hydrated.companyId ?? companyId,
+          customerName:    hydrated.customerName || current.customerName,
+          customerCompany: hydrated.customerCompany || current.customerCompany,
+          customerPhone:   hydrated.customerPhone || current.customerPhone,
+          customerEmail:   hydrated.customerEmail || current.customerEmail,
+          customerSignals: hydrated.signals,
+          customerWarmth:  hydrated.warmth,
+        }));
+        setStep("customer");
+      } catch {
+        // Non-fatal: the company id still persists on next save.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [companyId, prospectConverted]);
 
   // Local draft persistence: lets a rep leave the builder mid-entry and
   // resume from the deal page without losing their partial work. DB save
@@ -3340,6 +3371,15 @@ export function QuoteBuilderV2Page() {
                     <Link to={`/qrm/deals/${draft.dealId}`}>Back to Deal</Link>
                   </Button>
                 )}
+                {!draft.companyId && activeQuotePackageId && (
+                  <Button asChild size="sm">
+                    <Link
+                      to={`/qrm/companies?new=1&name=${encodeURIComponent(draft.customerCompany || draft.customerName || "Walk-in prospect")}&status=Prospect&source=quote_builder&return_quote_package_id=${encodeURIComponent(activeQuotePackageId)}`}
+                    >
+                      Convert prospect
+                    </Link>
+                  </Button>
+                )}
               </div>
             </div>
           </Card>
@@ -3612,6 +3652,17 @@ export function QuoteBuilderV2Page() {
               Select or add a customer, or use "Quote for prospect" from the controls above for a walk-in.
             </p>
           )}
+
+          <div className="flex flex-col-reverse gap-2 rounded-xl border border-border/70 bg-card/80 p-3 shadow-sm md:hidden">
+            {!hasCustomer && (
+              <Button variant="outline" onClick={handleQuoteForProspect}>
+                Quote for prospect
+              </Button>
+            )}
+            <Button onClick={() => setStep("equipment")} disabled={wizardNextDisabled}>
+              {nextWizardLabel ?? "Equipment"} <ArrowRight className="ml-1 h-4 w-4" />
+            </Button>
+          </div>
         </div>
       )}
 

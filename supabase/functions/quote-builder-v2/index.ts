@@ -5187,6 +5187,22 @@ Deno.serve(async (req) => {
       const voiceTranscript = typeof body.voice_transcript === "string"
         ? body.voice_transcript.trim().slice(0, 12000)
         : null;
+      const prospectConversionSource = body.prospect_conversion_source &&
+        typeof body.prospect_conversion_source === "object" &&
+        !Array.isArray(body.prospect_conversion_source)
+        ? body.prospect_conversion_source as Record<string, unknown>
+        : null;
+      const bodyMetadata = body.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata)
+        ? body.metadata as Record<string, unknown>
+        : null;
+      const metadataPatch = bodyMetadata || prospectConversionSource
+        ? {
+          metadata: {
+            ...(bodyMetadata ?? {}),
+            ...(prospectConversionSource ? { prospect_conversion_source: prospectConversionSource } : {}),
+          },
+        }
+        : {};
       const contactId = typeof body.contact_id === "string" ? body.contact_id : null;
       const companyId = typeof body.company_id === "string" ? body.company_id : null;
       const equipment = Array.isArray(body.equipment) ? body.equipment : [];
@@ -5440,6 +5456,7 @@ Deno.serve(async (req) => {
           customer_company: customerCompany,
           customer_phone: customerPhone,
           customer_email: customerEmail,
+          ...metadataPatch,
           opportunity_description: opportunityDescription,
           voice_transcript: voiceTranscript,
           originating_log_id: originatingLogId,
