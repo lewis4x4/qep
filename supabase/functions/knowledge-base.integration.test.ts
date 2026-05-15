@@ -32,8 +32,11 @@ function loadLocalEnv() {
 
 loadLocalEnv();
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.8";
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const EXPLICIT_ADMIN_TOKEN = Deno.env.get("KB_TEST_ADMIN_TOKEN") ?? "";
 const EXPLICIT_REP_TOKEN = Deno.env.get("KB_TEST_REP_TOKEN") ?? "";
 const DEMO_PASSWORD = Deno.env.get("QEP_DEMO_PASSWORD") ?? "QepDemo!2026";
@@ -64,8 +67,72 @@ async function signInForTest(email: string): Promise<string> {
   return typeof payload?.access_token === "string" ? payload.access_token : "";
 }
 
-const ADMIN_TOKEN = EXPLICIT_ADMIN_TOKEN || await signInForTest("demo.admin@qep-demo.local");
-const REP_TOKEN = EXPLICIT_REP_TOKEN || await signInForTest("demo.rep@qep-demo.local");
+async function isTokenUsable(token: string): Promise<boolean> {
+  if (!token || !SUPABASE_URL || !SUPABASE_ANON_KEY) return false;
+
+  const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/auth/v1/user`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: SUPABASE_ANON_KEY,
+    },
+  });
+
+  return response.ok;
+}
+
+async function resolveTestToken(explicitToken: string, fallbackEmail: string, roles: string[]): Promise<string> {
+  if (await isTokenUsable(explicitToken)) return explicitToken;
+  const passwordToken = await signInForTest(fallbackEmail);
+  if (await isTokenUsable(passwordToken)) return passwordToken;
+  return signInWithServiceMagicLink(fallbackEmail, roles);
+}
+
+async function signInWithServiceMagicLink(fallbackEmail: string, roles: string[]): Promise<string> {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) return "";
+
+  const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const email = await resolveProfileEmail(adminClient, roles) || fallbackEmail;
+  const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+    type: "magiclink",
+    email,
+  });
+  const tokenHash = linkData?.properties?.hashed_token;
+  if (linkError || !tokenHash) return "";
+
+  const publicClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: sessionData, error: verifyError } = await publicClient.auth.verifyOtp({
+    type: "magiclink",
+    token_hash: tokenHash,
+  });
+  if (verifyError || !sessionData.session?.access_token) return "";
+  return sessionData.session.access_token;
+}
+
+async function resolveProfileEmail(
+  // The Supabase client carries very deep generics in Deno. Keep this test
+  // utility intentionally structural so live-gate type-checking stays stable.
+  // deno-lint-ignore no-explicit-any
+  adminClient: any,
+  roles: string[],
+): Promise<string | null> {
+  const { data, error } = await adminClient
+    .from("profiles")
+    .select("email")
+    .in("role", roles)
+    .not("email", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return null;
+  return typeof data?.email === "string" && data.email.includes("@") ? data.email : null;
+}
+
+const ADMIN_TOKEN = await resolveTestToken(EXPLICIT_ADMIN_TOKEN, "demo.admin@qep-demo.local", ["admin", "manager", "owner"]);
+const REP_TOKEN = await resolveTestToken(EXPLICIT_REP_TOKEN, "demo.rep@qep-demo.local", ["rep"]);
 
 const canRunLive =
   SUPABASE_URL.length > 0 &&
@@ -76,8 +143,8 @@ const canRunLive =
 const missingEnv = [
   ["SUPABASE_URL", SUPABASE_URL],
   ["SUPABASE_ANON_KEY", SUPABASE_ANON_KEY],
-  ["KB_TEST_ADMIN_TOKEN", ADMIN_TOKEN],
-  ["KB_TEST_REP_TOKEN", REP_TOKEN],
+  ["KB_TEST_ADMIN_TOKEN or SUPABASE_SERVICE_ROLE_KEY fallback", ADMIN_TOKEN],
+  ["KB_TEST_REP_TOKEN or SUPABASE_SERVICE_ROLE_KEY fallback", REP_TOKEN],
 ].filter(([, value]) => value.length === 0).map(([name]) => name);
 
 type UploadedDocument = {
