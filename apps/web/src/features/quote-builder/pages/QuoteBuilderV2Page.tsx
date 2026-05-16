@@ -96,6 +96,10 @@ import {
 import { useApprovalBypass } from "../hooks/useApprovalBypass";
 import { useLiveMargin } from "../hooks/useLiveMargin";
 import { usePdiAutofill } from "../hooks/usePdiAutofill";
+import {
+  applyEquipmentOverridePrice,
+  equipmentSystemBasePrice,
+} from "../lib/equipment-override-price";
 import { hydrateDraftFromSavedQuote } from "../lib/saved-quote-draft";
 import { buildCatalogQueryCandidates } from "../lib/catalog-query-candidates";
 import {
@@ -406,25 +410,6 @@ function metadataNumber(metadata: Record<string, unknown> | null | undefined, ke
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
-}
-
-function equipmentSystemBasePrice(line: QuoteLineItemDraft): number {
-  return metadataNumber(line.metadata, "system_base_unit_price") ?? line.unitPrice;
-}
-
-function applyEquipmentOverridePrice(line: QuoteLineItemDraft, nextPrice: number): QuoteLineItemDraft {
-  const systemBase = equipmentSystemBasePrice(line);
-  const metadata = { ...(line.metadata ?? {}) };
-  if (Math.abs(nextPrice - systemBase) < 0.01) {
-    delete metadata.equipment_override_price;
-  } else {
-    metadata.equipment_override_price = nextPrice;
-  }
-  return {
-    ...line,
-    unitPrice: nextPrice,
-    metadata: Object.keys(metadata).length > 0 ? metadata : null,
-  };
 }
 
 function availabilityClientLineKey(item: QuoteLineItemDraft, index: number): string {
