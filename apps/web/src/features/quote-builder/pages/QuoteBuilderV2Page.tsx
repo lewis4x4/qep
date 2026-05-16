@@ -95,6 +95,7 @@ import {
   type QuoteSendActionChannel,
 } from "../lib/quote-workspace";
 import { useLiveMargin } from "../hooks/useLiveMargin";
+import { usePdiAutofill } from "../hooks/usePdiAutofill";
 import { hydrateDraftFromSavedQuote } from "../lib/saved-quote-draft";
 import { buildCatalogQueryCandidates } from "../lib/catalog-query-candidates";
 import {
@@ -2318,53 +2319,25 @@ export function QuoteBuilderV2Page() {
 
   const firstEquipment = draft.equipment[0];
   const activeWorkspaceId = profile?.active_workspace_id ?? null;
-  const firstEquipmentMake = firstEquipment?.make?.trim().toLowerCase() ?? "";
-  const firstEquipmentModel = firstEquipment?.model?.trim().toLowerCase() ?? "";
-  const pdiAutofillEligible = firstEquipmentMake.length > 0 && firstEquipmentModel.length > 0;
-
-  const pdiAverageQuery = useQuery({
-    queryKey: ["pdi-average-by-model", activeWorkspaceId, firstEquipmentMake, firstEquipmentModel],
-    enabled: Boolean(activeWorkspaceId && pdiAutofillEligible),
-    staleTime: 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pdi_average_by_model")
-        .select("avg_pdi_cost, sample_count")
-        .eq("workspace_id", activeWorkspaceId)
-        .eq("make", firstEquipmentMake)
-        .eq("model", firstEquipmentModel)
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) return null;
-      const avg = Number((data as { avg_pdi_cost?: number | string }).avg_pdi_cost ?? 0);
-      if (!Number.isFinite(avg) || avg <= 0) return null;
-      return {
-        avgPdiCost: avg,
-        sampleCount: Number((data as { sample_count?: number | string }).sample_count ?? 0) || 0,
-      };
+  const pdiAutofillField = PRICING_ADDER_FIELDS.find((field) => field.id === "pdi");
+  const pdiAutofillCurrentAmount = pdiAutofillField ? (pricingLine(pdiAutofillField)?.unitPrice ?? 0) : 0;
+  usePdiAutofill({
+    workspaceId: activeWorkspaceId,
+    make: firstEquipment?.make,
+    model: firstEquipment?.model,
+    currentPdiAmount: pdiAutofillCurrentAmount,
+    onAutofill: ({ amount, sampleCount }) => {
+      if (!pdiAutofillField) return;
+      const existing = pricingLine(pdiAutofillField);
+      upsertPricingLine(pdiAutofillField, amount, {
+        metadata: {
+          ...(existing?.metadata ?? {}),
+          pdi_source: "rolling_average_by_model",
+          pdi_sample_count: sampleCount,
+        },
+      });
     },
   });
-
-  useEffect(() => {
-    if (!pdiAverageQuery.data || !pdiAutofillEligible) return;
-    const pdiField = PRICING_ADDER_FIELDS.find((field) => field.id === "pdi");
-    if (!pdiField) return;
-    const existingPdi = pricingLine(pdiField);
-    if (existingPdi && existingPdi.unitPrice > 0) return;
-    const nextAmount = Math.round(pdiAverageQuery.data.avgPdiCost);
-    if (nextAmount <= 0) return;
-    upsertPricingLine(pdiField, nextAmount, {
-      metadata: {
-        ...(existingPdi?.metadata ?? {}),
-        pdi_source: "rolling_average_by_model",
-        pdi_sample_count: pdiAverageQuery.data.sampleCount,
-      },
-    });
-  }, [
-    draft.pricingLines,
-    pdiAutofillEligible,
-    pdiAverageQuery.data,
-  ]);
 
   function liveAvailabilityRequestForLine(item: QuoteLineItemDraft): QuoteAvailabilityRequest | null {
     const requestId = availabilityRequestIdForLine(item);
