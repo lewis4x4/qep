@@ -33,10 +33,8 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { CustomerInfoCard } from "../components/CustomerInfoCard";
-import { CustomerPicker, type PickedCustomer } from "../components/CustomerPicker";
-import { SelectedCustomerChip } from "../components/SelectedCustomerChip";
 import { CustomerIntelPanel } from "../components/CustomerIntelPanel";
+import { CustomerSection } from "../components/CustomerSection";
 import { PointShootTradeCard } from "../components/PointShootTradeCard";
 import { TradeInInputCard } from "../components/TradeInInputCard";
 import { WinProbabilityStrip } from "../components/WinProbabilityStrip";
@@ -178,6 +176,7 @@ import {
   wizardReachableMaxIndex0,
 } from "../wizard/wizard-navigation";
 import { IntakeInput } from "../wizard/IntakeInput";
+import { CustomerStep } from "../steps/CustomerStep";
 
 // Item 2: the salesperson-facing flow is now the QRM 11-step wizard.
 // Steps 10–11 persist generated document artifacts and use the guarded
@@ -446,47 +445,6 @@ function availabilityRequestLabel(status: string | null): string {
   if (status === "checking_vendor") return "Checking vendor";
   if (status === "pending") return "Availability pending";
   return "Request sent";
-}
-
-/**
- * Heuristic: is `next` likely a typo-fix / case-variation of `prev`,
- * not a material rewrite to a different company?
- *
- * Returns true when the edit is safe to preserve the Digital Twin
- * snapshot through (e.g. "acme landscaping" → "Acme Landscaping",
- * "Acme Ldsc" → "Acme Landscaping", trailing whitespace trims).
- * Returns false for genuine re-targeting ("Acme" → "Smith Excavation").
- *
- * We require either: (a) case-insensitive prefix match in either
- * direction, or (b) small edit distance relative to the shorter
- * string (≤20% of length). Not perfect — but correct on the demo
- * axes and safe: the worst false-positive preserves a signal that
- * the rep can still clear manually; the worst false-negative just
- * triggers a CustomerIntelPanel re-fetch.
- */
-function isTypoLikeRewrite(prev: string, next: string): boolean {
-  const a = prev.trim().toLowerCase();
-  const b = next.trim().toLowerCase();
-  if (a === b) return true;
-  if (!a || !b) return false;
-  if (a.startsWith(b) || b.startsWith(a)) return true;
-  // Bounded Levenshtein — bail if length gap alone exceeds threshold.
-  const shorter = Math.min(a.length, b.length);
-  const threshold = Math.max(2, Math.floor(shorter * 0.2));
-  if (Math.abs(a.length - b.length) > threshold) return false;
-  // Small-string Levenshtein; O(a*b) but both are ≤ a few dozen chars.
-  const dp: number[] = Array(b.length + 1).fill(0).map((_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    let prevDiag = dp[0]!;
-    dp[0] = i;
-    for (let j = 1; j <= b.length; j++) {
-      const tmp = dp[j]!;
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      dp[j] = Math.min(dp[j]! + 1, dp[j - 1]! + 1, prevDiag + cost);
-      prevDiag = tmp;
-    }
-  }
-  return (dp[b.length] ?? Infinity) <= threshold;
 }
 
 function buildEquipmentLine(entry: CatalogEntryMatch): QuoteLineItemDraft {
@@ -3536,154 +3494,22 @@ export function QuoteBuilderV2Page() {
       </div>
 
       {step === "customer" && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Step 1: Choose the customer</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Search first, then add a new customer only if there is no match. Keep the rest of the quote out of view until this is clear.</p>
-          </div>
-
-          <Card className="border-border/70 bg-muted/20 p-3">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              <span className="font-medium text-foreground">Customer vs equipment.</span>{" "}
-              This step anchors CRM identity and deal signals. The primary machine row starts in{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 2 — Equipment"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("equipment")}
-              >
-                Equipment
-              </Button>
-              ; catalog package lines and visibility land in{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 3 — Configure the package"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("configure")}
-              >
-                Configure
-              </Button>
-              .
-            </p>
-          </Card>
-
-          <CustomerSection
-            draft={draft}
-            onPick={(picked) => setDraft((cur) => ({
-              ...cur,
-              contactId:       picked.contactId ?? undefined,
-              companyId:       picked.companyId ?? undefined,
-              customerName:    picked.customerName,
-              customerCompany: picked.customerCompany,
-              customerPhone:   picked.customerPhone,
-              customerEmail:   picked.customerEmail,
-              customerSignals: picked.signals ?? null,
-              customerWarmth:  picked.warmth ?? null,
-            }))}
-            onManualChange={(field, value) => setDraft((cur) => {
-              // Preserve signals on typo fixes (phone, email, name punctuation)
-              // but *clear* them when the company name is materially rewritten —
-              // keeping Acme's open-deal count attached to "Smith Excavation"
-              // would poison the intel panel and the saved quote. Heuristic:
-              // clear when the field is customerCompany, a snapshot exists,
-              // and the new value is clearly a different company (not a
-              // prefix / not a case variation of the old).
-              const next = { ...cur, [field]: value };
-              if (
-                field === "customerCompany" &&
-                cur.customerSignals &&
-                cur.customerCompany &&
-                !isTypoLikeRewrite(cur.customerCompany, value)
-              ) {
-                next.customerSignals = null;
-                next.customerWarmth  = null;
-                // The companyId/contactId referred to the prior customer;
-                // drop them so downstream reads don't cross-attribute.
-                next.companyId = undefined;
-                next.contactId = undefined;
-              }
-              return next;
-            })}
-            onClear={() => setDraft((cur) => ({
-              ...cur,
-              contactId:       undefined,
-              companyId:       undefined,
-              customerName:    "",
-              customerCompany: "",
-              customerPhone:   "",
-              customerEmail:   "",
-              customerSignals: null,
-              customerWarmth:  null,
-            }))}
-          />
-
-          <Card className="p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Fast intake</p>
-            <IntakeInput
-              aiPrompt={aiPrompt}
-              onAiPromptChange={setAiPrompt}
-              intakeRecorderOpen={intakeRecorderOpen}
-              onIntakeRecorderToggle={() => setIntakeRecorderOpen((open) => !open)}
-              onEntryModeChange={(mode) => setDraft((current) => ({ ...current, entryMode: mode }))}
-              onVoiceRecorded={(audioBlob, fileName) => voiceMutation.mutate({ blob: audioBlob, fileName })}
-              voiceMutationPending={voiceMutation.isPending}
-              onBuildWithAi={(prompt) => aiIntakeMutation.mutate(prompt)}
-              aiIntakeMutationPending={aiIntakeMutation.isPending}
-              aiIntakeMessage={aiIntakeMessage}
-              helperText="Use the same intake box for typing and mic capture before AI builds the draft."
-              recorderHeading="Record the customer need"
-              textareaMinHeight="90px"
-              buildButtonVariant="text"
-              bodyOrder="recorder_then_build"
-            />
-
-            <label className="mt-4 block space-y-1 text-sm">
-              <span className="text-xs font-medium text-muted-foreground">Opportunity note</span>
-              <textarea
-                value={draft.voiceSummary ?? ""}
-                onChange={(event) => setDraft((current) => ({ ...current, voiceSummary: event.target.value }))}
-                placeholder="What is the customer trying to accomplish?"
-                rows={3}
-                className="w-full resize-y rounded border border-input bg-card px-3 py-2 text-sm"
-              />
-            </label>
-          </Card>
-
-          {/* Slice 20c: always-on win-probability strip. Rule-based today;
-              becomes the rule-baseline for Move 2's counterfactual engine. */}
-          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} shadowCalibration={shadowCalibration} />
-
-          {draft.recommendation?.machine && (
-            <div className="lg:hidden">
-              {intelligencePanel}
-            </div>
-          )}
-
-          <Card className="border-blue-500/20 bg-blue-500/5 p-4">
-            <p className="text-sm font-semibold text-blue-200">New-customer guardrails</p>
-            <p className="mt-1 text-xs text-blue-100/90">If phone + last name match an existing customer, pick that record from search instead of creating a duplicate. Tax certificate upload stays “attach later” until document storage is wired.</p>
-            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-blue-100/90">
-              <span className="rounded-full border border-blue-400/30 px-2 py-1">Search before create</span>
-              <span className="rounded-full border border-blue-400/30 px-2 py-1">Phone + last name dedupe</span>
-              <span className="rounded-full border border-blue-400/30 px-2 py-1">Resale certificate: attach later</span>
-            </div>
-          </Card>
-
-          <CustomerIntelPanel
-            customerCompany={draft.customerCompany ?? ""}
-            companyId={draft.companyId ?? null}
-            signals={draft.customerSignals ?? null}
-            warmth={draft.customerWarmth ?? null}
-          />
-
-          {!hasCustomer && (
-            <p className="text-[11px] text-muted-foreground">
-              Select or add a customer, or use "Quote for prospect" from the mobile step bar below for a walk-in.
-            </p>
-          )}
-        </div>
+        <CustomerStep
+          aiPrompt={aiPrompt}
+          setAiPrompt={setAiPrompt}
+          intakeRecorderOpen={intakeRecorderOpen}
+          setIntakeRecorderOpen={setIntakeRecorderOpen}
+          onVoiceRecorded={(audioBlob, fileName) => voiceMutation.mutate({ blob: audioBlob, fileName })}
+          voiceMutationPending={voiceMutation.isPending}
+          onBuildWithAi={(prompt) => aiIntakeMutation.mutate(prompt)}
+          aiIntakeMutationPending={aiIntakeMutation.isPending}
+          aiIntakeMessage={aiIntakeMessage}
+          winProbContext={winProbContext}
+          factorVerdicts={factorVerdicts}
+          shadowHistory={shadowHistory}
+          shadowCalibration={shadowCalibration}
+          intelligencePanel={intelligencePanel}
+        />
       )}
 
       {step === "equipment" && (
@@ -6090,77 +5916,5 @@ function QuoteSendActionCard({
         {setupBlocked ? "Log setup-blocked" : title}
       </Button>
     </div>
-  );
-}
-
-function CustomerSection({
-  draft,
-  onPick,
-  onManualChange,
-  onClear,
-}: {
-  draft: QuoteWorkspaceDraft;
-  onPick: (picked: PickedCustomer) => void;
-  onManualChange: (
-    field: "customerName" | "customerCompany" | "customerPhone" | "customerEmail",
-    value: string,
-  ) => void;
-  onClear: () => void;
-}) {
-  const [query, setQuery] = useState("");
-  const [manualMode, setManualMode] = useState(false);
-
-  const hasCustomer = Boolean(
-    draft.customerCompany?.trim() || draft.customerName?.trim(),
-  );
-  const fromCrm = Boolean(draft.contactId || draft.companyId);
-
-  // Chip view — something's selected / entered
-  if (hasCustomer && !manualMode) {
-    return (
-      <SelectedCustomerChip
-        customerName={draft.customerName ?? ""}
-        customerCompany={draft.customerCompany ?? ""}
-        customerPhone={draft.customerPhone ?? ""}
-        customerEmail={draft.customerEmail ?? ""}
-        fromCrm={fromCrm}
-        onChange={() => {
-          onClear();
-          setQuery("");
-          setManualMode(false);
-        }}
-      />
-    );
-  }
-
-  // Manual mode — 4-field form for brand-new customers
-  if (manualMode) {
-    return (
-      <CustomerInfoCard
-        customerName={draft.customerName ?? ""}
-        customerCompany={draft.customerCompany ?? ""}
-        customerPhone={draft.customerPhone ?? ""}
-        customerEmail={draft.customerEmail ?? ""}
-        onChange={onManualChange}
-      />
-    );
-  }
-
-  // Default — picker
-  return (
-    <CustomerPicker
-      query={query}
-      onQueryChange={setQuery}
-      onPick={(picked) => {
-        onPick(picked);
-        setQuery("");
-      }}
-      onRequestManualEntry={(startingQuery) => {
-        // Seed customer name with what the rep was typing so they don't
-        // have to retype it in the manual form
-        onManualChange("customerName", startingQuery);
-        setManualMode(true);
-      }}
-    />
   );
 }
