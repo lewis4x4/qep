@@ -143,48 +143,32 @@ import type {
   QuoteTaxProfile,
   QuoteWorkspaceDraft,
 } from "../../../../../../shared/qep-moonshot-contracts";
+import {
+  STEP_LABELS,
+  WIZARD_STEPS,
+  WIZARD_STEP_IDS,
+  isWizardStepId,
+  stepForWizardIndex,
+  wizardIndexForStep,
+  type Step,
+  type WizardStepMeta,
+} from "../wizard/wizard-types";
+import {
+  STEP_STORAGE_PREFIX,
+  persistStep,
+  readPersistedStep,
+} from "../wizard/wizard-storage";
 
 // Item 2: the salesperson-facing flow is now the QRM 11-step wizard.
 // Steps 10–11 persist generated document artifacts and use the guarded
 // backend email route; text delivery remains gated by Twilio provisioning.
-type Step =
-  | "customer"
-  | "equipment"
-  | "configure"
-  | "tradeIn"
-  | "pricing"
-  | "promotions"
-  | "financing"
-  | "details"
-  | "review"
-  | "document"
-  | "send";
+// Step / WizardStepMeta / WIZARD_STEPS / WIZARD_STEP_IDS / STEP_LABELS /
+// isWizardStepId / wizardIndexForStep / stepForWizardIndex live in
+// `../wizard/wizard-types`. STEP_STORAGE_PREFIX / readPersistedStep /
+// persistStep live in `../wizard/wizard-storage`. Page-local types only
+// from here down.
 type BuilderMode = "workspace" | "guided";
 type AutoSaveState = "idle" | "local" | "saving" | "saved" | "error";
-
-interface WizardStepMeta {
-  id: Step;
-  number: number;
-  label: string;
-  shortLabel: string;
-  owner: "item-2" | "item-3" | "placeholder";
-}
-
-const WIZARD_STEPS: WizardStepMeta[] = [
-  { id: "customer", number: 1, label: "Customer", shortLabel: "Customer", owner: "item-2" },
-  { id: "equipment", number: 2, label: "Equipment", shortLabel: "Equipment", owner: "item-2" },
-  { id: "configure", number: 3, label: "Configure", shortLabel: "Configure", owner: "item-2" },
-  { id: "tradeIn", number: 4, label: "Trade-in", shortLabel: "Trade", owner: "item-2" },
-  { id: "pricing", number: 5, label: "Pricing build", shortLabel: "Pricing", owner: "item-3" },
-  { id: "promotions", number: 6, label: "Rebates & promos", shortLabel: "Promos", owner: "item-3" },
-  { id: "financing", number: 7, label: "Financing", shortLabel: "Finance", owner: "item-3" },
-  { id: "details", number: 8, label: "Quote details", shortLabel: "Details", owner: "item-3" },
-  { id: "review", number: 9, label: "Review & approval", shortLabel: "Review", owner: "item-3" },
-  { id: "document", number: 10, label: "Document", shortLabel: "Document", owner: "item-3" },
-  { id: "send", number: 11, label: "Send & log", shortLabel: "Send", owner: "item-3" },
-];
-
-const WIZARD_STEP_IDS = WIZARD_STEPS.map((item) => item.id);
 
 function readinessChipLabel(missing: string): string {
   if (missing.includes("customer-facing equipment")) return "Visible machine";
@@ -195,12 +179,6 @@ function readinessChipLabel(missing: string): string {
   if (missing.includes("customer")) return "Customer";
   return missing;
 }
-
-const STEP_STORAGE_PREFIX = "qep.quote-builder.last-step.";
-const STEP_LABELS: Record<Step, string> = WIZARD_STEPS.reduce((labels, item) => {
-  labels[item.id] = item.label;
-  return labels;
-}, {} as Record<Step, string>);
 
 type EquipmentAvailabilityStatus = "in_stock" | "in_transit" | "source_required";
 type FinanceStepTab = "cash" | "finance" | "lease";
@@ -568,30 +546,6 @@ function draftHasCustomer(draft: Pick<QuoteWorkspaceDraft, "customerName" | "cus
     draft.contactId ||
     draft.companyId,
   );
-}
-
-function isWizardStepId(value: string | null): value is Step {
-  return Boolean(value && WIZARD_STEP_IDS.includes(value as Step));
-}
-
-function wizardIndexForStep(step: Step): number {
-  return WIZARD_STEPS.find((item) => item.id === step)?.number ?? 1;
-}
-
-function stepForWizardIndex(index: number | null | undefined): Step | null {
-  if (!Number.isFinite(index ?? NaN)) return null;
-  return WIZARD_STEPS.find((item) => item.number === Number(index))?.id ?? null;
-}
-
-function readPersistedStep(quotePackageId: string | null): Step | null {
-  if (!quotePackageId || typeof window === "undefined") return null;
-  const raw = window.sessionStorage.getItem(`${STEP_STORAGE_PREFIX}${quotePackageId}`);
-  return isWizardStepId(raw) ? raw : null;
-}
-
-function persistStep(quotePackageId: string | null, step: Step): void {
-  if (!quotePackageId || typeof window === "undefined") return;
-  window.sessionStorage.setItem(`${STEP_STORAGE_PREFIX}${quotePackageId}`, step);
 }
 
 function money(value: number): string {
@@ -6215,7 +6169,7 @@ function QuoteWizardProgress({
   compact = false,
   onJumpTo,
 }: {
-  steps: WizardStepMeta[];
+  steps: readonly WizardStepMeta[];
   currentStep: Step;
   maxCompletedStepIndex: number;
   compact?: boolean;
