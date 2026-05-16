@@ -89,12 +89,12 @@ import {
 } from "../lib/quote-api";
 import {
   computeQuoteSendActionReadiness,
-  computeQuoteWorkspace,
   isQuoteWhyThisMachineConfirmationRequired,
   isTaxProfileExempt,
   quoteLineCostVisibility,
   type QuoteSendActionChannel,
 } from "../lib/quote-workspace";
+import { useLiveMargin } from "../hooks/useLiveMargin";
 import { hydrateDraftFromSavedQuote } from "../lib/saved-quote-draft";
 import { buildCatalogQueryCandidates } from "../lib/catalog-query-candidates";
 import {
@@ -823,7 +823,7 @@ export function QuoteBuilderV2Page() {
     marginPct,
     approvalState,
     packetReadiness,
-  } = computeQuoteWorkspace(draft);
+  } = useLiveMargin(draft);
 
   const { generateAndDownload: downloadPDF, generating: pdfGenerating, error: pdfError } = useQuotePDF();
   const { profile } = useAuth();
