@@ -1,8 +1,11 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
+import { visualizer } from "rollup-plugin-visualizer";
 import path from "path";
 import { execSync } from "node:child_process";
+
+const analyzeBundle = process.env.ANALYZE === "true" || process.env.ANALYZE === "1";
 
 /**
  * Wave 6.11 Flare — stamp git SHA + build timestamp + app version into
@@ -57,6 +60,16 @@ export default defineConfig({
             org: process.env.SENTRY_ORG!,
             project: process.env.SENTRY_PROJECT!,
             authToken: process.env.SENTRY_AUTH_TOKEN!,
+          }),
+        ]
+      : []),
+    ...(analyzeBundle
+      ? [
+          visualizer({
+            filename: "dist/bundle-stats.html",
+            gzipSize: true,
+            brotliSize: true,
+            open: false,
           }),
         ]
       : []),

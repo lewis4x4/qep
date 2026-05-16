@@ -15,6 +15,7 @@
     "dev": "bun run --filter @qep/web dev",
     "build": "bun run migrations:check && bun run floor:validate-layouts && bun run audit:rls-initplan && bun run audit:edges && bun run --filter @qep/web build",
     "build:web": "bun run --filter @qep/web build",
+    "bundle:check": "node ./scripts/check-web-bundle-size.mjs",
     "audit:rls-initplan": "node ./scripts/check-rls-initplan.mjs",
     "audit:edges": "bun ./scripts/check-edge-function-auth.mjs",
     "audit:secrets": "node ./scripts/check-no-plaintext-secrets.mjs",

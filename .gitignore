@@ -21,6 +21,8 @@ apps/web/apps/
 # Ephemeral local scratch + test output
 comment.json
 test-results/
+playwright-report/
+blob-report/
 
 # Supabase CLI local branch metadata
 supabase/.branches/

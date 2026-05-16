@@ -1,23 +1,8 @@
 // QRM Quote Builder — equipment override-price helpers (pure).
 //
-// Extracted from `QuoteBuilderV2Page.tsx` as PR 8 of the
-// IRON_WIZARD_DECOMPOSITION_PLAN_2026-05-15 strangler-fig sequence.
-// Behavior contract preserved 1:1 with the page-local helpers at
-// lines 411-428 of the prior page.
-//
-// Storage shape today: equipment override price lives in
-// `quote_package_line_items.metadata.equipment_override_price` (JSON).
-// Plan §5 calls for promoting this to a typed `equipment_override_price_cents`
-// column in a follow-up migration (`578_*` after head `577_*`); when that
-// lands, this module becomes the single point of update — readers swap
-// to the column, writers update the column instead of the JSON. Until
-// then, JSON path is the only source of truth.
-//
-// Margin / approval rules: the **system_base_unit_price** is the
-// reference for margin and approval-bypass evaluation; the override is
-// what the customer sees on the PDF. `equipmentSystemBasePrice` returns
-// the system base when set in metadata, otherwise the line's
-// `unitPrice` (back-compat for legacy lines without the metadata).
+// Override storage: `quote_package_line_items.equipment_override_price_cents`
+// (migration 578). Legacy drafts may still carry metadata.equipment_override_price
+// (dollars); readers accept both until backfill is complete.
 
 import type { QuoteLineItemDraft } from "../../../../../../shared/qep-moonshot-contracts";
 
@@ -37,14 +22,37 @@ export function equipmentSystemBasePrice(line: QuoteLineItemDraft): number {
   return line.unitPrice;
 }
 
+function dollarsToCents(value: number): number {
+  return Math.round(value * 100);
+}
+
+/**
+ * Typed override in cents when the rep price differs from system base.
+ * Falls back to legacy metadata dollars when the column was not hydrated.
+ */
+export function equipmentOverridePriceCents(line: QuoteLineItemDraft): number | null {
+  if (line.equipmentOverridePriceCents != null && Number.isFinite(line.equipmentOverridePriceCents)) {
+    return Math.round(line.equipmentOverridePriceCents);
+  }
+  const raw = line.metadata?.equipment_override_price;
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return dollarsToCents(raw);
+  }
+  if (typeof raw === "string") {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) return dollarsToCents(parsed);
+  }
+  return null;
+}
+
+export function hasEquipmentOverride(line: QuoteLineItemDraft): boolean {
+  return equipmentOverridePriceCents(line) != null;
+}
+
 /**
  * Returns a new equipment line with `unitPrice = nextPrice`. When
  * `nextPrice` matches the system base (within $0.01), the override
- * metadata key is **deleted** so analytics queries can distinguish
- * "rep returned the line to system base" from "rep set the override
- * to exactly the system base". When the resulting metadata object is
- * empty, the metadata field is set to `null` to avoid an empty `{}`
- * blob being persisted alongside the row.
+ * column is cleared. When it differs, `equipmentOverridePriceCents` is set.
  */
 export function applyEquipmentOverridePrice(
   line: QuoteLineItemDraft,
@@ -52,14 +60,15 @@ export function applyEquipmentOverridePrice(
 ): QuoteLineItemDraft {
   const systemBase = equipmentSystemBasePrice(line);
   const metadata = { ...(line.metadata ?? {}) };
-  if (Math.abs(nextPrice - systemBase) < 0.01) {
-    delete metadata.equipment_override_price;
-  } else {
-    metadata.equipment_override_price = nextPrice;
-  }
+  delete metadata.equipment_override_price;
+
+  const equipmentOverridePriceCentsValue =
+    Math.abs(nextPrice - systemBase) < 0.01 ? null : dollarsToCents(nextPrice);
+
   return {
     ...line,
     unitPrice: nextPrice,
+    equipmentOverridePriceCents: equipmentOverridePriceCentsValue,
     metadata: Object.keys(metadata).length > 0 ? metadata : null,
   };
 }

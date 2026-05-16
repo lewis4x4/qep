@@ -266,6 +266,17 @@ function toPackageLineItemDraft(item: unknown): QuoteLineItemDraft[] {
   }
   if (sourceId) line.sourceId = sourceId;
   if (dealerCost !== null) line.dealerCost = dealerCost;
+  const overrideCents = asNumber(record.equipment_override_price_cents);
+  if (overrideCents != null) {
+    line.equipmentOverridePriceCents = Math.round(overrideCents);
+    line.unitPrice = overrideCents / 100;
+  } else if (metadata?.equipment_override_price != null) {
+    const legacyDollars = asNumber(metadata.equipment_override_price);
+    if (legacyDollars != null) {
+      line.equipmentOverridePriceCents = Math.round(legacyDollars * 100);
+      line.unitPrice = legacyDollars;
+    }
+  }
   return [line];
 }
 

@@ -54,6 +54,8 @@ export interface QuoteLineItemDraft {
   year?: number | null;
   quantity: number;
   unitPrice: number;
+  /** Rep override of equipment base price in cents; null = use system/catalog base. */
+  equipmentOverridePriceCents?: number | null;
   reasonCode?: QuoteLineDiscountReason | string | null;
   approvalRequired?: boolean;
   metadata?: Record<string, unknown> | null;

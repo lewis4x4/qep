@@ -100,6 +100,29 @@ describe("buildQuoteSavePayload", () => {
     expect(payload.company_id).toBeUndefined();
   });
 
+  test("persists equipment override as equipment_override_price_cents", () => {
+    const payload = buildQuoteSavePayload(
+      makeQuoteDraft({
+        equipment: [{
+          kind: "equipment",
+          id: "model-1",
+          title: "Bobcat T86",
+          quantity: 1,
+          unitPrice: 72_500,
+          equipmentOverridePriceCents: 7_250_000,
+          metadata: { system_base_unit_price: 75_000 },
+        }],
+      }),
+      computedQuoteTotals,
+      [],
+    );
+
+    const line = (payload.line_items as Array<Record<string, unknown>>)[0]!;
+    expect(line.equipment_override_price_cents).toBe(7_250_000);
+    expect(line.unit_price).toBe(72_500);
+    expect((line.metadata as Record<string, unknown>).equipment_override_price).toBeUndefined();
+  });
+
   test("preserves availability request metadata on equipment line items", () => {
     const payload = buildQuoteSavePayload(
       makeQuoteDraft({

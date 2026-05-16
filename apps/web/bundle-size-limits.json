@@ -1,0 +1,6 @@
+{
+  "indexEntryMaxBytes": 199711,
+  "baselineBytes": 181555,
+  "baselineCapturedAt": "2026-05-16",
+  "note": "Sum of dist/assets/index-*.js after production build; cap = baseline + 10% (IRON_WIZARD_DECOMPOSITION_PLAN §7)."
+}

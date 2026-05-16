@@ -80,3 +80,6 @@ jobs:
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: bun run build
+
+      - name: Web bundle size guard (index entry)
+        run: bun run bundle:check

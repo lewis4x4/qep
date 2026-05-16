@@ -1,0 +1,78 @@
+# Quote Builder Playwright suite against production staging (https://qep.blackrockai.co).
+# IRON_WIZARD_DECOMPOSITION_PLAN_2026-05-15 §7 step 5.
+#
+# Required repo secrets (same-repo PRs):
+#   PLAYWRIGHT_TEST_EMAIL — staging rep/admin test user
+#   PLAYWRIGHT_TEST_PASSWORD
+# Optional:
+#   PLAYWRIGHT_AGED_EQUIPMENT_ID — CRM UUID for approval-bypass spec (365+ day received_at)
+name: E2E Staging
+
+on:
+  pull_request:
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/e2e-staging.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-staging-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: .
+        run: bun install --frozen-lockfile
+
+      - name: Require staging credentials (same-repo PRs)
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          PLAYWRIGHT_TEST_EMAIL: ${{ secrets.PLAYWRIGHT_TEST_EMAIL }}
+          PLAYWRIGHT_TEST_PASSWORD: ${{ secrets.PLAYWRIGHT_TEST_PASSWORD }}
+        run: |
+          if [ -z "$PLAYWRIGHT_TEST_EMAIL" ] || [ -z "$PLAYWRIGHT_TEST_PASSWORD" ]; then
+            echo "::error::Configure PLAYWRIGHT_TEST_EMAIL and PLAYWRIGHT_TEST_PASSWORD repository secrets for e2e-staging."
+            exit 1
+          fi
+
+      - name: Install Playwright Chromium
+        run: bunx playwright install chromium --with-deps
+
+      - name: Run quote builder staging e2e
+        env:
+          CI: "true"
+          PLAYWRIGHT_BASE_URL: https://qep.blackrockai.co
+          PLAYWRIGHT_SKIP_WEBSERVER: "1"
+          PLAYWRIGHT_TEST_EMAIL: ${{ secrets.PLAYWRIGHT_TEST_EMAIL }}
+          PLAYWRIGHT_TEST_PASSWORD: ${{ secrets.PLAYWRIGHT_TEST_PASSWORD }}
+          PLAYWRIGHT_AGED_EQUIPMENT_ID: ${{ secrets.PLAYWRIGHT_AGED_EQUIPMENT_ID }}
+        run: |
+          if [ -z "$PLAYWRIGHT_TEST_EMAIL" ] || [ -z "$PLAYWRIGHT_TEST_PASSWORD" ]; then
+            echo "Authenticated secrets unavailable (fork PR) — guest route smoke only."
+            bunx playwright test tests/e2e/quote-builder-route.spec.ts
+          else
+            bun run test:e2e:staging
+          fi
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: apps/web/playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore

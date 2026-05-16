@@ -30,6 +30,13 @@ Deno.test("quote version snapshots use computed financial metrics for approval r
   assert(amountIndex > financialsIndex);
 });
 
+Deno.test("equipment override persists as equipment_override_price_cents column", async () => {
+  const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
+  assert(source.includes("function resolveEquipmentOverridePriceCents("));
+  assert(source.includes("equipment_override_price_cents: equipmentOverridePriceCents"));
+  assert(source.includes("delete persistedMetadata.equipment_override_price"));
+});
+
 Deno.test("legacy misc credit rows are normalized before server financial totals", async () => {
   const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
   assert(source.includes("function isMiscCreditLine("));

@@ -26,6 +26,7 @@ import type { ClosedDealAuditRow } from "./closed-deals-audit";
 import type { DealFactorObservation } from "./factor-attribution";
 import type { FactorVerdict } from "./factor-verdict";
 import type { CalibrationObservation, CalibrationOutcome } from "./scorer-calibration";
+import { equipmentOverridePriceCents } from "./equipment-override-price";
 import { quoteLineCostVisibility } from "./quote-workspace";
 
 const QUOTE_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/quote-builder-v2`;
@@ -1889,27 +1890,31 @@ export function buildQuoteSavePayload(
     return null;
   };
   const lineItems = [
-    ...draft.equipment.map((item, index) => ({
-      id: item.id,
-      catalog_entry_id: catalogEntryIdForLine(item),
-      line_type: "equipment",
-      description: item.title,
-      make: item.make,
-      model: item.model,
-      year: item.year,
-      quantity: item.quantity,
-      unit_price: item.unitPrice,
-      extended_price: item.unitPrice * item.quantity,
-      quoted_dealer_cost: item.dealerCost ?? undefined,
-      display_order: index,
-      reason_code: safeLineReasonCode(item),
-      approval_required: item.approvalRequired === true,
-      cost_visibility: quoteLineCostVisibility(item),
-      metadata: buildLineMetadata(item, {
-        source_catalog: item.sourceCatalog ?? "qb_equipment_models",
-        source_id: item.sourceId ?? item.id ?? null,
-      }),
-    })),
+    ...draft.equipment.map((item, index) => {
+      const overrideCents = equipmentOverridePriceCents(item);
+      return {
+        id: item.id,
+        catalog_entry_id: catalogEntryIdForLine(item),
+        line_type: "equipment",
+        description: item.title,
+        make: item.make,
+        model: item.model,
+        year: item.year,
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        extended_price: item.unitPrice * item.quantity,
+        equipment_override_price_cents: overrideCents,
+        quoted_dealer_cost: item.dealerCost ?? undefined,
+        display_order: index,
+        reason_code: safeLineReasonCode(item),
+        approval_required: item.approvalRequired === true,
+        cost_visibility: quoteLineCostVisibility(item),
+        metadata: buildLineMetadata(item, {
+          source_catalog: item.sourceCatalog ?? "qb_equipment_models",
+          source_id: item.sourceId ?? item.id ?? null,
+        }),
+      };
+    }),
     ...draft.attachments.map((item, index) => ({
       id: item.id,
       catalog_entry_id: catalogEntryIdForLine(item),

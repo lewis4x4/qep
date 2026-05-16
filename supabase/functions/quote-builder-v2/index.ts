@@ -286,6 +286,42 @@ function isMiscCreditLine(line: Record<string, unknown>): boolean {
   return lineString((metadata as Record<string, unknown>).misc_line_kind, 40) === "credit";
 }
 
+function equipmentSystemBaseUnitPrice(metadata: Record<string, unknown>, unitPrice: number): number {
+  const raw = metadata.system_base_unit_price;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string") {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return unitPrice;
+}
+
+function resolveEquipmentOverridePriceCents(
+  row: Record<string, unknown>,
+  metadata: Record<string, unknown>,
+  unitPrice: number,
+  lineType: string,
+): number | null {
+  if (lineType !== "equipment") return null;
+  const explicit = row.equipment_override_price_cents ?? row.equipmentOverridePriceCents;
+  if (explicit != null && Number.isFinite(Number(explicit))) {
+    return Math.round(Number(explicit));
+  }
+  const legacy = metadata.equipment_override_price;
+  if (typeof legacy === "number" && Number.isFinite(legacy)) {
+    return Math.round(legacy * 100);
+  }
+  if (typeof legacy === "string") {
+    const parsed = Number(legacy);
+    if (Number.isFinite(parsed)) return Math.round(parsed * 100);
+  }
+  const systemBase = equipmentSystemBaseUnitPrice(metadata, unitPrice);
+  if (Math.abs(unitPrice - systemBase) >= 0.01) {
+    return Math.round(unitPrice * 100);
+  }
+  return null;
+}
+
 function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Record<string, unknown>> {
   const rawLines = Array.isArray(body.line_items) ? body.line_items : [];
   const fallbackEquipment = Array.isArray(body.equipment)
@@ -339,6 +375,11 @@ function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Re
     const outboundDeliveryAmount = lineType === "freight" && canonicalFreightDir !== "inbound"
       ? (outboundDeliveryRaw > 0 ? outboundDeliveryRaw : extendedPrice)
       : null;
+    const equipmentOverridePriceCents = resolveEquipmentOverridePriceCents(row, metadata, unitPrice, lineType);
+    const persistedMetadata = { ...metadata };
+    if (equipmentOverridePriceCents != null) {
+      delete persistedMetadata.equipment_override_price;
+    }
 
     return [{
       catalog_entry_id: catalogEntryId && UUID_RE.test(catalogEntryId) ? catalogEntryId : null,
@@ -359,7 +400,8 @@ function normalizeQuotePackageLineItems(body: Record<string, unknown>): Array<Re
       cost_visibility: costVisibility,
       inbound_freight_amount: inboundFreightAmount,
       outbound_delivery_amount: outboundDeliveryAmount,
-      metadata,
+      equipment_override_price_cents: equipmentOverridePriceCents,
+      metadata: persistedMetadata,
     }];
   });
 }
@@ -4747,7 +4789,7 @@ Deno.serve(async (req) => {
       const admin = createAdminClient();
       const { data: sourceLines } = await admin
         .from("quote_package_line_items")
-        .select("workspace_id, catalog_entry_id, make, model, year, quoted_list_price, quoted_dealer_cost, quantity, source_location, line_type, description, unit_price, extended_price, inbound_freight_amount, outbound_delivery_amount, display_order, reason_code, approval_required, cost_visibility, metadata")
+        .select("workspace_id, catalog_entry_id, make, model, year, quoted_list_price, quoted_dealer_cost, quantity, source_location, line_type, description, unit_price, extended_price, equipment_override_price_cents, inbound_freight_amount, outbound_delivery_amount, display_order, reason_code, approval_required, cost_visibility, metadata")
         .eq("quote_package_id", quotePackageId)
         .order("display_order", { ascending: true });
       if (Array.isArray(sourceLines) && sourceLines.length > 0) {
