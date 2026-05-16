@@ -158,6 +158,14 @@ import {
   readPersistedStep,
 } from "../wizard/wizard-storage";
 import { QuoteWizardProgress } from "../wizard/WizardProgress";
+import {
+  canJumpToWizardIndex,
+  findWizardStepIndex,
+  nextWizardStep as resolveNextWizardStep,
+  previousWizardStep as resolvePreviousWizardStep,
+  wizardMaxStepIndex0FromDraft,
+  wizardReachableMaxIndex0,
+} from "../wizard/wizard-navigation";
 
 // Item 2: the salesperson-facing flow is now the QRM 11-step wizard.
 // Steps 10–11 persist generated document artifacts and use the guarded
@@ -2724,8 +2732,8 @@ export function QuoteBuilderV2Page() {
     saveMutation.isPending
     || submitApprovalMutation.isPending
     || (!packetReadiness.draft.ready && primaryActionLabel !== "Review & Send");
-  const previousWizardStep = WIZARD_STEPS[currentWizardStepNumber - 2]?.id ?? null;
-  const nextWizardStep = WIZARD_STEPS[currentWizardStepNumber]?.id ?? null;
+  const previousWizardStep = resolvePreviousWizardStep(currentWizardStepNumber);
+  const nextWizardStep = resolveNextWizardStep(currentWizardStepNumber);
   const nextWizardLabel = nextWizardStep ? STEP_LABELS[nextWizardStep] : null;
   const wizardNextDisabled =
     !nextWizardStep
@@ -2739,17 +2747,13 @@ export function QuoteBuilderV2Page() {
       : step === "document" && !documentReady
         ? "Generate the document preview before send/log."
         : "Completed steps stay editable — click any finished step below to jump back.";
-  const pricingWizardIndex = WIZARD_STEPS.findIndex((item) => item.id === "pricing");
-  const wizardMaxStepIndex0 = Math.max(0, (draft.wizardStep ?? 1) - 1);
-  const wizardCurrentIndex0 = WIZARD_STEPS.findIndex((item) => item.id === step);
-  const wizardReachableMaxIndex0 = Math.min(
-    Math.max(wizardMaxStepIndex0, wizardCurrentIndex0 >= 0 ? wizardCurrentIndex0 : 0),
-    WIZARD_STEPS.length - 1,
-  );
+  const pricingWizardIndex = findWizardStepIndex("pricing");
+  const wizardMaxStepIndex0 = wizardMaxStepIndex0FromDraft(draft.wizardStep);
+  const wizardCurrentIndex0 = findWizardStepIndex(step);
+  const wizardReachableMaxIndex0Value = wizardReachableMaxIndex0(wizardMaxStepIndex0, wizardCurrentIndex0);
   const wizardPricingJumpAllowed =
     signalsReady
-    && pricingWizardIndex !== -1
-    && pricingWizardIndex <= wizardReachableMaxIndex0
+    && canJumpToWizardIndex(pricingWizardIndex, wizardReachableMaxIndex0Value)
     && step !== "pricing";
 
   function handleQuoteForProspect(): void {
@@ -3557,7 +3561,7 @@ export function QuoteBuilderV2Page() {
       <QuoteWizardProgress
         steps={WIZARD_STEPS}
         currentStep={step}
-        maxCompletedStepIndex={Math.max(0, (draft.wizardStep ?? 1) - 1)}
+        maxCompletedStepIndex={wizardMaxStepIndex0}
         compact
         onJumpTo={setStep}
       />

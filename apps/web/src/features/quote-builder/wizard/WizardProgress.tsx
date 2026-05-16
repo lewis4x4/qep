@@ -8,6 +8,7 @@
 
 import { Card } from "@/components/ui/card";
 
+import { canJumpToWizardIndex } from "./wizard-navigation";
 import type { Step, WizardStepMeta } from "./wizard-types";
 
 export interface QuoteWizardProgressProps {
@@ -48,8 +49,8 @@ export function QuoteWizardProgress({
       }`}>
         {steps.map((item, index) => {
           const isCurrent = item.id === currentStep;
-          const isReachable = index <= maxCompletedIndex;
-          const isComplete = index < currentIndex || (index !== currentIndex && index <= maxCompletedIndex);
+          const isReachable = canJumpToWizardIndex(index, maxCompletedIndex);
+          const isComplete = index < currentIndex || (index !== currentIndex && isReachable);
           const isFuture = !isReachable;
           return (
             <button
