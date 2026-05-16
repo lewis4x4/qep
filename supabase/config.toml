@@ -168,6 +168,15 @@ verify_jwt = false
 [functions.parts-embed-backfill]
 verify_jwt = false
 
+[functions.parts-identify-photo]
+verify_jwt = false
+
+[functions.parts-network-optimizer]
+verify_jwt = false
+
+[functions.parts-order-customer-notify]
+verify_jwt = false
+
 [functions.parts-predictive-ai]
 verify_jwt = false
 
@@ -559,6 +568,12 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.iron-undo-flow-run]
+verify_jwt = false
+
+[functions.kb-maintenance]
+verify_jwt = false
+
+[functions.nudge-scheduler]
 verify_jwt = false
 
 [functions.qb-ai-scenarios]

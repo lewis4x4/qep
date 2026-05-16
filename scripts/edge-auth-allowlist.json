@@ -54,11 +54,6 @@
     "       - onedrive-oauth"
   ],
   "unregistered_in_config": [
-    "kb-maintenance",
-    "nudge-scheduler",
-    "parts-identify-photo",
-    "parts-network-optimizer",
-    "parts-order-customer-notify",
     "parts-order-manager",
     "parts-predictive-kitter",
     "parts-reorder-compute",

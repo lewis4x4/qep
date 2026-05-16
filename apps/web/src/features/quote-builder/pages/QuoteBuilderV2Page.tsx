@@ -50,7 +50,6 @@ import { EquipmentSelector } from "../components/EquipmentSelector";
 import { PackageItemSearchDialog } from "../components/PackageItemSearchDialog";
 import { FinancingCalculator } from "../components/FinancingCalculator";
 import { DealCoachSidebar } from "../components/DealCoachSidebar";
-import { IncentiveStack } from "../components/IncentiveStack";
 import { QuoteReviewWorkflowPanels } from "../components/QuoteReviewWorkflowPanels";
 import { SendQuoteSection } from "../components/SendQuoteSection";
 import { TaxBreakdown } from "../components/TaxBreakdown";
@@ -180,6 +179,18 @@ import { CustomerStep } from "../steps/CustomerStep";
 import { EquipmentStep } from "../steps/EquipmentStep";
 import { ConfigureStep } from "../steps/ConfigureStep";
 import { TradeInStep } from "../steps/TradeInStep";
+import { PricingStep } from "../steps/PricingStep";
+import { PromotionsStep } from "../steps/PromotionsStep";
+import { FinancingStep } from "../steps/FinancingStep";
+import { DetailsStep } from "../steps/DetailsStep";
+import { ReviewStep } from "../steps/ReviewStep";
+import { dateInputValue, isoFromDateInput } from "../lib/quote-date-input";
+import {
+  PRICING_ADDER_FIELDS,
+  type CostVisibility,
+  type PricingAdderField,
+  type PricingLineKind,
+} from "../lib/pricing-adder-fields";
 import { QuoteWorkspaceLineRow } from "../components/QuoteWorkspaceLineRow";
 import { money } from "../lib/money";
 import {
@@ -210,61 +221,6 @@ function readinessChipLabel(missing: string): string {
 }
 
 type EquipmentAvailabilityStatus = "in_stock" | "in_transit" | "source_required";
-type FinanceStepTab = "cash" | "finance" | "lease";
-type PricingLineKind = Extract<QuoteLineItemDraft["kind"], "pdi" | "freight" | "good_faith" | "doc_fee" | "title" | "tag" | "registration" | "discount" | "rebate_mfg" | "rebate_dealer" | "loyalty_discount" | "custom">;
-type CostVisibility = "internal" | "customer";
-
-type PricingAdderField = {
-  id: string;
-  kind: PricingLineKind;
-  title: string;
-  helper: string;
-  step: number;
-  costVisibility: CostVisibility;
-  metadata?: Record<string, unknown>;
-};
-
-const PRICING_ADDER_FIELDS: PricingAdderField[] = [
-  {
-    id: "inbound_freight",
-    kind: "freight",
-    title: "Inbound freight to yard",
-    helper: "Internal freight from vendor to QEP yard",
-    step: 100,
-    costVisibility: "internal",
-    metadata: { freight_direction: "inbound", pricing_field_key: "inbound_freight" },
-  },
-  {
-    id: "outbound_delivery",
-    kind: "freight",
-    title: "Outbound delivery",
-    helper: "Customer-facing outbound delivery charge",
-    step: 100,
-    costVisibility: "customer",
-    metadata: { freight_direction: "outbound", pricing_field_key: "outbound_delivery" },
-  },
-  { id: "pdi", kind: "pdi", title: "PDI", helper: "Internal prep / inspection cost", step: 100, costVisibility: "internal" },
-  { id: "good_faith", kind: "good_faith", title: "1% good faith", helper: "Internal goodwill reserve", step: 100, costVisibility: "internal" },
-  { id: "doc_fee", kind: "doc_fee", title: "Doc fee", helper: "Customer-facing paperwork fee", step: 25, costVisibility: "customer" },
-  { id: "title", kind: "title", title: "Title", helper: "Customer-facing title processing", step: 25, costVisibility: "customer" },
-  { id: "tag", kind: "tag", title: "Tag", helper: "Customer-facing tag / plate fee", step: 25, costVisibility: "customer" },
-  { id: "registration", kind: "registration", title: "Registration", helper: "Customer-facing registration support", step: 25, costVisibility: "customer" },
-];
-
-const DISCOUNT_REASON_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "competitive_match", label: "Competitive match" },
-  { value: "volume_buyer", label: "Volume buyer" },
-  { value: "aged_inventory", label: "Aged inventory" },
-  { value: "loyalty", label: "Loyalty" },
-  { value: "other", label: "Other" },
-];
-
-const PROMOTION_PLACEHOLDERS: Array<{ id: string; title: string; kind: PricingLineKind; amount: number; source: string; detail: string }> = [
-  { id: "seed-mfg-support", title: "Manufacturer retail support", kind: "rebate_mfg", amount: 1000, source: "Manufacturer", detail: "Clear starter row until seeded OEM programs resolve." },
-  { id: "seed-dealer-match", title: "Dealer close-the-gap promo", kind: "rebate_dealer", amount: 500, source: "Dealer", detail: "Use only when manager policy allows dealer-funded support." },
-  { id: "seed-loyalty-owner", title: "Returning owner loyalty", kind: "loyalty_discount", amount: 750, source: "Loyalty", detail: "Placeholder for customer loyalty program selection." },
-];
-
 interface CatalogEntryMatch {
   id?: string;
   sourceCatalog?: QuoteLineItemDraft["sourceCatalog"];
@@ -495,34 +451,6 @@ function shortDateTime(value: string | null): string | null {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-function dateInputValue(value: string | null | undefined): string {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (part: number) => String(part).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-function dateTimeInputValue(value: string | null | undefined): string {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (part: number) => String(part).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function isoFromDateInput(value: string): string | null {
-  if (!value) return null;
-  const date = new Date(`${value}T12:00:00`);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
-
-function isoFromDateTimeInput(value: string): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
-
 function addDaysIso(days: number): string {
   const date = new Date();
   date.setDate(date.getDate() + days);
@@ -652,7 +580,6 @@ export function QuoteBuilderV2Page() {
   const [customFinanceEnabled, setCustomFinanceEnabled] = useState(false);
   const [customFinanceRate, setCustomFinanceRate] = useState<number | null>(null);
   const [customFinanceTermMonths, setCustomFinanceTermMonths] = useState<number | null>(null);
-  const [financeStepTab, setFinanceStepTab] = useState<FinanceStepTab>("cash");
   const [draft, setDraft] = useState<QuoteWorkspaceDraft>({
     dealId: dealId || undefined,
     contactId: contactId || undefined,
@@ -2440,79 +2367,8 @@ export function QuoteBuilderV2Page() {
     });
   }
 
-  function promotionPlaceholderSelected(promo: typeof PROMOTION_PLACEHOLDERS[number]): boolean {
-    return draft.pricingLines?.some((line) =>
-      line.kind === promo.kind && line.metadata?.promotion_placeholder_id === promo.id) ?? false;
-  }
-
-  function togglePromotion(promo: typeof PROMOTION_PLACEHOLDERS[number]): void {
-    const selected = promotionPlaceholderSelected(promo);
-    setDraft((current) => {
-      const existing = current.pricingLines ?? [];
-      const selectedPromotionIds = (current.selectedPromotionIds ?? []).filter(isUuid);
-      if (selected) {
-        return {
-          ...current,
-          selectedPromotionIds,
-          pricingLines: existing.filter((line) => line.metadata?.promotion_placeholder_id !== promo.id),
-        };
-      }
-      const currentLine = existing.find((line) => line.metadata?.promotion_placeholder_id === promo.id);
-      const promoMetadata = {
-        ...(currentLine?.metadata ?? {}),
-        promotion_placeholder_id: promo.id,
-        promotion_source: promo.source,
-      };
-      const nextLine: QuoteLineItemDraft = {
-        kind: promo.kind,
-        costVisibility: quoteLineCostVisibility({ kind: promo.kind, metadata: promoMetadata }),
-        id: currentLine?.id ?? `${promo.kind}-${Date.now()}`,
-        sourceCatalog: "manual",
-        sourceId: null,
-        dealerCost: null,
-        title: promo.title,
-        quantity: 1,
-        unitPrice: promo.amount,
-        metadata: promoMetadata,
-      };
-      return {
-        ...current,
-        selectedPromotionIds,
-        pricingLines: currentLine
-          ? existing.map((line) => line.metadata?.promotion_placeholder_id === promo.id ? nextLine : line)
-          : [...existing, nextLine],
-      };
-    });
-  }
-
-  function saveSelectedFinanceScenario(scenario: QuoteFinanceScenario): void {
-    setDraft((current) => {
-      const saved = current.savedFinanceScenarios ?? [];
-      const nextScenario = {
-        ...scenario,
-        kind: scenario.kind ?? (scenario.type === "lease" ? "lease_fmv" : scenario.type),
-        isDefault: scenario.label === current.selectedFinanceScenario,
-      } satisfies QuoteFinanceScenario;
-      return {
-        ...current,
-        savedFinanceScenarios: saved.some((item) => item.label === nextScenario.label)
-          ? saved.map((item) => item.label === nextScenario.label
-            ? { ...item, ...nextScenario, isDefault: true }
-            : { ...item, isDefault: false })
-          : [...saved.map((item) => ({ ...item, isDefault: false })), { ...nextScenario, isDefault: true }],
-      };
-    });
-  }
-
   const discountLine = pricingLine("discount");
   const leaseQuotingEnabled = import.meta.env.VITE_FEATURE_LEASE_QUOTING === "true";
-  const financeTabScenarios = allFinanceScenarios.filter((scenario) => (
-    financeStepTab === "cash"
-      ? scenario.type === "cash" || scenario.kind === "cash"
-      : financeStepTab === "lease"
-        ? scenario.type === "lease" || scenario.kind === "lease_fmv" || scenario.kind === "lease_fppo"
-        : scenario.type === "finance" || scenario.kind === "finance"
-  ));
 
   const documentReady = Boolean(documentFallbackGeneratedAt);
   const documentPersistenceLabel = documentArtifact
@@ -3571,1047 +3427,90 @@ export function QuoteBuilderV2Page() {
       )}
 
       {step === "pricing" && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Step 5: Build the price</h2>
-            <p className="mt-1 text-sm text-muted-foreground">A simple waterfall: machine, configuration, adders, discount, trade, tax, and customer total.</p>
-          </div>
-
-          <Card className="border-border/70 bg-muted/20 p-3">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              <span className="font-medium text-foreground">Configure vs pricing.</span>{" "}
-              Catalog package lines (attachments, options, parts, warranty) and per-row{" "}
-              <span className="font-medium text-foreground">Internal</span> / customer visibility are edited in{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 3 — Configure the package"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("configure")}
-              >
-                Configure
-              </Button>
-              . This step covers sell-price overrides, standard adders, discounts, and totals.
-            </p>
-          </Card>
-
-          <Card className="overflow-hidden border-qep-orange/20">
-            <div className="bg-qep-orange/5 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pricing waterfall</p>
-              <div className="mt-3 space-y-2 text-sm">
-                <SummaryRow label="Equipment" value={money(equipmentTotal)} />
-                <SummaryRow label="Configuration (customer)" value={money(attachmentTotal)} />
-                {internalCostLoadTotal > 0 ? (
-                  <SummaryRow
-                    label="Internal cost load (not on customer quote)"
-                    value={money(internalCostLoadTotal)}
-                  />
-                ) : null}
-                <SummaryRow label="Customer-facing adders" value={money(pricingLineTotal)} />
-                <SummaryRow label="Subtotal" value={money(subtotal)} emphasize />
-                <SummaryRow label="Discounts + promos" value={`-${money(discountTotal)}`} positive />
-                <SummaryRow label="Trade allowance" value={`-${money(draft.tradeAllowance)}`} positive />
-                <SummaryRow label="Taxable basis" value={money(taxableBasis)} emphasize />
-                <SummaryRow label="Estimated tax" value={money(taxTotal)} />
-                <SummaryRow label="Customer total" value={money(customerTotal)} emphasize />
-              </div>
-            </div>
-          </Card>
-          <MarginCheckBanner
-            marginPct={marginPct}
-            waterfall={{
-              equipmentTotal: subtotal,
-              dealerCost,
-              tradeAllowance: draft.tradeAllowance,
-              netTotal,
-              marginAmount,
-            }}
-          />
-
-          <Card className="p-4">
-            <p className="text-sm font-semibold text-foreground">Equipment base-price overrides</p>
-            <p className="mt-1 text-xs text-muted-foreground">Override price here without changing the machine's source/base price record.</p>
-            <div className="mt-3 space-y-2">
-              {draft.equipment.length === 0 ? (
-                <p className="rounded border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-                  Add equipment first to set an override.
-                </p>
-              ) : draft.equipment.map((equipment, index) => {
-                const systemBase = equipmentSystemBasePrice(equipment);
-                const hasOverride = Math.abs(equipment.unitPrice - systemBase) > 0.01;
-                return (
-                  <div key={`pricing-override-${equipment.id ?? equipment.title}-${index}`} className="rounded-lg border border-border/70 bg-card/50 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-foreground">{equipment.title || `${equipment.make ?? ""} ${equipment.model ?? ""}`.trim() || "Equipment"}</p>
-                      <span className="text-xs text-muted-foreground">System base {money(systemBase)}</span>
-                    </div>
-                    <div className="mt-2 flex items-center gap-2">
-                      <label className="flex flex-1 items-center gap-1 rounded border border-input bg-background px-2 py-1 text-sm font-semibold text-foreground">
-                        <span className="text-muted-foreground">$</span>
-                        <input
-                          type="number"
-                          min={0}
-                          step={100}
-                          value={equipment.unitPrice}
-                          onChange={(event) => {
-                            const parsed = event.target.value === "" ? 0 : Number(event.target.value);
-                            if (!Number.isFinite(parsed) || parsed < 0) return;
-                            setDraft((current) => ({
-                              ...current,
-                              equipment: current.equipment.map((item, rowIndex) => (
-                                rowIndex === index ? applyEquipmentOverridePrice(item, parsed) : item
-                              )),
-                            }));
-                          }}
-                          className="w-full bg-transparent text-right outline-none"
-                          aria-label={`Override price for ${equipment.title}`}
-                        />
-                      </label>
-                      {hasOverride && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDraft((current) => ({
-                            ...current,
-                            equipment: current.equipment.map((item, rowIndex) => (
-                              rowIndex === index ? applyEquipmentOverridePrice(item, systemBase) : item
-                            )),
-                          }))}
-                        >
-                          Reset
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-foreground">Price adders</p>
-                <p className="mt-1 text-xs text-muted-foreground">Only fill what applies. Empty rows stay out of the quote payload.</p>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  const goodFaithField = PRICING_ADDER_FIELDS.find((field) => field.id === "good_faith");
-                  if (!goodFaithField) return;
-                  upsertPricingLine(goodFaithField, Math.round(subtotal * 0.01));
-                }}
-              >
-                Set 1% good faith
-              </Button>
-            </div>
-            <div className="mt-4 space-y-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Internal cost adders (not shown to customer)</p>
-                <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                  {PRICING_ADDER_FIELDS.filter((field) =>
-                    field.costVisibility === "internal"
-                    && (field.id !== "inbound_freight" || inboundFreightEligible))
-                    .map((field) => {
-                    const line = pricingLine(field);
-                    return (
-                      <label key={field.id} className="rounded-lg border border-border/70 bg-card/50 p-3 text-sm">
-                        <span className="font-medium text-foreground">{field.title}</span>
-                        <span className="mt-0.5 block text-[11px] text-muted-foreground">{field.helper}</span>
-                        {field.kind === "pdi" && line?.metadata?.pdi_source === "rolling_average_by_model" && (
-                          <span className="mt-0.5 block text-[11px] text-qep-orange">
-                            Prefilled from model history ({Number(line.metadata?.pdi_sample_count ?? 0)} sample{Number(line.metadata?.pdi_sample_count ?? 0) === 1 ? "" : "s"})
-                          </span>
-                        )}
-                        <div className="mt-2 flex items-center gap-1 rounded border border-input bg-background px-2 py-1">
-                          <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-                          <input
-                            type="number"
-                            min={0}
-                            step={field.step}
-                            value={line?.unitPrice ?? ""}
-                            onChange={(event) => upsertPricingLine(field, Number(event.target.value) || 0)}
-                            placeholder="0"
-                            className="w-full bg-transparent text-right text-sm font-semibold outline-none"
-                          />
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-                {!inboundFreightEligible && (
-                  <p className="mt-2 text-[11px] text-muted-foreground">
-                    Inbound freight is hidden while all selected equipment is in stock because inbound cost is already baked into loaded machine cost.
-                  </p>
-                )}
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Customer-facing charges (printed on quote)</p>
-                <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                  {PRICING_ADDER_FIELDS.filter((field) => field.costVisibility === "customer").map((field) => {
-                    const line = pricingLine(field);
-                    return (
-                      <label key={field.id} className="rounded-lg border border-border/70 bg-card/50 p-3 text-sm">
-                        <span className="font-medium text-foreground">{field.title}</span>
-                        <span className="mt-0.5 block text-[11px] text-muted-foreground">{field.helper}</span>
-                        <div className="mt-2 flex items-center gap-1 rounded border border-input bg-background px-2 py-1">
-                          <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-                          <input
-                            type="number"
-                            min={0}
-                            step={field.step}
-                            value={line?.unitPrice ?? ""}
-                            onChange={(event) => upsertPricingLine(field, Number(event.target.value) || 0)}
-                            placeholder="0"
-                            className="w-full bg-transparent text-right text-sm font-semibold outline-none"
-                          />
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="rounded-lg border border-border/70 bg-background/40 p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Misc charges / credits</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">Use for wrap, down payment received, one-off charges, or customer-visible credits not covered above.</p>
-                <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                  <div className="rounded-lg border border-border/60 bg-card/50 p-3">
-                    <p className="text-sm font-medium text-foreground">Misc charge</p>
-                    <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px_auto]">
-                      <input
-                        value={miscChargeTitle}
-                        onChange={(event) => setMiscChargeTitle(event.target.value)}
-                        placeholder="e.g. Wrap, setup, special handling"
-                        className="rounded border border-input bg-background px-3 py-2 text-sm"
-                      />
-                      <input
-                        type="number"
-                        min={0}
-                        step={25}
-                        value={miscChargeAmount || ""}
-                        onChange={(event) => setMiscChargeAmount(Number(event.target.value) || 0)}
-                        placeholder="0"
-                        className="rounded border border-input bg-background px-3 py-2 text-sm"
-                      />
-                      <Button type="button" size="sm" onClick={() => handleAddMiscPricingLine("charge")}>
-                        Add
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="rounded-lg border border-border/60 bg-card/50 p-3">
-                    <p className="text-sm font-medium text-foreground">Misc credit</p>
-                    <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px_auto]">
-                      <input
-                        value={miscCreditTitle}
-                        onChange={(event) => setMiscCreditTitle(event.target.value)}
-                        placeholder="e.g. Down payment received"
-                        className="rounded border border-input bg-background px-3 py-2 text-sm"
-                      />
-                      <input
-                        type="number"
-                        min={0}
-                        step={25}
-                        value={miscCreditAmount || ""}
-                        onChange={(event) => setMiscCreditAmount(Number(event.target.value) || 0)}
-                        placeholder="0"
-                        className="rounded border border-input bg-background px-3 py-2 text-sm"
-                      />
-                      <Button type="button" size="sm" variant="outline" onClick={() => handleAddMiscPricingLine("credit")}>
-                        Add
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-                {(draft.pricingLines ?? []).some((line) => line.metadata?.misc_line_kind === "charge" || line.metadata?.misc_line_kind === "credit") && (
-                  <div className="mt-3 space-y-2">
-                    {(draft.pricingLines ?? [])
-                      .filter((line) => line.metadata?.misc_line_kind === "charge" || line.metadata?.misc_line_kind === "credit")
-                      .map((line) => (
-                        <div key={line.id ?? line.title} className="flex items-center justify-between gap-3 rounded border border-border/60 bg-card/50 px-3 py-2 text-sm">
-                          <div>
-                            <p className="font-medium text-foreground">{line.title}</p>
-                            <p className="text-[11px] text-muted-foreground">
-                              {line.metadata?.misc_line_kind === "credit" ? "Credit" : "Charge"} · printed on customer quote
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className={line.metadata?.misc_line_kind === "credit" ? "font-semibold text-emerald-400" : "font-semibold text-foreground"}>
-                              {line.metadata?.misc_line_kind === "credit" ? "-" : ""}{money(line.unitPrice)}
-                            </span>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setDraft((current) => ({
-                                ...current,
-                                pricingLines: (current.pricingLines ?? []).filter((item) => item.id !== line.id),
-                              }))}
-                            >
-                              Remove
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <p className="text-sm font-semibold text-foreground">Discount with reason code</p>
-            <p className="mt-1 text-xs text-muted-foreground">A manual discount requires a reason so approval and future review do not guess why margin changed.</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-[160px_minmax(0,1fr)_auto]">
-              <label className="space-y-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">Legacy type</span>
-                <select
-                  value={draft.commercialDiscountType}
-                  onChange={(event) => setDraft((current) => ({ ...current, commercialDiscountType: event.target.value as typeof current.commercialDiscountType }))}
-                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                >
-                  <option value="flat">Flat</option>
-                  <option value="percent">Percent</option>
-                </select>
-              </label>
-              <label className="space-y-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">Existing quote discount</span>
-                <div className="flex items-center gap-1 rounded border border-input bg-background px-2 py-1">
-                  <span className="text-sm text-muted-foreground">{draft.commercialDiscountType === "percent" ? "%" : "$"}</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={draft.commercialDiscountType === "percent" ? 0.5 : 100}
-                    value={draft.commercialDiscountValue || ""}
-                    onChange={(event) => setDraft((current) => ({ ...current, commercialDiscountValue: Number(event.target.value) || 0 }))}
-                    placeholder="0"
-                    className="w-full bg-transparent text-right text-sm font-semibold outline-none"
-                  />
-                </div>
-              </label>
-              <div className="flex items-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setDraft((current) => ({ ...current, commercialDiscountValue: 0 }))}
-                >
-                  Clear
-                </Button>
-              </div>
-            </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">Saved legacy quote-level discounts remain editable here so older drafts do not hide a margin change. New manual discounts below carry a reason code.</p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
-              <label className="space-y-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">Discount amount</span>
-                <div className="flex items-center gap-1 rounded border border-input bg-background px-2 py-1">
-                  <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-                  <input
-                    type="number"
-                    min={0}
-                    step={100}
-                    value={discountLine?.unitPrice ?? ""}
-                    onChange={(event) => upsertPricingLine("discount", Number(event.target.value) || 0, {
-                      reasonCode: discountLine?.reasonCode ?? "competitive_match",
-                    }, "Manual discount", "customer")}
-                    placeholder="0"
-                    className="w-full bg-transparent text-right text-sm font-semibold outline-none"
-                  />
-                </div>
-              </label>
-              <label className="space-y-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">Reason code</span>
-                <select
-                  value={discountLine?.reasonCode ?? "competitive_match"}
-                  onChange={(event) => upsertPricingLine("discount", discountLine?.unitPrice ?? 0, {
-                    reasonCode: event.target.value,
-                  }, "Manual discount", "customer")}
-                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                >
-                  {DISCOUNT_REASON_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <p className="text-sm font-semibold text-foreground">Tax preview</p>
-            <p className="mt-1 text-xs text-muted-foreground">Florida delivery uses delivery county/state when provided. Override only with a clear reason.</p>
-            <div className="mt-3 grid gap-2">
-              {taxProfiles.map((profile) => {
-                const selected = profile.value === draft.taxProfile;
-                return (
-                  <button
-                    key={profile.value}
-                    type="button"
-                    onClick={() => setDraft((current) => ({ ...current, taxProfile: profile.value }))}
-                    className={`rounded-lg border p-3 text-left transition ${selected ? "border-qep-orange bg-qep-orange/5" : "border-border bg-card/40 hover:border-qep-orange/40"}`}
-                  >
-                    <p className="text-sm font-medium text-foreground">{profile.label}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{profile.detail}</p>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">Delivery state</span>
-                <input
-                  value={draft.deliveryState ?? ""}
-                  onChange={(event) => setDraft((current) => ({ ...current, deliveryState: event.target.value.toUpperCase() || null }))}
-                  placeholder={selectedBranch?.state_province ?? "FL"}
-                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">Delivery county</span>
-                <input
-                  value={draft.deliveryCounty ?? ""}
-                  onChange={(event) => setDraft((current) => ({ ...current, deliveryCounty: event.target.value || null }))}
-                  placeholder="County for FL surtax preview"
-                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">Tax override amount</span>
-                <input
-                  type="number"
-                  min={0}
-                  step={25}
-                  value={draft.taxOverrideAmount ?? ""}
-                  onChange={(event) => setDraft((current) => ({ ...current, taxOverrideAmount: event.target.value === "" ? null : Number(event.target.value) || 0 }))}
-                  placeholder="Leave blank for calculated tax"
-                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">Override reason</span>
-                <input
-                  value={draft.taxOverrideReason ?? ""}
-                  onChange={(event) => setDraft((current) => ({ ...current, taxOverrideReason: event.target.value || null }))}
-                  placeholder="Required when overriding tax"
-                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                />
-              </label>
-            </div>
-            <div className="mt-4">
-              <TaxBreakdown
-                data={taxPreviewQuery.data}
-                isLoading={taxPreviewQuery.isLoading}
-                isError={taxPreviewQuery.isError}
-                enabled={Boolean(draft.branchSlug || draft.deliveryState)}
-              />
-            </div>
-          </Card>
-
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("tradeIn")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
-            <Button onClick={() => setStep("promotions")}>Promotions <ArrowRight className="ml-1 h-4 w-4" /></Button>
-          </div>
-        </div>
+        <PricingStep
+          equipmentTotal={equipmentTotal}
+          attachmentTotal={attachmentTotal}
+          internalCostLoadTotal={internalCostLoadTotal}
+          pricingLineTotal={pricingLineTotal}
+          subtotal={subtotal}
+          discountTotal={discountTotal}
+          taxableBasis={taxableBasis}
+          taxTotal={taxTotal}
+          customerTotal={customerTotal}
+          marginPct={marginPct}
+          dealerCost={dealerCost}
+          netTotal={netTotal}
+          marginAmount={marginAmount}
+          inboundFreightEligible={inboundFreightEligible}
+          pricingLine={pricingLine}
+          upsertPricingLine={upsertPricingLine}
+          discountLine={discountLine}
+          miscChargeTitle={miscChargeTitle}
+          setMiscChargeTitle={setMiscChargeTitle}
+          miscChargeAmount={miscChargeAmount}
+          setMiscChargeAmount={setMiscChargeAmount}
+          miscCreditTitle={miscCreditTitle}
+          setMiscCreditTitle={setMiscCreditTitle}
+          miscCreditAmount={miscCreditAmount}
+          setMiscCreditAmount={setMiscCreditAmount}
+          onAddMiscPricingLine={handleAddMiscPricingLine}
+          taxProfiles={taxProfiles}
+          taxPreviewData={taxPreviewQuery.data}
+          taxPreviewLoading={taxPreviewQuery.isLoading}
+          taxPreviewError={taxPreviewQuery.isError}
+          branchStateProvince={selectedBranch?.state_province}
+        />
       )}
 
       {step === "promotions" && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Step 6: Rebates & promotions</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Use seeded incentives when they exist. If no program data is present, these clear starter rows keep the skeleton moving.</p>
-          </div>
-
-          <Card className="border-border/70 bg-muted/20 p-3">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              <span className="font-medium text-foreground">Promotions vs pricing.</span>{" "}
-              OEM and dealer incentives stack on the sell price from{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 5 — Pricing build"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("pricing")}
-              >
-                Pricing
-              </Button>
-              . Cash and payment scenarios are modeled in{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 7 — Financing scenarios"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("financing")}
-              >
-                Financing
-              </Button>
-              .
-            </p>
-          </Card>
-
-          {activeQuotePackageId ? (
-            <IncentiveStack quotePackageId={activeQuotePackageId} />
-          ) : (
-            <Card className="border-dashed p-4 text-sm text-muted-foreground">Save the draft to run the existing incentive resolver against this quote.</Card>
-          )}
-
-          <Card className="p-4">
-            <p className="text-sm font-semibold text-foreground">Manual promotion choices</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
-              {PROMOTION_PLACEHOLDERS.map((promo) => {
-                const selected = promotionPlaceholderSelected(promo);
-                return (
-                  <button
-                    key={promo.id}
-                    type="button"
-                    onClick={() => togglePromotion(promo)}
-                    className={`rounded-lg border p-3 text-left transition ${
-                      selected ? "border-emerald-500/50 bg-emerald-500/10" : "border-border bg-card/40 hover:border-qep-orange/40"
-                    }`}
-                  >
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-qep-orange">{promo.source}</p>
-                    <p className="mt-2 text-sm font-semibold text-foreground">{promo.title}</p>
-                    <p className="mt-1 text-lg font-bold text-emerald-400">−{money(promo.amount)}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{promo.detail}</p>
-                    <span className="mt-3 inline-flex rounded-full border border-border/70 px-2 py-1 text-[11px] text-muted-foreground">
-                      {selected ? "Selected" : "Tap to apply"}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
-
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("pricing")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
-            <Button onClick={() => setStep("financing")}>Financing <ArrowRight className="ml-1 h-4 w-4" /></Button>
-          </div>
-        </div>
+        <PromotionsStep activeQuotePackageId={activeQuotePackageId} />
       )}
 
       {step === "financing" && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Step 7: Financing scenarios</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Pick cash, finance, or view the disabled lease path. Payment math is an estimate and includes TILA guidance.</p>
-          </div>
-
-          <Card className="border-border/70 bg-muted/20 p-3">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              <span className="font-medium text-foreground">Financing vs promos & details.</span>{" "}
-              Incentive stacks live in{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 6 — Rebates & promotions"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("promotions")}
-              >
-                Promos
-              </Button>
-              . Expiry, follow-up, and rep-confirmed narrative move forward in{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 8 — Quote details"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("details")}
-              >
-                Details
-              </Button>
-              .
-            </p>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex flex-wrap gap-2">
-              {([
-                ["cash", "Cash"],
-                ["finance", "Finance"],
-                ["lease", "Lease"],
-              ] as Array<[FinanceStepTab, string]>).map(([tab, label]) => {
-                const disabled = tab === "lease" && !leaseQuotingEnabled;
-                return (
-                  <button
-                    key={tab}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => {
-                      setFinanceStepTab(tab);
-                      if (tab === "cash") {
-                        const cashScenario = allFinanceScenarios.find((scenario) => scenario.type === "cash" || scenario.kind === "cash");
-                        setDraft((current) => ({ ...current, selectedFinanceScenario: cashScenario?.label ?? null }));
-                      }
-                    }}
-                    className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
-                      financeStepTab === tab
-                        ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
-                        : disabled
-                          ? "border-border/60 bg-muted/30 text-muted-foreground"
-                          : "border-border text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {label}{disabled ? " — unavailable" : ""}
-                  </button>
-                );
-              })}
-            </div>
-
-            {financeStepTab === "cash" && (
-              <div className="mt-4 rounded-lg border border-border/70 bg-card/50 p-4">
-                <p className="text-sm font-semibold text-foreground">Cash quote</p>
-                <p className="mt-1 text-xs text-muted-foreground">Customer total due at delivery: {money(customerTotal)}. Down payment remains optional for internal tracking.</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <SummaryRow label="Customer total" value={money(customerTotal)} emphasize />
-                  <SummaryRow label="Deposit / cash down" value={money(cashDown)} />
-                </div>
-              </div>
-            )}
-
-            {financeStepTab === "finance" && (
-              <div className="mt-4 space-y-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="space-y-1 text-sm">
-                    <span className="text-xs font-medium text-muted-foreground">Cash down</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step={500}
-                      value={draft.cashDown || ""}
-                      onChange={(event) => setDraft((current) => ({ ...current, cashDown: Number(event.target.value) || 0 }))}
-                      className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <div className="rounded-lg border border-border/70 bg-card/50 p-3">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Amount financed</p>
-                    <p className="mt-1 text-xl font-semibold text-qep-orange">{money(amountFinanced)}</p>
-                  </div>
-                </div>
-
-                {financingPreviewQuery.isLoading && <p className="text-xs text-muted-foreground">Calculating scenarios…</p>}
-                {financingPreviewQuery.isError && <p className="text-xs text-red-400">Financing preview failed. Continue with cash or try again.</p>}
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {financeTabScenarios.length > 0 ? financeTabScenarios.map((scenario) => {
-                    const selected = draft.selectedFinanceScenario === scenario.label;
-                    return (
-                      <button
-                        key={scenario.label}
-                        type="button"
-                        onClick={() => setDraft((current) => ({ ...current, selectedFinanceScenario: scenario.label }))}
-                        className={`rounded-lg border p-3 text-left transition ${selected ? "border-qep-orange bg-qep-orange/5" : "border-border bg-card/40 hover:border-qep-orange/40"}`}
-                      >
-                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-qep-orange">{scenario.label}</p>
-                        <p className="mt-2 text-lg font-semibold text-foreground">
-                          {scenario.monthlyPayment == null ? money(scenario.totalCost ?? customerTotal) : `${money(scenario.monthlyPayment)}/mo`}
-                        </p>
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          {scenario.termMonths ?? 0} months · {(scenario.apr ?? scenario.rate ?? 0).toFixed(2)}% APR · {scenario.lender ?? "Preferred lender"}
-                        </p>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="mt-3"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            saveSelectedFinanceScenario(scenario);
-                          }}
-                        >
-                          Save scenario
-                        </Button>
-                      </button>
-                    );
-                  }) : (
-                    <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">No finance scenario seed is available yet. The quote can still proceed as cash/TBD.</div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {financeStepTab === "lease" && (
-              <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/20 p-4">
-                <p className="text-sm font-semibold text-foreground">Lease quoting is not enabled yet</p>
-                <p className="mt-1 text-xs text-muted-foreground">FMV and FPPO lease cards stay disabled until feature flag, OEM list, lease rate sheets, and residual tables are seeded.</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-lg border border-border/60 bg-card/40 p-3 opacity-70">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">FMV lease</p>
-                    <p className="mt-2 text-sm text-muted-foreground">Awaiting residual table.</p>
-                  </div>
-                  <div className="rounded-lg border border-border/60 bg-card/40 p-3 opacity-70">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">FPPO lease</p>
-                    <p className="mt-2 text-sm text-muted-foreground">Awaiting purchase option rules.</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </Card>
-
-          <Card className="border-blue-500/20 bg-blue-500/5 p-4">
-            <p className="text-sm font-semibold text-blue-200">TILA estimate disclaimer</p>
-            <p className="mt-1 text-xs text-blue-100/90">Payment examples are estimates for discussion only, not a commitment to lend. Final APR, fees, approval, and disclosures come from the lender.</p>
-          </Card>
-
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("promotions")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
-            <Button onClick={() => setStep("details")}>Quote details <ArrowRight className="ml-1 h-4 w-4" /></Button>
-          </div>
-        </div>
+        <FinancingStep
+          allFinanceScenarios={allFinanceScenarios}
+          customerTotal={customerTotal}
+          cashDown={cashDown}
+          amountFinanced={amountFinanced}
+          financingPreviewLoading={financingPreviewQuery.isLoading}
+          financingPreviewError={financingPreviewQuery.isError}
+          leaseQuotingEnabled={leaseQuotingEnabled}
+        />
       )}
 
       {step === "details" && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Step 8: Quote details</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Set the handoff details the customer will ask about before anyone sends a document.</p>
-          </div>
-
-          <Card className="border-border/70 bg-muted/20 p-3">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              <span className="font-medium text-foreground">Details vs finance & review.</span>{" "}
-              Cash and payment scenarios sit in{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 7 — Financing scenarios"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("financing")}
-              >
-                Financing
-              </Button>
-              . The approval-ready snapshot is{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 9 — Review + approval"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("review")}
-              >
-                Review
-              </Button>
-              .
-            </p>
-          </Card>
-
-          <Card className="p-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">Expiration date</span>
-                <input
-                  type="date"
-                  value={dateInputValue(draft.expiresAt)}
-                  onChange={(event) => setDraft((current) => ({ ...current, expiresAt: isoFromDateInput(event.target.value) }))}
-                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                />
-                <span className="text-[11px] text-muted-foreground">Defaults to 30 days when this step opens.</span>
-              </label>
-              <label className="space-y-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">Follow-up reminder</span>
-                <input
-                  type="datetime-local"
-                  value={dateTimeInputValue(draft.followUpAt)}
-                  onChange={(event) => setDraft((current) => ({ ...current, followUpAt: isoFromDateTimeInput(event.target.value) }))}
-                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                />
-                <span className="text-[11px] text-muted-foreground">Defaults to 3 days. Final send/log will require it.</span>
-              </label>
-              <label className="space-y-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">Delivery ETA</span>
-                <input
-                  type="date"
-                  value={dateInputValue(draft.deliveryEta)}
-                  onChange={(event) => setDraft((current) => ({ ...current, deliveryEta: isoFromDateInput(event.target.value) }))}
-                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">Deposit placeholder</span>
-                <input
-                  type="number"
-                  min={0}
-                  step={250}
-                  value={draft.depositRequiredAmount ?? ""}
-                  onChange={(event) => setDraft((current) => ({ ...current, depositRequiredAmount: event.target.value === "" ? null : Number(event.target.value) || 0 }))}
-                  placeholder="Awaiting deposit SOP"
-                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                />
-              </label>
-            </div>
-
-            <label className="mt-4 block space-y-1 text-sm">
-              <span className="text-xs font-medium text-muted-foreground">Special terms</span>
-              <textarea
-                value={draft.specialTerms ?? ""}
-                onChange={(event) => setDraft((current) => ({ ...current, specialTerms: event.target.value || null }))}
-                placeholder="Subject to availability, freight confirmation, manager approval, or customer-specific terms."
-                className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
-              />
-            </label>
-          </Card>
-
-          <Card className="p-4">
-            <p className="text-sm font-semibold text-foreground">Why this machine</p>
-            <p className="mt-1 text-xs text-muted-foreground">QRM can suggest a reason, but the rep must edit or confirm it before customer-facing send.</p>
-            <textarea
-              value={draft.whyThisMachine ?? ""}
-              onChange={(event) => setDraft((current) => ({ ...current, whyThisMachine: event.target.value, whyThisMachineConfirmed: false }))}
-              placeholder="Explain why this unit fits the customer's job, terrain, timeline, and budget."
-              className="mt-3 min-h-[120px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
-            />
-            <label className="mt-3 flex items-center gap-2 text-sm text-foreground">
-              <input
-                type="checkbox"
-                checked={draft.whyThisMachineConfirmed === true}
-                onChange={(event) => setDraft((current) => ({ ...current, whyThisMachineConfirmed: event.target.checked }))}
-                className="h-4 w-4"
-              />
-              I reviewed this language and confirm it is rep-approved.
-            </label>
-          </Card>
-
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("financing")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
-            <Button onClick={() => setStep("review")}>Review <ArrowRight className="ml-1 h-4 w-4" /></Button>
-          </div>
-        </div>
+        <DetailsStep />
       )}
 
       {step === "review" && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Step 9: Review + approval</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Everything in one plain-English summary. Approval case status is the authoritative gate before document generation and customer delivery.</p>
-          </div>
-
-          <Card className="border-border/70 bg-muted/20 p-3">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              <span className="font-medium text-foreground">Review vs details & document.</span>{" "}
-              Dates and special terms stay in{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 8 — Quote details"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("details")}
-              >
-                Details
-              </Button>
-              . Customer PDF preview and artifact storage are{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 10 — Document preview"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("document")}
-              >
-                PDF
-              </Button>
-              .
-            </p>
-          </Card>
-
-          <Card className="p-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <ReviewSummaryBlock title="Customer" rows={[
-                ["Name", draft.customerName || draft.customerCompany || "Not set"],
-                ["Company", draft.customerCompany || "—"],
-                ["Email", draft.customerEmail || "Missing before send"],
-                ["Branch", selectedBranch?.display_name ?? (draft.branchSlug || "Missing")],
-              ]} />
-              <ReviewSummaryBlock title="Equipment" rows={[
-                ["Primary", firstEquipment?.title || [firstEquipment?.make, firstEquipment?.model].filter(Boolean).join(" ") || "No equipment"],
-                ["Config rows", String(draft.attachments.length)],
-                ["Trade", draft.tradeAllowance > 0 ? money(draft.tradeAllowance) : "No trade"],
-                ["Availability", sourceRequiredAwaitingConfirmation.length > 0 ? "Needs sourcing request" : "Ready for review"],
-              ]} />
-              <ReviewSummaryBlock title="Pricing + tax" rows={[
-                ["Subtotal", money(subtotal)],
-                ["Discounts", `-${money(discountTotal)}`],
-                ["Taxable basis", money(taxableBasis)],
-                ["Tax", money(taxTotal)],
-                ["Customer total", money(customerTotal)],
-              ]} />
-              <ReviewSummaryBlock title="Finance + details" rows={[
-                ["Scenario", financeMethodLabel],
-                ["Amount financed", money(amountFinanced)],
-                ["Expires", dateInputValue(draft.expiresAt) || "Default needed"],
-                ["Delivery ETA", dateInputValue(draft.deliveryEta) || "TBD"],
-                ["Why confirmed", draft.whyThisMachineConfirmed ? "Yes" : "Needs rep confirm"],
-              ]} />
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <p className="text-sm font-semibold text-foreground">Equipment pricing at review</p>
-            <p className="mt-1 text-xs text-muted-foreground">Final opportunity to adjust machine price before approval submission.</p>
-            <div className="mt-3 space-y-2">
-              {draft.equipment.length === 0 ? (
-                <p className="rounded border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-                  No equipment selected yet.
-                </p>
-              ) : draft.equipment.map((equipment, index) => {
-                const systemBase = equipmentSystemBasePrice(equipment);
-                const hasOverride = Math.abs(equipment.unitPrice - systemBase) > 0.01;
-                return (
-                  <div key={`review-override-${equipment.id ?? equipment.title}-${index}`} className="rounded-lg border border-border/70 bg-card/40 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-foreground">{equipment.title || `${equipment.make ?? ""} ${equipment.model ?? ""}`.trim() || "Equipment"}</p>
-                      <span className="text-xs text-muted-foreground">
-                        {hasOverride ? `Override active (base ${money(systemBase)})` : `Base ${money(systemBase)}`}
-                      </span>
-                    </div>
-                    <label className="mt-2 flex items-center gap-1 rounded border border-input bg-background px-2 py-1 text-sm font-semibold text-foreground">
-                      <span className="text-muted-foreground">$</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step={100}
-                        value={equipment.unitPrice}
-                        onChange={(event) => {
-                          const parsed = event.target.value === "" ? 0 : Number(event.target.value);
-                          if (!Number.isFinite(parsed) || parsed < 0) return;
-                          setDraft((current) => ({
-                            ...current,
-                            equipment: current.equipment.map((item, rowIndex) => (
-                              rowIndex === index ? applyEquipmentOverridePrice(item, parsed) : item
-                            )),
-                          }));
-                        }}
-                        className="w-full bg-transparent text-right outline-none"
-                        aria-label={`Review price for ${equipment.title}`}
-                      />
-                    </label>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-
-          <MarginCheckBanner
-            marginPct={marginPct}
-            waterfall={{
-              equipmentTotal: subtotal,
-              dealerCost,
-              tradeAllowance: draft.tradeAllowance,
-              netTotal,
-              marginAmount,
-            }}
-          />
-
-          <Card className="p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-foreground">Approval handoff</p>
-                <p className="mt-1 text-xs text-muted-foreground">Submit routes through the existing approval-case workflow. Future document/send steps should trust activeApprovalCase.canSend, not a duplicate UI flag.</p>
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  Workspace auto-approve rules (for example aged stocked inventory) read yard age from the primary machine line&apos;s{" "}
-                  <span className="font-medium text-foreground">metadata.received_at</span> when CRM provides it, optional{" "}
-                  <span className="font-medium text-foreground">metadata.hot_list</span> for hot-list gates, plus in-stock and margin checks.
-                  {" "}
-                  When a rule sets a max discount %, the saved quote&apos;s{" "}
-                  <span className="font-medium text-foreground">discount_total</span> relative to{" "}
-                  <span className="font-medium text-foreground">subtotal</span> must stay within that cap.
-                  {" "}
-                  If a rule matches, the server sets the quote to <span className="font-medium text-foreground">Approved</span> or{" "}
-                  <span className="font-medium text-foreground">Approved with conditions</span> according to that rule&apos;s{" "}
-                  <span className="font-medium text-foreground">bypass_to_status</span> (only those two targets are allowed).
-                </p>
-              </div>
-              <Button onClick={() => submitApprovalMutation.mutate()} disabled={!canSubmitForApproval || submitApprovalMutation.isPending}>
-                {submitApprovalMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
-                {approvalPending ? "Approval pending" : approvalGranted ? "Approved" : "Submit for approval"}
-              </Button>
-            </div>
-            <div className="mt-3 rounded-lg border border-border/70 bg-card/40 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Post-approval action</p>
-              <p className="mt-1 text-xs text-muted-foreground">Choose whether approved quotes auto-send to the customer or route back to the rep for final delivery timing.</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => setDraft((current) => ({ ...current, postApprovalAction: "return_to_rep" }))}
-                  className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
-                    (draft.postApprovalAction ?? "return_to_rep") === "return_to_rep"
-                      ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <p className="font-semibold">Return to rep</p>
-                  <p className="mt-1 text-[11px]">Default path. Rep reviews and manually sends to customer.</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDraft((current) => ({ ...current, postApprovalAction: "auto_send_customer" }))}
-                  className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
-                    draft.postApprovalAction === "auto_send_customer"
-                      ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <p className="font-semibold">Auto-send customer</p>
-                  <p className="mt-1 text-[11px]">Queue approved quote for automatic customer delivery.</p>
-                </button>
-              </div>
-            </div>
-            {(submitApprovalMutation.data?.status === "approved" || submitApprovalMutation.data?.status === "approved_with_conditions") && submitApprovalMutation.data?.bypassRuleName && (
-              <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-300">Auto-approved</p>
-                <p className="mt-1 text-xs text-emerald-100">
-                  Approval bypass applied
-                  {submitApprovalMutation.data.status === "approved_with_conditions" ? " — quote status is approved with conditions" : ""}
-                  : <span className="font-semibold">{submitApprovalMutation.data.bypassRuleName}</span>
-                </p>
-              </div>
-            )}
-            {submitApprovalMutation.data?.autoSend?.attempted && (
-              <div className={`mt-3 rounded-lg border px-3 py-2 ${
-                submitApprovalMutation.data.autoSend.sent
-                  ? "border-emerald-500/30 bg-emerald-500/5"
-                  : "border-amber-500/30 bg-amber-500/5"
-              }`}>
-                <p className={`text-xs font-semibold uppercase tracking-[0.12em] ${
-                  submitApprovalMutation.data.autoSend.sent ? "text-emerald-300" : "text-amber-300"
-                }`}>
-                  Post-approval auto-send
-                </p>
-                <p className={`mt-1 text-xs ${
-                  submitApprovalMutation.data.autoSend.sent ? "text-emerald-100" : "text-amber-100"
-                }`}>
-                  {submitApprovalMutation.data.autoSend.sent
-                    ? "Quote was auto-sent to the customer after approval."
-                    : `Auto-send attempted but did not complete${submitApprovalMutation.data.autoSend.error ? `: ${submitApprovalMutation.data.autoSend.error}` : "."}`}
-                </p>
-              </div>
-            )}
-          </Card>
-
-          {activeQuotePackageId ? (
-            <QuoteReviewWorkflowPanels
-              quotePackageId={activeQuotePackageId}
-              draft={draft}
-              financeScenarios={allFinanceScenarios}
-              computed={{ subtotal, discountTotal, netTotal, taxTotal, customerTotal, cashDown, amountFinanced }}
-              sendReadiness={packetReadiness.send}
-              requiresManagerApproval={approvalState.requiresManagerApproval}
-              userRole={userRoleQuery.data ?? null}
-              submitApprovalResult={{
-                assignedToName: submitApprovalMutation.data?.assignedToName ?? null,
-                branchName: submitApprovalMutation.data?.branchName ?? null,
-                autoSend: submitApprovalMutation.data?.autoSend ?? null,
-              }}
-              quoteStatus={quoteStatus}
-              onQuoteStatusChange={handleQuoteStatusChange}
-              showSendSection={false}
-            />
-          ) : (
-            <Card className="border-amber-500/20 bg-amber-500/5 p-4">
-              <p className="text-sm font-semibold text-amber-300">Save required for approval case details</p>
-              <p className="mt-1 text-xs text-amber-200">Autosave starts once customer and equipment are present, or use Save Draft above.</p>
-            </Card>
-          )}
-
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("details")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
-            <Button variant="outline" onClick={() => setStep("document")}>Document <ArrowRight className="ml-1 h-4 w-4" /></Button>
-          </div>
-        </div>
+        <ReviewStep
+          branchDisplayName={selectedBranch?.display_name ?? (draft.branchSlug || "Missing")}
+          financeMethodLabel={financeMethodLabel}
+          availabilityAwaitingCount={sourceRequiredAwaitingConfirmation.length}
+          subtotal={subtotal}
+          discountTotal={discountTotal}
+          taxableBasis={taxableBasis}
+          taxTotal={taxTotal}
+          customerTotal={customerTotal}
+          amountFinanced={amountFinanced}
+          netTotal={netTotal}
+          marginPct={marginPct}
+          dealerCost={dealerCost}
+          marginAmount={marginAmount}
+          activeQuotePackageId={activeQuotePackageId}
+          allFinanceScenarios={allFinanceScenarios}
+          sendReadiness={packetReadiness.send}
+          requiresManagerApproval={approvalState.requiresManagerApproval}
+          userRole={userRoleQuery.data ?? null}
+          canSubmitForApproval={canSubmitForApproval}
+          approvalPending={approvalPending}
+          approvalGranted={approvalGranted}
+          submitApprovalPending={submitApprovalMutation.isPending}
+          onSubmitApproval={() => submitApprovalMutation.mutate()}
+          submitApprovalData={submitApprovalMutation.data}
+          quoteStatus={quoteStatus}
+          onQuoteStatusChange={handleQuoteStatusChange}
+        />
       )}
 
       {step === "document" && (
@@ -5269,28 +4168,6 @@ function SummaryRow({
       <span className={`font-medium ${emphasize ? "text-qep-orange" : positive ? "text-emerald-400" : "text-foreground"}`}>
         {value}
       </span>
-    </div>
-  );
-}
-
-function ReviewSummaryBlock({
-  title,
-  rows,
-}: {
-  title: string;
-  rows: Array<[string, string]>;
-}) {
-  return (
-    <div className="rounded-lg border border-border/70 bg-card/50 p-3">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{title}</p>
-      <div className="mt-3 space-y-2 text-sm">
-        {rows.map(([label, value]) => (
-          <div key={label} className="flex items-start justify-between gap-3">
-            <span className="text-muted-foreground">{label}</span>
-            <span className="max-w-[60%] text-right font-medium text-foreground">{value}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
