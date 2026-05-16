@@ -616,3 +616,148 @@ verify_jwt = false
 
 [functions.telematics-ingest]
 verify_jwt = false
+
+# Batch-registered remaining edge functions (578 audit)
+
+[functions.parts-order-manager]
+verify_jwt = false
+
+
+[functions.parts-predictive-kitter]
+verify_jwt = false
+
+
+[functions.parts-reorder-compute]
+verify_jwt = false
+
+
+[functions.pipeline-enforcer]
+verify_jwt = false
+
+
+[functions.predictive-visit-generator]
+verify_jwt = false
+
+
+[functions.process-offline-queue]
+verify_jwt = false
+
+
+[functions.process-parts-request]
+verify_jwt = false
+
+
+[functions.prospecting-nudge]
+verify_jwt = false
+
+
+[functions.publish-price-sheet]
+verify_jwt = false
+
+
+[functions.qb-calculate]
+verify_jwt = false
+
+
+[functions.qb-recommend-programs]
+verify_jwt = false
+
+
+[functions.qrm-hubspot-import]
+verify_jwt = false
+
+
+[functions.qrm-prediction-scorer]
+verify_jwt = false
+
+
+[functions.service-billing-post]
+verify_jwt = false
+
+
+[functions.service-calendar-slots]
+verify_jwt = false
+
+
+[functions.service-completion-feedback]
+verify_jwt = false
+
+
+[functions.service-customer-notify-dispatch]
+verify_jwt = false
+
+
+[functions.service-haul-router]
+verify_jwt = false
+
+
+[functions.service-intake]
+verify_jwt = false
+
+
+[functions.service-invoice-generator]
+verify_jwt = false
+
+
+[functions.service-job-router]
+verify_jwt = false
+
+
+[functions.service-jobcode-learner]
+verify_jwt = false
+
+
+[functions.service-jobcode-suggestion-merge]
+verify_jwt = false
+
+
+[functions.service-knowledge-capture]
+verify_jwt = false
+
+
+[functions.service-notifications]
+verify_jwt = false
+
+
+[functions.service-parts-manager]
+verify_jwt = false
+
+
+[functions.service-parts-planner]
+verify_jwt = false
+
+
+[functions.service-public-job-status]
+verify_jwt = false
+
+
+[functions.service-quote-engine]
+verify_jwt = false
+
+
+[functions.service-scheduler]
+verify_jwt = false
+
+
+[functions.service-stage-enforcer]
+verify_jwt = false
+
+
+[functions.service-tat-monitor]
+verify_jwt = false
+
+
+[functions.service-upsell-scanner]
+verify_jwt = false
+
+
+[functions.service-vendor-escalator]
+verify_jwt = false
+
+
+[functions.service-vendor-inbound]
+verify_jwt = false
+
+
+[functions.voice-to-parts-order]
+verify_jwt = false

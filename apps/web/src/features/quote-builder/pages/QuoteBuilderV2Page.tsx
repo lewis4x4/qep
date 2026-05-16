@@ -184,7 +184,16 @@ import { PromotionsStep } from "../steps/PromotionsStep";
 import { FinancingStep } from "../steps/FinancingStep";
 import { DetailsStep } from "../steps/DetailsStep";
 import { ReviewStep } from "../steps/ReviewStep";
-import { dateInputValue, isoFromDateInput } from "../lib/quote-date-input";
+import { DocumentStep } from "../steps/DocumentStep";
+import { SendStep } from "../steps/SendStep";
+import { ReadinessRow } from "../components/ReadinessRow";
+import {
+  dateInputValue,
+  dateTimeInputValue,
+  isoFromDateInput,
+  isoFromDateTimeInput,
+  shortDateTime,
+} from "../lib/quote-date-input";
 import {
   PRICING_ADDER_FIELDS,
   type CostVisibility,
@@ -442,13 +451,6 @@ function draftHasCustomer(draft: Pick<QuoteWorkspaceDraft, "customerName" | "cus
     draft.contactId ||
     draft.companyId,
   );
-}
-
-function shortDateTime(value: string | null): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 function addDaysIso(days: number): string {
@@ -3492,6 +3494,7 @@ export function QuoteBuilderV2Page() {
           taxableBasis={taxableBasis}
           taxTotal={taxTotal}
           customerTotal={customerTotal}
+          cashDown={cashDown}
           amountFinanced={amountFinanced}
           netTotal={netTotal}
           marginPct={marginPct}
@@ -3514,205 +3517,49 @@ export function QuoteBuilderV2Page() {
       )}
 
       {step === "document" && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Step 10: Document preview</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Generate a customer-facing PDF, store the artifact when the renderer succeeds, and keep a printable fallback available for browser/runtime failures.
-            </p>
-          </div>
-
-          <Card className="border-border/70 bg-muted/20 p-3">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              <span className="font-medium text-foreground">Document vs review & send.</span>{" "}
-              Approval context and final numbers are confirmed in{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 9 — Review + approval"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("review")}
-              >
-                Review
-              </Button>
-              . Email, text, and logging live in{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 11 — Send & log"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("send")}
-              >
-                Send
-              </Button>
-              .
-            </p>
-          </Card>
-
-          <Card className="border-blue-500/20 bg-blue-500/5 p-4">
-            <p className="text-sm font-semibold text-blue-100">Stored document artifact</p>
-            <p className="mt-1 text-xs text-blue-100/90">
-              Successful PDF renders are uploaded to the private documents bucket and registered on the quote package for downstream send, audit, and signature workflows.
-            </p>
-          </Card>
-
-          {customerFacingDocumentBlocker && (
-            <Card className="border-amber-500/20 bg-amber-500/5 p-4">
-              <p className="text-sm font-semibold text-amber-300">Document blocked</p>
-              <p className="mt-1 text-xs text-amber-200">{customerFacingDocumentBlocker}</p>
-            </Card>
-          )}
-
-          <Card className="p-4">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Quote document preview</p>
-                <p className="mt-2 text-base font-semibold text-foreground">{quoteTitle}</p>
-                <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                  <SummaryRow label="Customer" value={draft.customerName || draft.customerCompany || "Customer"} />
-                  <SummaryRow label="Customer total" value={money(customerTotal)} emphasize />
-                  <SummaryRow label="Equipment lines" value={String(draft.equipment.length)} />
-                  <SummaryRow label="Financing" value={financeMethodLabel} />
-                  <SummaryRow label="Artifact status" value={documentPersistenceLabel} />
-                </div>
-                <div className="mt-4 rounded-lg border border-border/70 bg-background/50 p-3 text-xs text-muted-foreground">
-                  {documentFallbackGeneratedAt
-                    ? documentArtifact
-                      ? `PDF artifact generated ${shortDateTime(documentFallbackGeneratedAt)} and stored for customer delivery.`
-                      : `Preview generated ${shortDateTime(documentFallbackGeneratedAt)} using the printable fallback; no stored PDF artifact is available from this render.`
-                    : "Click Generate Preview PDF to open/download the current proposal preview."}
-                </div>
-              </div>
-              <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
-                <Button onClick={() => void handleGenerateFallbackDocument()} disabled={Boolean(customerFacingDocumentBlocker) || pdfGenerating || quoteMediaSnapshotLoading}>
-                  {pdfGenerating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileDown className="mr-1 h-4 w-4" />}
-                  {quoteMediaSnapshotLoading ? "Loading media..." : "Generate Preview PDF"}
-                </Button>
-                <Button variant="outline" onClick={() => void handleGenerateFallbackDocument()} disabled={Boolean(customerFacingDocumentBlocker) || pdfGenerating || quoteMediaSnapshotLoading}>
-                  <Printer className="mr-1 h-4 w-4" /> Print Preview
-                </Button>
-              </div>
-            </div>
-            {documentActionError && <p className="mt-3 text-xs text-rose-400">{documentActionError}</p>}
-          </Card>
-
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("review")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
-            <Button onClick={() => setStep("send")} disabled={!documentReady || quoteMediaSnapshotLoading}>Send & log <ArrowRight className="ml-1 h-4 w-4" /></Button>
-          </div>
-        </div>
+        <DocumentStep
+          quoteTitle={quoteTitle}
+          customerTotal={customerTotal}
+          financeMethodLabel={financeMethodLabel}
+          documentPersistenceLabel={documentPersistenceLabel}
+          documentFallbackGeneratedAt={documentFallbackGeneratedAt}
+          documentArtifact={documentArtifact}
+          customerFacingDocumentBlocker={customerFacingDocumentBlocker}
+          pdfGenerating={pdfGenerating}
+          quoteMediaSnapshotLoading={quoteMediaSnapshotLoading}
+          documentActionError={documentActionError}
+          documentReady={documentReady}
+          onGenerateDocument={() => void handleGenerateFallbackDocument()}
+        />
       )}
 
       {step === "send" && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Step 11: Send & log</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Preview, email, or text the quote only after clean approval and a follow-up date are present.</p>
-          </div>
-
-          <Card className="border-border/70 bg-muted/20 p-3">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              <span className="font-medium text-foreground">Send vs document & review.</span>{" "}
-              Regenerate the customer PDF in{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 10 — Document preview"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("document")}
-              >
-                PDF
-              </Button>
-              . If totals or approval change, return to{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 9 — Review + approval"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("review")}
-              >
-                Review
-              </Button>
-              .
-            </p>
-          </Card>
-
-          {customerFacingDocumentBlocker && (
-            <Card className="border-amber-500/20 bg-amber-500/5 p-4">
-              <p className="text-sm font-semibold text-amber-300">Customer send blocked</p>
-              <p className="mt-1 text-xs text-amber-200">{customerFacingDocumentBlocker}</p>
-            </Card>
-          )}
-
-          <Card className="p-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <ReadinessRow label="Approval case" ready={approvalCaseCanSend} detail={approvalBlocker ?? "canSend is true"} />
-              <ReadinessRow label="Document" ready={documentReady} detail={documentReady ? documentPersistenceLabel : "Generate Step 10 preview first"} />
-              <ReadinessRow label="Follow-up" ready={Boolean(draft.followUpAt)} detail={draft.followUpAt ? (shortDateTime(draft.followUpAt) ?? "Scheduled") : "Required before email/text"} />
-              <ReadinessRow label="Tax" ready={taxResolved} detail={taxResolutionBlocker ?? "Tax preview resolved"} />
-              <ReadinessRow label="Why this machine" ready={!whyThisMachineRequired || draft.whyThisMachineConfirmed === true} detail={whyThisMachineBlocker ?? "Rep confirmed or not required"} />
-            </div>
-            <div className="mt-4 rounded-lg border border-border/70 bg-card/40 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Post-approval routing</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {(draft.postApprovalAction ?? "return_to_rep") === "auto_send_customer"
-                  ? "Auto-send to customer is selected. Once approval clears, the system attempts immediate customer delivery."
-                  : "Return-to-rep is selected. Approval clears the quote, but the rep controls final customer send timing."}
-              </p>
-            </div>
-            <label className="mt-4 block space-y-1 text-sm">
-              <span className="text-xs font-medium text-muted-foreground">Required follow-up date</span>
-              <input
-                type="date"
-                value={dateInputValue(draft.followUpAt)}
-                onChange={(event) => setDraft((current) => ({ ...current, followUpAt: isoFromDateInput(event.target.value) }))}
-                className="w-full rounded border border-input bg-card px-3 py-2 text-sm sm:max-w-xs"
-              />
-              <span className="block text-xs text-muted-foreground">Defaults to +3 days when absent. Email/text send/log remains blocked without this date.</span>
-            </label>
-          </Card>
-
-          <Card className="p-4">
-            <div className="grid gap-3 lg:grid-cols-3">
-              <QuoteSendActionCard
-                icon={<FileText className="h-4 w-4" />}
-                title="Preview Quote"
-                detail="Open the latest quote PDF/print preview and log a preview event. Does not mark sent."
-                readiness={previewReadiness}
-                busy={deliveryActionBusy === "preview" || pdfGenerating}
-                onClick={() => void handleQuoteSendAction("preview")}
-              />
-              <QuoteSendActionCard
-                icon={<Mail className="h-4 w-4" />}
-                title="Email Quote"
-                detail="Send the guarded customer proposal email through the existing backend email route and log the delivery event."
-                readiness={emailReadiness}
-                busy={deliveryActionBusy === "email"}
-                onClick={() => void handleQuoteSendAction("email")}
-              />
-              <QuoteSendActionCard
-                icon={<Smartphone className="h-4 w-4" />}
-                title="Text Quote"
-                detail={textQuoteEnabled ? "Twilio flag enabled, but provider endpoint must be wired before customer send." : "Twilio text delivery is not configured; no text will be sent."}
-                readiness={textReadiness}
-                setupBlocked={!textQuoteEnabled}
-                busy={deliveryActionBusy === "text"}
-                onClick={() => void handleQuoteSendAction("text")}
-              />
-            </div>
-            {deliveryActionMessage && <p className="mt-3 rounded border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-300">{deliveryActionMessage}</p>}
-            {deliveryActionError && <p className="mt-3 rounded border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-xs text-rose-300">{deliveryActionError}</p>}
-          </Card>
-
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("document")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
-            <Button variant="outline" onClick={() => void handleSaveClick()} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
-              Save follow-up
-            </Button>
-          </div>
-        </div>
+        <SendStep
+          customerFacingDocumentBlocker={customerFacingDocumentBlocker}
+          approvalCaseCanSend={approvalCaseCanSend}
+          approvalBlocker={approvalBlocker}
+          documentReady={documentReady}
+          documentPersistenceLabel={documentPersistenceLabel}
+          taxResolved={taxResolved}
+          taxResolutionBlocker={taxResolutionBlocker}
+          whyThisMachineRequired={whyThisMachineRequired}
+          whyThisMachineBlocker={whyThisMachineBlocker}
+          previewReadiness={previewReadiness}
+          emailReadiness={emailReadiness}
+          textReadiness={textReadiness}
+          textQuoteEnabled={textQuoteEnabled}
+          deliveryActionBusy={deliveryActionBusy}
+          pdfGenerating={pdfGenerating}
+          deliveryActionMessage={deliveryActionMessage}
+          deliveryActionError={deliveryActionError}
+          savePending={saveMutation.isPending}
+          onPreview={() => void handleQuoteSendAction("preview")}
+          onEmail={() => void handleQuoteSendAction("email")}
+          onText={() => void handleQuoteSendAction("text")}
+          onSaveFollowUp={() => void handleSaveClick()}
+        />
       )}
+
 
       <MarginFloorGate
         brandId={null}
@@ -4147,95 +3994,6 @@ function DeliveryOption({
       <p className="mt-1 text-[11px] text-muted-foreground">
         {disabled ? "Backend gap" : "Available"}
       </p>
-    </div>
-  );
-}
-
-function SummaryRow({
-  label,
-  value,
-  emphasize = false,
-  positive = false,
-}: {
-  label: string;
-  value: string;
-  emphasize?: boolean;
-  positive?: boolean;
-}) {
-  return (
-    <div className={`flex items-center justify-between ${emphasize ? "border-t border-border pt-2" : ""}`}>
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`font-medium ${emphasize ? "text-qep-orange" : positive ? "text-emerald-400" : "text-foreground"}`}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function ReadinessRow({
-  label,
-  ready,
-  detail,
-}: {
-  label: string;
-  ready: boolean;
-  detail?: string;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3 rounded border border-border/60 bg-background/50 px-3 py-2">
-      <div>
-        <p className="font-medium text-foreground">{label}</p>
-        {!ready && detail ? <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p> : null}
-      </div>
-      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
-        ready ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-300"
-      }`}>
-        {ready ? "ready" : "open"}
-      </span>
-    </div>
-  );
-}
-
-function QuoteSendActionCard({
-  icon,
-  title,
-  detail,
-  readiness,
-  setupBlocked,
-  busy,
-  onClick,
-}: {
-  icon: ReactNode;
-  title: string;
-  detail: string;
-  readiness: { ready: boolean; missing: string[] };
-  setupBlocked?: boolean;
-  busy?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <div className="rounded-lg border border-border/70 bg-background/50 p-4">
-      <div className="flex items-start gap-3">
-        <span className="rounded-full bg-qep-orange/10 p-2 text-qep-orange">{icon}</span>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground">{title}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-        </div>
-      </div>
-      <div className="mt-3 rounded border border-border/60 bg-card/50 px-3 py-2 text-xs">
-        {readiness.ready ? (
-          <span className="text-emerald-300">Ready to log this action.</span>
-        ) : (
-          <span className="text-amber-300">Blocked: {readiness.missing.join(", ")}</span>
-        )}
-      </div>
-      {setupBlocked && (
-        <p className="mt-2 text-xs text-blue-200">Setup blocked — this button logs a draft/setup-blocked event only; it does not send to the customer.</p>
-      )}
-      <Button className="mt-4 w-full" variant={setupBlocked ? "outline" : "default"} onClick={onClick} disabled={busy || !readiness.ready}>
-        {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
-        {setupBlocked ? "Log setup-blocked" : title}
-      </Button>
     </div>
   );
 }

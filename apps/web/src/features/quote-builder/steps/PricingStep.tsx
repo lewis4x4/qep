@@ -26,6 +26,7 @@ import {
   type PricingLineKind,
 } from "../lib/pricing-adder-fields";
 import type { TaxCalculation } from "../lib/tax-api";
+import { SummaryRow } from "../components/SummaryRow";
 import { useWizard } from "../wizard/useWizard";
 
 export interface PricingStepProps {
@@ -544,27 +545,6 @@ export function PricingStep({
         <Button variant="outline" onClick={() => setStep("tradeIn")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
         <Button onClick={() => setStep("promotions")}>Promotions <ArrowRight className="ml-1 h-4 w-4" /></Button>
       </div>
-    </div>
-  );
-}
-
-function SummaryRow({
-  label,
-  value,
-  emphasize = false,
-  positive = false,
-}: {
-  label: string;
-  value: string;
-  emphasize?: boolean;
-  positive?: boolean;
-}) {
-  return (
-    <div className={`flex items-center justify-between ${emphasize ? "border-t border-border pt-2" : ""}`}>
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`font-medium ${emphasize ? "text-qep-orange" : positive ? "text-emerald-400" : "text-foreground"}`}>
-        {value}
-      </span>
     </div>
   );
 }

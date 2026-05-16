@@ -33,6 +33,7 @@ supabase/.temp/
 
 # Working documents — local only, never pushed to GitHub
 _workspace/
+QEP (1)/
 
 # IntelliDealer raw source evidence — local/private custody only.
 # The committed manifest records hashes and shape; do not commit raw customer files.

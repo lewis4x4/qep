@@ -35,6 +35,7 @@ export interface ReviewStepProps {
   taxableBasis: number;
   taxTotal: number;
   customerTotal: number;
+  cashDown: number;
   amountFinanced: number;
   netTotal: number;
   marginPct: number;
@@ -70,6 +71,7 @@ export function ReviewStep({
   taxableBasis,
   taxTotal,
   customerTotal,
+  cashDown,
   amountFinanced,
   netTotal,
   marginPct,
@@ -305,7 +307,7 @@ export function ReviewStep({
           quotePackageId={activeQuotePackageId}
           draft={draft}
           financeScenarios={allFinanceScenarios}
-          computed={{ subtotal, discountTotal, netTotal, taxTotal, customerTotal, cashDown: draft.cashDown, amountFinanced }}
+          computed={{ subtotal, discountTotal, netTotal, taxTotal, customerTotal, cashDown, amountFinanced }}
           sendReadiness={sendReadiness}
           requiresManagerApproval={requiresManagerApproval}
           userRole={userRole}

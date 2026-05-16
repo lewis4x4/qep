@@ -12,6 +12,7 @@ import type { QuoteFinanceScenario } from "../../../../../../shared/qep-moonshot
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { SummaryRow } from "../components/SummaryRow";
 import { money } from "../lib/money";
 import { useWizard } from "../wizard/useWizard";
 
@@ -235,25 +236,6 @@ export function FinancingStep({
         <Button variant="outline" onClick={() => setStep("promotions")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
         <Button onClick={() => setStep("details")}>Quote details <ArrowRight className="ml-1 h-4 w-4" /></Button>
       </div>
-    </div>
-  );
-}
-
-function SummaryRow({
-  label,
-  value,
-  emphasize = false,
-}: {
-  label: string;
-  value: string;
-  emphasize?: boolean;
-}) {
-  return (
-    <div className={`flex items-center justify-between ${emphasize ? "border-t border-border pt-2" : ""}`}>
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`font-medium ${emphasize ? "text-qep-orange" : "text-foreground"}`}>
-        {value}
-      </span>
     </div>
   );
 }
