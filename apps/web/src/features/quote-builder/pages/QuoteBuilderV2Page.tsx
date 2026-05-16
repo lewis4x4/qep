@@ -94,6 +94,7 @@ import {
   type QuoteSendActionChannel,
 } from "../lib/quote-workspace";
 import { useApprovalBypass } from "../hooks/useApprovalBypass";
+import { useDraftAutosave } from "../hooks/useDraftAutosave";
 import { useLiveMargin } from "../hooks/useLiveMargin";
 import { usePdiAutofill } from "../hooks/usePdiAutofill";
 import {
@@ -1660,36 +1661,16 @@ export function QuoteBuilderV2Page() {
     marginPct,
   ]);
 
-  useEffect(() => {
-    if (!localDraftHydrationComplete) return;
-    if (!packetReadiness.draft.ready) {
-      setAutoSaveState(isDraftEmpty(draft) ? "idle" : "local");
-      return;
-    }
-    if (saveMutation.isPending || submitApprovalMutation.isPending) return;
-    if (lastAutoSaveSignatureRef.current === draftSaveSignature) return;
-
-    const timer = window.setTimeout(() => {
-      setAutoSaveState("saving");
-      saveMutation.mutateAsync()
-        .then(() => {
-          lastAutoSaveSignatureRef.current = draftSaveSignature;
-          setAutoSaveState("saved");
-        })
-        .catch(() => {
-          setAutoSaveState("error");
-        });
-    }, 10_000);
-    return () => window.clearTimeout(timer);
-  }, [
-    draft,
-    draftSaveSignature,
-    localDraftHydrationComplete,
-    packetReadiness.draft.ready,
-    saveMutation.isPending,
-    saveMutation.mutateAsync,
-    submitApprovalMutation.isPending,
-  ]);
+  useDraftAutosave({
+    enabled: localDraftHydrationComplete,
+    draftReady: packetReadiness.draft.ready,
+    draftIsEmpty: isDraftEmpty(draft),
+    draftSignature: draftSaveSignature,
+    signatureRef: lastAutoSaveSignatureRef,
+    isPaused: saveMutation.isPending || submitApprovalMutation.isPending,
+    save: saveMutation.mutateAsync,
+    setAutoSaveState,
+  });
 
   useEffect(() => {
     if (!documentFallbackGeneratedAt) return;
