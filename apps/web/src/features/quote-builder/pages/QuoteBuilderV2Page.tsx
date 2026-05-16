@@ -177,6 +177,7 @@ import {
   wizardMaxStepIndex0FromDraft,
   wizardReachableMaxIndex0,
 } from "../wizard/wizard-navigation";
+import { IntakeInput } from "../wizard/IntakeInput";
 
 // Item 2: the salesperson-facing flow is now the QRM 11-step wizard.
 // Steps 10–11 persist generated document artifacts and use the guarded
@@ -2927,63 +2928,22 @@ export function QuoteBuilderV2Page() {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Start quote</p>
                 <p className="mt-1 text-sm text-muted-foreground">Describe what you want to quote. Type or use the mic in the same intake box.</p>
               </div>
-              <div className="relative mt-4">
-                <textarea
-                  value={aiPrompt}
-                  onFocus={() => setDraft((cur) => ({ ...cur, entryMode: "ai_chat" }))}
-                  onChange={(event) => {
-                    setAiPrompt(event.target.value);
-                    setDraft((cur) => ({ ...cur, entryMode: "ai_chat" }));
-                  }}
-                  placeholder="Describe what you want to quote."
-                  className="min-h-[104px] w-full rounded border border-input bg-card px-3 py-2 pr-12 text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraft((cur) => ({ ...cur, entryMode: "voice" }));
-                    setIntakeRecorderOpen((current) => !current);
-                  }}
-                  className={`absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border transition ${
-                    intakeRecorderOpen
-                      ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
-                      : "border-border bg-background/80 text-muted-foreground hover:border-qep-orange/50 hover:text-qep-orange"
-                  }`}
-                  aria-label="Use microphone intake"
-                  title="Use microphone intake"
-                >
-                  <Mic className="h-4 w-4" />
-                </button>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">Use the mic to capture field notes, then build the quote from one intake stream.</p>
-              <div className="mt-2 flex justify-end">
-                <Button
-                  size="sm"
-                  onClick={() => aiIntakeMutation.mutate(aiPrompt.trim())}
-                  disabled={aiIntakeMutation.isPending || aiPrompt.trim().length < 12}
-                >
-                  {aiIntakeMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1 h-4 w-4" />}
-                  Build with AI
-                </Button>
-              </div>
-              {intakeRecorderOpen && (
-                <div className="mt-3 space-y-2 rounded-lg border border-border/70 bg-background/60 p-3">
-                  <p className="text-sm font-medium text-foreground">Record intake</p>
-                  <VoiceRecorder
-                    onRecorded={(audioBlob, fileName) => {
-                      setDraft((current) => ({ ...current, entryMode: "voice" }));
-                      voiceMutation.mutate({ blob: audioBlob, fileName });
-                    }}
-                    disabled={voiceMutation.isPending}
-                  />
-                  {voiceMutation.isPending && <p className="text-xs text-muted-foreground">Processing voice note…</p>}
-                </div>
-              )}
-              {aiIntakeMessage && (
-                <p className="mt-2 rounded border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-300">
-                  {aiIntakeMessage}
-                </p>
-              )}
+              <IntakeInput
+                aiPrompt={aiPrompt}
+                onAiPromptChange={setAiPrompt}
+                intakeRecorderOpen={intakeRecorderOpen}
+                onIntakeRecorderToggle={() => setIntakeRecorderOpen((current) => !current)}
+                onEntryModeChange={(mode) => setDraft((cur) => ({ ...cur, entryMode: mode }))}
+                onVoiceRecorded={(audioBlob, fileName) => voiceMutation.mutate({ blob: audioBlob, fileName })}
+                voiceMutationPending={voiceMutation.isPending}
+                onBuildWithAi={(prompt) => aiIntakeMutation.mutate(prompt)}
+                aiIntakeMutationPending={aiIntakeMutation.isPending}
+                aiIntakeMessage={aiIntakeMessage}
+                helperText="Use the mic to capture field notes, then build the quote from one intake stream."
+                recorderHeading="Record intake"
+                textareaMinHeight="104px"
+                buildButtonVariant="icons"
+              />
             </Card>
 
             <Card className="p-4">
@@ -3661,64 +3621,23 @@ export function QuoteBuilderV2Page() {
 
           <Card className="p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Fast intake</p>
-            <div className="relative mt-3">
-              <textarea
-                value={aiPrompt}
-                onFocus={() => setDraft((current) => ({ ...current, entryMode: "ai_chat" }))}
-                onChange={(event) => {
-                  setAiPrompt(event.target.value);
-                  setDraft((current) => ({ ...current, entryMode: "ai_chat" }));
-                }}
-                placeholder="Describe what you want to quote."
-                className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 pr-12 text-sm"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setDraft((current) => ({ ...current, entryMode: "voice" }));
-                  setIntakeRecorderOpen((open) => !open);
-                }}
-                className={`absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border transition ${
-                  intakeRecorderOpen
-                    ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
-                    : "border-border bg-background/80 text-muted-foreground hover:border-qep-orange/50 hover:text-qep-orange"
-                }`}
-                aria-label="Use microphone intake"
-                title="Use microphone intake"
-              >
-                <Mic className="h-4 w-4" />
-              </button>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">Use the same intake box for typing and mic capture before AI builds the draft.</p>
-
-            {intakeRecorderOpen && (
-              <div className="mt-4 space-y-2 rounded-lg border border-border/70 bg-background/60 p-3">
-                <p className="text-sm font-medium text-foreground">Record the customer need</p>
-                <VoiceRecorder
-                  onRecorded={(audioBlob, fileName) => {
-                    setDraft((current) => ({ ...current, entryMode: "voice" }));
-                    voiceMutation.mutate({ blob: audioBlob, fileName });
-                  }}
-                  disabled={voiceMutation.isPending}
-                />
-                {voiceMutation.isPending && <p className="text-xs text-muted-foreground">Processing voice note…</p>}
-              </div>
-            )}
-
-            <div className="mt-3 flex justify-end">
-              <Button
-                size="sm"
-                onClick={() => aiIntakeMutation.mutate(aiPrompt.trim())}
-                disabled={aiIntakeMutation.isPending || aiPrompt.trim().length < 12}
-              >
-                {aiIntakeMutation.isPending ? "Building…" : "Build with AI"}
-              </Button>
-            </div>
-            {aiIntakeMessage && (
-              <p className="mt-2 rounded border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-300">
-                {aiIntakeMessage}
-              </p>
-            )}
+            <IntakeInput
+              aiPrompt={aiPrompt}
+              onAiPromptChange={setAiPrompt}
+              intakeRecorderOpen={intakeRecorderOpen}
+              onIntakeRecorderToggle={() => setIntakeRecorderOpen((open) => !open)}
+              onEntryModeChange={(mode) => setDraft((current) => ({ ...current, entryMode: mode }))}
+              onVoiceRecorded={(audioBlob, fileName) => voiceMutation.mutate({ blob: audioBlob, fileName })}
+              voiceMutationPending={voiceMutation.isPending}
+              onBuildWithAi={(prompt) => aiIntakeMutation.mutate(prompt)}
+              aiIntakeMutationPending={aiIntakeMutation.isPending}
+              aiIntakeMessage={aiIntakeMessage}
+              helperText="Use the same intake box for typing and mic capture before AI builds the draft."
+              recorderHeading="Record the customer need"
+              textareaMinHeight="90px"
+              buildButtonVariant="text"
+              bodyOrder="recorder_then_build"
+            />
 
             <label className="mt-4 block space-y-1 text-sm">
               <span className="text-xs font-medium text-muted-foreground">Opportunity note</span>
