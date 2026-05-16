@@ -37,6 +37,8 @@ export function TradeCaptureDialog({
 }: TradeCaptureDialogProps) {
   const activeItem = TRADE_CHECKLIST_ITEMS.find((item) => item.key === activeTradeCaptureKey)
     ?? TRADE_CHECKLIST_ITEMS[0]!;
+  const activeFieldId = `trade-capture-field-${activeItem.key}`;
+  const activeLabelId = `trade-capture-label-${activeItem.key}`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -56,6 +58,8 @@ export function TradeCaptureDialog({
               <button
                 key={item.key}
                 type="button"
+                aria-pressed={active}
+                aria-label={`${item.label}${complete ? ", captured" : ""}`}
                 onClick={() => onActiveTradeCaptureKeyChange(item.key)}
                 className={`rounded-lg border p-3 text-left text-sm transition ${
                   active
@@ -78,7 +82,7 @@ export function TradeCaptureDialog({
         <div className="mt-4 rounded-xl border border-border bg-card/60 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-foreground">{activeItem.label}</p>
+              <p id={activeLabelId} className="text-sm font-semibold text-foreground">{activeItem.label}</p>
               <p className="mt-1 text-xs text-muted-foreground">{activeItem.prompt}</p>
             </div>
             {tradeChecklist[activeItem.key] && (
@@ -88,6 +92,8 @@ export function TradeCaptureDialog({
             )}
           </div>
           <textarea
+            id={activeFieldId}
+            aria-labelledby={activeLabelId}
             value={tradeCapture[activeItem.key]}
             onChange={(event) => setTradeCapture((current) => ({ ...current, [activeItem.key]: event.target.value }))}
             placeholder={activeItem.placeholder}

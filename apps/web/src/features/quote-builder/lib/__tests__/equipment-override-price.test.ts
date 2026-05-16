@@ -45,6 +45,17 @@ describe("equipment-override-price", () => {
     expect(hasEquipmentOverride(next)).toBe(true);
   });
 
+  test("applyEquipmentOverridePrice pins system_base_unit_price on first override", () => {
+    const line: QuoteLineItemDraft = {
+      kind: "equipment",
+      title: "Unit",
+      quantity: 1,
+      unitPrice: 100_000,
+    };
+    const next = applyEquipmentOverridePrice(line, 97_500);
+    expect(next.metadata?.system_base_unit_price).toBe(100_000);
+  });
+
   test("applyEquipmentOverridePrice clears override at system base", () => {
     const overridden = applyEquipmentOverridePrice(baseLine(), 97_500);
     const reset = applyEquipmentOverridePrice(overridden, 100_000);

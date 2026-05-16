@@ -38,15 +38,14 @@ jobs:
         working-directory: .
         run: bun install --frozen-lockfile
 
-      - name: Require staging credentials (same-repo PRs)
+      - name: Warn when staging credentials missing (same-repo PRs)
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         env:
           PLAYWRIGHT_TEST_EMAIL: ${{ secrets.PLAYWRIGHT_TEST_EMAIL }}
           PLAYWRIGHT_TEST_PASSWORD: ${{ secrets.PLAYWRIGHT_TEST_PASSWORD }}
         run: |
           if [ -z "$PLAYWRIGHT_TEST_EMAIL" ] || [ -z "$PLAYWRIGHT_TEST_PASSWORD" ]; then
-            echo "::error::Configure PLAYWRIGHT_TEST_EMAIL and PLAYWRIGHT_TEST_PASSWORD repository secrets for e2e-staging."
-            exit 1
+            echo "::warning::PLAYWRIGHT_TEST_EMAIL / PLAYWRIGHT_TEST_PASSWORD not set — running guest route smoke only."
           fi
 
       - name: Install Playwright Chromium

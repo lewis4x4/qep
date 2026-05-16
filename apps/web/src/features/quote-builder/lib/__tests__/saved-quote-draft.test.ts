@@ -269,4 +269,27 @@ describe("hydrateDraftFromSavedQuote", () => {
       },
     ]);
   });
+
+  test("hydrates equipment override cents and preserves system base from quoted_list_price", () => {
+    const draft = hydrateDraftFromSavedQuote({
+      quote_package_line_items: [
+        {
+          id: "eq-1",
+          line_type: "equipment",
+          description: "CAT 299D3",
+          quantity: 1,
+          unit_price: 97_500,
+          quoted_list_price: 100_000,
+          equipment_override_price_cents: 9_750_000,
+          metadata: { source_catalog: "qb_equipment_models", source_id: "eq-1" },
+        },
+      ],
+    });
+
+    expect(draft.equipment?.[0]).toMatchObject({
+      unitPrice: 97_500,
+      equipmentOverridePriceCents: 9_750_000,
+      metadata: { system_base_unit_price: 100_000 },
+    });
+  });
 });

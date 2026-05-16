@@ -270,6 +270,16 @@ function toPackageLineItemDraft(item: unknown): QuoteLineItemDraft[] {
   if (overrideCents != null) {
     line.equipmentOverridePriceCents = Math.round(overrideCents);
     line.unitPrice = overrideCents / 100;
+    const quotedList = asNumber(record.quoted_list_price);
+    const hydratedMetadata = { ...(line.metadata ?? {}) };
+    if (
+      hydratedMetadata.system_base_unit_price == null
+      && quotedList != null
+      && Math.abs(quotedList - line.unitPrice) >= 0.01
+    ) {
+      hydratedMetadata.system_base_unit_price = quotedList;
+    }
+    line.metadata = Object.keys(hydratedMetadata).length > 0 ? hydratedMetadata : null;
   } else if (metadata?.equipment_override_price != null) {
     const legacyDollars = asNumber(metadata.equipment_override_price);
     if (legacyDollars != null) {

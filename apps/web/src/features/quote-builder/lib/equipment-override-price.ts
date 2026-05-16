@@ -60,6 +60,9 @@ export function applyEquipmentOverridePrice(
 ): QuoteLineItemDraft {
   const systemBase = equipmentSystemBasePrice(line);
   const metadata = { ...(line.metadata ?? {}) };
+  if (metadata.system_base_unit_price == null) {
+    metadata.system_base_unit_price = systemBase;
+  }
   delete metadata.equipment_override_price;
 
   const equipmentOverridePriceCentsValue =

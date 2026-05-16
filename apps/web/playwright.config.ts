@@ -26,11 +26,8 @@ export default defineConfig({
         timeout: 120_000,
         env: {
           ...process.env,
-          VITE_SUPABASE_URL:
-            process.env.VITE_SUPABASE_URL ?? "https://iciddijgonywtxoelous.supabase.co",
-          VITE_SUPABASE_ANON_KEY:
-            process.env.VITE_SUPABASE_ANON_KEY
-            ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImljaWRkaWpnb255d3R4b2Vsb3MiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTY0NzY2MTEyMCwiZXhwIjoxOTYyMzM3NTEyfQ.e2e-placeholder",
+          VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ?? "",
+          VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY ?? "",
         },
       },
 });

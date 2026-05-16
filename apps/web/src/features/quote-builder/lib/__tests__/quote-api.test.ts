@@ -121,6 +121,7 @@ describe("buildQuoteSavePayload", () => {
     expect(line.equipment_override_price_cents).toBe(7_250_000);
     expect(line.unit_price).toBe(72_500);
     expect((line.metadata as Record<string, unknown>).equipment_override_price).toBeUndefined();
+    expect((line.metadata as Record<string, unknown>).system_base_unit_price).toBe(75_000);
   });
 
   test("preserves availability request metadata on equipment line items", () => {

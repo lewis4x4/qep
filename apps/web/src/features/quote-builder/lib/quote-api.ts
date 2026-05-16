@@ -26,7 +26,7 @@ import type { ClosedDealAuditRow } from "./closed-deals-audit";
 import type { DealFactorObservation } from "./factor-attribution";
 import type { FactorVerdict } from "./factor-verdict";
 import type { CalibrationObservation, CalibrationOutcome } from "./scorer-calibration";
-import { equipmentOverridePriceCents } from "./equipment-override-price";
+import { equipmentOverridePriceCents, equipmentSystemBasePrice } from "./equipment-override-price";
 import { quoteLineCostVisibility } from "./quote-workspace";
 
 const QUOTE_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/quote-builder-v2`;
@@ -1912,6 +1912,7 @@ export function buildQuoteSavePayload(
         metadata: buildLineMetadata(item, {
           source_catalog: item.sourceCatalog ?? "qb_equipment_models",
           source_id: item.sourceId ?? item.id ?? null,
+          system_base_unit_price: equipmentSystemBasePrice(item),
         }),
       };
     }),
