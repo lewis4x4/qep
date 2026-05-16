@@ -179,8 +179,15 @@ import { IntakeInput } from "../wizard/IntakeInput";
 import { CustomerStep } from "../steps/CustomerStep";
 import { EquipmentStep } from "../steps/EquipmentStep";
 import { ConfigureStep } from "../steps/ConfigureStep";
+import { TradeInStep } from "../steps/TradeInStep";
 import { QuoteWorkspaceLineRow } from "../components/QuoteWorkspaceLineRow";
 import { money } from "../lib/money";
+import {
+  EMPTY_TRADE_CAPTURE,
+  TRADE_CHECKLIST_ITEMS,
+  type TradeCaptureDraft,
+  type TradeChecklistKey,
+} from "../lib/trade-checklist";
 
 // Item 2: the salesperson-facing flow is now the QRM 11-step wizard.
 // Steps 10–11 persist generated document artifacts and use the guarded
@@ -205,9 +212,6 @@ function readinessChipLabel(missing: string): string {
 type EquipmentAvailabilityStatus = "in_stock" | "in_transit" | "source_required";
 type FinanceStepTab = "cash" | "finance" | "lease";
 type PricingLineKind = Extract<QuoteLineItemDraft["kind"], "pdi" | "freight" | "good_faith" | "doc_fee" | "title" | "tag" | "registration" | "discount" | "rebate_mfg" | "rebate_dealer" | "loyalty_discount" | "custom">;
-type TradeChecklistKey = "hourMeter" | "undercarriage" | "hydraulicLeaks" | "serviceHours" | "tiresTracks" | "photos";
-type TradeCaptureDraft = Record<TradeChecklistKey, string>;
-
 type CostVisibility = "internal" | "customer";
 
 type PricingAdderField = {
@@ -254,24 +258,6 @@ const DISCOUNT_REASON_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "loyalty", label: "Loyalty" },
   { value: "other", label: "Other" },
 ];
-
-const TRADE_CHECKLIST_ITEMS: Array<{ key: TradeChecklistKey; label: string; prompt: string; placeholder: string }> = [
-  { key: "hourMeter", label: "Hour meter captured", prompt: "Capture the hour meter reading or photo note.", placeholder: "e.g. 1,248 hours shown on meter; photo captured" },
-  { key: "undercarriage", label: "Undercarriage / frame checked", prompt: "Record frame, undercarriage, rust, welds, or structural concerns.", placeholder: "e.g. Frame straight, no cracks; light wear on undercarriage" },
-  { key: "hydraulicLeaks", label: "Hydraulic leaks checked", prompt: "Note whether leaks, seepage, hose issues, or cylinder concerns are visible.", placeholder: "e.g. No active leaks; left lift cylinder seepage noted" },
-  { key: "serviceHours", label: "Engine hours / service noted", prompt: "Record service interval, last service, engine hours, or maintenance proof.", placeholder: "e.g. 250h service completed Jan 2026; oil sample pending" },
-  { key: "tiresTracks", label: "Tires or tracks condition noted", prompt: "Capture tire/track tread, cuts, wear percentage, and replacement risk.", placeholder: "e.g. Rear tires 60%; front right has sidewall cut" },
-  { key: "photos", label: "Visible damage photos captured", prompt: "List captured photo angles or visible damage evidence.", placeholder: "e.g. Front-left, rear-right, serial plate, bucket edge damage photos captured" },
-];
-
-const EMPTY_TRADE_CAPTURE: TradeCaptureDraft = {
-  hourMeter: "",
-  undercarriage: "",
-  hydraulicLeaks: "",
-  serviceHours: "",
-  tiresTracks: "",
-  photos: "",
-};
 
 const PROMOTION_PLACEHOLDERS: Array<{ id: string; title: string; kind: PricingLineKind; amount: number; source: string; detail: string }> = [
   { id: "seed-mfg-support", title: "Manufacturer retail support", kind: "rebate_mfg", amount: 1000, source: "Manufacturer", detail: "Clear starter row until seeded OEM programs resolve." },
@@ -3571,130 +3557,17 @@ export function QuoteBuilderV2Page() {
       )}
 
       {step === "tradeIn" && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Step 4: Trade-in</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Capture the trade once. If the provisional checklist is not complete, this screen shows manager-approval-required messaging for the handoff.</p>
-          </div>
-
-          <Card className="border-border/70 bg-muted/20 p-3">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              <span className="font-medium text-foreground">Configure vs pricing.</span>{" "}
-              Package lines and per-row internal vs customer visibility are edited in{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 3 — Configure the package"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("configure")}
-              >
-                Configure
-              </Button>
-              . Freight, PDI, discounts, and the customer waterfall are in{" "}
-              <Button
-                type="button"
-                variant="link"
-                title="Step 5 — Pricing build"
-                className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
-                onClick={() => setStep("pricing")}
-              >
-                Pricing
-              </Button>
-              .
-            </p>
-          </Card>
-
-          {draft.dealId && (
-            <TradeInSection
-              dealId={draft.dealId}
-              onTradeValueChange={(value, valId) => {
-                setDraft((current) => ({
-                  ...current,
-                  tradeAllowance: value || 0,
-                  tradeValuationId: valId,
-                }));
-              }}
-            />
-          )}
-
-          <PointShootTradeCard
-            dealId={draft.dealId ?? null}
-            appliedAllowanceDollars={draft.tradeAllowance || null}
-            appliedValuationSnapshot={tradeValuationProposalQuery.data ?? null}
-            onApply={handlePointShootTradeApply}
-            onClear={() => setDraft((cur) => ({
-              ...cur,
-              tradeAllowance: 0,
-              tradeValuationId: null,
-            }))}
-          />
-
-          <TradeInInputCard
-            tradeAllowance={draft.tradeAllowance}
-            onChange={(value) => setDraft((current) => ({
-              ...current,
-              tradeAllowance: value,
-              tradeValuationId: null,
-            }))}
-          />
-
-          <Card className="p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-foreground">Trade evidence checklist</p>
-                <p className="mt-1 text-xs text-muted-foreground">Click a row, capture the evidence in this quote, and it checks itself off automatically.</p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setActiveTradeCaptureKey("hourMeter");
-                  setTradeCaptureOpen(true);
-                }}
-              >
-                Open trade capture
-              </Button>
-            </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {TRADE_CHECKLIST_ITEMS.map((item) => {
-                const complete = tradeChecklist[item.key];
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => {
-                      setActiveTradeCaptureKey(item.key);
-                      setTradeCaptureOpen(true);
-                    }}
-                    className={`flex items-start gap-3 rounded border px-3 py-3 text-left text-sm transition ${
-                      complete ? "border-emerald-500/30 bg-emerald-500/5" : "border-border/70 bg-card/50 hover:border-qep-orange/60"
-                    }`}
-                  >
-                    {complete ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" /> : <span className="mt-0.5 h-4 w-4 shrink-0 rounded border border-muted-foreground/70" />}
-                    <span className="min-w-0">
-                      <span className="block font-medium text-foreground">{item.label}</span>
-                      <span className="mt-1 block truncate text-xs text-muted-foreground">
-                        {tradeCapture[item.key] || item.prompt}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
-
-          {tradeManagerApprovalRequired && (
-            <Card className="border-amber-500/20 bg-amber-500/5 p-4">
-              <p className="text-sm font-semibold text-amber-300">Manager approval required for trade allowance.</p>
-              <p className="mt-1 text-xs text-amber-200">The trade value stays in the quote; this checklist note is a provisional handoff until the Trade SOP is finalized.</p>
-            </Card>
-          )}
-
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("configure")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
-            <Button onClick={() => setStep("pricing")}>Pricing <ArrowRight className="ml-1 h-4 w-4" /></Button>
-          </div>
-        </div>
+        <TradeInStep
+          appliedValuationSnapshot={tradeValuationProposalQuery.data ?? null}
+          onPointShootApply={handlePointShootTradeApply}
+          tradeChecklist={tradeChecklist}
+          tradeCapture={tradeCapture}
+          tradeManagerApprovalRequired={tradeManagerApprovalRequired}
+          onOpenTradeCapture={(key) => {
+            setActiveTradeCaptureKey(key);
+            setTradeCaptureOpen(true);
+          }}
+        />
       )}
 
       {step === "pricing" && (
