@@ -71,7 +71,6 @@ import {
   getClosedDealsAudit,
   getCrmEquipmentQuoteSeed,
   getFactorVerdicts,
-  getQuoteApprovalCase,
   getSavedQuotePackage,
   listQuoteAvailabilityRequests,
   logQuoteDeliveryEvent,
@@ -94,6 +93,7 @@ import {
   quoteLineCostVisibility,
   type QuoteSendActionChannel,
 } from "../lib/quote-workspace";
+import { useApprovalBypass } from "../hooks/useApprovalBypass";
 import { useLiveMargin } from "../hooks/useLiveMargin";
 import { usePdiAutofill } from "../hooks/usePdiAutofill";
 import { hydrateDraftFromSavedQuote } from "../lib/saved-quote-draft";
@@ -1549,14 +1549,6 @@ export function QuoteBuilderV2Page() {
     return map;
   }, [availabilityRequestsQuery.data]);
 
-  const activeApprovalCaseQuery = useQuery({
-    queryKey: ["quote-builder", "approval-case", activeQuotePackageId],
-    queryFn: () => getQuoteApprovalCase(activeQuotePackageId!),
-    enabled: Boolean(activeQuotePackageId),
-    staleTime: 5_000,
-  });
-  const activeApprovalCase = activeApprovalCaseQuery.data ?? null;
-
   const currentWizardStepNumber = wizardIndexForStep(step);
 
   useEffect(() => {
@@ -1585,29 +1577,26 @@ export function QuoteBuilderV2Page() {
   }, []);
 
   const quoteStatus = draft.quoteStatus ?? "draft";
-  const approvalPending = quoteStatus === "pending_approval";
-  const bypassApprovedWithoutCase =
-    !activeApprovalCase
-    && (quoteStatus === "approved" || quoteStatus === "sent" || quoteStatus === "accepted");
-  const approvalCaseCanSend = activeApprovalCase?.canSend === true || bypassApprovedWithoutCase;
-  const approvalGranted =
-    quoteStatus === "approved"
-    || quoteStatus === "approved_with_conditions"
-    || quoteStatus === "sent"
-    || quoteStatus === "accepted";
   // QEP rule: every quote requires owner approval (Ryan + Rylee).
-  // Button shows whenever the draft is complete enough to save — Submit
-  // auto-saves first, so the rep can go straight from "done editing"
-  // to "waiting on Ryan/Rylee" in one click. Hidden once the case is
-  // already past draft (pending / approved / sent / accepted).
-  const canSubmitForApproval =
-    packetReadiness.draft.ready
-    && Boolean(draft.branchSlug)
-    && quoteStatus !== "sent"
-    && quoteStatus !== "accepted"
-    && !approvalPending
-    && quoteStatus !== "approved"
-    && quoteStatus !== "approved_with_conditions";
+  // canSubmit shows whenever the draft is complete enough to save —
+  // Submit auto-saves first, so the rep can go straight from "done
+  // editing" to "waiting on Ryan/Rylee" in one click. Hidden once the
+  // case is already past draft (pending / approved / sent / accepted).
+  const {
+    approvalCase: activeApprovalCase,
+    caseLoading: activeApprovalCaseLoading,
+    refetchCase: refetchActiveApprovalCase,
+    pending: approvalPending,
+    bypassApprovedWithoutCase,
+    canSend: approvalCaseCanSend,
+    granted: approvalGranted,
+    canSubmit: canSubmitForApproval,
+  } = useApprovalBypass({
+    quotePackageId: activeQuotePackageId,
+    quoteStatus,
+    draftHasBranch: Boolean(draft.branchSlug),
+    draftReady: packetReadiness.draft.ready,
+  });
   void approvalState.requiresManagerApproval; // retained in state; not used for gating
   const displayedSavedAt = lastSavedAt ?? activeQuoteUpdatedAt;
   const displayedSavedLabel = shortDateTime(displayedSavedAt);
@@ -2018,7 +2007,7 @@ export function QuoteBuilderV2Page() {
 
   function approvalBlockerMessage(): string | null {
     if (!activeQuotePackageId) return "Save the quote package before generating customer-facing documents.";
-    if (activeApprovalCaseQuery.isLoading) return "Checking the approval case before customer-facing actions unlock.";
+    if (activeApprovalCaseLoading) return "Checking the approval case before customer-facing actions unlock.";
     if (bypassApprovedWithoutCase) return null;
     if (!activeApprovalCase) return "Submit this quote for owner approval before generating or sending customer-facing material.";
     if (activeApprovalCase.canSend) return null;
@@ -2044,7 +2033,7 @@ export function QuoteBuilderV2Page() {
       await saveMutation.mutateAsync();
       lastAutoSaveSignatureRef.current = draftSaveSignature;
     }
-    const refreshed = await activeApprovalCaseQuery.refetch();
+    const refreshed = await refetchActiveApprovalCase();
     if (refreshed.error) return "Could not recheck owner approval after saving. Try again before customer-facing actions.";
     if (!refreshed.data && bypassApprovedWithoutCase) return null;
     return refreshed.data?.canSend === true
