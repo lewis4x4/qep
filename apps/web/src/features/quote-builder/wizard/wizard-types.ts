@@ -4,6 +4,12 @@
 // IRON_WIZARD_DECOMPOSITION_PLAN_2026-05-15 strangler-fig sequence.
 // Pure types/data — no JSX, no side effects.
 
+// Autosave state machine shared by the page-level autosave effect and the
+// (forthcoming) `WizardStateProvider` so step components can read the
+// current persistence status without prop-drilling. Promoted from
+// `pages/QuoteBuilderV2Page.tsx` in PR 4.
+export type AutoSaveState = "idle" | "local" | "saving" | "saved" | "error";
+
 export type Step =
   | "customer"
   | "equipment"

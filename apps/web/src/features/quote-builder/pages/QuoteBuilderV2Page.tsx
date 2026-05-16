@@ -150,8 +150,13 @@ import {
   isWizardStepId,
   stepForWizardIndex,
   wizardIndexForStep,
+  type AutoSaveState,
   type Step,
 } from "../wizard/wizard-types";
+import {
+  WizardStateProvider,
+  type WizardStateValue,
+} from "../wizard/WizardStateProvider";
 import {
   STEP_STORAGE_PREFIX,
   persistStep,
@@ -176,7 +181,6 @@ import {
 // persistStep live in `../wizard/wizard-storage`. Page-local types only
 // from here down.
 type BuilderMode = "workspace" | "guided";
-type AutoSaveState = "idle" | "local" | "saving" | "saved" | "error";
 
 function readinessChipLabel(missing: string): string {
   if (missing.includes("customer-facing equipment")) return "Visible machine";
@@ -2769,7 +2773,38 @@ export function QuoteBuilderV2Page() {
     setStep("equipment");
   }
 
+  const wizardStateValue = useMemo<WizardStateValue>(() => ({
+    step,
+    setStep,
+    previousWizardStep,
+    nextWizardStep,
+    currentWizardStepNumber,
+    maxCompletedStepIndex: wizardMaxStepIndex0,
+    reachableMaxStepIndex: wizardReachableMaxIndex0Value,
+    draft,
+    setDraft,
+    activeWorkspaceId,
+    activeQuotePackageId,
+    autoSaveState,
+    setAutoSaveState,
+    lastSavedAt,
+    setLastSavedAt,
+  }), [
+    step,
+    previousWizardStep,
+    nextWizardStep,
+    currentWizardStepNumber,
+    wizardMaxStepIndex0,
+    wizardReachableMaxIndex0Value,
+    draft,
+    activeWorkspaceId,
+    activeQuotePackageId,
+    autoSaveState,
+    lastSavedAt,
+  ]);
+
   return (
+    <WizardStateProvider value={wizardStateValue}>
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-4 pb-[calc(6rem+env(safe-area-inset-bottom,0px))] pt-2 sm:px-6 lg:px-8">
       <div className="sticky top-0 z-30 rounded-xl border border-border/70 bg-background/95 p-3 shadow-sm backdrop-blur">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -5980,6 +6015,7 @@ export function QuoteBuilderV2Page() {
         </DialogContent>
       </Dialog>
     </div>
+    </WizardStateProvider>
   );
 }
 
