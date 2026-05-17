@@ -13,6 +13,7 @@
     "test:quote-builder": "bun test src/features/quote-builder",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "test:e2e:install": "playwright install --with-deps chromium",
     "test:e2e:staging": "PLAYWRIGHT_BASE_URL=https://qep.blackrockai.co PLAYWRIGHT_SKIP_WEBSERVER=1 playwright test",
     "bundle:analyze": "ANALYZE=true bun run build",
     "bundle:check": "node ../../scripts/check-web-bundle-size.mjs"
