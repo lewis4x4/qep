@@ -9,9 +9,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-// WAVE polish (Slice 2): voice dictation on the active capture note.
-// Slice 3 will wrap the dialog itself in a MobileBottomSheet on phone.
+// WAVE polish:
+//   Slice 2 — dictation on the active capture note (MobileVoiceTextarea).
+//   Slice 3 — render as MobileBottomSheet at <640px so the trade-in
+//   capture flow inherits the SalesShell chrome on phones.
+import { MobileBottomSheet } from "@/features/sales/components/MobileBottomSheet";
 import { MobileVoiceTextarea } from "@/features/sales/components/MobileVoiceTextarea";
+import { useIsMobileViewport } from "@/features/sales/hooks/useIsMobileViewport";
 
 import {
   TRADE_CHECKLIST_ITEMS,
@@ -42,18 +46,12 @@ export function TradeCaptureDialog({
     ?? TRADE_CHECKLIST_ITEMS[0]!;
   const activeFieldId = `trade-capture-field-${activeItem.key}`;
   const activeLabelId = `trade-capture-label-${activeItem.key}`;
+  // WAVE polish (Slice 3): branch to MobileBottomSheet on phone viewports.
+  const isMobile = useIsMobileViewport();
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Trade capture evidence</DialogTitle>
-          <DialogDescription>
-            Capture the trade facts here without leaving the quote. Rows check off automatically when their evidence field has content.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="grid gap-3 sm:grid-cols-2">
+  const body = (
+    <>
+      <div className="grid gap-3 sm:grid-cols-2">
           {TRADE_CHECKLIST_ITEMS.map((item) => {
             const active = activeTradeCaptureKey === item.key;
             const complete = tradeChecklist[item.key];
@@ -146,6 +144,33 @@ export function TradeCaptureDialog({
             </div>
           </div>
         </div>
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <MobileBottomSheet
+        open={open}
+        onOpenChange={onOpenChange}
+        title="Trade capture evidence"
+        description="Capture the trade facts here without leaving the quote. Rows check off automatically when their evidence field has content."
+        size="tall"
+      >
+        {body}
+      </MobileBottomSheet>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Trade capture evidence</DialogTitle>
+          <DialogDescription>
+            Capture the trade facts here without leaving the quote. Rows check off automatically when their evidence field has content.
+          </DialogDescription>
+        </DialogHeader>
+        {body}
       </DialogContent>
     </Dialog>
   );
