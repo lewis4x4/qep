@@ -1,16 +1,18 @@
 import { expect, test } from "@playwright/test";
 
-import { playwrightTestCredentials, signInWithPassword } from "./helpers/auth";
 import {
+  clickWizardProgressPill,
   expectApprovalBypassApplied,
   expectWizardStep,
   playwrightAgedEquipmentId,
+  playwrightTestCredentials,
   selectFirstQuotingBranch,
+  signInWithPassword,
   startProspectQuote,
   submitForApproval,
   waitForQuoteAutosave,
   walkFromEquipmentToReview,
-} from "./helpers/quote-wizard";
+} from "./fixtures";
 
 const credentials = playwrightTestCredentials();
 const agedEquipmentId = playwrightAgedEquipmentId();
@@ -34,7 +36,7 @@ test.describe("quote approval bypass", () => {
     await startProspectQuote(page);
     await selectFirstQuotingBranch(page);
 
-    await page.getByRole("button", { name: /2\. Equipment/i }).click();
+    await clickWizardProgressPill(page, "equipment");
     await expectWizardStep(page, 2);
     await expect(page.getByRole("button", { name: /^Configure/i })).toBeEnabled({ timeout: 90_000 });
 
