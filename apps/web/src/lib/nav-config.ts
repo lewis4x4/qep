@@ -89,10 +89,28 @@ export const PRIMARY_NAV_GROUPS: PrimaryNavGroupDefinition[] = [
 ];
 
 export const NAV_ITEMS: NavItemDefinition[] = [
+  // WAVE phase 6: Sales nav dropdown rewires to the mobile-first
+  // SalesShell routes (Workspace / Execution / Reflection sections).
   {
     label: "Dashboard",
-    href: "/dashboard",
+    href: "/sales/today",
     icon: BriefcaseBusiness,
+    roles: ["rep", "admin", "manager", "owner"],
+    primaryHeaderId: "sales",
+    sectionLabel: "Workspace",
+  },
+  {
+    label: "Pipeline",
+    href: "/sales/pipeline",
+    icon: BarChart3,
+    roles: ["rep", "admin", "manager", "owner"],
+    primaryHeaderId: "sales",
+    sectionLabel: "Workspace",
+  },
+  {
+    label: "Customers",
+    href: "/sales/customers",
+    icon: Users,
     roles: ["rep", "admin", "manager", "owner"],
     primaryHeaderId: "sales",
     sectionLabel: "Workspace",
@@ -121,6 +139,14 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     roles: ["rep", "admin", "manager", "owner"],
     primaryHeaderId: "sales",
     sectionLabel: "Execution",
+  },
+  {
+    label: "My Mirror",
+    href: "/sales/my-mirror",
+    icon: UserRound,
+    roles: ["rep", "admin", "manager", "owner"],
+    primaryHeaderId: "sales",
+    sectionLabel: "Reflection",
   },
   {
     label: "Parts Command",

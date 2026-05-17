@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   MapPin,
   Mic,
@@ -12,6 +13,8 @@ import {
   Search,
   Check,
   Package,
+  UserRound,
+  Sparkles,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -40,12 +43,25 @@ const TAGS = [
 ] as const;
 
 /* ── Alternate actions ──────────────────────────────────── */
+// WAVE phase 6: Quick-launch destinations include the deep mobile
+// surfaces (Field Note, Voice Quote, My Mirror) so the rep can reach
+// them in one tap from the FAB.
 const ALT_ACTIONS = [
   { key: "log_visit" as const, icon: MapPin, label: "Log Visit", desc: "GPS + notes", iconBg: "bg-blue-500/10", iconColor: "text-blue-400" },
   { key: "schedule" as const, icon: Calendar, label: "Schedule", desc: "Follow-up", iconBg: "bg-emerald-500/10", iconColor: "text-emerald-400" },
   { key: "quick_note" as const, icon: FileText, label: "Quick Note", desc: "Text capture", iconBg: "bg-amber-500/10", iconColor: "text-amber-400" },
   { key: "new_quote" as const, icon: Package, label: "New Quote", desc: "Start builder", iconBg: "bg-purple-500/10", iconColor: "text-purple-400" },
+  { key: "field_note" as const, icon: Mic, label: "Field Note", desc: "Record voice", iconBg: "bg-red-500/10", iconColor: "text-red-400" },
+  { key: "voice_quote" as const, icon: Sparkles, label: "Voice Quote", desc: "Speak a quote", iconBg: "bg-qep-orange/10", iconColor: "text-qep-orange" },
+  { key: "my_mirror" as const, icon: UserRound, label: "My Mirror", desc: "Your reflection", iconBg: "bg-cyan-500/10", iconColor: "text-cyan-400" },
 ] as const;
+
+const NAV_ACTION_HREFS: Partial<Record<(typeof ALT_ACTIONS)[number]["key"], string>> = {
+  new_quote: "/sales/quotes/new",
+  field_note: "/sales/field-note",
+  voice_quote: "/sales/voice-quote",
+  my_mirror: "/sales/my-mirror",
+};
 
 /* ── Customer avatar ────────────────────────────────────── */
 function MiniAvatar({ name, size = 24 }: { name: string; size?: number }) {
@@ -79,6 +95,7 @@ export function CaptureSheet({
   const [recording, setRecording] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   // Fetch top customers for quick-attach pills
   const { data: customers } = useQuery({
@@ -278,13 +295,23 @@ export function CaptureSheet({
                     <button
                       key={a.key}
                       onClick={() => {
-                        if (a.key === "new_quote") {
-                          // Could navigate to quote builder
+                        const href = NAV_ACTION_HREFS[a.key];
+                        if (href) {
+                          navigate(href);
                           handleClose();
-                        } else {
+                          return;
+                        }
+                        // Mode keys (log_visit, schedule, quick_note) are
+                        // the only remaining options that drive in-sheet UI.
+                        if (
+                          a.key === "log_visit" ||
+                          a.key === "schedule" ||
+                          a.key === "quick_note"
+                        ) {
                           setMode(a.key);
                         }
                       }}
+                      data-capture-action={a.key}
                       className="flex flex-col items-center gap-1.5 py-3.5 px-1.5 rounded-[14px] border border-white/[0.06] bg-[hsl(var(--card))] hover:border-white/20 transition-all active:scale-[0.98]"
                     >
                       <div
