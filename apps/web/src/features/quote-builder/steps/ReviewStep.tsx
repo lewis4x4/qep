@@ -7,6 +7,7 @@
  */
 
 import { Loader2, ArrowLeft, ArrowRight } from "lucide-react";
+import type { ReactNode } from "react";
 import type {
   QuoteAutoSendResult,
   QuoteFinanceScenario,
@@ -25,6 +26,9 @@ import {
 import { money } from "../lib/money";
 import { dateInputValue } from "../lib/quote-date-input";
 import { useWizard } from "../wizard/useWizard";
+// WAVE quote-builder deep reflow (B5)
+import { MobileSectionAccordion } from "@/features/sales/components/MobileSectionAccordion";
+import { useIsMobileViewport } from "@/features/sales/hooks/useIsMobileViewport";
 
 export interface ReviewStepProps {
   branchDisplayName: string;
@@ -95,6 +99,12 @@ export function ReviewStep({
 }: ReviewStepProps) {
   const { draft, setDraft, setStep } = useWizard();
   const firstEquipment = draft.equipment[0];
+  // WAVE B5 deep reflow: mobile reps see a customer-total hero plus
+  // the four summary blocks wrapped in collapsible numbered accordions.
+  // Desktop keeps the 2x2 grid for density.
+  const isMobile = useIsMobileViewport();
+  const customerDisplay = draft.customerName || draft.customerCompany || "Customer";
+  const statusLabel = (draft.quoteStatus ?? "draft").replace(/_/g, " ");
 
   return (
     <div className="space-y-4">
@@ -102,6 +112,26 @@ export function ReviewStep({
         <h2 className="text-lg font-semibold text-foreground">Step 9: Review + approval</h2>
         <p className="mt-1 text-sm text-muted-foreground">Everything in one plain-English summary. Approval case status is the authoritative gate before document generation and customer delivery.</p>
       </div>
+
+      {/* WAVE B5: mobile-only quote-value hero. Hidden on >= sm because the
+          desktop grid already gives reps the totals at a glance. */}
+      {isMobile && (
+        <Card
+          className="border-qep-orange/30 bg-qep-orange/5 p-4 sm:hidden"
+          data-testid="review-quote-hero"
+        >
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+            Customer total
+          </p>
+          <p className="mt-1 text-3xl font-bold text-qep-orange">{money(customerTotal)}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-qep-orange/30 bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange">
+              {statusLabel}
+            </span>
+            <span className="text-xs text-muted-foreground truncate">{customerDisplay}</span>
+          </div>
+        </Card>
+      )}
 
       <Card className="border-border/70 bg-muted/20 p-3">
         <p className="text-xs leading-relaxed text-muted-foreground">
@@ -130,36 +160,105 @@ export function ReviewStep({
         </p>
       </Card>
 
-      <Card className="p-4">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <ReviewSummaryBlock title="Customer" rows={[
-            ["Name", draft.customerName || draft.customerCompany || "Not set"],
-            ["Company", draft.customerCompany || "—"],
-            ["Email", draft.customerEmail || "Missing before send"],
-            ["Branch", branchDisplayName],
-          ]} />
-          <ReviewSummaryBlock title="Equipment" rows={[
-            ["Primary", firstEquipment?.title || [firstEquipment?.make, firstEquipment?.model].filter(Boolean).join(" ") || "No equipment"],
-            ["Config rows", String(draft.attachments.length)],
-            ["Trade", draft.tradeAllowance > 0 ? money(draft.tradeAllowance) : "No trade"],
-            ["Availability", availabilityAwaitingCount > 0 ? "Needs sourcing request" : "Ready for review"],
-          ]} />
-          <ReviewSummaryBlock title="Pricing + tax" rows={[
-            ["Subtotal", money(subtotal)],
-            ["Discounts", `-${money(discountTotal)}`],
-            ["Taxable basis", money(taxableBasis)],
-            ["Tax", money(taxTotal)],
-            ["Customer total", money(customerTotal)],
-          ]} />
-          <ReviewSummaryBlock title="Finance + details" rows={[
-            ["Scenario", financeMethodLabel],
-            ["Amount financed", money(amountFinanced)],
-            ["Expires", dateInputValue(draft.expiresAt) || "Default needed"],
-            ["Delivery ETA", dateInputValue(draft.deliveryEta) || "TBD"],
-            ["Why confirmed", draft.whyThisMachineConfirmed ? "Yes" : "Needs rep confirm"],
-          ]} />
-        </div>
-      </Card>
+      {(() => {
+        // WAVE B5: four review summaries. Desktop renders them as the
+        // existing 2x2 grid inside one Card. Mobile renders them as
+        // numbered MobileSectionAccordions (Customer expanded by default)
+        // with an "Edit" jump back to the source step.
+        const sections: Array<{
+          step: Parameters<typeof setStep>[0];
+          title: string;
+          rows: Array<[string, string]>;
+        }> = [
+          {
+            step: "customer",
+            title: "Customer",
+            rows: [
+              ["Name", draft.customerName || draft.customerCompany || "Not set"],
+              ["Company", draft.customerCompany || "—"],
+              ["Email", draft.customerEmail || "Missing before send"],
+              ["Branch", branchDisplayName],
+            ],
+          },
+          {
+            step: "equipment",
+            title: "Equipment",
+            rows: [
+              ["Primary", firstEquipment?.title || [firstEquipment?.make, firstEquipment?.model].filter(Boolean).join(" ") || "No equipment"],
+              ["Config rows", String(draft.attachments.length)],
+              ["Trade", draft.tradeAllowance > 0 ? money(draft.tradeAllowance) : "No trade"],
+              ["Availability", availabilityAwaitingCount > 0 ? "Needs sourcing request" : "Ready for review"],
+            ],
+          },
+          {
+            step: "pricing",
+            title: "Pricing + tax",
+            rows: [
+              ["Subtotal", money(subtotal)],
+              ["Discounts", `-${money(discountTotal)}`],
+              ["Taxable basis", money(taxableBasis)],
+              ["Tax", money(taxTotal)],
+              ["Customer total", money(customerTotal)],
+            ],
+          },
+          {
+            step: "details",
+            title: "Finance + details",
+            rows: [
+              ["Scenario", financeMethodLabel],
+              ["Amount financed", money(amountFinanced)],
+              ["Expires", dateInputValue(draft.expiresAt) || "Default needed"],
+              ["Delivery ETA", dateInputValue(draft.deliveryEta) || "TBD"],
+              ["Why confirmed", draft.whyThisMachineConfirmed ? "Yes" : "Needs rep confirm"],
+            ],
+          },
+        ];
+
+        if (isMobile) {
+          const renderEditAction = (
+            stepKey: Parameters<typeof setStep>[0],
+          ): ReactNode => (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-8 text-xs text-qep-orange hover:text-qep-orange"
+              onClick={(event) => {
+                event.stopPropagation();
+                setStep(stepKey);
+              }}
+              data-testid={`review-edit-${stepKey}`}
+            >
+              Edit
+            </Button>
+          );
+          return (
+            <div className="space-y-2" data-testid="review-summary-accordions">
+              {sections.map((section, index) => (
+                <MobileSectionAccordion
+                  key={section.title}
+                  index={index + 1}
+                  title={section.title}
+                  defaultOpen={index === 0}
+                  trailing={renderEditAction(section.step)}
+                >
+                  <ReviewSummaryBlock title={section.title} rows={section.rows} />
+                </MobileSectionAccordion>
+              ))}
+            </div>
+          );
+        }
+
+        return (
+          <Card className="p-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {sections.map((section) => (
+                <ReviewSummaryBlock key={section.title} title={section.title} rows={section.rows} />
+              ))}
+            </div>
+          </Card>
+        );
+      })()}
 
       <Card className="p-4">
         <p className="text-sm font-semibold text-foreground">Equipment pricing at review</p>
