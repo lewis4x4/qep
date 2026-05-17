@@ -230,8 +230,12 @@ export function useQuoteBuilderSave({
             ? result.status
             : "pending_approval",
       }));
+      const casePackageId = persistedQuotePackageIdRef.current ?? activeQuotePackageId;
       queryClient.invalidateQueries({ queryKey: ["quote-builder", "list"] });
-      queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case", activeQuotePackageId] });
+      queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case"] });
+      if (casePackageId) {
+        queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case", casePackageId] });
+      }
       queryClient.invalidateQueries({ queryKey: ["quote-builder", "saved-quote"] });
     },
   });

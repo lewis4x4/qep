@@ -37,7 +37,15 @@ export interface PricingAdderBucketsProps {
   miscCreditAmount: number;
   setMiscCreditAmount: (value: number) => void;
   onAddMiscPricingLine: (kind: "charge" | "credit") => void;
-  onRemoveMiscLine: (lineId: string | undefined) => void;
+  onRemoveMiscLine: (line: QuoteLineItemDraft) => void;
+}
+
+/** Stable key for misc charge/credit rows (id, pricing_field_key, or title fallback). */
+export function miscPricingLineKey(line: QuoteLineItemDraft): string {
+  if (line.id) return line.id;
+  const fieldKey = line.metadata?.pricing_field_key;
+  if (typeof fieldKey === "string" && fieldKey.length > 0) return fieldKey;
+  return `${line.metadata?.misc_line_kind ?? "misc"}:${line.title}`;
 }
 
 export function PricingAdderBuckets({
@@ -114,7 +122,7 @@ export function PricingAdderBuckets({
         </div>
       </details>
 
-      <details className="rounded-lg border border-border/70 bg-background/20" open>
+      <details className="rounded-lg border border-border/70 bg-background/20">
         <summary className="cursor-pointer list-none px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground [&::-webkit-details-marker]:hidden">
           <span className="flex items-center justify-between gap-2">
             <span>Customer-facing charges (printed on quote)</span>
@@ -220,7 +228,8 @@ export function PricingAdderBuckets({
                           type="button"
                           size="sm"
                           variant="ghost"
-                          onClick={() => onRemoveMiscLine(line.id)}
+                          onClick={() => onRemoveMiscLine(line)}
+                          aria-label={`Remove ${line.title}`}
                         >
                           Remove
                         </Button>

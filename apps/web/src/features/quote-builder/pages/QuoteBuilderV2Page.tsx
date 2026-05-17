@@ -25,7 +25,6 @@ import {
   computeRetrospectiveShadows,
   computeShadowAgreementSummary,
 } from "../lib/retrospective-shadow";
-import { hydrateCustomerById } from "../lib/customer-search-api";
 import { IntelligencePanel } from "../components/IntelligencePanel";
 import { QuoteBuilderOverlays } from "../components/QuoteBuilderOverlays";
 import { QuoteBuilderStatusBanners } from "../components/QuoteBuilderStatusBanners";
@@ -43,7 +42,6 @@ import {
   getClosedDealsAudit,
   getCrmEquipmentQuoteSeed,
   getFactorVerdicts,
-  getSavedQuotePackage,
   listQuoteAvailabilityRequests,
   logQuoteDeliveryEvent,
   persistQuoteDocumentArtifact,
@@ -63,6 +61,11 @@ import {
   type QuoteSendActionChannel,
 } from "../lib/quote-workspace";
 import { useApprovalBypass } from "../hooks/useApprovalBypass";
+import { useExistingQuoteLoad } from "../hooks/useExistingQuoteLoad";
+import { useQuoteBuilderHandoffs } from "../hooks/useQuoteBuilderHandoffs";
+import { useQuoteBuilderCrmHydration } from "../hooks/useQuoteBuilderCrmHydration";
+import { useQuoteBuilderLocalDraft } from "../hooks/useQuoteBuilderLocalDraft";
+import { useQuoteBuilderLocalDraftPersist } from "../hooks/useQuoteBuilderLocalDraftPersist";
 import { useQuoteBuilderSave } from "../hooks/useQuoteBuilderSave";
 import { useDraftAutosave } from "../hooks/useDraftAutosave";
 import { useLiveMargin } from "../hooks/useLiveMargin";
@@ -71,15 +74,8 @@ import {
   applyEquipmentOverridePrice,
   equipmentSystemBasePrice,
 } from "../lib/equipment-override-price";
-import { hydrateDraftFromSavedQuote } from "../lib/saved-quote-draft";
 import { buildCatalogQueryCandidates } from "../lib/catalog-query-candidates";
-import {
-  buildLocalDraftKey,
-  clearLocalDraft,
-  isDraftEmpty,
-  loadLocalDraft,
-  saveLocalDraft,
-} from "../lib/local-draft";
+import { isDraftEmpty } from "../lib/local-draft";
 import { useActiveBranches, useBranchBySlug } from "@/hooks/useBranches";
 import { useQuotePDF } from "../hooks/useQuotePDF";
 import { useQuoteFinancingPreview } from "../hooks/useQuoteFinancingPreview";
@@ -92,16 +88,6 @@ import { AskIronAdvisorButton } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { VoiceRecorder } from "@/features/voice-qrm/components/VoiceRecorder";
 import { submitVoiceToQrm } from "@/features/voice-qrm/lib/voice-qrm-api";
-import {
-  clearVoiceQuoteHandoff,
-  readVoiceQuoteHandoff,
-} from "@/features/voice-quote/lib/voice-quote-handoff";
-import {
-  clearIronQuoteHandoff,
-  normalizeIronQuoteHandoff,
-  readIronQuoteHandoff,
-  type IronQuoteHandoff,
-} from "../lib/iron-quote-handoff";
 import { toast } from "@/hooks/use-toast";
 import { DealAssistantTrigger, type ScenarioSelection } from "../components/ConversationalDealEngine";
 import { issueShareToken } from "@/features/deal-room/lib/deal-room-api";
@@ -119,7 +105,6 @@ import {
   STEP_LABELS,
   WIZARD_STEP_IDS,
   isWizardStepId,
-  stepForWizardIndex,
   wizardIndexForStep,
   type AutoSaveState,
   type Step,
@@ -131,7 +116,6 @@ import {
 import {
   STEP_STORAGE_PREFIX,
   persistStep,
-  readPersistedStep,
 } from "../wizard/wizard-storage";
 import { WizardShell } from "../wizard/WizardShell";
 import { QuoteWizardStepRouter } from "../wizard/QuoteWizardStepRouter";
@@ -165,7 +149,6 @@ import {
 } from "../lib/trade-checklist";
 import {
   addDaysIso,
-  appendMissingIronLines,
   availabilityClientLineKey,
   availabilityLabel,
   availabilityRequestCreatedAtForLine,
@@ -174,9 +157,6 @@ import {
   availabilityRequestStatusForLine,
   availabilityStatusForLine,
   buildEquipmentLine,
-  buildIronQuoteIntakeEquipmentLine,
-  buildIronQuoteIntakeOptionLines,
-  buildIronQuoteIntakeSummary,
   draftHasCustomer,
   equipmentKeyForLine,
   isQuoteApprovedForDistribution,
@@ -278,6 +258,17 @@ export function QuoteBuilderV2Page() {
   const [aiIntakeMessage, setAiIntakeMessage] = useState<string | null>(null);
   const [intakeRecorderOpen, setIntakeRecorderOpen] = useState(false);
   const [dealAssistantOpen, setDealAssistantOpen] = useState(false);
+  const applyScenarioSelection = useCallback((
+    selection: ScenarioSelection & { at?: string },
+    source: ScenarioSelectionSource,
+  ) => {
+    setDealAssistantOpen(false);
+    setDraft((current) => ({
+      ...current,
+      ...buildScenarioSelectionDraftPatch(current, selection, source),
+    }));
+    setStep("customer");
+  }, [setDraft, setStep]);
   const [availableOptions, setAvailableOptions] = useState<Array<{ id: string; name: string; price: number }>>([]);
   const [availableOptionsLabel, setAvailableOptionsLabel] = useState<string | null>(null);
   const [configureTab, setConfigureTab] = useState<QuotePackageCatalogKind>("attachment");
@@ -329,18 +320,62 @@ export function QuoteBuilderV2Page() {
 
   const { generateAndDownload: downloadPDF, generating: pdfGenerating, error: pdfError } = useQuotePDF();
   const { profile } = useAuth();
-  const existingQuoteHydrationKeyRef = useRef<string | null>(null);
-  const voiceHandoffHydrationKeyRef = useRef<string | null>(null);
-  const ironQuoteHandoffHydrationKeyRef = useRef<string | null>(null);
+  const { existingQuoteQuery, existingQuote } = useExistingQuoteLoad({
+    packageId,
+    dealId,
+    companyId,
+    setDraft,
+    setStep,
+  });
 
-  const existingQuoteQuery = useQuery({
-    queryKey: ["quote-builder", "saved-quote", packageId, dealId],
-    queryFn: () => getSavedQuotePackage({
-      packageId: packageId || undefined,
-      dealId: dealId || undefined,
-    }),
-    enabled: Boolean(packageId || dealId),
-    staleTime: 10_000,
+  useQuoteBuilderHandoffs({
+    packageId,
+    dealId,
+    voiceSessionId,
+    ironQuoteHandoffId,
+    ironQuoteHandoffState,
+    existingQuote,
+    existingQuoteLoading: existingQuoteQuery.isLoading,
+    existingQuoteFetching: existingQuoteQuery.isFetching,
+    setDraft,
+    setStep,
+    setAiPrompt,
+    setAiIntakeMessage,
+    onVoiceHandoff: (handoff) => applyScenarioSelection(handoff, "voice_handoff"),
+  });
+
+  const {
+    localDraftKey,
+    localDraftHydrationComplete,
+    localPersistEnabled,
+    setLocalPersistEnabled,
+  } = useQuoteBuilderLocalDraft({
+    userId: profile?.id,
+    dealId,
+    contactId,
+    draftDealId: draft.dealId,
+    draftContactId: draft.contactId,
+    ironQuoteHandoffId,
+    existingQuote,
+    existingQuoteLoading: existingQuoteQuery.isLoading,
+    existingQuoteFetching: existingQuoteQuery.isFetching,
+    setDraft,
+  });
+
+  useQuoteBuilderCrmHydration({
+    prospectConverted,
+    companyId,
+    contactId,
+    dealId,
+    packageId,
+    customerName: draft.customerName ?? "",
+    customerCompany: draft.customerCompany ?? "",
+    existingQuote,
+    existingQuoteLoading: existingQuoteQuery.isLoading,
+    existingQuoteFetching: existingQuoteQuery.isFetching,
+    draftRef,
+    setDraft,
+    setStep,
   });
 
   const equipmentSeedQuery = useQuery({
@@ -349,14 +384,6 @@ export function QuoteBuilderV2Page() {
     enabled: Boolean(equipmentId) && !packageId && !dealId,
     staleTime: 60_000,
   });
-
-  const existingQuote = useMemo(() => {
-    const quote = existingQuoteQuery.data?.quote;
-    if (quote && typeof quote === "object" && !Array.isArray(quote)) {
-      return quote as Record<string, unknown>;
-    }
-    return null;
-  }, [existingQuoteQuery.data?.quote]);
 
   useEffect(() => {
     const seed = equipmentSeedQuery.data;
@@ -481,103 +508,6 @@ export function QuoteBuilderV2Page() {
       : { ...current, branchSlug: branches[0]!.slug });
   }, [branches, draft.branchSlug]);
 
-  useEffect(() => {
-    if (!existingQuote) return;
-    const nextKey =
-      (typeof existingQuote.id === "string" && existingQuote.id.length > 0 ? existingQuote.id : "")
-      || packageId
-      || dealId
-      || "__saved_quote__";
-    if (existingQuoteHydrationKeyRef.current === nextKey) return;
-    existingQuoteHydrationKeyRef.current = nextKey;
-    const hydratedDraft = hydrateDraftFromSavedQuote(existingQuote);
-    setDraft((current) => ({
-      ...current,
-      ...hydratedDraft,
-      companyId: companyId || hydratedDraft.companyId,
-    }));
-    setStep(readPersistedStep(nextKey) ?? stepForWizardIndex(hydratedDraft.wizardStep) ?? "review");
-  }, [companyId, dealId, existingQuote, packageId]);
-
-  useEffect(() => {
-    if (!prospectConverted || !companyId) return;
-    if (packageId && (existingQuoteQuery.isLoading || existingQuoteQuery.isFetching)) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const hydrated = await hydrateCustomerById({ companyId });
-        if (!hydrated || cancelled) return;
-        setDraft((current) => ({
-          ...current,
-          contactId:       hydrated.contactId ?? current.contactId,
-          companyId:       hydrated.companyId ?? companyId,
-          customerName:    hydrated.customerName || current.customerName,
-          customerCompany: hydrated.customerCompany || current.customerCompany,
-          customerPhone:   hydrated.customerPhone || current.customerPhone,
-          customerEmail:   hydrated.customerEmail || current.customerEmail,
-          customerSignals: hydrated.signals,
-          customerWarmth:  hydrated.warmth,
-        }));
-        const nextStep =
-          readPersistedStep(packageId || null)
-          ?? stepForWizardIndex(draftRef.current.wizardStep)
-          ?? "customer";
-        setStep(nextStep);
-      } catch {
-        // Non-fatal: the company id still persists on next save.
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [companyId, existingQuoteQuery.isFetching, existingQuoteQuery.isLoading, packageId, prospectConverted]);
-
-  // Local draft persistence: lets a rep leave the builder mid-entry and
-  // resume from the deal page without losing their partial work. DB save
-  // requires customer + at least one equipment line, so partial drafts
-  // can't be persisted server-side; we keep them in localStorage keyed
-  // by (userId, deal/contact). User-scoping prevents shared-device leaks
-  // where one rep would see another rep's draft after sign-in. DB quote
-  // wins on hydration — local restore only runs when no saved quote
-  // exists and we know who the user is.
-  const userId = profile?.id ?? "";
-  const localDraftKey = useMemo(
-    () => userId
-      ? buildLocalDraftKey({
-        userId,
-        dealId: dealId || draft.dealId,
-        contactId: contactId || draft.contactId,
-      })
-      : null,
-    [userId, dealId, contactId, draft.dealId, draft.contactId],
-  );
-  const [localDraftHydrationComplete, setLocalDraftHydrationComplete] = useState(false);
-  const [localPersistEnabled, setLocalPersistEnabled] = useState(true);
-
-  useEffect(() => {
-    if (localDraftHydrationComplete) return;
-    if (!localDraftKey) return;
-    if (existingQuoteQuery.isFetching || existingQuoteQuery.isLoading) return;
-    if (existingQuote) {
-      setLocalDraftHydrationComplete(true);
-      return;
-    }
-    if (ironQuoteHandoffId) {
-      setLocalDraftHydrationComplete(true);
-      return;
-    }
-    const stored = loadLocalDraft(localDraftKey);
-    if (stored && !isDraftEmpty(stored)) {
-      setDraft((current) => ({ ...current, ...stored }));
-    }
-    setLocalDraftHydrationComplete(true);
-  }, [
-    existingQuote,
-    existingQuoteQuery.isFetching,
-    existingQuoteQuery.isLoading,
-    ironQuoteHandoffId,
-    localDraftHydrationComplete,
-    localDraftKey,
-  ]);
-
   const financingInput = useMemo<QuoteFinancingRequest>(() => ({
     packageSubtotal: subtotal,
     discountTotal,
@@ -679,141 +609,6 @@ export function QuoteBuilderV2Page() {
     if (hasSelected) return;
     setDraft((current) => ({ ...current, selectedFinanceScenario: allFinanceScenarios[0]!.label }));
   }, [allFinanceScenarios, customFinanceScenario, draft.selectedFinanceScenario]);
-
-  // Slice 20a: when QRM deep-links into Quote Builder with ?contact_id= or
-  // ?deal_id=, hydrate the customer from CRM so the Customer step renders
-  // a real name/company + intel panel on arrival instead of an empty form.
-  // Only runs while there is no saved quote to hydrate and no customer is
-  // already present, which avoids clobbering rep-entered edits.
-  useEffect(() => {
-    const hasCustomer = Boolean(
-      draft.customerName?.trim() || draft.customerCompany?.trim(),
-    );
-    if (hasCustomer) return;
-    if (existingQuoteQuery.isLoading || existingQuote) return;
-    if (!contactId && !companyId && !dealId) return;
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const hydrated = await hydrateCustomerById({
-          contactId: contactId || null,
-          companyId: companyId || null,
-          dealId:    dealId || null,
-        });
-        if (!hydrated || cancelled) return;
-        setDraft((current) => ({
-          ...current,
-          contactId:       hydrated.contactId ?? current.contactId,
-          companyId:       hydrated.companyId ?? current.companyId,
-          customerName:    hydrated.customerName,
-          customerCompany: hydrated.customerCompany,
-          customerPhone:   hydrated.customerPhone,
-          customerEmail:   hydrated.customerEmail,
-          customerSignals: hydrated.signals,
-          customerWarmth:  hydrated.warmth,
-        }));
-      } catch {
-        // Non-fatal — rep can still search/pick manually.
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [
-    contactId,
-    companyId,
-    dealId,
-    draft.customerCompany,
-    draft.customerName,
-    existingQuote,
-    existingQuoteQuery.isLoading,
-  ]);
-
-  // Iron quote intake handoff: a lightweight bridge from Iron's natural-
-  // language operator/trainer surface into Quote Builder. Saved quote/deal
-  // hydration still wins; this only seeds a new draft with raw intake notes
-  // and best-effort customer identity so reps verify customer first, then
-  // configure equipment/options/timeframe.
-  useEffect(() => {
-    if (!ironQuoteHandoffId) return;
-    if (packageId || dealId) return;
-    if (existingQuoteQuery.isFetching || existingQuoteQuery.isLoading) return;
-    if (existingQuote) return;
-    if (ironQuoteHandoffHydrationKeyRef.current === ironQuoteHandoffId) return;
-    ironQuoteHandoffHydrationKeyRef.current = ironQuoteHandoffId;
-
-    const handoff = readIronQuoteHandoff(ironQuoteHandoffId)
-      ?? normalizeIronQuoteHandoff(ironQuoteHandoffState, { expectedHandoffId: ironQuoteHandoffId });
-    if (!handoff) {
-      toast({
-        title: "Quote intake expired",
-        description: "Start manually or ask Iron again.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    clearIronQuoteHandoff();
-    const intakeSummary = buildIronQuoteIntakeSummary(handoff);
-    const equipmentLine = buildIronQuoteIntakeEquipmentLine(handoff);
-    const optionLines = buildIronQuoteIntakeOptionLines(handoff);
-    setDraft((current) => ({
-      ...current,
-      entryMode: "ai_chat",
-      contactId: handoff.resolvedContactId ?? current.contactId,
-      companyId: handoff.resolvedCompanyId ?? current.companyId,
-      customerName: current.customerName || handoff.resolvedCustomerName || handoff.structuredCustomerText || "",
-      customerCompany: current.customerCompany || handoff.resolvedCustomerCompany || handoff.structuredCustomerText || "",
-      customerPhone: current.customerPhone || handoff.resolvedCustomerPhone || "",
-      customerEmail: current.customerEmail || handoff.resolvedCustomerEmail || "",
-      voiceSummary: current.voiceSummary || intakeSummary,
-      equipment: current.equipment.length > 0 || !equipmentLine ? current.equipment : [equipmentLine],
-      attachments: appendMissingIronLines(current.attachments, optionLines),
-    }));
-    setAiPrompt(intakeSummary);
-    setAiIntakeMessage(
-      handoff.structuredEquipmentText
-        ? "Iron captured the quote intake and created starter equipment/options lines. Verify customer, price the lines, then continue the quote."
-        : "Iron brought this quote intake over. Verify the customer, then configure equipment/options/timeframe before pricing.",
-    );
-    setStep(equipmentLine ? "equipment" : "customer");
-  }, [
-    dealId,
-    existingQuote,
-    existingQuoteQuery.isFetching,
-    existingQuoteQuery.isLoading,
-    ironQuoteHandoffId,
-    ironQuoteHandoffState,
-    packageId,
-  ]);
-
-  // Slice 14: pick up a pending voice-quote handoff only when the URL's
-  // voice_session_id matches the sessionStorage payload. Saved quote/deal
-  // hydration wins, so advisor/deal launches do not get overwritten by stale
-  // browser handoffs.
-  useEffect(() => {
-    if (!voiceSessionId) return;
-    if (packageId || dealId) return;
-    if (existingQuoteQuery.isFetching || existingQuoteQuery.isLoading) return;
-    if (voiceHandoffHydrationKeyRef.current === voiceSessionId) return;
-    voiceHandoffHydrationKeyRef.current = voiceSessionId;
-
-    const handoff = readVoiceQuoteHandoff(voiceSessionId);
-    if (!handoff) {
-      toast({
-        title: "Voice handoff expired",
-        description: "Start manually or record again.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    clearVoiceQuoteHandoff();
-    applyScenarioSelection(handoff, "voice_handoff");
-    // applyScenarioSelection is intentionally omitted so this remains keyed
-    // only by the stable handoff id, not by render-local function identity.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dealId, existingQuoteQuery.isFetching, existingQuoteQuery.isLoading, packageId, voiceSessionId]);
-
 
   const {
     saveMutation,
@@ -1025,37 +820,13 @@ export function QuoteBuilderV2Page() {
     setDocumentArtifact(null);
   }, [documentFallbackGeneratedAt, draftSaveSignature]);
 
-  useEffect(() => {
-    if (!localDraftHydrationComplete) return;
-    if (!localPersistEnabled) return;
-    if (!localDraftKey) return;
-    if (isDraftEmpty(draftRef.current)) {
-      clearLocalDraft(localDraftKey);
-      return;
-    }
-    const tid = window.setTimeout(() => {
-      const d = draftRef.current;
-      if (!localDraftKey || isDraftEmpty(d)) return;
-      saveLocalDraft(localDraftKey, d);
-    }, 450);
-    return () => window.clearTimeout(tid);
-  }, [draftSaveSignature, localDraftHydrationComplete, localDraftKey, localPersistEnabled]);
-
-  useEffect(() => {
-    if (!localDraftHydrationComplete || !localPersistEnabled || !localDraftKey) return;
-    const flush = () => {
-      const key = localDraftKey;
-      if (!key) return;
-      const d = draftRef.current;
-      if (!isDraftEmpty(d)) saveLocalDraft(key, d);
-    };
-    window.addEventListener("pagehide", flush);
-    window.addEventListener("beforeunload", flush);
-    return () => {
-      window.removeEventListener("pagehide", flush);
-      window.removeEventListener("beforeunload", flush);
-    };
-  }, [localDraftHydrationComplete, localDraftKey, localPersistEnabled]);
+  useQuoteBuilderLocalDraftPersist({
+    draftSaveSignature,
+    localDraftHydrationComplete,
+    localDraftKey,
+    localPersistEnabled,
+    draftRef,
+  });
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -1157,25 +928,6 @@ export function QuoteBuilderV2Page() {
       });
     },
   });
-
-  // ── Deal Assistant (Slice 05) ─────────────────────────────────────────────
-  // Pre-populate form state when rep selects an AI-generated scenario.
-  // Behavior: (a) set equipment from resolved model, (b) store prompt as
-  // voiceSummary, (c) advance to equipment step for review — never auto-save.
-  const applyScenarioSelection = (
-    selection: ScenarioSelection & { at?: string },
-    source: ScenarioSelectionSource,
-  ) => {
-    setDealAssistantOpen(false);
-    setDraft((current) => ({
-      ...current,
-      ...buildScenarioSelectionDraftPatch(current, selection, source),
-    }));
-
-    // Slice 20a: land on the Customer step first so the rep picks who the
-    // quote is for before confirming the AI-matched equipment.
-    setStep("customer");
-  };
 
   const handleScenarioSelection = (selection: ScenarioSelection) => {
     applyScenarioSelection(selection, "deal_assistant");

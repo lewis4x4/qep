@@ -26,7 +26,7 @@ import {
   type PricingLineKind,
 } from "../lib/pricing-adder-fields";
 import type { TaxCalculation } from "../lib/tax-api";
-import { PricingAdderBuckets } from "../components/PricingAdderBuckets";
+import { miscPricingLineKey, PricingAdderBuckets } from "../components/PricingAdderBuckets";
 import { SummaryRow } from "../components/SummaryRow";
 import { useWizard } from "../wizard/useWizard";
 
@@ -259,10 +259,15 @@ export function PricingStep({
           miscCreditAmount={miscCreditAmount}
           setMiscCreditAmount={setMiscCreditAmount}
           onAddMiscPricingLine={onAddMiscPricingLine}
-          onRemoveMiscLine={(lineId) => setDraft((current) => ({
-            ...current,
-            pricingLines: (current.pricingLines ?? []).filter((item) => item.id !== lineId),
-          }))}
+          onRemoveMiscLine={(line) => {
+            const key = miscPricingLineKey(line);
+            setDraft((current) => ({
+              ...current,
+              pricingLines: (current.pricingLines ?? []).filter(
+                (item) => miscPricingLineKey(item) !== key,
+              ),
+            }));
+          }}
         />
 
       </Card>

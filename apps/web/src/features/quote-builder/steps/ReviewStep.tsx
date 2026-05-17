@@ -248,6 +248,7 @@ export function ReviewStep({
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             <button
               type="button"
+              aria-pressed={(draft.postApprovalAction ?? "return_to_rep") === "return_to_rep"}
               onClick={() => setDraft((current) => ({ ...current, postApprovalAction: "return_to_rep" }))}
               className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
                 (draft.postApprovalAction ?? "return_to_rep") === "return_to_rep"
@@ -260,6 +261,7 @@ export function ReviewStep({
             </button>
             <button
               type="button"
+              aria-pressed={draft.postApprovalAction === "auto_send_customer"}
               onClick={() => setDraft((current) => ({ ...current, postApprovalAction: "auto_send_customer" }))}
               className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
                 draft.postApprovalAction === "auto_send_customer"
