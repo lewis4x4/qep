@@ -61,9 +61,7 @@ const VoiceHistoryPage = lazy(() =>
 // (mounted at /sales/quotes, /sales/quotes/new, /sales/quotes/:quoteId). The
 // legacy /quote-v2, /quote, /quotes paths still resolve via redirects to
 // the new SalesShell-hosted entry point.
-const VoiceQuotePage = lazy(() =>
-  import("./features/voice-quote/pages/VoiceQuotePage").then((m) => ({ default: m.VoiceQuotePage }))
-);
+// WAVE phase 3: VoiceQuotePage now lives at /sales/voice-quote under SalesRoutes.
 const DashboardRouter = lazy(() =>
   import("./features/dashboards/pages/DashboardRouter").then((m) => ({ default: m.DashboardRouter }))
 );
@@ -1113,16 +1111,9 @@ function App() {
               <Route path="/quotes" element={<RedirectPreserveSearch to="/sales/quotes" />} />
               {/* WAVE phase 1: legacy /quote-v2 redirects to the new SalesShell home. */}
               <Route path="/quote-v2" element={<RedirectPreserveSearch to="/sales/quotes/new" />} />
-              <Route
-                path="/voice-quote"
-                element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <VoiceQuotePage />
-                  ) : (
-                    <Navigate to="/dashboard" replace />
-                  )
-                }
-              />
+              {/* WAVE phase 3: /voice-quote redirects into SalesShell at
+                  /sales/voice-quote. The new route lives in SalesRoutes. */}
+              <Route path="/voice-quote" element={<RedirectPreserveSearch to="/sales/voice-quote" />} />
               {/* Service Engine routes */}
               <Route
                 path="/service/labor-pricing"

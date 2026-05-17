@@ -114,8 +114,9 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     sectionLabel: "Execution",
   },
   {
+    // WAVE phase 3: rep-facing Voice Quote now lives inside SalesShell.
     label: "Voice Quote",
-    href: "/voice-quote",
+    href: "/sales/voice-quote",
     icon: Mic,
     roles: ["rep", "admin", "manager", "owner"],
     primaryHeaderId: "sales",

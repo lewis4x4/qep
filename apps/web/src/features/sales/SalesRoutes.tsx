@@ -31,6 +31,11 @@ const FieldNoteHistoryPage = lazy(() =>
   import("./pages/FieldNoteHistoryPage").then((m) => ({ default: m.FieldNoteHistoryPage })),
 );
 
+// WAVE phase 3: Voice Quote hosts inside SalesShell.
+const VoiceQuotePage = lazy(() =>
+  import("../voice-quote/pages/VoiceQuotePage").then((m) => ({ default: m.VoiceQuotePage })),
+);
+
 function SalesRouteFallback() {
   return (
     <div className="flex items-center justify-center h-64">
@@ -118,6 +123,15 @@ export function SalesRoutes() {
           element={
             <Suspense fallback={<SalesRouteFallback />}>
               <FieldNoteHistoryPage />
+            </Suspense>
+          }
+        />
+        {/* WAVE phase 3: Voice Quote route */}
+        <Route
+          path="voice-quote"
+          element={
+            <Suspense fallback={<SalesRouteFallback />}>
+              <VoiceQuotePage />
             </Suspense>
           }
         />
