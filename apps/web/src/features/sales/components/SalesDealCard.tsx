@@ -116,7 +116,7 @@ export function SalesDealCard({
 
   return (
     <div
-      onClick={() => navigate(`/sales/customers/${deal.company_id}`)}
+      onClick={() => navigate(`/sales/deals/${deal.deal_id}`)}
       className={`relative rounded-[14px] bg-[hsl(var(--card))] border overflow-hidden cursor-pointer transition-all duration-150 hover:border-white/20 hover:shadow-lg hover:shadow-black/20 ${
         stalled ? "border-amber-500/35" : "border-white/[0.06]"
       }`}

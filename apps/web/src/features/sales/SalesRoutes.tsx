@@ -41,6 +41,11 @@ const MyMirrorPage = lazy(() =>
   import("./pages/MyMirrorPage").then((m) => ({ default: m.MyMirrorPage })),
 );
 
+// WAVE phase 5: Sales-rep Deal Detail.
+const DealDetailPage = lazy(() =>
+  import("./pages/DealDetailPage").then((m) => ({ default: m.DealDetailPage })),
+);
+
 function SalesRouteFallback() {
   return (
     <div className="flex items-center justify-center h-64">
@@ -146,6 +151,15 @@ export function SalesRoutes() {
           element={
             <Suspense fallback={<SalesRouteFallback />}>
               <MyMirrorPage />
+            </Suspense>
+          }
+        />
+        {/* WAVE phase 5: Sales-rep Deal Detail */}
+        <Route
+          path="deals/:dealId"
+          element={
+            <Suspense fallback={<SalesRouteFallback />}>
+              <DealDetailPage />
             </Suspense>
           }
         />
