@@ -1,0 +1,66 @@
+# WAVE CI / Quality — Slice 1: Lighthouse mobile workflow.
+#
+# Runs `lhci autorun` against the eight highest-value sales-rep routes
+# in mobile emulation. Triggered on PRs that touch apps/web/** so a
+# regression to performance or accessibility blocks the merge.
+#
+# Targets the staging host by default (https://qep.blackrockai.co).
+# LHCI_BASE_URL can be overridden via workflow_dispatch input or by
+# setting a repo variable if we ever point this at a preview deploy.
+#
+# Guest-route note: PRs without PLAYWRIGHT_TEST_EMAIL /
+# PLAYWRIGHT_TEST_PASSWORD secrets (e.g. fork PRs) measure the login
+# page — that guest baseline is acceptable for the initial slice. An
+# authenticated runner that signs in via Playwright + saves storage
+# state lands in a follow-on slice.
+name: Lighthouse Mobile
+
+on:
+  pull_request:
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/lighthouse-mobile.yml"
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Override LHCI base URL (defaults to staging)."
+        required: false
+        default: "https://qep.blackrockai.co"
+
+concurrency:
+  group: lighthouse-mobile-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: .
+        run: bun install --frozen-lockfile
+
+      - name: Warn when staging credentials missing
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          PLAYWRIGHT_TEST_EMAIL: ${{ secrets.PLAYWRIGHT_TEST_EMAIL }}
+          PLAYWRIGHT_TEST_PASSWORD: ${{ secrets.PLAYWRIGHT_TEST_PASSWORD }}
+        run: |
+          if [ -z "$PLAYWRIGHT_TEST_EMAIL" ] || [ -z "$PLAYWRIGHT_TEST_PASSWORD" ]; then
+            echo "::warning::PLAYWRIGHT_TEST_EMAIL / PLAYWRIGHT_TEST_PASSWORD not set — Lighthouse will only hit guest routes (login page)."
+          fi
+
+      - name: Run Lighthouse against staging
+        env:
+          LHCI_BASE_URL: ${{ github.event.inputs.base_url || 'https://qep.blackrockai.co' }}
+        run: bun run lighthouse:mobile

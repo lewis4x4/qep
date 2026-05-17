@@ -16,7 +16,9 @@
     "test:e2e:install": "playwright install --with-deps chromium",
     "test:e2e:staging": "PLAYWRIGHT_BASE_URL=https://qep.blackrockai.co PLAYWRIGHT_SKIP_WEBSERVER=1 playwright test",
     "bundle:analyze": "ANALYZE=true bun run build",
-    "bundle:check": "node ../../scripts/check-web-bundle-size.mjs"
+    "bundle:check": "node ../../scripts/check-web-bundle-size.mjs",
+    "lighthouse:mobile": "lhci autorun --config=.lighthouserc.cjs",
+    "lighthouse:mobile:local": "LHCI_BASE_URL=http://127.0.0.1:5173 lhci autorun --config=.lighthouserc.cjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -57,6 +59,7 @@
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^20.9.0",
+    "@lhci/cli": "^0.15.1",
     "@playwright/test": "^1.60.0",
     "@sentry/vite-plugin": "^5.1.1",
     "@tailwindcss/typography": "^0.5.19",
