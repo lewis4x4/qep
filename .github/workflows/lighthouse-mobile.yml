@@ -1,18 +1,27 @@
-# WAVE CI / Quality — Slice 1: Lighthouse mobile workflow.
+# WAVE Quality Tail (Slice 1): authenticated Lighthouse mobile workflow.
 #
 # Runs `lhci autorun` against the eight highest-value sales-rep routes
 # in mobile emulation. Triggered on PRs that touch apps/web/** so a
 # regression to performance or accessibility blocks the merge.
 #
-# Targets the staging host by default (https://qep.blackrockai.co).
-# LHCI_BASE_URL can be overridden via workflow_dispatch input or by
-# setting a repo variable if we ever point this at a preview deploy.
+# Two execution modes:
 #
-# Guest-route note: PRs without PLAYWRIGHT_TEST_EMAIL /
-# PLAYWRIGHT_TEST_PASSWORD secrets (e.g. fork PRs) measure the login
-# page — that guest baseline is acceptable for the initial slice. An
-# authenticated runner that signs in via Playwright + saves storage
-# state lands in a follow-on slice.
+#   Authenticated (when PLAYWRIGHT_TEST_EMAIL + PLAYWRIGHT_TEST_PASSWORD
+#   secrets are available — same-repo PRs and workflow_dispatch):
+#     1. `bun run lighthouse:auth-setup` signs in via Playwright and
+#        writes apps/web/.lighthouse-storage-state.json.
+#     2. `bunx lhci autorun` runs with LHCI_AUTHENTICATED=true so the
+#        puppeteerScript at scripts/lighthouse-puppeteer-auth.cjs
+#        loads that storage state into the headless browser before
+#        each audit — /sales/* routes render the real SalesShell.
+#
+#   Guest fallback (fork PRs without secrets, or local debug):
+#     - The workflow emits a ::warning:: and runs `bun run
+#       lighthouse:mobile` which still hits the eight URLs but
+#       measures the login page for routes that gate.
+#
+# Targets the staging host by default (https://qep.blackrockai.co).
+# LHCI_BASE_URL can be overridden via workflow_dispatch input.
 name: Lighthouse Mobile
 
 on:
@@ -35,6 +44,11 @@ jobs:
   lighthouse:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # Project-wide env so each step's `if:` can check env.HAS_CREDS
+    # to branch between the authenticated path and the guest fallback.
+    env:
+      HAS_CREDS: ${{ secrets.PLAYWRIGHT_TEST_EMAIL != '' && secrets.PLAYWRIGHT_TEST_PASSWORD != '' && 'true' || '' }}
+      LHCI_BASE_URL: ${{ github.event.inputs.base_url || 'https://qep.blackrockai.co' }}
     defaults:
       run:
         working-directory: apps/web
@@ -50,17 +64,25 @@ jobs:
         working-directory: .
         run: bun install --frozen-lockfile
 
-      - name: Warn when staging credentials missing
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+      - name: Install Playwright Chromium (authenticated path only)
+        if: env.HAS_CREDS == 'true'
+        run: bunx playwright install chromium --with-deps
+
+      - name: Capture authenticated storage state
+        if: env.HAS_CREDS == 'true'
         env:
           PLAYWRIGHT_TEST_EMAIL: ${{ secrets.PLAYWRIGHT_TEST_EMAIL }}
           PLAYWRIGHT_TEST_PASSWORD: ${{ secrets.PLAYWRIGHT_TEST_PASSWORD }}
-        run: |
-          if [ -z "$PLAYWRIGHT_TEST_EMAIL" ] || [ -z "$PLAYWRIGHT_TEST_PASSWORD" ]; then
-            echo "::warning::PLAYWRIGHT_TEST_EMAIL / PLAYWRIGHT_TEST_PASSWORD not set — Lighthouse will only hit guest routes (login page)."
-          fi
+        run: bun run lighthouse:auth-setup
 
-      - name: Run Lighthouse against staging
+      - name: Lighthouse — authenticated mobile run
+        if: env.HAS_CREDS == 'true'
         env:
-          LHCI_BASE_URL: ${{ github.event.inputs.base_url || 'https://qep.blackrockai.co' }}
-        run: bun run lighthouse:mobile
+          LHCI_AUTHENTICATED: "true"
+        run: bunx lhci autorun --config=.lighthouserc.cjs
+
+      - name: Lighthouse — guest fallback when no credentials
+        if: env.HAS_CREDS != 'true'
+        run: |
+          echo "::warning::Running Lighthouse against guest routes only (PLAYWRIGHT_TEST_EMAIL / PLAYWRIGHT_TEST_PASSWORD not available — typically a fork PR)."
+          bun run lighthouse:mobile

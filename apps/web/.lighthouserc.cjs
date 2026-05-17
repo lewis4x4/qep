@@ -16,11 +16,18 @@
  * host; local runs use the `lighthouse:mobile:local` script which
  * points at the Vite dev server.
  *
- * Guest-route note: the eight routes require auth. When run as guest
- * (no Playwright storage state), most of them redirect to the login
- * page — Lighthouse still measures the login page. That guest-route
- * baseline is acceptable for Slice 1; an authenticated runner lands
- * in a follow-on slice once the multi-approver wave closes.
+ * Auth modes:
+ *   - LHCI_AUTHENTICATED unset / "false" (default): guest-route run.
+ *     Routes redirect to login; Lighthouse measures the login surface.
+ *     Used by fork PRs without secrets — the workflow surfaces a
+ *     ::warning:: when it falls back to this mode.
+ *   - LHCI_AUTHENTICATED="true": the puppeteerScript at
+ *     scripts/lighthouse-puppeteer-auth.cjs loads the storage state
+ *     captured by scripts/lighthouse-auth-setup.mjs into the headless
+ *     browser before each audit, so SalesShell renders for real
+ *     instead of bouncing through the login redirect.
+ *
+ * (Quality Tail Slice 1)
  */
 
 const SALES_REP_ROUTES = [
@@ -35,12 +42,16 @@ const SALES_REP_ROUTES = [
 ];
 
 const baseUrl = process.env.LHCI_BASE_URL || "https://qep.blackrockai.co";
+const authenticated = process.env.LHCI_AUTHENTICATED === "true";
 
 module.exports = {
   ci: {
     collect: {
       url: SALES_REP_ROUTES.map((path) => `${baseUrl}${path}`),
       numberOfRuns: 1,
+      puppeteerScript: authenticated
+        ? "./scripts/lighthouse-puppeteer-auth.cjs"
+        : undefined,
       settings: {
         preset: "mobile",
         throttlingMethod: "simulate",
