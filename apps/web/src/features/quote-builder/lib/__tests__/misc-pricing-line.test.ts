@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { QuoteLineItemDraft } from "../../../../../../../shared/qep-moonshot-contracts";
 
-import { miscPricingLineKey } from "../PricingAdderBuckets";
+import { miscPricingLineKey } from "../misc-pricing-line";
 
 describe("miscPricingLineKey", () => {
   test("prefers line id", () => {

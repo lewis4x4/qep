@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
@@ -62,8 +62,11 @@ import {
 import { useApprovalBypass } from "../hooks/useApprovalBypass";
 import { useExistingQuoteLoad } from "../hooks/useExistingQuoteLoad";
 import { useQuoteBuilderHandoffs } from "../hooks/useQuoteBuilderHandoffs";
+import { useQuoteBuilderInboundFreightReset } from "../hooks/useQuoteBuilderInboundFreightReset";
 import { useQuoteBuilderCrmHydration } from "../hooks/useQuoteBuilderCrmHydration";
 import { useQuoteBuilderDefaultBranch } from "../hooks/useQuoteBuilderDefaultBranch";
+import { useQuoteBuilderDetailsDefaults } from "../hooks/useQuoteBuilderDetailsDefaults";
+import { useQuoteBuilderDocumentInvalidation } from "../hooks/useQuoteBuilderDocumentInvalidation";
 import { useQuoteBuilderLocalDraft } from "../hooks/useQuoteBuilderLocalDraft";
 import { useQuoteBuilderEquipmentSeed } from "../hooks/useQuoteBuilderEquipmentSeed";
 import { useQuoteBuilderFinanceScenarioSync } from "../hooks/useQuoteBuilderFinanceScenarioSync";
@@ -71,6 +74,7 @@ import { useQuoteBuilderKeyboardShortcuts } from "../hooks/useQuoteBuilderKeyboa
 import { useQuoteBuilderLocalDraftPersist } from "../hooks/useQuoteBuilderLocalDraftPersist";
 import { useQuoteBuilderSave } from "../hooks/useQuoteBuilderSave";
 import { useQuoteBuilderTaxSync } from "../hooks/useQuoteBuilderTaxSync";
+import { useQuoteBuilderWizardPersist } from "../hooks/useQuoteBuilderWizardPersist";
 import { useDraftAutosave } from "../hooks/useDraftAutosave";
 import { useLiveMargin } from "../hooks/useLiveMargin";
 import { usePdiAutofill } from "../hooks/usePdiAutofill";
@@ -117,10 +121,7 @@ import {
   WizardStateProvider,
   type WizardStateValue,
 } from "../wizard/WizardStateProvider";
-import {
-  STEP_STORAGE_PREFIX,
-  persistStep,
-} from "../wizard/wizard-storage";
+import { STEP_STORAGE_PREFIX } from "../wizard/wizard-storage";
 import { WizardShell } from "../wizard/WizardShell";
 import { QuoteWizardStepRouter } from "../wizard/QuoteWizardStepRouter";
 import {
@@ -152,7 +153,6 @@ import {
   type TradeChecklistKey,
 } from "../lib/trade-checklist";
 import {
-  addDaysIso,
   availabilityClientLineKey,
   availabilityLabel,
   availabilityRequestCreatedAtForLine,
@@ -642,26 +642,14 @@ export function QuoteBuilderV2Page() {
 
   const currentWizardStepNumber = wizardIndexForStep(step);
 
-  useEffect(() => {
-    persistStep(activeQuotePackageId, step);
-    setDraft((current) => current.wizardStep === Math.max(current.wizardStep ?? 1, currentWizardStepNumber)
-      ? current
-      : { ...current, wizardStep: Math.max(current.wizardStep ?? 1, currentWizardStepNumber) });
-  }, [activeQuotePackageId, currentWizardStepNumber, step]);
+  useQuoteBuilderWizardPersist({
+    activeQuotePackageId,
+    step,
+    currentWizardStepNumber,
+    setDraft,
+  });
 
-  useEffect(() => {
-    if (step !== "details" && step !== "send") return;
-    setDraft((current) => ({
-      ...current,
-      expiresAt: current.expiresAt ?? addDaysIso(30),
-      followUpAt: current.followUpAt ?? addDaysIso(3),
-      whyThisMachine: current.whyThisMachine
-        ?? current.recommendation?.reasoning
-        ?? current.voiceSummary
-        ?? "",
-      whyThisMachineConfirmed: current.whyThisMachineConfirmed ?? false,
-    }));
-  }, [step]);
+  useQuoteBuilderDetailsDefaults({ step, setDraft });
 
   const handleQuoteStatusChange = useCallback((status: QuoteWorkspaceDraft["quoteStatus"]) => {
     setDraft((current) => ({ ...current, quoteStatus: status }));
@@ -777,13 +765,13 @@ export function QuoteBuilderV2Page() {
     setAutoSaveState,
   });
 
-  useEffect(() => {
-    if (!documentFallbackGeneratedAt) return;
-    if (documentDraftSignatureRef.current === draftSaveSignature) return;
-    documentDraftSignatureRef.current = "";
-    setDocumentFallbackGeneratedAt(null);
-    setDocumentArtifact(null);
-  }, [documentFallbackGeneratedAt, draftSaveSignature]);
+  useQuoteBuilderDocumentInvalidation({
+    documentFallbackGeneratedAt,
+    draftSaveSignature,
+    documentDraftSignatureRef,
+    setDocumentFallbackGeneratedAt,
+    setDocumentArtifact,
+  });
 
   useQuoteBuilderLocalDraftPersist({
     draftSaveSignature,
@@ -1438,15 +1426,6 @@ export function QuoteBuilderV2Page() {
     },
   });
 
-  useEffect(() => {
-    if (inboundFreightEligible) return;
-    const inboundField = PRICING_ADDER_FIELDS.find((field) => field.id === "inbound_freight");
-    if (!inboundField) return;
-    const existingInbound = pricingLine(inboundField);
-    if (!existingInbound) return;
-    upsertPricingLine(inboundField, 0);
-  }, [inboundFreightEligible, draft.pricingLines]);
-
   function markAvailabilityConfirmationRequested(index: number): void {
     const equipment = draft.equipment[index];
     if (!equipment) return;
@@ -1562,6 +1541,13 @@ export function QuoteBuilderV2Page() {
       };
     });
   }
+
+  useQuoteBuilderInboundFreightReset({
+    inboundFreightEligible,
+    pricingLines: draft.pricingLines,
+    pricingLine,
+    upsertPricingLine,
+  });
 
   const discountLine = pricingLine("discount");
   const leaseQuotingEnabled = import.meta.env.VITE_FEATURE_LEASE_QUOTING === "true";

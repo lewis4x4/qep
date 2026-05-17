@@ -26,7 +26,8 @@ import {
   type PricingLineKind,
 } from "../lib/pricing-adder-fields";
 import type { TaxCalculation } from "../lib/tax-api";
-import { miscPricingLineKey, PricingAdderBuckets } from "../components/PricingAdderBuckets";
+import { PricingAdderBuckets } from "../components/PricingAdderBuckets";
+import { miscPricingLineKey } from "../lib/misc-pricing-line";
 import { SummaryRow } from "../components/SummaryRow";
 import { useWizard } from "../wizard/useWizard";
 
