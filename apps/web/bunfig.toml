@@ -4,8 +4,13 @@
 # work whether `bun test` is invoked from the repo root or from apps/web/.
 # (The root-level bunfig.toml also defines preload, but its path is
 # cwd-relative — not bunfig-relative — so we need one entry per cwd.)
+#
+# WAVE CI/Quality (Slice 4): mirror the 30-second per-test timeout
+# from the root bunfig.toml so direct `bun test` invocations from
+# apps/web/ also can't hang on a single bad file.
 
 [test]
+timeout = 30000
 preload = [
   "./test-setup/env-vars.ts",
   "./test-setup/happy-dom.ts",

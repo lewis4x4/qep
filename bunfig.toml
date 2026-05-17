@@ -15,6 +15,14 @@
 
 [test]
 root = "apps"
+# Per-test timeout safety net (WAVE CI/Quality Slice 4). The
+# pre-Slice-3 hang turned out to be a stuck React tree from
+# missing afterEach(cleanup) in older integration tests — the
+# global cleanup installed in apps/web/test-setup/happy-dom.ts
+# resolves it. The 30-second timeout below is the belt-and-
+# suspenders safety net so any single test that does hang cannot
+# block the whole suite.
+timeout = 30000
 # Slice 08 CP6: happy-dom preload for .integration.test.tsx files.
 # Unit .test.ts files are unaffected — the registrator only installs
 # document/window globals when they're not already defined.
