@@ -21,18 +21,21 @@ export function TradeInInputCard({ tradeAllowance, onChange }: TradeInInputCardP
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Equipment description (e.g. 2019 CAT 320)"
-        className="text-sm"
+        className="text-base sm:text-sm"
+        aria-label="Trade-in equipment description"
       />
       <div className="relative">
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
         <Input
           type="number"
+          inputMode="decimal"
           min={0}
           step={500}
           value={tradeAllowance || ""}
           onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
           placeholder="Estimated value"
-          className="pl-7 text-sm"
+          className="pl-7 text-base sm:text-sm"
+          aria-label="Trade-in estimated value"
         />
       </div>
       {tradeAllowance > 0 && (

@@ -120,12 +120,17 @@ export function TradeInStep({
           <Button
             size="sm"
             variant="outline"
+            className="min-h-[44px]"
             onClick={() => onOpenTradeCapture("hourMeter")}
+            data-testid="trade-open-capture"
           >
             Open trade capture
           </Button>
         </div>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {/* WAVE B3 deep reflow: tiles stack single-column on phone (1-col
+            via sm:grid-cols-2 default), each tile lands min-h-[44px]
+            for a thumb target. */}
+        <div className="mt-3 grid gap-2 sm:grid-cols-2" data-testid="trade-evidence-checklist">
           {TRADE_CHECKLIST_ITEMS.map((item) => {
             const complete = tradeChecklist[item.key];
             return (
@@ -133,7 +138,9 @@ export function TradeInStep({
                 key={item.key}
                 type="button"
                 onClick={() => onOpenTradeCapture(item.key)}
-                className={`flex items-start gap-3 rounded border px-3 py-3 text-left text-sm transition ${
+                aria-pressed={complete}
+                data-trade-evidence={item.key}
+                className={`flex min-h-[44px] items-start gap-3 rounded border px-3 py-3 text-left text-sm transition ${
                   complete ? "border-emerald-500/30 bg-emerald-500/5" : "border-border/70 bg-card/50 hover:border-qep-orange/60"
                 }`}
               >
