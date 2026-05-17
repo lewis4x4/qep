@@ -2,10 +2,16 @@
  * PR 20 — Quote wizard Step 11 (send & log).
  */
 
-import { ArrowLeft, FileText, Loader2, Mail, Save, Smartphone } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileText, Loader2, Mail, Save, Smartphone } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+// WAVE parity-close (Slice 3): readiness diagnostics collapse into an
+// accordion on phone, the sticky footer pins Save follow-up with a
+// safe-area inset, and a successful send fills the viewport with a
+// full-bleed confirmation banner.
+import { MobileSectionAccordion } from "@/features/sales/components/MobileSectionAccordion";
+import { useIsMobileViewport } from "@/features/sales/hooks/useIsMobileViewport";
 import { QuoteSendActionCard } from "../components/QuoteSendActionCard";
 import { ReadinessRow } from "../components/ReadinessRow";
 import { dateTimeInputValue, isoFromDateTimeInput, shortDateTime } from "../lib/quote-date-input";
@@ -63,6 +69,49 @@ export function SendStep({
   onSaveFollowUp,
 }: SendStepProps) {
   const { draft, setDraft, setStep } = useWizard();
+  const isMobile = useIsMobileViewport();
+  const readinessAllReady =
+    approvalCaseCanSend &&
+    documentReady &&
+    Boolean(draft.followUpAt) &&
+    taxResolved &&
+    (!whyThisMachineRequired || draft.whyThisMachineConfirmed === true);
+  const readinessSummary = readinessAllReady ? "All gates clear" : "Action needed";
+
+  const readinessRows = (
+    <div className="grid gap-3 sm:grid-cols-3" data-testid="send-step-readiness-rows">
+      <ReadinessRow label="Approval case" ready={approvalCaseCanSend} detail={approvalBlocker ?? "canSend is true"} />
+      <ReadinessRow label="Document" ready={documentReady} detail={documentReady ? documentPersistenceLabel : "Generate Step 10 preview first"} />
+      <ReadinessRow label="Follow-up" ready={Boolean(draft.followUpAt)} detail={draft.followUpAt ? (shortDateTime(draft.followUpAt) ?? "Scheduled") : "Required before email/text"} />
+      <ReadinessRow label="Tax" ready={taxResolved} detail={taxResolutionBlocker ?? "Tax preview resolved"} />
+      <ReadinessRow label="Why this machine" ready={!whyThisMachineRequired || draft.whyThisMachineConfirmed === true} detail={whyThisMachineBlocker ?? "Rep confirmed or not required"} />
+    </div>
+  );
+
+  const postApprovalRouting = (
+    <div className="rounded-lg border border-border/70 bg-card/40 px-3 py-2">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Post-approval routing</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {(draft.postApprovalAction ?? "return_to_rep") === "auto_send_customer"
+          ? "Auto-send to customer is selected. Once approval clears, the system attempts immediate customer delivery."
+          : "Return-to-rep is selected. Approval clears the quote, but the rep controls final customer send timing."}
+      </p>
+    </div>
+  );
+
+  const followUpInput = (
+    <label className="block space-y-1 text-sm">
+      <span className="text-xs font-medium text-muted-foreground">Required follow-up reminder</span>
+      <input
+        type="datetime-local"
+        value={dateTimeInputValue(draft.followUpAt)}
+        onChange={(event) => setDraft((current) => ({ ...current, followUpAt: isoFromDateTimeInput(event.target.value) }))}
+        className="min-h-[44px] w-full rounded border border-input bg-card px-3 py-2 text-base sm:max-w-xs sm:text-sm"
+        data-testid="send-step-followup-input"
+      />
+      <span className="block text-xs text-muted-foreground">Defaults to +3 days when absent. Email/text send/log remains blocked without a scheduled follow-up.</span>
+    </label>
+  );
 
   return (
     <div className="space-y-4">
@@ -105,33 +154,42 @@ export function SendStep({
         </Card>
       )}
 
-      <Card className="p-4">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <ReadinessRow label="Approval case" ready={approvalCaseCanSend} detail={approvalBlocker ?? "canSend is true"} />
-          <ReadinessRow label="Document" ready={documentReady} detail={documentReady ? documentPersistenceLabel : "Generate Step 10 preview first"} />
-          <ReadinessRow label="Follow-up" ready={Boolean(draft.followUpAt)} detail={draft.followUpAt ? (shortDateTime(draft.followUpAt) ?? "Scheduled") : "Required before email/text"} />
-          <ReadinessRow label="Tax" ready={taxResolved} detail={taxResolutionBlocker ?? "Tax preview resolved"} />
-          <ReadinessRow label="Why this machine" ready={!whyThisMachineRequired || draft.whyThisMachineConfirmed === true} detail={whyThisMachineBlocker ?? "Rep confirmed or not required"} />
+      {isMobile ? (
+        <MobileSectionAccordion
+          index={1}
+          title="Readiness gates"
+          caption={readinessSummary}
+          defaultOpen={!readinessAllReady}
+        >
+          <div className="space-y-3 pt-2">
+            {readinessRows}
+            {postApprovalRouting}
+            {followUpInput}
+          </div>
+        </MobileSectionAccordion>
+      ) : (
+        <Card className="p-4">
+          {readinessRows}
+          <div className="mt-4">{postApprovalRouting}</div>
+          <div className="mt-4">{followUpInput}</div>
+        </Card>
+      )}
+
+      {/* WAVE parity-close (Slice 3): on mobile a successful send fills
+          the upper viewport with a full-bleed banner so the rep sees
+          the confirmation without scrolling; desktop renders the
+          existing inline success/error strip below the cards. */}
+      {isMobile && deliveryActionMessage ? (
+        <div
+          className="-mx-4 border-y border-emerald-500/30 bg-emerald-500/10 px-4 py-5 text-center sm:hidden"
+          role="status"
+          aria-live="polite"
+          data-testid="send-step-mobile-success"
+        >
+          <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-300" aria-hidden />
+          <p className="mt-3 text-sm font-semibold text-emerald-100">{deliveryActionMessage}</p>
         </div>
-        <div className="mt-4 rounded-lg border border-border/70 bg-card/40 px-3 py-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Post-approval routing</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {(draft.postApprovalAction ?? "return_to_rep") === "auto_send_customer"
-              ? "Auto-send to customer is selected. Once approval clears, the system attempts immediate customer delivery."
-              : "Return-to-rep is selected. Approval clears the quote, but the rep controls final customer send timing."}
-          </p>
-        </div>
-        <label className="mt-4 block space-y-1 text-sm">
-          <span className="text-xs font-medium text-muted-foreground">Required follow-up reminder</span>
-          <input
-            type="datetime-local"
-            value={dateTimeInputValue(draft.followUpAt)}
-            onChange={(event) => setDraft((current) => ({ ...current, followUpAt: isoFromDateTimeInput(event.target.value) }))}
-            className="w-full rounded border border-input bg-card px-3 py-2 text-sm sm:max-w-xs"
-          />
-          <span className="block text-xs text-muted-foreground">Defaults to +3 days when absent. Email/text send/log remains blocked without a scheduled follow-up.</span>
-        </label>
-      </Card>
+      ) : null}
 
       <Card className="p-4">
         <div className="grid gap-3 lg:grid-cols-3">
@@ -161,17 +219,51 @@ export function SendStep({
             onClick={onText}
           />
         </div>
-        {deliveryActionMessage && <p className="mt-3 rounded border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-300">{deliveryActionMessage}</p>}
-        {deliveryActionError && <p className="mt-3 rounded border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-xs text-rose-300">{deliveryActionError}</p>}
+        {/* The compact inline strip is the desktop affordance and a
+            phone fallback (when the full-bleed banner above is absent). */}
+        {deliveryActionMessage && !isMobile && (
+          <p className="mt-3 rounded border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-300">{deliveryActionMessage}</p>
+        )}
+        {deliveryActionError && (
+          <p className="mt-3 rounded border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-xs text-rose-300">{deliveryActionError}</p>
+        )}
       </Card>
 
-      <div className="flex justify-between">
-        <Button variant="outline" onClick={() => setStep("document")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
-        <Button variant="outline" onClick={onSaveFollowUp} disabled={savePending}>
-          {savePending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
-          Save follow-up
-        </Button>
-      </div>
+      {isMobile ? (
+        <div
+          className="sticky bottom-0 -mx-4 flex items-center justify-between gap-3 border-t border-white/[0.06] bg-[hsl(var(--qep-bg))]/95 px-4 pt-3 backdrop-blur-md"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.75rem)" }}
+          data-testid="send-step-mobile-footer"
+        >
+          <Button
+            variant="outline"
+            onClick={() => setStep("document")}
+            className="min-h-[44px] gap-1"
+            data-testid="send-step-back"
+          >
+            <ArrowLeft className="h-4 w-4" /> Back
+          </Button>
+          <Button
+            onClick={onSaveFollowUp}
+            disabled={savePending}
+            className="min-h-[44px] flex-1 justify-center gap-2"
+            data-testid="send-step-save-followup"
+          >
+            {savePending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save follow-up
+          </Button>
+        </div>
+      ) : (
+        <div className="flex justify-between">
+          <Button variant="outline" onClick={() => setStep("document")} className="min-h-[44px]">
+            <ArrowLeft className="mr-1 h-4 w-4" /> Back
+          </Button>
+          <Button variant="outline" onClick={onSaveFollowUp} disabled={savePending} className="min-h-[44px]">
+            {savePending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
+            Save follow-up
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
