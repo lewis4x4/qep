@@ -135,7 +135,13 @@ test.describe("quote-builder mobile deep reflow", () => {
       ];
 
       for (const stepId of stepIds) {
-        const pill = page.locator(`[data-testid="wizard-progress-${stepId}"]`);
+        // WAVE polish (Slice 1): on phone the wizard now renders via
+        // MobileWizardStepper (data-step-id) instead of the desktop
+        // QuoteWizardProgress tiles (data-testid="wizard-progress-").
+        // Try both selectors so the spec works at any viewport.
+        const pill = page
+          .locator(`[data-step-id="${stepId}"], [data-testid="wizard-progress-${stepId}"]`)
+          .first();
         if ((await pill.count()) === 0) continue;
         await pill.click({ trial: false }).catch(() => {});
         await page.waitForTimeout(200);
@@ -150,7 +156,9 @@ test.describe("quote-builder mobile deep reflow", () => {
       if (!credentials) test.skip();
       await signInWithPassword(page, credentials.email, credentials.password);
       await page.goto("/sales/quotes/new");
-      const pricingPill = page.locator('[data-testid="wizard-progress-pricing"]');
+      const pricingPill = page
+        .locator('[data-step-id="pricing"], [data-testid="wizard-progress-pricing"]')
+        .first();
       if ((await pricingPill.count()) === 0) test.skip(undefined, "Pricing pill not reachable in seed state");
       await pricingPill.click();
       await expect(page.getByTestId("pricing-step-margin-strip")).toBeVisible({
@@ -165,7 +173,9 @@ test.describe("quote-builder mobile deep reflow", () => {
       if (!credentials) test.skip();
       await signInWithPassword(page, credentials.email, credentials.password);
       await page.goto("/sales/quotes/new");
-      const reviewPill = page.locator('[data-testid="wizard-progress-review"]');
+      const reviewPill = page
+        .locator('[data-step-id="review"], [data-testid="wizard-progress-review"]')
+        .first();
       if ((await reviewPill.count()) === 0) test.skip(undefined, "Review pill not reachable in seed state");
       await reviewPill.click();
       await expect(page.getByTestId("review-quote-hero")).toBeVisible({
@@ -173,6 +183,70 @@ test.describe("quote-builder mobile deep reflow", () => {
       });
       await expect(page.getByTestId("review-summary-accordions")).toBeVisible();
       await assertNoHorizontalOverflow(page);
+    });
+
+    test("WAVE polish (Slice 1): mobile wizard stepper chip rail renders", async ({
+      page,
+    }) => {
+      if (!credentials) test.skip();
+      await signInWithPassword(page, credentials.email, credentials.password);
+      await page.goto("/sales/quotes/new");
+      // The Phase 1 polish slice swaps in MobileWizardStepper for
+      // QuoteWizardProgress at <640px. Existence of the chip rail
+      // proves the swap shipped.
+      await expect(page.getByTestId("mobile-wizard-stepper")).toBeVisible({
+        timeout: 15_000,
+      });
+    });
+  });
+
+  test.describe("authenticated wizard walk @ iPad portrait (768x1024)", () => {
+    test.describe.configure({ timeout: 240_000 });
+    test.use({ viewport: { width: 768, height: 1024 } });
+
+    test.skip(
+      !credentials,
+      "Set PLAYWRIGHT_TEST_EMAIL + PLAYWRIGHT_TEST_PASSWORD for the iPad-portrait wizard walk",
+    );
+
+    test("iPad portrait wizard stays single-column inside SalesShell", async ({
+      page,
+    }) => {
+      if (!credentials) test.skip();
+      await signInWithPassword(page, credentials.email, credentials.password);
+      await page.goto("/sales/quotes/new");
+      // SalesShell still owns the chrome at 768pt — the BottomTabBar
+      // and CaptureSheet trigger should remain visible.
+      await expect(page.getByRole("button", { name: /Quick actions/i })).toBeVisible({
+        timeout: 30_000,
+      });
+      await assertNoHorizontalOverflow(page);
+      await assertNoStrayDialog(page);
+
+      // Walk through each step (selectors match either chrome — at
+      // 768pt, tailwind's sm breakpoint (640) has fired so the
+      // QuoteWizardProgress desktop tiles are the visible rail).
+      const stepIds = [
+        "customer",
+        "equipment",
+        "configure",
+        "tradeIn",
+        "pricing",
+        "promotions",
+        "financing",
+        "details",
+        "review",
+      ];
+      for (const stepId of stepIds) {
+        const pill = page
+          .locator(`[data-step-id="${stepId}"], [data-testid="wizard-progress-${stepId}"]`)
+          .first();
+        if ((await pill.count()) === 0) continue;
+        await pill.click({ trial: false }).catch(() => {});
+        await page.waitForTimeout(200);
+        await assertNoHorizontalOverflow(page);
+        await assertNoStrayDialog(page);
+      }
     });
 
     test("tap targets meet 44pt minimum across visible Customer step", async ({
