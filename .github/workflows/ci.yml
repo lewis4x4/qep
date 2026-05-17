@@ -83,3 +83,16 @@ jobs:
 
       - name: Web bundle size guard (index entry)
         run: bun run bundle:check
+
+      # WAVE Quality Tail (Slice 2): full test sweep using the per-file
+      # subprocess runner. `bun run test` chains test:unit +
+      # test:integration which both spawn each test file in its own
+      # bun process — that's the only way around bun:test's process-
+      # global `mock.module()` persistence, which is what made the
+      # raw `bun test` sweep report ~31 cross-file pollution failures
+      # in the polish/CI waves. Per-file isolation is the canonical
+      # green-light signal; gating main on this catches regressions
+      # immediately instead of waiting for the targeted sweep to
+      # accidentally exercise the offending file order.
+      - name: Full test sweep (per-file isolation)
+        run: bun run test

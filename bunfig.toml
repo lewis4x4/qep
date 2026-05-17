@@ -8,7 +8,25 @@
 # Solution: scope bun test to apps/ by default. Edge function tests require
 # Deno and must be run via `bun run test:edge:*` scripts (which delegate to deno).
 #
-# To run ALL scoped tests: bun test (uses this root config)
+# WAVE Quality Tail (Slice 2): raw `bun test` from this directory still
+# completes (~25s) but reports ~31 pollution failures. Root cause is
+# bun:test's mock.module() API — module mocks persist for the process
+# lifetime with no public unmock primitive, so the 34+ test files that
+# call mock.module("@/lib/supabase", ...) (or @/hooks/useAuth, etc.)
+# leak their mocks into every subsequent test file. There is no
+# userland fix — see https://github.com/oven-sh/bun/issues for the
+# upstream tracking issue.
+#
+# The canonical green-light sweep is `bun run test` (the npm script),
+# which chains scripts/run-unit-tests.mjs + scripts/run-integration-
+# tests.mjs — both spawn each test file in its own bun process so
+# mock.module persistence cannot cross file boundaries. That is the
+# sweep gated in .github/workflows/ci.yml.
+#
+# To run ALL scoped tests: `bun run test` (recommended; 100% green)
+# Raw `bun test` is available for quick spot-checks but pre-existing
+# mock.module pollution shows up as ~31 fails — they all pass when
+# each file runs in isolation (`bun run test`).
 # To run edge function tests: bun run test:edge:dge (or equivalent deno commands)
 #
 # Dependency CVE scan: `bun run security:deps` (npm audit on root + apps/web).

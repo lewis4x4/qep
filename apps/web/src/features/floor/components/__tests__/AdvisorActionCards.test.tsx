@@ -65,7 +65,10 @@ describe("AdvisorActionCards", () => {
     );
 
     const primaryQuote = screen.getByRole("link", { name: /start a new quote in quote builder/i });
-    expect(primaryQuote.getAttribute("href")).toBe("/quote-v2");
+    // WAVE polish (Slice 5) consolidated quote-builder deep links
+    // behind /sales/quotes/new; the legacy /quote-v2 path stays as a
+    // RedirectPreserveSearch but is no longer the canonical href.
+    expect(primaryQuote.getAttribute("href")).toBe("/sales/quotes/new");
     expect(primaryQuote.className).toContain("min-h-14");
 
     const voiceQuote = screen.getByRole("link", { name: /open voice quote/i });
