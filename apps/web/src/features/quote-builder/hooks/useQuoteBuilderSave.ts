@@ -73,6 +73,7 @@ export interface UseQuoteBuilderSaveInput {
   winProbContext: QuoteBuilderWinProbContext;
   persistedQuotePackageIdRef: MutableRefObject<string | null>;
   existingQuote: Record<string, unknown> | null;
+  urlPackageId?: string | null;
   localDraftKey: string | null;
   userId: string | undefined;
   dealId: string | null;
@@ -107,6 +108,24 @@ export function marginKeyFor(quoteId: string | null, marginPctValue: number): st
   return `${quoteId ?? "new"}|${Math.round(marginPctValue * 10) / 10}`;
 }
 
+/** Exported for tests — stable package id for approval, persist, and margin gate. */
+export function resolveActiveQuotePackageId(input: {
+  savedQuoteId?: string | null;
+  savedResponseId?: string | null;
+  existingQuoteId?: string | null;
+  urlPackageId?: string | null;
+  persistedId?: string | null;
+}): string | null {
+  const fromSave = input.savedQuoteId ?? input.savedResponseId ?? null;
+  if (fromSave) return fromSave;
+  const fromLoad = input.existingQuoteId ?? null;
+  if (fromLoad) return fromLoad;
+  const urlId = input.urlPackageId?.trim();
+  if (urlId) return urlId;
+  const persisted = input.persistedId?.trim();
+  return persisted || null;
+}
+
 export function useQuoteBuilderSave({
   draft,
   setDraft,
@@ -115,6 +134,7 @@ export function useQuoteBuilderSave({
   winProbContext,
   persistedQuotePackageIdRef,
   existingQuote,
+  urlPackageId,
   localDraftKey,
   userId,
   dealId,
@@ -145,8 +165,11 @@ export function useQuoteBuilderSave({
           allFinanceScenarios,
           snapshot,
           {
-            quotePackageId: persistedQuotePackageIdRef.current
-              ?? (typeof existingQuote?.id === "string" ? existingQuote.id : null),
+            quotePackageId: resolveActiveQuotePackageId({
+              existingQuoteId: typeof existingQuote?.id === "string" ? existingQuote.id : null,
+              urlPackageId: urlPackageId ?? null,
+              persistedId: persistedQuotePackageIdRef.current,
+            }),
           },
         ),
       );
@@ -197,10 +220,13 @@ export function useQuoteBuilderSave({
     },
   });
 
-  const activeQuotePackageId =
-    (saveMutation.data?.quote?.id as string | undefined)
-    ?? saveMutation.data?.id
-    ?? (typeof existingQuote?.id === "string" ? existingQuote.id : null);
+  const activeQuotePackageId = resolveActiveQuotePackageId({
+    savedQuoteId: saveMutation.data?.quote?.id as string | undefined,
+    savedResponseId: saveMutation.data?.id as string | undefined,
+    existingQuoteId: typeof existingQuote?.id === "string" ? existingQuote.id : null,
+    urlPackageId: urlPackageId ?? null,
+    persistedId: persistedQuotePackageIdRef.current,
+  });
 
   const activeQuoteRecord = useMemo(() => {
     const saved = saveMutation.data?.quote;
@@ -216,7 +242,7 @@ export function useQuoteBuilderSave({
 
   const submitApprovalMutation = useMutation({
     mutationFn: async () => {
-      let quotePackageId = activeQuotePackageId;
+      let quotePackageId = activeQuotePackageId ?? persistedQuotePackageIdRef.current;
       if (!quotePackageId) {
         const saveResult = await saveMutation.mutateAsync();
         quotePackageId =
@@ -268,21 +294,16 @@ export function useQuoteBuilderSave({
     } catch (error) {
       console.warn("quote-builder threshold lookup failed; saving without margin gate", error);
     }
-    const key = marginKeyFor(
-      (saveMutation.data?.quote?.id as string | undefined)
-        ?? (typeof existingQuote?.id === "string" ? existingQuote.id : null),
-      marginPct,
-    );
+    const key = marginKeyFor(activeQuotePackageId, marginPct);
     if (isUnderThreshold(marginPct, thresholdPct) && marginReasonCaptured !== key) {
       setMarginGateOpen(true);
       return;
     }
     saveMutation.mutate();
   }, [
-    existingQuote?.id,
+    activeQuotePackageId,
     marginPct,
     marginReasonCaptured,
-    saveMutation.data?.quote?.id,
     saveMutation.mutate,
   ]);
 

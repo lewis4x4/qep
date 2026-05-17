@@ -605,6 +605,7 @@ export function QuoteBuilderV2Page() {
     winProbContext,
     persistedQuotePackageIdRef,
     existingQuote,
+    urlPackageId: packageId || null,
     localDraftKey,
     userId: profile?.id,
     dealId,
