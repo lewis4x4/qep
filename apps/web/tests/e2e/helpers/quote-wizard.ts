@@ -11,7 +11,7 @@ export async function expectWizardStep(page: Page, stepNumber: number): Promise<
 }
 
 export async function startProspectQuote(page: Page): Promise<void> {
-  await page.getByRole("button", { name: /Quote for prospect/i }).click();
+  await page.getByTestId("wizard-quote-for-prospect").first().click();
   await expect(page.getByText(/Walk-in prospect/i).first()).toBeVisible({ timeout: 15_000 });
 }
 
@@ -85,7 +85,7 @@ export async function submitForApproval(page: Page): Promise<void> {
 }
 
 export async function expectApprovalBypassApplied(page: Page): Promise<void> {
-  await expect(page.getByText("Auto-approved")).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByTestId("wizard-approval-auto-approved")).toBeVisible({ timeout: 90_000 });
   await expect(page.getByText(/Approval bypass applied/i)).toBeVisible();
   await expect(page.getByText("Approval Case", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/Waiting on .+ to approve this quote/i)).toHaveCount(0);

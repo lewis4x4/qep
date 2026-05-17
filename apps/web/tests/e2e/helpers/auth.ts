@@ -9,7 +9,7 @@ export function playwrightTestCredentials(): { email: string; password: string }
 
 export async function signInWithPassword(page: Page, email: string, password: string): Promise<void> {
   await page.goto("/");
-  await page.getByLabel("Email address").first().fill(email);
+  await page.locator("#email-pw").fill(email);
   await page.locator("#password").fill(password);
   await page.locator("#login-button").click();
   await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 30_000 });
