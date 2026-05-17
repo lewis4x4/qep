@@ -200,7 +200,7 @@ export function EquipmentStep({
                           {requestCreatedAt ? `Requested ${new Date(requestCreatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "Backend request recorded"}
                         </span>
                       )}
-                      <label className="flex items-center gap-1 rounded border border-input bg-background px-2 py-1 font-semibold text-foreground">
+                      <label className="flex min-h-[44px] items-center gap-1 rounded border border-input bg-background px-2 py-1 font-semibold text-foreground">
                         <span className="text-muted-foreground">$</span>
                         <input
                           type="number"
@@ -218,7 +218,7 @@ export function EquipmentStep({
                               )),
                             }));
                           }}
-                          className="w-24 bg-transparent text-right text-sm outline-none"
+                          className="w-24 bg-transparent text-right text-base sm:text-sm outline-none"
                           aria-label={`Unit price for ${equipment.title}`}
                         />
                       </label>
