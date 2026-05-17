@@ -15,8 +15,14 @@ export interface MobileKpiItem {
 
 export interface MobileKpiGridProps {
   items: MobileKpiItem[];
-  /** Tile columns on phone-sized viewports. Defaults to 2. */
-  phoneColumns?: 2;
+  /**
+   * Tile columns on phone-sized viewports.
+   *
+   * Defaults to 2 (the standard 2x2 KPI quad). Pass 3 for compact
+   * status strips (e.g. the Pricing margin strip: Margin / Net /
+   * Floor) where three short values need to share a single row.
+   */
+  phoneColumns?: 2 | 3;
   /** Tile columns on >= sm viewports. Defaults to 4. */
   smColumns?: 3 | 4;
   className?: string;
@@ -36,13 +42,15 @@ const TONE_CLASS: Record<NonNullable<MobileKpiItem["tone"]>, string> = {
  */
 export function MobileKpiGrid({
   items,
+  phoneColumns = 2,
   smColumns = 4,
   className,
 }: MobileKpiGridProps) {
   return (
     <div
       className={cn(
-        "grid grid-cols-2 gap-2",
+        "grid gap-2",
+        phoneColumns === 3 ? "grid-cols-3" : "grid-cols-2",
         smColumns === 3 ? "sm:grid-cols-3" : "sm:grid-cols-4",
         className,
       )}

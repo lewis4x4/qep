@@ -21,6 +21,8 @@ import {
   type ReasonIntelligence,
 } from "../lib/deal-intelligence-api";
 import { ReasonHint } from "./ReasonHint";
+import { MobileBottomSheet } from "@/features/sales/components/MobileBottomSheet";
+import { useIsMobileViewport } from "@/features/sales/hooks/useIsMobileViewport";
 
 /**
  * Slice 15 — Margin Floor Gate.
@@ -94,6 +96,11 @@ export function MarginFloorGate({
     return () => { cancelled = true; };
   }, [reasonModalOpen]);
 
+  // WAVE quote-builder deep reflow (A1): mobile reps see the reason
+  // prompt as a MobileBottomSheet so the gate matches the SalesShell
+  // chrome instead of a desktop Radix Dialog overlay.
+  const isMobile = useIsMobileViewport();
+
   if (loading || !threshold) return null;
 
   const thresholdPct = Number(threshold.min_margin_pct);
@@ -102,6 +109,25 @@ export function MarginFloorGate({
 
   const gapCents = estimateMarginGapCents(netTotalCents, marginPct, thresholdPct);
   const gapDollars = Math.round(gapCents / 100).toLocaleString("en-US");
+
+  const reasonBody = (
+    <div className="space-y-2 py-2">
+      <Label htmlFor="margin-reason">Your reason</Label>
+      <textarea
+        id="margin-reason"
+        value={reason}
+        onChange={(e) => setReason(e.target.value.slice(0, 500))}
+        placeholder="e.g. Customer has signed a 2-year service agreement that offsets margin, or competitive response to retain account."
+        rows={4}
+        className="w-full rounded-md border border-input bg-card px-3 py-2 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+      />
+      <p className="text-[10px] text-muted-foreground">{reason.length}/500</p>
+
+      <ReasonHint reason={reason} intelligence={reasonIntel} />
+    </div>
+  );
+
+  const subtitle = `This quote is ${(thresholdPct - marginPct).toFixed(1)} pts below the ${threshold.brand_id ? "brand" : "workspace"} floor. A short reason is logged to the margin-exceptions report for management review.`;
 
   return (
     <>
@@ -118,33 +144,17 @@ export function MarginFloorGate({
         </div>
       </div>
 
-      {/* Reason modal */}
-      <Dialog open={reasonModalOpen} onOpenChange={onReasonModalOpenChange}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Margin below floor — reason required</DialogTitle>
-            <DialogDescription>
-              This quote is {(thresholdPct - marginPct).toFixed(1)} pts below the {threshold.brand_id ? "brand" : "workspace"} floor.
-              A short reason is logged to the margin-exceptions report for management review.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-2 py-2">
-            <Label htmlFor="margin-reason">Your reason</Label>
-            <textarea
-              id="margin-reason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value.slice(0, 500))}
-              placeholder="e.g. Customer has signed a 2-year service agreement that offsets margin, or competitive response to retain account."
-              rows={4}
-              className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-            />
-            <p className="text-[10px] text-muted-foreground">{reason.length}/500</p>
-
-            <ReasonHint reason={reason} intelligence={reasonIntel} />
-          </div>
-
-          <DialogFooter>
+      {/* Reason modal — desktop Radix Dialog, mobile MobileBottomSheet */}
+      {isMobile ? (
+        <MobileBottomSheet
+          open={reasonModalOpen}
+          onOpenChange={onReasonModalOpenChange}
+          title="Margin below floor"
+          description={subtitle}
+          size="tall"
+        >
+          {reasonBody}
+          <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button variant="ghost" onClick={() => onReasonModalOpenChange(false)}>
               Cancel save
             </Button>
@@ -162,9 +172,38 @@ export function MarginFloorGate({
                 <>Confirm save</>
               )}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </MobileBottomSheet>
+      ) : (
+        <Dialog open={reasonModalOpen} onOpenChange={onReasonModalOpenChange}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Margin below floor — reason required</DialogTitle>
+              <DialogDescription>{subtitle}</DialogDescription>
+            </DialogHeader>
+            {reasonBody}
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => onReasonModalOpenChange(false)}>
+                Cancel save
+              </Button>
+              <Button
+                disabled={reason.trim().length < 10}
+                onClick={() => onReasonConfirm({
+                  reason: reason.trim(),
+                  thresholdPct,
+                  estimatedGapCents: gapCents,
+                })}
+              >
+                {reason.trim().length < 10 ? (
+                  <span className="text-xs">At least 10 characters…</span>
+                ) : (
+                  <>Confirm save</>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 }

@@ -30,6 +30,10 @@ import { PricingAdderBuckets } from "../components/PricingAdderBuckets";
 import { miscPricingLineKey } from "../lib/misc-pricing-line";
 import { SummaryRow } from "../components/SummaryRow";
 import { useWizard } from "../wizard/useWizard";
+// WAVE quote-builder deep reflow (A1)
+import { MobileKpiGrid } from "@/features/sales/components/MobileKpiGrid";
+import { MobileSectionAccordion } from "@/features/sales/components/MobileSectionAccordion";
+import { useIsMobileViewport } from "@/features/sales/hooks/useIsMobileViewport";
 
 export interface PricingStepProps {
   equipmentTotal: number;
@@ -105,6 +109,14 @@ export function PricingStep({
   branchStateProvince,
 }: PricingStepProps) {
   const { draft, setDraft, setStep } = useWizard();
+  // WAVE quote-builder deep reflow (A1): mobile reps get a compact
+  // margin KPI strip + accordion-wrapped adders / discount / tax.
+  const isMobile = useIsMobileViewport();
+  const floorPct = 10;
+  const floorTone: "positive" | "warning" | "danger" =
+    marginPct >= 20 ? "positive" : marginPct >= floorPct ? "warning" : "danger";
+  const floorStatusValue =
+    marginPct >= 20 ? "Healthy" : marginPct >= floorPct ? "OK" : "Below floor";
 
   return (
     <div className="space-y-4">
@@ -112,6 +124,40 @@ export function PricingStep({
         <h2 className="text-lg font-semibold text-foreground">Step 5: Build the price</h2>
         <p className="mt-1 text-sm text-muted-foreground">A simple waterfall: machine, configuration, adders, discount, trade, tax, and customer total.</p>
       </div>
+
+      {/* WAVE A1: top compact margin strip — sticks to top of step on mobile,
+          stays inline on desktop. Three cells: Margin %, Net $, Floor status. */}
+      {isMobile ? (
+        <div
+          className="sticky top-0 z-10 -mx-4 px-4 py-2 bg-[hsl(var(--qep-bg))]/95 backdrop-blur-md border-b border-white/[0.06]"
+          data-testid="pricing-step-margin-strip"
+        >
+          <MobileKpiGrid
+            phoneColumns={3}
+            smColumns={3}
+            items={[
+              {
+                id: "margin-pct",
+                label: "Margin",
+                value: `${marginPct.toFixed(1)}%`,
+                tone: floorTone === "danger" ? "danger" : floorTone === "warning" ? "warning" : "positive",
+              },
+              {
+                id: "net-total",
+                label: "Net",
+                value: money(netTotal),
+                tone: "orange",
+              },
+              {
+                id: "floor-status",
+                label: "Floor",
+                value: floorStatusValue,
+                tone: floorTone,
+              },
+            ]}
+          />
+        </div>
+      ) : null}
 
       <Card className="border-border/70 bg-muted/20 p-3">
         <p className="text-xs leading-relaxed text-muted-foreground">
@@ -225,53 +271,80 @@ export function PricingStep({
         </div>
       </Card>
 
-      <Card className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Price adders</p>
-            <p className="mt-1 text-xs text-muted-foreground">Only fill what applies. Empty rows stay out of the quote payload.</p>
+      {(() => {
+        // WAVE A1 deep reflow: keep the inline Card layout on desktop; on
+        // mobile the same content sits inside a MobileSectionAccordion so
+        // reps can collapse the long adders list and keep the margin strip
+        // + line items in view.
+        const adderHeader = (
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Price adders</p>
+              <p className="mt-1 text-xs text-muted-foreground">Only fill what applies. Empty rows stay out of the quote payload.</p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const goodFaithField = PRICING_ADDER_FIELDS.find((field) => field.id === "good_faith");
+                if (!goodFaithField) return;
+                upsertPricingLine(goodFaithField, Math.round(subtotal * 0.01));
+              }}
+            >
+              Set 1% good faith
+            </Button>
           </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              const goodFaithField = PRICING_ADDER_FIELDS.find((field) => field.id === "good_faith");
-              if (!goodFaithField) return;
-              upsertPricingLine(goodFaithField, Math.round(subtotal * 0.01));
+        );
+        const adderBody = (
+          <PricingAdderBuckets
+            draftPricingLines={draft.pricingLines ?? []}
+            internalCostLoadTotal={internalCostLoadTotal}
+            pricingLineTotal={pricingLineTotal}
+            inboundFreightEligible={inboundFreightEligible}
+            pricingLine={pricingLine}
+            upsertPricingLine={upsertPricingLine}
+            miscChargeTitle={miscChargeTitle}
+            setMiscChargeTitle={setMiscChargeTitle}
+            miscChargeAmount={miscChargeAmount}
+            setMiscChargeAmount={setMiscChargeAmount}
+            miscCreditTitle={miscCreditTitle}
+            setMiscCreditTitle={setMiscCreditTitle}
+            miscCreditAmount={miscCreditAmount}
+            setMiscCreditAmount={setMiscCreditAmount}
+            onAddMiscPricingLine={onAddMiscPricingLine}
+            onRemoveMiscLine={(line) => {
+              const key = miscPricingLineKey(line);
+              setDraft((current) => ({
+                ...current,
+                pricingLines: (current.pricingLines ?? []).filter(
+                  (item) => miscPricingLineKey(item) !== key,
+                ),
+              }));
             }}
-          >
-            Set 1% good faith
-          </Button>
-        </div>
-        <PricingAdderBuckets
-          draftPricingLines={draft.pricingLines ?? []}
-          internalCostLoadTotal={internalCostLoadTotal}
-          pricingLineTotal={pricingLineTotal}
-          inboundFreightEligible={inboundFreightEligible}
-          pricingLine={pricingLine}
-          upsertPricingLine={upsertPricingLine}
-          miscChargeTitle={miscChargeTitle}
-          setMiscChargeTitle={setMiscChargeTitle}
-          miscChargeAmount={miscChargeAmount}
-          setMiscChargeAmount={setMiscChargeAmount}
-          miscCreditTitle={miscCreditTitle}
-          setMiscCreditTitle={setMiscCreditTitle}
-          miscCreditAmount={miscCreditAmount}
-          setMiscCreditAmount={setMiscCreditAmount}
-          onAddMiscPricingLine={onAddMiscPricingLine}
-          onRemoveMiscLine={(line) => {
-            const key = miscPricingLineKey(line);
-            setDraft((current) => ({
-              ...current,
-              pricingLines: (current.pricingLines ?? []).filter(
-                (item) => miscPricingLineKey(item) !== key,
-              ),
-            }));
-          }}
-        />
+          />
+        );
 
-      </Card>
+        if (isMobile) {
+          return (
+            <MobileSectionAccordion
+              index={1}
+              title="Adders & extras"
+              caption={`${money(pricingLineTotal)} applied`}
+              defaultOpen={false}
+            >
+              <div className="mt-2">{adderHeader}</div>
+              {adderBody}
+            </MobileSectionAccordion>
+          );
+        }
+        return (
+          <Card className="p-4" data-testid="pricing-adders-desktop">
+            {adderHeader}
+            {adderBody}
+          </Card>
+        );
+      })()}
 
       <Card className="p-4">
         <p className="text-sm font-semibold text-foreground">Discount with reason code</p>

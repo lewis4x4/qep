@@ -89,6 +89,7 @@ export function MobileBottomSheet({
         )}
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
         data-testid="mobile-bottom-sheet-panel"
+        data-mobile-sheet="true"
       >
         {/* Drag handle */}
         <div className="flex justify-center pt-2.5 pb-1.5 shrink-0">
