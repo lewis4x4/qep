@@ -6,17 +6,20 @@
  * `IncentiveStack` passes in from the page.
  */
 
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Sparkles } from "lucide-react";
 import type { QuoteLineItemDraft } from "../../../../../../shared/qep-moonshot-contracts";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { isUuid } from "@/lib/uuid";
 import { IncentiveStack } from "../components/IncentiveStack";
 import { money } from "../lib/money";
 import { PROMOTION_PLACEHOLDERS, type PromotionPlaceholder } from "../lib/promotion-placeholders";
 import { quoteLineCostVisibility } from "../lib/quote-workspace";
 import { useWizard } from "../wizard/useWizard";
+// WAVE quote-builder deep reflow (A3)
+import { useIsMobileViewport } from "@/features/sales/hooks/useIsMobileViewport";
 
 export interface PromotionsStepProps {
   activeQuotePackageId: string | null;
@@ -24,10 +27,28 @@ export interface PromotionsStepProps {
 
 export function PromotionsStep({ activeQuotePackageId }: PromotionsStepProps) {
   const { draft, setDraft, setStep } = useWizard();
+  // WAVE A3 deep reflow: total-savings hero + tap-to-toggle full-width
+  // cards on mobile.
+  const isMobile = useIsMobileViewport();
 
   function promotionPlaceholderSelected(promo: PromotionPlaceholder): boolean {
     return draft.pricingLines?.some((line) =>
       line.kind === promo.kind && line.metadata?.promotion_placeholder_id === promo.id) ?? false;
+  }
+
+  const selectedPromotions = PROMOTION_PLACEHOLDERS.filter(promotionPlaceholderSelected);
+  const totalSavings = selectedPromotions.reduce((sum, promo) => sum + promo.amount, 0);
+  const appliedCount = selectedPromotions.length;
+
+  function applyBestStack(): void {
+    // WAVE A3: deterministic "best stack" — apply every placeholder.
+    // PromotionPlaceholders have no conflict rules in the current model;
+    // when a real conflict resolver lands this can swap to a knapsack.
+    for (const promo of PROMOTION_PLACEHOLDERS) {
+      if (!promotionPlaceholderSelected(promo)) {
+        togglePromotion(promo);
+      }
+    }
   }
 
   function togglePromotion(promo: PromotionPlaceholder): void {
@@ -77,6 +98,39 @@ export function PromotionsStep({ activeQuotePackageId }: PromotionsStepProps) {
         <p className="mt-1 text-sm text-muted-foreground">Use seeded incentives when they exist. If no program data is present, these clear starter rows keep the skeleton moving.</p>
       </div>
 
+      {/* WAVE A3: total-savings hero on mobile. Hidden on >= sm because
+          the desktop layout already shows savings inside each card. */}
+      {isMobile && (
+        <Card
+          className="border-emerald-500/30 bg-emerald-500/10 p-4 sm:hidden"
+          data-testid="promotions-savings-hero"
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Total promo savings
+          </p>
+          <p className="mt-1 text-3xl font-bold text-emerald-300">
+            {appliedCount > 0 ? `−${money(totalSavings)}` : "$0"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {appliedCount > 0
+              ? `${appliedCount} promo${appliedCount === 1 ? "" : "s"} applied`
+              : "Tap a promo below to apply it."}
+          </p>
+          {appliedCount < PROMOTION_PLACEHOLDERS.length && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-3 min-h-[44px] w-full border-emerald-400/40 bg-emerald-500/5 text-emerald-200 hover:bg-emerald-500/15"
+              onClick={applyBestStack}
+              data-testid="promotions-apply-best-stack"
+            >
+              <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Apply best stack
+            </Button>
+          )}
+        </Card>
+      )}
+
       <Card className="border-border/70 bg-muted/20 p-3">
         <p className="text-xs leading-relaxed text-muted-foreground">
           <span className="font-medium text-foreground">Promotions vs pricing.</span>{" "}
@@ -112,7 +166,7 @@ export function PromotionsStep({ activeQuotePackageId }: PromotionsStepProps) {
 
       <Card className="p-4">
         <p className="text-sm font-semibold text-foreground">Manual promotion choices</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <div className="mt-3 grid gap-3 sm:grid-cols-3" data-testid="promotions-grid">
           {PROMOTION_PLACEHOLDERS.map((promo) => {
             const selected = promotionPlaceholderSelected(promo);
             return (
@@ -120,16 +174,37 @@ export function PromotionsStep({ activeQuotePackageId }: PromotionsStepProps) {
                 key={promo.id}
                 type="button"
                 onClick={() => togglePromotion(promo)}
-                className={`rounded-lg border p-3 text-left transition ${
-                  selected ? "border-emerald-500/50 bg-emerald-500/10" : "border-border bg-card/40 hover:border-qep-orange/40"
-                }`}
+                aria-pressed={selected}
+                data-promo-id={promo.id}
+                data-promo-selected={selected ? "true" : "false"}
+                className={cn(
+                  "relative min-h-[44px] rounded-lg border p-3 text-left transition",
+                  selected
+                    ? "border-qep-orange bg-emerald-500/5 border-l-4 border-l-qep-orange"
+                    : "border-border bg-card/40 hover:border-qep-orange/40",
+                )}
               >
+                {selected && (
+                  <span
+                    aria-hidden
+                    className="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-qep-orange text-white"
+                  >
+                    <Check className="h-3 w-3" strokeWidth={3} />
+                  </span>
+                )}
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-qep-orange">{promo.source}</p>
-                <p className="mt-2 text-sm font-semibold text-foreground">{promo.title}</p>
+                <p className={cn("mt-2 text-sm font-semibold text-foreground", selected && "pr-7")}>{promo.title}</p>
                 <p className="mt-1 text-lg font-bold text-emerald-400">−{money(promo.amount)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{promo.detail}</p>
-                <span className="mt-3 inline-flex rounded-full border border-border/70 px-2 py-1 text-[11px] text-muted-foreground">
-                  {selected ? "Selected" : "Tap to apply"}
+                <span
+                  className={cn(
+                    "mt-3 inline-flex rounded-full border px-2 py-1 text-[11px]",
+                    selected
+                      ? "border-qep-orange/40 bg-qep-orange/10 text-qep-orange font-semibold"
+                      : "border-border/70 text-muted-foreground",
+                  )}
+                >
+                  {selected ? "Applied" : "Tap to apply"}
                 </span>
               </button>
             );
