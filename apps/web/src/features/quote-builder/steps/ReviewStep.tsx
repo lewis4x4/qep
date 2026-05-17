@@ -277,7 +277,7 @@ export function ReviewStep({
         {(bypassApprovedWithoutCase
           || ((submitApprovalData?.status === "approved" || submitApprovalData?.status === "approved_with_conditions")
             && submitApprovalData?.bypassRuleName)) && (
-          <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2" role="status">
+          <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2" role="status" data-testid="wizard-approval-auto-approved">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-300">Auto-approved</p>
             <p className="mt-1 text-xs text-emerald-100">
               {submitApprovalData?.bypassRuleName

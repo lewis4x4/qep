@@ -56,6 +56,7 @@ export function QuoteWizardProgress({
             <button
               key={item.id}
               type="button"
+              data-testid={`wizard-progress-${item.id}`}
               onClick={() => { if (isReachable) onJumpTo(item.id); }}
               disabled={isFuture}
               aria-current={isCurrent ? "step" : undefined}

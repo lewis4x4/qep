@@ -115,7 +115,7 @@ export function WizardShell({
               </Button>
             )}
             {step === "customer" && !hasCustomer && (
-              <Button variant="ghost" className="touch-manipulation" onClick={onQuoteForProspect}>
+              <Button variant="ghost" className="touch-manipulation" data-testid="wizard-quote-for-prospect" onClick={onQuoteForProspect}>
                 Quote for prospect
               </Button>
             )}
@@ -187,7 +187,7 @@ export function WizardShell({
           ) : null}
         </div>
         {step === "customer" && !hasCustomer ? (
-          <Button type="button" variant="outline" className="w-full touch-manipulation" onClick={onQuoteForProspect}>
+          <Button type="button" variant="outline" className="w-full touch-manipulation" data-testid="wizard-quote-for-prospect" onClick={onQuoteForProspect}>
             Quote for prospect
           </Button>
         ) : null}

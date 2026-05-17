@@ -60,7 +60,7 @@ export function CustomerStep({
   const hasCustomer = hasQuoteCustomerIdentity(draft);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="wizard-step-customer">
       <div>
         <h2 className="text-lg font-semibold text-foreground">Step 1: Choose the customer</h2>
         <p className="mt-1 text-sm text-muted-foreground">
