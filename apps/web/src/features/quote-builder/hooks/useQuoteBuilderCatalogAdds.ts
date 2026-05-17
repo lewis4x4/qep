@@ -15,17 +15,17 @@ import {
 } from "../lib/catalog-line-mutations";
 import type { CatalogAttachmentMatch, CatalogEntryMatch } from "../lib/quote-builder-page-helpers";
 
-export interface UseQuoteBuilderCatalogActionsInput {
+export interface UseQuoteBuilderCatalogAddsInput {
   setDraft: Dispatch<SetStateAction<QuoteWorkspaceDraft>>;
   setAvailableOptions: Dispatch<SetStateAction<Array<{ id: string; name: string; price: number }>>>;
   setAvailableOptionsLabel: Dispatch<SetStateAction<string | null>>;
 }
 
-export function useQuoteBuilderCatalogActions({
+export function useQuoteBuilderCatalogAdds({
   setDraft,
   setAvailableOptions,
   setAvailableOptionsLabel,
-}: UseQuoteBuilderCatalogActionsInput) {
+}: UseQuoteBuilderCatalogAddsInput) {
   const addPackageCatalogItem = useCallback((entry: QuotePackageCatalogItem) => {
     const line = buildPackageCatalogLine(entry);
     setDraft((current) => ({
