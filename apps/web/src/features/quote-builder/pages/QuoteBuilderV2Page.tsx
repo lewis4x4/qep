@@ -21,33 +21,24 @@ import { PointShootTradeCard } from "../components/PointShootTradeCard";
 import { TradeInInputCard } from "../components/TradeInInputCard";
 import { WinProbabilityStrip } from "../components/WinProbabilityStrip";
 import { getMarginBaseline } from "../lib/coach-api";
-import { computeWinProbability } from "../lib/win-probability-scorer";
 import {
   computeRetrospectiveShadows,
   computeShadowAgreementSummary,
 } from "../lib/retrospective-shadow";
 import { hydrateCustomerById } from "../lib/customer-search-api";
 import { IntelligencePanel } from "../components/IntelligencePanel";
-import { CatalogBrowserDialog } from "../components/CatalogBrowserDialog";
-import { TradeCaptureDialog } from "../components/TradeCaptureDialog";
-import { PackageItemSearchDialog } from "../components/PackageItemSearchDialog";
+import { QuoteBuilderOverlays } from "../components/QuoteBuilderOverlays";
+import { QuoteBuilderStatusBanners } from "../components/QuoteBuilderStatusBanners";
 import { FinancingCalculator } from "../components/FinancingCalculator";
 import { DealCoachSidebar } from "../components/DealCoachSidebar";
 import { QuoteReviewWorkflowPanels } from "../components/QuoteReviewWorkflowPanels";
-import { ReviewSendDialog } from "../components/ReviewSendDialog";
 import { QuoteBuilderStickyBar } from "../components/QuoteBuilderStickyBar";
 import { TaxBreakdown } from "../components/TaxBreakdown";
 import { MarginFloorGate } from "../components/MarginFloorGate";
 import { useAuth } from "@/hooks/useAuth";
-import {
-  getApplicableThreshold,
-  isUnderThreshold,
-  logMarginException,
-} from "@/features/admin/lib/pricing-discipline-api";
 import { MarginCheckBanner } from "../components/MarginCheckBanner";
 import { TradeInSection } from "../components/TradeInSection";
 import {
-  buildQuoteSavePayload,
   getAiEquipmentRecommendation,
   getClosedDealsAudit,
   getCrmEquipmentQuoteSeed,
@@ -57,14 +48,11 @@ import {
   logQuoteDeliveryEvent,
   persistQuoteDocumentArtifact,
   requestQuoteAvailability,
-  saveQuotePackage,
   searchCatalog,
   sendQuotePackage,
-  submitQuoteForApproval,
   type QuoteAvailabilityRequest,
   type QuotePackageCatalogItem,
   type QuotePackageCatalogKind,
-  type QuotePackageSaveResponse,
   type QuoteFinancingRequest,
 } from "../lib/quote-api";
 import {
@@ -75,6 +63,7 @@ import {
   type QuoteSendActionChannel,
 } from "../lib/quote-workspace";
 import { useApprovalBypass } from "../hooks/useApprovalBypass";
+import { useQuoteBuilderSave } from "../hooks/useQuoteBuilderSave";
 import { useDraftAutosave } from "../hooks/useDraftAutosave";
 import { useLiveMargin } from "../hooks/useLiveMargin";
 import { usePdiAutofill } from "../hooks/usePdiAutofill";
@@ -114,11 +103,7 @@ import {
   type IronQuoteHandoff,
 } from "../lib/iron-quote-handoff";
 import { toast } from "@/hooks/use-toast";
-import {
-  ConversationalDealEngine,
-  DealAssistantTrigger,
-  type ScenarioSelection,
-} from "../components/ConversationalDealEngine";
+import { DealAssistantTrigger, type ScenarioSelection } from "../components/ConversationalDealEngine";
 import { issueShareToken } from "@/features/deal-room/lib/deal-room-api";
 import {
   buildScenarioSelectionDraftPatch,
@@ -149,6 +134,7 @@ import {
   readPersistedStep,
 } from "../wizard/wizard-storage";
 import { WizardShell } from "../wizard/WizardShell";
+import { QuoteWizardStepRouter } from "../wizard/QuoteWizardStepRouter";
 import {
   canJumpToWizardIndex,
   findWizardStepIndex,
@@ -157,18 +143,6 @@ import {
   wizardMaxStepIndex0FromDraft,
   wizardReachableMaxIndex0,
 } from "../wizard/wizard-navigation";
-import { IntakeInput } from "../wizard/IntakeInput";
-import { CustomerStep } from "../steps/CustomerStep";
-import { EquipmentStep } from "../steps/EquipmentStep";
-import { ConfigureStep } from "../steps/ConfigureStep";
-import { TradeInStep } from "../steps/TradeInStep";
-import { PricingStep } from "../steps/PricingStep";
-import { PromotionsStep } from "../steps/PromotionsStep";
-import { FinancingStep } from "../steps/FinancingStep";
-import { DetailsStep } from "../steps/DetailsStep";
-import { ReviewStep } from "../steps/ReviewStep";
-import { DocumentStep } from "../steps/DocumentStep";
-import { SendStep } from "../steps/SendStep";
 import {
   dateInputValue,
   dateTimeInputValue,
@@ -840,217 +814,47 @@ export function QuoteBuilderV2Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dealId, existingQuoteQuery.isFetching, existingQuoteQuery.isLoading, packageId, voiceSessionId]);
 
-  const saveMutation = useMutation({
-    mutationFn: (): Promise<QuotePackageSaveResponse> => {
-      // Slice 20e: capture the rule-based win-probability result at save
-      // time so we can show it on list views + build the learning loop
-      // later. We compute it here (not from the live strip state) to
-      // make sure the persisted snapshot is consistent with the exact
-      // draft + context we send to the edge function. Weights are
-      // versioned so future scorer rewrites stay diffable against old
-      // snapshots.
-      const wp = computeWinProbability(draft, winProbContext);
-      const snapshot = {
-        score: wp.score,
-        band: wp.band,
-        rawScore: wp.rawScore,
-        factors: wp.factors,
-        marginBaselineMedianPct: winProbContext.marginBaselineMedianPct ?? null,
-        weightsVersion: "v1",
-        savedAt: new Date().toISOString(),
-      };
-      return saveQuotePackage(
-        buildQuoteSavePayload(
-          draft,
-          {
-            equipmentTotal,
-            attachmentTotal,
-            subtotal,
-            discountTotal,
-            discountedSubtotal,
-            netTotal,
-            taxTotal,
-            customerTotal,
-            cashDown,
-            amountFinanced,
-            marginAmount,
-            marginPct,
-          },
-          allFinanceScenarios,
-          snapshot,
-          {
-            quotePackageId: persistedQuotePackageIdRef.current ?? (typeof existingQuote?.id === "string" ? existingQuote.id : null),
-          },
-        ),
-      );
-    },
-    onSuccess: (result) => {
-      const savedQuoteId =
-        (result.quote as { id?: string } | undefined)?.id
-        ?? (result as { id?: string }).id
-        ?? null;
-      if (savedQuoteId) persistedQuotePackageIdRef.current = savedQuoteId;
-      const resolvedDealId =
-        (result.quote as { deal_id?: string } | undefined)?.deal_id
-        ?? (result as { deal_id?: string }).deal_id
-        ?? draft.dealId
-        ?? undefined;
-      const nextStatus =
-        (result.quote as { status?: string } | undefined)?.status
-        ?? "draft";
-      setDraft((current) => ({
-        ...current,
-        dealId: resolvedDealId ?? current.dealId,
-        quoteStatus: nextStatus as QuoteWorkspaceDraft["quoteStatus"],
-      }));
-      setLastSavedAt(new Date().toISOString());
-      setAutoSaveState("saved");
-      // DB is authoritative now. Clear the local draft and stop mirroring
-      // further edits so a follow-up refresh hydrates from the saved row,
-      // not a stale localStorage overlay.
-      if (localDraftKey) clearLocalDraft(localDraftKey);
-      if (userId && resolvedDealId && resolvedDealId !== dealId) {
-        clearLocalDraft(buildLocalDraftKey({ userId, dealId: resolvedDealId }));
-      }
-      setLocalPersistEnabled(false);
-      queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case"] });
-      queryClient.invalidateQueries({ queryKey: ["quote-builder", "saved-quote"] });
-      queryClient.invalidateQueries({ queryKey: ["quote-builder", "list"] });
-      if (result.warning || result.partial_error) {
-        toast({
-          title: "Quote saved with a sync warning",
-          description: result.warning ?? result.partial_error ?? "Some quote details may need another save after refresh.",
-          variant: "destructive",
-        });
-      }
-    },
-  });
 
-  const submitApprovalMutation = useMutation({
-    mutationFn: async () => {
-      // Auto-save first. Two-click "save then submit" was annoying; one
-      // click should do the whole journey. If the quote is already
-      // saved we skip the save and go straight to submit. saveMutation
-      // surfaces the real Postgres error if something rejects the write,
-      // so any failure here cleanly bubbles up to the error banner.
-      let quotePackageId = activeQuotePackageId;
-      if (!quotePackageId) {
-        const saveResult = await saveMutation.mutateAsync();
-        quotePackageId =
-          (saveResult.quote?.id as string | undefined)
-          ?? (saveResult as { id?: string }).id
-          ?? null;
-        if (!quotePackageId) {
-          throw new Error("Couldn't save the quote — approval not submitted.");
-        }
-      }
-      return submitQuoteForApproval(quotePackageId);
-    },
-    onSuccess: (result) => {
-      setDraft((current) => ({
-        ...current,
-        quoteStatus:
-          result.status === "approved" || result.status === "approved_with_conditions"
-            ? result.status
-            : "pending_approval",
-      }));
-      queryClient.invalidateQueries({ queryKey: ["quote-builder", "list"] });
-      queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case", activeQuotePackageId] });
-      queryClient.invalidateQueries({ queryKey: ["quote-builder", "saved-quote"] });
-    },
-  });
-
-  // Slice 15: margin-floor gate state. The gate blocks the save action
-  // when the current margin is below the applicable threshold until the
-  // rep provides a one-sentence reason. Threshold is looked up against
-  // null brandId for MVP — the workspace default floor. Per-brand
-  // lookups hang on the draft's primary equipment brand_id which we
-  // don't thread yet; enable later when Slice 09's full migration ships.
-  const [marginGateOpen, setMarginGateOpen] = useState(false);
-  // Remember which quote+margin combo the rep already justified so we
-  // don't keep re-prompting them. Keyed by quote id + margin (rounded to
-  // 1 decimal) so editing the quote and making the margin worse re-asks,
-  // but a simple re-save at the same margin doesn't. Resets when the
-  // loaded quote changes (different rep session).
-  const [marginReasonCaptured, setMarginReasonCaptured] = useState<string | null>(null);
-  useEffect(() => {
-    setMarginReasonCaptured(null);
-  }, [existingQuote?.id]);
-
-  function marginKeyFor(quoteId: string | null, marginPctValue: number): string {
-    return `${quoteId ?? "new"}|${Math.round(marginPctValue * 10) / 10}`;
-  }
-
-  const handleSaveClick = useCallback(async () => {
-    // Resolve threshold just-in-time so a new workspace-default created
-    // in a sibling tab applies to this session without a refresh. If the
-    // admin lookup flakes, don't silently drop the user's save — save the
-    // draft and let server-side approval/readiness gates stay authoritative.
-    let thresholdPct: number | null = null;
-    try {
-      const { threshold } = await getApplicableThreshold(null);
-      thresholdPct = threshold ? Number(threshold.min_margin_pct) : null;
-    } catch (error) {
-      console.warn("quote-builder threshold lookup failed; saving without margin gate", error);
-    }
-    const key = marginKeyFor(
-      (saveMutation.data?.quote?.id as string | undefined)
-        ?? (typeof existingQuote?.id === "string" ? existingQuote.id : null),
+  const {
+    saveMutation,
+    submitApprovalMutation,
+    marginGateOpen,
+    setMarginGateOpen,
+    handleSaveClick,
+    handleMarginReasonConfirm,
+    activeQuotePackageId,
+    activeQuoteRecord,
+    activeQuoteNumber,
+  } = useQuoteBuilderSave({
+    draft,
+    setDraft,
+    totals: {
+      equipmentTotal,
+      attachmentTotal,
+      subtotal,
+      discountTotal,
+      discountedSubtotal,
+      netTotal,
+      taxTotal,
+      customerTotal,
+      cashDown,
+      amountFinanced,
+      marginAmount,
       marginPct,
-    );
-    // Re-prompting a rep who already captured a reason for the same
-    // (quote, margin) pair this session is pure annoyance — it doesn't
-    // add audit value. Once captured, a straight save just goes through.
-    if (isUnderThreshold(marginPct, thresholdPct) && marginReasonCaptured !== key) {
-      setMarginGateOpen(true);
-      return;
-    }
-    saveMutation.mutate();
-  }, [existingQuote?.id, marginPct, marginReasonCaptured, saveMutation.data?.quote?.id, saveMutation.mutate]);
+    },
+    allFinanceScenarios,
+    winProbContext,
+    persistedQuotePackageIdRef,
+    existingQuote,
+    localDraftKey,
+    userId: profile?.id,
+    dealId,
+    profile,
+    setLastSavedAt,
+    setAutoSaveState,
+    setLocalPersistEnabled,
+  });
 
-  async function handleMarginReasonConfirm(payload: {
-    reason: string;
-    thresholdPct: number;
-    estimatedGapCents: number;
-  }) {
-    setMarginGateOpen(false);
-    // Fire the save first so we have a quote_package_id to attach to the
-    // exception. Wait for it, then log the exception; if the save fails,
-    // no orphan exception row.
-    try {
-      const saveResult = await saveMutation.mutateAsync();
-      const savedId = saveResult.quote?.id ?? saveResult.id;
-      if (!savedId || !profile) return;
-      await logMarginException({
-        workspaceId:        profile.active_workspace_id ?? "default",
-        quotePackageId:     savedId,
-        brandId:            null,
-        quotedMarginPct:    marginPct,
-        thresholdMarginPct: payload.thresholdPct,
-        estimatedGapCents:  payload.estimatedGapCents,
-        reason:             payload.reason,
-        repId:              profile.id,
-      });
-      // Lock in so subsequent saves at this margin don't re-prompt.
-      setMarginReasonCaptured(marginKeyFor(savedId, marginPct));
-    } catch {
-      // saveMutation.error path handles user-visible feedback.
-    }
-  }
-
-  const activeQuotePackageId =
-    saveMutation.data?.quote?.id
-    ?? saveMutation.data?.id
-    ?? (typeof existingQuote?.id === "string" ? existingQuote.id : null);
-  const activeQuoteRecord = useMemo(() => {
-    const saved = saveMutation.data?.quote;
-    return saved && typeof saved === "object" && !Array.isArray(saved)
-      ? (saved as Record<string, unknown>)
-      : existingQuote;
-  }, [existingQuote, saveMutation.data?.quote]);
-  const activeQuoteNumber = typeof activeQuoteRecord?.quote_number === "string" && activeQuoteRecord.quote_number.length > 0
-    ? activeQuoteRecord.quote_number
-    : null;
   const tradeValuationProposalQuery = useQuery({
     queryKey: ["quote-builder", "trade-valuation-proposal", draft.tradeValuationId],
     queryFn: () => getTradeValuationProposalSnapshot(draft.tradeValuationId!),
@@ -2317,25 +2121,22 @@ export function QuoteBuilderV2Page() {
           </div>
         </Card>
 
-        {existingQuoteQuery.isError && (
-          <Card className="border-red-500/30 bg-red-500/5 p-4">
-            <p className="text-sm text-red-300">
-              {existingQuoteQuery.error instanceof Error
+        <QuoteBuilderStatusBanners
+          existingQuoteLoadError={
+            existingQuoteQuery.isError
+              ? (existingQuoteQuery.error instanceof Error
                 ? existingQuoteQuery.error.message
-                : "Unable to load the saved quote."}
-            </p>
-          </Card>
-        )}
-
-        {!existingQuoteQuery.isError && existingQuote && (
-          <Card className="border-blue-500/20 bg-blue-500/5 p-4">
-            <p className="text-sm text-blue-300">
-              Editing saved quote{typeof existingQuote.quote_number === "string" && existingQuote.quote_number
+                : "Unable to load the saved quote.")
+              : null
+          }
+          existingQuoteEditingMessage={
+            !existingQuoteQuery.isError && existingQuote
+              ? `Editing saved quote${typeof existingQuote.quote_number === "string" && existingQuote.quote_number
                 ? ` ${existingQuote.quote_number}`
-                : ""}. Update any step below, then save to keep working in the same quote.
-            </p>
-          </Card>
-        )}
+                : ""}. Update any step below, then save to keep working in the same quote.`
+              : null
+          }
+        />
 
         <WizardShell
           currentWizardStepNumber={currentWizardStepNumber}
@@ -2353,240 +2154,138 @@ export function QuoteBuilderV2Page() {
           onQuoteForProspect={handleQuoteForProspect}
           wizardMaxStepIndex0={wizardMaxStepIndex0}
         >
-      {step === "customer" && (
-        <CustomerStep
-          aiPrompt={aiPrompt}
-          setAiPrompt={setAiPrompt}
-          intakeRecorderOpen={intakeRecorderOpen}
-          setIntakeRecorderOpen={setIntakeRecorderOpen}
-          onVoiceRecorded={(audioBlob, fileName) => voiceMutation.mutate({ blob: audioBlob, fileName })}
-          voiceMutationPending={voiceMutation.isPending}
-          onBuildWithAi={(prompt) => aiIntakeMutation.mutate(prompt)}
-          aiIntakeMutationPending={aiIntakeMutation.isPending}
-          aiIntakeMessage={aiIntakeMessage}
-          winProbContext={winProbContext}
-          factorVerdicts={factorVerdicts}
-          shadowHistory={shadowHistory}
-          shadowCalibration={shadowCalibration}
-          intelligencePanel={intelligencePanel}
-        />
-      )}
-
-      {step === "equipment" && (
-        <EquipmentStep
-          winProbContext={winProbContext}
-          factorVerdicts={factorVerdicts}
-          shadowHistory={shadowHistory}
-          shadowCalibration={shadowCalibration}
-          intelligencePanel={intelligencePanel}
-          onEquipmentCatalogSelect={(entry) => {
-            setAvailableOptions(entry.attachments ?? []);
-            setAvailableOptionsLabel(`${entry.make} ${entry.model}`);
-            const nextLine: QuoteLineItemDraft = {
-              kind: "equipment",
-              id: entry.id,
-              sourceCatalog: entry.sourceCatalog ?? "qb_equipment_models",
-              sourceId: entry.sourceId ?? entry.id ?? null,
-              dealerCost: entry.dealerCost ?? null,
-              title: `${entry.make} ${entry.model}`.trim(),
-              make: entry.make,
-              model: entry.model,
-              year: entry.year,
-              quantity: 1,
-              unitPrice: entry.list_price || 0,
-              metadata: metadataForCatalogEntry(entry),
-            };
-            const nextKey = equipmentKeyForLine(nextLine);
-            setDraft((current) => ({
-              ...current,
-              equipment: current.equipment.some((item) => equipmentKeyForLine(item) === nextKey)
-                ? current.equipment
-                : [...current.equipment, nextLine],
-            }));
-          }}
-          onEquipmentRecommendation={(recommendation) => {
-            setDraft((current) => ({ ...current, recommendation }));
-          }}
-          setAvailableOptions={setAvailableOptions}
-          setAvailableOptionsLabel={setAvailableOptionsLabel}
-          availableOptionsLabel={availableOptionsLabel}
-          equipmentKeyForLine={equipmentKeyForLine}
-          availabilityStatusForLine={availabilityStatusForLine}
-          availabilityRequestIdForLine={availabilityRequestIdForLine}
-          availabilityRequestCreatedAtForLine={availabilityRequestCreatedAtForLine}
-          availabilityRequestLabel={availabilityRequestLabel}
-          availabilityLabel={availabilityLabel}
-          liveAvailabilityRequestForLine={liveAvailabilityRequestForLine}
-          liveAvailabilityStatusForLine={liveAvailabilityStatusForLine}
-          markAvailabilityConfirmationRequested={markAvailabilityConfirmationRequested}
-          markAllAvailabilityConfirmationRequested={markAllAvailabilityConfirmationRequested}
-          availabilityRequestMutationPending={availabilityRequestMutation.isPending}
-          sourceRequiredAwaitingConfirmation={sourceRequiredAwaitingConfirmation}
-          sourceRequiredUnavailable={sourceRequiredUnavailable}
-          equipmentCanContinue={equipmentCanContinue}
-        />
-      )}
-
-      {step === "configure" && (
-        <ConfigureStep
-          configureTab={configureTab}
-          setConfigureTab={setConfigureTab}
-          availableOptions={availableOptions}
-          availableOptionsLabel={availableOptionsLabel}
-          setPackageItemSearchOpen={setPackageItemSearchOpen}
-          customLineTitle={customLineTitle}
-          setCustomLineTitle={setCustomLineTitle}
-          customLinePrice={customLinePrice}
-          setCustomLinePrice={setCustomLinePrice}
-          addConfigLine={addConfigLine}
-        />
-      )}
-
-      {step === "tradeIn" && (
-        <TradeInStep
-          appliedValuationSnapshot={tradeValuationProposalQuery.data ?? null}
-          onPointShootApply={handlePointShootTradeApply}
-          tradeChecklist={tradeChecklist}
-          tradeCapture={tradeCapture}
-          tradeManagerApprovalRequired={tradeManagerApprovalRequired}
-          onOpenTradeCapture={(key) => {
-            setActiveTradeCaptureKey(key);
-            setTradeCaptureOpen(true);
-          }}
-        />
-      )}
-
-      {step === "pricing" && (
-        <PricingStep
-          equipmentTotal={equipmentTotal}
-          attachmentTotal={attachmentTotal}
-          internalCostLoadTotal={internalCostLoadTotal}
-          pricingLineTotal={pricingLineTotal}
-          subtotal={subtotal}
-          discountTotal={discountTotal}
-          taxableBasis={taxableBasis}
-          taxTotal={taxTotal}
-          customerTotal={customerTotal}
-          marginPct={marginPct}
-          dealerCost={dealerCost}
-          netTotal={netTotal}
-          marginAmount={marginAmount}
-          inboundFreightEligible={inboundFreightEligible}
-          pricingLine={pricingLine}
-          upsertPricingLine={upsertPricingLine}
-          discountLine={discountLine}
-          miscChargeTitle={miscChargeTitle}
-          setMiscChargeTitle={setMiscChargeTitle}
-          miscChargeAmount={miscChargeAmount}
-          setMiscChargeAmount={setMiscChargeAmount}
-          miscCreditTitle={miscCreditTitle}
-          setMiscCreditTitle={setMiscCreditTitle}
-          miscCreditAmount={miscCreditAmount}
-          setMiscCreditAmount={setMiscCreditAmount}
-          onAddMiscPricingLine={handleAddMiscPricingLine}
-          taxProfiles={taxProfiles}
-          taxPreviewData={taxPreviewQuery.data}
-          taxPreviewLoading={taxPreviewQuery.isLoading}
-          taxPreviewError={taxPreviewQuery.isError}
-          branchStateProvince={selectedBranch?.state_province}
-        />
-      )}
-
-      {step === "promotions" && (
-        <PromotionsStep activeQuotePackageId={activeQuotePackageId} />
-      )}
-
-      {step === "financing" && (
-        <FinancingStep
-          allFinanceScenarios={allFinanceScenarios}
-          customerTotal={customerTotal}
-          cashDown={cashDown}
-          amountFinanced={amountFinanced}
-          financingPreviewLoading={financingPreviewQuery.isLoading}
-          financingPreviewError={financingPreviewQuery.isError}
-          leaseQuotingEnabled={leaseQuotingEnabled}
-        />
-      )}
-
-      {step === "details" && (
-        <DetailsStep />
-      )}
-
-      {step === "review" && (
-        <ReviewStep
-          branchDisplayName={selectedBranch?.display_name ?? (draft.branchSlug || "Missing")}
-          financeMethodLabel={financeMethodLabel}
-          availabilityAwaitingCount={sourceRequiredAwaitingConfirmation.length}
-          subtotal={subtotal}
-          discountTotal={discountTotal}
-          taxableBasis={taxableBasis}
-          taxTotal={taxTotal}
-          customerTotal={customerTotal}
-          cashDown={cashDown}
-          amountFinanced={amountFinanced}
-          netTotal={netTotal}
-          marginPct={marginPct}
-          dealerCost={dealerCost}
-          marginAmount={marginAmount}
-          activeQuotePackageId={activeQuotePackageId}
-          allFinanceScenarios={allFinanceScenarios}
-          sendReadiness={packetReadiness.send}
-          requiresManagerApproval={approvalState.requiresManagerApproval}
-          userRole={userRoleQuery.data ?? null}
-          canSubmitForApproval={canSubmitForApproval}
-          approvalPending={approvalPending}
-          approvalGranted={approvalGranted}
-          submitApprovalPending={submitApprovalMutation.isPending}
-          onSubmitApproval={() => submitApprovalMutation.mutate()}
-          submitApprovalData={submitApprovalMutation.data}
-          quoteStatus={quoteStatus}
-          onQuoteStatusChange={handleQuoteStatusChange}
-        />
-      )}
-
-      {step === "document" && (
-        <DocumentStep
-          quoteTitle={quoteTitle}
-          customerTotal={customerTotal}
-          financeMethodLabel={financeMethodLabel}
-          documentPersistenceLabel={documentPersistenceLabel}
-          documentFallbackGeneratedAt={documentFallbackGeneratedAt}
-          documentArtifact={documentArtifact}
-          customerFacingDocumentBlocker={customerFacingDocumentBlocker}
-          pdfGenerating={pdfGenerating}
-          quoteMediaSnapshotLoading={quoteMediaSnapshotLoading}
-          documentActionError={documentActionError}
-          documentReady={documentReady}
-          onGenerateDocument={() => void handleGenerateFallbackDocument()}
-        />
-      )}
-
-      {step === "send" && (
-        <SendStep
-          customerFacingDocumentBlocker={customerFacingDocumentBlocker}
-          approvalCaseCanSend={approvalCaseCanSend}
-          approvalBlocker={approvalBlocker}
-          documentReady={documentReady}
-          documentPersistenceLabel={documentPersistenceLabel}
-          taxResolved={taxResolved}
-          taxResolutionBlocker={taxResolutionBlocker}
-          whyThisMachineRequired={whyThisMachineRequired}
-          whyThisMachineBlocker={whyThisMachineBlocker}
-          previewReadiness={previewReadiness}
-          emailReadiness={emailReadiness}
-          textReadiness={textReadiness}
-          textQuoteEnabled={textQuoteEnabled}
-          deliveryActionBusy={deliveryActionBusy}
-          pdfGenerating={pdfGenerating}
-          deliveryActionMessage={deliveryActionMessage}
-          deliveryActionError={deliveryActionError}
-          savePending={saveMutation.isPending}
-          onPreview={() => void handleQuoteSendAction("preview")}
-          onEmail={() => void handleQuoteSendAction("email")}
-          onText={() => void handleQuoteSendAction("text")}
-          onSaveFollowUp={() => void handleSaveClick()}
-        />
-      )}
+      <QuoteWizardStepRouter
+        aiPrompt={aiPrompt}
+        setAiPrompt={setAiPrompt}
+        intakeRecorderOpen={intakeRecorderOpen}
+        setIntakeRecorderOpen={setIntakeRecorderOpen}
+        onVoiceRecorded={(audioBlob, fileName) => voiceMutation.mutate({ blob: audioBlob, fileName })}
+        voiceMutationPending={voiceMutation.isPending}
+        onBuildWithAi={(prompt) => aiIntakeMutation.mutate(prompt)}
+        aiIntakeMutationPending={aiIntakeMutation.isPending}
+        aiIntakeMessage={aiIntakeMessage}
+        winProbContext={winProbContext}
+        factorVerdicts={factorVerdicts}
+        shadowHistory={shadowHistory}
+        shadowCalibration={shadowCalibration}
+        intelligencePanel={intelligencePanel}
+        setAvailableOptions={setAvailableOptions}
+        setAvailableOptionsLabel={setAvailableOptionsLabel}
+        availableOptionsLabel={availableOptionsLabel}
+        equipmentKeyForLine={equipmentKeyForLine}
+        availabilityStatusForLine={availabilityStatusForLine}
+        availabilityRequestIdForLine={availabilityRequestIdForLine}
+        availabilityRequestCreatedAtForLine={availabilityRequestCreatedAtForLine}
+        availabilityRequestLabel={availabilityRequestLabel}
+        availabilityLabel={availabilityLabel}
+        liveAvailabilityRequestForLine={liveAvailabilityRequestForLine}
+        liveAvailabilityStatusForLine={liveAvailabilityStatusForLine}
+        markAvailabilityConfirmationRequested={markAvailabilityConfirmationRequested}
+        markAllAvailabilityConfirmationRequested={markAllAvailabilityConfirmationRequested}
+        availabilityRequestMutationPending={availabilityRequestMutation.isPending}
+        sourceRequiredAwaitingConfirmation={sourceRequiredAwaitingConfirmation}
+        sourceRequiredUnavailable={sourceRequiredUnavailable}
+        equipmentCanContinue={equipmentCanContinue}
+        configureTab={configureTab}
+        setConfigureTab={setConfigureTab}
+        availableOptions={availableOptions}
+        setPackageItemSearchOpen={setPackageItemSearchOpen}
+        customLineTitle={customLineTitle}
+        setCustomLineTitle={setCustomLineTitle}
+        customLinePrice={customLinePrice}
+        setCustomLinePrice={setCustomLinePrice}
+        addConfigLine={addConfigLine}
+        appliedValuationSnapshot={tradeValuationProposalQuery.data ?? null}
+        onPointShootApply={handlePointShootTradeApply}
+        tradeChecklist={tradeChecklist}
+        tradeCapture={tradeCapture}
+        tradeManagerApprovalRequired={tradeManagerApprovalRequired}
+        onOpenTradeCapture={(key) => {
+          setActiveTradeCaptureKey(key);
+          setTradeCaptureOpen(true);
+        }}
+        equipmentTotal={equipmentTotal}
+        attachmentTotal={attachmentTotal}
+        internalCostLoadTotal={internalCostLoadTotal}
+        pricingLineTotal={pricingLineTotal}
+        subtotal={subtotal}
+        discountTotal={discountTotal}
+        taxableBasis={taxableBasis}
+        taxTotal={taxTotal}
+        customerTotal={customerTotal}
+        marginPct={marginPct}
+        dealerCost={dealerCost}
+        netTotal={netTotal}
+        marginAmount={marginAmount}
+        inboundFreightEligible={inboundFreightEligible}
+        pricingLine={pricingLine}
+        upsertPricingLine={upsertPricingLine}
+        discountLine={discountLine}
+        miscChargeTitle={miscChargeTitle}
+        setMiscChargeTitle={setMiscChargeTitle}
+        miscChargeAmount={miscChargeAmount}
+        setMiscChargeAmount={setMiscChargeAmount}
+        miscCreditTitle={miscCreditTitle}
+        setMiscCreditTitle={setMiscCreditTitle}
+        miscCreditAmount={miscCreditAmount}
+        setMiscCreditAmount={setMiscCreditAmount}
+        onAddMiscPricingLine={handleAddMiscPricingLine}
+        taxProfiles={taxProfiles}
+        taxPreviewData={taxPreviewQuery.data}
+        taxPreviewLoading={taxPreviewQuery.isLoading}
+        taxPreviewError={taxPreviewQuery.isError}
+        branchStateProvince={selectedBranch?.state_province}
+        activeQuotePackageId={activeQuotePackageId}
+        allFinanceScenarios={allFinanceScenarios}
+        cashDown={cashDown}
+        amountFinanced={amountFinanced}
+        financingPreviewLoading={financingPreviewQuery.isLoading}
+        financingPreviewError={financingPreviewQuery.isError}
+        leaseQuotingEnabled={leaseQuotingEnabled}
+        branchDisplayName={selectedBranch?.display_name ?? (draft.branchSlug || "Missing")}
+        financeMethodLabel={financeMethodLabel}
+        availabilityAwaitingCount={sourceRequiredAwaitingConfirmation.length}
+        sendReadiness={packetReadiness.send}
+        requiresManagerApproval={approvalState.requiresManagerApproval}
+        userRole={userRoleQuery.data ?? null}
+        canSubmitForApproval={canSubmitForApproval}
+        approvalPending={approvalPending}
+        approvalGranted={approvalGranted}
+        bypassApprovedWithoutCase={bypassApprovedWithoutCase}
+        submitApprovalPending={submitApprovalMutation.isPending}
+        onSubmitApproval={() => submitApprovalMutation.mutate()}
+        submitApprovalData={submitApprovalMutation.data}
+        quoteStatus={quoteStatus}
+        onQuoteStatusChange={handleQuoteStatusChange}
+        quoteTitle={quoteTitle}
+        documentPersistenceLabel={documentPersistenceLabel}
+        documentFallbackGeneratedAt={documentFallbackGeneratedAt}
+        documentArtifact={documentArtifact}
+        customerFacingDocumentBlocker={customerFacingDocumentBlocker}
+        pdfGenerating={pdfGenerating}
+        quoteMediaSnapshotLoading={quoteMediaSnapshotLoading}
+        documentActionError={documentActionError}
+        documentReady={documentReady}
+        onGenerateDocument={() => void handleGenerateFallbackDocument()}
+        approvalCaseCanSend={approvalCaseCanSend}
+        approvalBlocker={approvalBlocker}
+        taxResolved={taxResolved}
+        taxResolutionBlocker={taxResolutionBlocker}
+        whyThisMachineRequired={whyThisMachineRequired}
+        whyThisMachineBlocker={whyThisMachineBlocker}
+        previewReadiness={previewReadiness}
+        emailReadiness={emailReadiness}
+        textReadiness={textReadiness}
+        textQuoteEnabled={textQuoteEnabled}
+        deliveryActionBusy={deliveryActionBusy}
+        deliveryActionMessage={deliveryActionMessage}
+        deliveryActionError={deliveryActionError}
+        savePending={saveMutation.isPending}
+        onPreview={() => void handleQuoteSendAction("preview")}
+        onEmail={() => void handleQuoteSendAction("email")}
+        onText={() => void handleQuoteSendAction("text")}
+        onSaveFollowUp={() => void handleSaveClick()}
+      />
 
         </WizardShell>
 
@@ -2599,37 +2298,24 @@ export function QuoteBuilderV2Page() {
         onReasonConfirm={(payload) => { void handleMarginReasonConfirm(payload); }}
       />
 
-      {pdfError && (
-        <Card className="border-red-500/30 bg-red-500/5 p-4">
-          <p className="text-sm text-red-400">{pdfError}</p>
-        </Card>
-      )}
-
-      {saveMutation.isSuccess && (
-        <Card className="border-emerald-500/30 bg-emerald-500/5 p-4">
-          <p className="text-sm text-emerald-400">Quote saved successfully.</p>
-        </Card>
-      )}
-
-      {submitApprovalMutation.isError && (
-        <Card className="border-red-500/30 bg-red-500/5 p-4">
-          <p className="text-sm text-red-400">
-            {submitApprovalMutation.error instanceof Error
-              ? submitApprovalMutation.error.message
-              : "Failed to submit the quote for approval."}
-          </p>
-        </Card>
-      )}
-
-      {saveMutation.isError && (
-        <Card className="border-red-500/30 bg-red-500/5 p-4">
-          <p className="text-sm text-red-400">
-            {saveMutation.error instanceof Error
+      <QuoteBuilderStatusBanners
+        pdfError={pdfError}
+        saveSuccess={saveMutation.isSuccess}
+        saveErrorMessage={
+          saveMutation.isError
+            ? (saveMutation.error instanceof Error
               ? saveMutation.error.message
-              : "Failed to save the quote."}
-          </p>
-        </Card>
-      )}
+              : "Failed to save the quote.")
+            : null
+        }
+        submitApprovalErrorMessage={
+          submitApprovalMutation.isError
+            ? (submitApprovalMutation.error instanceof Error
+              ? submitApprovalMutation.error.message
+              : "Failed to submit the quote for approval.")
+            : null
+        }
+      />
 
       </div>
       {/* Right column — intelligence panel + Deal Coach (desktop only) */}
@@ -2647,106 +2333,30 @@ export function QuoteBuilderV2Page() {
       </aside>
         </div>
 
-      {/* Deal Assistant / Copilot panel (Slice 05 cold-start + Slice 21
-          per-quote copilot). The drawer auto-routes to the Copilot tab
-          when a quote is in flight (activeQuotePackageId present) and
-          falls back to Scenarios for cold-start. */}
-      <ConversationalDealEngine
-        open={dealAssistantOpen}
-        onClose={() => setDealAssistantOpen(false)}
+      <QuoteBuilderOverlays
+        dealAssistantOpen={dealAssistantOpen}
+        onDealAssistantOpenChange={setDealAssistantOpen}
         onScenarioSelect={handleScenarioSelection}
-        dealId={draft.dealId || undefined}
-        quotePackageId={activeQuotePackageId ?? undefined}
-        quoteName={
-          draft.customerName || draft.customerCompany || undefined
-        }
-        onCopilotDraftPatch={(patch) => {
-          // Merge patch into the draft reducer. customerSignals gets a
-          // shallow merge so CRM-sourced numerics (openDeals, past quote
-          // count, etc.) aren't overwritten by the copilot's narrower
-          // surface.
-          setDraft((current) => ({
-            ...current,
-            ...patch,
-            customerSignals: patch.customerSignals
-              ? { ...(current.customerSignals ?? {
-                  openDeals: 0,
-                  openDealValueCents: 0,
-                  lastContactDaysAgo: null,
-                  pastQuoteCount: 0,
-                  pastQuoteValueCents: 0,
-                }), ...patch.customerSignals }
-              : current.customerSignals,
-          }));
-        }}
-        onCopilotScore={(_score, _factors, _lifts) => {
-          // Intentionally no-op in the reducer path: WinProbabilityStrip
-          // recomputes from the patched draft, so the score surface is
-          // already live. This callback is reserved for future
-          // animation hooks (pulse the strip on delta, etc.).
-        }}
-      />
-
-      <TradeCaptureDialog
-        open={tradeCaptureOpen}
-        onOpenChange={setTradeCaptureOpen}
+        activeQuotePackageId={activeQuotePackageId}
+        tradeCaptureOpen={tradeCaptureOpen}
+        onTradeCaptureOpenChange={setTradeCaptureOpen}
         activeTradeCaptureKey={activeTradeCaptureKey}
         onActiveTradeCaptureKeyChange={setActiveTradeCaptureKey}
         tradeCapture={tradeCapture}
         setTradeCapture={setTradeCapture}
         tradeChecklist={tradeChecklist}
-      />
-
-      <PackageItemSearchDialog
-        open={packageItemSearchOpen}
-        onOpenChange={setPackageItemSearchOpen}
-        kind={configureTab}
-        selectedIds={draft.attachments
-          .filter((item) => item.kind === configureTab)
-          .flatMap((item) => [item.id, item.sourceId].filter((value): value is string => Boolean(value)))}
-        compatibleItems={availableOptions.map((item) => ({
-          id: item.id,
-          kind: "attachment" as const,
-          name: item.name,
-          price: item.price,
-          dealerCost: null,
-          brandName: availableOptionsLabel,
-          category: "Compatible attachment",
-          universal: false,
-          sourceCatalog: "qb_attachments" as const,
-          sourceId: item.id,
-          metadata: {
-            catalog_kind: "compatible_attachment",
-            compatibility: "selected_equipment",
-            compatible_for: availableOptionsLabel,
-          },
-        }))}
-        onAdd={addPackageCatalogItem}
-      />
-
-      <CatalogBrowserDialog
-        open={catalogBrowserOpen}
-        onOpenChange={setCatalogBrowserOpen}
-        onSelectEquipment={(entry) => {
-          addCatalogEquipment(entry);
-          setCatalogBrowserOpen(false);
-          setStep("equipment");
-        }}
-        onSelectAttachment={(entry) => {
-          addCatalogAttachment(entry);
-          setCatalogBrowserOpen(false);
-          setStep("configure");
-        }}
-        onRecommendation={(recommendation) => {
-          setDraft((current) => ({ ...current, recommendation }));
-        }}
-      />
-
-      <ReviewSendDialog
-        open={reviewSendOpen}
-        onOpenChange={setReviewSendOpen}
-        draft={draft}
-        setDraft={setDraft}
+        packageItemSearchOpen={packageItemSearchOpen}
+        onPackageItemSearchOpenChange={setPackageItemSearchOpen}
+        configureTab={configureTab}
+        availableOptions={availableOptions}
+        availableOptionsLabel={availableOptionsLabel}
+        onAddPackageCatalogItem={addPackageCatalogItem}
+        catalogBrowserOpen={catalogBrowserOpen}
+        onCatalogBrowserOpenChange={setCatalogBrowserOpen}
+        onAddCatalogEquipment={addCatalogEquipment}
+        onAddCatalogAttachment={addCatalogAttachment}
+        reviewSendOpen={reviewSendOpen}
+        onReviewSendOpenChange={setReviewSendOpen}
         customerTotal={customerTotal}
         financeMethodLabel={financeMethodLabel}
         pdfGenerating={pdfGenerating}
@@ -2756,18 +2366,14 @@ export function QuoteBuilderV2Page() {
         shareUrl={shareUrl}
         shareError={shareError}
         onIssueShareLink={handleIssueShareLink}
-        activeQuotePackageId={activeQuotePackageId}
         internalNotes={internalNotes}
         setInternalNotes={setInternalNotes}
         packetReadiness={packetReadiness}
         approvalGranted={approvalGranted}
         requiresManagerApproval={approvalState.requiresManagerApproval}
         approvalDetail={approvalState.reason ?? ""}
-        onSent={() => {
-          setDraft((current) => ({ ...current, quoteStatus: "sent" }));
-          setReviewSendOpen(false);
-        }}
       />
+
     </div>
     </WizardStateProvider>
   );

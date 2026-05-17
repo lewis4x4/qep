@@ -26,6 +26,7 @@ import {
   type PricingLineKind,
 } from "../lib/pricing-adder-fields";
 import type { TaxCalculation } from "../lib/tax-api";
+import { PricingAdderBuckets } from "../components/PricingAdderBuckets";
 import { SummaryRow } from "../components/SummaryRow";
 import { useWizard } from "../wizard/useWizard";
 
@@ -242,157 +243,28 @@ export function PricingStep({
             Set 1% good faith
           </Button>
         </div>
-        <div className="mt-4 space-y-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Internal cost adders (not shown to customer)</p>
-            <div className="mt-2 grid gap-3 sm:grid-cols-2">
-              {PRICING_ADDER_FIELDS.filter((field) =>
-                field.costVisibility === "internal"
-                && (field.id !== "inbound_freight" || inboundFreightEligible))
-                .map((field) => {
-                const line = pricingLine(field);
-                return (
-                  <label key={field.id} className="rounded-lg border border-border/70 bg-card/50 p-3 text-sm">
-                    <span className="font-medium text-foreground">{field.title}</span>
-                    <span className="mt-0.5 block text-[11px] text-muted-foreground">{field.helper}</span>
-                    {field.kind === "pdi" && line?.metadata?.pdi_source === "rolling_average_by_model" && (
-                      <span className="mt-0.5 block text-[11px] text-qep-orange">
-                        Prefilled from model history ({Number(line.metadata?.pdi_sample_count ?? 0)} sample{Number(line.metadata?.pdi_sample_count ?? 0) === 1 ? "" : "s"})
-                      </span>
-                    )}
-                    <div className="mt-2 flex items-center gap-1 rounded border border-input bg-background px-2 py-1">
-                      <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-                      <input
-                        type="number"
-                        min={0}
-                        step={field.step}
-                        value={line?.unitPrice ?? ""}
-                        onChange={(event) => upsertPricingLine(field, Number(event.target.value) || 0)}
-                        placeholder="0"
-                        className="w-full bg-transparent text-right text-sm font-semibold outline-none"
-                      />
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-            {!inboundFreightEligible && (
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                Inbound freight is hidden while all selected equipment is in stock because inbound cost is already baked into loaded machine cost.
-              </p>
-            )}
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Customer-facing charges (printed on quote)</p>
-            <div className="mt-2 grid gap-3 sm:grid-cols-2">
-              {PRICING_ADDER_FIELDS.filter((field) => field.costVisibility === "customer").map((field) => {
-                const line = pricingLine(field);
-                return (
-                  <label key={field.id} className="rounded-lg border border-border/70 bg-card/50 p-3 text-sm">
-                    <span className="font-medium text-foreground">{field.title}</span>
-                    <span className="mt-0.5 block text-[11px] text-muted-foreground">{field.helper}</span>
-                    <div className="mt-2 flex items-center gap-1 rounded border border-input bg-background px-2 py-1">
-                      <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-                      <input
-                        type="number"
-                        min={0}
-                        step={field.step}
-                        value={line?.unitPrice ?? ""}
-                        onChange={(event) => upsertPricingLine(field, Number(event.target.value) || 0)}
-                        placeholder="0"
-                        className="w-full bg-transparent text-right text-sm font-semibold outline-none"
-                      />
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-          <div className="rounded-lg border border-border/70 bg-background/40 p-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Misc charges / credits</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">Use for wrap, down payment received, one-off charges, or customer-visible credits not covered above.</p>
-            <div className="mt-3 grid gap-3 lg:grid-cols-2">
-              <div className="rounded-lg border border-border/60 bg-card/50 p-3">
-                <p className="text-sm font-medium text-foreground">Misc charge</p>
-                <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px_auto]">
-                  <input
-                    value={miscChargeTitle}
-                    onChange={(event) => setMiscChargeTitle(event.target.value)}
-                    placeholder="e.g. Wrap, setup, special handling"
-                    className="rounded border border-input bg-background px-3 py-2 text-sm"
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    step={25}
-                    value={miscChargeAmount || ""}
-                    onChange={(event) => setMiscChargeAmount(Number(event.target.value) || 0)}
-                    placeholder="0"
-                    className="rounded border border-input bg-background px-3 py-2 text-sm"
-                  />
-                  <Button type="button" size="sm" onClick={() => onAddMiscPricingLine("charge")}>
-                    Add
-                  </Button>
-                </div>
-              </div>
-              <div className="rounded-lg border border-border/60 bg-card/50 p-3">
-                <p className="text-sm font-medium text-foreground">Misc credit</p>
-                <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px_auto]">
-                  <input
-                    value={miscCreditTitle}
-                    onChange={(event) => setMiscCreditTitle(event.target.value)}
-                    placeholder="e.g. Down payment received"
-                    className="rounded border border-input bg-background px-3 py-2 text-sm"
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    step={25}
-                    value={miscCreditAmount || ""}
-                    onChange={(event) => setMiscCreditAmount(Number(event.target.value) || 0)}
-                    placeholder="0"
-                    className="rounded border border-input bg-background px-3 py-2 text-sm"
-                  />
-                  <Button type="button" size="sm" variant="outline" onClick={() => onAddMiscPricingLine("credit")}>
-                    Add
-                  </Button>
-                </div>
-              </div>
-            </div>
-            {(draft.pricingLines ?? []).some((line) => line.metadata?.misc_line_kind === "charge" || line.metadata?.misc_line_kind === "credit") && (
-              <div className="mt-3 space-y-2">
-                {(draft.pricingLines ?? [])
-                  .filter((line) => line.metadata?.misc_line_kind === "charge" || line.metadata?.misc_line_kind === "credit")
-                  .map((line) => (
-                    <div key={line.id ?? line.title} className="flex items-center justify-between gap-3 rounded border border-border/60 bg-card/50 px-3 py-2 text-sm">
-                      <div>
-                        <p className="font-medium text-foreground">{line.title}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {line.metadata?.misc_line_kind === "credit" ? "Credit" : "Charge"} · printed on customer quote
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={line.metadata?.misc_line_kind === "credit" ? "font-semibold text-emerald-400" : "font-semibold text-foreground"}>
-                          {line.metadata?.misc_line_kind === "credit" ? "-" : ""}{money(line.unitPrice)}
-                        </span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setDraft((current) => ({
-                            ...current,
-                            pricingLines: (current.pricingLines ?? []).filter((item) => item.id !== line.id),
-                          }))}
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </div>
-        </div>
+        <PricingAdderBuckets
+          draftPricingLines={draft.pricingLines ?? []}
+          internalCostLoadTotal={internalCostLoadTotal}
+          pricingLineTotal={pricingLineTotal}
+          inboundFreightEligible={inboundFreightEligible}
+          pricingLine={pricingLine}
+          upsertPricingLine={upsertPricingLine}
+          miscChargeTitle={miscChargeTitle}
+          setMiscChargeTitle={setMiscChargeTitle}
+          miscChargeAmount={miscChargeAmount}
+          setMiscChargeAmount={setMiscChargeAmount}
+          miscCreditTitle={miscCreditTitle}
+          setMiscCreditTitle={setMiscCreditTitle}
+          miscCreditAmount={miscCreditAmount}
+          setMiscCreditAmount={setMiscCreditAmount}
+          onAddMiscPricingLine={onAddMiscPricingLine}
+          onRemoveMiscLine={(lineId) => setDraft((current) => ({
+            ...current,
+            pricingLines: (current.pricingLines ?? []).filter((item) => item.id !== lineId),
+          }))}
+        />
+
       </Card>
 
       <Card className="p-4">

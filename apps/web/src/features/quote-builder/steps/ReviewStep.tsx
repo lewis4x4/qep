@@ -49,6 +49,7 @@ export interface ReviewStepProps {
   canSubmitForApproval: boolean;
   approvalPending: boolean;
   approvalGranted: boolean;
+  bypassApprovedWithoutCase: boolean;
   submitApprovalPending: boolean;
   onSubmitApproval: () => void;
   submitApprovalData?: {
@@ -85,6 +86,7 @@ export function ReviewStep({
   canSubmitForApproval,
   approvalPending,
   approvalGranted,
+  bypassApprovedWithoutCase,
   submitApprovalPending,
   onSubmitApproval,
   submitApprovalData,
@@ -270,13 +272,21 @@ export function ReviewStep({
             </button>
           </div>
         </div>
-        {(submitApprovalData?.status === "approved" || submitApprovalData?.status === "approved_with_conditions") && submitApprovalData?.bypassRuleName && (
-          <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
+        {(bypassApprovedWithoutCase
+          || ((submitApprovalData?.status === "approved" || submitApprovalData?.status === "approved_with_conditions")
+            && submitApprovalData?.bypassRuleName)) && (
+          <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2" role="status">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-300">Auto-approved</p>
             <p className="mt-1 text-xs text-emerald-100">
-              Approval bypass applied
-              {submitApprovalData.status === "approved_with_conditions" ? " — quote status is approved with conditions" : ""}
-              : <span className="font-semibold">{submitApprovalData.bypassRuleName}</span>
+              {submitApprovalData?.bypassRuleName
+                ? (
+                  <>
+                    Approval bypass applied
+                    {submitApprovalData.status === "approved_with_conditions" ? " — quote status is approved with conditions" : ""}
+                    : <span className="font-semibold">{submitApprovalData.bypassRuleName}</span>
+                  </>
+                )
+                : "Workspace approval bypass applied — no manager approval case required."}
             </p>
           </div>
         )}

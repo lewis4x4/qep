@@ -36,6 +36,21 @@ import { getQuoteApprovalCase } from "../lib/quote-api";
 
 const APPROVAL_CASE_STALE_MS = 5_000;
 
+const BYPASS_APPROVED_STATUSES = new Set([
+  "approved",
+  "approved_with_conditions",
+  "sent",
+  "accepted",
+]);
+
+/** Pure helper — exported for unit tests and ReviewStep bypass badge logic. */
+export function isBypassApprovedWithoutCase(
+  approvalCase: QuoteApprovalCaseSummary | null,
+  quoteStatus: string,
+): boolean {
+  return !approvalCase && BYPASS_APPROVED_STATUSES.has(quoteStatus);
+}
+
 export interface UseApprovalBypassInput {
   quotePackageId: string | null;
   /** `draft.quoteStatus ?? "draft"` — caller normalizes the null. */
@@ -72,9 +87,7 @@ export function useApprovalBypass({
 
   const approvalCase = caseQuery.data ?? null;
   const pending = quoteStatus === "pending_approval";
-  const bypassApprovedWithoutCase =
-    !approvalCase
-    && (quoteStatus === "approved" || quoteStatus === "sent" || quoteStatus === "accepted");
+  const bypassApprovedWithoutCase = isBypassApprovedWithoutCase(approvalCase, quoteStatus);
   const canSend = approvalCase?.canSend === true || bypassApprovedWithoutCase;
   const granted =
     quoteStatus === "approved"
