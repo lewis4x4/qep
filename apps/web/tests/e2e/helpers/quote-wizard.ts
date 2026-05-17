@@ -15,6 +15,10 @@ export async function startProspectQuote(page: Page): Promise<void> {
   await expect(page.getByText(/Walk-in prospect/i).first()).toBeVisible({ timeout: 15_000 });
 }
 
+export async function clickWizardProgressPill(page: Page, stepId: string): Promise<void> {
+  await page.getByTestId(`wizard-progress-${stepId}`).click();
+}
+
 export async function advanceWizardNext(page: Page, label: string): Promise<void> {
   const progress = page.getByRole("button", { name: new RegExp(`\\. ${escapeRegExp(label)}:`, "i") });
   if (await progress.first().isVisible().catch(() => false)) {
