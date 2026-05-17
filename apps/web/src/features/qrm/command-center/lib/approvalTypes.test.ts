@@ -49,7 +49,7 @@ describe("normalizeApprovals", () => {
       id: "approval-case-1",
       type: "quote",
       dealId: "deal-1",
-      viewHref: "/quote-v2?package_id=pkg-1",
+      viewHref: "/sales/quotes/new?package_id=pkg-1",
       dealName: "Sykes Earthworks",
       contactName: "Thomas Sykes",
       amount: 82000,
