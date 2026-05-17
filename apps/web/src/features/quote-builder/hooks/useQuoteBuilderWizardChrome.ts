@@ -107,19 +107,6 @@ export function useQuoteBuilderWizardChrome({
     && canJumpToWizardIndex(pricingWizardIndex, wizardReachableMaxIndex0Value)
     && step !== "pricing";
 
-  const handleQuoteForProspect = useCallback(() => {
-    setDraft((cur) => ({
-      ...cur,
-      customerName: cur.customerName || "Walk-in prospect",
-      customerCompany: cur.customerCompany || "Walk-in prospect",
-      contactId: undefined,
-      companyId: undefined,
-      customerSignals: null,
-      customerWarmth: cur.customerWarmth ?? "new",
-    }));
-    setStep("equipment");
-  }, [setDraft, setStep]);
-
   const primaryActionLabel =
     savePending || submitApprovalPending
       ? "Working..."
@@ -208,7 +195,6 @@ export function useQuoteBuilderWizardChrome({
     wizardMaxStepIndex0,
     wizardReachableMaxIndex0Value,
     wizardPricingJumpAllowed,
-    handleQuoteForProspect,
     primaryActionLabel,
     primaryActionDisabled,
     previewReadiness,
