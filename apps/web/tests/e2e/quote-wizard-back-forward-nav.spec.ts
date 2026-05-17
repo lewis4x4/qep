@@ -1,11 +1,23 @@
 import { expect, test } from "@playwright/test";
 
-import { playwrightTestCredentials, signInWithPassword } from "./helpers/auth";
+import {
+  clickStepFooterNext,
+  clickWizardProgressPill,
+  expectWizardStep,
+  playwrightTestCredentials,
+  selectFirstCatalogEquipment,
+  selectFirstQuotingBranch,
+  signInWithPassword,
+  startProspectQuote,
+} from "./fixtures";
 
 const credentials = playwrightTestCredentials();
 
 test.describe("quote wizard step navigation", () => {
-  test.skip(!credentials, "Set PLAYWRIGHT_TEST_EMAIL and PLAYWRIGHT_TEST_PASSWORD for authenticated e2e");
+  test.skip(
+    !credentials,
+    "Set PLAYWRIGHT_TEST_EMAIL and PLAYWRIGHT_TEST_PASSWORD for authenticated e2e",
+  );
 
   test.beforeEach(async ({ page }) => {
     await signInWithPassword(page, credentials!.email, credentials!.password);
@@ -13,15 +25,27 @@ test.describe("quote wizard step navigation", () => {
     await expect(page.getByRole("heading", { name: "Quote Builder" })).toBeVisible();
   });
 
-  test("wizard progress rail jumps forward and back without losing the shell", async ({ page }) => {
-    await expect(page.getByRole("heading", { level: 2, name: /Step 1:/i })).toBeVisible();
+  test("progress pills jump back from pricing to configure and forward again", async ({ page }) => {
+    await expectWizardStep(page, 1);
+    await startProspectQuote(page);
+    await selectFirstQuotingBranch(page);
 
-    await page.getByRole("button", { name: /Quote for prospect/i }).click();
-    await page.getByRole("button", { name: /Equipment/i }).click();
+    await clickWizardProgressPill(page, "equipment");
+    await expectWizardStep(page, 2);
+    await selectFirstCatalogEquipment(page);
+    await clickStepFooterNext(page, /^Configure/i);
 
-    await expect(page.getByRole("heading", { level: 2, name: /Step 2:/i })).toBeVisible();
+    await expectWizardStep(page, 3);
+    await clickStepFooterNext(page, /^Trade-in/i);
+    await expectWizardStep(page, 4);
+    await clickStepFooterNext(page, /^Pricing/i);
+    await expectWizardStep(page, 5);
 
-    await page.getByRole("button", { name: "1. Customer: editable step" }).click();
-    await expect(page.getByRole("heading", { level: 2, name: /Step 1:/i })).toBeVisible();
+    await clickWizardProgressPill(page, "configure");
+    await expectWizardStep(page, 3);
+
+    await clickWizardProgressPill(page, "pricing");
+    await expectWizardStep(page, 5);
+    await expect(page.getByRole("button", { name: /^Configure/i })).toBeEnabled();
   });
 });
