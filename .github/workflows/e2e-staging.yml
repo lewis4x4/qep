@@ -62,7 +62,7 @@ jobs:
         run: |
           if [ -z "$PLAYWRIGHT_TEST_EMAIL" ] || [ -z "$PLAYWRIGHT_TEST_PASSWORD" ]; then
             echo "Authenticated secrets unavailable (fork PR) — guest route smoke only."
-            bunx playwright test tests/e2e/quote-builder-route.spec.ts
+            bunx playwright test tests/e2e/quote-wizard-happy-path.spec.ts -g "unauthenticated visit is gated"
           else
             bun run test:e2e:staging
           fi
