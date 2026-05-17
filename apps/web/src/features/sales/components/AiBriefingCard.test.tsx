@@ -1,6 +1,8 @@
-import { describe, expect, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, test } from "bun:test";
+import { cleanup, render, screen } from "@testing-library/react";
 import { AiBriefingCard } from "./AiBriefingCard";
+
+afterEach(cleanup);
 
 describe("AiBriefingCard", () => {
   test("uses caller-provided summary parts when supplied", () => {
