@@ -4,14 +4,21 @@
  */
 
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { money } from "../lib/money";
 import { QuoteWizardProgress } from "./WizardProgress";
 import { STEP_LABELS, WIZARD_STEPS, type Step } from "./wizard-types";
+import { canJumpToWizardIndex, findWizardStepIndex } from "./wizard-navigation";
 import { useWizard } from "./useWizard";
+// WAVE quote-builder polish (Slice 1)
+import {
+  MobileWizardStepper,
+  type MobileWizardStep,
+} from "@/features/sales/components/MobileWizardStepper";
+import { useIsMobileViewport } from "@/features/sales/hooks/useIsMobileViewport";
 
 export type QuotingBranchOption = {
   id: string;
@@ -55,6 +62,31 @@ export function WizardShell({
   children,
 }: WizardShellProps) {
   const { step, setStep, draft, setDraft } = useWizard();
+  // WAVE polish Slice 1: on phone viewports we replace the desktop
+  // QuoteWizardProgress tile grid with the chip-rail MobileWizardStepper
+  // primitive. The mapping below mirrors QuoteWizardProgress's own
+  // status logic so the two stay in lockstep.
+  const isMobile = useIsMobileViewport();
+  const mobileSteps = useMemo<MobileWizardStep[]>(() => {
+    const currentIndex = findWizardStepIndex(step);
+    const reachableMax = Math.min(
+      Math.max(wizardMaxStepIndex0, currentIndex),
+      WIZARD_STEPS.length - 1,
+    );
+    return WIZARD_STEPS.map((item, index) => {
+      const isCurrent = item.id === step;
+      const isReachable = canJumpToWizardIndex(index, reachableMax);
+      const isComplete = !isCurrent && index < currentIndex;
+      const status: MobileWizardStep["status"] = isCurrent
+        ? "current"
+        : isComplete
+          ? "done"
+          : isReachable
+            ? "available"
+            : "locked";
+      return { id: item.id, label: item.shortLabel, status };
+    });
+  }, [step, wizardMaxStepIndex0]);
 
   return (
     <>
@@ -132,13 +164,21 @@ export function WizardShell({
         </div>
       </Card>
 
-      <QuoteWizardProgress
-        steps={WIZARD_STEPS}
-        currentStep={step}
-        maxCompletedStepIndex={wizardMaxStepIndex0}
-        compact
-        onJumpTo={setStep}
-      />
+      {isMobile ? (
+        <MobileWizardStepper
+          steps={mobileSteps}
+          onStepClick={(id) => setStep(id as Step)}
+          ariaLabel="Quote wizard progress"
+        />
+      ) : (
+        <QuoteWizardProgress
+          steps={WIZARD_STEPS}
+          currentStep={step}
+          maxCompletedStepIndex={wizardMaxStepIndex0}
+          compact
+          onJumpTo={setStep}
+        />
+      )}
 
       {/*
         WAVE phase 1: Quote Builder now hosts inside SalesShell, which has a
