@@ -523,8 +523,12 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     sectionLabel: "Admin",
   },
   {
+    // WAVE phase 4: rep-facing My Mirror now lives inside SalesShell.
+    // The legacy /qrm/my/reality route stays available (still mounted at
+    // the desktop chrome) so this nav entry just repoints to the mobile
+    // surface for reps.
     label: "My Mirror",
-    href: "/qrm/my/reality",
+    href: "/sales/my-mirror",
     icon: UserRound,
     roles: ["rep"],
     primaryHeaderId: "qrm",

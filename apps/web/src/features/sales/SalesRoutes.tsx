@@ -36,6 +36,11 @@ const VoiceQuotePage = lazy(() =>
   import("../voice-quote/pages/VoiceQuotePage").then((m) => ({ default: m.VoiceQuotePage })),
 );
 
+// WAVE phase 4: Rep My Mirror reflection page (mobile-first).
+const MyMirrorPage = lazy(() =>
+  import("./pages/MyMirrorPage").then((m) => ({ default: m.MyMirrorPage })),
+);
+
 function SalesRouteFallback() {
   return (
     <div className="flex items-center justify-center h-64">
@@ -132,6 +137,15 @@ export function SalesRoutes() {
           element={
             <Suspense fallback={<SalesRouteFallback />}>
               <VoiceQuotePage />
+            </Suspense>
+          }
+        />
+        {/* WAVE phase 4: Rep My Mirror */}
+        <Route
+          path="my-mirror"
+          element={
+            <Suspense fallback={<SalesRouteFallback />}>
+              <MyMirrorPage />
             </Suspense>
           }
         />
