@@ -98,7 +98,10 @@ export function ConfigureStep({
       </Card>
 
       <Card className="p-4">
-        <div className="flex flex-wrap gap-2">
+        {/* WAVE B2 deep reflow: tab row reads as a chip rail on mobile —
+            each tab is full-thumb height (44pt min) and shows its
+            configured-line count badge inline. */}
+        <div className="flex flex-wrap gap-2" data-testid="configure-tabs">
           {([
             { id: "attachment", label: "Attachments" },
             { id: "option", label: "Options" },
@@ -115,7 +118,9 @@ export function ConfigureStep({
                   setConfigureTab(tab.id);
                   setPackageItemSearchOpen(true);
                 }}
-                className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                data-configure-tab={tab.id}
+                aria-pressed={configureTab === tab.id}
+                className={`min-h-[44px] rounded-lg border px-3 py-2 text-xs font-semibold transition ${
                   configureTab === tab.id
                     ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
                     : "border-border text-muted-foreground hover:text-foreground"
@@ -218,23 +223,29 @@ export function ConfigureStep({
             </div>
           ) : null}
 
+          {/* WAVE B2: manual fallback row stacks on mobile (already 1-col by
+              default at md:grid-cols-*), but inputs need text-base to keep
+              iOS Safari from auto-zooming on focus, and the Add button
+              needs a 44pt min height. */}
           <div className="grid gap-2 md:grid-cols-[1fr_140px_auto]">
             <input
               value={customLineTitle}
               onChange={(event) => setCustomLineTitle(event.target.value)}
               placeholder={`Add ${configureTab} name`}
-              className="rounded border border-input bg-card px-3 py-2 text-sm"
+              className="rounded border border-input bg-card px-3 py-2 text-base sm:text-sm"
             />
             <input
               type="number"
+              inputMode="decimal"
               min={0}
               step={100}
               value={customLinePrice}
               onChange={(event) => setCustomLinePrice(Number(event.target.value) || 0)}
-              className="rounded border border-input bg-card px-3 py-2 text-sm"
+              className="rounded border border-input bg-card px-3 py-2 text-base sm:text-sm"
             />
             <Button
               size="sm"
+              className="min-h-[44px]"
               onClick={() => {
                 addConfigLine(configureTab, { title: customLineTitle, unitPrice: customLinePrice });
                 setCustomLineTitle("");
