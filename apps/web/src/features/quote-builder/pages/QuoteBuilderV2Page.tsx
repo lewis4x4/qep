@@ -42,11 +42,8 @@ import {
   getClosedDealsAudit,
   getFactorVerdicts,
   listQuoteAvailabilityRequests,
-  logQuoteDeliveryEvent,
-  persistQuoteDocumentArtifact,
   requestQuoteAvailability,
   searchCatalog,
-  sendQuotePackage,
   type QuoteAvailabilityRequest,
   type QuotePackageCatalogItem,
   type QuotePackageCatalogKind,
@@ -56,7 +53,6 @@ import {
   computeQuoteSendActionReadiness,
   isQuoteWhyThisMachineConfirmationRequired,
   isTaxProfileExempt,
-  quoteLineCostVisibility,
   type QuoteSendActionChannel,
 } from "../lib/quote-workspace";
 import { useApprovalBypass } from "../hooks/useApprovalBypass";
@@ -66,6 +62,7 @@ import { useQuoteBuilderInboundFreightReset } from "../hooks/useQuoteBuilderInbo
 import { useQuoteBuilderCrmHydration } from "../hooks/useQuoteBuilderCrmHydration";
 import { useQuoteBuilderDefaultBranch } from "../hooks/useQuoteBuilderDefaultBranch";
 import { useQuoteBuilderDetailsDefaults } from "../hooks/useQuoteBuilderDetailsDefaults";
+import { useQuoteBuilderDocumentActions } from "../hooks/useQuoteBuilderDocumentActions";
 import { useQuoteBuilderDocumentInvalidation } from "../hooks/useQuoteBuilderDocumentInvalidation";
 import { useQuoteBuilderLocalDraft } from "../hooks/useQuoteBuilderLocalDraft";
 import { useQuoteBuilderEquipmentSeed } from "../hooks/useQuoteBuilderEquipmentSeed";
@@ -73,6 +70,17 @@ import { useQuoteBuilderFinanceScenarioSync } from "../hooks/useQuoteBuilderFina
 import { useQuoteBuilderKeyboardShortcuts } from "../hooks/useQuoteBuilderKeyboardShortcuts";
 import { useQuoteBuilderLocalDraftPersist } from "../hooks/useQuoteBuilderLocalDraftPersist";
 import { useQuoteBuilderSave } from "../hooks/useQuoteBuilderSave";
+import { useQuoteBuilderConfigLines } from "../hooks/useQuoteBuilderConfigLines";
+import { useQuoteBuilderAiIntake } from "../hooks/useQuoteBuilderAiIntake";
+import { useQuoteBuilderAvailability } from "../hooks/useQuoteBuilderAvailability";
+import { useQuoteBuilderCatalogActions } from "../hooks/useQuoteBuilderCatalogActions";
+import { useQuoteBuilderRecommendedMachine } from "../hooks/useQuoteBuilderRecommendedMachine";
+import { useQuoteBuilderIntelligenceContext } from "../hooks/useQuoteBuilderIntelligenceContext";
+import { useQuoteBuilderWizardChrome } from "../hooks/useQuoteBuilderWizardChrome";
+import { useQuoteBuilderMiscPricingLine } from "../hooks/useQuoteBuilderMiscPricingLine";
+import { useQuoteBuilderPricingLines } from "../hooks/useQuoteBuilderPricingLines";
+import { useQuoteBuilderPrimaryAction } from "../hooks/useQuoteBuilderPrimaryAction";
+import { useQuoteBuilderShareLink } from "../hooks/useQuoteBuilderShareLink";
 import { useQuoteBuilderTaxSync } from "../hooks/useQuoteBuilderTaxSync";
 import { useQuoteBuilderWizardPersist } from "../hooks/useQuoteBuilderWizardPersist";
 import { useDraftAutosave } from "../hooks/useDraftAutosave";
@@ -82,13 +90,13 @@ import {
   applyEquipmentOverridePrice,
   equipmentSystemBasePrice,
 } from "../lib/equipment-override-price";
-import { buildCatalogQueryCandidates } from "../lib/catalog-query-candidates";
 import { isDraftEmpty } from "../lib/local-draft";
 import { useActiveBranches, useBranchBySlug } from "@/hooks/useBranches";
 import { useQuotePDF } from "../hooks/useQuotePDF";
 import { useQuoteFinancingPreview } from "../hooks/useQuoteFinancingPreview";
 import { useQuoteTaxPreview } from "../hooks/useQuoteTaxPreview";
 import { buildCustomFinanceScenario } from "../lib/custom-finance";
+import { resolveApprovalBlockerMessage } from "../lib/quote-builder-approval-blocker";
 import { buildQuoteProposalData } from "../lib/quote-proposal-data";
 import { getTradeValuationProposalSnapshot } from "../lib/point-shoot-trade-api";
 import { buildQuotePdfBranch } from "../lib/quote-builder-page-normalizers";
@@ -98,7 +106,6 @@ import { VoiceRecorder } from "@/features/voice-qrm/components/VoiceRecorder";
 import { submitVoiceToQrm } from "@/features/voice-qrm/lib/voice-qrm-api";
 import { toast } from "@/hooks/use-toast";
 import { DealAssistantTrigger, type ScenarioSelection } from "../components/ConversationalDealEngine";
-import { issueShareToken } from "@/features/deal-room/lib/deal-room-api";
 import {
   buildScenarioSelectionDraftPatch,
   type ScenarioSelectionSource,
@@ -139,12 +146,7 @@ import {
   isoFromDateTimeInput,
   shortDateTime,
 } from "../lib/quote-date-input";
-import {
-  PRICING_ADDER_FIELDS,
-  type CostVisibility,
-  type PricingAdderField,
-  type PricingLineKind,
-} from "../lib/pricing-adder-fields";
+import { PRICING_ADDER_FIELDS } from "../lib/pricing-adder-fields";
 import { QuoteWorkspaceLineRow } from "../components/QuoteWorkspaceLineRow";
 import {
   EMPTY_TRADE_CAPTURE,
@@ -166,7 +168,6 @@ import {
   isQuoteApprovedForDistribution,
   metadataForCatalogEntry,
   metadataString,
-  normalizeMachineMatchLabel,
   type CatalogAttachmentMatch,
   type CatalogEntryMatch,
 } from "../lib/quote-builder-page-helpers";
@@ -321,6 +322,27 @@ export function QuoteBuilderV2Page() {
     packetReadiness,
   } = useLiveMargin(draft);
 
+  const { pricingLine, upsertPricingLine } = useQuoteBuilderPricingLines({
+    pricingLines: draft.pricingLines,
+    setDraft,
+  });
+
+  const { addConfigLine } = useQuoteBuilderConfigLines({ setDraft });
+
+  const { addRecommendedMachine } = useQuoteBuilderRecommendedMachine({
+    draftRef,
+    setDraft,
+    setStep,
+    setAvailableOptions,
+    setAvailableOptionsLabel,
+  });
+
+  const { addCatalogEquipment, addCatalogAttachment, addPackageCatalogItem } = useQuoteBuilderCatalogActions({
+    setDraft,
+    setAvailableOptions,
+    setAvailableOptionsLabel,
+  });
+
   const { generateAndDownload: downloadPDF, generating: pdfGenerating, error: pdfError } = useQuotePDF();
   const { profile } = useAuth();
   const { existingQuoteQuery, existingQuote } = useExistingQuoteLoad({
@@ -391,94 +413,13 @@ export function QuoteBuilderV2Page() {
     setAvailableOptionsLabel,
   });
 
-  const userRoleQuery = useQuery({
-    queryKey: ["quote-builder", "role"],
-    queryFn: async () => {
-      const { data: auth } = await supabase.auth.getUser();
-      const userId = auth.user?.id;
-      if (!userId) return null;
-      const { data, error } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
-      if (error) throw error;
-      return typeof data?.role === "string" ? data.role : null;
-    },
-    staleTime: 60_000,
-  });
-
-  // Slice 20c: margin baseline powers the win-probability strip's "margin
-  // discipline" factor. Same data source DealCoachSidebar uses; we fetch it
-  // here once so every step can render the strip without each surface
-  // refetching. `enabled` gates on profile.id because the query hits
-  // quote_packages.created_by — firing pre-auth would always come back empty.
-  const marginBaselineQuery = useQuery({
-    queryKey: ["quote-builder", "margin-baseline", profile?.id ?? ""],
-    queryFn: () => (profile?.id ? getMarginBaseline(profile.id) : Promise.resolve(null)),
-    enabled: !!profile?.id,
-    staleTime: 5 * 60_000,
-  });
-  // Memoized so the strip's `useMemo([draft, context])` scorer can actually
-  // hit — a fresh object literal on every render would invalidate it.
-  const marginBaselineMedianPct = marginBaselineQuery.data?.medianPct ?? null;
-
-  // Slice 20i: factor verdicts — historical "proven / suspect / unknown"
-  // labels for each scorer factor, used by WinProbabilityStrip to annotate
-  // the live factor chips. Rep-accessible endpoint; on failure it returns
-  // an empty map and the strip silently renders without badges.
-  // Gated on `profile?.id` to avoid firing a pre-auth fetch that'd be
-  // silently discarded; 5-minute stale time because the verdict
-  // aggregate changes on closed-deal timescale, not quote-editing
-  // timescale.
-  const factorVerdictsQuery = useQuery({
-    queryKey: ["quote-builder", "factor-verdicts"],
-    queryFn: getFactorVerdicts,
-    enabled: !!profile?.id,
-    staleTime: 5 * 60_000,
-  });
-  const factorVerdicts = factorVerdictsQuery.data ?? null;
-
-  // Slice 20j: closed-deals history feeds the K-nearest-neighbor
-  // shadow score. The endpoint is manager/owner-only; on reps it
-  // returns `{ok:false, reason:"forbidden"}` and we silently render
-  // the strip without a shadow chip. Same 5-minute stale time as the
-  // verdicts query for the same reason — history updates on
-  // closed-deal timescale, not keystroke timescale.
-  //
-  // Role-gated so we don't round-trip a guaranteed-403 request every
-  // 5 minutes on rep sessions. `userRoleQuery.data` can momentarily
-  // be undefined; we wait for it to resolve before firing.
-  const canLoadShadowHistory =
-    !!profile?.id
-    && (userRoleQuery.data === "manager" || userRoleQuery.data === "owner");
-  const closedDealsAuditQuery = useQuery({
-    queryKey: ["quote-builder", "closed-deals-audit"],
-    queryFn: getClosedDealsAudit,
-    enabled: canLoadShadowHistory,
-    staleTime: 5 * 60_000,
-  });
-  const shadowHistory = useMemo(() => {
-    const result = closedDealsAuditQuery.data;
-    if (!result || !result.ok) return null;
-    return result.audits.map((a) => ({
-      packageId: a.packageId,
-      factors: a.factors,
-      outcome: a.outcome,
-    }));
-  }, [closedDealsAuditQuery.data]);
-  // Slice 20l: calibrated disagreement callout. Derive the aggregate
-  // shadow-vs-rule agreement summary from the same closed-deals
-  // payload so the strip can modulate its tone by measured evidence.
-  // Computed once here (not on every strip render) so three mounted
-  // strips share the work.
-  const shadowCalibration = useMemo(() => {
-    const result = closedDealsAuditQuery.data;
-    if (!result || !result.ok) return null;
-    if (result.audits.length === 0) return null;
-    const retros = computeRetrospectiveShadows(result.audits);
-    return computeShadowAgreementSummary(retros);
-  }, [closedDealsAuditQuery.data]);
-  const winProbContext = useMemo(
-    () => ({ marginPct, marginBaselineMedianPct }),
-    [marginPct, marginBaselineMedianPct],
-  );
+  const {
+    userRoleQuery,
+    factorVerdicts,
+    shadowHistory,
+    shadowCalibration,
+    winProbContext,
+  } = useQuoteBuilderIntelligenceContext(profile?.id, marginPct);
 
   const taxProfiles: Array<{ value: QuoteTaxProfile; label: string; detail: string }> = [
     { value: "standard", label: "Standard taxable", detail: "Calculate estimated sales tax normally." },
@@ -626,20 +567,6 @@ export function QuoteBuilderV2Page() {
     : typeof activeQuoteRecord?.created_at === "string"
       ? activeQuoteRecord.created_at
       : null;
-  const availabilityRequestsQuery = useQuery({
-    queryKey: ["quote-builder", "availability-requests", activeQuotePackageId],
-    queryFn: () => listQuoteAvailabilityRequests(activeQuotePackageId!),
-    enabled: Boolean(activeQuotePackageId),
-    staleTime: 5_000,
-  });
-  const availabilityRequestsById = useMemo(() => {
-    const map = new Map<string, QuoteAvailabilityRequest>();
-    for (const request of availabilityRequestsQuery.data ?? []) {
-      map.set(request.id, request);
-    }
-    return map;
-  }, [availabilityRequestsQuery.data]);
-
   const currentWizardStepNumber = wizardIndexForStep(step);
 
   useQuoteBuilderWizardPersist({
@@ -727,6 +654,17 @@ export function QuoteBuilderV2Page() {
     Boolean(draft.tradeValuationId)
     && (tradeValuationProposalQuery.isLoading || tradeValuationProposalQuery.isFetching)
     && !tradeValuationProposalQuery.data;
+  const whyThisMachineRequired = isQuoteWhyThisMachineConfirmationRequired(draft);
+  const whyThisMachineBlocker = whyThisMachineRequired && draft.whyThisMachineConfirmed !== true
+    ? "Confirm the Why this machine narrative before customer-facing document/send."
+    : null;
+  const approvalBlocker = resolveApprovalBlockerMessage({
+    activeQuotePackageId,
+    activeApprovalCaseLoading,
+    bypassApprovedWithoutCase,
+    activeApprovalCase,
+  });
+  const customerFacingDocumentBlocker = approvalBlocker ?? taxResolutionBlocker ?? whyThisMachineBlocker;
   const draftSaveSignature = useMemo(() => JSON.stringify({
     draft,
     computed: {
@@ -753,6 +691,55 @@ export function QuoteBuilderV2Page() {
     amountFinanced,
     marginPct,
   ]);
+
+  const {
+    handleDownloadPdf,
+    handleGenerateFallbackDocument,
+    handleQuoteSendAction,
+  } = useQuoteBuilderDocumentActions({
+    customerFacingDocumentBlocker,
+    quoteMediaSnapshotLoading,
+    quotePdfData,
+    downloadPDF,
+    activeQuotePackageId,
+    draft,
+    setDraft,
+    draftSaveSignature,
+    lastAutoSaveSignatureRef,
+    documentDraftSignatureRef,
+    documentArtifact,
+    documentFallbackGeneratedAt,
+    setDocumentFallbackGeneratedAt,
+    setDocumentArtifact,
+    setDocumentActionError,
+    setDeliveryActionMessage,
+    setDeliveryActionError,
+    setDeliveryActionBusy,
+    packetReadinessDraftReady: packetReadiness.draft.ready,
+    saveMutation,
+    refetchActiveApprovalCase: refetchActiveApprovalCase,
+    bypassApprovedWithoutCase,
+    approvalCaseCanSend,
+    taxResolved,
+    whyThisMachineRequired,
+  });
+
+  const { handleIssueShareLink } = useQuoteBuilderShareLink({
+    activeQuotePackageId,
+    setShareUrl,
+    setShareBusy,
+    setShareError,
+  });
+
+  const handlePrimaryAction = useQuoteBuilderPrimaryAction({
+    quoteStatus,
+    approvalCaseCanSend,
+    sendReady: packetReadiness.send.ready,
+    canSubmitForApproval,
+    onSave: handleSaveClick,
+    onSubmitApproval: () => submitApprovalMutation.mutate(),
+    setStep,
+  });
 
   useDraftAutosave({
     enabled: localDraftHydrationComplete,
@@ -787,534 +774,41 @@ export function QuoteBuilderV2Page() {
     onSave: handleSaveClick,
   });
 
-  const voiceMutation = useMutation({
-    mutationFn: async (payload: { blob: Blob; fileName: string }) => {
-      const voiceResult = await submitVoiceToQrm({
-        audioBlob: payload.blob,
-        fileName: payload.fileName,
-        dealId: draft.dealId || undefined,
-      });
-      if (!("transcript" in voiceResult) || !voiceResult.transcript) {
-        throw new Error("Voice note did not return a usable transcript.");
-      }
-      const recommendation = await getAiEquipmentRecommendation(voiceResult.transcript);
-      return { voiceResult, recommendation };
-    },
-    onSuccess: ({ voiceResult, recommendation }) => {
-      // voice-to-qrm already extracts structured entities from the
-      // transcript (contact name/id, company name/id, deal id). The old
-      // flow dropped all of that on the floor — rep landed on Customer
-      // with an empty form even though the pipeline knew "John Coker"
-      // from "I'm quoting John Coker for a small farm tractor..." Pull
-      // the entities in so the Customer step is pre-filled when confidence
-      // is usable. Only apply fields we actually have; don't overwrite
-      // a manually-entered value the rep may have already typed.
-      const entities = "entities" in voiceResult ? voiceResult.entities : null;
-      const contactName = entities?.contact?.name?.trim() || "";
-      const companyName = entities?.company?.name?.trim() || "";
-      const contactId = entities?.contact?.id ?? null;
-      const companyId = entities?.company?.id ?? null;
-      setDraft((current) => ({
-        ...current,
-        recommendation,
-        voiceSummary: voiceResult.transcript,
-        customerName: current.customerName?.trim() ? current.customerName : contactName,
-        customerCompany: current.customerCompany?.trim() ? current.customerCompany : companyName,
-        contactId: current.contactId ?? contactId ?? undefined,
-        companyId: current.companyId ?? companyId ?? undefined,
-      }));
-      // Slice 20a: land on the Customer step instead of Equipment. The AI
-      // has picked a machine, but we still don't know who the quote is
-      // for — rep confirms/picks customer next.
-      setStep("customer");
-    },
-  });
-
-  const aiIntakeMutation = useMutation({
-    onMutate: () => {
-      setAiIntakeMessage(null);
-    },
-    mutationFn: async (prompt: string) => {
-      const recommendation = await getAiEquipmentRecommendation(prompt);
-      return { recommendation, prompt };
-    },
-    onSuccess: ({ recommendation, prompt }) => {
-      setDraft((current) => ({
-        ...current,
-        recommendation,
-        voiceSummary: prompt,
-      }));
-      if (!recommendation.machine) {
-        const message = recommendation.reasoning || "AI could not find a sellable QEP catalog match. Browse the catalog and pick a verified machine.";
-        setAiIntakeMessage(message);
-        setPackageToolsOpen(true);
-        setCatalogBrowserOpen(true);
-        setStep("equipment");
-        toast({
-          title: "No catalog-backed machine found",
-          description: message,
-          variant: "destructive",
-        });
-        return;
-      }
-      setStep(draftHasCustomer(draft) ? "equipment" : "customer");
-      toast({
-        title: "Catalog-backed recommendation ready",
-        description: draftHasCustomer(draft)
-          ? "Review the verified machine on the equipment step."
-          : "Confirm the customer, then review the verified machine.",
-      });
-    },
-    onError: (error) => {
-      const message = error instanceof Error ? error.message : "AI recommendation failed. Try again or browse the catalog.";
-      setAiIntakeMessage(message);
-      toast({
-        title: "AI intake failed",
-        description: message,
-        variant: "destructive",
-      });
-    },
+  const { voiceMutation, aiIntakeMutation, onVoiceRecorded, onBuildWithAi } = useQuoteBuilderAiIntake({
+    draftRef,
+    setDraft,
+    setStep,
+    setAiIntakeMessage,
+    setPackageToolsOpen,
+    setCatalogBrowserOpen,
   });
 
   const handleScenarioSelection = (selection: ScenarioSelection) => {
     applyScenarioSelection(selection, "deal_assistant");
   };
 
-  function addCatalogEquipment(entry: CatalogEntryMatch): void {
-    setAvailableOptions(entry.attachments ?? []);
-    setAvailableOptionsLabel(`${entry.make} ${entry.model}`);
-    const nextLine = buildEquipmentLine(entry);
-    const nextKey = equipmentKeyForLine(nextLine);
-    setDraft((current) => ({
-      ...current,
-      equipment: current.equipment.some((item) => equipmentKeyForLine(item) === nextKey)
-        ? current.equipment
-        : [...current.equipment, nextLine],
-    }));
-  }
+  const tradeChecklistComplete = Object.values(tradeChecklist).every(Boolean);
 
-  function addCatalogAttachment(entry: CatalogAttachmentMatch): void {
-    addPackageCatalogItem({
-      id: entry.id,
-      kind: "attachment",
-      name: entry.name,
-      price: entry.price,
-      dealerCost: null,
-      brandName: entry.brandName ?? null,
-      category: entry.category ?? null,
-      universal: entry.universal === true,
-      sourceCatalog: "qb_attachments",
-      sourceId: entry.id,
-      metadata: {
-        catalog_kind: entry.universal ? "universal_attachment" : "attachment",
-        brand_name: entry.brandName ?? null,
-        category: entry.category ?? null,
-      },
-    });
-  }
-
-  function addPackageCatalogItem(entry: QuotePackageCatalogItem): void {
-    const nextLine: QuoteLineItemDraft = {
-      kind: entry.kind,
-      id: entry.id,
-      sourceCatalog: entry.sourceCatalog,
-      sourceId: entry.sourceId,
-      dealerCost: entry.dealerCost,
-      title: entry.name,
-      quantity: 1,
-      unitPrice: entry.price,
-      metadata: {
-        ...(entry.metadata ?? {}),
-        brand_name: entry.brandName ?? null,
-        category: entry.category ?? null,
-        universal: entry.universal,
-      },
-    };
-    const nextKey = equipmentKeyForLine(nextLine);
-    setDraft((current) => ({
-      ...current,
-      attachments: current.attachments.some((item) => equipmentKeyForLine(item) === nextKey)
-        ? current.attachments
-        : [...current.attachments, nextLine],
-    }));
-  }
-
-  async function addRecommendedMachine(machine: string) {
-    // AI machine strings look like "Case SR175 (2026)". Catalog columns
-    // (model_code/family/series/name_display) don't contain the year, so
-    // a single ilike on the full string returns zero rows and we fall
-    // through progressive catalog-only fallbacks (full → no year →
-    // make+model → model code → make). If none match, do not add a manual
-    // line: AI recommendations must remain backed by a sellable QEP model.
-    const candidateQueries = buildCatalogQueryCandidates(machine);
-    const expectedMachine = normalizeMachineMatchLabel(machine);
-    let firstMatch: CatalogEntryMatch | undefined;
-    try {
-      for (const query of candidateQueries) {
-        const matches = await searchCatalog(query) as CatalogEntryMatch[];
-        const exactMatch = matches.find((match) =>
-          normalizeMachineMatchLabel(`${match.make} ${match.model}`) === expectedMachine
-        );
-        if (exactMatch || matches.length > 0) {
-          firstMatch = exactMatch ?? matches[0];
-          break;
-        }
-      }
-      if (!firstMatch) {
-        toast({
-          title: "Recommendation not in QEP catalog",
-          description: "Select a verified machine from Browse Catalog before quoting.",
-          variant: "destructive",
-        });
-        setStep("equipment");
-        return;
-      }
-      const line = buildEquipmentLine(firstMatch);
-      const nextKey = equipmentKeyForLine(line);
-      setAvailableOptions(firstMatch.attachments ?? []);
-      setAvailableOptionsLabel(`${firstMatch.make} ${firstMatch.model}`);
-      setDraft((current) => {
-        const alreadyAdded = current.equipment.some((item) => equipmentKeyForLine(item) === nextKey);
-        if (alreadyAdded) return current;
-        return {
-          ...current,
-          equipment: [...current.equipment, line],
-        };
-      });
-    } catch {
-      toast({
-        title: "Catalog verification failed",
-        description: "The recommendation was not added. Browse Catalog and select a verified machine.",
-        variant: "destructive",
-      });
-      setStep("equipment");
-      return;
-    }
-    // Slice 20a: if the rep hasn't picked a customer yet, land on Customer
-    // so "who is this quote for?" is explicit before we jump to Equipment.
-    // The AI rec often flows straight from voice/AI-chat intake, where the
-    // rep hasn't confirmed the customer identity yet.
-    const hasCustomerNow = Boolean(
-      draft.customerName?.trim() ||
-      draft.customerCompany?.trim() ||
-      draft.contactId ||
-      draft.companyId,
-    );
-    setStep(hasCustomerNow ? "equipment" : "customer");
-  }
-
-  function handleDownloadPdf() {
-    if (customerFacingDocumentBlocker) {
-      setDocumentActionError(customerFacingDocumentBlocker);
-      return;
-    }
-    if (quoteMediaSnapshotLoading) {
-      setDocumentActionError("Trade-in photos are still loading. Try again in a moment so the proposal includes the stored trade media.");
-      return;
-    }
-    void downloadPDF(quotePdfData);
-  }
-
-  function approvalBlockerMessage(): string | null {
-    if (!activeQuotePackageId) return "Save the quote package before generating customer-facing documents.";
-    if (activeApprovalCaseLoading) return "Checking the approval case before customer-facing actions unlock.";
-    if (bypassApprovedWithoutCase) return null;
-    if (!activeApprovalCase) return "Submit this quote for owner approval before generating or sending customer-facing material.";
-    if (activeApprovalCase.canSend) return null;
-    if (activeApprovalCase.status === "pending" || activeApprovalCase.status === "escalated") {
-      return activeApprovalCase.assignedToName
-        ? `Waiting on ${activeApprovalCase.assignedToName} to approve this quote.`
-        : "Approval is still pending in Approval Center.";
-    }
-    if (activeApprovalCase.status === "changes_requested") return "Approval requested changes. Revise and resubmit before sending.";
-    if (activeApprovalCase.status === "rejected") return "Approval rejected this quote. It cannot be sent until revised and approved.";
-    if (activeApprovalCase.status === "approved_with_conditions") {
-      const unmet = activeApprovalCase.evaluations.filter((evaluation) => !evaluation.satisfied).map((evaluation) => evaluation.label);
-      return unmet.length > 0
-        ? `Approval has unmet conditions: ${unmet.join(", ")}.`
-        : "Conditional approval is not clean yet. Recheck the approval case before sending.";
-    }
-    return "Approval is not clean. Ryan/Rylee approval-case canSend must be true before customer-facing actions.";
-  }
-
-  async function ensureCleanApprovalForCustomerFacing(): Promise<string | null> {
-    if (!packetReadiness.draft.ready) return "Save the quote package before customer-facing actions.";
-    if (draftSaveSignature !== lastAutoSaveSignatureRef.current) {
-      await saveMutation.mutateAsync();
-      lastAutoSaveSignatureRef.current = draftSaveSignature;
-    }
-    const refreshed = await refetchActiveApprovalCase();
-    if (refreshed.error) return "Could not recheck owner approval after saving. Try again before customer-facing actions.";
-    if (!refreshed.data && bypassApprovedWithoutCase) return null;
-    return refreshed.data?.canSend === true
-      ? null
-      : "Approval case is no longer clean after saving the latest quote changes. Resubmit or wait for owner approval before customer-facing actions.";
-  }
-
-  async function handleGenerateFallbackDocument() {
-    setDocumentActionError(null);
-    const blocker = customerFacingDocumentBlocker;
-    if (blocker) {
-      setDocumentActionError(blocker);
-      return;
-    }
-    if (quoteMediaSnapshotLoading) {
-      setDocumentActionError("Trade-in photos are still loading. Try again in a moment so the proposal includes the stored trade media.");
-      return;
-    }
-    try {
-      const approvalRefreshBlocker = await ensureCleanApprovalForCustomerFacing();
-      if (approvalRefreshBlocker) {
-        setDocumentActionError(approvalRefreshBlocker);
-        return;
-      }
-      const pdfResult = await downloadPDF(quotePdfData);
-      const generatedAt = new Date().toISOString();
-      let artifact: { id: string; storageBucket: string; storageKey: string; generatedAt: string } | null = null;
-      if (activeQuotePackageId && pdfResult.blob) {
-        const persisted = await persistQuoteDocumentArtifact({
-          quotePackageId: activeQuotePackageId,
-          quotePackageVersionId: saveMutation.data?.quote_package_version_id ?? null,
-          blob: pdfResult.blob,
-          filename: pdfResult.filename,
-          generatedAt,
-          metadata: {
-            step: 10,
-            mode: pdfResult.mode,
-            draft_signature: draftSaveSignature,
-          },
-        });
-        artifact = { ...persisted, generatedAt };
-        setDocumentArtifact(artifact);
-      } else {
-        setDocumentArtifact(null);
-      }
-      documentDraftSignatureRef.current = draftSaveSignature;
-      setDocumentFallbackGeneratedAt(generatedAt);
-      if (activeQuotePackageId) {
-        await logQuoteDeliveryEvent({
-          quotePackageId: activeQuotePackageId,
-          documentArtifactId: artifact?.id ?? null,
-          channel: "preview",
-          status: "draft",
-          provider: artifact ? "stored_pdf_preview" : "local_preview",
-          recipient: draft.customerEmail || draft.customerPhone || draft.customerName || draft.customerCompany || null,
-          followUpAt: draft.followUpAt ?? null,
-          metadata: {
-            step: 10,
-            fallback_document: !artifact,
-            document_artifact_id: artifact?.id ?? null,
-            generated_at: generatedAt,
-            storage_bucket: artifact?.storageBucket ?? null,
-            storage_key: artifact?.storageKey ?? null,
-            note: artifact
-              ? "Customer quote PDF stored as a quote document artifact."
-              : "Printable fallback opened; no stored PDF artifact was created.",
-          },
-        });
-      }
-    } catch (error) {
-      setDocumentActionError(error instanceof Error ? error.message : "Failed to generate document preview.");
-    }
-  }
-
-  async function handleQuoteSendAction(channel: QuoteSendActionChannel) {
-    setDeliveryActionMessage(null);
-    setDeliveryActionError(null);
-    const readiness = computeQuoteSendActionReadiness({
-      channel,
-      quotePackageId: activeQuotePackageId,
-      approvalCaseCanSend,
-      followUpAt: draft.followUpAt ?? null,
-      customerEmail: draft.customerEmail ?? null,
-      customerPhone: draft.customerPhone ?? null,
-      documentReady: Boolean(documentFallbackGeneratedAt),
-      taxResolved,
-      whyThisMachineRequired,
-      whyThisMachineConfirmed: draft.whyThisMachineConfirmed === true,
-    });
-    if (!readiness.ready) {
-      setDeliveryActionError(`Blocked: ${readiness.missing.join(", ")}.`);
-      return;
-    }
-    const approvalRefreshBlocker = await ensureCleanApprovalForCustomerFacing();
-    if (approvalRefreshBlocker) {
-      setDeliveryActionError(`Blocked: ${approvalRefreshBlocker}`);
-      return;
-    }
-    if (!activeQuotePackageId) return;
-    setDeliveryActionBusy(channel);
-    try {
-      if (channel === "preview") {
-        if (quoteMediaSnapshotLoading) {
-          setDeliveryActionError("Blocked: trade-in photos are still loading. Try again in a moment.");
-          return;
-        }
-        const pdfResult = await downloadPDF(quotePdfData);
-        const generatedAt = new Date().toISOString();
-        let artifact: { id: string; storageBucket: string; storageKey: string; generatedAt: string } | null = null;
-        if (activeQuotePackageId && pdfResult.blob) {
-          const persisted = await persistQuoteDocumentArtifact({
-            quotePackageId: activeQuotePackageId,
-            quotePackageVersionId: saveMutation.data?.quote_package_version_id ?? null,
-            blob: pdfResult.blob,
-            filename: pdfResult.filename,
-            generatedAt,
-            metadata: {
-              step: 11,
-              mode: pdfResult.mode,
-              draft_signature: draftSaveSignature,
-            },
-          });
-          artifact = { ...persisted, generatedAt };
-          setDocumentArtifact(artifact);
-        } else {
-          setDocumentArtifact(null);
-        }
-        documentDraftSignatureRef.current = draftSaveSignature;
-        setDocumentFallbackGeneratedAt(generatedAt);
-        await logQuoteDeliveryEvent({
-          quotePackageId: activeQuotePackageId,
-          documentArtifactId: artifact?.id ?? null,
-          channel: "preview",
-          status: "draft",
-          provider: artifact ? "stored_pdf_preview" : "local_preview",
-          recipient: draft.customerEmail || draft.customerPhone || draft.customerName || draft.customerCompany || null,
-          followUpAt: draft.followUpAt ?? null,
-          metadata: {
-            step: 11,
-            fallback_document: !artifact,
-            document_artifact_id: artifact?.id ?? null,
-            generated_at: generatedAt,
-            mode: pdfResult.mode,
-            storage_bucket: artifact?.storageBucket ?? null,
-            storage_key: artifact?.storageKey ?? null,
-            note: artifact
-              ? "Customer quote PDF stored as a quote document artifact."
-              : "Printable fallback opened; no stored PDF artifact was created.",
-          },
-        });
-        setDeliveryActionMessage("Preview opened and logged. This does not mark the quote sent.");
-        return;
-      }
-
-      const textEnabled = import.meta.env.VITE_FEATURE_QRM_TEXT_QUOTE === "true";
-      if (channel === "email") {
-        const result = await sendQuotePackage(activeQuotePackageId, {
-          documentArtifactId: documentArtifact?.id ?? null,
-          followUpAt: draft.followUpAt ?? null,
-        });
-        setDraft((current) => ({ ...current, quoteStatus: "sent" }));
-        setDeliveryActionMessage(`Quote emailed to ${result.to_email}. Delivery event ${result.delivery_event_id ? "logged" : "recorded by quote status"} and follow-up preserved.`);
-        return;
-      }
-
-      if (!textEnabled) {
-        setDeliveryActionMessage("Twilio is not configured. No customer text was sent and no delivery event was logged.");
-        return;
-      }
-
-      setDeliveryActionError("Twilio flag is enabled, but the text send endpoint is not implemented yet. No customer message was sent or logged.");
-    } catch (error) {
-      setDeliveryActionError(error instanceof Error ? error.message : "Quote delivery action failed.");
-    } finally {
-      setDeliveryActionBusy(null);
-    }
-  }
-
-  function handleAddCustomLine(kindLabel: "Warranty" | "Financing" | "Custom") {
-    const title = customLineTitle.trim() || `${kindLabel} line item`;
-    const unitPrice = Number.isFinite(customLinePrice) && customLinePrice > 0 ? customLinePrice : 0;
-    const kind = kindLabel.toLowerCase() as "warranty" | "financing" | "custom";
-    setDraft((current) => ({
-      ...current,
-      attachments: [
-        ...current.attachments,
-        {
-          kind,
-          id: `${kindLabel.toLowerCase()}-${Date.now()}`,
-          sourceCatalog: "manual",
-          sourceId: null,
-          dealerCost: null,
-          title: `${kindLabel}: ${title}`,
-          quantity: 1,
-          unitPrice,
-        },
-      ],
-    }));
-    setCustomLineTitle("");
-    setCustomLinePrice(0);
-    setPackageToolsOpen(false);
-  }
-
-  function handleAddMiscPricingLine(kind: "charge" | "credit") {
-    const rawTitle = kind === "charge" ? miscChargeTitle : miscCreditTitle;
-    const rawAmount = kind === "charge" ? miscChargeAmount : miscCreditAmount;
-    const title = rawTitle.trim() || (kind === "charge" ? "Misc charge" : "Misc credit");
-    const amount = Number.isFinite(rawAmount) ? Math.max(0, rawAmount) : 0;
-    if (amount <= 0) return;
-    const id = `misc_${kind}_${Date.now()}`;
-    const field: PricingAdderField = {
-      id,
-      kind: kind === "credit" ? "discount" : "custom",
-      title,
-      helper: kind === "credit" ? "Customer-facing miscellaneous credit" : "Customer-facing miscellaneous charge",
-      step: 25,
-      costVisibility: "customer",
-      metadata: {
-        pricing_field_key: id,
-        misc_line_kind: kind,
-      },
-    };
-    upsertPricingLine(field, amount, {
-      title,
-      reasonCode: kind === "credit" ? "other" : null,
-      metadata: field.metadata,
-    });
-    if (kind === "charge") {
-      setMiscChargeTitle("");
-      setMiscChargeAmount(0);
-    } else {
-      setMiscCreditTitle("");
-      setMiscCreditAmount(0);
-    }
-  }
-
-  function handlePrimaryAction() {
-    if (quoteStatus === "sent" || quoteStatus === "accepted") {
-      void handleSaveClick();
-      return;
-    }
-    if (approvalCaseCanSend && packetReadiness.send.ready) {
-      setStep("document");
-      return;
-    }
-    if (canSubmitForApproval) {
-      submitApprovalMutation.mutate();
-      return;
-    }
-    void handleSaveClick();
-  }
-
-  async function handleIssueShareLink() {
-    if (!activeQuotePackageId) return;
-    setShareBusy(true);
-    setShareError(null);
-    try {
-      const { token } = await issueShareToken(activeQuotePackageId);
-      const url = `${window.location.origin}/q/${token}`;
-      setShareUrl(url);
-      try {
-        await navigator.clipboard.writeText(url);
-      } catch {
-        // Clipboard can be unavailable in preview or restricted browsers.
-      }
-    } catch (error) {
-      setShareError(error instanceof Error ? error.message : "Unable to create share link.");
-    } finally {
-      setShareBusy(false);
-    }
-  }
+  const {
+    liveAvailabilityRequestForLine,
+    liveAvailabilityStatusForLine,
+    markAvailabilityConfirmationRequested,
+    markAllAvailabilityConfirmationRequested,
+    availabilityRequestMutation,
+    hasCustomer,
+    sourceRequiredAwaitingConfirmation,
+    sourceRequiredUnavailable,
+    inboundFreightEligible,
+    equipmentCanContinue,
+    tradeManagerApprovalRequired,
+    signalsReady,
+  } = useQuoteBuilderAvailability({
+    activeQuotePackageId,
+    draft,
+    setDraft,
+    netTotal,
+    tradeChecklistComplete,
+  });
 
   const firstEquipment = draft.equipment[0];
   const activeWorkspaceId = profile?.active_workspace_id ?? null;
@@ -1338,214 +832,22 @@ export function QuoteBuilderV2Page() {
     },
   });
 
-  function liveAvailabilityRequestForLine(item: QuoteLineItemDraft): QuoteAvailabilityRequest | null {
-    const requestId = availabilityRequestIdForLine(item);
-    return requestId ? availabilityRequestsById.get(requestId) ?? null : null;
-  }
-
-  function liveAvailabilityStatusForLine(item: QuoteLineItemDraft): string | null {
-    const request = liveAvailabilityRequestForLine(item);
-    return request?.status ?? availabilityRequestStatusForLine(item);
-  }
-
-  // Gate for advancing off the Customer step — any of name, company,
-  // or a resolved CRM id is enough. Kept as one derived flag so the
-  // Next-button disabled state and the inline helper text can't drift.
-  const hasCustomer = Boolean(
-    draft.customerName?.trim() ||
-    draft.customerCompany?.trim() ||
-    draft.contactId ||
-    draft.companyId,
-  );
-  const hasEquipmentLine = draft.equipment.length > 0;
-  const sourceRequiredEquipment = draft.equipment.filter((item) => availabilityStatusForLine(item) === "source_required");
-  const sourceRequiredAwaitingConfirmation = sourceRequiredEquipment.filter((item) => !availabilityRequestIdForLine(item));
-  const sourceRequiredUnavailable = sourceRequiredEquipment.filter((item) => {
-    const request = liveAvailabilityRequestForLine(item);
-    return request?.status === "not_available" && !request.managerOverrideAt;
-  });
-  const inboundFreightEligible = draft.equipment.some((item) => availabilityStatusForLine(item) !== "in_stock");
-  const equipmentCanContinue = hasEquipmentLine && sourceRequiredAwaitingConfirmation.length === 0 && sourceRequiredUnavailable.length === 0;
-  const tradeChecklistComplete = Object.values(tradeChecklist).every(Boolean);
-  const tradeManagerApprovalRequired = draft.tradeAllowance > 0 && !tradeChecklistComplete;
-  const signalsReady = hasCustomer && hasEquipmentLine;
-
-  const availabilityRequestMutation = useMutation({
-    mutationFn: async ({ equipment, index }: { equipment: QuoteLineItemDraft; index: number }) => {
-      const clientLineKey = metadataString(equipment.metadata, "availability_client_line_key")
-        ?? availabilityClientLineKey(equipment, index);
-      const requestedMachineLabel = equipment.title || [equipment.make, equipment.model].filter(Boolean).join(" ").trim() || "Equipment";
-      const request = await requestQuoteAvailability({
-        quotePackageId: activeQuotePackageId,
-        availabilityRequestId: availabilityRequestIdForLine(equipment),
-        clientLineKey,
-        sourceCatalog: equipment.sourceCatalog ?? null,
-        sourceId: equipment.sourceId ?? equipment.id ?? null,
-        catalogModelId: equipment.sourceCatalog === "qb_equipment_models" ? equipment.sourceId ?? equipment.id ?? null : null,
-        requestedMachineLabel,
-        make: equipment.make ?? null,
-        model: equipment.model ?? null,
-        year: equipment.year ?? null,
-        customerNeed: draft.voiceSummary ?? null,
-        requestedBudget: netTotal > 0 ? netTotal : equipment.unitPrice,
-        urgency: "normal",
-        allowAlternatives: true,
-      });
-      return { request, index, clientLineKey };
-    },
-    onSuccess: ({ request, index, clientLineKey }: { request: QuoteAvailabilityRequest; index: number; clientLineKey: string }) => {
-      setDraft((current) => ({
-        ...current,
-        equipment: current.equipment.map((item, rowIndex) => rowIndex === index
-          ? {
-              ...item,
-              metadata: {
-                ...(item.metadata ?? {}),
-                availability_status: availabilityStatusForLine(item),
-                availability_request_id: request.id,
-                availability_request_status: request.status,
-                availability_client_line_key: clientLineKey,
-                availability_confirmation_requested_at: request.createdAt ?? new Date().toISOString(),
-                availability_candidate_count: request.candidates.length,
-              },
-            }
-          : item),
-      }));
-      toast({
-        title: "Availability request created",
-        description: `${request.requestedMachineLabel} is now pending sourcing review.`,
-      });
-      queryClient.invalidateQueries({ queryKey: ["quote-builder", "availability-requests"] });
-    },
-    onError: (error) => {
-      toast({
-        title: "Availability request failed",
-        description: error instanceof Error ? error.message : "Could not create the sourcing request.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  function markAvailabilityConfirmationRequested(index: number): void {
-    const equipment = draft.equipment[index];
-    if (!equipment) return;
-    availabilityRequestMutation.mutate({ equipment, index });
-  }
-
-  function markAllAvailabilityConfirmationRequested(): void {
-    draft.equipment.forEach((equipment, index) => {
-      if (availabilityStatusForLine(equipment) === "source_required" && !availabilityRequestIdForLine(equipment)) {
-        availabilityRequestMutation.mutate({ equipment, index });
-      }
-    });
-  }
-
-  function addConfigLine(kind: "attachment" | "option" | "accessory" | "part" | "warranty", input?: { id?: string; title: string; unitPrice: number }): void {
-    const title = input?.title?.trim() || `${kind[0]!.toUpperCase()}${kind.slice(1)} line`;
-    const line: QuoteLineItemDraft = {
-      kind,
-      id: input?.id ?? `${kind}-${Date.now()}`,
-      sourceCatalog: input?.id ? "qb_attachments" : "manual",
-      sourceId: input?.id ?? null,
-      dealerCost: null,
-      title,
-      quantity: 1,
-      unitPrice: input?.unitPrice ?? 0,
-    };
-    setDraft((current) => ({
-      ...current,
-      attachments: current.attachments.some((item) => item.id === line.id)
-        ? current.attachments
-        : [...current.attachments, line],
-    }));
-  }
-
-  function pricingFieldKeyForLine(item: QuoteLineItemDraft): string {
-    const explicitKey = typeof item.metadata?.pricing_field_key === "string"
-      ? item.metadata.pricing_field_key
-      : null;
-    if (explicitKey) return explicitKey;
-    if (item.kind === "freight") {
-      const direction = typeof item.metadata?.freight_direction === "string"
-        ? item.metadata.freight_direction
-        : "outbound";
-      return direction === "inbound" ? "inbound_freight" : "outbound_delivery";
-    }
-    return item.kind;
-  }
-
-  function asPricingAdderField(
-    fieldOrKind: PricingAdderField | PricingLineKind,
-    title?: string,
-    costVisibility?: CostVisibility,
-  ): PricingAdderField {
-    if (typeof fieldOrKind === "object") return fieldOrKind;
-    return {
-      id: fieldOrKind,
-      kind: fieldOrKind,
-      title: title ?? fieldOrKind,
-      helper: "",
-      step: 1,
-      costVisibility: costVisibility ?? quoteLineCostVisibility({ kind: fieldOrKind }),
-    };
-  }
-
-  function pricingLine(fieldOrKind: PricingAdderField | PricingLineKind): QuoteLineItemDraft | undefined {
-    const field = asPricingAdderField(fieldOrKind);
-    return draft.pricingLines?.find((item) => item.kind === field.kind && pricingFieldKeyForLine(item) === field.id);
-  }
-
-  function upsertPricingLine(
-    fieldOrKind: PricingAdderField | PricingLineKind,
-    amount: number,
-    patch: Partial<QuoteLineItemDraft> = {},
-    legacyTitle?: string,
-    legacyCostVisibility?: CostVisibility,
-  ): void {
-    const field = asPricingAdderField(fieldOrKind, legacyTitle, legacyCostVisibility);
-    const safeAmount = Number.isFinite(amount) ? Math.max(0, amount) : 0;
-    setDraft((current) => {
-      const existing = current.pricingLines ?? [];
-      const existingMatch = existing.find((item) =>
-        item.kind === field.kind && pricingFieldKeyForLine(item) === field.id);
-      const mergedMetadata = {
-        ...(field.metadata ?? {}),
-        ...(existingMatch?.metadata ?? {}),
-        ...((patch.metadata && typeof patch.metadata === "object" && !Array.isArray(patch.metadata))
-          ? patch.metadata
-          : {}),
-      };
-      const nextLine: QuoteLineItemDraft = {
-        kind: field.kind,
-        id: existingMatch?.id ?? `${field.id}-${Date.now()}`,
-        sourceCatalog: "manual",
-        sourceId: null,
-        dealerCost: null,
-        costVisibility: field.costVisibility,
-        title: field.title,
-        quantity: 1,
-        unitPrice: safeAmount,
-        metadata: mergedMetadata,
-        ...patch,
-      };
-      return {
-        ...current,
-        pricingLines: safeAmount <= 0
-          ? existing.filter((item) => !(item.kind === field.kind && pricingFieldKeyForLine(item) === field.id))
-          : existingMatch
-            ? existing.map((item) =>
-              item.kind === field.kind && pricingFieldKeyForLine(item) === field.id
-                ? { ...item, ...nextLine }
-                : item)
-            : [...existing, nextLine],
-      };
-    });
-  }
-
   useQuoteBuilderInboundFreightReset({
     inboundFreightEligible,
     pricingLines: draft.pricingLines,
     pricingLine,
+    upsertPricingLine,
+  });
+
+  const handleAddMiscPricingLine = useQuoteBuilderMiscPricingLine({
+    chargeTitle: miscChargeTitle,
+    chargeAmount: miscChargeAmount,
+    creditTitle: miscCreditTitle,
+    creditAmount: miscCreditAmount,
+    setMiscChargeTitle,
+    setMiscChargeAmount,
+    setMiscCreditTitle,
+    setMiscCreditAmount,
     upsertPricingLine,
   });
 
@@ -1558,44 +860,51 @@ export function QuoteBuilderV2Page() {
     : documentFallbackGeneratedAt
       ? "Printable fallback generated"
       : "Not generated";
-  const textQuoteEnabled = import.meta.env.VITE_FEATURE_QRM_TEXT_QUOTE === "true";
-  const approvalBlocker = approvalBlockerMessage();
-  const whyThisMachineRequired = isQuoteWhyThisMachineConfirmationRequired(draft);
-  const whyThisMachineBlocker = whyThisMachineRequired && draft.whyThisMachineConfirmed !== true
-    ? "Confirm the Why this machine narrative before customer-facing document/send."
-    : null;
-  const customerFacingDocumentBlocker = approvalBlocker ?? taxResolutionBlocker ?? whyThisMachineBlocker;
-  const previewReadiness = computeQuoteSendActionReadiness({
-    channel: "preview",
-    quotePackageId: activeQuotePackageId,
-    approvalCaseCanSend,
-    followUpAt: draft.followUpAt ?? null,
+  const {
+    primaryActionLabel,
+    primaryActionDisabled,
+    previousWizardStep,
+    nextWizardStep,
+    nextWizardLabel,
+    wizardNextDisabled,
+    wizardNextHelp,
+    wizardMaxStepIndex0,
+    wizardReachableMaxIndex0Value,
+    wizardPricingJumpAllowed,
+    handleQuoteForProspect,
+    previewReadiness,
+    emailReadiness,
+    textReadiness,
+    textQuoteEnabled,
+    wizardStateValue,
+  } = useQuoteBuilderWizardChrome({
+    step,
+    setStep,
+    draft,
+    setDraft,
+    activeWorkspaceId,
+    activeQuotePackageId,
+    autoSaveState,
+    setAutoSaveState,
+    lastSavedAt,
+    setLastSavedAt,
+    hasCustomer,
+    equipmentCanContinue,
     documentReady,
+    signalsReady,
+    marginPct,
+    marginAmount,
+    quoteStatus,
+    savePending: saveMutation.isPending,
+    submitApprovalPending: submitApprovalMutation.isPending,
+    approvalCaseCanSend,
+    sendReady: packetReadiness.send.ready,
+    canSubmitForApproval,
+    draftReady: packetReadiness.draft.ready,
     taxResolved,
     whyThisMachineRequired,
     whyThisMachineConfirmed: draft.whyThisMachineConfirmed === true,
-  });
-  const emailReadiness = computeQuoteSendActionReadiness({
-    channel: "email",
-    quotePackageId: activeQuotePackageId,
-    approvalCaseCanSend,
-    followUpAt: draft.followUpAt ?? null,
-    customerEmail: draft.customerEmail ?? null,
-    documentReady,
-    taxResolved,
-    whyThisMachineRequired,
-    whyThisMachineConfirmed: draft.whyThisMachineConfirmed === true,
-  });
-  const textReadiness = computeQuoteSendActionReadiness({
-    channel: "text",
-    quotePackageId: activeQuotePackageId,
-    approvalCaseCanSend,
-    followUpAt: draft.followUpAt ?? null,
-    customerPhone: draft.customerPhone ?? null,
-    documentReady,
-    taxResolved,
-    whyThisMachineRequired,
-    whyThisMachineConfirmed: draft.whyThisMachineConfirmed === true,
+    textQuoteEnabled: import.meta.env.VITE_FEATURE_QRM_TEXT_QUOTE === "true",
   });
 
   const intelligencePanel = (
@@ -1620,87 +929,6 @@ export function QuoteBuilderV2Page() {
       equipmentModel={firstEquipment?.model}
     />
   );
-
-  const primaryActionLabel =
-    saveMutation.isPending || submitApprovalMutation.isPending
-      ? "Working..."
-      : quoteStatus === "sent" || quoteStatus === "accepted"
-        ? "Update"
-        : approvalCaseCanSend && packetReadiness.send.ready
-          ? "Review & Send"
-          : canSubmitForApproval
-            ? "Submit Approval"
-            : "Save Draft";
-  const primaryActionDisabled =
-    saveMutation.isPending
-    || submitApprovalMutation.isPending
-    || (!packetReadiness.draft.ready && primaryActionLabel !== "Review & Send");
-  const previousWizardStep = resolvePreviousWizardStep(currentWizardStepNumber);
-  const nextWizardStep = resolveNextWizardStep(currentWizardStepNumber);
-  const nextWizardLabel = nextWizardStep ? STEP_LABELS[nextWizardStep] : null;
-  const wizardNextDisabled =
-    !nextWizardStep
-    || (step === "customer" && !hasCustomer)
-    || (step === "equipment" && !equipmentCanContinue)
-    || (step === "document" && !documentReady);
-  const wizardNextHelp = step === "customer" && !hasCustomer
-    ? "Pick a customer or use Quote for prospect first."
-    : step === "equipment" && !equipmentCanContinue
-      ? "Select equipment and resolve source-required availability first."
-      : step === "document" && !documentReady
-        ? "Generate the document preview before send/log."
-        : "Completed steps stay editable — click any finished step below to jump back.";
-  const pricingWizardIndex = findWizardStepIndex("pricing");
-  const wizardMaxStepIndex0 = wizardMaxStepIndex0FromDraft(draft.wizardStep);
-  const wizardCurrentIndex0 = findWizardStepIndex(step);
-  const wizardReachableMaxIndex0Value = wizardReachableMaxIndex0(wizardMaxStepIndex0, wizardCurrentIndex0);
-  const wizardPricingJumpAllowed =
-    signalsReady
-    && canJumpToWizardIndex(pricingWizardIndex, wizardReachableMaxIndex0Value)
-    && step !== "pricing";
-
-  function handleQuoteForProspect(): void {
-    setDraft((cur) => ({
-      ...cur,
-      customerName:    cur.customerName    || "Walk-in prospect",
-      customerCompany: cur.customerCompany || "Walk-in prospect",
-      contactId:       undefined,
-      companyId:       undefined,
-      customerSignals: null,
-      customerWarmth:  cur.customerWarmth ?? "new",
-    }));
-    setStep("equipment");
-  }
-
-  const wizardStateValue = useMemo<WizardStateValue>(() => ({
-    step,
-    setStep,
-    previousWizardStep,
-    nextWizardStep,
-    currentWizardStepNumber,
-    maxCompletedStepIndex: wizardMaxStepIndex0,
-    reachableMaxStepIndex: wizardReachableMaxIndex0Value,
-    draft,
-    setDraft,
-    activeWorkspaceId,
-    activeQuotePackageId,
-    autoSaveState,
-    setAutoSaveState,
-    lastSavedAt,
-    setLastSavedAt,
-  }), [
-    step,
-    previousWizardStep,
-    nextWizardStep,
-    currentWizardStepNumber,
-    wizardMaxStepIndex0,
-    wizardReachableMaxIndex0Value,
-    draft,
-    activeWorkspaceId,
-    activeQuotePackageId,
-    autoSaveState,
-    lastSavedAt,
-  ]);
 
   return (
     <WizardStateProvider value={wizardStateValue}>
@@ -1856,9 +1084,9 @@ export function QuoteBuilderV2Page() {
         setAiPrompt={setAiPrompt}
         intakeRecorderOpen={intakeRecorderOpen}
         setIntakeRecorderOpen={setIntakeRecorderOpen}
-        onVoiceRecorded={(audioBlob, fileName) => voiceMutation.mutate({ blob: audioBlob, fileName })}
+        onVoiceRecorded={onVoiceRecorded}
         voiceMutationPending={voiceMutation.isPending}
-        onBuildWithAi={(prompt) => aiIntakeMutation.mutate(prompt)}
+        onBuildWithAi={onBuildWithAi}
         aiIntakeMutationPending={aiIntakeMutation.isPending}
         aiIntakeMessage={aiIntakeMessage}
         winProbContext={winProbContext}
