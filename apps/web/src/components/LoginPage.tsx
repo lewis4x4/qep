@@ -249,10 +249,19 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
                 <CardContent className="p-5 sm:p-6">
                   <Tabs defaultValue="password">
                     <TabsList className="mb-6 grid w-full grid-cols-2 border border-white/10 bg-[#0A121E] p-1">
-                      <TabsTrigger value="password" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+                      {/*
+                        WAVE CI/Quality (Slice 2 a11y fix): the active
+                        tab and login button previously rendered white
+                        on bg-primary (hsl 26 81% 52% / #e87721) which
+                        gave a 2.96:1 contrast ratio — below WCAG 2 AA's
+                        4.5:1 floor. bg-qep-orange-accessible
+                        (hsl 22 76% 46%) is the brand-approved darker
+                        token that lands 4.5:1 on white text.
+                      */}
+                      <TabsTrigger value="password" className="data-[state=active]:bg-qep-orange-accessible data-[state=active]:text-white">
                         Password
                       </TabsTrigger>
-                      <TabsTrigger value="magic" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+                      <TabsTrigger value="magic" className="data-[state=active]:bg-qep-orange-accessible data-[state=active]:text-white">
                         Magic link
                       </TabsTrigger>
                     </TabsList>
@@ -300,7 +309,11 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
                         <Button
                           id="login-button"
                           type="submit"
-                          className="h-12 w-full gap-2 bg-primary text-base font-semibold text-white hover:bg-[#D96C1D]"
+                          // WAVE CI/Quality (Slice 2 a11y fix): switch to
+                          // bg-qep-orange-accessible for 4.5:1 contrast on
+                          // white text. Hover still lands on the existing
+                          // darker hover swatch.
+                          className="h-12 w-full gap-2 bg-qep-orange-accessible text-base font-semibold text-white hover:bg-[#D96C1D]"
                           disabled={loading}
                         >
                           {loading ? "Signing In..." : "Sign In"}

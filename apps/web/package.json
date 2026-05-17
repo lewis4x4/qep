@@ -58,6 +58,7 @@
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@happy-dom/global-registrator": "^20.9.0",
     "@lhci/cli": "^0.15.1",
     "@playwright/test": "^1.60.0",

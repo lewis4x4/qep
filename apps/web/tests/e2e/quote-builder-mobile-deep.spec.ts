@@ -18,6 +18,8 @@
 
 import { expect, test, type Page } from "@playwright/test";
 import { playwrightTestCredentials, signInWithPassword } from "./fixtures";
+// WAVE CI / Quality (Slice 2): per-step axe scan.
+import { expectNoAxeViolations } from "./_helpers/axe-scan";
 
 const IPHONE_14_VIEWPORT = { width: 390, height: 844 };
 const credentials = playwrightTestCredentials();
@@ -147,6 +149,8 @@ test.describe("quote-builder mobile deep reflow", () => {
         await page.waitForTimeout(200);
         await assertNoHorizontalOverflow(page);
         await assertNoStrayDialog(page);
+        // WAVE CI / Quality (Slice 2): a11y scan per step.
+        await expectNoAxeViolations(page, `quote-builder-${stepId}`);
       }
     });
 
