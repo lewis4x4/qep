@@ -3,6 +3,8 @@ import { useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Search, Sparkles } from "lucide-react";
+// WAVE polish (Slice 2): dictation on AI job-description textarea.
+import { MobileVoiceTextarea } from "@/features/sales/components/MobileVoiceTextarea";
 import { searchCatalog, getAiEquipmentRecommendation, searchQuoteAttachments } from "../lib/quote-api";
 
 type AvailabilityStatus = "in_stock" | "in_transit" | "source_required";
@@ -223,11 +225,11 @@ export function EquipmentSelector({
 
       {mode === "ai" && (
         <div className="space-y-3">
-          <textarea
+          <MobileVoiceTextarea
             value={jobDescription}
             onChange={(e) => setJobDescription(e.target.value)}
             placeholder="Describe the job: e.g., 'Land clearing and tree service on rocky terrain, need to handle 12-inch trees...'"
-            className="w-full rounded border border-input bg-card px-3 py-2 text-sm min-h-[80px]"
+            className="w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm min-h-[80px]"
           />
           <Button size="sm" onClick={() => aiMutation.mutate()} disabled={aiMutation.isPending || !jobDescription.trim()}>
             {aiMutation.isPending ? "Analyzing..." : "Get AI Recommendation"}

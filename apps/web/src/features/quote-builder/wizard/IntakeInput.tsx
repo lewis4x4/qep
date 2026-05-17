@@ -13,6 +13,8 @@ import { Loader2, Mic, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { VoiceRecorder } from "@/features/voice-qrm/components/VoiceRecorder";
+// WAVE polish (Slice 2): inline dictation on the fast-intake textarea.
+import { MobileVoiceTextarea } from "@/features/sales/components/MobileVoiceTextarea";
 
 import type { QuoteEntryMode } from "../../../../../../shared/qep-moonshot-contracts";
 
@@ -113,7 +115,7 @@ export function IntakeInput({
   return (
     <>
       <div className="relative mt-4">
-        <textarea
+        <MobileVoiceTextarea
           value={aiPrompt}
           onFocus={() => onEntryModeChange("ai_chat")}
           onChange={(event) => {
@@ -121,7 +123,10 @@ export function IntakeInput({
             onEntryModeChange("ai_chat");
           }}
           placeholder="Describe what you want to quote."
-          className="w-full rounded border border-input bg-card px-3 py-2 pr-12 text-sm"
+          /* `pr-16` to leave room for both the existing recorder toggle
+             (top-right corner) and the new inline dictation mic
+             (bottom-right corner from MobileVoiceTextarea). */
+          className="w-full rounded border border-input bg-card px-3 py-2 pr-16 text-base sm:text-sm"
           style={{ minHeight: textareaMinHeight }}
         />
         <button

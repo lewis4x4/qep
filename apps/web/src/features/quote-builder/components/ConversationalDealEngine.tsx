@@ -23,6 +23,8 @@ import { Mic, MessageSquare, X, Zap, Loader2, AlertCircle, ChevronDown, ChevronU
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+// WAVE polish (Slice 2): voice dictation on the text intake.
+import { MobileVoiceTextarea } from "@/features/sales/components/MobileVoiceTextarea";
 import { VoiceRecorder } from "@/features/voice-qrm/components/VoiceRecorder";
 import { submitVoiceToQrm } from "@/features/voice-qrm/lib/voice-qrm-api";
 import { ScenarioCard } from "./ScenarioCard";
@@ -397,14 +399,14 @@ export function ConversationalDealEngine({
               <p className="text-xs text-muted-foreground">
                 Describe the opportunity. Include the machine type, brand, customer situation, and any budget constraints.
               </p>
-              <textarea
+              <MobileVoiceTextarea
                 value={textPrompt}
                 onChange={(e) => setTextPrompt(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleTextSubmit();
                 }}
                 placeholder="Example: Customer needs an ASV RT-135 for land clearing in Lake City. Has about $100k budget, prefers monthly payments under $2,500."
-                className="min-h-[110px] w-full rounded-lg border border-input bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-qep-orange resize-none"
+                className="min-h-[110px] w-full rounded-lg border border-input bg-card px-3 py-2 text-base sm:text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-qep-orange resize-none"
                 disabled={isRunning}
               />
               <div className="flex items-center justify-between">

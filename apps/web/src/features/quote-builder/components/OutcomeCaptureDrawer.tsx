@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { CheckCircle2, Loader2, XCircle, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+// WAVE polish (Slice 2): voice dictation on outcome notes.
+import { MobileVoiceTextarea } from "@/features/sales/components/MobileVoiceTextarea";
 import {
   captureQuoteOutcome,
   REASON_LABELS,
@@ -209,7 +211,7 @@ export function OutcomeCaptureDrawer({
 
       <div className="space-y-1">
         <Label htmlFor="outcome-details">What happened? (optional)</Label>
-        <textarea
+        <MobileVoiceTextarea
           id="outcome-details"
           value={reasonDetails}
           onChange={(e) => setReasonDetails(e.target.value.slice(0, 2000))}
@@ -221,7 +223,7 @@ export function OutcomeCaptureDrawer({
               : "e.g. 'Customer paused — budget shifted to next quarter.'"
           }
           rows={3}
-          className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+          className="w-full rounded-md border border-input bg-card px-3 py-2 text-base sm:text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
         />
         <p className="text-[10px] text-muted-foreground">{reasonDetails.length}/2000</p>
       </div>

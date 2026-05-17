@@ -22,6 +22,7 @@ import {
 } from "../lib/deal-intelligence-api";
 import { ReasonHint } from "./ReasonHint";
 import { MobileBottomSheet } from "@/features/sales/components/MobileBottomSheet";
+import { MobileVoiceTextarea } from "@/features/sales/components/MobileVoiceTextarea";
 import { useIsMobileViewport } from "@/features/sales/hooks/useIsMobileViewport";
 
 /**
@@ -113,7 +114,7 @@ export function MarginFloorGate({
   const reasonBody = (
     <div className="space-y-2 py-2">
       <Label htmlFor="margin-reason">Your reason</Label>
-      <textarea
+      <MobileVoiceTextarea
         id="margin-reason"
         value={reason}
         onChange={(e) => setReason(e.target.value.slice(0, 500))}

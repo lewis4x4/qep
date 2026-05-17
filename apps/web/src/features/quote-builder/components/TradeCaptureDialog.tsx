@@ -9,6 +9,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+// WAVE polish (Slice 2): voice dictation on the active capture note.
+// Slice 3 will wrap the dialog itself in a MobileBottomSheet on phone.
+import { MobileVoiceTextarea } from "@/features/sales/components/MobileVoiceTextarea";
 
 import {
   TRADE_CHECKLIST_ITEMS,
@@ -91,13 +94,13 @@ export function TradeCaptureDialog({
               </span>
             )}
           </div>
-          <textarea
+          <MobileVoiceTextarea
             id={activeFieldId}
             aria-labelledby={activeLabelId}
             value={tradeCapture[activeItem.key]}
             onChange={(event) => setTradeCapture((current) => ({ ...current, [activeItem.key]: event.target.value }))}
             placeholder={activeItem.placeholder}
-            className="mt-3 min-h-[120px] w-full rounded border border-input bg-background px-3 py-2 text-sm"
+            className="mt-3 min-h-[120px] w-full rounded border border-input bg-background px-3 py-2 text-base sm:text-sm"
           />
           <label className="mt-3 block rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
             <div className="flex items-center gap-2 text-foreground">

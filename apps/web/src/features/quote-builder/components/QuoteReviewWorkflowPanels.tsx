@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 
 import { IncentiveStack } from "./IncentiveStack";
 import { SendQuoteSection } from "./SendQuoteSection";
+// WAVE polish (Slice 2): dictation on dealer response + revision summary.
+import { MobileVoiceTextarea } from "@/features/sales/components/MobileVoiceTextarea";
 import {
   buildPortalRevisionQuoteData,
   getPortalRevision,
@@ -381,20 +383,20 @@ export function QuoteReviewWorkflowPanels({
 
           <label className="block space-y-1 text-sm">
             <span className="text-muted-foreground">Dealer response message</span>
-            <textarea
+            <MobileVoiceTextarea
               value={dealerMessage}
               onChange={(event) => setDealerMessage(event.target.value)}
-              className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+              className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm"
               placeholder="Explain what changed and what the customer should notice in the revised proposal."
             />
           </label>
 
           <label className="block space-y-1 text-sm">
             <span className="text-muted-foreground">Revision summary</span>
-            <textarea
+            <MobileVoiceTextarea
               value={revisionSummary}
               onChange={(event) => setRevisionSummary(event.target.value)}
-              className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+              className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm"
               placeholder="Summarize the revision in one concise line."
             />
           </label>

@@ -10,6 +10,8 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+// WAVE polish (Slice 2): voice dictation on Special terms + Why this machine.
+import { MobileVoiceTextarea } from "@/features/sales/components/MobileVoiceTextarea";
 import {
   dateInputValue,
   dateTimeInputValue,
@@ -102,7 +104,7 @@ export function DetailsStep() {
 
         <label className="mt-4 block space-y-1 text-sm">
           <span className="text-xs font-medium text-muted-foreground">Special terms</span>
-          <textarea
+          <MobileVoiceTextarea
             value={draft.specialTerms ?? ""}
             onChange={(event) => setDraft((current) => ({ ...current, specialTerms: event.target.value || null }))}
             placeholder="Subject to availability, freight confirmation, manager approval, or customer-specific terms."
@@ -115,7 +117,7 @@ export function DetailsStep() {
       <Card className="p-4">
         <p className="text-sm font-semibold text-foreground">Why this machine</p>
         <p className="mt-1 text-xs text-muted-foreground">QRM can suggest a reason, but the rep must edit or confirm it before customer-facing send.</p>
-        <textarea
+        <MobileVoiceTextarea
           value={draft.whyThisMachine ?? ""}
           onChange={(event) => setDraft((current) => ({ ...current, whyThisMachine: event.target.value, whyThisMachineConfirmed: false }))}
           placeholder="Explain why this unit fits the customer's job, terrain, timeline, and budget."

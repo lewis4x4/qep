@@ -10,6 +10,8 @@ import type { Dispatch, ReactNode, SetStateAction } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+// WAVE polish (Slice 2): voice dictation on Opportunity note.
+import { MobileVoiceTextarea } from "@/features/sales/components/MobileVoiceTextarea";
 import { CustomerIntelPanel } from "../components/CustomerIntelPanel";
 import { CustomerSection } from "../components/CustomerSection";
 import { WinProbabilityStrip } from "../components/WinProbabilityStrip";
@@ -158,12 +160,12 @@ export function CustomerStep({
 
         <label className="mt-4 block space-y-1 text-sm">
           <span className="text-xs font-medium text-muted-foreground">Opportunity note</span>
-          <textarea
+          <MobileVoiceTextarea
             value={draft.voiceSummary ?? ""}
             onChange={(event) => setDraft((current) => ({ ...current, voiceSummary: event.target.value }))}
             placeholder="What is the customer trying to accomplish?"
             rows={3}
-            className="w-full resize-y rounded border border-input bg-card px-3 py-2 text-sm"
+            className="w-full resize-y rounded border border-input bg-card px-3 py-2 text-base sm:text-sm"
           />
         </label>
       </Card>

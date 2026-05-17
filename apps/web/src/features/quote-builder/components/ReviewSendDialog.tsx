@@ -15,6 +15,9 @@ import { money } from "../lib/money";
 import type { QuotePacketReadiness, QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
 import { ReadinessRow } from "./ReadinessRow";
 import { SendQuoteSection } from "./SendQuoteSection";
+// WAVE polish (Slice 2): voice dictation on the internal-notes textarea.
+// Slice 6 will wrap the Dialog itself in a MobileBottomSheet on phone.
+import { MobileVoiceTextarea } from "@/features/sales/components/MobileVoiceTextarea";
 
 export interface ReviewSendDialogProps {
   open: boolean;
@@ -195,11 +198,11 @@ export function ReviewSendDialog({
 
               <label className="mt-4 block space-y-1 text-sm">
                 <span className="text-xs font-medium text-muted-foreground">Internal notes</span>
-                <textarea
+                <MobileVoiceTextarea
                   value={internalNotes}
                   onChange={(event) => setInternalNotes(event.target.value)}
                   placeholder="Private note for follow-up, manager context, or delivery caveats."
-                  className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                  className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm"
                 />
               </label>
             </Card>

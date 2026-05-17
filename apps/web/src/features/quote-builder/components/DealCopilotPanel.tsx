@@ -52,6 +52,8 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+// WAVE polish (Slice 2): inline dictation on copilot text input.
+import { MobileVoiceTextarea } from "@/features/sales/components/MobileVoiceTextarea";
 import { VoiceRecorder } from "@/features/voice-qrm/components/VoiceRecorder";
 import { submitVoiceToQrm } from "@/features/voice-qrm/lib/voice-qrm-api";
 import { supabase } from "@/lib/supabase";
@@ -407,7 +409,7 @@ export function DealCopilotPanel({
 
           {inputMode === "text" ? (
             <div className="space-y-1.5">
-              <textarea
+              <MobileVoiceTextarea
                 value={composerText}
                 onChange={(e) => setComposerText(e.target.value)}
                 onKeyDown={(e) => {
@@ -416,7 +418,7 @@ export function DealCopilotPanel({
                   }
                 }}
                 placeholder="What did you learn? ('Dave wants cash not financing; timeline is 3 weeks.')"
-                className="min-h-[70px] w-full resize-none rounded-lg border border-input bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-qep-orange disabled:opacity-50"
+                className="min-h-[70px] w-full resize-none rounded-lg border border-input bg-card px-3 py-2 text-base sm:text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-qep-orange disabled:opacity-50"
                 disabled={isSubmitting}
               />
               <div className="flex items-center justify-between">
