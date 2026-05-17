@@ -10,6 +10,8 @@
 #
 # To run ALL scoped tests: bun test (uses this root config)
 # To run edge function tests: bun run test:edge:dge (or equivalent deno commands)
+#
+# Dependency CVE scan: `bun run security:deps` (npm audit on root + apps/web).
 
 [test]
 root = "apps"

@@ -19,6 +19,7 @@
     "audit:rls-initplan": "node ./scripts/check-rls-initplan.mjs",
     "audit:edges": "bun ./scripts/check-edge-function-auth.mjs",
     "audit:secrets": "node ./scripts/check-no-plaintext-secrets.mjs",
+    "security:deps": "node ./scripts/security/dependency-audit.mjs",
     "pressure:parts": "bun ./scripts/parts-service-pressure/run.mjs",
     "test:edge:tax": "deno test supabase/functions/tax-calculator/tax-logic.test.ts --allow-env",
     "test:edge:dge": "deno test supabase/functions/_shared/market-valuation-logic.test.ts supabase/functions/_shared/dge-refresh-state.test.ts supabase/functions/_shared/dge-refresh-jobs.test.ts supabase/functions/_shared/dge-auth.test.ts",

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -104,20 +104,47 @@ export function DealCoachSidebar({
   const [acceptanceStats, setAcceptanceStats] = useState<AcceptanceSnapshot[]>([]);
   const coachReady = hasQuoteCustomerIdentity(draft) && draft.equipment.length > 0;
 
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const computedRef = useRef(computed);
+  computedRef.current = computed;
+  const coachEvalRef = useRef({
+    activePrograms,
+    similarDeals,
+    reasonIntelligence,
+    dismissedRuleIds,
+    personalSuppressions,
+    acceptanceStats,
+  });
+  coachEvalRef.current = {
+    activePrograms,
+    similarDeals,
+    reasonIntelligence,
+    dismissedRuleIds,
+    personalSuppressions,
+    acceptanceStats,
+  };
+
   // ── Context fetch (once per user + equipment-make change) ──────────────
   const equipmentMakesKey = useMemo(
     () => draft.equipment.map((e) => (e.make ?? "").trim()).join("|"),
     [draft.equipment],
   );
 
+  const programsDraftKey = useMemo(
+    () => `${draft.branchSlug ?? ""}|${equipmentMakesKey}|${draft.equipment.length}`,
+    [draft.branchSlug, draft.equipment.length, equipmentMakesKey],
+  );
+
   useEffect(() => {
     if (!profile) return;
     let cancelled = false;
+    const programsDraft = draftRef.current;
 
     (async () => {
       const [baseline, programs, reasons, suppressions, acceptance] = await Promise.all([
         getMarginBaseline(profile.id),
-        getActiveProgramsForDraft(draft),
+        getActiveProgramsForDraft(programsDraft),
         getReasonIntelligence(),
         getPersonalSuppressions({ repId: profile.id }),
         getRuleAcceptanceStats(),
@@ -137,8 +164,7 @@ export function DealCoachSidebar({
     })();
 
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.id, equipmentMakesKey]);
+  }, [profile?.id, programsDraftKey]);
 
   // Similar-deals query depends on brand + netTotal. Refetches when either
   // meaningfully changes — debounced at the netTotal level via rounding to
@@ -152,13 +178,12 @@ export function DealCoachSidebar({
   useEffect(() => {
     if (!similarQueryKey) { setSimilarDeals(null); return; }
     let cancelled = false;
-    const query = buildSimilarDealsQuery(draft, computed.netTotal);
+    const query = buildSimilarDealsQuery(draftRef.current, computedRef.current.netTotal);
     if (!query) { setSimilarDeals(null); return; }
     getSimilarDealOutcomes(query).then((result) => {
       if (!cancelled) setSimilarDeals(result);
     });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [similarQueryKey]);
 
   // ── Dismissed-set fetch when quote id shows up ─────────────────────────
@@ -212,24 +237,23 @@ export function DealCoachSidebar({
     }
     setLoading(true);
     const timer = setTimeout(() => {
+      const evalSnapshot = coachEvalRef.current;
       const ctx: DealCoachContext = {
-        draft,
-        computed,
+        draft: draftRef.current,
+        computed: computedRef.current,
         userId: profile.id,
         userRole: profile.role ?? null,
         quotePackageId,
         marginBaseline,
-        activePrograms,
-        similarDeals,
-        reasonIntelligence,
+        activePrograms: evalSnapshot.activePrograms,
+        similarDeals: evalSnapshot.similarDeals,
+        reasonIntelligence: evalSnapshot.reasonIntelligence,
       };
-      // Combine per-quote dismissals with the rep's personal 30-day
-      // suppression memory. Both silence the rule before it ever shows.
       const effectiveDismissals = new Set<string>([
-        ...dismissedRuleIds,
-        ...personalSuppressions,
+        ...evalSnapshot.dismissedRuleIds,
+        ...evalSnapshot.personalSuppressions,
       ]);
-      const results = evaluateCoachRules(ctx, effectiveDismissals, acceptanceStats);
+      const results = evaluateCoachRules(ctx, effectiveDismissals, evalSnapshot.acceptanceStats);
       setSuggestions(results);
       setLoading(false);
       // Record "shown" for each newly-surfaced suggestion (fire-and-forget).
@@ -250,8 +274,7 @@ export function DealCoachSidebar({
       }
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctxSignature, coachReady]);
+  }, [ctxSignature, coachReady, marginBaseline, onAction, profile, quotePackageId]);
 
   const handleApply = useCallback((rule: RuleResult) => {
     if (rule.action && onAction) onAction(rule.action.actionId);

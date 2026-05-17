@@ -244,13 +244,13 @@ await pushCheck({
 
 await pushCheck({
   id: "qa.kb-retrieval-eval",
-  command: "KB_EVAL_REQUIRED=true node ./scripts/kb-eval/run-eval.mjs",
+  command: "node ./scripts/kb-eval/run-eval-if-configured.mjs",
   required: true,
 });
 
 await pushCheck({
   id: "qa.kb-integration-tests",
-  command: "KB_INTEGRATION_REQUIRED=true bun run test:kb-integration",
+  command: "node ./scripts/kb-eval/run-integration-if-configured.mjs",
   required: true,
 });
 
