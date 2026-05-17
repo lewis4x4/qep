@@ -660,7 +660,7 @@ export function VoiceQuotePage() {
       console.warn("[voice-quote] sessionStorage write failed:", error);
     }
 
-    navigate(`/quote-v2?voice_session_id=${encodeURIComponent(voiceSessionId)}`);
+    navigate(`/sales/quotes/new?voice_session_id=${encodeURIComponent(voiceSessionId)}`);
   }
 
   const primaryStatus = phase === "recording" ? "Live" : phase === "paused" ? "Paused" : phase === "error" ? "Needs review" : "Ready";

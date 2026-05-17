@@ -15,6 +15,8 @@ import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { GlassPanel } from "@/components/primitives/GlassPanel";
 import { cn } from "@/lib/utils";
+// WAVE polish (Slice 5): canonical quote-builder href.
+import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -182,7 +184,7 @@ function QuoteTableRow({ row }: { row: QuoteVelocityRow }) {
       <td className="py-3 pl-2 pr-3">
         <div className="flex items-center justify-end gap-1">
           <Link
-            to={`/quote-v2?package_id=${encodeURIComponent(row.id)}${row.dealId ? `&crm_deal_id=${encodeURIComponent(row.dealId)}` : ""}`}
+            to={buildQuoteBuilderHref({ packageId: row.id, dealId: row.dealId ?? undefined })}
             className="inline-flex items-center gap-1 text-[11px] font-medium text-qep-orange hover:text-qep-orange/80 min-h-[44px] min-w-[44px] justify-center"
             aria-label={`Resume quote for ${row.dealName}`}
             title="Resume quote"
@@ -360,7 +362,7 @@ export function QuoteVelocityCenterPage() {
           <FileText className="h-8 w-8 text-white/20 mx-auto mb-3" />
           <p className="text-sm text-slate-400">No quote packages in your workspace yet</p>
           <Link
-            to="/quote-v2"
+            to={buildQuoteBuilderHref()}
             className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-qep-orange hover:text-qep-orange/80"
           >
             Create your first quote <ArrowRight className="h-3.5 w-3.5" />

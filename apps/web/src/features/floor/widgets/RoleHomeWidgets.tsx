@@ -18,6 +18,8 @@ import {
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+// WAVE polish (Slice 5): canonical quote-builder href.
+import { buildQuoteBuilderHref, buildQuoteListHref } from "@/features/quote-builder/lib/quote-route";
 import { transitionServiceJob } from "@/features/service/lib/api";
 import type { ServiceStage } from "@/features/service/lib/constants";
 import { STAGE_LABELS } from "@/features/service/lib/constants";
@@ -317,7 +319,7 @@ export function MyQuotesByStatusWidget() {
     <FloorWidgetShell
       title="My quotes by status"
       icon={<FileText className="h-3.5 w-3.5" aria-hidden="true" />}
-      to="/quote"
+      to={buildQuoteListHref()}
       linkLabel="Quotes"
       minHeight="min-h-[420px]"
     >
@@ -376,7 +378,7 @@ export function MyQuotesByStatusWidget() {
                       <table className="w-full min-w-[720px] text-left text-xs">
                         <tbody className="divide-y divide-[hsl(var(--qep-deck-rule))]/60">
                           {visible.map((row) => {
-                            const quoteHref = `/quote-v2?package_id=${encodeURIComponent(row.id)}${row.deal_id ? `&crm_deal_id=${encodeURIComponent(row.deal_id)}` : ""}`;
+                            const quoteHref = buildQuoteBuilderHref({ packageId: row.id, dealId: row.deal_id ?? undefined });
                             const action = quoteActionLabel(row.status);
                             return (
                               <tr key={row.id} className="bg-[hsl(var(--qep-deck))]/20">

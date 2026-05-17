@@ -5,6 +5,7 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import type { UserRole } from "@/lib/database.types";
 import { AskIronAdvisorButton } from "@/components/primitives";
+import { buildQuoteBuilderHref, buildQuoteListHref } from "@/features/quote-builder/lib/quote-route";
 import { supabase } from "@/lib/supabase";
 import { DeckSurface } from "../components/command-deck";
 import { QrmPageHeader } from "../components/QrmPageHeader";
@@ -368,17 +369,11 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
         return { label: "Draft", tone: "text-muted-foreground bg-muted/20" };
     }
   };
-  const quoteHref = (() => {
-    const params = new URLSearchParams();
-    if (activeQuote?.id) {
-      params.set("package_id", activeQuote.id);
-    }
-    params.set("crm_deal_id", dealId);
-    if (dealQueryData?.primaryContactId) {
-      params.set("crm_contact_id", dealQueryData.primaryContactId);
-    }
-    return `/quote-v2?${params.toString()}`;
-  })();
+  const quoteHref = buildQuoteBuilderHref({
+    packageId: activeQuote?.id,
+    dealId,
+    contactId: dealQueryData?.primaryContactId ?? undefined,
+  });
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8 lg:pb-8">
@@ -491,7 +486,7 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
                     </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link to="/quote">Open Quote List</Link>
+                    <Link to={buildQuoteListHref()}>Open Quote List</Link>
                   </Button>
                 </div>
               </div>
@@ -505,13 +500,11 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
                 <div className="mt-4 grid gap-2">
                   {(dealQuotesQuery.data ?? []).map((quote) => {
                     const status = quoteStatusMeta(quote.status);
-                    const rowHref = (() => {
-                      const params = new URLSearchParams({ package_id: quote.id, crm_deal_id: dealId });
-                      if (dealQueryData.primaryContactId) {
-                        params.set("crm_contact_id", dealQueryData.primaryContactId);
-                      }
-                      return `/quote-v2?${params.toString()}`;
-                    })();
+                    const rowHref = buildQuoteBuilderHref({
+                      packageId: quote.id,
+                      dealId,
+                      contactId: dealQueryData.primaryContactId ?? undefined,
+                    });
                     return (
                       <div key={quote.id} className="flex flex-col gap-3 rounded-md border border-border/60 bg-background/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="min-w-0">

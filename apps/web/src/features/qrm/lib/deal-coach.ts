@@ -1,4 +1,6 @@
 import type { DealCompositeBundle } from "./deal-composite-api";
+// WAVE polish (Slice 5): canonical quote-builder href.
+import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
 import type { QuoteVelocityRow } from "../command-center/lib/quoteVelocity";
 import type { TimeBankRow } from "./time-bank";
 import type { BlockedDeal } from "../command-center/lib/blockerTypes";
@@ -92,7 +94,10 @@ export function buildDealCoachBoard(input: {
             input.quote.requiresRequote ? "Quote is flagged for requote." : "No requote flag present.",
           ],
           actionLabel: "Open quote flow",
-          href: `/quote-v2?crm_deal_id=${deal.id}${deal.primaryContactId ? `&crm_contact_id=${deal.primaryContactId}` : ""}`,
+          href: buildQuoteBuilderHref({
+            dealId: deal.id,
+            contactId: deal.primaryContactId ?? undefined,
+          }),
         }
       : null,
   );

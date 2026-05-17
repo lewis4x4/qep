@@ -18,6 +18,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { GlassPanel } from "@/components/primitives/GlassPanel";
 import { DashboardPivotToggle } from "@/components/primitives";
+// WAVE polish (Slice 5): canonical quote-builder href.
+import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -454,7 +456,7 @@ export function ApprovalCenterPage() {
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
             <Link
-              to="/quote-v2"
+              to={buildQuoteBuilderHref()}
               className="inline-flex min-h-10 items-center rounded-lg border border-white/10 px-4 text-xs font-semibold text-slate-200 hover:border-qep-orange/50 hover:text-white"
             >
               Open Quote Builder

@@ -25,6 +25,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+// WAVE polish (Slice 5): canonical quote-builder href.
+import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
 import {
   EmptyState,
   ErrorLine,
@@ -297,7 +299,7 @@ function normalizeQuoteViewedRow(row: unknown): ActivityItem | null {
     occurredAt: viewedAt,
     label: `${label} · ${customer}`,
     detail: "Buying signal — follow up now",
-    href: `/quote-v2?package_id=${encodeURIComponent(id)}${dealId ? `&crm_deal_id=${encodeURIComponent(dealId)}` : ""}`,
+    href: buildQuoteBuilderHref({ packageId: id, dealId: dealId ?? undefined }),
     tone: "buying_signal",
   };
 }

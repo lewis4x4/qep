@@ -1,4 +1,6 @@
 import { accountCommandUrl } from "@/features/qrm/lib/account-links";
+// WAVE polish (Slice 5): canonical quote-builder href helper.
+import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
 
 export interface ActionLink {
   label: string;
@@ -43,7 +45,7 @@ export function resolveEntityAction(item: BaseQueueItem): ActionLink | null {
   if (table === "quote_packages") {
     const dealId = issueDealId(item);
     if (dealId) {
-      return { label: "Open quote", href: `/quote-v2?deal_id=${encodeURIComponent(dealId)}` };
+      return { label: "Open quote", href: buildQuoteBuilderHref({ dealId }) };
     }
   }
   if (table === "equipment_documents") {
@@ -59,7 +61,7 @@ export function resolveDataQualityPlaybook(issueClass: string, item: BaseQueueIt
   if (issueClass === "quotes_no_tax_jurisdiction" || issueClass === "quote_no_validity_window") {
     const dealId = issueDealId(item);
     if (dealId) {
-      return { label: "Open quote playbook", href: `/quote-v2?deal_id=${encodeURIComponent(dealId)}` };
+      return { label: "Open quote playbook", href: buildQuoteBuilderHref({ dealId }) };
     }
   }
   if (issueClass === "documents_unclassified") {
@@ -83,9 +85,9 @@ export function resolveExceptionPlaybook(source: string, item: BaseQueueItem): A
   if (source === "tax_failed") {
     const dealId = readString(item.payload?.deal_id) ?? issueDealId(item);
     if (dealId) {
-      return { label: "Open quote playbook", href: `/quote-v2?deal_id=${encodeURIComponent(dealId)}` };
+      return { label: "Open quote playbook", href: buildQuoteBuilderHref({ dealId }) };
     }
-    return { label: "Open quote builder", href: "/quote-v2" };
+    return { label: "Open quote builder", href: buildQuoteBuilderHref() };
   }
   if (source === "price_unmatched") {
     return { label: "Open price intelligence", href: "/price-intelligence" };

@@ -8,6 +8,7 @@ import {
   Database, Users, CreditCard, BarChart3, Target,
 } from "lucide-react";
 import { StatusChipStack } from "@/components/primitives";
+import { buildQuoteBuilderHref, buildQuoteListHref } from "@/features/quote-builder/lib/quote-route";
 import { supabase } from "@/lib/supabase";
 import type {
   Account360Response,
@@ -236,12 +237,12 @@ export function AccountQuotesTab({ quotes }: { quotes: Account360OpenQuote[] }) 
                 </div>
                 <div className="flex shrink-0 flex-col gap-2">
                   <Button asChild size="sm" variant="outline" className="h-8 px-2 text-xs">
-                    <Link to={`/quote-v2?package_id=${encodeURIComponent(q.id)}&crm_deal_id=${encodeURIComponent(q.deal_id)}`}>
+                    <Link to={buildQuoteBuilderHref({ packageId: q.id, dealId: q.deal_id })}>
                       Resume
                     </Link>
                   </Button>
                   <Button asChild size="sm" variant="ghost" className="h-8 px-2 text-xs">
-                    <Link to="/quote">All Quotes</Link>
+                    <Link to={buildQuoteListHref()}>All Quotes</Link>
                   </Button>
                 </div>
               </div>

@@ -100,7 +100,7 @@ export function AdvisorActionCards() {
 
           <div className="relative mt-auto grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
             <Link
-              to="/quote-v2"
+              to="/sales/quotes/new"
               className="group inline-flex min-h-14 items-center justify-center gap-3 rounded-2xl bg-white px-5 py-4 text-sm font-black uppercase tracking-[0.14em] text-[#15100a] shadow-xl shadow-black/25 transition-all hover:-translate-y-0.5 hover:bg-white/95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#15100a]"
               aria-label="Start a new quote in Quote Builder"
             >

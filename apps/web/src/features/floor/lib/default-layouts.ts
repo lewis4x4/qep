@@ -28,7 +28,7 @@ export const DEFAULT_FLOOR_LAYOUTS: Record<IronRole, FloorLayout> = {
     ],
     quickActions: [
       { id: "open_approvals", label: "OPEN APPROVALS", route: "/qrm/approvals", icon: "approve" },
-      { id: "new_quote", label: "NEW QUOTE", route: "/quote-v2", icon: "quote" },
+      { id: "new_quote", label: "NEW QUOTE", route: "/sales/quotes/new", icon: "quote" },
       { id: "nudge_rep", label: "NUDGE REP", route: "/qrm/deals?stalled=true", icon: "users" },
     ],
     showNarrative: true,
@@ -43,7 +43,7 @@ export const DEFAULT_FLOOR_LAYOUTS: Record<IronRole, FloorLayout> = {
       { id: "crm.customer-search", order: 5 },
     ],
     quickActions: [
-      { id: "new_quote", label: "NEW QUOTE", route: "/quote-v2", icon: "quote" },
+      { id: "new_quote", label: "NEW QUOTE", route: "/sales/quotes/new", icon: "quote" },
       { id: "voice_note", label: "VOICE NOTE", route: "/voice-qrm", icon: "voice" },
       { id: "my_pipeline", label: "MY PIPELINE", route: "/qrm/deals?assigned_to=me", icon: "activity" },
     ],

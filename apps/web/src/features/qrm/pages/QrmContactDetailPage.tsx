@@ -4,6 +4,8 @@ import { ArrowLeft, CalendarDays, FileText, Link2, Plus } from "lucide-react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { AskIronAdvisorButton } from "@/components/primitives";
+// WAVE polish (Slice 5): canonical quote-builder href.
+import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
 import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
 import { QrmActivityComposer } from "../components/QrmActivityComposer";
@@ -209,7 +211,7 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
             Edit Contact
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={`/quote-v2?crm_contact_id=${contactId}`}>
+            <Link to={buildQuoteBuilderHref({ contactId })}>
               <FileText className="mr-2 h-4 w-4" />
               New Quote
             </Link>
@@ -356,7 +358,7 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground">{deal.amount ? `$${deal.amount.toLocaleString()}` : "Amount TBD"}</span>
                         <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
-                          <Link to={`/quote-v2?crm_contact_id=${contactId}&crm_deal_id=${deal.id}`}>
+                          <Link to={buildQuoteBuilderHref({ contactId, dealId: deal.id })}>
                             Quote
                           </Link>
                         </Button>

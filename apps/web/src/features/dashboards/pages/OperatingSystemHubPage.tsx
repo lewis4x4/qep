@@ -44,7 +44,7 @@ const MODULES: ModuleCard[] = [
   {
     title: "Quote Builder",
     description: "Live quote workflow with tax, incentives, trade-in, and AI-assisted commercial drafting.",
-    href: "/quote-v2",
+    href: "/sales/quotes/new",
     roles: ["rep", "admin", "manager", "owner"],
     icon: FileText,
     tone: "border-qep-orange/30 bg-qep-orange/5 text-qep-orange",

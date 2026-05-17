@@ -18,7 +18,7 @@
  *     re-rate — each with its own color.
  *   • Score delta pill is color-graded — green for up, rose for down,
  *     muted for zero.
- *   • Click a row → /quote-v2/{quotePackageId}?copilotTurn={turnId}
+ *   • Click a row → /sales/quotes/{quotePackageId}?copilotTurn={turnId}
  *     which triggers the DealCopilotPanel auto-open + scroll-to
  *     behavior already wired in Slice 21.
  *   • Empty state stays brand-true: "Your Copilot is quiet — drop a
@@ -39,6 +39,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+// WAVE polish (Slice 5): canonical quote-builder href.
+import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
 
 interface TurnRow {
   id: string;
@@ -300,7 +302,7 @@ function TurnRowCard({ row }: { row: TurnRow }) {
   return (
     <li>
       <Link
-        to={`/quote-v2/${row.quotePackageId}?copilotTurn=${row.id}`}
+        to={`${buildQuoteBuilderHref({ quoteId: row.quotePackageId })}?copilotTurn=${encodeURIComponent(row.id)}`}
         className="group block rounded-md border border-transparent px-2 py-1.5 transition-colors hover:border-[hsl(var(--qep-deck-rule))] hover:bg-[hsl(var(--qep-deck))]"
       >
         <div className="flex items-start gap-2">

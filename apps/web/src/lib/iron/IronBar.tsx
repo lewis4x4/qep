@@ -182,7 +182,7 @@ async function openQuoteBuilderForIntake(
     content,
     createdAt: Date.now(),
   });
-  navigate(`/quote-v2?${params.toString()}`, {
+  navigate(`/sales/quotes/new?${params.toString()}`, {
     state: { ironQuoteHandoff: handoff },
   });
 }

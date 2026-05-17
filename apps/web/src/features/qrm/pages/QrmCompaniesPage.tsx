@@ -19,6 +19,8 @@ import {
 } from "../components/command-deck";
 import { ASK_IRON_PATH, createAskIronSeedState } from "../components/askIronHandoff";
 import { buildAccountCommandHref } from "../lib/account-command";
+// WAVE polish (Slice 5): canonical quote-builder href.
+import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
 import { listCrmCompanies } from "../lib/qrm-api";
 import { crmSupabase, type QrmDatabase } from "../lib/qrm-supabase";
 
@@ -553,7 +555,14 @@ export function QrmCompaniesPage() {
         initialValues={newCompanyInitialValues}
         onSaved={(company) => {
           if (returnToQuotePackageId) {
-            navigate(`/quote-v2?package_id=${encodeURIComponent(returnToQuotePackageId)}&crm_company_id=${encodeURIComponent(company.id)}&prospect_converted=1`, { replace: true });
+            navigate(
+              buildQuoteBuilderHref({
+                packageId: returnToQuotePackageId,
+                companyId: company.id,
+                prospectConverted: true,
+              }),
+              { replace: true },
+            );
             return;
           }
           navigate(buildAccountCommandHref(company.id), { replace: true });

@@ -80,7 +80,7 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   "/sales/field-note": "Field Note",
   "/quote": "Quotes",
   "/sales/quotes": "Quotes",
-  "/quote-v2": "Quote Builder",
+  "/sales/quotes/new": "Quote Builder",
   "/voice-quote": "Voice Quote",
   "/qrm": "QRM",
   "/qrm/activities": "Activities",
@@ -134,10 +134,10 @@ const QUICK_ACTION_MAP: Record<string, QuickAction | null> = {
   "/chat": { label: "New Chat", route: "/chat" },
   "/voice": { label: "Record", route: "/voice" },
   "/sales/field-note": { label: "Record", route: "/sales/field-note" },
-  "/quote": { label: "New Quote", route: "/quote-v2" },
-  "/sales/quotes": { label: "New Quote", route: "/quote-v2" },
-  "/quote-v2": { label: "New Quote", route: "/quote-v2" },
-  "/voice-quote": { label: "New Quote", route: "/quote-v2" },
+  "/quote": { label: "New Quote", route: "/sales/quotes/new" },
+  "/sales/quotes": { label: "New Quote", route: "/sales/quotes/new" },
+  "/sales/quotes/new": { label: "New Quote", route: "/sales/quotes/new" },
+  "/voice-quote": { label: "New Quote", route: "/sales/quotes/new" },
   "/qrm": { label: "QRM Hub", route: "/qrm" },
   "/qrm/activities": { label: "Activities", route: "/qrm/activities" },
   "/qrm/deals": { label: "Deals", route: "/qrm/deals" },
@@ -477,7 +477,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
       href === "/rentals" ||
       href === "/chat" ||
       href === "/voice" ||
-      href === "/quote-v2" ||
+      href === "/sales/quotes/new" ||
       href === "/os" ||
       href === "/admin" ||
       href === "/executive"

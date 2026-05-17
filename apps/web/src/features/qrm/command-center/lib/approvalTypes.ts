@@ -6,6 +6,8 @@
  */
 
 import type { QuoteApprovalConditionType } from "../../../../../../../shared/qep-moonshot-contracts";
+// WAVE polish (Slice 5): canonical quote-builder href helper.
+import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -469,7 +471,7 @@ export function normalizeApprovals(
       id: approval.id,
       type: "quote",
       dealId,
-      viewHref: quotePackageId ? `/quote-v2?package_id=${encodeURIComponent(quotePackageId)}` : (dealId ? `/qrm/deals/${dealId}` : null),
+      viewHref: quotePackageId ? buildQuoteBuilderHref({ packageId: quotePackageId }) : (dealId ? `/qrm/deals/${dealId}` : null),
       dealName: headline,
       contactName: customerCompany && customerName ? customerName : "—",
       amount: Number.isFinite(amount) ? amount : 0,

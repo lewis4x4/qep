@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { AskIronAdvisorButton } from "@/components/primitives";
+import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
 import { fetchDealComposite } from "../lib/deal-composite-api";
 import {
   REQUIRED_TRADE_PHOTO_SLOTS,
@@ -321,7 +322,7 @@ export function TradeWalkaroundPage() {
                   Generated in {valuationResult.pipeline_duration_ms}ms
                 </p>
                 <Button asChild size="sm" variant="outline">
-                  <Link to={`/quote-v2?crm_deal_id=${dealId}${deal?.primaryContactId ? `&crm_contact_id=${deal?.primaryContactId}` : ""}`}>
+                  <Link to={buildQuoteBuilderHref({ dealId: dealId, contactId: deal?.primaryContactId ?? undefined })}>
                     Open quote builder
                   </Link>
                 </Button>

@@ -1,3 +1,6 @@
+// WAVE polish (Slice 5): canonical quote-builder href helper.
+import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
+
 export interface ExecAlertActionLink {
   label: string;
   href: string;
@@ -32,7 +35,7 @@ export function resolveExecAlertRecordLink(alert: AlertActionInput): ExecAlertAc
     return { label: "Open service dashboard", href: "/service/dashboard" };
   }
   if (alert.entity_type === "quote_package") {
-    return { label: "Open quote builder", href: "/quote-v2" };
+    return { label: "Open quote builder", href: buildQuoteBuilderHref() };
   }
   return null;
 }
@@ -51,7 +54,7 @@ export function resolveExecAlertPlaybookLink(alert: AlertActionInput): ExecAlert
     return { label: "Open data quality", href: "/admin/data-quality" };
   }
   if (alert.metric_key === "quote_expiring_7d") {
-    return { label: "Open quote playbook", href: "/quote-v2" };
+    return { label: "Open quote playbook", href: buildQuoteBuilderHref() };
   }
   if (alert.metric_key === "receipt_compliance_rate" || alert.metric_key === "payment_exception_rate") {
     return { label: "Open invoice playbook", href: "/service/invoice" };

@@ -1,3 +1,6 @@
+// WAVE polish (Slice 5): canonical quote-builder href helper.
+import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
+
 export interface MetricActionLink {
   label: string;
   href: string;
@@ -10,7 +13,7 @@ export function resolveMetricPlaybook(metricKey: string | null): MetricActionLin
     return { label: "Open pipeline playbook", href: "/qrm/deals" };
   }
   if (metricKey === "quote_expiring_7d") {
-    return { label: "Open quote builder", href: "/quote-v2" };
+    return { label: "Open quote builder", href: buildQuoteBuilderHref() };
   }
   if (metricKey === "service_backlog_overdue" || metricKey === "service_parts_waiting") {
     return { label: "Open service dashboard", href: "/service/dashboard" };

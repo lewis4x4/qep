@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Clock, Loader2 } from "lucide-react";
 import { RequireAdmin } from "@/components/RequireAdmin";
+import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
 import {
   getQuoteVelocityRows,
   summarizeVelocity,
@@ -148,7 +149,7 @@ function DealVelocityPageInner() {
                         <tr
                           key={r.id}
                           className="cursor-pointer border-b transition-colors hover:bg-muted/20"
-                          onClick={() => navigate(`/quote-v2?package_id=${r.id}`)}
+                          onClick={() => navigate(buildQuoteBuilderHref({ packageId: r.id }))}
                         >
                           <td className="px-4 py-2 font-medium">
                             {r.customer ?? <span className="text-muted-foreground">—</span>}

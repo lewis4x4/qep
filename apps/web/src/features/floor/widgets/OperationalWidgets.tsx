@@ -382,7 +382,7 @@ export function SalesCommissionSourceFloorWidget() {
     <FloorWidgetShell
       title="Commission source"
       icon={<BadgeDollarSign className="h-3.5 w-3.5" aria-hidden="true" />}
-      to="/quote-v2"
+      to="/sales/quotes/new"
       linkLabel="Quotes"
       minHeight="min-h-[210px]"
     >

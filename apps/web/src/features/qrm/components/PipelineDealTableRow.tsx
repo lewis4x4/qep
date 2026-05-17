@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
 import { HealthScorePill } from "../../nervous-system/components/HealthScorePill";
 import { formatMoney, formatDate, getFutureFollowUpIso } from "../lib/pipeline-utils";
 import { patchCrmDeal } from "../lib/qrm-api";
@@ -104,7 +105,10 @@ export function PipelineDealTableRow({
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline" size="sm">
             <Link
-              to={`/quote-v2?crm_deal_id=${effectiveDeal.id}${effectiveDeal.primaryContactId ? `&crm_contact_id=${effectiveDeal.primaryContactId}` : ""}`}
+              to={buildQuoteBuilderHref({
+                dealId: effectiveDeal.id,
+                contactId: effectiveDeal.primaryContactId ?? undefined,
+              })}
             >
               <FileText className="mr-1 h-4 w-4" />
               New Quote
