@@ -15,6 +15,10 @@ import { Card } from "@/components/ui/card";
 import { SummaryRow } from "../components/SummaryRow";
 import { money } from "../lib/money";
 import { useWizard } from "../wizard/useWizard";
+// WAVE quote-builder deep reflow (A2)
+import { MobileBottomSheet } from "@/features/sales/components/MobileBottomSheet";
+import { MobileSectionAccordion } from "@/features/sales/components/MobileSectionAccordion";
+import { useIsMobileViewport } from "@/features/sales/hooks/useIsMobileViewport";
 
 type FinanceStepTab = "cash" | "finance" | "lease";
 
@@ -39,6 +43,19 @@ export function FinancingStep({
 }: FinancingStepProps) {
   const { draft, setDraft, setStep } = useWizard();
   const [financeStepTab, setFinanceStepTab] = useState<FinanceStepTab>("cash");
+  // WAVE A2 deep reflow: on mobile, the selected scenario's payment
+  // breakdown surfaces inside a MobileBottomSheet rather than expanding
+  // inline. The scenario list itself stays tap-to-select.
+  const isMobile = useIsMobileViewport();
+  const [scenarioSheetLabel, setScenarioSheetLabel] = useState<string | null>(null);
+  const scenarioSheetOpen = scenarioSheetLabel !== null;
+  const scenarioSheetScenario = useMemo(
+    () =>
+      scenarioSheetLabel
+        ? allFinanceScenarios.find((s) => s.label === scenarioSheetLabel) ?? null
+        : null,
+    [allFinanceScenarios, scenarioSheetLabel],
+  );
 
   const financeTabScenarios = useMemo(
     () => allFinanceScenarios.filter((scenario) => (
@@ -104,7 +121,9 @@ export function FinancingStep({
         </p>
       </Card>
 
-      <Card className="p-4">
+      <Card className="p-4" data-testid="financing-tabs">
+        {/* WAVE A2: segmented control at the top — flex-1 children on mobile
+            so each tab is the same width and lands a 44pt thumb target. */}
         <div className="flex flex-wrap gap-2">
           {([
             ["cash", "Cash"],
@@ -124,13 +143,14 @@ export function FinancingStep({
                     setDraft((current) => ({ ...current, selectedFinanceScenario: cashScenario?.label ?? null }));
                   }
                 }}
-                className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
+                className={`flex-1 sm:flex-none min-h-[44px] rounded-lg border px-4 py-2 text-sm font-semibold transition ${
                   financeStepTab === tab
                     ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
                     : disabled
                       ? "border-border/60 bg-muted/30 text-muted-foreground"
                       : "border-border text-muted-foreground hover:text-foreground"
                 }`}
+                data-financing-tab={tab}
               >
                 {label}{disabled ? " — unavailable" : ""}
               </button>
@@ -151,23 +171,42 @@ export function FinancingStep({
 
         {financeStepTab === "finance" && (
           <div className="mt-4 space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">Cash down</span>
-                <input
-                  type="number"
-                  min={0}
-                  step={500}
-                  value={draft.cashDown || ""}
-                  onChange={(event) => setDraft((current) => ({ ...current, cashDown: Number(event.target.value) || 0 }))}
-                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                />
-              </label>
-              <div className="rounded-lg border border-border/70 bg-card/50 p-3">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Amount financed</p>
-                <p className="mt-1 text-xl font-semibold text-qep-orange">{money(amountFinanced)}</p>
-              </div>
-            </div>
+            {/* WAVE A2: Loan inputs collapse into MobileSectionAccordion on
+                phone (expanded by default). text-base prevents iOS auto-zoom. */}
+            {(() => {
+              const inputs = (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1 text-sm">
+                    <span className="text-xs font-medium text-muted-foreground">Cash down</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step={500}
+                      value={draft.cashDown || ""}
+                      onChange={(event) => setDraft((current) => ({ ...current, cashDown: Number(event.target.value) || 0 }))}
+                      className="w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm"
+                    />
+                  </label>
+                  <div className="rounded-lg border border-border/70 bg-card/50 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Amount financed</p>
+                    <p className="mt-1 text-xl font-semibold text-qep-orange">{money(amountFinanced)}</p>
+                  </div>
+                </div>
+              );
+              return isMobile ? (
+                <MobileSectionAccordion
+                  index={1}
+                  title="Loan inputs"
+                  caption={`Cash down ${money(draft.cashDown || 0)}`}
+                  defaultOpen
+                >
+                  {inputs}
+                </MobileSectionAccordion>
+              ) : (
+                inputs
+              );
+            })()}
 
             {financingPreviewLoading && <p className="text-xs text-muted-foreground">Calculating scenarios…</p>}
             {financingPreviewError && <p className="text-xs text-red-400">Financing preview failed. Continue with cash or try again.</p>}
@@ -188,18 +227,34 @@ export function FinancingStep({
                     <p className="mt-1 text-[11px] text-muted-foreground">
                       {scenario.termMonths ?? 0} months · {(scenario.apr ?? scenario.rate ?? 0).toFixed(2)}% APR · {scenario.lender ?? "Preferred lender"}
                     </p>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="mt-3"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        saveSelectedFinanceScenario(scenario);
-                      }}
-                    >
-                      Save scenario
-                    </Button>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          saveSelectedFinanceScenario(scenario);
+                        }}
+                      >
+                        Save scenario
+                      </Button>
+                      {isMobile ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="text-qep-orange"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setScenarioSheetLabel(scenario.label);
+                          }}
+                          data-testid="financing-view-payment"
+                        >
+                          View payment
+                        </Button>
+                      ) : null}
+                    </div>
                   </button>
                 );
               }) : (
@@ -236,6 +291,73 @@ export function FinancingStep({
         <Button variant="outline" onClick={() => setStep("promotions")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
         <Button onClick={() => setStep("details")}>Quote details <ArrowRight className="ml-1 h-4 w-4" /></Button>
       </div>
+
+      {/* WAVE A2: scenario detail sheet — opens on mobile when the rep
+          taps "View payment" on a scenario card. */}
+      <MobileBottomSheet
+        open={scenarioSheetOpen}
+        onOpenChange={(next) => {
+          if (!next) setScenarioSheetLabel(null);
+        }}
+        title={scenarioSheetScenario?.label ?? "Payment breakdown"}
+        description={
+          scenarioSheetScenario
+            ? `${scenarioSheetScenario.lender ?? "Preferred lender"} · ${scenarioSheetScenario.termMonths ?? 0} mo`
+            : undefined
+        }
+        size="tall"
+      >
+        {scenarioSheetScenario ? (
+          <div className="space-y-3 pt-2 pb-4">
+            <div className="rounded-2xl border border-qep-orange/30 bg-qep-orange/5 p-4 text-center">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Monthly</p>
+              <p className="mt-1 text-3xl font-bold text-qep-orange">
+                {scenarioSheetScenario.monthlyPayment == null
+                  ? money(scenarioSheetScenario.totalCost ?? customerTotal)
+                  : `${money(scenarioSheetScenario.monthlyPayment)}/mo`}
+              </p>
+            </div>
+            <div className="space-y-1 text-sm">
+              <SummaryRow
+                label="Term"
+                value={`${scenarioSheetScenario.termMonths ?? 0} months`}
+              />
+              <SummaryRow
+                label="APR"
+                value={`${(scenarioSheetScenario.apr ?? scenarioSheetScenario.rate ?? 0).toFixed(2)}%`}
+              />
+              {scenarioSheetScenario.totalCost != null && (
+                <SummaryRow
+                  label="Total of payments"
+                  value={money(scenarioSheetScenario.totalCost)}
+                />
+              )}
+              <SummaryRow
+                label="Amount financed"
+                value={money(amountFinanced)}
+              />
+              <SummaryRow
+                label="Cash down"
+                value={money(cashDown)}
+              />
+            </div>
+            <Button
+              type="button"
+              className="w-full min-h-[44px]"
+              onClick={() => {
+                saveSelectedFinanceScenario(scenarioSheetScenario);
+                setDraft((current) => ({
+                  ...current,
+                  selectedFinanceScenario: scenarioSheetScenario.label,
+                }));
+                setScenarioSheetLabel(null);
+              }}
+            >
+              Use this scenario
+            </Button>
+          </div>
+        ) : null}
+      </MobileBottomSheet>
     </div>
   );
 }
