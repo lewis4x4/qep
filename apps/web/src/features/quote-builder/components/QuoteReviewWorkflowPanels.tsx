@@ -8,8 +8,14 @@ import { cn } from "@/lib/utils";
 
 import { IncentiveStack } from "./IncentiveStack";
 import { SendQuoteSection } from "./SendQuoteSection";
-// WAVE polish (Slice 2): dictation on dealer response + revision summary.
+// WAVE polish:
+//   Slice 2 — dictation on dealer response + revision summary.
+//   Slice 4 — surface the approval-case detail in a MobileBottomSheet
+//   on phone viewports so reps can drill in without losing the parent
+//   review chrome.
+import { MobileBottomSheet } from "@/features/sales/components/MobileBottomSheet";
 import { MobileVoiceTextarea } from "@/features/sales/components/MobileVoiceTextarea";
+import { useIsMobileViewport } from "@/features/sales/hooks/useIsMobileViewport";
 import {
   buildPortalRevisionQuoteData,
   getPortalRevision,
@@ -71,6 +77,11 @@ export function QuoteReviewWorkflowPanels({
   const queryClient = useQueryClient();
   const [dealerMessage, setDealerMessage] = useState("");
   const [revisionSummary, setRevisionSummary] = useState("");
+  // WAVE polish (Slice 4): controlled state for the per-approval
+  // MobileBottomSheet. On phone the Approval Case card is a tap-able
+  // summary; the full evaluation checklist + decision note open here.
+  const [approvalSheetOpen, setApprovalSheetOpen] = useState(false);
+  const isMobileViewport = useIsMobileViewport();
 
   const portalRevisionQuery = useQuery({
     queryKey: ["quote-builder", "portal-revision", draft.dealId],
@@ -208,66 +219,122 @@ export function QuoteReviewWorkflowPanels({
     <>
       <IncentiveStack quotePackageId={quotePackageId} />
 
-      {activeApprovalCase && (
-        <Card className="border-border/60 bg-card/60 p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium text-foreground">Approval Case</p>
-              <p className="text-xs text-muted-foreground">
-                {activeApprovalCase.versionNumber != null
-                  ? `Quote version v${activeApprovalCase.versionNumber}`
-                  : "Version snapshot attached"}
-                {activeApprovalCase.branchName ? ` · ${activeApprovalCase.branchName}` : ""}
-              </p>
-            </div>
-            <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange">
-              {String(activeApprovalCase.status).replace(/_/g, " ")}
-            </span>
-          </div>
+      {activeApprovalCase && (() => {
+        const approver = activeApprovalCase.assignedToName ?? activeApprovalCase.assignedRole ?? "Unassigned";
+        const route = String(activeApprovalCase.routeMode).replace(/_/g, " ");
+        const statusLabel = String(activeApprovalCase.status).replace(/_/g, " ");
+        const decisionNote = activeApprovalCase.decisionNote ?? "No decision note recorded yet.";
+        const openEvaluations = activeApprovalCase.evaluations.filter((e) => !e.satisfied).length;
+        const versionLine = activeApprovalCase.versionNumber != null
+          ? `Quote version v${activeApprovalCase.versionNumber}`
+          : "Version snapshot attached";
+        const branchSuffix = activeApprovalCase.branchName ? ` · ${activeApprovalCase.branchName}` : "";
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Assigned approver</p>
-              <p className="mt-2 text-sm font-semibold text-foreground">
-                {activeApprovalCase.assignedToName ?? activeApprovalCase.assignedRole ?? "Unassigned"}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Route: {String(activeApprovalCase.routeMode).replace(/_/g, " ")}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Decision note</p>
-              <p className="mt-2 text-sm text-foreground">
-                {activeApprovalCase.decisionNote ?? "No decision note recorded yet."}
-              </p>
-            </div>
-          </div>
-
-          {activeApprovalCase.evaluations.length > 0 && (
-            <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Condition checklist</p>
-              <div className="mt-3 space-y-2">
-                {activeApprovalCase.evaluations.map((evaluation) => (
-                  <div key={evaluation.id} className="rounded border border-border/60 bg-card/50 px-3 py-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-medium text-foreground">{evaluation.label}</p>
-                      <span className={cn(
-                        "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
-                        evaluation.satisfied
-                          ? "bg-emerald-500/10 text-emerald-400"
-                          : "bg-amber-500/10 text-amber-300",
-                      )}>
-                        {evaluation.satisfied ? "met" : "open"}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">{evaluation.detail}</p>
-                  </div>
-                ))}
+        const detailBody = (
+          <div className="space-y-3" data-testid="approval-case-detail">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Assigned approver</p>
+                <p className="mt-2 text-sm font-semibold text-foreground">{approver}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Route: {route}</p>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Decision note</p>
+                <p className="mt-2 text-sm text-foreground">{decisionNote}</p>
               </div>
             </div>
-          )}
-        </Card>
-      )}
+
+            {activeApprovalCase.evaluations.length > 0 && (
+              <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Condition checklist</p>
+                <div className="mt-3 space-y-2">
+                  {activeApprovalCase.evaluations.map((evaluation) => (
+                    <div key={evaluation.id} className="rounded border border-border/60 bg-card/50 px-3 py-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-foreground">{evaluation.label}</p>
+                        <span className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
+                          evaluation.satisfied
+                            ? "bg-emerald-500/10 text-emerald-400"
+                            : "bg-amber-500/10 text-amber-300",
+                        )}>
+                          {evaluation.satisfied ? "met" : "open"}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">{evaluation.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+
+        if (isMobileViewport) {
+          return (
+            <>
+              {/* WAVE polish (Slice 4): tap-to-drill approval summary card. */}
+              <Card
+                className="border-border/60 bg-card/60 p-4"
+                role="button"
+                tabIndex={0}
+                aria-haspopup="dialog"
+                aria-expanded={approvalSheetOpen}
+                onClick={() => setApprovalSheetOpen(true)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setApprovalSheetOpen(true);
+                  }
+                }}
+                data-testid="approval-case-summary"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">Approval Case</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {approver} · {versionLine}{branchSuffix}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange shrink-0">
+                    {statusLabel}
+                  </span>
+                </div>
+                {openEvaluations > 0 && (
+                  <p className="mt-2 text-[11px] text-amber-300">
+                    {openEvaluations} condition{openEvaluations === 1 ? "" : "s"} open — tap for detail.
+                  </p>
+                )}
+              </Card>
+
+              <MobileBottomSheet
+                open={approvalSheetOpen}
+                onOpenChange={setApprovalSheetOpen}
+                title={`Approval Case — ${statusLabel}`}
+                description={`${approver} · ${versionLine}${branchSuffix}`}
+                size="tall"
+              >
+                {detailBody}
+              </MobileBottomSheet>
+            </>
+          );
+        }
+
+        return (
+          <Card className="border-border/60 bg-card/60 p-4 space-y-3" data-testid="approval-case-desktop">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-foreground">Approval Case</p>
+                <p className="text-xs text-muted-foreground">{versionLine}{branchSuffix}</p>
+              </div>
+              <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange">
+                {statusLabel}
+              </span>
+            </div>
+            {detailBody}
+          </Card>
+        );
+      })()}
       {submitApprovalResult?.autoSend?.attempted && (
         <Card className={cn(
           "p-4",
