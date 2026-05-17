@@ -23,6 +23,14 @@ const QuoteBuilderV2Page = lazy(() =>
   import("../quote-builder/pages/QuoteBuilderV2Page").then((m) => ({ default: m.QuoteBuilderV2Page })),
 );
 
+// WAVE phase 2: Field Note + history host inside SalesShell.
+const FieldNotePage = lazy(() =>
+  import("./pages/FieldNotePage").then((m) => ({ default: m.FieldNotePage })),
+);
+const FieldNoteHistoryPage = lazy(() =>
+  import("./pages/FieldNoteHistoryPage").then((m) => ({ default: m.FieldNoteHistoryPage })),
+);
+
 function SalesRouteFallback() {
   return (
     <div className="flex items-center justify-center h-64">
@@ -93,6 +101,23 @@ export function SalesRoutes() {
           element={
             <Suspense fallback={<SalesRouteFallback />}>
               <QuoteBuilderV2Page />
+            </Suspense>
+          }
+        />
+        {/* WAVE phase 2: Field Note routes */}
+        <Route
+          path="field-note"
+          element={
+            <Suspense fallback={<SalesRouteFallback />}>
+              <FieldNotePage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="field-note/history"
+          element={
+            <Suspense fallback={<SalesRouteFallback />}>
+              <FieldNoteHistoryPage />
             </Suspense>
           }
         />

@@ -730,9 +730,10 @@ function SalesOrAppLayout({
   children,
 }: AppLayoutProps) {
   const location = useLocation();
-  // WAVE phase 1: /sales/quotes + /sales/quotes/* now live inside SalesShell.
-  // (Phase 2 will also remove /sales/field-note from this list.)
-  const salesRoutesWithSharedChrome = ["/sales/field-note"];
+  // WAVE phase 1+2: /sales/quotes and /sales/field-note both live inside
+  // SalesShell now — nothing in this array means SalesOrAppLayout treats
+  // every /sales/* path as companion territory.
+  const salesRoutesWithSharedChrome: string[] = [];
   const hasSharedSalesChrome = salesRoutesWithSharedChrome.some((path) =>
     location.pathname === path || location.pathname.startsWith(`${path}/`)
   );
@@ -1091,31 +1092,11 @@ function App() {
                   )
                 }
               />
-              <Route
-                path="/sales/field-note"
-                element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <VoiceCapturePage
-                      userRole={profile.role}
-                      userEmail={profile.email}
-                    />
-                  ) : (
-                    <Navigate to="/dashboard" replace />
-                  )
-                }
-              />
+              {/* WAVE phase 2: /sales/field-note and /sales/field-note/history
+                  are now nested under <SalesRoutes /> (hosting SalesShell).
+                  The /voice/history admin/manager route stays here. */}
               <Route
                 path="/voice/history"
-                element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <VoiceHistoryPage userRole={profile.role} />
-                  ) : (
-                    <Navigate to="/dashboard" replace />
-                  )
-                }
-              />
-              <Route
-                path="/sales/field-note/history"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <VoiceHistoryPage userRole={profile.role} />
