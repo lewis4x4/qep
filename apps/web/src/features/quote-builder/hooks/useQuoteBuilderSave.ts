@@ -188,6 +188,13 @@ export function useQuoteBuilderSave({
         });
       }
     },
+    onError: (error) => {
+      toast({
+        title: "Quote save failed",
+        description: error instanceof Error ? error.message : "Check your connection and try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const activeQuotePackageId =
@@ -237,6 +244,13 @@ export function useQuoteBuilderSave({
         queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case", casePackageId] });
       }
       queryClient.invalidateQueries({ queryKey: ["quote-builder", "saved-quote"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Approval submission failed",
+        description: error instanceof Error ? error.message : "Try saving the quote, then submit again.",
+        variant: "destructive",
+      });
     },
   });
 

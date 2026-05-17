@@ -40,7 +40,6 @@ import { TradeInSection } from "../components/TradeInSection";
 import {
   getAiEquipmentRecommendation,
   getClosedDealsAudit,
-  getCrmEquipmentQuoteSeed,
   getFactorVerdicts,
   listQuoteAvailabilityRequests,
   logQuoteDeliveryEvent,
@@ -64,9 +63,14 @@ import { useApprovalBypass } from "../hooks/useApprovalBypass";
 import { useExistingQuoteLoad } from "../hooks/useExistingQuoteLoad";
 import { useQuoteBuilderHandoffs } from "../hooks/useQuoteBuilderHandoffs";
 import { useQuoteBuilderCrmHydration } from "../hooks/useQuoteBuilderCrmHydration";
+import { useQuoteBuilderDefaultBranch } from "../hooks/useQuoteBuilderDefaultBranch";
 import { useQuoteBuilderLocalDraft } from "../hooks/useQuoteBuilderLocalDraft";
+import { useQuoteBuilderEquipmentSeed } from "../hooks/useQuoteBuilderEquipmentSeed";
+import { useQuoteBuilderFinanceScenarioSync } from "../hooks/useQuoteBuilderFinanceScenarioSync";
+import { useQuoteBuilderKeyboardShortcuts } from "../hooks/useQuoteBuilderKeyboardShortcuts";
 import { useQuoteBuilderLocalDraftPersist } from "../hooks/useQuoteBuilderLocalDraftPersist";
 import { useQuoteBuilderSave } from "../hooks/useQuoteBuilderSave";
+import { useQuoteBuilderTaxSync } from "../hooks/useQuoteBuilderTaxSync";
 import { useDraftAutosave } from "../hooks/useDraftAutosave";
 import { useLiveMargin } from "../hooks/useLiveMargin";
 import { usePdiAutofill } from "../hooks/usePdiAutofill";
@@ -211,7 +215,6 @@ export function QuoteBuilderV2Page() {
   const lastAutoSaveSignatureRef = useRef<string>("");
   const documentDraftSignatureRef = useRef<string>("");
   const persistedQuotePackageIdRef = useRef<string | null>(packageId || null);
-  const equipmentSeedAppliedRef = useRef<string | null>(null);
   const [customFinanceEnabled, setCustomFinanceEnabled] = useState(false);
   const [customFinanceRate, setCustomFinanceRate] = useState<number | null>(null);
   const [customFinanceTermMonths, setCustomFinanceTermMonths] = useState<number | null>(null);
@@ -324,6 +327,7 @@ export function QuoteBuilderV2Page() {
     packageId,
     dealId,
     companyId,
+    persistedQuotePackageIdRef,
     setDraft,
     setStep,
   });
@@ -378,31 +382,14 @@ export function QuoteBuilderV2Page() {
     setStep,
   });
 
-  const equipmentSeedQuery = useQuery({
-    queryKey: ["quote-builder", "crm-equipment-seed", equipmentId],
-    queryFn: () => getCrmEquipmentQuoteSeed(equipmentId),
-    enabled: Boolean(equipmentId) && !packageId && !dealId,
-    staleTime: 60_000,
+  useQuoteBuilderEquipmentSeed({
+    equipmentId,
+    packageId,
+    dealId,
+    setDraft,
+    setAvailableOptions,
+    setAvailableOptionsLabel,
   });
-
-  useEffect(() => {
-    const seed = equipmentSeedQuery.data;
-    if (!seed) return;
-    const seedKey = seed.sourceId || seed.id || equipmentId;
-    if (!seedKey || equipmentSeedAppliedRef.current === seedKey) return;
-
-    const nextLine = buildEquipmentLine(seed);
-    const nextKey = equipmentKeyForLine(nextLine);
-    equipmentSeedAppliedRef.current = seedKey;
-    setAvailableOptions(seed.attachments ?? []);
-    setAvailableOptionsLabel(`${seed.make} ${seed.model}`.trim() || seed.long_description || "Selected equipment");
-    setDraft((current) => ({
-      ...current,
-      equipment: current.equipment.some((item) => equipmentKeyForLine(item) === nextKey)
-        ? current.equipment
-        : [...current.equipment, nextLine],
-    }));
-  }, [equipmentId, equipmentSeedQuery.data]);
 
   const userRoleQuery = useQuery({
     queryKey: ["quote-builder", "role"],
@@ -501,12 +488,11 @@ export function QuoteBuilderV2Page() {
     { value: "resale_exempt", label: "Resale exempt", detail: "Use when the customer is buying for resale." },
   ];
 
-  useEffect(() => {
-    if (draft.branchSlug || branches.length !== 1) return;
-    setDraft((current) => current.branchSlug
-      ? current
-      : { ...current, branchSlug: branches[0]!.slug });
-  }, [branches, draft.branchSlug]);
+  useQuoteBuilderDefaultBranch({
+    branchSlug: draft.branchSlug,
+    branches,
+    setDraft,
+  });
 
   const financingInput = useMemo<QuoteFinancingRequest>(() => ({
     packageSubtotal: subtotal,
@@ -572,43 +558,21 @@ export function QuoteBuilderV2Page() {
       ? "Tax preview failed. Resolve the jurisdiction or enter a manual tax override with a reason before customer-facing document/send."
       : "Tax preview must complete before customer-facing document/send.";
 
-  useEffect(() => {
-    const hasTaxJurisdiction = Boolean(draft.branchSlug || draft.deliveryState);
-    if (!hasTaxJurisdiction) {
-      setDraft((current) => current.taxTotal === 0 ? current : { ...current, taxTotal: 0 });
-      return;
-    }
-    if (manualTaxOverrideReady && typeof draft.taxOverrideAmount === "number") {
-      const nextTaxTotal = Math.round(draft.taxOverrideAmount * 100) / 100;
-      setDraft((current) => current.taxTotal === nextTaxTotal
-        ? current
-        : { ...current, taxTotal: nextTaxTotal });
-      return;
-    }
-    if (typeof taxPreviewQuery.data?.total_tax !== "number") return;
-    const nextTaxTotal = Math.round(taxPreviewQuery.data.total_tax * 100) / 100;
-    setDraft((current) => current.taxTotal === nextTaxTotal
-      ? current
-      : { ...current, taxTotal: nextTaxTotal });
-  }, [draft.branchSlug, draft.deliveryState, draft.taxOverrideAmount, manualTaxOverrideReady, taxPreviewQuery.data?.total_tax]);
+  useQuoteBuilderTaxSync({
+    branchSlug: draft.branchSlug,
+    deliveryState: draft.deliveryState,
+    taxOverrideAmount: draft.taxOverrideAmount,
+    manualTaxOverrideReady,
+    previewTotalTax: taxPreviewQuery.data?.total_tax,
+    setDraft,
+  });
 
-  useEffect(() => {
-    if (allFinanceScenarios.length === 0) {
-      setDraft((current) => current.selectedFinanceScenario == null
-        ? current
-        : { ...current, selectedFinanceScenario: null });
-      return;
-    }
-    const hasSelected = allFinanceScenarios.some((scenario) => scenario.label === draft.selectedFinanceScenario);
-    if (customFinanceScenario) {
-      if (draft.selectedFinanceScenario == null || draft.selectedFinanceScenario === "Cash" || !hasSelected) {
-        setDraft((current) => ({ ...current, selectedFinanceScenario: customFinanceScenario.label }));
-      }
-      return;
-    }
-    if (hasSelected) return;
-    setDraft((current) => ({ ...current, selectedFinanceScenario: allFinanceScenarios[0]!.label }));
-  }, [allFinanceScenarios, customFinanceScenario, draft.selectedFinanceScenario]);
+  useQuoteBuilderFinanceScenarioSync({
+    allFinanceScenarios,
+    customFinanceScenario,
+    selectedFinanceScenario: draft.selectedFinanceScenario,
+    setDraft,
+  });
 
   const {
     saveMutation,
@@ -828,17 +792,11 @@ export function QuoteBuilderV2Page() {
     draftRef,
   });
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      const mod = event.metaKey || event.ctrlKey;
-      if (!mod || event.key.toLowerCase() !== "s") return;
-      event.preventDefault();
-      if (!packetReadiness.draft.ready || saveMutation.isPending) return;
-      void handleSaveClick();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleSaveClick, packetReadiness.draft.ready, saveMutation.isPending]);
+  useQuoteBuilderKeyboardShortcuts({
+    draftReady: packetReadiness.draft.ready,
+    savePending: saveMutation.isPending,
+    onSave: handleSaveClick,
+  });
 
   const voiceMutation = useMutation({
     mutationFn: async (payload: { blob: Blob; fileName: string }) => {

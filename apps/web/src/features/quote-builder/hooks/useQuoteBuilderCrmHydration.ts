@@ -43,6 +43,7 @@ export function useQuoteBuilderCrmHydration({
 }: UseQuoteBuilderCrmHydrationInput): void {
   useEffect(() => {
     if (!prospectConverted || !companyId) return;
+    if (packageId && existingQuote) return;
     if (packageId && (existingQuoteLoading || existingQuoteFetching)) return;
     let cancelled = false;
     (async () => {
@@ -73,6 +74,7 @@ export function useQuoteBuilderCrmHydration({
   }, [
     companyId,
     draftRef,
+    existingQuote,
     existingQuoteFetching,
     existingQuoteLoading,
     packageId,
@@ -84,7 +86,7 @@ export function useQuoteBuilderCrmHydration({
   useEffect(() => {
     const hasCustomer = Boolean(customerName.trim() || customerCompany.trim());
     if (hasCustomer) return;
-    if (existingQuoteLoading || existingQuote) return;
+    if (existingQuoteLoading || existingQuoteFetching || existingQuote) return;
     if (!contactId && !companyId && !dealId) return;
 
     let cancelled = false;
@@ -119,6 +121,7 @@ export function useQuoteBuilderCrmHydration({
     customerName,
     dealId,
     existingQuote,
+    existingQuoteFetching,
     existingQuoteLoading,
     setDraft,
   ]);

@@ -4,7 +4,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
 import { getSavedQuotePackage } from "../lib/quote-api";
@@ -17,6 +17,7 @@ export interface UseExistingQuoteLoadInput {
   packageId: string;
   dealId: string;
   companyId: string;
+  persistedQuotePackageIdRef?: MutableRefObject<string | null>;
   setDraft: Dispatch<SetStateAction<QuoteWorkspaceDraft>>;
   setStep: (step: Step) => void;
 }
@@ -26,14 +27,25 @@ export interface UseExistingQuoteLoadResult {
   existingQuote: Record<string, unknown> | null;
 }
 
+/** Exported for tests — id used to keep saves on the loaded package row. */
+export function loadedQuotePackageId(quote: Record<string, unknown>): string | null {
+  return typeof quote.id === "string" && quote.id.length > 0 ? quote.id : null;
+}
+
 export function useExistingQuoteLoad({
   packageId,
   dealId,
   companyId,
+  persistedQuotePackageIdRef,
   setDraft,
   setStep,
 }: UseExistingQuoteLoadInput): UseExistingQuoteLoadResult {
   const existingQuoteHydrationKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!packageId || !persistedQuotePackageIdRef) return;
+    persistedQuotePackageIdRef.current = packageId;
+  }, [packageId, persistedQuotePackageIdRef]);
 
   const existingQuoteQuery = useQuery({
     queryKey: ["quote-builder", "saved-quote", packageId, dealId],
@@ -62,6 +74,10 @@ export function useExistingQuoteLoad({
       || "__saved_quote__";
     if (existingQuoteHydrationKeyRef.current === nextKey) return;
     existingQuoteHydrationKeyRef.current = nextKey;
+    const loadedPackageId = loadedQuotePackageId(existingQuote);
+    if (loadedPackageId && persistedQuotePackageIdRef) {
+      persistedQuotePackageIdRef.current = loadedPackageId;
+    }
     const hydratedDraft = hydrateDraftFromSavedQuote(existingQuote);
     setDraft((current) => ({
       ...current,
@@ -69,7 +85,7 @@ export function useExistingQuoteLoad({
       companyId: companyId || hydratedDraft.companyId,
     }));
     setStep(readPersistedStep(nextKey) ?? stepForWizardIndex(hydratedDraft.wizardStep) ?? "review");
-  }, [companyId, dealId, existingQuote, packageId, setDraft, setStep]);
+  }, [companyId, dealId, existingQuote, packageId, persistedQuotePackageIdRef, setDraft, setStep]);
 
   return { existingQuoteQuery, existingQuote };
 }

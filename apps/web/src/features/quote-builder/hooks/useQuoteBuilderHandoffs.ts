@@ -125,6 +125,7 @@ export function useQuoteBuilderHandoffs({
     if (!voiceSessionId) return;
     if (packageId || dealId) return;
     if (existingQuoteFetching || existingQuoteLoading) return;
+    if (existingQuote) return;
     if (voiceHandoffHydrationKeyRef.current === voiceSessionId) return;
     voiceHandoffHydrationKeyRef.current = voiceSessionId;
 
@@ -142,6 +143,7 @@ export function useQuoteBuilderHandoffs({
     onVoiceHandoffRef.current(handoff);
   }, [
     dealId,
+    existingQuote,
     existingQuoteFetching,
     existingQuoteLoading,
     packageId,
