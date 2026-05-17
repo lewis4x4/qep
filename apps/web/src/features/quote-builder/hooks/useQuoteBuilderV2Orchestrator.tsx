@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useLocation, useParams, useSearchParams } from "react-router-dom";
 import type { QuoteFinancingRequest, QuotePackageCatalogKind } from "../lib/quote-api";
 import type { QuoteFinanceScenario, QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
 import type { QuoteSendActionChannel } from "../lib/quote-workspace";
@@ -76,7 +76,14 @@ import {
 export function useQuoteBuilderV2Orchestrator() {
   const [searchParams] = useSearchParams();
   const location = useLocation();
-  const packageId = searchParams.get("package_id") || "";
+  const routeParams = useParams<{ quoteId?: string }>();
+  // WAVE phase 1: Quote Builder now ALSO hosts at /sales/quotes/:quoteId
+  // (path-param form). Path param wins when present; otherwise fall back
+  // to the legacy ?package_id=... contract preserved via redirects.
+  const packageId =
+    routeParams.quoteId && routeParams.quoteId !== "new"
+      ? routeParams.quoteId
+      : searchParams.get("package_id") || "";
   const dealId = searchParams.get("deal_id") || searchParams.get("crm_deal_id") || "";
   const contactId = searchParams.get("contact_id") || searchParams.get("crm_contact_id") || "";
   const companyId = searchParams.get("company_id") || searchParams.get("crm_company_id") || "";

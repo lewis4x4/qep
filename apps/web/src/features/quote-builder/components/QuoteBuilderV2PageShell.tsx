@@ -13,6 +13,7 @@ import { QuoteBuilderStatusBanners } from "./QuoteBuilderStatusBanners";
 import { QuoteBuilderOverlays } from "./QuoteBuilderOverlays";
 import { MarginFloorGate } from "./MarginFloorGate";
 import { DealCoachSidebar } from "./DealCoachSidebar";
+import { MobileIntelligencePanelHost } from "./MobileIntelligencePanelHost";
 import { WizardShell, type QuotingBranchOption } from "../wizard/WizardShell";
 import { STEP_LABELS, type AutoSaveState, type Step } from "../wizard/wizard-types";
 import type { QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
@@ -189,7 +190,7 @@ export function QuoteBuilderV2PageShell({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button asChild size="sm" variant="outline">
-                    <Link to="/quote">Open Quotes</Link>
+                    <Link to="/sales/quotes">Open Quotes</Link>
                   </Button>
                   {draft.dealId && (
                     <Button asChild size="sm" variant="outline">
@@ -244,6 +245,24 @@ export function QuoteBuilderV2PageShell({
           <QuoteBuilderStatusBanners
             existingQuoteLoadError={existingQuoteLoadError}
             existingQuoteEditingMessage={existingQuoteEditingMessage}
+          />
+
+          {/*
+            WAVE phase 1: surface right-rail intelligence panels via
+            chip-triggered bottom sheets on viewports below `xl`. The
+            desktop sidebar below still renders the same panels at xl+.
+          */}
+          <MobileIntelligencePanelHost
+            intelligencePanel={intelligencePanel}
+            dealCoachPanel={
+              draft.equipment.length > 0 ? (
+                <DealCoachSidebar
+                  draft={draft}
+                  computed={{ equipmentTotal, attachmentTotal, subtotal, netTotal, marginAmount, marginPct }}
+                  quotePackageId={activeQuotePackageId}
+                />
+              ) : null
+            }
           />
 
           <WizardShell

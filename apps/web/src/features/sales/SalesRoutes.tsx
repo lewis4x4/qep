@@ -15,6 +15,14 @@ const CustomerDetailPage = lazy(() =>
   import("./pages/CustomerDetailPage").then((m) => ({ default: m.CustomerDetailPage })),
 );
 
+// WAVE phase 1: Quote Builder + Quote List now host inside SalesShell.
+const QuoteListPage = lazy(() =>
+  import("../quote-builder/pages/QuoteListPage").then((m) => ({ default: m.QuoteListPage })),
+);
+const QuoteBuilderV2Page = lazy(() =>
+  import("../quote-builder/pages/QuoteBuilderV2Page").then((m) => ({ default: m.QuoteBuilderV2Page })),
+);
+
 function SalesRouteFallback() {
   return (
     <div className="flex items-center justify-center h-64">
@@ -60,6 +68,31 @@ export function SalesRoutes() {
           element={
             <Suspense fallback={<SalesRouteFallback />}>
               <CustomerDetailPage />
+            </Suspense>
+          }
+        />
+        {/* WAVE phase 1: Quote routes */}
+        <Route
+          path="quotes"
+          element={
+            <Suspense fallback={<SalesRouteFallback />}>
+              <QuoteListPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="quotes/new"
+          element={
+            <Suspense fallback={<SalesRouteFallback />}>
+              <QuoteBuilderV2Page />
+            </Suspense>
+          }
+        />
+        <Route
+          path="quotes/:quoteId"
+          element={
+            <Suspense fallback={<SalesRouteFallback />}>
+              <QuoteBuilderV2Page />
             </Suspense>
           }
         />

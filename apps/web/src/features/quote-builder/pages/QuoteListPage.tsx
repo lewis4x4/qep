@@ -263,7 +263,7 @@ export function QuoteListPage() {
     const params = new URLSearchParams();
     if (record.dealId) params.set("crm_deal_id", record.dealId);
     if (record.contactId) params.set("crm_contact_id", record.contactId);
-    navigate(params.toString() ? `/quote-v2?${params.toString()}` : "/quote-v2");
+    navigate(params.toString() ? `/sales/quotes/new?${params.toString()}` : "/sales/quotes/new");
   }
 
   function handleClearLocalDraft(key: string) {
@@ -385,7 +385,7 @@ export function QuoteListPage() {
             onRetry={() => quotesQuery.refetch()}
           />
         ) : hasNoQuotes ? (
-          <EmptyState onNewQuote={() => navigate("/quote-v2")} />
+          <EmptyState onNewQuote={() => navigate("/sales/quotes/new")} />
         ) : sortedItems.length === 0 ? (
           <NoMatches onClear={() => {
             setSearch("");
@@ -401,11 +401,11 @@ export function QuoteListPage() {
             actionPending={actionMutation.isPending}
             hasFilters={hasFilters}
             onSort={handleSort}
-            onOpen={(item) => navigate(`/quote-v2?${new URLSearchParams({ package_id: item.id }).toString()}`)}
+            onOpen={(item) => navigate(`/sales/quotes/${item.id}`)}
             onAction={(quoteId, action) => {
               if (action === "resume") {
                 const item = sortedItems.find((row) => row.id === quoteId);
-                if (item) navigate(`/quote-v2?${new URLSearchParams({ package_id: item.id }).toString()}`);
+                if (item) navigate(`/sales/quotes/${item.id}`);
                 return;
               }
               actionMutation.mutate({ quoteId, action });

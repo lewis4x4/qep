@@ -57,16 +57,12 @@ const VoiceCapturePage = lazy(() =>
 const VoiceHistoryPage = lazy(() =>
   import("./components/VoiceHistoryPage").then((m) => ({ default: m.VoiceHistoryPage }))
 );
-// Legacy QuoteBuilderPage (1628-line monolith) removed in Track 2 Slice 2.1b
-// cutover — all quote entry goes through QuoteBuilderV2Page at /quote-v2.
-const QuoteBuilderV2Page = lazy(() =>
-  import("./features/quote-builder/pages/QuoteBuilderV2Page").then((m) => ({ default: m.QuoteBuilderV2Page }))
-);
+// WAVE phase 1: QuoteBuilderV2Page + QuoteListPage now live under SalesRoutes
+// (mounted at /sales/quotes, /sales/quotes/new, /sales/quotes/:quoteId). The
+// legacy /quote-v2, /quote, /quotes paths still resolve via redirects to
+// the new SalesShell-hosted entry point.
 const VoiceQuotePage = lazy(() =>
   import("./features/voice-quote/pages/VoiceQuotePage").then((m) => ({ default: m.VoiceQuotePage }))
-);
-const QuoteListPage = lazy(() =>
-  import("./features/quote-builder/pages/QuoteListPage").then((m) => ({ default: m.QuoteListPage }))
 );
 const DashboardRouter = lazy(() =>
   import("./features/dashboards/pages/DashboardRouter").then((m) => ({ default: m.DashboardRouter }))
@@ -734,7 +730,9 @@ function SalesOrAppLayout({
   children,
 }: AppLayoutProps) {
   const location = useLocation();
-  const salesRoutesWithSharedChrome = ["/sales/quotes", "/sales/field-note"];
+  // WAVE phase 1: /sales/quotes + /sales/quotes/* now live inside SalesShell.
+  // (Phase 2 will also remove /sales/field-note from this list.)
+  const salesRoutesWithSharedChrome = ["/sales/field-note"];
   const hasSharedSalesChrome = salesRoutesWithSharedChrome.some((path) =>
     location.pathname === path || location.pathname.startsWith(`${path}/`)
   );
@@ -1126,28 +1124,14 @@ function App() {
                   )
                 }
               />
-              <Route
-                path="/sales/quotes"
-                element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <QuoteListPage />
-                  ) : (
-                    <Navigate to="/dashboard" replace />
-                  )
-                }
-              />
-              <Route path="/quote" element={<RedirectPreserveSearch to="/sales/quotes" />} />
+              {/* WAVE phase 1: /sales/quotes + /sales/quotes/new + /sales/quotes/:quoteId
+                  are now nested under <SalesRoutes /> (which hosts SalesShell).
+                  The /sales/* catch-all at the bottom of this Routes block
+                  carries the request through. */}
+              <Route path="/quote" element={<RedirectPreserveSearch to="/sales/quotes/new" />} />
               <Route path="/quotes" element={<RedirectPreserveSearch to="/sales/quotes" />} />
-              <Route
-                path="/quote-v2"
-                element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <QuoteBuilderV2Page />
-                  ) : (
-                    <Navigate to="/dashboard" replace />
-                  )
-                }
-              />
+              {/* WAVE phase 1: legacy /quote-v2 redirects to the new SalesShell home. */}
+              <Route path="/quote-v2" element={<RedirectPreserveSearch to="/sales/quotes/new" />} />
               <Route
                 path="/voice-quote"
                 element={

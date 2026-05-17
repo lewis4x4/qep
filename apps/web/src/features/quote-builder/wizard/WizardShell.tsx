@@ -140,7 +140,13 @@ export function WizardShell({
         onJumpTo={setStep}
       />
 
-      <div className="sticky bottom-[max(0.5rem,env(safe-area-inset-bottom,0px))] z-20 flex touch-manipulation flex-col gap-2 rounded-xl border border-border/70 bg-card/95 p-3 shadow-md backdrop-blur md:hidden">
+      {/*
+        WAVE phase 1: Quote Builder now hosts inside SalesShell, which has a
+        64px fixed BottomTabBar (+ safe-area inset). Offset the mobile sticky
+        bar by ~4.5rem so it clears the tab bar instead of hiding behind it.
+        Desktop nav remains via the md:inline-flex buttons above.
+      */}
+      <div className="sticky bottom-[max(4.5rem,calc(env(safe-area-inset-bottom,0px)+4.5rem))] z-20 flex touch-manipulation flex-col gap-2 rounded-xl border border-border/70 bg-card/95 p-3 shadow-md backdrop-blur md:hidden">
         {signalsReady ? (
           <p className="text-center text-[10px] leading-tight text-muted-foreground" role="status" aria-live="polite">
             <span className="font-semibold text-foreground">{marginPct.toFixed(1)}%</span>
