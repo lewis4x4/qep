@@ -58,9 +58,10 @@ const VoiceHistoryPage = lazy(() =>
   import("./components/VoiceHistoryPage").then((m) => ({ default: m.VoiceHistoryPage }))
 );
 // WAVE phase 1: QuoteBuilderV2Page + QuoteListPage now live under SalesRoutes
-// (mounted at /sales/quotes, /sales/quotes/new, /sales/quotes/:quoteId). The
-// legacy /quote-v2, /quote, /quotes paths still resolve via redirects to
-// the new SalesShell-hosted entry point.
+// (mounted at /sales/quotes, /sales/quotes/new, /sales/quotes/:quoteId).
+// Legacy quote paths still resolve via RedirectPreserveSearch mounts below
+// so inbound bookmarks survive — see the Route mounts in the JSX tree for
+// the canonical destinations.
 // WAVE phase 3: VoiceQuotePage now lives at /sales/voice-quote under SalesRoutes.
 const DashboardRouter = lazy(() =>
   import("./features/dashboards/pages/DashboardRouter").then((m) => ({ default: m.DashboardRouter }))
@@ -1109,7 +1110,10 @@ function App() {
                   carries the request through. */}
               <Route path="/quote" element={<RedirectPreserveSearch to="/sales/quotes/new" />} />
               <Route path="/quotes" element={<RedirectPreserveSearch to="/sales/quotes" />} />
-              {/* WAVE phase 1: legacy /quote-v2 redirects to the new SalesShell home. */}
+              {/* Legacy QB redirect mount — preserves inbound bookmarks from
+                  pre-SalesShell deep links. New callsites must use the
+                  buildQuoteBuilderHref helper from
+                  features/quote-builder/lib/quote-route.ts. */}
               <Route path="/quote-v2" element={<RedirectPreserveSearch to="/sales/quotes/new" />} />
               {/* WAVE phase 3: /voice-quote redirects into SalesShell at
                   /sales/voice-quote. The new route lives in SalesRoutes. */}

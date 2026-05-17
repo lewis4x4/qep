@@ -40,8 +40,9 @@ export function AppLayout({
   const location = useLocation();
   const embeddedMode = new URLSearchParams(location.search).get("embedded") === "1";
   // WAVE polish (Slice 5): Quote Builder lives under /sales/quotes inside
-  // SalesShell. The legacy /quote-v2 paths still redirect via App.tsx but
-  // the back-to-floor chip suppression keys off the canonical route now.
+  // SalesShell. Legacy QB paths still redirect via App.tsx (the
+  // RedirectPreserveSearch mount) but the back-to-floor chip
+  // suppression keys off the canonical /sales/quotes route now.
   const quoteWorkspaceRoute =
     location.pathname === "/sales/quotes/new"
     || location.pathname.startsWith("/sales/quotes/");
