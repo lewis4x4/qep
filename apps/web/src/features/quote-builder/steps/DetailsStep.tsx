@@ -63,7 +63,7 @@ export function DetailsStep() {
               type="date"
               value={dateInputValue(draft.expiresAt)}
               onChange={(event) => setDraft((current) => ({ ...current, expiresAt: isoFromDateInput(event.target.value) }))}
-              className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+              className="w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm min-h-[44px]"
             />
             <span className="text-[11px] text-muted-foreground">Defaults to 30 days when this step opens.</span>
           </label>
@@ -73,7 +73,7 @@ export function DetailsStep() {
               type="datetime-local"
               value={dateTimeInputValue(draft.followUpAt)}
               onChange={(event) => setDraft((current) => ({ ...current, followUpAt: isoFromDateTimeInput(event.target.value) }))}
-              className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+              className="w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm min-h-[44px]"
             />
             <span className="text-[11px] text-muted-foreground">Defaults to 3 days. Final send/log will require it.</span>
           </label>
@@ -83,7 +83,7 @@ export function DetailsStep() {
               type="date"
               value={dateInputValue(draft.deliveryEta)}
               onChange={(event) => setDraft((current) => ({ ...current, deliveryEta: isoFromDateInput(event.target.value) }))}
-              className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+              className="w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm min-h-[44px]"
             />
           </label>
           <label className="space-y-1 text-sm">
@@ -95,7 +95,7 @@ export function DetailsStep() {
               value={draft.depositRequiredAmount ?? ""}
               onChange={(event) => setDraft((current) => ({ ...current, depositRequiredAmount: event.target.value === "" ? null : Number(event.target.value) || 0 }))}
               placeholder="Awaiting deposit SOP"
-              className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+              className="w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm min-h-[44px]"
             />
           </label>
         </div>
@@ -106,7 +106,8 @@ export function DetailsStep() {
             value={draft.specialTerms ?? ""}
             onChange={(event) => setDraft((current) => ({ ...current, specialTerms: event.target.value || null }))}
             placeholder="Subject to availability, freight confirmation, manager approval, or customer-specific terms."
-            className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+            className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm"
+            data-testid="details-special-terms"
           />
         </label>
       </Card>
@@ -118,14 +119,15 @@ export function DetailsStep() {
           value={draft.whyThisMachine ?? ""}
           onChange={(event) => setDraft((current) => ({ ...current, whyThisMachine: event.target.value, whyThisMachineConfirmed: false }))}
           placeholder="Explain why this unit fits the customer's job, terrain, timeline, and budget."
-          className="mt-3 min-h-[120px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+          className="mt-3 min-h-[120px] w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm"
+          data-testid="details-why-this-machine"
         />
-        <label className="mt-3 flex items-center gap-2 text-sm text-foreground">
+        <label className="mt-3 flex min-h-[44px] items-center gap-2 text-sm text-foreground">
           <input
             type="checkbox"
             checked={draft.whyThisMachineConfirmed === true}
             onChange={(event) => setDraft((current) => ({ ...current, whyThisMachineConfirmed: event.target.checked }))}
-            className="h-4 w-4"
+            className="h-5 w-5"
           />
           I reviewed this language and confirm it is rep-approved.
         </label>
