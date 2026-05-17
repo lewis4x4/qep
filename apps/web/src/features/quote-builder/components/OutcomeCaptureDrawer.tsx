@@ -12,8 +12,13 @@ import { Label } from "@/components/ui/label";
 import { CheckCircle2, Loader2, XCircle, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-// WAVE polish (Slice 2): voice dictation on outcome notes.
+// WAVE polish (Slices 2 + 6):
+//   2 — voice dictation on the outcome-detail textarea.
+//   6 — drawer collapses to MobileBottomSheet at <640px so the side
+//   panel doesn't get cropped on phones.
+import { MobileBottomSheet } from "@/features/sales/components/MobileBottomSheet";
 import { MobileVoiceTextarea } from "@/features/sales/components/MobileVoiceTextarea";
+import { useIsMobileViewport } from "@/features/sales/hooks/useIsMobileViewport";
 import {
   captureQuoteOutcome,
   REASON_LABELS,
@@ -68,6 +73,8 @@ export function OutcomeCaptureDrawer({
 }: OutcomeCaptureDrawerProps) {
   const { profile } = useAuth();
   const { toast } = useToast();
+  // WAVE polish (Slice 6): viewport gate for the drawer → sheet swap.
+  const isMobile = useIsMobileViewport();
 
   const [step, setStep] = useState<Step>("outcome");
   const [outcome, setOutcome] = useState<Exclude<OutcomeClassification, "skipped"> | null>(null);
@@ -267,6 +274,48 @@ export function OutcomeCaptureDrawer({
     </div>
   );
 
+  const body = (
+    <>
+      <div className="space-y-5">
+        {step === "outcome" && outcomeStep}
+        {step === "reason"  && reasonStep}
+        {step === "details" && detailsStep}
+      </div>
+
+      <div className="mt-6 flex items-center justify-between gap-2 border-t pt-4">
+        <Button
+          variant="ghost"
+          onClick={handleSkip}
+          disabled={saving || !quotePackageId || !profile}
+          className="text-xs"
+        >
+          {saving ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
+          Skip, add reason later
+        </Button>
+        <Button onClick={handleConfirm} disabled={!canConfirm}>
+          {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Save
+        </Button>
+      </div>
+    </>
+  );
+
+  if (isMobile) {
+    // Slice 6: side drawer → bottom sheet at <640px. Same content
+    // body, same Save / Skip CTAs, same step-machine.
+    return (
+      <MobileBottomSheet
+        open={open}
+        onOpenChange={(next) => { if (!next) onClose(); }}
+        title="Record outcome"
+        description="Takes 10 seconds. Feeds the Deal Coach and team-level learning."
+        size="tall"
+      >
+        {body}
+      </MobileBottomSheet>
+    );
+  }
+
   return (
     <Sheet open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <SheetContent side="right" className="w-full sm:max-w-md">
@@ -276,28 +325,7 @@ export function OutcomeCaptureDrawer({
             Takes 10 seconds. Feeds the Deal Coach and team-level learning.
           </SheetDescription>
         </SheetHeader>
-
-        <div className="space-y-5">
-          {step === "outcome" && outcomeStep}
-          {step === "reason"  && reasonStep}
-          {step === "details" && detailsStep}
-        </div>
-
-        <div className="mt-6 flex items-center justify-between gap-2 border-t pt-4">
-          <Button
-            variant="ghost"
-            onClick={handleSkip}
-            disabled={saving || !quotePackageId || !profile}
-            className="text-xs"
-          >
-            {saving ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
-            Skip, add reason later
-          </Button>
-          <Button onClick={handleConfirm} disabled={!canConfirm}>
-            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Save
-          </Button>
-        </div>
+        {body}
       </SheetContent>
     </Sheet>
   );

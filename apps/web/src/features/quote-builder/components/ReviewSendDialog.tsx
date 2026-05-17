@@ -15,9 +15,12 @@ import { money } from "../lib/money";
 import type { QuotePacketReadiness, QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
 import { ReadinessRow } from "./ReadinessRow";
 import { SendQuoteSection } from "./SendQuoteSection";
-// WAVE polish (Slice 2): voice dictation on the internal-notes textarea.
-// Slice 6 will wrap the Dialog itself in a MobileBottomSheet on phone.
+// WAVE polish:
+//   Slice 2 — voice dictation on the internal-notes textarea.
+//   Slice 6 — Dialog → MobileBottomSheet at <640px.
+import { MobileBottomSheet } from "@/features/sales/components/MobileBottomSheet";
 import { MobileVoiceTextarea } from "@/features/sales/components/MobileVoiceTextarea";
+import { useIsMobileViewport } from "@/features/sales/hooks/useIsMobileViewport";
 
 export interface ReviewSendDialogProps {
   open: boolean;
@@ -98,16 +101,9 @@ export function ReviewSendDialog({
   approvalDetail,
   onSent,
 }: ReviewSendDialogProps) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Review & Send</DialogTitle>
-          <DialogDescription>
-            Confirm the customer packet, choose delivery, and send without leaving the workspace.
-          </DialogDescription>
-        </DialogHeader>
-
+  // WAVE polish (Slice 6): Dialog → MobileBottomSheet at <640px.
+  const isMobile = useIsMobileViewport();
+  const body = (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-4">
             <Card className="p-4">
@@ -238,6 +234,32 @@ export function ReviewSendDialog({
             )}
           </div>
         </div>
+  );
+
+  if (isMobile) {
+    return (
+      <MobileBottomSheet
+        open={open}
+        onOpenChange={onOpenChange}
+        title="Review & Send"
+        description="Confirm the customer packet, choose delivery, and send without leaving the workspace."
+        size="tall"
+      >
+        {body}
+      </MobileBottomSheet>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Review & Send</DialogTitle>
+          <DialogDescription>
+            Confirm the customer packet, choose delivery, and send without leaving the workspace.
+          </DialogDescription>
+        </DialogHeader>
+        {body}
       </DialogContent>
     </Dialog>
   );
