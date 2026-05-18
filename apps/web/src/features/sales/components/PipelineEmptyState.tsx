@@ -82,7 +82,7 @@ export function PipelineEmptyState({ filterLabel }: PipelineEmptyStateProps) {
       </div>
 
       <p className="text-[11px] text-muted-foreground/60 text-center mt-5 px-4 leading-relaxed">
-        Once deals land here, JARVIS surfaces at-risk accounts, closing
+        Once deals land here, your pipeline surfaces at-risk accounts, closing
         opportunities, and your next best move — automatically.
       </p>
     </div>
