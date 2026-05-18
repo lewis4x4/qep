@@ -1,6 +1,8 @@
 import { useSalesPipeline } from "../hooks/useSalesPipeline";
 import { StageFilterTabs } from "../components/StageFilterTabs";
 import { SalesDealCard } from "../components/SalesDealCard";
+import { PipelineEmptyState } from "../components/PipelineEmptyState";
+import { PipelineInsightsStrip } from "../components/PipelineInsightsStrip";
 import {
   TrendingUp,
   Flame,
@@ -59,8 +61,12 @@ export function PipelineBoardPage() {
     return days >= 0 && days <= 14;
   }).length;
 
-  // Win rate (placeholder — could be computed from historical data)
-  const winRate = allDeals.length > 0 ? Math.round((closingCount / allDeals.length) * 100) : 0;
+  // Closing %: share of active deals expected to close within 14 days.
+  // Honest about what the math computes; renamed from misleading "Win Rate".
+  const closingPct =
+    allDeals.length > 0
+      ? Math.round((closingCount / allDeals.length) * 100)
+      : null;
 
   // Build filter options
   const filterOptions = [
@@ -153,34 +159,39 @@ export function PipelineBoardPage() {
             variant="success"
           />
           <QuickStat
-            label="Win Rate"
-            value={`${winRate}%`}
+            label="Closing %"
+            value={closingPct === null ? "—" : `${closingPct}%`}
             variant="neutral"
           />
         </div>
       </div>
 
-      {/* Stage filter tabs */}
-      <StageFilterTabs
-        options={filterOptions}
-        active={activeFilter}
-        onChange={setActiveFilter}
-      />
+      {/* AI Insights strip (only when there are deals to analyze) */}
+      {allDeals.length > 0 && <PipelineInsightsStrip deals={allDeals} />}
 
-      {/* Deal cards */}
+      {/* Stage filter tabs — hidden when pipeline is fully empty to reduce noise */}
+      {allDeals.length > 0 && (
+        <StageFilterTabs
+          options={filterOptions}
+          active={activeFilter}
+          onChange={setActiveFilter}
+        />
+      )}
+
+      {/* Deal cards / empty state */}
       <div className="px-4 py-3.5 flex flex-col gap-2.5">
         {deals.map((deal) => (
           <SalesDealCard key={deal.deal_id} deal={deal} stages={stages} />
         ))}
 
         {deals.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground text-sm">
-              {activeFilter === "all"
-                ? "No active deals in your pipeline."
-                : `No deals in ${activeFilter.replace(/_/g, " ")}. Looking good — or time to prospect?`}
-            </p>
-          </div>
+          allDeals.length === 0 ? (
+            <PipelineEmptyState />
+          ) : (
+            <PipelineEmptyState
+              filterLabel={activeFilter.replace(/_/g, " ")}
+            />
+          )
         )}
       </div>
     </div>
