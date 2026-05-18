@@ -240,13 +240,22 @@ export function SalesDealCard({
             Call
           </a>
         ) : (
-          <button className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-foreground text-xs font-bold hover:bg-foreground/[0.04] transition-colors">
-            <PhoneCall className="w-[13px] h-[13px] text-qep-orange" />
-            Call
+          <button
+            disabled
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-muted-foreground text-xs font-bold opacity-40 cursor-not-allowed"
+          >
+            <PhoneCall className="w-[13px] h-[13px]" />
+            No phone
           </button>
         )}
         <div className="w-px bg-white/[0.06]" />
-        <button className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-foreground text-xs font-bold hover:bg-foreground/[0.04] transition-colors">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/sales/quotes/new?crm_deal_id=${encodeURIComponent(deal.deal_id)}`);
+          }}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-foreground text-xs font-bold hover:bg-foreground/[0.04] transition-colors"
+        >
           <FileText className="w-[13px] h-[13px] text-blue-400" />
           Quote
         </button>

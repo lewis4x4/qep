@@ -495,8 +495,8 @@ export function VoiceQuotePage() {
         if (nextScenarios.length === 0) {
           setScenarios([]);
           setProcessingMessage("The recording was transcribed, but scenario generation returned no cards. Re-record or open Quote Builder manually.");
+          setPhase("ready");
         }
-        setPhase("ready");
       } catch (error) {
         const message = error instanceof Error ? error.message : "Voice quote generation failed.";
         setPhase("error");

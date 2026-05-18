@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCustomers } from "../hooks/useCustomers";
 import { createQuickNote } from "../lib/sales-api";
+import { useToast } from "@/hooks/use-toast";
 
 export interface QuickNoteTag {
   key: string;
@@ -17,6 +18,7 @@ export function QuickNote({
   tag?: QuickNoteTag;
 }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { allCustomers } = useCustomers();
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [text, setText] = useState("");
@@ -40,8 +42,13 @@ export function QuickNote({
       });
       await queryClient.invalidateQueries({ queryKey: ["sales"] });
       onComplete();
-    } catch {
-      alert("Failed to save note.");
+    } catch (err) {
+      console.error("[QuickNote] save failed:", err);
+      toast({
+        title: "Failed to save note",
+        description: err instanceof Error ? err.message : "Try again.",
+        variant: "destructive",
+      });
     } finally {
       setSubmitting(false);
     }

@@ -317,7 +317,10 @@ export function CapturePage() {
                 </button>
               );
             })}
-            <button className="shrink-0 flex items-center gap-1.5 py-2 px-3 rounded-full border border-dashed border-white/[0.12] text-muted-foreground text-xs font-semibold">
+            <button
+              onClick={() => navigate("/sales/customers")}
+              className="shrink-0 flex items-center gap-1.5 py-2 px-3 rounded-full border border-dashed border-white/[0.12] text-muted-foreground text-xs font-semibold hover:border-white/[0.25] hover:text-foreground transition-colors"
+            >
               <Search className="w-3 h-3" />
               Find customer
             </button>
@@ -438,7 +441,10 @@ export function CapturePage() {
           <p className="text-[10px] font-extrabold text-muted-foreground/60 uppercase tracking-[0.1em]">
             Recent Captures
           </p>
-          <button className="text-[11px] text-qep-orange font-bold">
+          <button
+            onClick={() => navigate("/sales/field-note/history")}
+            className="text-[11px] text-qep-orange font-bold hover:underline underline-offset-2"
+          >
             View all
           </button>
         </div>

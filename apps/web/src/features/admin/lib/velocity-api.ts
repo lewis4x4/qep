@@ -158,18 +158,22 @@ export async function getQuoteVelocityRows(
   let quotesQ = supabase
     .from("quote_packages")
     .select("id, status, created_at, sent_at, viewed_at, customer_name, customer_company")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(2000);
   if (daysBack != null) {
     quotesQ = quotesQ.gte("created_at", cutoffIso(daysBack));
   }
 
-  const [quotesRes, outcomesRes] = await Promise.all([
-    quotesQ,
-    supabase
-      .from("qb_quote_outcomes")
-      .select("quote_package_id, outcome, captured_at")
-      .order("captured_at", { ascending: false }),
-  ]);
+  let outcomesQ = supabase
+    .from("qb_quote_outcomes")
+    .select("quote_package_id, outcome, captured_at")
+    .order("captured_at", { ascending: false })
+    .limit(5000);
+  if (daysBack != null) {
+    outcomesQ = outcomesQ.gte("captured_at", cutoffIso(daysBack));
+  }
+
+  const [quotesRes, outcomesRes] = await Promise.all([quotesQ, outcomesQ]);
 
   const quotes = normalizeQuoteVelocityPackageRows(quotesRes.data);
   const outcomeRows = normalizeQuoteVelocityOutcomeRows(outcomesRes.data);

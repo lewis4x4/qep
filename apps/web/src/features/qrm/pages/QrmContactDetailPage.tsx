@@ -54,18 +54,21 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
     queryKey: ["crm", "contact", contactId],
     queryFn: () => getCrmContact(contactId!),
     enabled: Boolean(contactId),
+    staleTime: 30_000,
   });
 
   const activitiesQuery = useQuery({
     queryKey: ["crm", "contact", contactId, "activities"],
     queryFn: () => listContactActivities(contactId!),
-    enabled: Boolean(contactId) && contactQuery.data !== null,
+    enabled: Boolean(contactId) && Boolean(contactQuery.data),
+    staleTime: 30_000,
   });
 
   const companyQuery = useQuery({
     queryKey: ["crm", "company", contactQuery.data?.primaryCompanyId],
     queryFn: () => getCrmCompany(contactQuery.data?.primaryCompanyId ?? ""),
     enabled: Boolean(contactQuery.data?.primaryCompanyId),
+    staleTime: 30_000,
   });
 
   const territoriesQuery = useQuery({
@@ -78,7 +81,8 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
   const dealsQuery = useQuery({
     queryKey: ["crm", "contact", contactId, "rep-safe-deals"],
     queryFn: () => listRepSafeDealsForContact(contactId!),
-    enabled: Boolean(contactId) && contactQuery.data !== null,
+    enabled: Boolean(contactId) && Boolean(contactQuery.data),
+    staleTime: 30_000,
   });
 
   const createActivityMutation = useMutation({
@@ -151,12 +155,14 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
     queryKey: ["crm", "profile", "contact-rep", contactQuery.data?.assignedRepId],
     queryFn: () => getProfileDisplayName(contactQuery.data?.assignedRepId ?? ""),
     enabled: Boolean(contactQuery.data?.assignedRepId),
+    staleTime: 5 * 60_000,
   });
 
   const territoryRepNameQuery = useQuery({
     queryKey: ["crm", "profile", "territory-rep", conflict?.assignedRepId],
     queryFn: () => getProfileDisplayName(conflict?.assignedRepId ?? ""),
     enabled: Boolean(conflict?.assignedRepId),
+    staleTime: 5 * 60_000,
   });
 
   const contactName = useMemo(() => {

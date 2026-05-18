@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Clock, Loader2 } from "lucide-react";
@@ -10,7 +11,6 @@ import {
   summarizeVelocity,
   findStalledQuotes,
   formatDuration,
-  type QuoteVelocityRow,
   type StageStats,
   type VelocitySummary,
 } from "../lib/velocity-api";
@@ -30,18 +30,17 @@ export function DealVelocityPage() {
 function DealVelocityPageInner() {
   const navigate = useNavigate();
   const [period, setPeriod] = useState<PeriodFilter>("90");
-  const [rows, setRows] = useState<QuoteVelocityRow[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setLoading(true);
-    getQuoteVelocityRows({
-      daysBack: period === "all" ? null : parseInt(period),
-    }).then((data) => {
-      setRows(data);
-      setLoading(false);
-    });
-  }, [period]);
+  const velocityQuery = useQuery({
+    queryKey: ["admin", "velocity", period],
+    queryFn: () =>
+      getQuoteVelocityRows({
+        daysBack: period === "all" ? null : parseInt(period, 10),
+      }),
+    staleTime: 60_000,
+  });
+  const rows = velocityQuery.data ?? [];
+  const loading = velocityQuery.isLoading;
 
   const summary: VelocitySummary | null = useMemo(
     () => (rows.length > 0 ? summarizeVelocity(rows) : null),

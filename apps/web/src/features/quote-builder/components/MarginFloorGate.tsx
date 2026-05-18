@@ -78,11 +78,17 @@ export function MarginFloorGate({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getApplicableThreshold(brandId).then(({ threshold }) => {
-      if (cancelled) return;
-      setThreshold(threshold);
-      setLoading(false);
-    });
+    getApplicableThreshold(brandId)
+      .then(({ threshold }) => {
+        if (cancelled) return;
+        setThreshold(threshold);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("[MarginFloorGate] threshold fetch failed:", err);
+        setLoading(false);
+      });
     return () => { cancelled = true; };
   }, [brandId]);
 

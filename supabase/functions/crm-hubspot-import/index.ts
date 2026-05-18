@@ -77,8 +77,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     global: { headers: { Authorization: authHeader } },
   });
 
+  const callerToken = authHeader.slice("Bearer ".length).trim();
   const { data: authData, error: authError } = await callerClient.auth
-    .getUser();
+    .getUser(callerToken);
   if (authError || !authData.user) {
     await emitCrmAccessDeniedAudit(supabaseAdmin, {
       workspaceId: "default",

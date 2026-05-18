@@ -30,6 +30,7 @@ import { submitVoiceToQrm } from "@/features/voice-qrm/lib/voice-qrm-api";
 import { ScenarioCard } from "./ScenarioCard";
 import { DealCopilotPanel } from "./DealCopilotPanel";
 import {
+  isAbortError,
   streamScenarios,
   type SseEvent,
   type SseResolvedEvent,
@@ -181,59 +182,68 @@ export function ConversationalDealEngine({
     const session = streamScenarios({ prompt, promptSource, supabase });
     sessionRef.current = session;
 
-    for await (const event of session) {
-      switch (event.type) {
-        case "status":
-          setPanelState((prev) =>
-            prev.phase === "running"
-              ? { ...prev, statusMessage: event.message }
-              : prev
-          );
-          break;
+    try {
+      for await (const event of session) {
+        switch (event.type) {
+          case "status":
+            setPanelState((prev) =>
+              prev.phase === "running"
+                ? { ...prev, statusMessage: event.message }
+                : prev
+            );
+            break;
 
-        case "resolved":
-          resolvedEvent = event;
-          setResolved(event);
-          setPanelState((prev) =>
-            prev.phase === "running"
-              ? { ...prev, resolved: event }
-              : prev
-          );
-          break;
+          case "resolved":
+            resolvedEvent = event;
+            setResolved(event);
+            setPanelState((prev) =>
+              prev.phase === "running"
+                ? { ...prev, resolved: event }
+                : prev
+            );
+            break;
 
-        case "scenario":
-          collectedScenarios.push(event.scenario);
-          setScenarios([...collectedScenarios]);
-          // Transition to "done" style early so cards appear as they stream
-          setPanelState({
-            phase: "done",
-            scenarios: [...collectedScenarios],
-            resolved: resolvedEvent,
-            latencyMs: Date.now() - start,
-          });
-          break;
+          case "scenario":
+            collectedScenarios.push(event.scenario);
+            setScenarios([...collectedScenarios]);
+            // Transition to "done" style early so cards appear as they stream
+            setPanelState({
+              phase: "done",
+              scenarios: [...collectedScenarios],
+              resolved: resolvedEvent,
+              latencyMs: Date.now() - start,
+            });
+            break;
 
-        case "error":
-          if (event.fatal) {
+          case "error":
+            if (event.fatal) {
+              setPanelState({ phase: "error", message: event.message });
+              return;
+            }
+            // Non-fatal: show warning but keep going
             setPanelState({ phase: "error", message: event.message });
             return;
-          }
-          // Non-fatal: show warning but keep going
-          setPanelState({ phase: "error", message: event.message });
-          return;
 
-        case "complete":
-          // Slice 09: persist logId so a subsequent scenario select can
-          // thread it into the resulting quote's originating_log_id.
-          setOriginatingLogId(event.logId ?? null);
-          setPanelState({
-            phase:     "done",
-            scenarios: collectedScenarios,
-            resolved:  resolvedEvent,
-            latencyMs: event.latencyMs,
-          });
-          break;
+          case "complete":
+            // Slice 09: persist logId so a subsequent scenario select can
+            // thread it into the resulting quote's originating_log_id.
+            setOriginatingLogId(event.logId ?? null);
+            setPanelState({
+              phase:     "done",
+              scenarios: collectedScenarios,
+              resolved:  resolvedEvent,
+              latencyMs: event.latencyMs,
+            });
+            break;
+        }
       }
+    } catch (err) {
+      if (isAbortError(err)) return;
+      console.error("[ConversationalDealEngine] stream failed:", err);
+      setPanelState({
+        phase: "error",
+        message: err instanceof Error ? err.message : "Scenario stream failed.",
+      });
     }
   }, [reset]);
 

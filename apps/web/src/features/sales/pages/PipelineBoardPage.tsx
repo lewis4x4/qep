@@ -64,11 +64,14 @@ export function PipelineBoardPage() {
     return sum + (d.amount ?? 0) * (pct / 100);
   }, 0);
 
-  const hotCount = allDeals.filter((d) => d.heat_status === "warm").length;
-  const stalledCount = allDeals.filter(
+  const TERMINAL_STAGES = new Set(["won", "lost", "closed_won", "closed_lost", "closed won", "closed lost"]);
+  const activeDeals = allDeals.filter((d) => !TERMINAL_STAGES.has(d.stage.toLowerCase()));
+
+  const hotCount = activeDeals.filter((d) => d.heat_status === "warm").length;
+  const stalledCount = activeDeals.filter(
     (d) => (d.days_since_activity ?? 0) >= 10,
   ).length;
-  const closingCount = allDeals.filter((d) => {
+  const closingCount = activeDeals.filter((d) => {
     if (!d.expected_close_on) return false;
     const days = Math.ceil(
       (new Date(d.expected_close_on).getTime() - Date.now()) / 86_400_000,
@@ -76,11 +79,9 @@ export function PipelineBoardPage() {
     return days >= 0 && days <= 14;
   }).length;
 
-  // Closing %: share of active deals expected to close within 14 days.
-  // Honest about what the math computes; renamed from misleading "Win Rate".
   const closingPct =
-    allDeals.length > 0
-      ? Math.round((closingCount / allDeals.length) * 100)
+    activeDeals.length > 0
+      ? Math.round((closingCount / activeDeals.length) * 100)
       : null;
 
   // Build filter options
