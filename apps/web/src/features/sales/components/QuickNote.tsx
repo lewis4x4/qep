@@ -3,7 +3,19 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCustomers } from "../hooks/useCustomers";
 import { createQuickNote } from "../lib/sales-api";
 
-export function QuickNote({ onComplete }: { onComplete: () => void }) {
+export interface QuickNoteTag {
+  key: string;
+  label: string;
+  colorClass?: string;
+}
+
+export function QuickNote({
+  onComplete,
+  tag,
+}: {
+  onComplete: () => void;
+  tag?: QuickNoteTag;
+}) {
   const queryClient = useQueryClient();
   const { allCustomers } = useCustomers();
   const [customerId, setCustomerId] = useState<string | null>(null);
@@ -21,9 +33,10 @@ export function QuickNote({ onComplete }: { onComplete: () => void }) {
     if (!text.trim()) return;
     setSubmitting(true);
     try {
+      const body = tag ? `[${tag.label}] ${text.trim()}` : text.trim();
       await createQuickNote({
         companyId: customerId && customerId !== "__none__" ? customerId : undefined,
-        text: text.trim(),
+        text: body,
       });
       await queryClient.invalidateQueries({ queryKey: ["sales"] });
       onComplete();
@@ -34,9 +47,21 @@ export function QuickNote({ onComplete }: { onComplete: () => void }) {
     }
   }
 
+  const title = tag ? `Log a ${tag.label}` : "Quick Note";
+  const placeholder = tag ? `Describe the ${tag.label.toLowerCase()}…` : "Type your note...";
+
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-bold text-slate-900">Quick Note</h3>
+      <div className="flex items-center gap-2">
+        <h3 className="text-lg font-bold text-foreground">{title}</h3>
+        {tag && (
+          <span
+            className={`text-[10px] font-extrabold uppercase tracking-[0.08em] px-2 py-0.5 rounded-full border ${tag.colorClass ?? "border-qep-orange/40 text-qep-orange bg-qep-orange/10"}`}
+          >
+            {tag.label}
+          </span>
+        )}
+      </div>
 
       {/* Optional customer */}
       {!customerId ? (
@@ -72,7 +97,7 @@ export function QuickNote({ onComplete }: { onComplete: () => void }) {
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Type your note..."
+            placeholder={placeholder}
             rows={4}
             autoFocus
             className="w-full px-4 py-3 rounded-xl bg-slate-100 text-sm outline-none focus:ring-2 focus:ring-qep-orange/30 resize-none"

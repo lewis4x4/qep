@@ -21,7 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 import { LogVisitFlow } from "../components/LogVisitFlow";
 import { VoiceNoteCapture } from "../components/VoiceNoteCapture";
 import { ScheduleFollowUp } from "../components/ScheduleFollowUp";
-import { QuickNote } from "../components/QuickNote";
+import { QuickNote, type QuickNoteTag } from "../components/QuickNote";
 import { fetchRepCustomers } from "../lib/sales-api";
 import { cn } from "@/lib/utils";
 
@@ -32,14 +32,70 @@ type CaptureMode =
   | "schedule"
   | "quick_note";
 
-const TAGS = [
-  { key: "hot", label: "Hot Lead", icon: Flame, activeColor: "text-red-400 border-red-400 bg-red-500/10" },
-  { key: "quote", label: "Quote Request", icon: FileText, activeColor: "text-blue-400 border-blue-400 bg-blue-500/10" },
-  { key: "service", label: "Service Issue", icon: Wrench, activeColor: "text-amber-400 border-amber-400 bg-amber-500/10" },
-  { key: "competitor", label: "Competitor Intel", icon: AlertCircle, activeColor: "text-purple-400 border-purple-400 bg-purple-500/10" },
-  { key: "trade", label: "Trade-In", icon: Truck, activeColor: "text-emerald-400 border-emerald-400 bg-emerald-500/10" },
-  { key: "meeting", label: "Meeting Note", icon: Calendar, activeColor: "text-muted-foreground border-muted-foreground/40 bg-foreground/5" },
-] as const;
+const TYPE_ACTIONS: Array<{
+  key: string;
+  label: string;
+  actionLabel: string;
+  icon: typeof Flame;
+  iconBg: string;
+  iconColor: string;
+  chipClass: string;
+}> = [
+  {
+    key: "hot",
+    label: "Hot Lead",
+    actionLabel: "Log a Hot Lead",
+    icon: Flame,
+    iconBg: "bg-red-500/10",
+    iconColor: "text-red-400",
+    chipClass: "border-red-400/40 text-red-400 bg-red-500/10",
+  },
+  {
+    key: "quote",
+    label: "Quote Request",
+    actionLabel: "Log a Quote Request",
+    icon: FileText,
+    iconBg: "bg-blue-500/10",
+    iconColor: "text-blue-400",
+    chipClass: "border-blue-400/40 text-blue-400 bg-blue-500/10",
+  },
+  {
+    key: "service",
+    label: "Service Issue",
+    actionLabel: "Log a Service Issue",
+    icon: Wrench,
+    iconBg: "bg-amber-500/10",
+    iconColor: "text-amber-400",
+    chipClass: "border-amber-400/40 text-amber-400 bg-amber-500/10",
+  },
+  {
+    key: "competitor",
+    label: "Competitor Intel",
+    actionLabel: "Log Competitor Intel",
+    icon: AlertCircle,
+    iconBg: "bg-purple-500/10",
+    iconColor: "text-purple-400",
+    chipClass: "border-purple-400/40 text-purple-400 bg-purple-500/10",
+  },
+  {
+    key: "trade",
+    label: "Trade-In",
+    actionLabel: "Log a Trade-In",
+    icon: Truck,
+    iconBg: "bg-emerald-500/10",
+    iconColor: "text-emerald-400",
+    chipClass: "border-emerald-400/40 text-emerald-400 bg-emerald-500/10",
+  },
+  {
+    key: "meeting",
+    label: "Meeting Note",
+    actionLabel: "Log a Meeting Note",
+    icon: Calendar,
+    iconBg: "bg-foreground/[0.06]",
+    iconColor: "text-muted-foreground",
+    chipClass: "border-muted-foreground/40 text-muted-foreground bg-foreground/5",
+  },
+];
 
 const QUICK_DESTINATIONS = [
   {
@@ -131,7 +187,7 @@ export function CapturePage() {
   const [mode, setMode] = useState<CaptureMode>(null);
   const [recording, setRecording] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [noteTag, setNoteTag] = useState<QuickNoteTag | null>(null);
 
   const { data: customers } = useQuery({
     queryKey: ["sales", "customers"],
@@ -143,6 +199,12 @@ export function CapturePage() {
   function resetAll() {
     setMode(null);
     setRecording(false);
+    setNoteTag(null);
+  }
+
+  function openTypedNote(type: (typeof TYPE_ACTIONS)[number]) {
+    setNoteTag({ key: type.key, label: type.label, colorClass: type.chipClass });
+    setMode("quick_note");
   }
 
   if (mode !== null) {
@@ -158,7 +220,9 @@ export function CapturePage() {
         {mode === "log_visit" && <LogVisitFlow onComplete={resetAll} />}
         {mode === "voice_note" && <VoiceNoteCapture onComplete={resetAll} />}
         {mode === "schedule" && <ScheduleFollowUp onComplete={resetAll} />}
-        {mode === "quick_note" && <QuickNote onComplete={resetAll} />}
+        {mode === "quick_note" && (
+          <QuickNote onComplete={resetAll} tag={noteTag ?? undefined} />
+        )}
       </div>
     );
   }
@@ -263,38 +327,6 @@ export function CapturePage() {
 
       <div className="px-5 pb-5">
         <p className="text-[10px] font-extrabold text-muted-foreground/60 uppercase tracking-[0.1em] mb-2">
-          Tag This Capture
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {TAGS.map((t) => {
-            const Icon = t.icon;
-            const active = selectedTag === t.key;
-            return (
-              <button
-                key={t.key}
-                onClick={() => setSelectedTag(active ? null : t.key)}
-                className={cn(
-                  "flex items-center gap-1.5 px-[11px] py-[7px] rounded-full border text-xs font-bold transition-all duration-150",
-                  active
-                    ? t.activeColor
-                    : "border-white/[0.06] bg-[hsl(var(--card))] text-foreground",
-                )}
-              >
-                <Icon
-                  className={cn(
-                    "w-3 h-3",
-                    active ? "" : "text-muted-foreground",
-                  )}
-                />
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="px-5 pb-5">
-        <p className="text-[10px] font-extrabold text-muted-foreground/60 uppercase tracking-[0.1em] mb-2">
           On This Page
         </p>
         <div className="grid grid-cols-3 gap-2">
@@ -320,6 +352,40 @@ export function CapturePage() {
                 </span>
                 <span className="text-[10px] text-muted-foreground/60 text-center -mt-0.5">
                   {a.desc}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="px-5 pb-5">
+        <p className="text-[10px] font-extrabold text-muted-foreground/60 uppercase tracking-[0.1em] mb-2">
+          Log a Specific Type
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {TYPE_ACTIONS.map((t) => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.key}
+                onClick={() => openTypedNote(t)}
+                data-type-action={t.key}
+                className="flex flex-col items-center gap-1.5 py-3.5 px-1.5 rounded-[14px] border border-white/[0.06] bg-[hsl(var(--card))] hover:border-white/20 transition-all active:scale-[0.98]"
+              >
+                <div
+                  className={`w-9 h-9 rounded-[10px] ${t.iconBg} flex items-center justify-center`}
+                >
+                  <Icon
+                    className={`w-[17px] h-[17px] ${t.iconColor}`}
+                    strokeWidth={2.2}
+                  />
+                </div>
+                <span className="text-[12px] font-bold text-foreground text-center leading-tight">
+                  {t.label}
+                </span>
+                <span className="text-[10px] text-muted-foreground/60 text-center -mt-0.5">
+                  Log this
                 </span>
               </button>
             );
