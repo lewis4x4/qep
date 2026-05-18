@@ -2,7 +2,7 @@
  * WAVE phase 5 — DealDetailPage smoke test.
  *
  * Full rendering is integration-bound (useAuth + supabase + tanstack
- * query + CaptureSheet) and bun:test mock.module pollutes the
+ * query) and bun:test mock.module pollutes the
  * process-global module cache. Rendering tests live in the Phase 7
  * Playwright suite; this spec just asserts the page exports a function
  * component so import paths are guaranteed at build time.

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTodayFeed } from "../hooks/useTodayFeed";
 import { useAuth } from "@/hooks/useAuth";
 import { AiBriefingCard } from "../components/AiBriefingCard";
@@ -5,10 +6,13 @@ import { PrepCard } from "../components/PrepCard";
 import { ActionItemCard } from "../components/ActionItemCard";
 import { PipelineSnapshot } from "../components/PipelineSnapshot";
 import { DaySummaryCard } from "../components/DaySummaryCard";
+import { LogVisitFlow } from "../components/LogVisitFlow";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   TrendingUp,
   Flame,
   Calendar,
+  Plus,
 } from "lucide-react";
 export function TodayFeedPage() {
   const {
@@ -20,6 +24,7 @@ export function TodayFeedPage() {
     isLoading,
   } = useTodayFeed();
   const { profile } = useAuth();
+  const [logVisitOpen, setLogVisitOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -61,6 +66,24 @@ export function TodayFeedPage() {
 
   return (
     <div className="px-4 py-4 space-y-5 max-w-lg mx-auto pb-8">
+      <div className="flex items-center justify-between px-4 py-3 sm:hidden">
+        <h1 className="text-xl font-bold text-foreground">Today</h1>
+        <button
+          type="button"
+          aria-label="Log a visit"
+          onClick={() => setLogVisitOpen(true)}
+          className="w-10 h-10 rounded-full bg-qep-orange text-white flex items-center justify-center active:scale-95 transition-transform"
+        >
+          <Plus className="w-5 h-5" />
+        </button>
+      </div>
+
+      <Sheet open={logVisitOpen} onOpenChange={setLogVisitOpen}>
+        <SheetContent side="bottom">
+          <LogVisitFlow onComplete={() => setLogVisitOpen(false)} />
+        </SheetContent>
+      </Sheet>
+
       {/* Hero Greeting */}
       <AiBriefingCard
         firstName={firstName}

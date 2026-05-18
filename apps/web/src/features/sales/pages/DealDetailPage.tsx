@@ -8,7 +8,6 @@
  * builder, and the activity timeline.
  */
 
-import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ChevronLeft,
@@ -24,12 +23,10 @@ import { useSalesDealDetail } from "../hooks/useSalesDealDetail";
 import { formatCurrency } from "@/lib/format";
 import { MobileKpiGrid } from "../components/MobileKpiGrid";
 import { MobileStickyActionBar } from "../components/MobileStickyActionBar";
-import { CaptureSheet } from "../components/CaptureSheet";
 
 export function DealDetailPage() {
   const { dealId } = useParams<{ dealId: string }>();
   const navigate = useNavigate();
-  const [captureOpen, setCaptureOpen] = useState(false);
 
   const dealQuery = useSalesDealDetail(dealId);
   const deal = dealQuery.data ?? null;
@@ -206,7 +203,7 @@ export function DealDetailPage() {
               </p>
               <button
                 type="button"
-                onClick={() => setCaptureOpen(true)}
+                onClick={() => navigate("/sales/capture")}
                 className="inline-flex items-center gap-1 text-xs font-semibold text-qep-orange"
               >
                 <PlusCircle className="h-3.5 w-3.5" aria-hidden />
@@ -252,7 +249,7 @@ export function DealDetailPage() {
         secondary={
           <button
             type="button"
-            onClick={() => setCaptureOpen(true)}
+            onClick={() => navigate("/sales/capture")}
             className="inline-flex h-12 items-center gap-1.5 rounded-full border border-white/[0.06] bg-foreground/[0.04] px-4 text-sm font-semibold text-foreground hover:border-white/20 transition-colors"
           >
             <Calendar className="h-4 w-4" aria-hidden />
@@ -270,7 +267,6 @@ export function DealDetailPage() {
         }
       />
 
-      <CaptureSheet open={captureOpen} onOpenChange={setCaptureOpen} />
     </div>
   );
 }

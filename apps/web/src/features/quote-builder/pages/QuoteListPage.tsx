@@ -276,6 +276,17 @@ export function QuoteListPage() {
       className="relative left-1/2 -mt-8 flex min-h-[calc(100vh-9rem)] -translate-x-1/2 flex-col gap-6 rounded-b-2xl border-x border-b border-border/60 bg-background/25 px-4 pb-8 pt-8 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:px-6 lg:px-10"
       style={{ width: "calc(100vw - clamp(24px, 5vw, 80px))" }}
     >
+      <div className="flex items-center justify-between px-4 py-3 sm:hidden">
+        <h1 className="text-xl font-bold text-foreground">Quotes</h1>
+        <button
+          type="button"
+          aria-label="Start a Quote"
+          onClick={() => navigate("/sales/quotes/new")}
+          className="w-10 h-10 rounded-full bg-qep-orange text-white flex items-center justify-center active:scale-95 transition-transform"
+        >
+          <Plus className="w-5 h-5" />
+        </button>
+      </div>
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Quotes</h1>

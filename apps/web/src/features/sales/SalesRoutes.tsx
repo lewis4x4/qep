@@ -14,6 +14,9 @@ const CustomerListPage = lazy(() =>
 const CustomerDetailPage = lazy(() =>
   import("./pages/CustomerDetailPage").then((m) => ({ default: m.CustomerDetailPage })),
 );
+const CapturePage = lazy(() =>
+  import("./pages/CapturePage").then((m) => ({ default: m.CapturePage })),
+);
 
 // WAVE phase 1: Quote Builder + Quote List now host inside SalesShell.
 const QuoteListPage = lazy(() =>
@@ -91,6 +94,14 @@ export function SalesRoutes() {
           element={
             <Suspense fallback={<SalesRouteFallback />}>
               <CustomerDetailPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="capture"
+          element={
+            <Suspense fallback={<SalesRouteFallback />}>
+              <CapturePage />
             </Suspense>
           }
         />
