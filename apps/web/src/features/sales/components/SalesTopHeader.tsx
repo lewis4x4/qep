@@ -3,6 +3,7 @@ import { Search, User, LogOut, Moon, Sun, Monitor, Bug } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { SalesGlobalSearch } from "./SalesGlobalSearch";
+import { QbNotificationBell } from "@/components/QbNotificationBell";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +52,8 @@ export function SalesTopHeader() {
           >
             <Search className="w-5 h-5" />
           </button>
+
+          <QbNotificationBell tone="dark" iconClassName="w-5 h-5" />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

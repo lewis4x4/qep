@@ -482,6 +482,7 @@ export function normalizeQuoteApprovalCaseSummary(value: unknown): QuoteApproval
     policySnapshot: normalizeRecord(value.policySnapshot ?? value.policy_snapshot),
     reasonSummary: normalizeRecord(value.reasonSummary ?? value.reason_summary),
     status: normalizeApprovalCaseStatus(value.status),
+    submissionNote: nullableString(value.submissionNote ?? value.submission_note),
     decisionNote: nullableString(value.decisionNote ?? value.decision_note),
     decidedBy: nullableString(value.decidedBy ?? value.decided_by),
     decidedByName: nullableString(value.decidedByName ?? value.decided_by_name),
@@ -1632,10 +1633,25 @@ export async function logQuoteDeliveryEvent(input: QuoteDeliveryEventInput): Pro
   return { id: typeof data?.id === "string" ? data.id : null };
 }
 
-export async function submitQuoteForApproval(quotePackageId: string): Promise<QuoteApprovalSubmitResult> {
+export async function submitQuoteForApproval(
+  quotePackageId: string,
+  submissionNote?: string | null,
+): Promise<QuoteApprovalSubmitResult> {
+  // Phase 1 quote-approval feedback loop: optional rep justification
+  // captured at submission time and persisted to
+  // quote_approval_cases.submission_note by the edge function.
+  const trimmedNote = typeof submissionNote === "string"
+    ? submissionNote.trim()
+    : "";
+  const body: { quote_package_id: string; submission_note?: string } = {
+    quote_package_id: quotePackageId,
+  };
+  if (trimmedNote.length > 0) {
+    body.submission_note = trimmedNote;
+  }
   const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/submit-approval`, {
     method: "POST",
-    body: JSON.stringify({ quote_package_id: quotePackageId }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const err = await readJsonRecord(res);

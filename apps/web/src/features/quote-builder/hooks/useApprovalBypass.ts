@@ -25,13 +25,16 @@
 //   - canSubmit: draft is ready, branch chosen, and status is none of
 //     pending / approved / approved_with_conditions / sent / accepted.
 
+import { useEffect } from "react";
 import {
   useQuery,
+  useQueryClient,
   type QueryObserverResult,
   type RefetchOptions,
 } from "@tanstack/react-query";
 
 import type { QuoteApprovalCaseSummary } from "../../../../../../shared/qep-moonshot-contracts";
+import { supabase } from "@/lib/supabase";
 import { getQuoteApprovalCase } from "../lib/quote-api";
 
 const APPROVAL_CASE_STALE_MS = 5_000;
@@ -78,6 +81,7 @@ export function useApprovalBypass({
   draftHasBranch,
   draftReady,
 }: UseApprovalBypassInput): UseApprovalBypassResult {
+  const queryClient = useQueryClient();
   const caseQuery = useQuery({
     queryKey: ["quote-builder", "approval-case", quotePackageId],
     queryFn: () => getQuoteApprovalCase(quotePackageId!),
@@ -86,6 +90,43 @@ export function useApprovalBypass({
   });
 
   const approvalCase = caseQuery.data ?? null;
+  const activeApprovalCaseId = approvalCase?.id ?? null;
+
+  // Phase 1 quote-approval feedback loop: Supabase Realtime subscription
+  // on the active case row. Replaces poll-style latency (the 5s
+  // staleTime above is retained as a passive safety net for tab focus
+  // and refetch-on-mount; the realtime channel drives the fast path).
+  // The channel is keyed on the case id so we re-subscribe whenever a
+  // new case is created for a different package.
+  useEffect(() => {
+    if (!activeApprovalCaseId) return;
+    const channel = supabase
+      .channel(`quote-approval-case-${activeApprovalCaseId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "quote_approval_cases",
+          filter: `id=eq.${activeApprovalCaseId}`,
+        },
+        () => {
+          // Invalidate both the keyed and the broad query so any
+          // panels (ReviewWorkflowPanels, MarginCheckBanner, etc.)
+          // that read the same key refetch the latest case row.
+          queryClient.invalidateQueries({
+            queryKey: ["quote-builder", "approval-case", quotePackageId],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["quote-builder", "approval-case"],
+          });
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [activeApprovalCaseId, queryClient, quotePackageId]);
   const pending = quoteStatus === "pending_approval";
   const bypassApprovedWithoutCase = isBypassApprovedWithoutCase(approvalCase, quoteStatus);
   const canSend = approvalCase?.canSend === true || bypassApprovedWithoutCase;

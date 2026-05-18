@@ -416,6 +416,7 @@ export interface QuoteApprovalCaseSummary {
   policySnapshot: Record<string, unknown>;
   reasonSummary: Record<string, unknown>;
   status: QuoteApprovalCaseStatus;
+  submissionNote: string | null;
   decisionNote: string | null;
   decidedBy: string | null;
   decidedByName: string | null;

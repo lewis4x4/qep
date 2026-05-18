@@ -2872,6 +2872,272 @@ async function notifyQuoteApprovalSubmitted(
   }
 }
 
+/**
+ * Rep-facing copy for a quote approval decision. Returns the bell-row title,
+ * the email subject (mirrors the title), and a short text body. Keeps copy
+ * intentionally plain — no AI brand chrome.
+ */
+function buildRepApprovalDecisionCopy(input: {
+  decision: string;
+  quoteNumber: string | null;
+  managerName: string | null;
+  note: string | null;
+  nextRole: string | null;
+}): { title: string; subject: string; body: string } {
+  const quoteLabel = input.quoteNumber ? `quote #${input.quoteNumber}` : "your quote";
+  const quoteLabelSentenceCase = input.quoteNumber
+    ? `Quote #${input.quoteNumber}`
+    : "Your quote";
+  const manager = input.managerName?.trim() || "your manager";
+  const note = input.note?.trim() || "(no note provided)";
+  const nextRole = input.nextRole?.trim() || "the next approver";
+
+  switch (input.decision) {
+    case "approved": {
+      const title = "Quote approved";
+      return {
+        title,
+        subject: title,
+        body: `${quoteLabelSentenceCase} was approved by ${manager}. Ready to send to the customer.`,
+      };
+    }
+    case "approved_with_conditions": {
+      const title = "Quote approved with conditions";
+      return {
+        title,
+        subject: title,
+        body: `${quoteLabelSentenceCase} was approved with conditions. Tap to review.`,
+      };
+    }
+    case "changes_requested": {
+      const title = "Changes requested";
+      return {
+        title,
+        subject: title,
+        body: `${manager} requested changes on ${quoteLabel}. Note: ${note}`,
+      };
+    }
+    case "rejected": {
+      const title = "Quote rejected";
+      return {
+        title,
+        subject: title,
+        body: `${quoteLabelSentenceCase} was rejected. Note: ${note}`,
+      };
+    }
+    case "escalated": {
+      const title = "Quote escalated";
+      return {
+        title,
+        subject: title,
+        body: `${quoteLabelSentenceCase} was escalated to ${nextRole}.`,
+      };
+    }
+    default: {
+      const title = "Quote update";
+      return {
+        title,
+        subject: title,
+        body: `There is an update on ${quoteLabel}.`,
+      };
+    }
+  }
+}
+
+/**
+ * Send the rep a transactional email when their submitted quote receives a
+ * decision. No-op when RESEND_API_KEY is unset or recipient lacks an email.
+ */
+async function sendRepApprovalDecisionEmail(input: {
+  to: string | null;
+  decision: string;
+  quoteNumber: string | null;
+  managerName: string | null;
+  note: string | null;
+  conditions: ReadonlyArray<unknown>;
+  deepLinkAbsoluteUrl: string;
+}): Promise<"sent" | "skipped" | "error"> {
+  if (!input.to || !input.to.includes("@")) return "skipped";
+  if (!Deno.env.get("RESEND_API_KEY")) {
+    console.warn("rep approval decision email skipped: RESEND_API_KEY not set");
+    return "skipped";
+  }
+
+  const copy = buildRepApprovalDecisionCopy({
+    decision: input.decision,
+    quoteNumber: input.quoteNumber,
+    managerName: input.managerName,
+    note: input.note,
+    nextRole: null,
+  });
+
+  const conditionsBlock = input.conditions.length > 0
+    ? `\nConditions:\n${input.conditions
+        .map((c, i) => {
+          const rec = (c && typeof c === "object") ? c as Record<string, unknown> : null;
+          const labelRaw = rec ? rec["label"] : null;
+          const typeRaw = rec ? (rec["conditionType"] ?? rec["condition_type"] ?? rec["type"]) : null;
+          const label = typeof labelRaw === "string" && labelRaw
+            ? labelRaw
+            : typeof typeRaw === "string" && typeRaw
+              ? typeRaw
+              : `Condition ${i + 1}`;
+          return `- ${label}`;
+        })
+        .join("\n")}\n`
+    : "";
+
+  try {
+    const result = await sendResendEmail({
+      to: input.to,
+      subject: `[QEP OS] ${copy.subject}`,
+      timeoutMs: 4000,
+      text: [
+        copy.body,
+        conditionsBlock,
+        `View quote: ${input.deepLinkAbsoluteUrl}`,
+      ].filter((line) => typeof line === "string" && line.length > 0).join("\n"),
+    });
+    if (result.skipped) return "skipped";
+    if (!result.ok) {
+      console.warn("rep approval decision email returned non-ok response");
+      return "error";
+    }
+    return "sent";
+  } catch (error) {
+    console.warn("rep approval decision email failed:", error);
+    return "error";
+  }
+}
+
+/**
+ * Notify the rep that submitted a quote of the approver's decision. Inserts a
+ * qb_notifications bell row (idempotent within a 5-minute window) AND sends a
+ * Resend email in parallel. All failures are logged and swallowed so they do
+ * NOT roll back the approver's decision write.
+ */
+async function notifyRepOfApprovalDecision(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  workspaceId: string;
+  approvalCaseId: string;
+  quotePackageId: string;
+  submittedBy: string | null;
+  decision: string;
+  decisionNote: string | null;
+  conditions: ReadonlyArray<unknown>;
+  managerName: string | null;
+  nextRole: string | null;
+}): Promise<void> {
+  if (!input.submittedBy) {
+    console.info("[rep-approval-decision] no submitted_by on case; skipping rep notify", {
+      approvalCaseId: input.approvalCaseId,
+    });
+    return;
+  }
+
+  try {
+    const { data: pkgRow } = await input.admin
+      .from("quote_packages")
+      .select("quote_number")
+      .eq("id", input.quotePackageId)
+      .maybeSingle();
+    const quoteNumber = typeof pkgRow?.quote_number === "string" ? pkgRow.quote_number : null;
+
+    const { data: repProfile } = await input.admin
+      .from("profiles")
+      .select("email, full_name")
+      .eq("id", input.submittedBy)
+      .maybeSingle();
+    const repEmail = typeof repProfile?.email === "string" ? repProfile.email : null;
+
+    const copy = buildRepApprovalDecisionCopy({
+      decision: input.decision,
+      quoteNumber,
+      managerName: input.managerName,
+      note: input.decisionNote,
+      nextRole: input.nextRole,
+    });
+
+    const deepLinkPath = `/sales/quotes/${input.quotePackageId}`;
+    const appBase = Deno.env.get("APP_BASE_URL")
+      ?? Deno.env.get("PUBLIC_APP_URL")
+      ?? Deno.env.get("SITE_URL")
+      ?? "";
+    const deepLinkAbsoluteUrl = appBase
+      ? `${appBase.replace(/\/+$/, "")}${deepLinkPath}`
+      : deepLinkPath;
+
+    const bellInsert = (async () => {
+      try {
+        // Dedup window: skip if an identical row already exists in the last 5
+        // minutes — protects against re-hits of the decide endpoint.
+        const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const { data: existing } = await input.admin
+          .from("qb_notifications")
+          .select("id")
+          .eq("user_id", input.submittedBy)
+          .eq("type", "quote_approval_decision")
+          .eq("metadata->>approval_case_id", input.approvalCaseId)
+          .eq("metadata->>decision", input.decision)
+          .gte("created_at", fiveMinAgo)
+          .maybeSingle();
+
+        if (existing?.id) {
+          console.info("[rep-approval-decision] bell row dedup hit; skipping insert", {
+            approvalCaseId: input.approvalCaseId,
+          });
+          return;
+        }
+
+        const { error: insertErr } = await input.admin
+          .from("qb_notifications")
+          .insert({
+            workspace_id: input.workspaceId || "default",
+            user_id: input.submittedBy,
+            type: "quote_approval_decision",
+            title: copy.title,
+            body: copy.body,
+            metadata: {
+              quote_package_id: input.quotePackageId,
+              approval_case_id: input.approvalCaseId,
+              decision: input.decision,
+              decision_note: input.decisionNote ?? null,
+              conditions: input.conditions ?? [],
+              deep_link: deepLinkPath,
+            },
+            read_at: null,
+          });
+        if (insertErr) {
+          console.warn("[rep-approval-decision] bell insert failed:", insertErr);
+        }
+      } catch (error) {
+        console.warn("[rep-approval-decision] bell insert threw:", error);
+      }
+    })();
+
+    const emailSend = (async () => {
+      try {
+        await sendRepApprovalDecisionEmail({
+          to: repEmail,
+          decision: input.decision,
+          quoteNumber,
+          managerName: input.managerName,
+          note: input.decisionNote,
+          conditions: input.conditions ?? [],
+          deepLinkAbsoluteUrl,
+        });
+      } catch (error) {
+        console.warn("[rep-approval-decision] email send threw:", error);
+      }
+    })();
+
+    await Promise.all([bellInsert, emailSend]);
+  } catch (error) {
+    console.warn("[rep-approval-decision] dispatch failed:", error);
+  }
+}
+
 function defaultQuoteApprovalPolicy(workspaceId: string): QuoteApprovalPolicy {
   return {
     workspaceId,
@@ -5761,6 +6027,17 @@ Deno.serve(async (req) => {
         return safeJsonError("Quote approval submission requires rep, manager, or owner role", 403, origin);
       }
 
+      // Optional rep-supplied justification, capped to 2,000 chars and
+      // normalized so empty strings/whitespace collapse to null.
+      let submissionNote: string | null = null;
+      if (typeof body.submission_note === "string") {
+        const trimmed = body.submission_note.trim();
+        if (trimmed.length > 2000) {
+          return safeJsonError("submission_note must be 2000 characters or fewer", 400, origin);
+        }
+        submissionNote = trimmed.length > 0 ? trimmed : null;
+      }
+
       const { data: pkg, error: pkgErr } = await supabase
         .from("quote_packages")
         .select("id, workspace_id, branch_slug, quote_number, deal_id, customer_name, customer_company, net_total, margin_pct, subtotal, discount_total, status")
@@ -6027,6 +6304,7 @@ Deno.serve(async (req) => {
           due_at: dueAt,
           escalate_at: escalateAt,
           flow_approval_id: approvalId,
+          submission_note: submissionNote,
         })
         .select("*")
         .single();
@@ -6246,6 +6524,19 @@ Deno.serve(async (req) => {
           .eq("id", caseRow.id);
         if (caseUpdateErr) return safeJsonError(caseUpdateErr.message, 500, origin);
 
+        await notifyRepOfApprovalDecision({
+          admin,
+          workspaceId: typeof caseRow.workspace_id === "string" ? caseRow.workspace_id : "default",
+          approvalCaseId: String(caseRow.id),
+          quotePackageId: String(caseRow.quote_package_id),
+          submittedBy: typeof caseRow.submitted_by === "string" ? caseRow.submitted_by : null,
+          decision,
+          decisionNote,
+          conditions: [],
+          managerName: deciderName,
+          nextRole: approvalRoute.assignedRole,
+        });
+
         const refreshedCase = await getLatestQuoteApprovalCase({
           admin,
           quotePackageId: String(caseRow.quote_package_id),
@@ -6346,6 +6637,19 @@ Deno.serve(async (req) => {
         nextQuoteStatus === "approved" || nextQuoteStatus === "approved_with_conditions"
           ? await tryAutoSendApprovedQuote({ quotePackageId: String(caseRow.quote_package_id) })
           : { attempted: false, sent: false, reason: "quote_not_approved" };
+
+      await notifyRepOfApprovalDecision({
+        admin,
+        workspaceId: typeof caseRow.workspace_id === "string" ? caseRow.workspace_id : "default",
+        approvalCaseId: String(caseRow.id),
+        quotePackageId: String(caseRow.quote_package_id),
+        submittedBy: typeof caseRow.submitted_by === "string" ? caseRow.submitted_by : null,
+        decision,
+        decisionNote,
+        conditions: decision === "approved" || decision === "rejected" ? [] : conditions,
+        managerName: deciderName,
+        nextRole: null,
+      });
 
       const refreshedCase = await getLatestQuoteApprovalCase({
         admin,

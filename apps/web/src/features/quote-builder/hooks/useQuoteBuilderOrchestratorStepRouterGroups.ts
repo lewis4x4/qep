@@ -135,7 +135,14 @@ export function useQuoteBuilderOrchestratorStepRouterGroups(
       approvalGranted: deps.approvalGranted,
       bypassApprovedWithoutCase: deps.bypassApprovedWithoutCase,
       submitApprovalPending: (deps.submitApprovalMutation as { isPending: boolean }).isPending,
-      onSubmitApproval: () => (deps.submitApprovalMutation as { mutate: () => void }).mutate(),
+      // Phase 1 quote-approval feedback loop: thread the rep's optional
+      // justification through to submitApprovalMutation so the
+      // submit-approval edge function persists it on the case row.
+      onSubmitApproval: (submissionNote: string) => {
+        (deps.submitApprovalMutation as {
+          mutate: (vars: { submissionNote?: string | null }) => void;
+        }).mutate({ submissionNote: submissionNote ?? null });
+      },
       submitApprovalData: (deps.submitApprovalMutation as { data: unknown }).data,
       quoteStatus: deps.quoteStatus,
       onQuoteStatusChange: deps.handleQuoteStatusChange,

@@ -83,12 +83,17 @@ export interface UseQuoteBuilderSaveInput {
   setLocalPersistEnabled: Dispatch<SetStateAction<boolean>>;
 }
 
+/** Phase 1 quote-approval feedback loop: submission justification payload. */
+export interface SubmitApprovalVariables {
+  submissionNote?: string | null;
+}
+
 export interface UseQuoteBuilderSaveResult {
   saveMutation: UseMutationResult<QuotePackageSaveResponse, Error, void, unknown>;
   submitApprovalMutation: UseMutationResult<
     Awaited<ReturnType<typeof submitQuoteForApproval>>,
     Error,
-    void,
+    SubmitApprovalVariables | void,
     unknown
   >;
   marginGateOpen: boolean;
@@ -240,8 +245,15 @@ export function useQuoteBuilderSave({
     ? activeQuoteRecord.quote_number
     : null;
 
-  const submitApprovalMutation = useMutation({
-    mutationFn: async () => {
+  const submitApprovalMutation = useMutation<
+    Awaited<ReturnType<typeof submitQuoteForApproval>>,
+    Error,
+    SubmitApprovalVariables | void
+  >({
+    mutationFn: async (variables) => {
+      const submissionNote = variables && typeof variables === "object"
+        ? variables.submissionNote ?? null
+        : null;
       let quotePackageId = activeQuotePackageId ?? persistedQuotePackageIdRef.current;
       if (!quotePackageId) {
         const saveResult = await saveMutation.mutateAsync();
@@ -253,7 +265,7 @@ export function useQuoteBuilderSave({
           throw new Error("Couldn't save the quote — approval not submitted.");
         }
       }
-      return submitQuoteForApproval(quotePackageId);
+      return submitQuoteForApproval(quotePackageId, submissionNote);
     },
     onSuccess: (result) => {
       setDraft((current) => ({

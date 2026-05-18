@@ -224,6 +224,11 @@ export function QuoteReviewWorkflowPanels({
         const route = String(activeApprovalCase.routeMode).replace(/_/g, " ");
         const statusLabel = String(activeApprovalCase.status).replace(/_/g, " ");
         const decisionNote = activeApprovalCase.decisionNote ?? "No decision note recorded yet.";
+        // Phase 1 quote-approval feedback loop: surface the rep's
+        // submission justification (captured at submit time) above the
+        // manager's decision note so approvers always see rep context.
+        const submissionNote = activeApprovalCase.submissionNote?.trim();
+        const hasSubmissionNote = Boolean(submissionNote && submissionNote.length > 0);
         const openEvaluations = activeApprovalCase.evaluations.filter((e) => !e.satisfied).length;
         const versionLine = activeApprovalCase.versionNumber != null
           ? `Quote version v${activeApprovalCase.versionNumber}`
@@ -232,6 +237,15 @@ export function QuoteReviewWorkflowPanels({
 
         const detailBody = (
           <div className="space-y-3" data-testid="approval-case-detail">
+            {hasSubmissionNote && (
+              <div
+                className="rounded-lg border border-border/60 bg-background/60 p-3"
+                data-testid="approval-case-submission-note"
+              >
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Rep&apos;s note</p>
+                <p className="mt-2 text-sm text-muted-foreground">{submissionNote}</p>
+              </div>
+            )}
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-lg border border-border/60 bg-background/60 p-3">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Assigned approver</p>

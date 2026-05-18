@@ -7,7 +7,7 @@
  */
 
 import { Loader2, ArrowLeft, ArrowRight } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type {
   QuoteAutoSendResult,
   QuoteFinanceScenario,
@@ -55,7 +55,13 @@ export interface ReviewStepProps {
   approvalGranted: boolean;
   bypassApprovedWithoutCase: boolean;
   submitApprovalPending: boolean;
-  onSubmitApproval: () => void;
+  /**
+   * Phase 1 quote-approval feedback loop: rep may supply an optional
+   * one-line justification when the quote sits below the margin floor.
+   * Note is forwarded into the submit-approval edge function so the
+   * approver sees rep context alongside the case payload.
+   */
+  onSubmitApproval: (submissionNote: string) => void;
   submitApprovalData?: {
     status?: string;
     bypassRuleName?: string | null;
@@ -105,6 +111,23 @@ export function ReviewStep({
   const isMobile = useIsMobileViewport();
   const customerDisplay = draft.customerName || draft.customerCompany || "Customer";
   const statusLabel = (draft.quoteStatus ?? "draft").replace(/_/g, " ");
+
+  // Phase 1 quote-approval feedback loop: rep justification capture.
+  // Below the 10% margin floor (the same threshold MarginCheckBanner
+  // flags red) the textarea is required and the Submit button is
+  // disabled until non-empty. Above the floor the field becomes an
+  // optional disclosure so reps can still attach context.
+  const [submissionNote, setSubmissionNote] = useState("");
+  const [optionalNoteOpen, setOptionalNoteOpen] = useState(false);
+  const SUBMISSION_NOTE_MAX = 280;
+  const requiresJustification = marginPct < 10;
+  const trimmedNoteLength = submissionNote.trim().length;
+  const justificationMissing = requiresJustification && trimmedNoteLength === 0;
+  const showSubmissionField = canSubmitForApproval && !approvalPending && !approvalGranted;
+  const submitDisabled =
+    !canSubmitForApproval
+    || submitApprovalPending
+    || justificationMissing;
 
   return (
     <div className="space-y-4">
@@ -336,11 +359,69 @@ export function ReviewStep({
               <span className="font-medium text-foreground">bypass_to_status</span> (only those two targets are allowed).
             </p>
           </div>
-          <Button onClick={onSubmitApproval} disabled={!canSubmitForApproval || submitApprovalPending}>
+          <Button
+            onClick={() => onSubmitApproval(submissionNote)}
+            disabled={submitDisabled}
+            data-testid="review-submit-approval"
+          >
             {submitApprovalPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
             {approvalPending ? "Approval pending" : approvalGranted ? "Approved" : "Submit for approval"}
           </Button>
         </div>
+        {showSubmissionField && (
+          requiresJustification ? (
+            <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/5 p-3" data-testid="submission-note-required">
+              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-red-300">
+                Why does this need approval?
+              </label>
+              <p className="mt-1 text-[11px] text-red-200">
+                Margin below 10% — give your approver one line of context so they can decide fast.
+              </p>
+              <textarea
+                value={submissionNote}
+                onChange={(event) => setSubmissionNote(event.target.value.slice(0, SUBMISSION_NOTE_MAX))}
+                placeholder="Door-opener — 3-store account, 18-month payback expected"
+                maxLength={SUBMISSION_NOTE_MAX}
+                rows={3}
+                className="mt-2 w-full rounded border border-red-500/30 bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-red-500/60"
+                aria-required="true"
+                aria-invalid={justificationMissing}
+                data-testid="submission-note-input"
+              />
+              <p className="mt-1 text-right text-[11px] text-muted-foreground">
+                {trimmedNoteLength}/{SUBMISSION_NOTE_MAX}
+              </p>
+            </div>
+          ) : (
+            <div className="mt-3 rounded-lg border border-border/60 bg-card/40" data-testid="submission-note-optional">
+              <button
+                type="button"
+                onClick={() => setOptionalNoteOpen((open) => !open)}
+                aria-expanded={optionalNoteOpen}
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground"
+              >
+                <span>Add note for the approver (optional)</span>
+                <span className="text-[10px]">{optionalNoteOpen ? "Hide" : "Show"}</span>
+              </button>
+              {optionalNoteOpen && (
+                <div className="px-3 pb-3">
+                  <textarea
+                    value={submissionNote}
+                    onChange={(event) => setSubmissionNote(event.target.value.slice(0, SUBMISSION_NOTE_MAX))}
+                    placeholder="Door-opener — 3-store account, 18-month payback expected"
+                    maxLength={SUBMISSION_NOTE_MAX}
+                    rows={3}
+                    className="w-full rounded border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-qep-orange/60"
+                    data-testid="submission-note-input"
+                  />
+                  <p className="mt-1 text-right text-[11px] text-muted-foreground">
+                    {trimmedNoteLength}/{SUBMISSION_NOTE_MAX}
+                  </p>
+                </div>
+              )}
+            </div>
+          )
+        )}
         <div className="mt-3 rounded-lg border border-border/70 bg-card/40 p-3">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Post-approval action</p>
           <p className="mt-1 text-xs text-muted-foreground">Choose whether approved quotes auto-send to the customer or route back to the rep for final delivery timing.</p>
