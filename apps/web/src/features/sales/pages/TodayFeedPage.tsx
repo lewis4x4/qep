@@ -6,6 +6,7 @@ import { MomentumStrip } from "../components/MomentumStrip";
 import { TomorrowFirstMove } from "../components/TomorrowFirstMove";
 import { LiveSignalsStrip } from "../components/LiveSignalsStrip";
 import { EmptyStateQuickStart } from "../components/EmptyStateQuickStart";
+import { TodayFeedSkeleton } from "../components/TodayFeedSkeleton";
 import { PrepCard } from "../components/PrepCard";
 import { ActionItemCard } from "../components/ActionItemCard";
 import { LogVisitFlow } from "../components/LogVisitFlow";
@@ -114,11 +115,7 @@ export function TodayFeedPage() {
   );
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-3 border-qep-orange border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <TodayFeedSkeleton />;
   }
 
   const dealMap = new Map(pipeline.map((d) => [d.deal_id, d]));
