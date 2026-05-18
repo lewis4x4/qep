@@ -148,6 +148,8 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
 
   const clearSelection = useCallback(() => setSelectedDealIds(new Set()), []);
 
+  const openHealthProfile = useCallback((profileId: string) => setHealthDrawerProfileId(profileId), []);
+
   const handleDealSelectToggle = useCallback((dealId: string, _additive: boolean) => {
     setSelectedDealIds((current) => {
       const next = new Set(current);
@@ -357,7 +359,7 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
           healthProfileByCompanyId={healthProfileByCompanyId}
           onCommitPipelineFollowUp={commitPipelineFollowUpUpdate}
           onSchedulePipelineRefresh={schedulePipelineRefresh}
-          onOpenHealthProfile={(profileId) => setHealthDrawerProfileId(profileId)}
+          onOpenHealthProfile={openHealthProfile}
         />
       )}
 
@@ -375,7 +377,7 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
             onDragEnd={handleDragEnd}
             onCommitPipelineFollowUp={commitPipelineFollowUpUpdate}
             onSchedulePipelineRefresh={schedulePipelineRefresh}
-            onOpenHealthProfile={(profileId) => setHealthDrawerProfileId(profileId)}
+            onOpenHealthProfile={openHealthProfile}
             showAnalytics={showAnalytics}
             bottleneckStageId={analyticsSnapshot?.bottleneckStageId ?? null}
             gateRejectedStageId={gateRejectedStageId}

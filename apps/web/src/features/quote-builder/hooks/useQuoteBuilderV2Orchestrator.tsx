@@ -454,7 +454,7 @@ export function useQuoteBuilderV2Orchestrator() {
 
   const handleQuoteStatusChange = useCallback((status: QuoteWorkspaceDraft["quoteStatus"]) => {
     setDraft((current) => ({ ...current, quoteStatus: status }));
-  }, []);
+  }, [setDraft]);
 
   const handleQuoteForProspect = useQuoteBuilderProspectIntake({ setDraft, setStep });
 

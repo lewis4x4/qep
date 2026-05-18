@@ -23,6 +23,10 @@ import { VoiceNoteCapture } from "../components/VoiceNoteCapture";
 import { ScheduleFollowUp } from "../components/ScheduleFollowUp";
 import { QuickNote, type QuickNoteTag } from "../components/QuickNote";
 import { fetchRepCustomers } from "../lib/sales-api";
+import {
+  useRecentCaptures,
+  type RecentCapture,
+} from "../hooks/useRecentCaptures";
 import { cn } from "@/lib/utils";
 
 type CaptureMode =
@@ -196,6 +200,8 @@ export function CapturePage() {
   });
   const quickCustomers = (customers ?? []).slice(0, 5);
 
+  const { data: recentCaptures = [] } = useRecentCaptures();
+
   function resetAll() {
     setMode(null);
     setRecording(false);
@@ -267,7 +273,7 @@ export function CapturePage() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[17px] font-extrabold text-white tracking-[-0.01em]">
-              {recording ? "Recording..." : "Hold to record"}
+              {recording ? "Recording..." : "Tap to record"}
             </p>
             <p className="text-xs text-white/85 mt-0.5 font-medium">
               {recording
@@ -436,54 +442,105 @@ export function CapturePage() {
         </div>
       </div>
 
-      <div className="mx-5 pt-3 mt-1 border-t border-white/[0.06]">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-[10px] font-extrabold text-muted-foreground/60 uppercase tracking-[0.1em]">
-            Recent Captures
-          </p>
-          <button
-            onClick={() => navigate("/sales/field-note/history")}
-            className="text-[11px] text-qep-orange font-bold hover:underline underline-offset-2"
-          >
-            View all
-          </button>
-        </div>
+      {recentCaptures.length > 0 && (
+        <div className="mx-5 pt-3 mt-1 border-t border-white/[0.06]">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-extrabold text-muted-foreground/60 uppercase tracking-[0.1em]">
+              Recent Captures
+            </p>
+            <button
+              onClick={() => navigate("/sales/field-note/history")}
+              className="text-[11px] text-qep-orange font-bold hover:underline underline-offset-2"
+            >
+              View all
+            </button>
+          </div>
 
-        {quickCustomers.length > 0 && (
           <div className="space-y-0">
-            {quickCustomers.slice(0, 2).map((c, i) => (
-              <div
-                key={c.customer_id}
-                className={`flex items-center gap-2.5 py-2.5 ${
-                  i === 0 ? "border-b border-white/[0.06]" : ""
-                }`}
-              >
-                <div className="w-8 h-8 rounded-[9px] bg-qep-orange/10 flex items-center justify-center shrink-0">
-                  {i === 0 ? (
-                    <Mic className="w-3.5 h-3.5 text-qep-orange" />
-                  ) : (
-                    <MapPin className="w-3.5 h-3.5 text-blue-400" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-bold text-foreground">
-                    {c.company_name}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {i === 0 ? "Voice note" : "Visit logged"}
-                    {c.last_interaction ? ` · ${c.last_interaction}` : ""}
-                  </p>
-                </div>
-                <span className="text-[11px] text-muted-foreground/60 shrink-0">
-                  {c.days_since_contact != null
-                    ? `${c.days_since_contact}d ago`
-                    : "Recently"}
-                </span>
-              </div>
+            {recentCaptures.slice(0, 3).map((capture, i, arr) => (
+              <RecentCaptureRow
+                key={capture.id}
+                capture={capture}
+                showDivider={i < arr.length - 1 && i < 2}
+              />
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
+}
+
+/* ── Recent capture row ─────────────────────────────────── */
+function RecentCaptureRow({
+  capture,
+  showDivider,
+}: {
+  capture: RecentCapture;
+  showDivider: boolean;
+}) {
+  const preview =
+    capture.transcript?.trim().slice(0, 72) ||
+    (capture.duration_seconds
+      ? `Voice capture · ${capture.duration_seconds}s`
+      : "Voice capture");
+  const status = formatCaptureStatus(capture.sync_status);
+  const relative = formatRelativeFromIso(capture.created_at);
+
+  return (
+    <div
+      className={`flex items-center gap-2.5 py-2.5 ${
+        showDivider ? "border-b border-white/[0.06]" : ""
+      }`}
+    >
+      <div className="w-8 h-8 rounded-[9px] bg-qep-orange/10 flex items-center justify-center shrink-0">
+        <Mic className="w-3.5 h-3.5 text-qep-orange" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[13px] font-bold text-foreground truncate">
+          {preview}
+        </p>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          {status}
+        </p>
+      </div>
+      <span className="text-[11px] text-muted-foreground/60 shrink-0">
+        {relative}
+      </span>
+    </div>
+  );
+}
+
+function formatCaptureStatus(status: string): string {
+  switch (status) {
+    case "synced":
+      return "Synced";
+    case "pending":
+    case "queued":
+      return "Syncing…";
+    case "failed":
+    case "error":
+      return "Sync failed — retrying";
+    case "transcribed":
+      return "Transcribed";
+    default:
+      return status.replace(/_/g, " ");
+  }
+}
+
+function formatRelativeFromIso(iso: string): string {
+  const ts = new Date(iso).getTime();
+  if (Number.isNaN(ts)) return "—";
+  const diffMs = Date.now() - ts;
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 }

@@ -55,6 +55,11 @@ export function DocumentStep({
   // own the visible viewport.
   const [previewSheetOpen, setPreviewSheetOpen] = useState(false);
 
+  const handlePrint = () => {
+    onGenerateDocument();
+    setTimeout(() => window.print(), 250);
+  };
+
   const previewSummary = (
     <div className="space-y-3" data-testid="document-step-preview-summary">
       <p className="text-base font-semibold text-foreground">{quoteTitle}</p>
@@ -187,7 +192,7 @@ export function DocumentStep({
             <Button
               type="button"
               variant="outline"
-              onClick={onGenerateDocument}
+              onClick={handlePrint}
               disabled={actionsDisabled}
               className="min-h-[44px] w-full justify-center gap-2"
               data-testid="document-step-print"
@@ -237,7 +242,7 @@ export function DocumentStep({
                 {pdfGenerating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileDown className="mr-1 h-4 w-4" />}
                 {quoteMediaSnapshotLoading ? "Loading media..." : "Generate Preview PDF"}
               </Button>
-              <Button variant="outline" onClick={onGenerateDocument} disabled={actionsDisabled} className="min-h-[44px]">
+              <Button variant="outline" onClick={handlePrint} disabled={actionsDisabled} className="min-h-[44px]">
                 <Printer className="mr-1 h-4 w-4" /> Print Preview
               </Button>
             </div>

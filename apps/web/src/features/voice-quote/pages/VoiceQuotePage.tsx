@@ -18,12 +18,9 @@ import {
   MapPin,
   Mic,
   Pause,
-  Play,
   RefreshCcw,
   RotateCcw,
-  Search,
   Signal,
-  SlidersHorizontal,
   Sparkles,
   Square,
   Timer,
@@ -42,7 +39,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -77,20 +73,6 @@ interface ExtractedDetail {
   edited?: boolean;
 }
 
-interface RecentVoiceQuote {
-  id: string;
-  title: string;
-  summary: string;
-  customer: string;
-  location: string;
-  duration: string;
-  createdAt: string;
-  statusLabel: string;
-  statusDetail: string;
-  statusTone: "success" | "warning" | "info" | "draft" | "offline";
-  action: string;
-}
-
 interface InProgressVoiceCapture {
   id: string;
   transcript: string | null;
@@ -107,8 +89,6 @@ const EXAMPLE_TRANSCRIPTS = [
   "Marcus at Hill Country Landscaping wants a skid steer under forty thousand dollars with pallet forks, delivery in Georgetown before the end of next week.",
   "Lone Star Rentals is expanding their Austin fleet and asked for a mini excavator quote with two financing options and a rental conversion path.",
 ];
-
-const RECENT_QUOTES: RecentVoiceQuote[] = [];
 
 function formatCurrency(cents?: number) {
   if (typeof cents !== "number") return "TBD";
@@ -135,21 +115,6 @@ function confidenceClass(confidence: ConfidenceLevel) {
   if (confidence === "High") return "border-lime-500/25 bg-lime-500/15 text-lime-300";
   if (confidence === "Medium") return "border-amber-500/25 bg-amber-500/15 text-amber-300";
   return "border-red-500/25 bg-red-500/15 text-red-300";
-}
-
-function statusToneClass(tone: RecentVoiceQuote["statusTone"]) {
-  switch (tone) {
-    case "success":
-      return "border-lime-500/25 bg-lime-500/15 text-lime-300";
-    case "warning":
-      return "border-amber-500/25 bg-amber-500/15 text-amber-300";
-    case "info":
-      return "border-sky-500/25 bg-sky-500/15 text-sky-300";
-    case "draft":
-      return "border-violet-500/25 bg-violet-500/15 text-violet-300";
-    default:
-      return "border-slate-500/25 bg-slate-500/15 text-slate-300";
-  }
 }
 
 function getLeadTime(scenario: QuoteScenario) {
@@ -366,7 +331,11 @@ export function VoiceQuotePage() {
     if (phase !== "recording") return undefined;
     const interval = window.setInterval(() => {
       if (recordingStartRef.current) {
-        setElapsedMs(elapsedBeforePauseRef.current + (Date.now() - recordingStartRef.current));
+        const next = elapsedBeforePauseRef.current + (Date.now() - recordingStartRef.current);
+        setElapsedMs(next);
+        if (next >= MAX_DURATION_MS) {
+          stopRecording();
+        }
       }
     }, 250);
     return () => window.clearInterval(interval);
@@ -1015,102 +984,6 @@ export function VoiceQuotePage() {
           </Card>
         </aside>
       </section>
-
-      <Card className="rounded-[8px] border-slate-800 bg-[#0b1727]/95">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
-          <p className="text-xs font-bold uppercase text-slate-200">Recent Voice Quotes</p>
-          <div className="flex flex-1 flex-wrap justify-end gap-2">
-            <div className="relative min-w-[240px] max-w-[320px] flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-              <Input className="h-9 border-slate-700 bg-slate-950/30 pl-9 text-sm text-slate-200" placeholder="Search sessions or customers..." />
-            </div>
-            {["All", "Converted", "Needs Review", "Queued", "Offline"].map((filter, index) => (
-              <Button
-                key={filter}
-                type="button"
-                variant={index === 0 ? "default" : "outline"}
-                size="sm"
-                className={cn(index !== 0 && "border-slate-700 bg-slate-950/20 text-slate-300")}
-              >
-                {filter}
-              </Button>
-            ))}
-            <Button type="button" variant="outline" size="sm" className="border-slate-700 bg-slate-950/20 text-slate-300">
-              Last 30 days
-              <CalendarDays className="h-4 w-4" />
-            </Button>
-            <Button type="button" variant="outline" size="icon" className="h-9 w-9 border-slate-700 bg-slate-950/20 text-slate-300">
-              <SlidersHorizontal className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-[1100px] table-fixed text-left text-sm">
-            <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
-              <tr>
-                <th className="w-[34%] px-5 py-3 font-semibold">Session</th>
-                <th className="w-[16%] px-5 py-3 font-semibold">Customer</th>
-                <th className="w-[9%] px-5 py-3 font-semibold">Duration</th>
-                <th className="w-[14%] px-5 py-3 font-semibold">Created</th>
-                <th className="w-[17%] px-5 py-3 font-semibold">Quote ID / Status</th>
-                <th className="w-[10%] px-5 py-3 font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {RECENT_QUOTES.length === 0 ? (
-                <tr>
-                  <td className="px-5 py-10 text-center text-slate-400" colSpan={6}>
-                    Recent voice quotes will appear after real sessions are recorded or restored.
-                  </td>
-                </tr>
-              ) : RECENT_QUOTES.map((quote) => (
-                <tr key={quote.id} className="text-slate-300 hover:bg-slate-950/25">
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-800 text-slate-200 hover:bg-orange-500 hover:text-slate-950"
-                        title={`Play ${quote.title}`}
-                      >
-                        <Play className="h-4 w-4 fill-current" />
-                      </button>
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-slate-100">{quote.title}</p>
-                        <p className="truncate text-xs text-slate-500">{quote.summary}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3">
-                    <p className="font-medium text-slate-200">{quote.customer}</p>
-                    <p className="text-xs text-slate-500">{quote.location}</p>
-                  </td>
-                  <td className="px-5 py-3 tabular-nums">{quote.duration}</td>
-                  <td className="whitespace-pre-line px-5 py-3 text-xs text-slate-400">{quote.createdAt}</td>
-                  <td className="px-5 py-3">
-                    <span className={cn("inline-flex rounded-full border px-2 py-1 text-xs font-semibold", statusToneClass(quote.statusTone))}>
-                      {quote.statusLabel}
-                    </span>
-                    <p className="mt-1 text-xs text-slate-400">{quote.statusDetail}</p>
-                  </td>
-                  <td className="px-5 py-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="border-slate-700 bg-slate-950/20 text-slate-200"
-                      onClick={() => quote.action.includes("Builder") || quote.action.includes("quote") ? openScenario(visibleScenarios[0]) : undefined}
-                      disabled={visibleScenarios.length === 0}
-                    >
-                      {quote.action}
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
 
       <Dialog open={compareOpen} onOpenChange={setCompareOpen}>
         <DialogContent className="max-w-5xl border-slate-800 bg-[#0b1727] text-slate-100">

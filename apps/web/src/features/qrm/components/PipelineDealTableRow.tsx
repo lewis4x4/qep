@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -10,7 +10,7 @@ import { patchCrmDeal } from "../lib/qrm-api";
 import type { QrmRepSafeDeal } from "../lib/types";
 import { FollowUpQuickActions } from "./FollowUpQuickActions";
 
-export function PipelineDealTableRow({
+function PipelineDealTableRowImpl({
   deal,
   stageName,
   healthProfile,
@@ -124,3 +124,5 @@ export function PipelineDealTableRow({
     </tr>
   );
 }
+
+export const PipelineDealTableRow = memo(PipelineDealTableRowImpl);

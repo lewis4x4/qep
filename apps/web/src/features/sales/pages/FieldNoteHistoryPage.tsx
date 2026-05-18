@@ -13,7 +13,7 @@ export function FieldNoteHistoryPage() {
   const { profile } = useAuth();
   if (!profile) return null;
   const allowedRoles = ["rep", "admin", "manager", "owner"] as const;
-  if (!allowedRoles.includes(profile.role as (typeof allowedRoles)[number])) {
+  if (!(allowedRoles as readonly string[]).includes(profile.role)) {
     return <Navigate to="/dashboard" replace />;
   }
   return <VoiceHistoryPage userRole={profile.role} />;

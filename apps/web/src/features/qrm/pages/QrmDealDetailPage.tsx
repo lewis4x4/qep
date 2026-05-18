@@ -175,9 +175,12 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
   });
 
   useEffect(() => {
-    if (compositeQuery.data?.activities) {
-      queryClient.setQueryData(["crm", "deal", dealId, "activities"], compositeQuery.data.activities);
-    }
+    const next = compositeQuery.data?.activities;
+    if (!next) return;
+    queryClient.setQueryData(["crm", "deal", dealId, "activities"], (prev: typeof next | undefined) => {
+      if (prev === next) return prev;
+      return next;
+    });
   }, [compositeQuery.data, dealId, queryClient]);
 
   const dealQueryData = compositeQuery.data?.deal ?? null;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -14,7 +14,7 @@ import { FollowUpQuickActions } from "./FollowUpQuickActions";
 import type { QrmRepSafeDeal } from "../lib/types";
 import { SopNudgeInline } from "@/features/sop/components/SopNudgeInline";
 
-export function PipelineDealCard({
+function PipelineDealCardImpl({
   deal,
   healthProfile,
   onCommitPipelineFollowUp,
@@ -143,3 +143,5 @@ export function PipelineDealCard({
     </article>
   );
 }
+
+export const PipelineDealCard = memo(PipelineDealCardImpl);
