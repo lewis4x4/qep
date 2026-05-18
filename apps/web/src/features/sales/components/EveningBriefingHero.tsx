@@ -9,7 +9,7 @@ export interface EveningBriefingHeroProps {
   headline: string | null;
   /** Optional secondary line — usually the tomorrow setup. */
   followup?: string | null;
-  /** What JARVIS is doing right now ("Scanning 47 deals…"). Drives the live dot. */
+  /** What the assistant is doing right now ("Scanning 47 deals…"). Drives the live dot. */
   assistantStatus?: string;
   /** Tap-to-dictate handler. Always present so voice is one tap from the hero. */
   onVoicePress?: () => void;
@@ -63,7 +63,7 @@ export function EveningBriefingHero({
           {assistantStatus && (
             <div
               className="flex items-center gap-1.5"
-              aria-label={`JARVIS status: ${assistantStatus}`}
+              aria-label={`Assistant status: ${assistantStatus}`}
             >
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white/80 opacity-75" />
@@ -95,7 +95,7 @@ export function EveningBriefingHero({
           <button
             type="button"
             onClick={onVoicePress}
-            aria-label="Dictate to JARVIS"
+            aria-label="Dictate a note"
             className="mt-4 inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white/15 backdrop-blur-sm border border-white/25 text-white text-xs font-semibold active:scale-95 transition-transform hover:bg-white/25"
           >
             <Mic className="w-3.5 h-3.5" />

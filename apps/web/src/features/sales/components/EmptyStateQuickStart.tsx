@@ -63,7 +63,7 @@ export function EmptyStateQuickStart({ onLogVisit }: EmptyStateQuickStartProps) 
         ))}
       </div>
       <p className="text-[11px] text-muted-foreground/60 text-center pt-2">
-        JARVIS sharpens your briefing the moment you start.
+        Your briefing sharpens the moment you start.
       </p>
     </div>
   );

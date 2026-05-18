@@ -46,7 +46,8 @@ function buildBriefingCopy(args: {
 
   if (pipelineCount === 0) {
     return {
-      headline: "JARVIS is warming up. Drop your first signal and I'll start scoring your book overnight.",
+      headline:
+        "Your book is quiet. Drop your first visit and the briefing sharpens overnight.",
       followup: null,
       assistantStatus: "Ready",
     };
