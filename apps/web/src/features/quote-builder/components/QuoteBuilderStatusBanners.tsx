@@ -107,8 +107,9 @@ function ErrorBanner({
     );
   }
 
-  const canRunAction =
-    Boolean(error.recoveryAction) && typeof onRecoveryAction === "function";
+  const handlerWired = typeof onRecoveryAction === "function";
+  const showPrimary = handlerWired && Boolean(error.recoveryAction);
+  const showFallback = handlerWired && Boolean(error.recoveryFallback);
 
   return (
     <Card role="alert" className="border-red-500/30 bg-red-500/5 p-4">
@@ -119,15 +120,28 @@ function ErrorBanner({
           {error.recoveryHint}
         </p>
       ) : null}
-      {canRunAction && error.recoveryAction ? (
-        <button
-          type="button"
-          onClick={() => onRecoveryAction?.(error.recoveryAction!.kind)}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-red-400/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-500/20 hover:border-red-400/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60"
-        >
-          {error.recoveryAction.label}
-          <ArrowRight className="h-3 w-3" aria-hidden />
-        </button>
+      {showPrimary || showFallback ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {showPrimary && error.recoveryAction ? (
+            <button
+              type="button"
+              onClick={() => onRecoveryAction?.(error.recoveryAction!.kind)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-red-400/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-500/20 hover:border-red-400/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60"
+            >
+              {error.recoveryAction.label}
+              <ArrowRight className="h-3 w-3" aria-hidden />
+            </button>
+          ) : null}
+          {showFallback && error.recoveryFallback ? (
+            <button
+              type="button"
+              onClick={() => onRecoveryAction?.(error.recoveryFallback!.kind)}
+              className="inline-flex items-center gap-1 rounded-md border border-transparent px-2 py-1.5 text-xs font-medium text-red-300/80 hover:text-red-200 hover:border-red-400/30 hover:bg-red-500/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60"
+            >
+              {error.recoveryFallback.label}
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </Card>
   );

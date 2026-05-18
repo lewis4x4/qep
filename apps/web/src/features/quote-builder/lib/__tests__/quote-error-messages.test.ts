@@ -18,6 +18,12 @@ describe("translateQuoteError", () => {
     expect(copy.recoveryAction?.label).toBe("Re-link customer");
   });
 
+  test("ARCHIVED_REFERENCE_NOT_ALLOWED also carries a discard-and-restart escape hatch", () => {
+    const copy = translateQuoteError(new Error("ARCHIVED_REFERENCE_NOT_ALLOWED"));
+    expect(copy.recoveryFallback?.kind).toBe("discard_and_restart");
+    expect(copy.recoveryFallback?.label).toBe("Discard and start over");
+  });
+
   test("other known errors do NOT carry a recovery action", () => {
     expect(
       translateQuoteError(new Error("JWT expired")).recoveryAction,

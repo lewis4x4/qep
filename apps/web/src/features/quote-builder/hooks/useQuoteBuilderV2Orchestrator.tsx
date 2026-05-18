@@ -1,8 +1,10 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocation, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { QuoteFinancingRequest, QuotePackageCatalogKind } from "../lib/quote-api";
+import { performQuoteListAction } from "../lib/quote-api";
 import { translateQuoteError } from "../lib/quote-error-messages";
+import { toast } from "@/hooks/use-toast";
 import type { QuoteFinanceScenario, QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
 import type { QuoteSendActionChannel } from "../lib/quote-workspace";
 import { useAuth } from "@/hooks/useAuth";
@@ -77,6 +79,7 @@ import {
 export function useQuoteBuilderV2Orchestrator() {
   const [searchParams] = useSearchParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const routeParams = useParams<{ quoteId?: string }>();
   // WAVE phase 1: Quote Builder now ALSO hosts at /sales/quotes/:quoteId
   // (path-param form). Path param wins when present; otherwise fall back
@@ -981,8 +984,45 @@ export function useQuoteBuilderV2Orchestrator() {
         submitApprovalErrorMessage: submitApprovalMutation.isError
           ? translateQuoteError(submitApprovalMutation.error ?? "Failed to submit the quote for approval.")
           : null,
-        onRecoveryAction: (kind: "goto_customer_step") => {
-          if (kind === "goto_customer_step") setStep("customer");
+        onRecoveryAction: (kind: "goto_customer_step" | "discard_and_restart") => {
+          if (kind === "goto_customer_step") {
+            setStep("customer");
+            // Clear the save error so the banner doesn't linger after the
+            // rep takes action — they'll see a fresh save attempt on the
+            // next state change.
+            saveMutation.reset();
+            submitApprovalMutation.reset();
+            return;
+          }
+          if (kind === "discard_and_restart") {
+            if (!activeQuotePackageId) {
+              navigate("/sales/quotes/new");
+              return;
+            }
+            const proceed = window.confirm(
+              "Discard this draft and start a new quote? This cannot be undone.",
+            );
+            if (!proceed) return;
+            performQuoteListAction({
+              quotePackageId: activeQuotePackageId,
+              action: "discard",
+            })
+              .then(() => {
+                toast({
+                  title: "Draft discarded",
+                  description: "Starting a fresh quote.",
+                });
+                navigate("/sales/quotes/new");
+              })
+              .catch((error) => {
+                const copy = translateQuoteError(error);
+                toast({
+                  title: "Couldn't discard the draft",
+                  description: copy.description,
+                  variant: "destructive",
+                });
+              });
+          }
         },
         intelligencePanel,
         overlays: {

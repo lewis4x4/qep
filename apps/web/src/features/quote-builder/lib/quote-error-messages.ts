@@ -16,7 +16,14 @@
  * The page-level component decides what each kind does (typically
  * jumping the wizard to a specific step).
  */
-export type QuoteErrorRecoveryAction = "goto_customer_step";
+export type QuoteErrorRecoveryAction =
+  | "goto_customer_step"
+  | "discard_and_restart";
+
+export interface QuoteErrorActionDescriptor {
+  kind: QuoteErrorRecoveryAction;
+  label: string;
+}
 
 export interface QuoteErrorCopy {
   /** Short, human title for the banner header or toast title. */
@@ -26,14 +33,17 @@ export interface QuoteErrorCopy {
   /** Optional next-step guidance — what the rep can do to recover. */
   recoveryHint?: string;
   /**
-   * Optional one-tap action. When set AND a handler is wired in the
-   * banner, the recovery hint renders as a clickable button instead
-   * of plain italic text.
+   * Optional one-tap primary action. When set AND a handler is wired
+   * in the banner, the recovery hint renders alongside a primary
+   * button.
    */
-  recoveryAction?: {
-    kind: QuoteErrorRecoveryAction;
-    label: string;
-  };
+  recoveryAction?: QuoteErrorActionDescriptor;
+  /**
+   * Optional secondary escape-hatch action — typically "Discard and
+   * start over" so a rep stuck in a save loop has a guaranteed exit
+   * even when the primary recovery fails.
+   */
+  recoveryFallback?: QuoteErrorActionDescriptor;
 }
 
 const DEFAULT_COPY: QuoteErrorCopy = {
@@ -85,10 +95,14 @@ function matchKnownError(raw: string): QuoteErrorCopy | null {
       description:
         "This quote references a customer, contact, or deal that has been archived. Re-link the quote to an active record to continue.",
       recoveryHint:
-        "Search the dealer directory in the Customer step and pick an active record.",
+        "Search the dealer directory in the Customer step and pick an active record — or discard this draft and start over.",
       recoveryAction: {
         kind: "goto_customer_step",
         label: "Re-link customer",
+      },
+      recoveryFallback: {
+        kind: "discard_and_restart",
+        label: "Discard and start over",
       },
     };
   }

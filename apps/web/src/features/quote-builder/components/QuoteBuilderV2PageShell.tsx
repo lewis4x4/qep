@@ -76,7 +76,9 @@ export interface QuoteBuilderV2PageShellProps {
   saveSuccess: boolean;
   saveErrorMessage: StatusBannerError;
   submitApprovalErrorMessage: StatusBannerError;
-  onRecoveryAction?: (kind: "goto_customer_step") => void;
+  onRecoveryAction?: (
+    kind: "goto_customer_step" | "discard_and_restart",
+  ) => void;
   intelligencePanel: ReactNode;
   overlays: QuoteBuilderOverlaysProps;
 }
