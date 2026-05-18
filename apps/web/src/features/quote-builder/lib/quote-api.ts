@@ -475,6 +475,11 @@ export function normalizeQuoteApprovalCaseSummary(value: unknown): QuoteApproval
     branchName: nullableString(value.branchName ?? value.branch_name),
     submittedBy: nullableString(value.submittedBy ?? value.submitted_by),
     submittedByName: nullableString(value.submittedByName ?? value.submitted_by_name),
+    // Phase 2B Approval Activity Log: backed by the case row's created_at
+    // (see buildQuoteApprovalCaseResponse in quote-builder-v2). Falling
+    // back to value.created_at keeps things resilient if a caller hands
+    // us a raw row instead of the contract shape.
+    submittedAt: nullableString(value.submittedAt ?? value.submitted_at ?? value.created_at),
     assignedTo: nullableString(value.assignedTo ?? value.assigned_to),
     assignedToName: nullableString(value.assignedToName ?? value.assigned_to_name),
     assignedRole: nullableString(value.assignedRole ?? value.assigned_role),

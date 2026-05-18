@@ -7,6 +7,7 @@ import { PipelineInsightsStrip } from "../components/PipelineInsightsStrip";
 import { PipelineForecastStrip } from "../components/PipelineForecastStrip";
 import { PipelinePulse } from "../components/PipelinePulse";
 import { PipelineSkeleton } from "../components/PipelineSkeleton";
+import { PendingApprovalsBanner } from "../components/PendingApprovalsBanner";
 import {
   TrendingUp,
   Flame,
@@ -186,6 +187,11 @@ export function PipelineBoardPage() {
           />
         </div>
       </div>
+
+      {/* Phase 2A: Pending approvals banner — self-hides when nothing is
+          pending. Skip render entirely when pipeline is empty (no deals,
+          no submissions in flight to show). */}
+      {allDeals.length > 0 && <PendingApprovalsBanner />}
 
       {/* Pipeline Pulse — natural-language vibe-check from existing fields */}
       {allDeals.length > 0 && <PipelinePulse deals={allDeals} />}

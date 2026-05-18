@@ -11,6 +11,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,6 +21,10 @@ import { GlassPanel } from "@/components/primitives/GlassPanel";
 import { DashboardPivotToggle } from "@/components/primitives";
 // WAVE polish (Slice 5): canonical quote-builder href.
 import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
+// Phase 2B: shared compact timeline; rendered above the decision form
+// so the manager reads the rep's submission_note before deciding.
+import { ApprovalActivityLog } from "@/features/quote-builder/components/ApprovalActivityLog";
+import { getQuoteApprovalCase } from "@/features/quote-builder/lib/quote-api";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -262,6 +267,22 @@ export function ApprovalCenterPage() {
   const approveDemo = useApproveDemo();
   const decideQuote = useDecideQuoteApproval();
 
+  // Phase 2B Approval Activity Log: when the manager opens the quote
+  // decision dialog, fetch the full approval-case summary so the log
+  // can render the rep's submission_note (the field added in Phase 1
+  // that the manager must read before deciding) plus any conditions.
+  // Keyed by quote_package_id because that's what getQuoteApprovalCase
+  // expects and what we have in the approval list-row meta.
+  const quoteDecisionPackageId = typeof quoteDecisionTarget?.meta.quotePackageId === "string"
+    ? quoteDecisionTarget.meta.quotePackageId
+    : null;
+  const quoteDecisionCaseQuery = useQuery({
+    queryKey: ["approval-center", "quote-approval-case", quoteDecisionPackageId],
+    queryFn: () => getQuoteApprovalCase(quoteDecisionPackageId!),
+    enabled: Boolean(quoteDecisionPackageId),
+    staleTime: 5_000,
+  });
+
   // Pending mutation IDs for optimistic fade-out
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
 
@@ -496,6 +517,19 @@ export function ApprovalCenterPage() {
                 <p className="text-sm font-medium text-foreground">{quoteDecisionTarget.dealName}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{quoteDecisionTarget.detail}</p>
               </Card>
+
+              {/* Phase 2B Approval Activity Log: top-of-dialog so the
+                  manager reads the rep's submission_note + sees prior
+                  decisions before they pick an action. Conditions on
+                  the case are surfaced as pills under the (already-
+                  decided) row; the dialog's own quoteConditions state
+                  drives the form below, not this log. */}
+              {quoteDecisionCaseQuery.data && (
+                <ApprovalActivityLog
+                  approvalCase={quoteDecisionCaseQuery.data}
+                  conditions={quoteDecisionCaseQuery.data.conditions}
+                />
+              )}
 
               <div className="grid gap-3 sm:grid-cols-5">
                 {([

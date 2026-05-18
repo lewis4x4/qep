@@ -3627,6 +3627,11 @@ async function buildQuoteApprovalCaseResponse(input: {
     branchName: typeof input.approvalCase.branch_name === "string" ? input.approvalCase.branch_name : null,
     submittedBy: typeof input.approvalCase.submitted_by === "string" ? input.approvalCase.submitted_by : null,
     submittedByName: typeof input.approvalCase.submitted_by_name === "string" ? input.approvalCase.submitted_by_name : null,
+    // Phase 2B Approval Activity Log: surface the case-row created_at as
+    // the canonical submitted_at for timeline rendering. The schema has
+    // no dedicated submitted_at column today; created_at is the moment
+    // the rep tapped Submit for Approval.
+    submittedAt: typeof input.approvalCase.created_at === "string" ? input.approvalCase.created_at : null,
     assignedTo: typeof input.approvalCase.assigned_to === "string" ? input.approvalCase.assigned_to : null,
     assignedToName: typeof input.approvalCase.assigned_to_name === "string" ? input.approvalCase.assigned_to_name : null,
     assignedRole: typeof input.approvalCase.assigned_role === "string" ? input.approvalCase.assigned_role : null,

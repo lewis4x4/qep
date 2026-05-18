@@ -4,8 +4,11 @@ import type {
   CustomerEquipment,
   DailyBriefing,
   HeatStatus,
+  ManagerPendingApproval,
+  PendingApprovals,
   RepCustomer,
   RepPipelineDeal,
+  RepStuckApproval,
 } from "./types";
 
 export interface DealStageOption {
@@ -51,9 +54,60 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+function normalizePendingApprovals(value: unknown): PendingApprovals | undefined {
+  // Tolerate missing field (legacy briefings generated before Phase 2C).
+  if (!isRecord(value)) return undefined;
+
+  const repStuck: RepStuckApproval[] = Array.isArray(value.rep_stuck)
+    ? value.rep_stuck.flatMap((item) => {
+        if (!isRecord(item)) return [];
+        const quotePackageId = stringOrNull(item.quote_package_id);
+        const submittedAt = validDateStringOrNull(item.submitted_at);
+        if (!quotePackageId || !submittedAt) return [];
+        return [{
+          quote_package_id: quotePackageId,
+          quote_number: stringOrNull(item.quote_number),
+          customer_name: stringOrNull(item.customer_name),
+          total_amount: finiteNumberOrNull(item.total_amount),
+          submitted_at: submittedAt,
+          hours_pending: finiteNumberOrDefault(item.hours_pending),
+          assigned_role: stringOrNull(item.assigned_role),
+        }];
+      })
+    : [];
+
+  const managerPending: ManagerPendingApproval[] = Array.isArray(value.manager_pending)
+    ? value.manager_pending.flatMap((item) => {
+        if (!isRecord(item)) return [];
+        const caseId = stringOrNull(item.approval_case_id);
+        const quotePackageId = stringOrNull(item.quote_package_id);
+        const submittedAt = validDateStringOrNull(item.submitted_at);
+        if (!caseId || !quotePackageId || !submittedAt) return [];
+        return [{
+          approval_case_id: caseId,
+          quote_package_id: quotePackageId,
+          quote_number: stringOrNull(item.quote_number),
+          customer_name: stringOrNull(item.customer_name),
+          total_amount: finiteNumberOrNull(item.total_amount),
+          margin_pct: finiteNumberOrNull(item.margin_pct),
+          submitted_at: submittedAt,
+          submitted_by_name: stringOrNull(item.submitted_by_name),
+          hours_pending: finiteNumberOrDefault(item.hours_pending),
+        }];
+      })
+    : [];
+
+  return {
+    rep_stuck: repStuck,
+    manager_pending: managerPending,
+    manager_pending_count: finiteNumberOrDefault(value.manager_pending_count),
+  };
+}
+
 function normalizeBriefingContent(value: unknown): BriefingContent {
   const record = isRecord(value) ? value : {};
   const stats = isRecord(record.stats) ? record.stats : {};
+  const pendingApprovals = normalizePendingApprovals(record.pending_approvals);
 
   return {
     greeting: stringOrNull(record.greeting) ?? "",
@@ -109,6 +163,7 @@ function normalizeBriefingContent(value: unknown): BriefingContent {
       quotes_sent_this_week: finiteNumberOrDefault(stats.quotes_sent_this_week),
       total_pipeline_value: finiteNumberOrDefault(stats.total_pipeline_value),
     },
+    ...(pendingApprovals ? { pending_approvals: pendingApprovals } : {}),
   };
 }
 

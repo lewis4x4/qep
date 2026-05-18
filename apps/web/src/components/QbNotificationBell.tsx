@@ -97,6 +97,11 @@ export function QbNotificationBell({
     markAllRead();
   }
 
+  function handleViewAllApprovals() {
+    setOpen(false);
+    navigate("/sales/my-approvals");
+  }
+
   const Trigger = (
     <button
       type="button"
@@ -126,6 +131,7 @@ export function QbNotificationBell({
       unreadCount={unreadCount}
       onSelect={handleSelect}
       onMarkAllRead={handleMarkAllRead}
+      onViewAllApprovals={handleViewAllApprovals}
     />
   );
 
@@ -176,6 +182,7 @@ export function QbNotificationBell({
             unreadCount={unreadCount}
             onSelect={handleSelect}
             onMarkAllRead={handleMarkAllRead}
+            onViewAllApprovals={handleViewAllApprovals}
             hideHeader
           />
         </SheetContent>
@@ -204,6 +211,9 @@ interface NotificationListProps {
   /** When true, omit the inline list header (used inside the mobile sheet
    *  where SheetHeader already supplies title + mark-all action). */
   hideHeader?: boolean;
+  /** Navigate handler for the "View all submitted approvals" footer link.
+   *  Lifted from the host (component owns dropdown/sheet close + nav). */
+  onViewAllApprovals?: () => void;
 }
 
 function NotificationList({
@@ -212,20 +222,26 @@ function NotificationList({
   onSelect,
   onMarkAllRead,
   hideHeader = false,
+  onViewAllApprovals,
 }: NotificationListProps) {
   if (notifications.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-2 px-6 py-8 text-center">
-        <CheckCircle2
-          className="h-7 w-7 text-qep-orange/70"
-          aria-hidden
-        />
-        <p className="text-sm font-medium text-foreground">
-          You&apos;re all caught up.
-        </p>
-        <p className="text-xs text-muted-foreground">
-          New approval activity will appear here.
-        </p>
+      <div className="flex flex-col">
+        <div className="flex flex-col items-center justify-center gap-2 px-6 py-8 text-center">
+          <CheckCircle2
+            className="h-7 w-7 text-qep-orange/70"
+            aria-hidden
+          />
+          <p className="text-sm font-medium text-foreground">
+            You&apos;re all caught up.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            New approval activity will appear here.
+          </p>
+        </div>
+        {onViewAllApprovals && (
+          <ApprovalsFooterLink onClick={onViewAllApprovals} />
+        )}
       </div>
     );
   }
@@ -295,6 +311,23 @@ function NotificationList({
           </li>
         ))}
       </ul>
+      {onViewAllApprovals && (
+        <ApprovalsFooterLink onClick={onViewAllApprovals} />
+      )}
+    </div>
+  );
+}
+
+function ApprovalsFooterLink({ onClick }: { onClick: () => void }) {
+  return (
+    <div className="border-t border-border px-3 py-2">
+      <button
+        type="button"
+        onClick={onClick}
+        className="w-full text-center text-xs font-semibold text-qep-orange hover:underline"
+      >
+        View all submitted approvals →
+      </button>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 
 import { IncentiveStack } from "./IncentiveStack";
 import { SendQuoteSection } from "./SendQuoteSection";
+import { ApprovalActivityLog } from "./ApprovalActivityLog";
 // WAVE polish:
 //   Slice 2 — dictation on dealer response + revision summary.
 //   Slice 4 — surface the approval-case detail in a MobileBottomSheet
@@ -281,6 +282,16 @@ export function QuoteReviewWorkflowPanels({
                 </div>
               </div>
             )}
+
+            {/* Phase 2B Approval Activity Log: full chronological story
+                of submit → route → decide → auto-send. Sits below the
+                rep-facing condition checklist so the action items are
+                top-of-card and the audit story sits one beat below. */}
+            <ApprovalActivityLog
+              approvalCase={activeApprovalCase}
+              conditions={activeApprovalCase.conditions}
+              autoSend={submitApprovalResult?.autoSend ?? null}
+            />
           </div>
         );
 

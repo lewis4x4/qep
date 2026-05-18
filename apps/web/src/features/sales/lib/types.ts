@@ -14,6 +14,40 @@ export interface BriefingContent {
   opportunities: Opportunity[];
   prep_cards: PrepCard[];
   stats: PipelineStats;
+  /**
+   * Phase 2C: Approval visibility on the daily briefing. Optional for
+   * backwards compatibility with briefings generated before this field
+   * was added — the normalizer fills empty arrays when missing.
+   */
+  pending_approvals?: PendingApprovals;
+}
+
+export interface RepStuckApproval {
+  quote_package_id: string;
+  quote_number: string | null;
+  customer_name: string | null;
+  total_amount: number | null;
+  submitted_at: string;
+  hours_pending: number;
+  assigned_role: string | null;
+}
+
+export interface ManagerPendingApproval {
+  approval_case_id: string;
+  quote_package_id: string;
+  quote_number: string | null;
+  customer_name: string | null;
+  total_amount: number | null;
+  margin_pct: number | null;
+  submitted_at: string;
+  submitted_by_name: string | null;
+  hours_pending: number;
+}
+
+export interface PendingApprovals {
+  rep_stuck: RepStuckApproval[];
+  manager_pending: ManagerPendingApproval[];
+  manager_pending_count: number;
 }
 
 export interface PriorityAction {

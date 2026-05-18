@@ -49,6 +49,11 @@ const DealDetailPage = lazy(() =>
   import("./pages/DealDetailPage").then((m) => ({ default: m.DealDetailPage })),
 );
 
+// Phase 2A: Rep's My Approvals page (submitted quote approvals at a glance).
+const MyApprovalsPage = lazy(() =>
+  import("./pages/MyApprovalsPage").then((m) => ({ default: m.MyApprovalsPage })),
+);
+
 function SalesRouteFallback() {
   return (
     <div className="flex items-center justify-center h-64">
@@ -94,6 +99,15 @@ export function SalesRoutes() {
           element={
             <Suspense fallback={<SalesRouteFallback />}>
               <CustomerDetailPage />
+            </Suspense>
+          }
+        />
+        {/* Phase 2A: dedicated submitted-approvals page */}
+        <Route
+          path="my-approvals"
+          element={
+            <Suspense fallback={<SalesRouteFallback />}>
+              <MyApprovalsPage />
             </Suspense>
           }
         />

@@ -58,6 +58,34 @@ interface RepContext {
   }>;
 }
 
+interface RepStuckApproval {
+  quote_package_id: string;
+  quote_number: string | null;
+  customer_name: string | null;
+  total_amount: number | null;
+  submitted_at: string;
+  hours_pending: number;
+  assigned_role: string | null;
+}
+
+interface ManagerPendingApproval {
+  approval_case_id: string;
+  quote_package_id: string;
+  quote_number: string | null;
+  customer_name: string | null;
+  total_amount: number | null;
+  margin_pct: number | null;
+  submitted_at: string;
+  submitted_by_name: string | null;
+  hours_pending: number;
+}
+
+interface PendingApprovals {
+  rep_stuck: RepStuckApproval[];
+  manager_pending: ManagerPendingApproval[];
+  manager_pending_count: number;
+}
+
 interface BriefingContent {
   greeting: string;
   priority_actions: Array<{
@@ -89,19 +117,43 @@ interface BriefingContent {
     quotes_sent_this_week: number;
     total_pipeline_value: number;
   };
+  pending_approvals?: PendingApprovals;
+}
+
+interface UserProfileLite {
+  id: string;
+  fullName: string;
+  role: string | null;
+  workspaceId: string | null;
+}
+
+async function fetchUserProfile(
+  db: ReturnType<typeof createAdminClient>,
+  userId: string,
+): Promise<UserProfileLite | null> {
+  const { data: profile } = await db
+    .from("profiles")
+    .select("id, full_name, role, active_workspace_id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (!profile) return null;
+  const p = profile as Record<string, unknown>;
+  return {
+    id: userId,
+    fullName: (p.full_name as string) ?? "Team Member",
+    role: typeof p.role === "string" ? p.role : null,
+    workspaceId:
+      typeof p.active_workspace_id === "string" ? p.active_workspace_id : null,
+  };
 }
 
 async function gatherRepContext(
   db: ReturnType<typeof createAdminClient>,
   userId: string,
+  profile: UserProfileLite,
 ): Promise<RepContext | null> {
-  const { data: profile } = await db
-    .from("profiles")
-    .select("id, full_name, role")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (!profile || (profile as Record<string, unknown>).role !== "rep") return null;
+  if (profile.role !== "rep") return null;
 
   const today = new Date().toISOString().split("T")[0];
   const sevenDaysOut = new Date();
@@ -226,8 +278,7 @@ async function gatherRepContext(
 
   return {
     userId,
-    fullName:
-      ((profile as Record<string, unknown>).full_name as string) ?? "Team Member",
+    fullName: profile.fullName,
     dealsClosingSoon: (closingDeals.data ?? []).map(
       (d: Record<string, unknown>) => ({
         deal_id: d.id as string,
@@ -282,6 +333,189 @@ async function gatherRepContext(
       year: e.year as number | null,
       engine_hours: e.engine_hours as number | null,
     })),
+  };
+}
+
+const REP_STUCK_THRESHOLD_HOURS = 4;
+const REP_STUCK_LIMIT = 5;
+const MANAGER_PENDING_LIMIT = 3;
+const MANAGER_ROLES = new Set(["manager", "owner", "admin"]);
+
+function hoursBetween(fromIso: string, now: number): number {
+  const ts = new Date(fromIso).getTime();
+  if (!Number.isFinite(ts)) return 0;
+  return Math.max(0, Math.floor((now - ts) / 3_600_000));
+}
+
+/**
+ * Fetch the pending_approvals slice for a user. Always returns a valid
+ * PendingApprovals shape — empty arrays if queries error or no rows match.
+ *
+ * Briefings are the user's morning surface; partial data is strictly better
+ * than a 5xx, so every catch path falls back to empty.
+ */
+async function gatherPendingApprovals(
+  db: ReturnType<typeof createAdminClient>,
+  userId: string,
+  role: string | null,
+  workspaceId: string | null,
+): Promise<PendingApprovals> {
+  const now = Date.now();
+  const isManager = role != null && MANAGER_ROLES.has(role);
+
+  // Rep-stuck: cases the user submitted that are still pending/escalated
+  // and have aged past the "fresh" threshold.
+  let repStuck: RepStuckApproval[] = [];
+  try {
+    const { data, error } = await db
+      .from("quote_approval_cases")
+      .select(
+        "id, quote_package_id, quote_number, customer_name, customer_company, net_total, created_at, assigned_role, status",
+      )
+      .eq("submitted_by", userId)
+      .in("status", ["pending", "escalated"])
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (error) {
+      console.error("[generate-daily-briefing] rep_stuck query failed:", error);
+    } else {
+      repStuck = (data ?? [])
+        .map((row: Record<string, unknown>) => {
+          const submittedAt = typeof row.created_at === "string" ? row.created_at : null;
+          if (!submittedAt) return null;
+          const hours = hoursBetween(submittedAt, now);
+          if (hours < REP_STUCK_THRESHOLD_HOURS) return null;
+          const quotePackageId = typeof row.quote_package_id === "string" ? row.quote_package_id : null;
+          if (!quotePackageId) return null;
+          return {
+            quote_package_id: quotePackageId,
+            quote_number: typeof row.quote_number === "string" ? row.quote_number : null,
+            customer_name:
+              (typeof row.customer_name === "string" && row.customer_name) ||
+              (typeof row.customer_company === "string" && row.customer_company) ||
+              null,
+            total_amount:
+              typeof row.net_total === "number" && Number.isFinite(row.net_total)
+                ? row.net_total
+                : row.net_total != null
+                  ? Number(row.net_total) || null
+                  : null,
+            submitted_at: submittedAt,
+            hours_pending: hours,
+            assigned_role:
+              typeof row.assigned_role === "string" ? row.assigned_role : null,
+          } as RepStuckApproval;
+        })
+        .filter((row): row is RepStuckApproval => row !== null)
+        .slice(0, REP_STUCK_LIMIT);
+    }
+  } catch (err) {
+    console.error("[generate-daily-briefing] rep_stuck threw:", err);
+    repStuck = [];
+  }
+
+  // Manager-pending: only for manager/owner/admin roles.
+  let managerPending: ManagerPendingApproval[] = [];
+  let managerPendingCount = 0;
+  if (isManager) {
+    try {
+      // Build the filter: assigned_to = me OR (assigned_role = my role AND workspace = my workspace)
+      // Supabase JS supports compound OR via the .or() string DSL.
+      const orFilter = workspaceId
+        ? `assigned_to.eq.${userId},and(assigned_role.eq.${role},workspace_id.eq.${workspaceId})`
+        : `assigned_to.eq.${userId},assigned_role.eq.${role}`;
+
+      const { data, error, count } = await db
+        .from("quote_approval_cases")
+        .select(
+          "id, quote_package_id, quote_number, customer_name, customer_company, net_total, margin_pct, created_at, submitted_by_name, status",
+          { count: "exact" },
+        )
+        .or(orFilter)
+        .in("status", ["pending", "escalated"])
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error(
+          "[generate-daily-briefing] manager_pending query failed:",
+          error,
+        );
+      } else {
+        managerPendingCount = typeof count === "number" ? count : (data ?? []).length;
+        managerPending = (data ?? [])
+          .slice(0, MANAGER_PENDING_LIMIT)
+          .map((row: Record<string, unknown>) => {
+            const submittedAt = typeof row.created_at === "string" ? row.created_at : null;
+            const quotePackageId = typeof row.quote_package_id === "string" ? row.quote_package_id : null;
+            const caseId = typeof row.id === "string" ? row.id : null;
+            if (!submittedAt || !quotePackageId || !caseId) return null;
+            const marginRaw = row.margin_pct;
+            const totalRaw = row.net_total;
+            return {
+              approval_case_id: caseId,
+              quote_package_id: quotePackageId,
+              quote_number:
+                typeof row.quote_number === "string" ? row.quote_number : null,
+              customer_name:
+                (typeof row.customer_name === "string" && row.customer_name) ||
+                (typeof row.customer_company === "string" && row.customer_company) ||
+                null,
+              total_amount:
+                typeof totalRaw === "number" && Number.isFinite(totalRaw)
+                  ? totalRaw
+                  : totalRaw != null
+                    ? Number(totalRaw) || null
+                    : null,
+              margin_pct:
+                typeof marginRaw === "number" && Number.isFinite(marginRaw)
+                  ? marginRaw
+                  : marginRaw != null
+                    ? Number(marginRaw) || null
+                    : null,
+              submitted_at: submittedAt,
+              submitted_by_name:
+                typeof row.submitted_by_name === "string"
+                  ? row.submitted_by_name
+                  : null,
+              hours_pending: hoursBetween(submittedAt, now),
+            } as ManagerPendingApproval;
+          })
+          .filter((row): row is ManagerPendingApproval => row !== null);
+      }
+    } catch (err) {
+      console.error("[generate-daily-briefing] manager_pending threw:", err);
+      managerPending = [];
+      managerPendingCount = 0;
+    }
+  }
+
+  return {
+    rep_stuck: repStuck,
+    manager_pending: managerPending,
+    manager_pending_count: managerPendingCount,
+  };
+}
+
+/**
+ * Briefing for non-rep operators (managers/owners/admins) — the rep pipeline
+ * sections don't apply, so this is just a greeting + the approvals slice. The
+ * Today page hides empty sections, so an entirely empty manager briefing
+ * still renders a clean shell.
+ */
+function buildManagerBriefing(profile: UserProfileLite): BriefingContent {
+  const firstName = (profile.fullName || "Team Member").split(" ")[0];
+  return {
+    greeting: `Good morning, ${firstName}. Here's your queue at a glance.`,
+    priority_actions: [],
+    expiring_quotes: [],
+    opportunities: [],
+    prep_cards: [],
+    stats: {
+      deals_in_pipeline: 0,
+      quotes_sent_this_week: 0,
+      total_pipeline_value: 0,
+    },
   };
 }
 
@@ -482,7 +716,7 @@ Deno.serve(async (req) => {
       const { data: reps } = await adminClient
         .from("profiles")
         .select("id")
-        .eq("role", "rep");
+        .in("role", ["rep", "manager", "owner", "admin"]);
       targetUserIds = (reps ?? []).map(
         (u: Record<string, unknown>) => u.id as string,
       );
@@ -524,13 +758,35 @@ Deno.serve(async (req) => {
           .eq("briefing_date", today);
       }
 
-      const ctx = await gatherRepContext(adminClient, userId);
-      if (!ctx) {
+      const profile = await fetchUserProfile(adminClient, userId);
+      if (!profile) {
+        results.push({ userId, status: "no_profile" });
+        continue;
+      }
+
+      let briefingContent: BriefingContent;
+      const ctx = await gatherRepContext(adminClient, userId, profile);
+      if (ctx) {
+        briefingContent = await generateAiBriefing(ctx);
+      } else if (
+        profile.role && MANAGER_ROLES.has(profile.role)
+      ) {
+        briefingContent = buildManagerBriefing(profile);
+      } else {
         results.push({ userId, status: "not_a_rep" });
         continue;
       }
 
-      const briefingContent = await generateAiBriefing(ctx);
+      // Always attach pending_approvals — both rep_stuck (any submitter) and
+      // manager_pending (only for manager/owner/admin). Errors inside this
+      // helper are swallowed and return empty arrays so the briefing still
+      // ships even if the approval-cases query backend is having a bad day.
+      briefingContent.pending_approvals = await gatherPendingApprovals(
+        adminClient,
+        userId,
+        profile.role,
+        profile.workspaceId,
+      );
 
       await adminClient.from("daily_briefings").insert({
         user_id: userId,

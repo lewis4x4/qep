@@ -57,6 +57,27 @@ export function TodayFeedSkeleton() {
           />
         ))}
       </div>
+
+      {/* Approvals section placeholder (Phase 2C) */}
+      <div className="space-y-2.5">
+        <div className="flex items-center gap-2">
+          <div className="w-3.5 h-3.5 bg-amber-400/25 rounded" />
+          <div className="h-2.5 w-20 bg-white/[0.06] rounded" />
+          <div className="flex-1 h-px bg-white/[0.06]" />
+        </div>
+        <div className="h-[68px] bg-white/[0.04] rounded-xl border border-amber-400/15" />
+        <div className="h-[68px] bg-white/[0.04] rounded-xl border border-amber-400/10" />
+      </div>
+
+      {/* Meetings section placeholder */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="w-3.5 h-3.5 bg-purple-400/30 rounded" />
+          <div className="h-2.5 w-32 bg-white/[0.06] rounded" />
+          <div className="flex-1 h-px bg-white/[0.06]" />
+        </div>
+        <div className="h-[88px] bg-white/[0.04] rounded-xl border border-white/[0.05]" />
+      </div>
     </div>
   );
 }

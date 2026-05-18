@@ -409,6 +409,7 @@ export interface QuoteApprovalCaseSummary {
   branchName: string | null;
   submittedBy: string | null;
   submittedByName: string | null;
+  submittedAt: string | null;
   assignedTo: string | null;
   assignedToName: string | null;
   assignedRole: string | null;
