@@ -281,7 +281,7 @@ export function QuoteBuilderV2PageMobileShell({
             </button>
           </div>
         )}
-        <div className="flex gap-2 p-3">
+        <div className="flex items-center gap-2 p-3">
           <Button
             type="button"
             variant="outline"
@@ -293,6 +293,14 @@ export function QuoteBuilderV2PageMobileShell({
           >
             Back
           </Button>
+          <button
+            type="button"
+            onClick={() => setAssistantOpen(true)}
+            aria-label="Open assistant"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-qep-orange/40 bg-qep-orange/10 text-qep-orange hover:bg-qep-orange/20 transition-colors"
+          >
+            <Sparkles className="h-5 w-5" />
+          </button>
           <Button
             type="button"
             className="h-11 flex-[2]"
@@ -308,16 +316,6 @@ export function QuoteBuilderV2PageMobileShell({
           </Button>
         </div>
       </div>
-
-      <button
-        type="button"
-        onClick={() => setAssistantOpen(true)}
-        className="fixed bottom-[6.5rem] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-qep-orange text-white shadow-lg hover:bg-qep-orange-hover"
-        aria-label="Open assistant"
-        style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}
-      >
-        <Sparkles className="h-6 w-6" />
-      </button>
 
       <MobileBottomSheet
         open={assistantOpen}
