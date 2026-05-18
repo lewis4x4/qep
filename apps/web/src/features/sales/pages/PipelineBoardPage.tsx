@@ -5,6 +5,7 @@ import { SalesDealCard } from "../components/SalesDealCard";
 import { PipelineEmptyState } from "../components/PipelineEmptyState";
 import { PipelineInsightsStrip } from "../components/PipelineInsightsStrip";
 import { PipelineForecastStrip } from "../components/PipelineForecastStrip";
+import { PipelinePulse } from "../components/PipelinePulse";
 import { PipelineSkeleton } from "../components/PipelineSkeleton";
 import {
   TrendingUp,
@@ -184,6 +185,9 @@ export function PipelineBoardPage() {
           />
         </div>
       </div>
+
+      {/* Pipeline Pulse — natural-language vibe-check from existing fields */}
+      {allDeals.length > 0 && <PipelinePulse deals={allDeals} />}
 
       {/* EOM forecast strip (only when something closes this month) */}
       {allDeals.length > 0 && (
