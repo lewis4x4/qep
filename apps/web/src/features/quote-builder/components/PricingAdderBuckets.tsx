@@ -38,6 +38,8 @@ export interface PricingAdderBucketsProps {
   setMiscCreditAmount: (value: number) => void;
   onAddMiscPricingLine: (kind: "charge" | "credit") => void;
   onRemoveMiscLine: (line: QuoteLineItemDraft) => void;
+  /** 1% of subtotal — drives the inline "Apply 1%" affordance on the good_faith card. */
+  goodFaithSuggestion?: number;
 }
 
 export function PricingAdderBuckets({
@@ -57,6 +59,7 @@ export function PricingAdderBuckets({
   setMiscCreditAmount,
   onAddMiscPricingLine,
   onRemoveMiscLine,
+  goodFaithSuggestion,
 }: PricingAdderBucketsProps) {
   return (
     <div className="mt-4 space-y-3">
@@ -81,10 +84,32 @@ export function PricingAdderBuckets({
               && (field.id !== "inbound_freight" || inboundFreightEligible))
               .map((field) => {
               const line = pricingLine(field);
+              const isGoodFaith = field.id === "good_faith";
+              const goodFaithApplyAmount = goodFaithSuggestion ?? 0;
+              const showGoodFaithButton =
+                isGoodFaith && goodFaithApplyAmount > 0 && line?.unitPrice !== goodFaithApplyAmount;
               return (
                 <label key={field.id} className="rounded-lg border border-border/70 bg-card/50 p-3 text-sm">
-                  <span className="font-medium text-foreground">{field.title}</span>
-                  <span className="mt-0.5 block text-[11px] text-muted-foreground">{field.helper}</span>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="font-medium text-foreground">{field.title}</span>
+                      <span className="mt-0.5 block text-[11px] text-muted-foreground">{field.helper}</span>
+                    </div>
+                    {showGoodFaithButton && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0 text-[11px] font-semibold"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          upsertPricingLine(field, goodFaithApplyAmount);
+                        }}
+                      >
+                        Apply 1% ({money(goodFaithApplyAmount)})
+                      </Button>
+                    )}
+                  </div>
                   {field.kind === "pdi" && line?.metadata?.pdi_source === "rolling_average_by_model" && (
                     <span className="mt-0.5 block text-[11px] text-qep-orange">
                       Prefilled from model history ({Number(line.metadata?.pdi_sample_count ?? 0)} sample{Number(line.metadata?.pdi_sample_count ?? 0) === 1 ? "" : "s"})

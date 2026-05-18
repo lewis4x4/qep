@@ -20,7 +20,6 @@ import {
 import { money } from "../lib/money";
 import {
   DISCOUNT_REASON_OPTIONS,
-  PRICING_ADDER_FIELDS,
   type CostVisibility,
   type PricingAdderField,
   type PricingLineKind,
@@ -204,7 +203,6 @@ export function PricingStep({
         waterfall={{
           equipmentTotal: subtotal,
           dealerCost,
-          tradeAllowance: draft.tradeAllowance,
           netTotal,
           marginAmount,
         }}
@@ -277,23 +275,9 @@ export function PricingStep({
         // reps can collapse the long adders list and keep the margin strip
         // + line items in view.
         const adderHeader = (
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Price adders</p>
-              <p className="mt-1 text-xs text-muted-foreground">Only fill what applies. Empty rows stay out of the quote payload.</p>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                const goodFaithField = PRICING_ADDER_FIELDS.find((field) => field.id === "good_faith");
-                if (!goodFaithField) return;
-                upsertPricingLine(goodFaithField, Math.round(subtotal * 0.01));
-              }}
-            >
-              Set 1% good faith
-            </Button>
+          <div>
+            <p className="text-sm font-semibold text-foreground">Price adders</p>
+            <p className="mt-1 text-xs text-muted-foreground">Only fill what applies. Empty rows stay out of the quote payload.</p>
           </div>
         );
         const adderBody = (
@@ -322,6 +306,7 @@ export function PricingStep({
                 ),
               }));
             }}
+            goodFaithSuggestion={Math.round(subtotal * 0.01)}
           />
         );
 
