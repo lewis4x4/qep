@@ -160,27 +160,18 @@ export function QuoteBuilderV2PageMobileShell({
 
   return (
     <div className="flex min-h-screen flex-col bg-[hsl(var(--background))]">
-      <header className="fixed inset-x-0 top-0 z-30 h-14 border-b border-white/[0.06] bg-[hsl(var(--background))]/95 backdrop-blur-lg">
-        <div className="flex h-full items-center justify-between px-2">
+      <div className="px-4 pt-3 pb-2">
+        <div className="flex items-center justify-between gap-2 mb-2">
           <button
             type="button"
             onClick={() => navigate("/sales/quotes")}
-            className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
+            className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
             aria-label="Back to quotes"
           >
-            <ChevronLeft className="h-5 w-5" />
+            <ChevronLeft className="h-4 w-4" />
+            Quotes
           </button>
-
-          <div className="flex min-w-0 flex-col items-center text-center">
-            <span className="text-[13px] font-extrabold uppercase tracking-[0.14em] text-foreground">
-              {activeSection.label}
-            </span>
-            <span className="text-[10px] text-muted-foreground">
-              {currentWizardStepNumber} of {totalSteps}
-            </span>
-          </div>
-
-          <div className="flex h-11 min-w-[64px] items-center justify-end gap-1.5 pr-2">
+          <div className="flex items-center gap-1.5">
             <span
               aria-hidden
               className={cn("h-2 w-2 rounded-full", autosaveDotClass(autosave.tone))}
@@ -190,11 +181,6 @@ export function QuoteBuilderV2PageMobileShell({
             </span>
           </div>
         </div>
-      </header>
-
-      <div className="h-14 shrink-0" aria-hidden />
-
-      <div className="px-4 py-2">
         <div className="flex items-center gap-1">
           {SECTIONS.map((section) => {
             const sectionLastStep = section.steps[section.steps.length - 1];
@@ -217,9 +203,14 @@ export function QuoteBuilderV2PageMobileShell({
             );
           })}
         </div>
-        <p className="mt-2 text-[10px] font-extrabold uppercase tracking-[0.1em] text-muted-foreground">
-          {activeSection.label}
-        </p>
+        <div className="flex items-baseline justify-between mt-2">
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-muted-foreground">
+            {activeSection.label}
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            {currentWizardStepNumber} of {totalSteps}
+          </p>
+        </div>
       </div>
 
       {activeQuotePackageId && (
@@ -235,7 +226,7 @@ export function QuoteBuilderV2PageMobileShell({
         </div>
       )}
 
-      <main className="flex-1 overflow-y-auto pb-32">
+      <main className="flex-1 overflow-y-auto pb-36">
         <div className="px-4 pt-3">{wizardStepRouter}</div>
 
         <div className="px-4 pt-4">
@@ -267,8 +258,8 @@ export function QuoteBuilderV2PageMobileShell({
       </main>
 
       <div
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-white/[0.06] bg-[hsl(var(--background))]/95 backdrop-blur-lg"
-        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+        className="fixed inset-x-0 bottom-16 z-50 border-t border-white/[0.06] bg-[hsl(var(--background))]/95 backdrop-blur-lg"
+        style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         {!hasCustomer && step === "customer" && (
           <div className="px-3 pt-2">
