@@ -11,6 +11,13 @@
  * we still surface useful info without revealing the exception code.
  */
 
+/**
+ * Recovery action kinds the banner can render as a one-tap button.
+ * The page-level component decides what each kind does (typically
+ * jumping the wizard to a specific step).
+ */
+export type QuoteErrorRecoveryAction = "goto_customer_step";
+
 export interface QuoteErrorCopy {
   /** Short, human title for the banner header or toast title. */
   title: string;
@@ -18,6 +25,15 @@ export interface QuoteErrorCopy {
   description: string;
   /** Optional next-step guidance — what the rep can do to recover. */
   recoveryHint?: string;
+  /**
+   * Optional one-tap action. When set AND a handler is wired in the
+   * banner, the recovery hint renders as a clickable button instead
+   * of plain italic text.
+   */
+  recoveryAction?: {
+    kind: QuoteErrorRecoveryAction;
+    label: string;
+  };
 }
 
 const DEFAULT_COPY: QuoteErrorCopy = {
@@ -69,7 +85,11 @@ function matchKnownError(raw: string): QuoteErrorCopy | null {
       description:
         "This quote references a customer, contact, or deal that has been archived. Re-link the quote to an active record to continue.",
       recoveryHint:
-        "Go back to the Customer step, search the dealer directory, and pick an active record.",
+        "Search the dealer directory in the Customer step and pick an active record.",
+      recoveryAction: {
+        kind: "goto_customer_step",
+        label: "Re-link customer",
+      },
     };
   }
 

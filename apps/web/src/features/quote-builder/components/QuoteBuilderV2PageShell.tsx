@@ -76,6 +76,7 @@ export interface QuoteBuilderV2PageShellProps {
   saveSuccess: boolean;
   saveErrorMessage: StatusBannerError;
   submitApprovalErrorMessage: StatusBannerError;
+  onRecoveryAction?: (kind: "goto_customer_step") => void;
   intelligencePanel: ReactNode;
   overlays: QuoteBuilderOverlaysProps;
 }
@@ -128,6 +129,7 @@ export function QuoteBuilderV2PageShell({
   saveSuccess,
   saveErrorMessage,
   submitApprovalErrorMessage,
+  onRecoveryAction,
   intelligencePanel,
   overlays,
 }: QuoteBuilderV2PageShellProps) {
@@ -301,6 +303,7 @@ export function QuoteBuilderV2PageShell({
             saveSuccess={saveSuccess}
             saveErrorMessage={saveErrorMessage}
             submitApprovalErrorMessage={submitApprovalErrorMessage}
+            onRecoveryAction={onRecoveryAction}
           />
         </div>
 

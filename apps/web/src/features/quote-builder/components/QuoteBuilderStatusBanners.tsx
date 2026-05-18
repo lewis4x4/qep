@@ -5,10 +5,17 @@
  * Error banners accept either a simple string (legacy) or a structured
  * `QuoteErrorCopy` so we can surface title + description + recovery hint
  * without leaking raw exception codes like `ARCHIVED_REFERENCE_NOT_ALLOWED`.
+ * When the structured form carries a `recoveryAction`, the banner renders
+ * a one-tap recovery button that calls back into the parent (typically
+ * to jump the wizard to a specific step).
  */
 
+import { ArrowRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import type { QuoteErrorCopy } from "../lib/quote-error-messages";
+import type {
+  QuoteErrorCopy,
+  QuoteErrorRecoveryAction,
+} from "../lib/quote-error-messages";
 
 export type StatusBannerError = QuoteErrorCopy | string | null | undefined;
 
@@ -19,6 +26,8 @@ export interface QuoteBuilderStatusBannersProps {
   saveSuccess?: boolean;
   saveErrorMessage?: StatusBannerError;
   submitApprovalErrorMessage?: StatusBannerError;
+  /** Called when the rep taps a recovery-action button on a banner. */
+  onRecoveryAction?: (kind: QuoteErrorRecoveryAction) => void;
 }
 
 export function QuoteBuilderStatusBanners({
@@ -28,11 +37,16 @@ export function QuoteBuilderStatusBanners({
   saveSuccess = false,
   saveErrorMessage = null,
   submitApprovalErrorMessage = null,
+  onRecoveryAction,
 }: QuoteBuilderStatusBannersProps) {
   return (
     <>
       {existingQuoteLoadError ? (
-        <ErrorBanner error={existingQuoteLoadError} tone="muted" />
+        <ErrorBanner
+          error={existingQuoteLoadError}
+          tone="muted"
+          onRecoveryAction={onRecoveryAction}
+        />
       ) : null}
 
       {existingQuoteEditingMessage ? (
@@ -41,7 +55,9 @@ export function QuoteBuilderStatusBanners({
         </Card>
       ) : null}
 
-      {pdfError ? <ErrorBanner error={pdfError} /> : null}
+      {pdfError ? (
+        <ErrorBanner error={pdfError} onRecoveryAction={onRecoveryAction} />
+      ) : null}
 
       {saveSuccess ? (
         <Card className="border-emerald-500/30 bg-emerald-500/5 p-4">
@@ -50,10 +66,18 @@ export function QuoteBuilderStatusBanners({
       ) : null}
 
       {submitApprovalErrorMessage ? (
-        <ErrorBanner error={submitApprovalErrorMessage} />
+        <ErrorBanner
+          error={submitApprovalErrorMessage}
+          onRecoveryAction={onRecoveryAction}
+        />
       ) : null}
 
-      {saveErrorMessage ? <ErrorBanner error={saveErrorMessage} /> : null}
+      {saveErrorMessage ? (
+        <ErrorBanner
+          error={saveErrorMessage}
+          onRecoveryAction={onRecoveryAction}
+        />
+      ) : null}
     </>
   );
 }
@@ -61,29 +85,30 @@ export function QuoteBuilderStatusBanners({
 /**
  * Renders a structured error banner. Accepts either a plain string
  * (legacy) or a `QuoteErrorCopy` with title + description + optional
- * recovery hint.
+ * recovery hint + optional recovery action.
  */
 function ErrorBanner({
   error,
   tone = "default",
+  onRecoveryAction,
 }: {
   error: QuoteErrorCopy | string;
   tone?: "default" | "muted";
+  onRecoveryAction?: (kind: QuoteErrorRecoveryAction) => void;
 }) {
   const titleColor = tone === "muted" ? "text-red-300" : "text-red-400";
-  const descColor =
-    tone === "muted" ? "text-red-300/85" : "text-red-400/85";
+  const descColor = tone === "muted" ? "text-red-300/85" : "text-red-400/85";
 
   if (typeof error === "string") {
     return (
-      <Card
-        role="alert"
-        className="border-red-500/30 bg-red-500/5 p-4"
-      >
+      <Card role="alert" className="border-red-500/30 bg-red-500/5 p-4">
         <p className={`text-sm ${titleColor}`}>{error}</p>
       </Card>
     );
   }
+
+  const canRunAction =
+    Boolean(error.recoveryAction) && typeof onRecoveryAction === "function";
 
   return (
     <Card role="alert" className="border-red-500/30 bg-red-500/5 p-4">
@@ -93,6 +118,16 @@ function ErrorBanner({
         <p className="mt-2 text-xs italic text-red-300/70">
           {error.recoveryHint}
         </p>
+      ) : null}
+      {canRunAction && error.recoveryAction ? (
+        <button
+          type="button"
+          onClick={() => onRecoveryAction?.(error.recoveryAction!.kind)}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-red-400/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-500/20 hover:border-red-400/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60"
+        >
+          {error.recoveryAction.label}
+          <ArrowRight className="h-3 w-3" aria-hidden />
+        </button>
       ) : null}
     </Card>
   );

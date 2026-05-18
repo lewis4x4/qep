@@ -12,6 +12,24 @@ describe("translateQuoteError", () => {
     expect(copy.recoveryHint).toContain("Customer step");
   });
 
+  test("ARCHIVED_REFERENCE_NOT_ALLOWED carries a one-tap recovery action", () => {
+    const copy = translateQuoteError(new Error("ARCHIVED_REFERENCE_NOT_ALLOWED"));
+    expect(copy.recoveryAction?.kind).toBe("goto_customer_step");
+    expect(copy.recoveryAction?.label).toBe("Re-link customer");
+  });
+
+  test("other known errors do NOT carry a recovery action", () => {
+    expect(
+      translateQuoteError(new Error("JWT expired")).recoveryAction,
+    ).toBeUndefined();
+    expect(
+      translateQuoteError(new Error("Failed to fetch")).recoveryAction,
+    ).toBeUndefined();
+    expect(
+      translateQuoteError(new Error("SQLSTATE 23505")).recoveryAction,
+    ).toBeUndefined();
+  });
+
   test("matches archived reference inside a longer Postgres message", () => {
     const copy = translateQuoteError(
       new Error("ERROR:  ARCHIVED_REFERENCE_NOT_ALLOWED\nCONTEXT: ..."),

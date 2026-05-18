@@ -139,6 +139,7 @@ export function QuoteBuilderV2PageMobileShell({
   saveSuccess,
   saveErrorMessage,
   submitApprovalErrorMessage,
+  onRecoveryAction,
   intelligencePanel,
   overlays,
   quoteStatus,
@@ -253,6 +254,7 @@ export function QuoteBuilderV2PageMobileShell({
             saveSuccess={saveSuccess}
             saveErrorMessage={saveErrorMessage}
             submitApprovalErrorMessage={submitApprovalErrorMessage}
+            onRecoveryAction={onRecoveryAction}
           />
         </div>
       </main>

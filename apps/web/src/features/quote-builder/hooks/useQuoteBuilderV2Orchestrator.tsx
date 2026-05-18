@@ -981,6 +981,9 @@ export function useQuoteBuilderV2Orchestrator() {
         submitApprovalErrorMessage: submitApprovalMutation.isError
           ? translateQuoteError(submitApprovalMutation.error ?? "Failed to submit the quote for approval.")
           : null,
+        onRecoveryAction: (kind: "goto_customer_step") => {
+          if (kind === "goto_customer_step") setStep("customer");
+        },
         intelligencePanel,
         overlays: {
           dealAssistantOpen,
