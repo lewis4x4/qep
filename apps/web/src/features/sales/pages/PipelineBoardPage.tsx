@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useSalesPipeline } from "../hooks/useSalesPipeline";
 import { StageFilterTabs } from "../components/StageFilterTabs";
 import { SalesDealCard } from "../components/SalesDealCard";
@@ -10,7 +11,13 @@ import {
   Flame,
   Clock,
   Check,
+  X,
 } from "lucide-react";
+import {
+  filterDealsByInsight,
+  INSIGHT_LABELS,
+  type InsightFilterKey,
+} from "../lib/insight-filters";
 
 /* ── Stage color palette for progress bar ───────────────── */
 const STAGE_BAR_COLORS = [
@@ -32,6 +39,12 @@ export function PipelineBoardPage() {
     stages,
     isLoading,
   } = useSalesPipeline();
+
+  // Insight filter overrides stage filter when set. Tap an AI insight card to
+  // narrow the deal list to that bucket; tap clear to return to stage view.
+  const [insightFilter, setInsightFilter] = useState<InsightFilterKey | null>(
+    null,
+  );
 
   if (isLoading) {
     return <PipelineSkeleton />;
@@ -86,6 +99,11 @@ export function PipelineBoardPage() {
     const pct = allDeals.length > 0 ? Math.max((count / allDeals.length) * 100, 4) : 0;
     return { pct, color: STAGE_BAR_COLORS[i % STAGE_BAR_COLORS.length], label: s.name, count };
   });
+
+  // Resolve the visible deal list: insight filter takes precedence over stage.
+  const visibleDeals = insightFilter
+    ? filterDealsByInsight(allDeals, insightFilter)
+    : deals;
 
   return (
     <div className="flex flex-col pb-20 max-w-lg mx-auto">
@@ -176,32 +194,85 @@ export function PipelineBoardPage() {
       )}
 
       {/* AI Insights strip (only when there are deals to analyze) */}
-      {allDeals.length > 0 && <PipelineInsightsStrip deals={allDeals} />}
-
-      {/* Stage filter tabs — hidden when pipeline is fully empty to reduce noise */}
       {allDeals.length > 0 && (
-        <StageFilterTabs
-          options={filterOptions}
-          active={activeFilter}
-          onChange={setActiveFilter}
+        <PipelineInsightsStrip
+          deals={allDeals}
+          activeFilter={insightFilter}
+          onFilterChange={setInsightFilter}
         />
+      )}
+
+      {/* Filter row: insight banner takes precedence; otherwise stage tabs */}
+      {allDeals.length > 0 && (
+        insightFilter ? (
+          <InsightFilterBanner
+            label={INSIGHT_LABELS[insightFilter]}
+            count={visibleDeals.length}
+            onClear={() => setInsightFilter(null)}
+          />
+        ) : (
+          <StageFilterTabs
+            options={filterOptions}
+            active={activeFilter}
+            onChange={setActiveFilter}
+          />
+        )
       )}
 
       {/* Deal cards / empty state */}
       <div className="px-4 py-3.5 flex flex-col gap-2.5">
-        {deals.map((deal) => (
+        {visibleDeals.map((deal) => (
           <SalesDealCard key={deal.deal_id} deal={deal} stages={stages} />
         ))}
 
-        {deals.length === 0 && (
+        {visibleDeals.length === 0 && (
           allDeals.length === 0 ? (
             <PipelineEmptyState />
           ) : (
             <PipelineEmptyState
-              filterLabel={activeFilter.replace(/_/g, " ")}
+              filterLabel={
+                insightFilter
+                  ? INSIGHT_LABELS[insightFilter]
+                  : activeFilter.replace(/_/g, " ")
+              }
             />
           )
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Active insight filter banner ───────────────────────── */
+function InsightFilterBanner({
+  label,
+  count,
+  onClear,
+}: {
+  label: string;
+  count: number;
+  onClear: () => void;
+}) {
+  return (
+    <div className="px-4 py-2.5 border-b border-white/[0.06]">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-[12px] bg-qep-orange/10 border border-qep-orange/30">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-qep-orange animate-pulse shrink-0" />
+          <p className="text-[12px] font-bold text-foreground truncate">
+            Filtered: <span className="text-qep-orange">{label}</span>
+            <span className="text-muted-foreground/70 font-normal ml-1.5">
+              · {count} {count === 1 ? "deal" : "deals"}
+            </span>
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClear}
+          className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold text-qep-orange hover:bg-qep-orange/15 transition-colors shrink-0"
+        >
+          <X className="w-3 h-3" />
+          Clear
+        </button>
       </div>
     </div>
   );

@@ -7,28 +7,47 @@ import {
   Crown,
 } from "lucide-react";
 import type { RepPipelineDeal } from "../lib/types";
+import {
+  filterDealsByInsight,
+  type InsightFilterKey,
+} from "../lib/insight-filters";
 
 interface PipelineInsightsStripProps {
   deals: RepPipelineDeal[];
+  activeFilter: InsightFilterKey | null;
+  onFilterChange: (next: InsightFilterKey | null) => void;
 }
+
+type Accent = "danger" | "success" | "hot" | "warning" | "gold";
 
 type Insight = {
   key: string;
+  filterKey: InsightFilterKey | null;
   icon: React.ReactNode;
   label: string;
   value: string;
   subtitle: string;
-  accent: "danger" | "success" | "hot" | "warning" | "gold";
+  accent: Accent;
   onTap?: () => void;
 };
 
 const ACCENT_STYLES: Record<
-  Insight["accent"],
-  { bg: string; border: string; iconBg: string; iconColor: string; valueColor: string }
+  Accent,
+  {
+    bg: string;
+    border: string;
+    activeBg: string;
+    activeBorder: string;
+    iconBg: string;
+    iconColor: string;
+    valueColor: string;
+  }
 > = {
   danger: {
     bg: "bg-red-500/[0.06]",
     border: "border-red-500/30",
+    activeBg: "bg-red-500/15",
+    activeBorder: "border-red-500/60 ring-1 ring-red-500/40",
     iconBg: "bg-red-500/15",
     iconColor: "text-red-400",
     valueColor: "text-red-300",
@@ -36,6 +55,8 @@ const ACCENT_STYLES: Record<
   success: {
     bg: "bg-emerald-500/[0.06]",
     border: "border-emerald-500/30",
+    activeBg: "bg-emerald-500/15",
+    activeBorder: "border-emerald-500/60 ring-1 ring-emerald-500/40",
     iconBg: "bg-emerald-500/15",
     iconColor: "text-emerald-400",
     valueColor: "text-emerald-300",
@@ -43,6 +64,8 @@ const ACCENT_STYLES: Record<
   hot: {
     bg: "bg-qep-orange/[0.08]",
     border: "border-qep-orange/35",
+    activeBg: "bg-qep-orange/20",
+    activeBorder: "border-qep-orange ring-1 ring-qep-orange/50",
     iconBg: "bg-qep-orange/20",
     iconColor: "text-qep-orange",
     valueColor: "text-qep-orange",
@@ -50,6 +73,8 @@ const ACCENT_STYLES: Record<
   warning: {
     bg: "bg-amber-500/[0.06]",
     border: "border-amber-500/30",
+    activeBg: "bg-amber-500/15",
+    activeBorder: "border-amber-500/60 ring-1 ring-amber-500/40",
     iconBg: "bg-amber-500/15",
     iconColor: "text-amber-400",
     valueColor: "text-amber-300",
@@ -57,15 +82,21 @@ const ACCENT_STYLES: Record<
   gold: {
     bg: "bg-yellow-500/[0.06]",
     border: "border-yellow-500/30",
+    activeBg: "bg-yellow-500/15",
+    activeBorder: "border-yellow-500/60 ring-1 ring-yellow-500/40",
     iconBg: "bg-yellow-500/15",
     iconColor: "text-yellow-400",
     valueColor: "text-yellow-300",
   },
 };
 
-export function PipelineInsightsStrip({ deals }: PipelineInsightsStripProps) {
+export function PipelineInsightsStrip({
+  deals,
+  activeFilter,
+  onFilterChange,
+}: PipelineInsightsStripProps) {
   const navigate = useNavigate();
-  const insights = buildInsights(deals, navigate);
+  const insights = buildInsights(deals, navigate, activeFilter, onFilterChange);
   if (insights.length === 0) return null;
 
   return (
@@ -75,7 +106,7 @@ export function PipelineInsightsStrip({ deals }: PipelineInsightsStripProps) {
           AI Insights
         </p>
         <p className="text-[10px] text-muted-foreground/50 italic">
-          tap to focus
+          tap to filter
         </p>
       </div>
       <div
@@ -86,7 +117,13 @@ export function PipelineInsightsStrip({ deals }: PipelineInsightsStripProps) {
         }}
       >
         {insights.map((insight) => (
-          <InsightCard key={insight.key} insight={insight} />
+          <InsightCard
+            key={insight.key}
+            insight={insight}
+            isActive={
+              insight.filterKey !== null && insight.filterKey === activeFilter
+            }
+          />
         ))}
         <div className="shrink-0 w-1" aria-hidden />
       </div>
@@ -94,16 +131,24 @@ export function PipelineInsightsStrip({ deals }: PipelineInsightsStripProps) {
   );
 }
 
-function InsightCard({ insight }: { insight: Insight }) {
+function InsightCard({
+  insight,
+  isActive,
+}: {
+  insight: Insight;
+  isActive: boolean;
+}) {
   const styles = ACCENT_STYLES[insight.accent];
   return (
     <button
       type="button"
       onClick={insight.onTap}
       disabled={!insight.onTap}
-      className={`group snap-start shrink-0 w-[148px] text-left rounded-[14px] border px-3 py-2.5 transition-all active:scale-[0.98] ${styles.bg} ${styles.border} ${
-        insight.onTap ? "cursor-pointer hover:brightness-110" : "cursor-default"
-      }`}
+      className={`group snap-start shrink-0 w-[148px] text-left rounded-[14px] border px-3 py-2.5 transition-all active:scale-[0.98] ${
+        isActive
+          ? `${styles.activeBg} ${styles.activeBorder}`
+          : `${styles.bg} ${styles.border}`
+      } ${insight.onTap ? "cursor-pointer hover:brightness-110" : "cursor-default"}`}
     >
       <div className="flex items-center gap-1.5 mb-1.5">
         <div
@@ -128,43 +173,20 @@ function InsightCard({ insight }: { insight: Insight }) {
 function buildInsights(
   deals: RepPipelineDeal[],
   navigate: (path: string) => void,
+  activeFilter: InsightFilterKey | null,
+  onFilterChange: (next: InsightFilterKey | null) => void,
 ): Insight[] {
   if (deals.length === 0) return [];
 
-  const now = Date.now();
-  const DAY = 86_400_000;
+  const toggleFilter = (key: InsightFilterKey) => {
+    onFilterChange(activeFilter === key ? null : key);
+  };
 
-  // ── 1. At risk: cold OR stalled 14d+ ──
-  const atRisk = deals.filter(
-    (d) =>
-      d.heat_status === "cold" || (d.days_since_activity ?? 0) >= 14,
-  );
+  const atRisk = filterDealsByInsight(deals, "at_risk");
+  const closingSoon = filterDealsByInsight(deals, "closing_soon");
+  const hotToPush = filterDealsByInsight(deals, "hot_to_push");
+  const noNextStep = filterDealsByInsight(deals, "no_next_step");
 
-  // ── 2. Closing this week (7d) ──
-  const closingSoon = deals.filter((d) => {
-    if (!d.expected_close_on) return false;
-    const days = Math.ceil(
-      (new Date(d.expected_close_on).getTime() - now) / DAY,
-    );
-    return days >= 0 && days <= 7;
-  });
-
-  // ── 3. Hot to push (warm + active in last 5d) ──
-  const hotToPush = deals.filter(
-    (d) =>
-      d.heat_status === "warm" && (d.days_since_activity ?? 99) < 5,
-  );
-
-  // ── 4. No next step set ──
-  const noNextStep = deals.filter(
-    (d) =>
-      !d.next_follow_up_at &&
-      !["won", "lost", "closed_won", "closed_lost"].includes(
-        d.stage.toLowerCase().replace(/\s+/g, "_"),
-      ),
-  );
-
-  // ── 5. Top deal (highest amount) ──
   const topDeal = [...deals]
     .filter((d) => (d.amount ?? 0) > 0)
     .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))[0];
@@ -175,12 +197,13 @@ function buildInsights(
     const totalAtRisk = atRisk.reduce((s, d) => s + (d.amount ?? 0), 0);
     insights.push({
       key: "at-risk",
+      filterKey: "at_risk",
       icon: <AlertTriangle className="w-3.5 h-3.5" />,
       label: "At Risk",
       value: `${atRisk.length}`,
       subtitle: `${formatCurrency(totalAtRisk)} cooling — needs attention`,
       accent: "danger",
-      onTap: () => navigate(`/sales/deals/${atRisk[0].deal_id}`),
+      onTap: () => toggleFilter("at_risk"),
     });
   }
 
@@ -188,42 +211,46 @@ function buildInsights(
     const totalClosing = closingSoon.reduce((s, d) => s + (d.amount ?? 0), 0);
     insights.push({
       key: "closing-soon",
+      filterKey: "closing_soon",
       icon: <Target className="w-3.5 h-3.5" />,
       label: "Closing 7d",
       value: `${closingSoon.length}`,
       subtitle: `${formatCurrency(totalClosing)} expected this week`,
       accent: "success",
-      onTap: () => navigate(`/sales/deals/${closingSoon[0].deal_id}`),
+      onTap: () => toggleFilter("closing_soon"),
     });
   }
 
   if (hotToPush.length > 0) {
     insights.push({
       key: "hot-to-push",
+      filterKey: "hot_to_push",
       icon: <Flame className="w-3.5 h-3.5" />,
       label: "Hot to Push",
       value: `${hotToPush.length}`,
       subtitle: "Warm + active — close while it's hot",
       accent: "hot",
-      onTap: () => navigate(`/sales/deals/${hotToPush[0].deal_id}`),
+      onTap: () => toggleFilter("hot_to_push"),
     });
   }
 
   if (noNextStep.length > 0) {
     insights.push({
       key: "no-next-step",
+      filterKey: "no_next_step",
       icon: <HelpCircle className="w-3.5 h-3.5" />,
       label: "No Next Step",
       value: `${noNextStep.length}`,
       subtitle: "Schedule a follow-up to keep momentum",
       accent: "warning",
-      onTap: () => navigate(`/sales/deals/${noNextStep[0].deal_id}`),
+      onTap: () => toggleFilter("no_next_step"),
     });
   }
 
   if (topDeal) {
     insights.push({
       key: "top-deal",
+      filterKey: null,
       icon: <Crown className="w-3.5 h-3.5" />,
       label: "Top Deal",
       value: formatCurrency(topDeal.amount ?? 0),
