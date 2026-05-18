@@ -117,7 +117,7 @@ export function CustomerListPage() {
                 <Zap className="w-[11px] h-[11px] text-qep-orange" />
               </div>
               <span className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-[0.08em]">
-                Ranked by Opportunity
+                Iron-Ranked by Opportunity
               </span>
             </div>
             <span className="text-[11px] text-muted-foreground/60 font-semibold">
