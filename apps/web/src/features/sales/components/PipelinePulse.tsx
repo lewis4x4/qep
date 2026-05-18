@@ -47,9 +47,13 @@ export function PipelinePulse({ deals }: PipelinePulseProps) {
   return (
     <div className="px-4 pt-2.5 pb-0.5">
       <div
+        role="status"
+        aria-label={`Pipeline pulse: ${pulse.text}`}
         className={`flex items-center gap-2.5 px-3 py-2 rounded-[12px] border ${styles.border} ${styles.bg}`}
       >
-        <span className={`shrink-0 ${styles.iconColor}`}>{pulse.icon}</span>
+        <span aria-hidden className={`shrink-0 ${styles.iconColor}`}>
+          {pulse.icon}
+        </span>
         <p className="text-[12.5px] text-foreground/90 leading-snug flex-1">
           {pulse.text}
         </p>

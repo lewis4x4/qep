@@ -284,14 +284,20 @@ export function QuoteApprovalDecisionDialog({
             />
           )}
 
-          <div className="grid gap-3 sm:grid-cols-5">
+          <div
+            role="radiogroup"
+            aria-label="Decision"
+            className="grid gap-3 sm:grid-cols-5"
+          >
             {DECISION_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 type="button"
+                role="radio"
+                aria-checked={decision === option.value}
                 onClick={() => setDecision(option.value)}
                 className={cn(
-                  "rounded-lg border px-3 py-2 text-xs font-medium transition",
+                  "rounded-lg border px-3 py-2 min-h-[44px] text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange",
                   decision === option.value
                     ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
                     : "border-border text-muted-foreground hover:border-foreground/20",
@@ -309,7 +315,9 @@ export function QuoteApprovalDecisionDialog({
             <textarea
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              className="min-h-[96px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+              aria-required={noteRequired}
+              aria-invalid={noteRequired && note.trim().length === 0}
+              className="min-h-[96px] w-full rounded border border-input bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange"
               placeholder="Explain the decision so the rep and audit trail are clear."
             />
           </label>

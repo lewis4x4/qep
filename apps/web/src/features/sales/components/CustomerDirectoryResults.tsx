@@ -56,11 +56,19 @@ export function CustomerDirectoryResults({
       </div>
 
       {isLoading ? (
-        <div className="space-y-2 animate-pulse">
+        <div
+          role="status"
+          aria-busy="true"
+          aria-live="polite"
+          aria-label="Searching dealer directory"
+          className="space-y-2 animate-pulse motion-reduce:animate-none"
+        >
+          <span className="sr-only">Searching dealer directory…</span>
           {[0, 1, 2].map((i) => (
             <div
               key={i}
               className="h-[64px] rounded-xl bg-white/[0.04] border border-white/[0.05]"
+              aria-hidden
             />
           ))}
         </div>
@@ -129,7 +137,8 @@ function DirectoryResultRow({
       type="button"
       onClick={() => canOpen && navigate(`/sales/customers/${companyId}`)}
       disabled={!canOpen}
-      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-white/[0.06] bg-[hsl(var(--card))] hover:border-white/20 transition-all text-left active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+      aria-label={`Open ${title}${alreadyInBook ? " (already in your book)" : ""}`}
+      className="w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-xl border border-white/[0.06] bg-[hsl(var(--card))] hover:border-white/20 transition-all text-left active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange"
     >
       <div
         className={`w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 ${iconTone}`}

@@ -231,7 +231,7 @@ export function MyApprovalsPage() {
       )}
 
       {/* Body */}
-      <div className="px-4 py-3">
+      <div className="px-4 py-3" aria-busy={isLoading}>
         {isLoading ? (
           <ApprovalsListSkeleton />
         ) : approvals.length === 0 ? (
@@ -327,7 +327,8 @@ function ApprovalRow({ approval }: { approval: MyApprovalRow }) {
       <button
         type="button"
         onClick={() => navigate(`/sales/quotes/${approval.quote_package_id}`)}
-        className="block w-full text-left px-3.5 py-3 active:scale-[0.995] transition-transform"
+        aria-label={`Open quote for ${customerLabel}, status ${style.label}`}
+        className="block w-full min-h-[44px] text-left px-3.5 py-3 active:scale-[0.995] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange rounded-2xl"
       >
         <div className="flex items-start justify-between gap-2 mb-1.5">
           <div className="min-w-0 flex-1">
@@ -401,8 +402,9 @@ function ApprovalRow({ approval }: { approval: MyApprovalRow }) {
               <button
                 type="button"
                 aria-label="Approval actions"
+                aria-haspopup="menu"
                 onClick={(event) => event.stopPropagation()}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground/70 hover:bg-white/[0.05] hover:text-foreground transition-colors"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground/70 hover:bg-white/[0.05] hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange"
                 data-testid={`my-approvals-row-menu-${approval.id}`}
               >
                 <MoreHorizontal className="h-4 w-4" />
@@ -479,7 +481,13 @@ function ApprovalRow({ approval }: { approval: MyApprovalRow }) {
 
 function ApprovalsListSkeleton() {
   return (
-    <div className="flex flex-col gap-2.5 animate-pulse">
+    <div
+      className="flex flex-col gap-2.5 animate-pulse motion-reduce:animate-none"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading approvals"
+    >
+      <span className="sr-only">Loading approvals…</span>
       {[0, 1, 2, 3].map((i) => (
         <div
           key={i}

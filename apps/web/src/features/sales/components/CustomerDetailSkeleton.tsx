@@ -1,6 +1,13 @@
 export function CustomerDetailSkeleton() {
   return (
-    <div className="pb-20 max-w-lg mx-auto animate-pulse">
+    <div
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+      aria-label="Loading customer details"
+      className="pb-20 max-w-lg mx-auto animate-pulse motion-reduce:animate-none"
+    >
+      <span className="sr-only">Loading customer details…</span>
       {/* Header */}
       <div
         className="px-4 pt-3 pb-4 border-b border-white/[0.06]"

@@ -1,6 +1,13 @@
 export function PipelineSkeleton() {
   return (
-    <div className="flex flex-col pb-20 max-w-lg mx-auto animate-pulse">
+    <div
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+      aria-label="Loading pipeline"
+      className="flex flex-col pb-20 max-w-lg mx-auto animate-pulse motion-reduce:animate-none"
+    >
+      <span className="sr-only">Loading pipeline…</span>
       {/* Hero skeleton */}
       <div
         className="px-4 pt-3.5 pb-3 border-b border-white/[0.06]"

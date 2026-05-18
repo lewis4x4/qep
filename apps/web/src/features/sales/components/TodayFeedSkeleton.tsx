@@ -1,6 +1,13 @@
 export function TodayFeedSkeleton() {
   return (
-    <div className="px-4 py-4 space-y-5 max-w-lg mx-auto pb-8 animate-pulse">
+    <div
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+      aria-label="Loading today's agenda"
+      className="px-4 py-4 space-y-5 max-w-lg mx-auto pb-8 animate-pulse motion-reduce:animate-none"
+    >
+      <span className="sr-only">Loading today's agenda…</span>
       {/* Mobile header skeleton */}
       <div className="flex items-center justify-between px-4 py-3 sm:hidden">
         <div className="h-6 w-20 bg-white/[0.08] rounded-md" />

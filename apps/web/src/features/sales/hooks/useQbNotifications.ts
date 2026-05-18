@@ -97,6 +97,27 @@ export function useQbNotifications() {
 
   const markReadMutation = useMutation({
     mutationFn: markOneRead,
+    // Optimistic flip — the bell badge drops instantly. If the server
+    // mutation fails we restore the previous snapshot in onError so the
+    // count stays truthful.
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: QB_NOTIFICATIONS_QUERY_KEY });
+      const previous = queryClient.getQueryData<QbNotification[]>(QB_NOTIFICATIONS_QUERY_KEY);
+      if (previous) {
+        const now = new Date().toISOString();
+        queryClient.setQueryData<QbNotification[]>(
+          QB_NOTIFICATIONS_QUERY_KEY,
+          previous.map((n) => (n.id === id && !n.read_at ? { ...n, read_at: now } : n)),
+        );
+      }
+      return { previous };
+    },
+    onError: (error, _id, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(QB_NOTIFICATIONS_QUERY_KEY, context.previous);
+      }
+      console.warn("qb-notifications: markRead failed", error);
+    },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: QB_NOTIFICATIONS_QUERY_KEY });
     },
@@ -104,6 +125,24 @@ export function useQbNotifications() {
 
   const markAllReadMutation = useMutation({
     mutationFn: markAllReadForUser,
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: QB_NOTIFICATIONS_QUERY_KEY });
+      const previous = queryClient.getQueryData<QbNotification[]>(QB_NOTIFICATIONS_QUERY_KEY);
+      if (previous) {
+        const now = new Date().toISOString();
+        queryClient.setQueryData<QbNotification[]>(
+          QB_NOTIFICATIONS_QUERY_KEY,
+          previous.map((n) => (n.read_at ? n : { ...n, read_at: now })),
+        );
+      }
+      return { previous };
+    },
+    onError: (error, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(QB_NOTIFICATIONS_QUERY_KEY, context.previous);
+      }
+      console.warn("qb-notifications: markAllRead failed", error);
+    },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: QB_NOTIFICATIONS_QUERY_KEY });
     },

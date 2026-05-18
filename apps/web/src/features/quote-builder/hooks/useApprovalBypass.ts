@@ -100,6 +100,10 @@ export function useApprovalBypass({
   // new case is created for a different package.
   useEffect(() => {
     if (!activeApprovalCaseId) return;
+    // Snapshot the package id so the invalidation callback uses the
+    // value at subscribe time even if the parent rerenders before the
+    // channel tears down.
+    const scopedPackageId = quotePackageId;
     const channel = supabase
       .channel(`quote-approval-case-${activeApprovalCaseId}`)
       .on(
@@ -115,7 +119,7 @@ export function useApprovalBypass({
           // panels (ReviewWorkflowPanels, MarginCheckBanner, etc.)
           // that read the same key refetch the latest case row.
           queryClient.invalidateQueries({
-            queryKey: ["quote-builder", "approval-case", quotePackageId],
+            queryKey: ["quote-builder", "approval-case", scopedPackageId],
           });
           queryClient.invalidateQueries({
             queryKey: ["quote-builder", "approval-case"],
@@ -123,6 +127,9 @@ export function useApprovalBypass({
         },
       )
       .subscribe();
+    // Always-on teardown: removeChannel is safe to call even if the
+    // subscribe handshake never completed (Supabase queues the unsub
+    // internally and the channel is removed from the client registry).
     return () => {
       void supabase.removeChannel(channel);
     };

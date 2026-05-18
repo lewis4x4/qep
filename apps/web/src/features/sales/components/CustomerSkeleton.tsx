@@ -1,6 +1,12 @@
 export function CustomerSkeleton() {
   return (
-    <div className="flex flex-col pb-20 max-w-lg mx-auto animate-pulse">
+    <div
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+      aria-label="Loading customers"
+      className="flex flex-col pb-20 max-w-lg mx-auto animate-pulse motion-reduce:animate-none"
+    >
       {/* Hero skeleton */}
       <div
         className="px-4 pt-3.5 pb-3 border-b border-white/[0.06]"
@@ -9,6 +15,7 @@ export function CustomerSkeleton() {
             "linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--background)) 100%)",
         }}
       >
+        <span className="sr-only">Loading customers…</span>
         <div className="flex items-end justify-between mb-3">
           <div className="space-y-1.5">
             <div className="h-2.5 w-32 bg-white/[0.06] rounded" />

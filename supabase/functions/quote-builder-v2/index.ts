@@ -6595,13 +6595,22 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (caseErr) return safeJsonError(caseErr.message, 500, origin);
       if (!caseRow?.id) return safeJsonError("Quote approval case not found", 404, origin);
+      // Workspace boundary: caller's active workspace must match the case's
+      // workspace. Admin client bypasses RLS, so this is the only gate that
+      // prevents a manager in workspace A from deciding workspace B's case.
+      const caseWorkspaceId = typeof caseRow.workspace_id === "string" && caseRow.workspace_id.trim()
+        ? caseRow.workspace_id.trim()
+        : "default";
+      if (caseWorkspaceId !== userWorkspaceId) {
+        return safeJsonError("Quote approval case not found", 404, origin);
+      }
       if (!["pending", "escalated"].includes(String(caseRow.status ?? ""))) {
         return safeJsonError("This approval case is no longer awaiting a decision.", 409, origin);
       }
 
       const policy = await loadQuoteApprovalPolicy({
         admin,
-        workspaceId: typeof caseRow.workspace_id === "string" ? caseRow.workspace_id : "default",
+        workspaceId: caseWorkspaceId,
       });
       const decision = body.decision as string;
       const decisionNote = typeof body.note === "string" ? body.note.trim().slice(0, 1000) : null;

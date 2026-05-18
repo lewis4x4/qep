@@ -111,7 +111,10 @@ export function CustomerInsightsStrip({
   return (
     <div className="px-4 pt-3 pb-1">
       <div className="flex items-center justify-between mb-1.5">
-        <p className="text-[10px] font-extrabold text-muted-foreground/70 uppercase tracking-[0.12em]">
+        <p
+          id="customer-insights-heading"
+          className="text-[10px] font-extrabold text-muted-foreground/70 uppercase tracking-[0.12em]"
+        >
           AI Insights
         </p>
         <p className="text-[10px] text-muted-foreground/50 italic">
@@ -119,6 +122,8 @@ export function CustomerInsightsStrip({
         </p>
       </div>
       <div
+        role="group"
+        aria-labelledby="customer-insights-heading"
         className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-2 snap-x snap-mandatory"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
@@ -150,7 +155,9 @@ function InsightCard({
     <button
       type="button"
       onClick={onToggle}
-      className={`group snap-start shrink-0 w-[148px] text-left rounded-[14px] border px-3 py-2.5 transition-all active:scale-[0.98] cursor-pointer hover:brightness-110 ${
+      aria-pressed={isActive}
+      aria-label={`${insight.label} filter: ${insight.value}. ${insight.subtitle}`}
+      className={`group snap-start shrink-0 w-[148px] min-h-[44px] text-left rounded-[14px] border px-3 py-2.5 transition-all active:scale-[0.98] cursor-pointer hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange ${
         isActive
           ? `${styles.activeBg} ${styles.activeBorder}`
           : `${styles.bg} ${styles.border}`

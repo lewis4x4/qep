@@ -72,7 +72,7 @@ export function QbNotificationBell({
       : "Notifications";
 
   const triggerClass = cn(
-    "relative inline-flex h-10 w-10 items-center justify-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-qep-orange",
+    "relative inline-flex h-11 w-11 items-center justify-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-qep-orange",
     tone === "dark"
       ? "text-white/70 hover:text-white hover:bg-white/10"
       : "text-muted-foreground hover:text-foreground hover:bg-muted",
@@ -107,6 +107,7 @@ export function QbNotificationBell({
       type="button"
       aria-label={triggerLabel}
       aria-haspopup={isHandheld ? "dialog" : "menu"}
+      aria-expanded={open}
       className={triggerClass}
     >
       {unreadCount > 0 ? (
@@ -114,6 +115,9 @@ export function QbNotificationBell({
       ) : (
         <Bell className={iconClassName} aria-hidden />
       )}
+      <span aria-live="polite" aria-atomic="true" className="sr-only">
+        {unreadCount > 0 ? `${unreadCount} unread notifications` : ""}
+      </span>
       {unreadCount > 0 && (
         <span
           aria-hidden
@@ -141,6 +145,8 @@ export function QbNotificationBell({
         <button
           type="button"
           aria-label={triggerLabel}
+          aria-haspopup="dialog"
+          aria-expanded={open}
           onClick={() => setOpen(true)}
           className={triggerClass}
         >
@@ -276,8 +282,9 @@ function NotificationList({
             <button
               type="button"
               onClick={() => onSelect(notification)}
+              aria-label={`${notification.title}${notification.read_at ? "" : " (unread)"}`}
               className={cn(
-                "flex w-full flex-col items-start gap-1 px-3 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:bg-muted",
+                "flex w-full min-h-[44px] flex-col items-start gap-1 px-3 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-qep-orange",
                 !notification.read_at && "bg-qep-orange/[0.04]",
               )}
             >

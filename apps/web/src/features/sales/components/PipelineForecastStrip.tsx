@@ -26,7 +26,8 @@ export function PipelineForecastStrip({
 
   return (
     <div className="px-4 pt-3 pb-1">
-      <div
+      <section
+        aria-label={`End of month forecast for ${monthName}: ${formatCurrency(forecastValue)} weighted close, ${daysLeft} days left`}
         className="relative overflow-hidden rounded-2xl border border-qep-orange/25 px-4 py-3"
         style={{
           background:
@@ -34,12 +35,15 @@ export function PipelineForecastStrip({
         }}
       >
         {/* Decorative glow */}
-        <div className="absolute -top-10 -right-10 w-28 h-28 rounded-full bg-qep-orange/10 blur-[28px]" />
+        <div
+          aria-hidden
+          className="absolute -top-10 -right-10 w-28 h-28 rounded-full bg-qep-orange/10 blur-[28px]"
+        />
 
         {/* Header row */}
         <div className="relative flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
-            <Calendar className="w-3.5 h-3.5 text-qep-orange" />
+            <Calendar className="w-3.5 h-3.5 text-qep-orange" aria-hidden />
             <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-[0.12em]">
               EOM Forecast · {monthName}
             </p>
@@ -86,13 +90,13 @@ export function PipelineForecastStrip({
           </span>
           <span className="text-muted-foreground flex items-center gap-1">
             Stretch
-            <TrendingUp className="w-3 h-3 text-qep-orange" />
+            <TrendingUp className="w-3 h-3 text-qep-orange" aria-hidden />
             <span className="text-foreground font-bold">
               {formatCurrency(stretchValue)}
             </span>
           </span>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
