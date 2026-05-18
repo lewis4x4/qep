@@ -4,16 +4,34 @@ import {
   fetchCustomerDeals,
   fetchCustomerActivities,
   fetchCustomerQuotes,
+  fetchRepCustomers,
+  fetchCustomerByCompanyId,
 } from "../lib/sales-api";
-import { fetchRepCustomers } from "../lib/sales-api";
 
 export function useCustomerDetail(companyId: string) {
-  const customerQuery = useQuery({
+  // Primary lookup: the rep's book of business. Fast (cached list query),
+  // hits when the rep has previously engaged with this customer.
+  const bookCustomerQuery = useQuery({
     queryKey: ["sales", "customers"],
     queryFn: fetchRepCustomers,
     staleTime: 5 * 60 * 1000,
     select: (data) => data.find((c) => c.customer_id === companyId) ?? null,
   });
+
+  // Fallback lookup: pull the company straight from crm_companies when the
+  // book lookup misses. This is what makes dealer-directory search results
+  // openable for customers the rep has never touched.
+  const directCustomerQuery = useQuery({
+    queryKey: ["sales", "customer-by-id", companyId],
+    queryFn: () => fetchCustomerByCompanyId(companyId),
+    enabled:
+      !!companyId &&
+      bookCustomerQuery.isSuccess &&
+      bookCustomerQuery.data === null,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const customer = bookCustomerQuery.data ?? directCustomerQuery.data ?? null;
 
   const equipmentQuery = useQuery({
     queryKey: ["sales", "customer-equipment", companyId],
@@ -43,19 +61,28 @@ export function useCustomerDetail(companyId: string) {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Customer is "loading" while the book query is in flight, OR while the
+  // fallback direct fetch is in flight after a book miss.
+  const customerLoading =
+    bookCustomerQuery.isLoading ||
+    (bookCustomerQuery.isSuccess &&
+      bookCustomerQuery.data === null &&
+      directCustomerQuery.isLoading);
+
   return {
-    customer: customerQuery.data ?? null,
+    customer,
     equipment: equipmentQuery.data ?? [],
     deals: dealsQuery.data ?? [],
     activities: activitiesQuery.data ?? [],
     quotes: quotesQuery.data ?? [],
     isLoading:
-      customerQuery.isLoading ||
+      customerLoading ||
       equipmentQuery.isLoading ||
       dealsQuery.isLoading ||
       activitiesQuery.isLoading,
     error:
-      customerQuery.error ||
+      bookCustomerQuery.error ||
+      directCustomerQuery.error ||
       equipmentQuery.error ||
       dealsQuery.error ||
       activitiesQuery.error,

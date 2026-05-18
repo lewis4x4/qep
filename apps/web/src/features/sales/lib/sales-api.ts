@@ -61,6 +61,71 @@ export async function fetchRepCustomers(): Promise<RepCustomer[]> {
   return normalizeRepCustomers(data);
 }
 
+/**
+ * Fallback fetch for customer detail pages when the company isn't in the
+ * rep's book (v_rep_customers). Pulls the company row directly from
+ * crm_companies plus a best-effort primary contact, and returns a
+ * RepCustomer-shaped object so the detail page can render uniformly.
+ *
+ * The numeric stats (open_deals, active_quotes, opportunity_score,
+ * days_since_contact) are zero/null here because they originate in the
+ * rep-scoped view; the detail page's equipment / deals / activities /
+ * quotes sub-queries hydrate the actual numbers downstream.
+ */
+export async function fetchCustomerByCompanyId(
+  companyId: string,
+): Promise<RepCustomer | null> {
+  const { data: company, error: companyError } = await supabase
+    .from("crm_companies")
+    .select("id, name, dba, search_1, search_2, city, state, phone")
+    .eq("id", companyId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (companyError) throw companyError;
+  if (!company) return null;
+
+  const { data: contactRows } = await supabase
+    .from("crm_contacts")
+    .select("first_name, last_name, email, phone")
+    .eq("primary_company_id", companyId)
+    .is("deleted_at", null)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+
+  const contact = contactRows?.[0] ?? null;
+  const c = company as {
+    id: string;
+    name: string | null;
+    dba: string | null;
+    search_1: string | null;
+    search_2: string | null;
+    city: string | null;
+    state: string | null;
+    phone: string | null;
+  };
+  const contactName = contact
+    ? `${contact.first_name ?? ""} ${contact.last_name ?? ""}`.trim() || null
+    : null;
+
+  return {
+    customer_id: c.id,
+    company_name: c.name ?? c.dba ?? "Customer",
+    search_1: c.search_1,
+    search_2: c.search_2,
+    primary_contact_name: contactName,
+    primary_contact_phone: contact?.phone ?? c.phone ?? null,
+    primary_contact_email: contact?.email ?? null,
+    city: c.city,
+    state: c.state,
+    open_deals: 0,
+    active_quotes: 0,
+    last_interaction: null,
+    days_since_contact: null,
+    opportunity_score: 0,
+  };
+}
+
 export async function fetchCustomerEquipment(
   companyId: string,
 ): Promise<CustomerEquipment[]> {
