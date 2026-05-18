@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useParams, useSearchParams } from "react-router-dom";
 import type { QuoteFinancingRequest, QuotePackageCatalogKind } from "../lib/quote-api";
 import { performQuoteListAction } from "../lib/quote-api";
 import { translateQuoteError } from "../lib/quote-error-messages";
@@ -79,7 +79,6 @@ import {
 export function useQuoteBuilderV2Orchestrator() {
   const [searchParams] = useSearchParams();
   const location = useLocation();
-  const navigate = useNavigate();
   const routeParams = useParams<{ quoteId?: string }>();
   // WAVE phase 1: Quote Builder now ALSO hosts at /sales/quotes/:quoteId
   // (path-param form). Path param wins when present; otherwise fall back
@@ -995,24 +994,27 @@ export function useQuoteBuilderV2Orchestrator() {
             return;
           }
           if (kind === "discard_and_restart") {
-            if (!activeQuotePackageId) {
-              navigate("/sales/quotes/new");
-              return;
-            }
             const proceed = window.confirm(
               "Discard this draft and start a new quote? This cannot be undone.",
             );
             if (!proceed) return;
+            // Hard reload to /sales/quotes/new — React-Router SPA
+            // navigation between /quotes/:quoteId and /quotes/new keeps
+            // the same component mounted, so the previous draft's React
+            // state (including any archived customer reference) leaks
+            // into the "new" quote. window.location.assign forces a full
+            // remount with truly empty state.
+            const restartUrl = "/sales/quotes/new";
+            if (!activeQuotePackageId) {
+              window.location.assign(restartUrl);
+              return;
+            }
             performQuoteListAction({
               quotePackageId: activeQuotePackageId,
               action: "discard",
             })
               .then(() => {
-                toast({
-                  title: "Draft discarded",
-                  description: "Starting a fresh quote.",
-                });
-                navigate("/sales/quotes/new");
+                window.location.assign(restartUrl);
               })
               .catch((error) => {
                 const copy = translateQuoteError(error);
