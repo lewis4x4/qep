@@ -2,39 +2,42 @@ import { useState } from "react";
 import { useCustomers } from "../hooks/useCustomers";
 import { SalesCustomerCard } from "../components/SalesCustomerCard";
 import { CustomerSearchBar } from "../components/CustomerSearchBar";
+import { CustomerEmptyState } from "../components/CustomerEmptyState";
+import { CustomerInsightsStrip } from "../components/CustomerInsightsStrip";
+import { CustomerPulse } from "../components/CustomerPulse";
+import { CustomerSkeleton } from "../components/CustomerSkeleton";
+import { Flame, Zap, X } from "lucide-react";
 import {
-  Flame,
-  Truck,
-  Clock,
-  Zap,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-
-/* ── Filter chip config ─────────────────────────────────── */
-const CUSTOMER_FILTERS = [
-  { key: "all", label: "All" },
-  { key: "hot", label: "Hot", icon: Flame, color: "text-red-400" },
-  { key: "active", label: "Active Deals", icon: Zap, color: "text-qep-orange" },
-  { key: "overdue", label: "Due Follow-up", icon: Clock, color: "text-muted-foreground" },
-] as const;
+  filterCustomersByInsight,
+  CUSTOMER_INSIGHT_LABELS,
+  type CustomerInsightKey,
+} from "../lib/customer-insight-filters";
 
 export function CustomerListPage() {
   const { customers, allCustomers, search, setSearch, isLoading } =
     useCustomers();
-  const [filter, setFilter] = useState("all");
 
-  // Apply secondary filter on top of search
-  const filtered = customers.filter((c) => {
-    if (filter === "hot") return c.opportunity_score >= 70;
-    if (filter === "active") return c.open_deals > 0;
-    if (filter === "overdue")
-      return c.days_since_contact != null && c.days_since_contact >= 7;
-    return true;
-  });
+  // Insight filter narrows the full list before search composes on top.
+  const [insightFilter, setInsightFilter] = useState<CustomerInsightKey | null>(
+    null,
+  );
 
-  // Hero stats
+  if (isLoading) {
+    return <CustomerSkeleton />;
+  }
+
+  // Hero stats — always computed from the unfiltered set.
   const totalOpen = allCustomers.reduce((sum, c) => sum + c.open_deals, 0);
   const hotCount = allCustomers.filter((c) => c.opportunity_score >= 70).length;
+
+  // Resolve the visible list. Search is already applied by useCustomers via
+  // `customers`. When an insight filter is active, narrow the full list first
+  // then re-apply search so both compose.
+  const visibleCustomers = insightFilter
+    ? filterCustomersByInsight(customers, insightFilter)
+    : customers;
+
+  const isFullyEmpty = allCustomers.length === 0;
 
   return (
     <div className="flex flex-col pb-20 max-w-lg mx-auto">
@@ -81,83 +84,110 @@ export function CustomerListPage() {
           </div>
         </div>
 
-        {/* Search */}
-        <CustomerSearchBar value={search} onChange={setSearch} />
+        {/* Search — only meaningful when there's something to search */}
+        {!isFullyEmpty && (
+          <CustomerSearchBar value={search} onChange={setSearch} />
+        )}
       </div>
 
-      {/* Filter chips */}
-      <div className="flex gap-1.5 px-3 py-2.5 overflow-x-auto scrollbar-none border-b border-white/[0.06] sticky top-0 z-10 bg-[hsl(var(--background))]">
-        {CUSTOMER_FILTERS.map((f) => {
-          const Icon = "icon" in f ? f.icon : null;
-          const active = filter === f.key;
-          return (
-            <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              className={cn(
-                "shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full text-xs font-bold border transition-all duration-150",
-                active
-                  ? "bg-qep-orange text-white border-qep-orange"
-                  : "bg-[hsl(var(--card))] text-muted-foreground border-white/[0.06] hover:border-white/20",
-              )}
-            >
-              {Icon && (
-                <Icon
-                  className={cn(
-                    "w-3 h-3",
-                    active ? "text-white" : ("color" in f ? f.color : "text-muted-foreground"),
-                  )}
-                />
-              )}
-              {f.label}
-            </button>
-          );
-        })}
-      </div>
+      {/* Pulse (one-line vibe-check) */}
+      {!isFullyEmpty && <CustomerPulse customers={allCustomers} />}
 
-      {/* AI-ranked banner */}
-      <div className="px-4 pt-2.5 pb-0 flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <div className="w-[22px] h-[22px] rounded-[7px] bg-qep-orange/10 flex items-center justify-center">
-            <Zap className="w-[11px] h-[11px] text-qep-orange" />
+      {/* AI Insights strip — replaces old chip row */}
+      {!isFullyEmpty && (
+        <CustomerInsightsStrip
+          customers={allCustomers}
+          activeFilter={insightFilter}
+          onFilterChange={setInsightFilter}
+        />
+      )}
+
+      {/* Banner row: filter banner if active, else Iron-Ranked label */}
+      {!isFullyEmpty && (
+        insightFilter ? (
+          <InsightFilterBanner
+            label={CUSTOMER_INSIGHT_LABELS[insightFilter]}
+            count={visibleCustomers.length}
+            onClear={() => setInsightFilter(null)}
+          />
+        ) : (
+          <div className="px-4 pt-2.5 pb-0 flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <div className="w-[22px] h-[22px] rounded-[7px] bg-qep-orange/10 flex items-center justify-center">
+                <Zap className="w-[11px] h-[11px] text-qep-orange" />
+              </div>
+              <span className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-[0.08em]">
+                Ranked by Opportunity
+              </span>
+            </div>
+            <span className="text-[11px] text-muted-foreground/60 font-semibold">
+              {visibleCustomers.length} result
+              {visibleCustomers.length !== 1 ? "s" : ""}
+            </span>
           </div>
-          <span className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-[0.08em]">
-            Iron-Ranked by Opportunity
-          </span>
-        </div>
-        <span className="text-[11px] text-muted-foreground/60 font-semibold">
-          {filtered.length} result{filtered.length !== 1 ? "s" : ""}
-        </span>
-      </div>
+        )
+      )}
 
-      {/* Customer list */}
+      {/* Customer list / empty states */}
       <div className="px-4 py-2.5 space-y-2.5">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="w-8 h-8 border-3 border-qep-orange border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : filtered.length > 0 ? (
-          filtered.map((customer, idx) => (
+        {visibleCustomers.length > 0 ? (
+          visibleCustomers.map((customer, idx) => (
             <SalesCustomerCard
               key={customer.customer_id}
               customer={customer}
               rank={idx}
-              showRank={filter === "all" && !search}
+              showRank={!insightFilter && !search}
             />
           ))
+        ) : isFullyEmpty ? (
+          <CustomerEmptyState />
         ) : search ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground text-sm">
-              No customers match &ldquo;{search}&rdquo;
-            </p>
-          </div>
+          <CustomerEmptyState searchTerm={search} />
         ) : (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground text-sm">
-              No customers yet. Start by logging a visit.
-            </p>
-          </div>
+          <CustomerEmptyState
+            filterLabel={
+              insightFilter
+                ? CUSTOMER_INSIGHT_LABELS[insightFilter]
+                : undefined
+            }
+            onClearFilter={() => setInsightFilter(null)}
+          />
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Active insight filter banner ───────────────────────── */
+function InsightFilterBanner({
+  label,
+  count,
+  onClear,
+}: {
+  label: string;
+  count: number;
+  onClear: () => void;
+}) {
+  return (
+    <div className="px-4 py-2.5 border-b border-white/[0.06]">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-[12px] bg-qep-orange/10 border border-qep-orange/30">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-qep-orange animate-pulse shrink-0" />
+          <p className="text-[12px] font-bold text-foreground truncate">
+            Filtered: <span className="text-qep-orange">{label}</span>
+            <span className="text-muted-foreground/70 font-normal ml-1.5">
+              · {count} {count === 1 ? "customer" : "customers"}
+            </span>
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClear}
+          className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold text-qep-orange hover:bg-qep-orange/15 transition-colors shrink-0"
+        >
+          <X className="w-3 h-3" />
+          Clear
+        </button>
       </div>
     </div>
   );
