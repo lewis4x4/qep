@@ -287,11 +287,18 @@ export function QuoteListPage() {
           <Plus className="w-5 h-5" />
         </button>
       </div>
-      <header className="flex items-start justify-between gap-4">
+      <header className="hidden items-start justify-between gap-4 sm:flex">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Quotes</h1>
           <p className="mt-1 text-sm text-muted-foreground">All equipment proposals — search, filter, or start a new one.</p>
         </div>
+        <Button
+          onClick={() => navigate("/sales/quotes/new")}
+          className="shrink-0 bg-qep-orange text-white hover:bg-qep-orange/90"
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Start a New Quote
+        </Button>
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

@@ -364,3 +364,11 @@
 .animate-shimmer-in {
   animation: shimmer-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
