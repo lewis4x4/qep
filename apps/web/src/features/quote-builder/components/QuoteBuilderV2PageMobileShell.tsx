@@ -261,29 +261,29 @@ export function QuoteBuilderV2PageMobileShell({
         className="fixed inset-x-0 bottom-16 z-50 border-t border-white/[0.06] bg-[hsl(var(--background))]/95 backdrop-blur-lg"
         style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
-        {!hasCustomer && step === "customer" && (
-          <div className="px-3 pt-2">
-            <button
+        <div className="flex items-center gap-2 p-3">
+          {!hasCustomer && step === "customer" ? (
+            <Button
               type="button"
+              variant="outline"
+              className="h-11 flex-1 border-qep-orange/40 text-qep-orange hover:bg-qep-orange/10 hover:text-qep-orange"
               onClick={onQuoteForProspect}
-              className="w-full text-center text-xs font-semibold text-qep-orange underline-offset-4 hover:underline"
             >
               Quote for prospect
-            </button>
-          </div>
-        )}
-        <div className="flex items-center gap-2 p-3">
-          <Button
-            type="button"
-            variant="outline"
-            className="h-11 flex-1"
-            disabled={!previousStep}
-            onClick={() => {
-              if (previousStep) wizard.setStep(previousStep);
-            }}
-          >
-            Back
-          </Button>
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 flex-1"
+              disabled={!previousStep}
+              onClick={() => {
+                if (previousStep) wizard.setStep(previousStep);
+              }}
+            >
+              Back
+            </Button>
+          )}
           <button
             type="button"
             onClick={() => setAssistantOpen(true)}
