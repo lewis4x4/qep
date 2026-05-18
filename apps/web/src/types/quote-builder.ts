@@ -21,7 +21,13 @@ export type QbFreightZone          = Database["public"]["Tables"]["qb_freight_zo
 export type QbProgram              = Database["public"]["Tables"]["qb_programs"]["Row"];
 export type QbProgramInsert        = Database["public"]["Tables"]["qb_programs"]["Insert"];
 export type QbProgramStackingRule  = Database["public"]["Tables"]["qb_program_stacking_rules"]["Row"];
+/** @deprecated `qb_quotes` is being retired in favor of `quote_packages`.
+ *  See migration 581 (`deprecate_qb_quotes`). Use the `quote_packages` row
+ *  type from `database.types.ts` for new code. */
 export type QbQuote                = Database["public"]["Tables"]["qb_quotes"]["Row"];
+/** @deprecated `qb_quotes` is being retired in favor of `quote_packages`.
+ *  See migration 581 (`deprecate_qb_quotes`). Use the `quote_packages`
+ *  insert type from `database.types.ts` for new code. */
 export type QbQuoteInsert          = Database["public"]["Tables"]["qb_quotes"]["Insert"];
 export type QbQuoteLineItem        = Database["public"]["Tables"]["qb_quote_line_items"]["Row"];
 export type QbDeal                 = Database["public"]["Tables"]["qb_deals"]["Row"];
@@ -59,6 +65,37 @@ export type QbProgramType =
   | "additional_rebate"
   | "other";
 
+/**
+ * Status lifecycle for `public.quote_packages` — the live quote table used
+ * by Quote Builder V2 and the wave-approval-loop flow. Mirrors the check
+ * constraint in migration `378_quote_packages_status_widen.sql`.
+ *
+ * Lifecycle: `draft` -> `pending_approval` -> `approved` /
+ * `approved_with_conditions` / `changes_requested` -> `ready` -> `sent` ->
+ * `viewed` -> `accepted` / `rejected` / `expired`, plus `converted_to_deal`
+ * and `archived` as terminal states.
+ */
+export type QuotePackageStatus =
+  | "draft"
+  | "pending_approval"
+  | "approved"
+  | "approved_with_conditions"
+  | "changes_requested"
+  | "ready"
+  | "sent"
+  | "viewed"
+  | "accepted"
+  | "rejected"
+  | "expired"
+  | "converted_to_deal"
+  | "archived";
+
+/**
+ * @deprecated Use {@link QuotePackageStatus} instead. The `qb_quotes` table
+ * is being retired in favor of `quote_packages`. See migration 581
+ * (`deprecate_qb_quotes`). This union is preserved only so legacy admin
+ * surfaces continue to compile during the quiet cycle.
+ */
 export type QbQuoteStatus =
   | "draft"
   | "pending_approval"
