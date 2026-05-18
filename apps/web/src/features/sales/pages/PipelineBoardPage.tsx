@@ -3,6 +3,7 @@ import { StageFilterTabs } from "../components/StageFilterTabs";
 import { SalesDealCard } from "../components/SalesDealCard";
 import { PipelineEmptyState } from "../components/PipelineEmptyState";
 import { PipelineInsightsStrip } from "../components/PipelineInsightsStrip";
+import { PipelineForecastStrip } from "../components/PipelineForecastStrip";
 import {
   TrendingUp,
   Flame,
@@ -42,10 +43,13 @@ export function PipelineBoardPage() {
   // ── Compute pipeline analytics ──
   const totalValue = allDeals.reduce((sum, d) => sum + (d.amount ?? 0), 0);
 
+  // Shared stage-probability denominator: highest stage_sort across the workspace.
+  const maxStageSort =
+    stages.length > 0 ? Math.max(...stages.map((s) => s.sort_order)) : 1;
+
   // Weighted value: estimate probability based on stage position
   const weightedValue = allDeals.reduce((sum, d) => {
-    const maxSort = stages.length > 0 ? Math.max(...stages.map((s) => s.sort_order)) : 1;
-    const pct = maxSort > 0 ? (d.stage_sort / maxSort) * 100 : 30;
+    const pct = maxStageSort > 0 ? (d.stage_sort / maxStageSort) * 100 : 30;
     return sum + (d.amount ?? 0) * (pct / 100);
   }, 0);
 
@@ -165,6 +169,14 @@ export function PipelineBoardPage() {
           />
         </div>
       </div>
+
+      {/* EOM forecast strip (only when something closes this month) */}
+      {allDeals.length > 0 && (
+        <PipelineForecastStrip
+          deals={allDeals}
+          maxStageSort={maxStageSort}
+        />
+      )}
 
       {/* AI Insights strip (only when there are deals to analyze) */}
       {allDeals.length > 0 && <PipelineInsightsStrip deals={allDeals} />}
