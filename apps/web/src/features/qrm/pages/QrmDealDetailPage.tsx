@@ -1,11 +1,13 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, FileText, GitCompare, Plus, Link as LinkIcon, Check } from "lucide-react";
+import { ArrowLeft, FileText, GitCompare, Plus, Link as LinkIcon, Check, ShieldCheck } from "lucide-react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import type { UserRole } from "@/lib/database.types";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { buildQuoteBuilderHref, buildQuoteListHref } from "@/features/quote-builder/lib/quote-route";
+import { getQuoteApprovalCase } from "@/features/quote-builder/lib/quote-api";
+import { QuoteApprovalDecisionDialog } from "../command-center/components/QuoteApprovalDecisionDialog";
 import { supabase } from "@/lib/supabase";
 import { DeckSurface } from "../components/command-deck";
 import { QrmPageHeader } from "../components/QrmPageHeader";
@@ -98,6 +100,9 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
   const [editorOpen, setEditorOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [shareStateByQuote, setShareStateByQuote] = useState<Record<string, { status: "idle" | "copied" | "error"; message?: string }>>({});
+  // Phase 3A: inline manager decision on the deal detail. State holds
+  // the quote_package_id whose approval case is being decided.
+  const [decideDialogQuoteId, setDecideDialogQuoteId] = useState<string | null>(null);
 
   const handleShareQuote = async (quoteId: string) => {
     setShareStateByQuote((cur) => ({ ...cur, [quoteId]: { status: "idle" } }));
@@ -351,6 +356,23 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
       ?? quotes[0]
       ?? null;
   }, [dealQuotesQuery.data]);
+
+  // Phase 3A: load the canonical approval case for the active quote so
+  // we can render an inline Decide button when the deal still has a
+  // pending/escalated manager approval. Elevated-only — reps see the
+  // existing status row instead.
+  const activeQuoteApprovalCaseQuery = useQuery({
+    queryKey: ["quote-builder", "approval-case", activeQuote?.id ?? null],
+    queryFn: () => getQuoteApprovalCase(activeQuote!.id),
+    enabled: Boolean(isElevatedRole && activeQuote?.id),
+    staleTime: 10_000,
+  });
+  const activeQuoteApprovalCase = activeQuoteApprovalCaseQuery.data ?? null;
+  const activeQuoteDecidable = Boolean(
+    isElevatedRole
+    && activeQuoteApprovalCase
+    && (activeQuoteApprovalCase.status === "pending" || activeQuoteApprovalCase.status === "escalated"),
+  );
   const quoteStatusMeta = (status: string | null) => {
     switch (status) {
       case "pending_approval":
@@ -482,6 +504,17 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {activeQuoteDecidable && activeQuote ? (
+                    <Button
+                      size="sm"
+                      onClick={() => setDecideDialogQuoteId(activeQuote.id)}
+                      data-testid="deal-detail-decide-quote"
+                      className="bg-qep-orange text-white hover:bg-qep-orange/90"
+                    >
+                      <ShieldCheck className="mr-2 h-4 w-4" />
+                      Decide Approval
+                    </Button>
+                  ) : null}
                   <Button asChild size="sm">
                     <Link to={quoteHref}>
                       <FileText className="mr-2 h-4 w-4" />
@@ -859,6 +892,21 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
           onArchived={() => navigate("/qrm/deals")}
         />
       </Suspense>
+
+      {/* Phase 3A: inline manager decision dialog. Only rendered when
+          we have a live approval case AND an elevated user; the trigger
+          button is gated identically (activeQuoteDecidable). */}
+      {decideDialogQuoteId && activeQuoteApprovalCase && (
+        <QuoteApprovalDecisionDialog
+          open={decideDialogQuoteId !== null}
+          onClose={() => setDecideDialogQuoteId(null)}
+          approvalCase={activeQuoteApprovalCase}
+          onDecided={() => {
+            void queryClient.invalidateQueries({ queryKey: ["crm", "deal", dealId, "quote-packages"] });
+            void queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case", decideDialogQuoteId] });
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -149,6 +149,17 @@ export function useQuoteBuilderOrchestratorStepRouterGroups(
       quoteTitle: deps.quoteTitle,
       approvalCaseCanSend: deps.approvalCaseCanSend,
       approvalBlocker: deps.approvalBlocker,
+      // Phase 3B quote-approval feedback loop: thread the rep's identity
+      // and the withdraw mutation down to the Review step so the active
+      // approval card can render a "Withdraw submission" affordance for
+      // the submitter only.
+      currentUserId: (deps.currentUserId as string | null) ?? null,
+      withdrawApprovalPending: (deps.withdrawApprovalMutation as { isPending: boolean }).isPending,
+      onWithdrawApproval: (input: { approvalCaseId: string; reason?: string | null }) => {
+        (deps.withdrawApprovalMutation as {
+          mutate: (vars: { approvalCaseId: string; reason?: string | null }) => void;
+        }).mutate({ approvalCaseId: input.approvalCaseId, reason: input.reason ?? null });
+      },
     },
     documentSend: {
       documentPersistenceLabel: deps.documentPersistenceLabel,

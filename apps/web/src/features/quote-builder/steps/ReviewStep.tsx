@@ -71,6 +71,21 @@ export interface ReviewStepProps {
   };
   quoteStatus: QuoteWorkspaceDraft["quoteStatus"];
   onQuoteStatusChange: (status: QuoteWorkspaceDraft["quoteStatus"]) => void;
+  /**
+   * Phase 3B quote-approval feedback loop — current viewer's user id.
+   * The QuoteReviewWorkflowPanels card uses this to decide whether to
+   * render the "Withdraw submission" affordance (only the submitter
+   * sees it).
+   */
+  currentUserId?: string | null;
+  /**
+   * Phase 3B quote-approval feedback loop — fires when the submitter
+   * confirms the withdraw dialog. The active approval-case id is
+   * resolved by the workflow panel from its own queries; the optional
+   * reason flows from the dialog's textarea.
+   */
+  onWithdrawApproval?: (input: { approvalCaseId: string; reason?: string | null }) => void;
+  withdrawApprovalPending?: boolean;
 }
 
 export function ReviewStep({
@@ -102,6 +117,9 @@ export function ReviewStep({
   submitApprovalData,
   quoteStatus,
   onQuoteStatusChange,
+  currentUserId,
+  onWithdrawApproval,
+  withdrawApprovalPending,
 }: ReviewStepProps) {
   const { draft, setDraft, setStep } = useWizard();
   const firstEquipment = draft.equipment[0];
@@ -511,6 +529,9 @@ export function ReviewStep({
           quoteStatus={quoteStatus}
           onQuoteStatusChange={onQuoteStatusChange}
           showSendSection={false}
+          currentUserId={currentUserId ?? null}
+          onWithdrawApproval={onWithdrawApproval}
+          withdrawApprovalPending={withdrawApprovalPending === true}
         />
       ) : (
         <Card className="border-amber-500/20 bg-amber-500/5 p-4">

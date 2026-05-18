@@ -36,6 +36,7 @@ import {
   buildQuoteSavePayload,
   saveQuotePackage,
   submitQuoteForApproval,
+  withdrawApprovalCase,
   type QuotePackageSaveResponse,
 } from "../lib/quote-api";
 import { computeWinProbability } from "../lib/win-probability-scorer";
@@ -88,12 +89,29 @@ export interface SubmitApprovalVariables {
   submissionNote?: string | null;
 }
 
+/**
+ * Phase 3B quote-approval feedback loop: rep recalls their own pending
+ * submission. The reason is an optional rep-supplied note that lands on
+ * `quote_approval_cases.decision_note` so the audit trail explains why
+ * the case was withdrawn instead of decided.
+ */
+export interface WithdrawApprovalVariables {
+  approvalCaseId: string;
+  reason?: string | null;
+}
+
 export interface UseQuoteBuilderSaveResult {
   saveMutation: UseMutationResult<QuotePackageSaveResponse, Error, void, unknown>;
   submitApprovalMutation: UseMutationResult<
     Awaited<ReturnType<typeof submitQuoteForApproval>>,
     Error,
     SubmitApprovalVariables | void,
+    unknown
+  >;
+  withdrawApprovalMutation: UseMutationResult<
+    Awaited<ReturnType<typeof withdrawApprovalCase>>,
+    Error,
+    WithdrawApprovalVariables,
     unknown
   >;
   marginGateOpen: boolean;
@@ -292,6 +310,44 @@ export function useQuoteBuilderSave({
     },
   });
 
+  // Phase 3B quote-approval feedback loop: rep withdraws their pending
+  // submission so they can edit and resubmit without waiting for a
+  // manager reject / changes-requested round-trip. On success the linked
+  // quote package returns to draft (server-side) and we invalidate the
+  // same query keys the submit/decide paths use so the active workflow
+  // card, My Approvals page, and qb-notifications all refresh.
+  const withdrawApprovalMutation = useMutation<
+    Awaited<ReturnType<typeof withdrawApprovalCase>>,
+    Error,
+    WithdrawApprovalVariables
+  >({
+    mutationFn: ({ approvalCaseId, reason }) =>
+      withdrawApprovalCase(approvalCaseId, reason ?? null),
+    onSuccess: () => {
+      setDraft((current) => ({ ...current, quoteStatus: "draft" }));
+      const casePackageId = persistedQuotePackageIdRef.current ?? activeQuotePackageId;
+      queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case"] });
+      if (casePackageId) {
+        queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case", casePackageId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["quote-builder", "saved-quote"] });
+      queryClient.invalidateQueries({ queryKey: ["quote-builder", "list"] });
+      queryClient.invalidateQueries({ queryKey: ["sales", "my-approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["sales", "qb-notifications"] });
+      toast({
+        title: "Approval withdrawn",
+        description: "Your quote is back in draft. Edit anything you need, then submit again.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Couldn't withdraw approval",
+        description: error instanceof Error ? error.message : "Try refreshing and withdrawing again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const [marginGateOpen, setMarginGateOpen] = useState(false);
   const [marginReasonCaptured, setMarginReasonCaptured] = useState<string | null>(null);
   useEffect(() => {
@@ -348,6 +404,7 @@ export function useQuoteBuilderSave({
   return {
     saveMutation,
     submitApprovalMutation,
+    withdrawApprovalMutation,
     marginGateOpen,
     setMarginGateOpen,
     handleSaveClick,

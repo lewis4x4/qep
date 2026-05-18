@@ -26,6 +26,7 @@ export interface QuoteBuilderOrchestratorStepRouterInput {
   handleQuoteStatusChange: unknown;
   inboundFreightEligible: unknown;
   submitApprovalMutation: unknown;
+  withdrawApprovalMutation: unknown;
   whyThisMachineRequired: unknown;
   setIntakeRecorderOpen: unknown;
   availableOptionsLabel: unknown;
@@ -119,4 +120,5 @@ export interface QuoteBuilderOrchestratorStepRouterInput {
   netTotal: unknown;
   cashDown: unknown;
   draft: unknown;
+  currentUserId: unknown;
 }

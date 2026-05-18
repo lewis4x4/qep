@@ -392,6 +392,7 @@ export function useQuoteBuilderV2Orchestrator() {
   const {
     saveMutation,
     submitApprovalMutation,
+    withdrawApprovalMutation,
     marginGateOpen,
     setMarginGateOpen,
     handleSaveClick,
@@ -824,6 +825,7 @@ export function useQuoteBuilderV2Orchestrator() {
     handleQuoteStatusChange,
     inboundFreightEligible,
     submitApprovalMutation,
+    withdrawApprovalMutation,
     whyThisMachineRequired,
     setIntakeRecorderOpen,
     availableOptionsLabel,
@@ -917,6 +919,7 @@ export function useQuoteBuilderV2Orchestrator() {
     netTotal,
     cashDown,
     draft,
+    currentUserId: profile?.id ?? null,
   });
 
   return (

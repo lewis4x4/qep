@@ -1,14 +1,29 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { ShieldCheck } from "lucide-react";
+
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 import { IncentiveStack } from "./IncentiveStack";
 import { SendQuoteSection } from "./SendQuoteSection";
 import { ApprovalActivityLog } from "./ApprovalActivityLog";
+// Phase 3A: inline manager decision dialog. Mounted only when the
+// current viewer is a manager/owner/admin AND the case is still pending
+// AND the viewer didn't submit the case themselves.
+import { QuoteApprovalDecisionDialog } from "@/features/qrm/command-center/components/QuoteApprovalDecisionDialog";
 // WAVE polish:
 //   Slice 2 — dictation on dealer response + revision summary.
 //   Slice 4 — surface the approval-case detail in a MobileBottomSheet
@@ -60,6 +75,15 @@ interface QuoteReviewWorkflowPanelsProps {
   quoteStatus: QuoteWorkspaceDraft["quoteStatus"];
   onQuoteStatusChange: (status: QuoteWorkspaceDraft["quoteStatus"]) => void;
   showSendSection?: boolean;
+  /**
+   * Phase 3B quote-approval feedback loop — viewer id passed by the
+   * orchestrator. Used for the submitter-only "Withdraw submission"
+   * affordance. Falls back to the in-component `useAuth().profile.id`
+   * when omitted so callers that don't yet thread the prop keep working.
+   */
+  currentUserId?: string | null;
+  onWithdrawApproval?: (input: { approvalCaseId: string; reason?: string | null }) => void;
+  withdrawApprovalPending?: boolean;
 }
 
 export function QuoteReviewWorkflowPanels({
@@ -74,14 +98,28 @@ export function QuoteReviewWorkflowPanels({
   quoteStatus,
   onQuoteStatusChange,
   showSendSection = true,
+  currentUserId,
+  onWithdrawApproval,
+  withdrawApprovalPending,
 }: QuoteReviewWorkflowPanelsProps) {
   const queryClient = useQueryClient();
+  const { profile } = useAuth();
   const [dealerMessage, setDealerMessage] = useState("");
   const [revisionSummary, setRevisionSummary] = useState("");
   // WAVE polish (Slice 4): controlled state for the per-approval
   // MobileBottomSheet. On phone the Approval Case card is a tap-able
   // summary; the full evaluation checklist + decision note open here.
   const [approvalSheetOpen, setApprovalSheetOpen] = useState(false);
+  // Phase 3A: opens the manager decision dialog inline so deep-linked
+  // managers can decide without bouncing back to ApprovalCenter.
+  const [decideDialogOpen, setDecideDialogOpen] = useState(false);
+  // Phase 3B quote-approval feedback loop — withdraw confirmation
+  // dialog. Mounted only when the viewer is the rep who submitted the
+  // case AND the case is still pending/escalated AND the manager hasn't
+  // recorded a decision yet. Keeps the textarea state outside the gate
+  // so reopening the dialog after a Cancel preserves what they typed.
+  const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
+  const [withdrawReason, setWithdrawReason] = useState("");
   const isMobileViewport = useIsMobileViewport();
 
   const portalRevisionQuery = useQuery({
@@ -98,6 +136,36 @@ export function QuoteReviewWorkflowPanels({
     staleTime: 5_000,
   });
   const activeApprovalCase = activeApprovalCaseQuery.data ?? null;
+
+  // Phase 3A: viewer-can-decide gate. Requires elevated role, an active
+  // case that is still pending/escalated, and a viewer who is NOT the
+  // rep who submitted the case (managers can act on others' submissions
+  // but never their own — that's the existing ApprovalCenter rule).
+  // Prefer the caller-supplied currentUserId (orchestrator wires this
+  // for consistency with withdraw logic) and fall back to useAuth so
+  // callers that haven't threaded the prop still gate correctly.
+  const viewerRole = (userRole ?? profile?.role ?? null) as string | null;
+  const viewerId = currentUserId ?? profile?.id ?? null;
+  const viewerCanDecide = Boolean(
+    activeApprovalCase
+    && (activeApprovalCase.status === "pending" || activeApprovalCase.status === "escalated")
+    && (viewerRole === "manager" || viewerRole === "owner" || viewerRole === "admin")
+    && viewerId
+    && activeApprovalCase.submittedBy !== viewerId,
+  );
+  // Phase 3B quote-approval feedback loop — viewer-can-withdraw gate.
+  // Mirrors the server-side authz in withdraw-approval-case: only the
+  // submitter, only before a manager decision, only while the case is
+  // still routable. The handler prop is required — if the caller hasn't
+  // wired it the affordance stays hidden.
+  const viewerCanWithdraw = Boolean(
+    activeApprovalCase
+    && (activeApprovalCase.status === "pending" || activeApprovalCase.status === "escalated")
+    && activeApprovalCase.decidedAt == null
+    && viewerId
+    && activeApprovalCase.submittedBy === viewerId
+    && typeof onWithdrawApproval === "function",
+  );
 
   useEffect(() => {
     const revisionDraft = portalRevisionQuery.data?.draft;
@@ -330,6 +398,43 @@ export function QuoteReviewWorkflowPanels({
                     {openEvaluations} condition{openEvaluations === 1 ? "" : "s"} open — tap for detail.
                   </p>
                 )}
+                {(viewerCanDecide || viewerCanWithdraw) && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {viewerCanDecide && (
+                      <Button
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setDecideDialogOpen(true);
+                        }}
+                        className="bg-qep-orange text-white hover:bg-qep-orange/90"
+                        data-testid="approval-case-decide-now-mobile"
+                      >
+                        <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+                        Decide Now
+                      </Button>
+                    )}
+                    {viewerCanWithdraw && (
+                      // Phase 3B: muted secondary text button so the
+                      // primary CTAs (Decide Now / Submit) keep visual
+                      // priority. Stop propagation so tapping it doesn't
+                      // also open the summary sheet.
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setWithdrawReason("");
+                          setWithdrawDialogOpen(true);
+                        }}
+                        disabled={withdrawApprovalPending === true}
+                        className="text-[11.5px] font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50"
+                        data-testid="approval-case-withdraw-mobile"
+                      >
+                        Withdraw submission
+                      </button>
+                    )}
+                  </div>
+                )}
               </Card>
 
               <MobileBottomSheet
@@ -352,14 +457,115 @@ export function QuoteReviewWorkflowPanels({
                 <p className="text-sm font-medium text-foreground">Approval Case</p>
                 <p className="text-xs text-muted-foreground">{versionLine}{branchSuffix}</p>
               </div>
-              <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange">
-                {statusLabel}
-              </span>
+              <div className="flex items-center gap-2">
+                {viewerCanDecide && (
+                  <Button
+                    size="sm"
+                    onClick={() => setDecideDialogOpen(true)}
+                    className="bg-qep-orange text-white hover:bg-qep-orange/90"
+                    data-testid="approval-case-decide-now"
+                  >
+                    <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+                    Decide Now
+                  </Button>
+                )}
+                {viewerCanWithdraw && (
+                  // Phase 3B: muted secondary "Withdraw" link in the
+                  // corner of the approval card. Kept text-only so it
+                  // doesn't compete with primary actions.
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWithdrawReason("");
+                      setWithdrawDialogOpen(true);
+                    }}
+                    disabled={withdrawApprovalPending === true}
+                    className="text-xs font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50"
+                    data-testid="approval-case-withdraw"
+                  >
+                    Withdraw submission
+                  </button>
+                )}
+                <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange">
+                  {statusLabel}
+                </span>
+              </div>
             </div>
             {detailBody}
           </Card>
         );
       })()}
+
+      {/* Phase 3A: inline manager decision. Mounted at the panel root
+          so both mobile (sheet) and desktop trigger paths share the
+          same dialog instance. */}
+      {viewerCanDecide && activeApprovalCase && (
+        <QuoteApprovalDecisionDialog
+          open={decideDialogOpen}
+          onClose={() => setDecideDialogOpen(false)}
+          approvalCase={activeApprovalCase}
+          onDecided={() => {
+            void queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case", quotePackageId] });
+          }}
+        />
+      )}
+
+      {/* Phase 3B quote-approval feedback loop — withdraw confirmation. */}
+      {viewerCanWithdraw && activeApprovalCase && (
+        <Dialog
+          open={withdrawDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) setWithdrawReason("");
+            setWithdrawDialogOpen(open);
+          }}
+        >
+          <DialogContent className="max-w-md" data-testid="approval-case-withdraw-dialog">
+            <DialogHeader>
+              <DialogTitle>Withdraw this approval submission?</DialogTitle>
+              <DialogDescription>
+                The quote will return to draft and the manager will no longer see it. You can edit anything you need and submit it again.
+              </DialogDescription>
+            </DialogHeader>
+            <label className="block space-y-1 text-sm">
+              <span className="text-muted-foreground">Reason (optional)</span>
+              <textarea
+                value={withdrawReason}
+                onChange={(event) => setWithdrawReason(event.target.value.slice(0, 1000))}
+                rows={3}
+                className="w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm"
+                placeholder="What changed? Helps the audit log explain why this case closed without a manager decision."
+                data-testid="approval-case-withdraw-reason"
+              />
+            </label>
+            <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setWithdrawDialogOpen(false)}
+                disabled={withdrawApprovalPending === true}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  if (!onWithdrawApproval) return;
+                  onWithdrawApproval({
+                    approvalCaseId: activeApprovalCase.id,
+                    reason: withdrawReason.trim() || null,
+                  });
+                  setWithdrawDialogOpen(false);
+                  setWithdrawReason("");
+                }}
+                disabled={withdrawApprovalPending === true}
+                data-testid="approval-case-withdraw-confirm"
+              >
+                {withdrawApprovalPending === true ? "Withdrawing…" : "Withdraw submission"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
       {submitApprovalResult?.autoSend?.attempted && (
         <Card className={cn(
           "p-4",

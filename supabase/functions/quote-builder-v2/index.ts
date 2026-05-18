@@ -6375,6 +6375,146 @@ Deno.serve(async (req) => {
       }, origin);
     }
 
+    // ── POST /withdraw-approval-case: rep cancels their pending submission ─
+    // Phase 3B quote-approval feedback loop. Lets the submitter recall a
+    // pending case before a manager decision is recorded so they can edit
+    // the quote and resubmit without waiting for a reject/changes-requested
+    // round-trip. Idempotent: a second click on the already-cancelled case
+    // returns 200 with the existing row instead of 403.
+    if (action === "withdraw-approval-case" && req.method === "POST") {
+      if (typeof body.approval_case_id !== "string" || body.approval_case_id.length === 0) {
+        return safeJsonError("approval_case_id required", 400, origin);
+      }
+      const providedReason = typeof body.reason === "string" ? body.reason.trim().slice(0, 1000) : "";
+      const withdrawNote = providedReason.length > 0 ? providedReason : "Withdrawn by rep";
+
+      const admin = createAdminClient();
+      const { data: caseRow, error: caseErr } = await admin
+        .from("quote_approval_cases")
+        .select("*")
+        .eq("id", body.approval_case_id)
+        .maybeSingle();
+      if (caseErr) return safeJsonError(caseErr.message, 500, origin);
+      if (!caseRow?.id) return safeJsonError("Quote approval case not found", 404, origin);
+
+      // Idempotent short-circuit: already-cancelled case returns the row
+      // as-is so the rep's double-tap doesn't flash an error.
+      if (String(caseRow.status ?? "") === "cancelled") {
+        return safeJsonOk({
+          ok: true,
+          approvalCase: await buildQuoteApprovalCaseResponse({ admin, approvalCase: caseRow }),
+        }, origin);
+      }
+
+      // Authorization: only the submitter can withdraw, only before a
+      // manager decision, and only while the case is still in a routable
+      // state (pending or escalated).
+      if (typeof caseRow.submitted_by !== "string" || caseRow.submitted_by !== user.id) {
+        return safeJsonError("Only the rep who submitted this approval can withdraw it.", 403, origin);
+      }
+      if (caseRow.decided_at) {
+        return safeJsonError("This approval has already been decided and cannot be withdrawn.", 403, origin);
+      }
+      if (!["pending", "escalated"].includes(String(caseRow.status ?? ""))) {
+        return safeJsonError("This approval is no longer pending and cannot be withdrawn.", 403, origin);
+      }
+
+      const nowIso = new Date().toISOString();
+
+      const { error: caseUpdateErr } = await admin
+        .from("quote_approval_cases")
+        .update({
+          status: "cancelled",
+          decision_note: withdrawNote,
+          decided_at: nowIso,
+          // The rep themself closed the case — record them as the decider
+          // so downstream consumers (My Approvals, activity log) read a
+          // consistent "who closed this" attribution.
+          decided_by: caseRow.submitted_by,
+          decided_by_name: typeof caseRow.submitted_by_name === "string" ? caseRow.submitted_by_name : null,
+        })
+        .eq("id", caseRow.id);
+      if (caseUpdateErr) return safeJsonError(caseUpdateErr.message, 500, origin);
+
+      // Flip the linked quote back to draft so the rep can edit and
+      // resubmit. Skipped silently if the package vanished underneath us
+      // (the case FK has on delete cascade so this is defensive only).
+      if (typeof caseRow.quote_package_id === "string") {
+        const { error: pkgErr } = await admin
+          .from("quote_packages")
+          .update({ status: "draft" })
+          .eq("id", caseRow.quote_package_id);
+        if (pkgErr) return safeJsonError(pkgErr.message, 500, origin);
+      }
+
+      // Cancel the linked flow_approvals row + parent workflow run so the
+      // manager queue clears immediately. The flow_approvals.status check
+      // constraint allows 'cancelled' (migration 195). decide_flow_approval
+      // RPC only handles approved/rejected, so we update the table directly.
+      if (typeof caseRow.flow_approval_id === "string" && caseRow.flow_approval_id.length > 0) {
+        const { data: flowRow, error: flowErr } = await admin
+          .from("flow_approvals")
+          .update({
+            status: "cancelled",
+            decided_at: nowIso,
+            decided_by: user.id,
+            decision_reason: withdrawNote,
+          })
+          .eq("id", caseRow.flow_approval_id)
+          .select("run_id")
+          .maybeSingle();
+        if (flowErr) return safeJsonError(flowErr.message, 500, origin);
+        if (flowRow?.run_id) {
+          const { error: runErr } = await admin
+            .from("flow_workflow_runs")
+            .update({
+              status: "cancelled",
+              finished_at: nowIso,
+              metadata: {
+                approval_case_id: caseRow.id,
+                quote_decision: "withdrawn",
+                decision_note: withdrawNote,
+              },
+            })
+            .eq("id", flowRow.run_id);
+          if (runErr) return safeJsonError(runErr.message, 500, origin);
+        }
+      }
+
+      // Audit trail: flow engine writes approval lifecycle events into
+      // analytics_action_log (see migration 195_flow_engine_approvals_and_context.sql).
+      // Mirror the pattern so the withdrawal shows up in the same stream
+      // as request/decide events. Best-effort — a missing analytics table
+      // must not block the withdrawal itself.
+      try {
+        await admin.from("analytics_action_log").insert({
+          workspace_id: typeof caseRow.workspace_id === "string" ? caseRow.workspace_id : "default",
+          user_id: user.id,
+          action_type: "approval_withdrawn",
+          source_widget: "quote_builder_v2",
+          metadata: {
+            approval_case_id: caseRow.id,
+            quote_package_id: caseRow.quote_package_id,
+            flow_approval_id: caseRow.flow_approval_id,
+            reason: withdrawNote,
+          },
+        });
+      } catch (_auditErr) {
+        // Swallow audit-only errors so a logging hiccup never blocks the
+        // rep from recalling a pending submission.
+      }
+
+      const refreshedCase = await getLatestQuoteApprovalCase({
+        admin,
+        quotePackageId: String(caseRow.quote_package_id),
+      });
+      const responseCase = refreshedCase
+        ? await buildQuoteApprovalCaseResponse({ admin, approvalCase: refreshedCase })
+        : null;
+
+      return safeJsonOk({ ok: true, approvalCase: responseCase }, origin);
+    }
+
     if (action === "approval-policy") {
       if (!canPublish) {
         return safeJsonError("Quote approval policy access requires admin, manager, or owner role", 403, origin);

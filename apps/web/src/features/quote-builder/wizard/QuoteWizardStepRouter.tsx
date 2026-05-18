@@ -237,6 +237,9 @@ export function QuoteWizardStepRouter(props: QuoteWizardStepRouterProps) {
           submitApprovalData={props.submitApprovalData}
           quoteStatus={props.quoteStatus}
           onQuoteStatusChange={props.onQuoteStatusChange}
+          currentUserId={props.currentUserId}
+          onWithdrawApproval={props.onWithdrawApproval}
+          withdrawApprovalPending={props.withdrawApprovalPending}
         />
       )}
 

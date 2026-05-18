@@ -509,6 +509,11 @@ verify_jwt = false
 [functions.generate-daily-briefing]
 verify_jwt = false
 
+# Daily approval-queue digest. Cron-invoked via x-internal-service-secret;
+# function gates auth in-handler via _shared/cron-auth.ts.
+[functions.qrm-approval-digest]
+verify_jwt = false
+
 [functions.anomaly-scan]
 verify_jwt = false
 

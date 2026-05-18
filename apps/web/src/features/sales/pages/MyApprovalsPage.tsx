@@ -19,6 +19,7 @@
  */
 import { useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ArrowRight,
@@ -26,12 +27,30 @@ import {
   ClipboardCheck,
   FileText,
   Mic,
+  MoreHorizontal,
 } from "lucide-react";
 import {
   useMyApprovals,
   type MyApprovalRow,
   type MyApprovalStatus,
 } from "../hooks/useMyApprovals";
+import { withdrawApprovalCase } from "@/features/quote-builder/lib/quote-api";
+import { toast } from "@/hooks/use-toast";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 type FilterKey = "all" | "pending" | "changes_requested" | "decided";
 
@@ -239,9 +258,45 @@ export function MyApprovalsPage() {
 
 function ApprovalRow({ approval }: { approval: MyApprovalRow }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const style = STATUS_STYLE[approval.status];
   const isPending = PENDING_SET.has(approval.status);
   const isDecided = DECIDED_SET.has(approval.status);
+
+  // Phase 3B quote-approval feedback loop — let the rep recall a pending
+  // submission directly from the My Approvals list. Hidden for any case
+  // that's already past pending/escalated so we don't flash an
+  // affordance the server will reject anyway. The mutation lives on the
+  // row (not the page) so concurrent withdrawals on multiple rows each
+  // get their own pending state.
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawReason, setWithdrawReason] = useState("");
+  const withdrawMutation = useMutation({
+    mutationFn: ({ reason }: { reason: string | null }) =>
+      withdrawApprovalCase(approval.id, reason),
+    onSuccess: () => {
+      toast({
+        title: "Approval withdrawn",
+        description: "Your quote is back in draft. Edit anything you need, then submit again.",
+      });
+      void queryClient.invalidateQueries({ queryKey: ["sales", "my-approvals"] });
+      void queryClient.invalidateQueries({ queryKey: ["sales", "qb-notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["quote-builder", "approval-case", approval.quote_package_id],
+      });
+      setWithdrawOpen(false);
+      setWithdrawReason("");
+    },
+    onError: (error) => {
+      toast({
+        title: "Couldn't withdraw approval",
+        description: error instanceof Error ? error.message : "Try refreshing and withdrawing again.",
+        variant: "destructive",
+      });
+    },
+  });
+  const canWithdraw = isPending && approval.decided_at === null;
 
   const customerLabel =
     approval.customer_name ||
@@ -266,71 +321,157 @@ function ApprovalRow({ approval }: { approval: MyApprovalRow }) {
       : null;
 
   return (
-    <button
-      type="button"
-      onClick={() => navigate(`/sales/quotes/${approval.quote_package_id}`)}
-      className="group w-full text-left bg-[hsl(var(--card))] border border-white/[0.06] rounded-2xl px-3.5 py-3 hover:bg-white/[0.03] transition-colors active:scale-[0.995]"
+    <div
+      className="group relative bg-[hsl(var(--card))] border border-white/[0.06] rounded-2xl hover:bg-white/[0.03] transition-colors"
     >
-      <div className="flex items-start justify-between gap-2 mb-1.5">
-        <div className="min-w-0 flex-1">
-          <p className="text-[14px] font-bold text-foreground leading-tight truncate">
-            {customerLabel}
-          </p>
-          <p className="text-[11px] text-muted-foreground/80 leading-snug mt-0.5 truncate">
-            {approval.quote_number ?? "No quote number"}
-            <span className="mx-1.5 text-muted-foreground/40">·</span>
-            {formatCurrency(approval.total_amount)}
-            {approval.margin_pct !== null && (
-              <>
-                <span className="mx-1.5 text-muted-foreground/40">·</span>
-                <span
-                  className={
-                    approval.margin_pct < 8 ? "text-amber-300" : "text-muted-foreground/80"
-                  }
-                >
-                  {approval.margin_pct.toFixed(1)}% margin
-                </span>
-              </>
-            )}
-          </p>
+      <button
+        type="button"
+        onClick={() => navigate(`/sales/quotes/${approval.quote_package_id}`)}
+        className="block w-full text-left px-3.5 py-3 active:scale-[0.995] transition-transform"
+      >
+        <div className="flex items-start justify-between gap-2 mb-1.5">
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-bold text-foreground leading-tight truncate">
+              {customerLabel}
+            </p>
+            <p className="text-[11px] text-muted-foreground/80 leading-snug mt-0.5 truncate">
+              {approval.quote_number ?? "No quote number"}
+              <span className="mx-1.5 text-muted-foreground/40">·</span>
+              {formatCurrency(approval.total_amount)}
+              {approval.margin_pct !== null && (
+                <>
+                  <span className="mx-1.5 text-muted-foreground/40">·</span>
+                  <span
+                    className={
+                      approval.margin_pct < 8 ? "text-amber-300" : "text-muted-foreground/80"
+                    }
+                  >
+                    {approval.margin_pct.toFixed(1)}% margin
+                  </span>
+                </>
+              )}
+            </p>
+          </div>
+          <span
+            className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border ${style.bg} ${style.border} ${style.text}`}
+          >
+            {style.label}
+          </span>
         </div>
-        <span
-          className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border ${style.bg} ${style.border} ${style.text}`}
-        >
-          {style.label}
-        </span>
-      </div>
 
-      <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground/70">
-        <span className="truncate">{timeAgo}</span>
-        {managerLabel && (
-          <span className="truncate text-right">{managerLabel}</span>
+        <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground/70">
+          <span className="truncate">{timeAgo}</span>
+          {managerLabel && (
+            <span className="truncate text-right">{managerLabel}</span>
+          )}
+        </div>
+
+        {approval.submission_note && (
+          <p className="mt-2 text-[11.5px] italic text-muted-foreground/75 leading-snug line-clamp-2">
+            &ldquo;{approval.submission_note}&rdquo;
+          </p>
         )}
-      </div>
 
-      {approval.submission_note && (
-        <p className="mt-2 text-[11.5px] italic text-muted-foreground/75 leading-snug line-clamp-2">
-          &ldquo;{approval.submission_note}&rdquo;
-        </p>
-      )}
+        {approval.decision_note && (
+          <div className="mt-2 px-2.5 py-1.5 rounded-[10px] bg-white/[0.03] border border-white/[0.05]">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground/60 mb-0.5">
+              {approval.decided_by_name
+                ? `${approval.decided_by_name} replied`
+                : "Manager replied"}
+            </p>
+            <p className="text-[12px] text-foreground/85 leading-snug">
+              {approval.decision_note}
+            </p>
+          </div>
+        )}
 
-      {approval.decision_note && (
-        <div className="mt-2 px-2.5 py-1.5 rounded-[10px] bg-white/[0.03] border border-white/[0.05]">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground/60 mb-0.5">
-            {approval.decided_by_name
-              ? `${approval.decided_by_name} replied`
-              : "Manager replied"}
-          </p>
-          <p className="text-[12px] text-foreground/85 leading-snug">
-            {approval.decision_note}
-          </p>
+        <div className="flex items-center justify-end mt-1.5 text-qep-orange/70 group-hover:text-qep-orange transition-colors">
+          <ChevronRight className="w-3.5 h-3.5" />
+        </div>
+      </button>
+
+      {/* Phase 3B quote-approval feedback loop — overflow menu with
+          Withdraw for any case still pending/escalated. Pinned to the
+          top-right of the row so the row body stays tappable. Hidden
+          entirely for already-decided cases. */}
+      {canWithdraw && (
+        <div className="absolute top-1.5 right-1.5">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="Approval actions"
+                onClick={(event) => event.stopPropagation()}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground/70 hover:bg-white/[0.05] hover:text-foreground transition-colors"
+                data-testid={`my-approvals-row-menu-${approval.id}`}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  setWithdrawReason("");
+                  setWithdrawOpen(true);
+                }}
+                data-testid={`my-approvals-row-withdraw-${approval.id}`}
+              >
+                Withdraw submission
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
 
-      <div className="flex items-center justify-end mt-1.5 text-qep-orange/70 group-hover:text-qep-orange transition-colors">
-        <ChevronRight className="w-3.5 h-3.5" />
-      </div>
-    </button>
+      {canWithdraw && (
+        <Dialog
+          open={withdrawOpen}
+          onOpenChange={(open) => {
+            if (!open) setWithdrawReason("");
+            setWithdrawOpen(open);
+          }}
+        >
+          <DialogContent className="max-w-md" data-testid={`my-approvals-withdraw-dialog-${approval.id}`}>
+            <DialogHeader>
+              <DialogTitle>Withdraw this approval submission?</DialogTitle>
+              <DialogDescription>
+                The quote will return to draft and the manager will no longer see it. You can edit anything you need and submit it again.
+              </DialogDescription>
+            </DialogHeader>
+            <label className="block space-y-1 text-sm">
+              <span className="text-muted-foreground">Reason (optional)</span>
+              <textarea
+                value={withdrawReason}
+                onChange={(event) => setWithdrawReason(event.target.value.slice(0, 1000))}
+                rows={3}
+                className="w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm"
+                placeholder="What changed? Helps the audit log explain why this case closed."
+              />
+            </label>
+            <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setWithdrawOpen(false)}
+                disabled={withdrawMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() =>
+                  withdrawMutation.mutate({ reason: withdrawReason.trim() || null })
+                }
+                disabled={withdrawMutation.isPending}
+              >
+                {withdrawMutation.isPending ? "Withdrawing…" : "Withdraw submission"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
   );
 }
 

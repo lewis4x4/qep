@@ -1709,6 +1709,45 @@ export async function decideQuoteApprovalCase(input: {
   };
 }
 
+/**
+ * Phase 3B quote-approval feedback loop: rep recalls a pending submission.
+ *
+ * Mirrors {@link submitQuoteForApproval} / {@link decideQuoteApprovalCase}:
+ * POST to the quote-builder-v2 edge function, normalize the returned case
+ * row through the same contract shape used everywhere else. The edge
+ * function flips the case to `cancelled`, returns the linked
+ * `quote_packages` row to `draft`, and cancels the linked
+ * `flow_approvals` so the manager queue clears.
+ *
+ * Idempotent on the server side — a second click on the already-cancelled
+ * case returns 200 with the cancelled row instead of 409/403, so callers
+ * don't need a debounce.
+ */
+export async function withdrawApprovalCase(
+  approvalCaseId: string,
+  reason?: string | null,
+): Promise<{ approvalCase: QuoteApprovalCaseSummary | null }> {
+  const trimmedReason = typeof reason === "string" ? reason.trim() : "";
+  const payload: { approval_case_id: string; reason?: string } = {
+    approval_case_id: approvalCaseId,
+  };
+  if (trimmedReason.length > 0) {
+    payload.reason = trimmedReason;
+  }
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/withdraw-approval-case`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await readJsonRecord(res);
+    throw new Error(errorDetail(err) || "Failed to withdraw approval submission");
+  }
+  const body = await readJsonRecord(res);
+  return {
+    approvalCase: normalizeQuoteApprovalCaseSummary(body.approvalCase ?? body.approval_case),
+  };
+}
+
 export async function getQuoteApprovalPolicy(): Promise<QuoteApprovalPolicy> {
   const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/approval-policy`);
   if (!res.ok) {
