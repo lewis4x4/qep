@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { useCustomers } from "../hooks/useCustomers";
+import { useCustomerDirectorySearch } from "../hooks/useCustomerDirectorySearch";
 import { SalesCustomerCard } from "../components/SalesCustomerCard";
 import { CustomerSearchBar } from "../components/CustomerSearchBar";
 import { CustomerEmptyState } from "../components/CustomerEmptyState";
 import { CustomerInsightsStrip } from "../components/CustomerInsightsStrip";
 import { CustomerPulse } from "../components/CustomerPulse";
 import { CustomerSkeleton } from "../components/CustomerSkeleton";
+import {
+  CustomerDirectoryResults,
+  buildBookCompanyIdSet,
+} from "../components/CustomerDirectoryResults";
 import { Flame, Zap, X } from "lucide-react";
 import {
   filterCustomersByInsight,
@@ -21,6 +26,11 @@ export function CustomerListPage() {
   const [insightFilter, setInsightFilter] = useState<CustomerInsightKey | null>(
     null,
   );
+
+  // Directory search fires only when the rep types ≥2 chars. Hits crm_companies
+  // + crm_contacts directly so the rep can find customers outside their book.
+  const directoryQuery = useCustomerDirectorySearch(search);
+  const isSearching = search.trim().length >= 2;
 
   if (isLoading) {
     return <CustomerSkeleton />;
@@ -84,25 +94,25 @@ export function CustomerListPage() {
           </div>
         </div>
 
-        {/* Search — only meaningful when there's something to search */}
-        {!isFullyEmpty && (
-          <CustomerSearchBar value={search} onChange={setSearch} />
-        )}
+        {/* Search — always visible so reps can find any customer in the
+            dealer directory, even when their book is empty. */}
+        <CustomerSearchBar value={search} onChange={setSearch} />
       </div>
 
-      {/* Pulse (one-line vibe-check) */}
-      {!isFullyEmpty && <CustomerPulse customers={allCustomers} />}
-
-      {/* AI Insights strip — replaces old chip row */}
-      {!isFullyEmpty && (
-        <CustomerInsightsStrip
-          customers={allCustomers}
-          activeFilter={insightFilter}
-          onFilterChange={setInsightFilter}
-        />
+      {/* Pulse + Insights strip — hidden while searching to keep focus on
+          search results; also hidden when book is fully empty. */}
+      {!isFullyEmpty && !isSearching && (
+        <>
+          <CustomerPulse customers={allCustomers} />
+          <CustomerInsightsStrip
+            customers={allCustomers}
+            activeFilter={insightFilter}
+            onFilterChange={setInsightFilter}
+          />
+        </>
       )}
 
-      {/* Banner row: filter banner if active, else Iron-Ranked label */}
+      {/* Book section header — only when there's a book to label */}
       {!isFullyEmpty && (
         insightFilter ? (
           <InsightFilterBanner
@@ -117,7 +127,7 @@ export function CustomerListPage() {
                 <Zap className="w-[11px] h-[11px] text-qep-orange" />
               </div>
               <span className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-[0.08em]">
-                Iron-Ranked by Opportunity
+                {isSearching ? "In Your Book" : "Iron-Ranked by Opportunity"}
               </span>
             </div>
             <span className="text-[11px] text-muted-foreground/60 font-semibold">
@@ -128,32 +138,51 @@ export function CustomerListPage() {
         )
       )}
 
-      {/* Customer list / empty states */}
-      <div className="px-4 py-2.5 space-y-2.5">
-        {visibleCustomers.length > 0 ? (
-          visibleCustomers.map((customer, idx) => (
-            <SalesCustomerCard
-              key={customer.customer_id}
-              customer={customer}
-              rank={idx}
-              showRank={!insightFilter && !search}
+      {/* Local book results — present whenever the rep has a book. */}
+      {!isFullyEmpty && (
+        <div className="px-4 py-2.5 space-y-2.5">
+          {visibleCustomers.length > 0 ? (
+            visibleCustomers.map((customer, idx) => (
+              <SalesCustomerCard
+                key={customer.customer_id}
+                customer={customer}
+                rank={idx}
+                showRank={!insightFilter && !search}
+              />
+            ))
+          ) : isSearching ? (
+            <p className="text-center text-[12px] text-muted-foreground/70 py-2">
+              No book matches — see dealer directory below.
+            </p>
+          ) : (
+            <CustomerEmptyState
+              filterLabel={
+                insightFilter
+                  ? CUSTOMER_INSIGHT_LABELS[insightFilter]
+                  : undefined
+              }
+              onClearFilter={() => setInsightFilter(null)}
             />
-          ))
-        ) : isFullyEmpty ? (
+          )}
+        </div>
+      )}
+
+      {/* Dealer directory results — appears whenever the rep is searching. */}
+      {isSearching && (
+        <CustomerDirectoryResults
+          query={search}
+          results={directoryQuery.data ?? []}
+          isLoading={directoryQuery.isLoading}
+          bookCompanyIds={buildBookCompanyIdSet(allCustomers)}
+        />
+      )}
+
+      {/* Activated empty state — only when no book AND no active search. */}
+      {isFullyEmpty && !isSearching && (
+        <div className="px-4 py-2.5">
           <CustomerEmptyState />
-        ) : search ? (
-          <CustomerEmptyState searchTerm={search} />
-        ) : (
-          <CustomerEmptyState
-            filterLabel={
-              insightFilter
-                ? CUSTOMER_INSIGHT_LABELS[insightFilter]
-                : undefined
-            }
-            onClearFilter={() => setInsightFilter(null)}
-          />
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
