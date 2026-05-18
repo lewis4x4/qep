@@ -14,6 +14,7 @@ import {
 import { useCustomerDetail } from "../hooks/useCustomerDetail";
 import { EquipmentFleet } from "../components/EquipmentFleet";
 import { InteractionTimeline } from "../components/InteractionTimeline";
+import { CustomerDetailSkeleton } from "../components/CustomerDetailSkeleton";
 import type { RepPipelineDeal } from "../lib/types";
 import { accountCommandUrl } from "@/features/qrm/lib/account-links";
 
@@ -103,11 +104,7 @@ export function CustomerDetailPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-3 border-qep-orange border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <CustomerDetailSkeleton />;
   }
 
   if (!customer) {
@@ -181,58 +178,66 @@ export function CustomerDetailPage() {
 
         {/* Action row */}
         <div className="grid grid-cols-4 gap-1.5">
-          {[
-            {
-              icon: <PhoneCall className="w-4 h-4" />,
-              label: "Call",
-              primary: true,
-              href: customer.primary_contact_phone
-                ? `tel:${customer.primary_contact_phone}`
-                : undefined,
-            },
-            {
-              icon: <Mail className="w-4 h-4" />,
-              label: "Email",
-              href: customer.primary_contact_email
-                ? `mailto:${customer.primary_contact_email}`
-                : undefined,
-            },
-            {
-              icon: <FileText className="w-4 h-4" />,
-              label: "Quote",
-            },
-            {
-              icon: <Edit3 className="w-4 h-4" />,
-              label: "Log",
-            },
-          ].map((action, i) =>
-            action.href ? (
-              <a
-                key={i}
-                href={action.href}
-                className={`flex flex-col items-center gap-1 py-2.5 px-1 rounded-[10px] text-[11px] font-bold transition-colors ${
-                  action.primary
-                    ? "bg-qep-orange text-white"
-                    : "bg-[hsl(var(--card))] border border-white/[0.06] text-foreground hover:border-white/20"
-                }`}
-              >
-                {action.icon}
-                {action.label}
-              </a>
-            ) : (
-              <button
-                key={i}
-                className={`flex flex-col items-center gap-1 py-2.5 px-1 rounded-[10px] text-[11px] font-bold transition-colors ${
-                  action.primary
-                    ? "bg-qep-orange text-white"
-                    : "bg-[hsl(var(--card))] border border-white/[0.06] text-foreground hover:border-white/20"
-                }`}
-              >
-                {action.icon}
-                {action.label}
-              </button>
-            ),
-          )}
+          {(() => {
+            const baseClass = (primary?: boolean) =>
+              `flex flex-col items-center gap-1 py-2.5 px-1 rounded-[10px] text-[11px] font-bold transition-colors ${
+                primary
+                  ? "bg-qep-orange text-white"
+                  : "bg-[hsl(var(--card))] border border-white/[0.06] text-foreground hover:border-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
+              }`;
+            return (
+              <>
+                {customer.primary_contact_phone ? (
+                  <a
+                    href={`tel:${customer.primary_contact_phone}`}
+                    className={baseClass(true)}
+                  >
+                    <PhoneCall className="w-4 h-4" />
+                    Call
+                  </a>
+                ) : (
+                  <button type="button" disabled className={baseClass(true)}>
+                    <PhoneCall className="w-4 h-4" />
+                    Call
+                  </button>
+                )}
+                {customer.primary_contact_email ? (
+                  <a
+                    href={`mailto:${customer.primary_contact_email}`}
+                    className={baseClass()}
+                  >
+                    <Mail className="w-4 h-4" />
+                    Email
+                  </a>
+                ) : (
+                  <button type="button" disabled className={baseClass()}>
+                    <Mail className="w-4 h-4" />
+                    Email
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(
+                      `/sales/quotes/new?company_id=${encodeURIComponent(companyId)}`,
+                    )
+                  }
+                  className={baseClass()}
+                >
+                  <FileText className="w-4 h-4" />
+                  Quote
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate("/sales/capture")}
+                  className={baseClass()}
+                >
+                  <Edit3 className="w-4 h-4" />
+                  Log
+                </button>
+              </>
+            );
+          })()}
         </div>
       </div>
 
