@@ -1,19 +1,96 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useTodayFeed } from "../hooks/useTodayFeed";
 import { useAuth } from "@/hooks/useAuth";
-import { AiBriefingCard } from "../components/AiBriefingCard";
+import { EveningBriefingHero } from "../components/EveningBriefingHero";
+import { MomentumStrip } from "../components/MomentumStrip";
+import { TomorrowFirstMove } from "../components/TomorrowFirstMove";
+import { LiveSignalsStrip } from "../components/LiveSignalsStrip";
+import { EmptyStateQuickStart } from "../components/EmptyStateQuickStart";
 import { PrepCard } from "../components/PrepCard";
 import { ActionItemCard } from "../components/ActionItemCard";
-import { PipelineSnapshot } from "../components/PipelineSnapshot";
-import { DaySummaryCard } from "../components/DaySummaryCard";
 import { LogVisitFlow } from "../components/LogVisitFlow";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import {
-  TrendingUp,
-  Flame,
-  Calendar,
-  Plus,
-} from "lucide-react";
+import { Flame, Calendar, Plus } from "lucide-react";
+import { formatRepFirstName } from "../lib/format-rep-name";
+
+function formatCurrencyCompact(value: number): string {
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
+  return `$${value.toLocaleString()}`;
+}
+
+interface BriefingCopy {
+  headline: string | null;
+  followup: string | null;
+  assistantStatus: string;
+}
+
+function buildBriefingCopy(args: {
+  timeOfDay: "morning" | "afternoon" | "evening";
+  pipelineCount: number;
+  pipelineValue: number;
+  warmCount: number;
+  coolingCount: number;
+  closingSoonCount: number;
+  quotesThisWeek: number;
+}): BriefingCopy {
+  const {
+    timeOfDay,
+    pipelineCount,
+    pipelineValue,
+    warmCount,
+    coolingCount,
+    closingSoonCount,
+    quotesThisWeek,
+  } = args;
+
+  if (pipelineCount === 0) {
+    return {
+      headline: "JARVIS is warming up. Drop your first signal and I'll start scoring your book overnight.",
+      followup: null,
+      assistantStatus: "Ready",
+    };
+  }
+
+  const pipelineLine = `${formatCurrencyCompact(pipelineValue)} across ${pipelineCount} ${pipelineCount === 1 ? "deal" : "deals"}`;
+  const followupBits: string[] = [];
+  if (closingSoonCount > 0) {
+    followupBits.push(`${closingSoonCount} closing this week`);
+  }
+  if (coolingCount > 0) {
+    followupBits.push(`${coolingCount} cooling`);
+  }
+  if (followupBits.length === 0 && warmCount > 0) {
+    followupBits.push(`${warmCount} warm and engaged`);
+  }
+  if (followupBits.length === 0 && quotesThisWeek > 0) {
+    followupBits.push(`${quotesThisWeek} quotes sent this week`);
+  }
+  const followup = followupBits.length > 0 ? followupBits.join(" · ") : null;
+
+  if (timeOfDay === "evening") {
+    return {
+      headline: `Today's book: ${pipelineLine}.`,
+      followup: followup ? `Tomorrow: ${followup}.` : "Tomorrow's prep is ready.",
+      assistantStatus: "Briefing tomorrow",
+    };
+  }
+
+  if (timeOfDay === "morning") {
+    return {
+      headline: `${pipelineLine} ready to move.`,
+      followup,
+      assistantStatus: "Scoring deals",
+    };
+  }
+
+  return {
+    headline: `${pipelineLine} in motion right now.`,
+    followup,
+    assistantStatus: "Watching signals",
+  };
+}
+
 export function TodayFeedPage() {
   const {
     briefing,
@@ -26,6 +103,15 @@ export function TodayFeedPage() {
   const { profile } = useAuth();
   const [logVisitOpen, setLogVisitOpen] = useState(false);
 
+  const firstName = useMemo(
+    () =>
+      formatRepFirstName({
+        full_name: profile?.full_name ?? null,
+        email: profile?.email ?? null,
+      }),
+    [profile?.full_name, profile?.email],
+  );
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -34,10 +120,8 @@ export function TodayFeedPage() {
     );
   }
 
-  // ── Deal lookup map for enriching priority cards ──
   const dealMap = new Map(pipeline.map((d) => [d.deal_id, d]));
 
-  // ── Merge & deduplicate priorities ──
   const allPriorities = [
     ...(briefing?.priority_actions ?? []),
     ...livePriorityActions,
@@ -50,19 +134,31 @@ export function TodayFeedPage() {
     return true;
   });
 
-  // ── Closing soon count for hero card ──
-  const closingSoon = pipeline.filter(
+  const now = Date.now();
+  const week = 7 * 24 * 60 * 60 * 1000;
+  const closingSoonCount = pipeline.filter(
     (d) =>
       d.expected_close_on &&
-      new Date(d.expected_close_on).getTime() - Date.now() <
-        7 * 24 * 60 * 60 * 1000,
+      new Date(d.expected_close_on).getTime() - now < week,
+  ).length;
+  const warmCount = pipeline.filter((d) => d.heat_status === "warm").length;
+  const coolingCount = pipeline.filter(
+    (d) => d.heat_status === "cooling" || d.heat_status === "cold",
   ).length;
 
-  // ── First name extraction ──
-  const firstName =
-    profile?.full_name?.split(" ")[0] ?? "";
+  const briefingCopy = buildBriefingCopy({
+    timeOfDay,
+    pipelineCount: pipeline.length,
+    pipelineValue: liveStats.total_pipeline_value,
+    warmCount,
+    coolingCount,
+    closingSoonCount,
+    quotesThisWeek: liveStats.quotes_sent_this_week,
+  });
 
-  const hasData = pipeline.length > 0 || briefing;
+  const hasData = pipeline.length > 0 || Boolean(briefing);
+
+  const handleVoiceDictate = () => setLogVisitOpen(true);
 
   return (
     <div className="px-4 py-4 space-y-5 max-w-lg mx-auto pb-8">
@@ -71,6 +167,7 @@ export function TodayFeedPage() {
         <button
           type="button"
           aria-label="Log a visit"
+          data-capture-trigger
           onClick={() => setLogVisitOpen(true)}
           className="w-10 h-10 rounded-full bg-qep-orange text-white flex items-center justify-center active:scale-95 transition-transform"
         >
@@ -84,19 +181,33 @@ export function TodayFeedPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Hero Greeting */}
-      <AiBriefingCard
+      <EveningBriefingHero
         firstName={firstName}
         timeOfDay={timeOfDay}
-        pipelineValue={liveStats.total_pipeline_value}
-        closingSoonCount={closingSoon}
-        priorityCount={priorities.length}
+        headline={briefingCopy.headline}
+        followup={briefingCopy.followup}
+        assistantStatus={briefingCopy.assistantStatus}
+        onVoicePress={handleVoiceDictate}
       />
 
-      {/* Pipeline Snapshot */}
-      <PipelineSnapshot stats={liveStats} />
+      {hasData && (
+        <MomentumStrip
+          pipeline={pipeline}
+          quotesThisWeek={liveStats.quotes_sent_this_week}
+        />
+      )}
 
-      {/* Priority Actions */}
+      {pipeline.length > 0 && (
+        <LiveSignalsStrip
+          pipeline={pipeline}
+          expiringQuoteCount={
+            briefing?.expiring_quotes?.length ?? 0
+          }
+        />
+      )}
+
+      {pipeline.length > 0 && <TomorrowFirstMove pipeline={pipeline} />}
+
       {priorities.length > 0 && (
         <div>
           <SectionHeader
@@ -116,7 +227,6 @@ export function TodayFeedPage() {
         </div>
       )}
 
-      {/* Today's Meetings / Prep Cards */}
       {briefing?.prep_cards && briefing.prep_cards.length > 0 && (
         <div>
           <SectionHeader
@@ -134,41 +244,13 @@ export function TodayFeedPage() {
         </div>
       )}
 
-      {/* Evening Summary */}
-      {timeOfDay === "evening" && <DaySummaryCard pipeline={pipeline} />}
-
-      {/* Empty state */}
       {!hasData && (
-        <div className="text-center py-16 px-6">
-          <div className="w-16 h-16 mx-auto mb-4 bg-qep-orange/10 rounded-full flex items-center justify-center">
-            <TrendingUp className="w-8 h-8 text-qep-orange" />
-          </div>
-          <h3 className="text-lg font-semibold text-foreground mb-2">
-            Your Sales Companion is ready
-          </h3>
-          <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-            Start by logging a visit or adding a deal. Your AI-powered briefing
-            will generate overnight with priorities, prep cards, and
-            opportunities.
-          </p>
-          <button
-            onClick={() => {
-              const plusBtn = document.querySelector(
-                "[data-capture-trigger]",
-              );
-              if (plusBtn instanceof HTMLButtonElement) plusBtn.click();
-            }}
-            className="mt-4 px-6 py-2.5 bg-qep-orange text-white rounded-full text-sm font-semibold shadow-md hover:shadow-lg transition-shadow"
-          >
-            Log Your First Visit
-          </button>
-        </div>
+        <EmptyStateQuickStart onLogVisit={() => setLogVisitOpen(true)} />
       )}
     </div>
   );
 }
 
-/* ── Reusable section header ─────────────────────────── */
 function SectionHeader({
   icon,
   label,
