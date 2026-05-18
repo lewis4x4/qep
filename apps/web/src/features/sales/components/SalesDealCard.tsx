@@ -7,10 +7,30 @@ import {
   ArrowRight,
   Zap,
   User2,
+  Sparkles,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { advanceDealStage } from "../lib/sales-api";
 import type { RepPipelineDeal } from "../lib/types";
+
+/* ── AI score chip ──────────────────────────────────────── */
+function AiScoreChip({ score }: { score: number }) {
+  const tone =
+    score >= 80
+      ? "bg-emerald-500/15 text-emerald-400"
+      : score >= 50
+        ? "bg-qep-orange/15 text-qep-orange"
+        : "bg-red-500/15 text-red-400";
+  return (
+    <span
+      className={`text-[10px] font-bold px-[7px] py-[2px] rounded-[10px] uppercase tracking-[0.04em] flex items-center gap-1 ${tone}`}
+      title="AI deal score"
+    >
+      <Sparkles className="w-2.5 h-2.5" />
+      AI {Math.round(score)}
+    </span>
+  );
+}
 
 /* ── Heat dot ───────────────────────────────────────────── */
 function HeatDot({ heat }: { heat: string }) {
@@ -144,6 +164,9 @@ export function SalesDealCard({
                 <span className="text-[10px] font-bold px-[7px] py-[2px] rounded-[10px] bg-amber-500/15 text-amber-400 uppercase tracking-[0.04em]">
                   Stalled
                 </span>
+              )}
+              {deal.deal_score != null && (
+                <AiScoreChip score={deal.deal_score} />
               )}
             </div>
             <p className="text-base font-extrabold text-foreground tracking-[-0.01em] mb-0.5">
