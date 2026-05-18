@@ -4,6 +4,7 @@ import { SalesDealCard } from "../components/SalesDealCard";
 import { PipelineEmptyState } from "../components/PipelineEmptyState";
 import { PipelineInsightsStrip } from "../components/PipelineInsightsStrip";
 import { PipelineForecastStrip } from "../components/PipelineForecastStrip";
+import { PipelineSkeleton } from "../components/PipelineSkeleton";
 import {
   TrendingUp,
   Flame,
@@ -33,11 +34,7 @@ export function PipelineBoardPage() {
   } = useSalesPipeline();
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-3 border-qep-orange border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <PipelineSkeleton />;
   }
 
   // ── Compute pipeline analytics ──
