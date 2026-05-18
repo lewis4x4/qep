@@ -20,6 +20,7 @@ import {
   draftHasCustomer,
   metadataString,
 } from "../lib/quote-builder-page-helpers";
+import { translateQuoteError } from "../lib/quote-error-messages";
 
 export interface UseQuoteBuilderAvailabilityInput {
   activeQuotePackageId: string | null;
@@ -111,9 +112,12 @@ export function useQuoteBuilderAvailability({
       queryClient.invalidateQueries({ queryKey: ["quote-builder", "availability-requests"] });
     },
     onError: (error) => {
+      const copy = translateQuoteError(error);
       toast({
-        title: "Availability request failed",
-        description: error instanceof Error ? error.message : "Could not create the sourcing request.",
+        title: copy.title === "Something went wrong" ? "Availability request failed" : copy.title,
+        description: copy.recoveryHint
+          ? `${copy.description} ${copy.recoveryHint}`
+          : copy.description,
         variant: "destructive",
       });
     },

@@ -9,7 +9,10 @@ import { Button } from "@/components/ui/button";
 import { DealAssistantTrigger } from "./ConversationalDealEngine";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { QuoteBuilderStickyBar } from "./QuoteBuilderStickyBar";
-import { QuoteBuilderStatusBanners } from "./QuoteBuilderStatusBanners";
+import {
+  QuoteBuilderStatusBanners,
+  type StatusBannerError,
+} from "./QuoteBuilderStatusBanners";
 import { QuoteBuilderOverlays } from "./QuoteBuilderOverlays";
 import { MarginFloorGate } from "./MarginFloorGate";
 import { DealCoachSidebar } from "./DealCoachSidebar";
@@ -71,8 +74,8 @@ export interface QuoteBuilderV2PageShellProps {
   }) => void;
   pdfError: string | null;
   saveSuccess: boolean;
-  saveErrorMessage: string | null;
-  submitApprovalErrorMessage: string | null;
+  saveErrorMessage: StatusBannerError;
+  submitApprovalErrorMessage: StatusBannerError;
   intelligencePanel: ReactNode;
   overlays: QuoteBuilderOverlaysProps;
 }

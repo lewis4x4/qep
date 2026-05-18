@@ -28,6 +28,7 @@ import {
   logMarginException,
 } from "@/features/admin/lib/pricing-discipline-api";
 import { toast } from "@/hooks/use-toast";
+import { translateQuoteError } from "../lib/quote-error-messages";
 import type {
   QuoteFinanceScenario,
   QuoteWorkspaceDraft,
@@ -235,9 +236,12 @@ export function useQuoteBuilderSave({
       }
     },
     onError: (error) => {
+      const copy = translateQuoteError(error);
       toast({
-        title: "Quote save failed",
-        description: error instanceof Error ? error.message : "Check your connection and try again.",
+        title: copy.title,
+        description: copy.recoveryHint
+          ? `${copy.description} ${copy.recoveryHint}`
+          : copy.description,
         variant: "destructive",
       });
     },
@@ -302,9 +306,12 @@ export function useQuoteBuilderSave({
       queryClient.invalidateQueries({ queryKey: ["quote-builder", "saved-quote"] });
     },
     onError: (error) => {
+      const copy = translateQuoteError(error);
       toast({
-        title: "Approval submission failed",
-        description: error instanceof Error ? error.message : "Try saving the quote, then submit again.",
+        title: copy.title === "Something went wrong" ? "Approval submission failed" : copy.title,
+        description: copy.recoveryHint
+          ? `${copy.description} ${copy.recoveryHint}`
+          : copy.description,
         variant: "destructive",
       });
     },
@@ -340,9 +347,12 @@ export function useQuoteBuilderSave({
       });
     },
     onError: (error) => {
+      const copy = translateQuoteError(error);
       toast({
-        title: "Couldn't withdraw approval",
-        description: error instanceof Error ? error.message : "Try refreshing and withdrawing again.",
+        title: copy.title === "Something went wrong" ? "Couldn't withdraw approval" : copy.title,
+        description: copy.recoveryHint
+          ? `${copy.description} ${copy.recoveryHint}`
+          : copy.description,
         variant: "destructive",
       });
     },

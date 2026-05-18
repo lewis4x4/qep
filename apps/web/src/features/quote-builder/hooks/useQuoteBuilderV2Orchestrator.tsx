@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams, useSearchParams } from "react-router-dom";
 import type { QuoteFinancingRequest, QuotePackageCatalogKind } from "../lib/quote-api";
+import { translateQuoteError } from "../lib/quote-error-messages";
 import type { QuoteFinanceScenario, QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
 import type { QuoteSendActionChannel } from "../lib/quote-workspace";
 import { useAuth } from "@/hooks/useAuth";
@@ -975,10 +976,10 @@ export function useQuoteBuilderV2Orchestrator() {
         pdfError,
         saveSuccess: saveMutation.isSuccess,
         saveErrorMessage: saveMutation.isError
-          ? (saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save the quote.")
+          ? translateQuoteError(saveMutation.error ?? "Failed to save the quote.")
           : null,
         submitApprovalErrorMessage: submitApprovalMutation.isError
-          ? (submitApprovalMutation.error instanceof Error ? submitApprovalMutation.error.message : "Failed to submit the quote for approval.")
+          ? translateQuoteError(submitApprovalMutation.error ?? "Failed to submit the quote for approval.")
           : null,
         intelligencePanel,
         overlays: {

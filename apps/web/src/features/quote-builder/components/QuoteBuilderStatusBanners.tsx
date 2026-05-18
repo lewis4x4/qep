@@ -1,17 +1,24 @@
 /**
  * Post–PR 21 orchestrator slimming: inline status / error banners from
  * `QuoteBuilderV2Page.tsx`. Mechanical move.
+ *
+ * Error banners accept either a simple string (legacy) or a structured
+ * `QuoteErrorCopy` so we can surface title + description + recovery hint
+ * without leaking raw exception codes like `ARCHIVED_REFERENCE_NOT_ALLOWED`.
  */
 
 import { Card } from "@/components/ui/card";
+import type { QuoteErrorCopy } from "../lib/quote-error-messages";
+
+export type StatusBannerError = QuoteErrorCopy | string | null | undefined;
 
 export interface QuoteBuilderStatusBannersProps {
-  existingQuoteLoadError?: string | null;
+  existingQuoteLoadError?: StatusBannerError;
   existingQuoteEditingMessage?: string | null;
-  pdfError?: string | null;
+  pdfError?: StatusBannerError;
   saveSuccess?: boolean;
-  saveErrorMessage?: string | null;
-  submitApprovalErrorMessage?: string | null;
+  saveErrorMessage?: StatusBannerError;
+  submitApprovalErrorMessage?: StatusBannerError;
 }
 
 export function QuoteBuilderStatusBanners({
@@ -25,9 +32,7 @@ export function QuoteBuilderStatusBanners({
   return (
     <>
       {existingQuoteLoadError ? (
-        <Card className="border-red-500/30 bg-red-500/5 p-4">
-          <p className="text-sm text-red-300">{existingQuoteLoadError}</p>
-        </Card>
+        <ErrorBanner error={existingQuoteLoadError} tone="muted" />
       ) : null}
 
       {existingQuoteEditingMessage ? (
@@ -36,11 +41,7 @@ export function QuoteBuilderStatusBanners({
         </Card>
       ) : null}
 
-      {pdfError ? (
-        <Card className="border-red-500/30 bg-red-500/5 p-4">
-          <p className="text-sm text-red-400">{pdfError}</p>
-        </Card>
-      ) : null}
+      {pdfError ? <ErrorBanner error={pdfError} /> : null}
 
       {saveSuccess ? (
         <Card className="border-emerald-500/30 bg-emerald-500/5 p-4">
@@ -49,16 +50,50 @@ export function QuoteBuilderStatusBanners({
       ) : null}
 
       {submitApprovalErrorMessage ? (
-        <Card className="border-red-500/30 bg-red-500/5 p-4">
-          <p className="text-sm text-red-400">{submitApprovalErrorMessage}</p>
-        </Card>
+        <ErrorBanner error={submitApprovalErrorMessage} />
       ) : null}
 
-      {saveErrorMessage ? (
-        <Card className="border-red-500/30 bg-red-500/5 p-4">
-          <p className="text-sm text-red-400">{saveErrorMessage}</p>
-        </Card>
-      ) : null}
+      {saveErrorMessage ? <ErrorBanner error={saveErrorMessage} /> : null}
     </>
+  );
+}
+
+/**
+ * Renders a structured error banner. Accepts either a plain string
+ * (legacy) or a `QuoteErrorCopy` with title + description + optional
+ * recovery hint.
+ */
+function ErrorBanner({
+  error,
+  tone = "default",
+}: {
+  error: QuoteErrorCopy | string;
+  tone?: "default" | "muted";
+}) {
+  const titleColor = tone === "muted" ? "text-red-300" : "text-red-400";
+  const descColor =
+    tone === "muted" ? "text-red-300/85" : "text-red-400/85";
+
+  if (typeof error === "string") {
+    return (
+      <Card
+        role="alert"
+        className="border-red-500/30 bg-red-500/5 p-4"
+      >
+        <p className={`text-sm ${titleColor}`}>{error}</p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card role="alert" className="border-red-500/30 bg-red-500/5 p-4">
+      <p className={`text-sm font-semibold ${titleColor}`}>{error.title}</p>
+      <p className={`mt-1 text-sm ${descColor}`}>{error.description}</p>
+      {error.recoveryHint ? (
+        <p className="mt-2 text-xs italic text-red-300/70">
+          {error.recoveryHint}
+        </p>
+      ) : null}
+    </Card>
   );
 }
