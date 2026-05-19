@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type VoiceCaptureDealStage =
   | "initial_contact"
@@ -182,6 +182,21 @@ interface InsertErrorLike {
   code?: string;
 }
 
+interface VoiceClusterMetadataSummary {
+  contactName: string | null;
+  companyName: string | null;
+  machineInterest: string | null;
+  nextStep: string | null;
+}
+
+interface VoiceClusterCandidate {
+  id: string;
+  metadata: Record<string, unknown>;
+}
+
+const VOICE_CLUSTER_SIMILARITY_STRICT = 0.75;
+const VOICE_CLUSTER_SIMILARITY_LOOSE = 0.45;
+
 const VALID_DEAL_STAGES = [
   "initial_contact",
   "follow_up",
@@ -192,6 +207,98 @@ const VALID_DEAL_STAGES = [
   "closed_lost",
 ] as const;
 
+function normalizeVoiceClusterText(value: string | null | undefined): string {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenizeVoiceClusterText(value: string | null | undefined): string[] {
+  return normalizeVoiceClusterText(value)
+    .split(" ")
+    .filter((token) => token.length > 2);
+}
+
+function computeTokenSimilarity(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): number {
+  const leftTokens = new Set(tokenizeVoiceClusterText(left));
+  const rightTokens = new Set(tokenizeVoiceClusterText(right));
+  if (leftTokens.size === 0 || rightTokens.size === 0) return 0;
+
+  let intersection = 0;
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) intersection += 1;
+  }
+  const union = new Set([...leftTokens, ...rightTokens]).size;
+  return union === 0 ? 0 : intersection / union;
+}
+
+function buildVoiceClusterSummary(
+  extracted: VoiceCaptureExtractedDealData,
+): VoiceClusterMetadataSummary {
+  const summary = buildCrmSummary(extracted);
+  return {
+    contactName: summary.contactName,
+    companyName: summary.companyName,
+    machineInterest: summary.machineInterest,
+    nextStep: summary.nextStep,
+  };
+}
+
+export function isVoiceCaptureClusterMatch(input: {
+  transcript: string;
+  summary: VoiceClusterMetadataSummary;
+  candidateTranscript: string | null;
+  candidateSummary: Partial<VoiceClusterMetadataSummary> | null;
+}): boolean {
+  const transcriptSimilarity = computeTokenSimilarity(
+    input.transcript,
+    input.candidateTranscript,
+  );
+  const summarySimilarity = Math.max(
+    computeTokenSimilarity(
+      input.summary.contactName,
+      input.candidateSummary?.contactName ?? null,
+    ),
+    computeTokenSimilarity(
+      input.summary.companyName,
+      input.candidateSummary?.companyName ?? null,
+    ),
+    computeTokenSimilarity(
+      input.summary.machineInterest,
+      input.candidateSummary?.machineInterest ?? null,
+    ),
+    computeTokenSimilarity(
+      input.summary.nextStep,
+      input.candidateSummary?.nextStep ?? null,
+    ),
+  );
+
+  return transcriptSimilarity >= VOICE_CLUSTER_SIMILARITY_STRICT ||
+    (transcriptSimilarity >= VOICE_CLUSTER_SIMILARITY_LOOSE &&
+      summarySimilarity >= VOICE_CLUSTER_SIMILARITY_LOOSE);
+}
+
+function getClusterDateKey(occurredAtIso: string): string {
+  const occurredAt = new Date(occurredAtIso);
+  return Number.isNaN(occurredAt.getTime())
+    ? occurredAtIso.slice(0, 10)
+    : occurredAt.toISOString().slice(0, 10);
+}
+
+function buildVoiceClusterKey(
+  target: LocalCrmTarget,
+  occurredAtIso: string,
+): string {
+  const targetId = target.dealId ?? target.companyId ?? target.contactId ??
+    "unknown";
+  return `${target.source}:${targetId}:${getClusterDateKey(occurredAtIso)}`;
+}
+
 function asObject(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null
     ? value as Record<string, unknown>
@@ -199,7 +306,9 @@ function asObject(value: unknown): Record<string, unknown> {
 }
 
 function toStringOrNull(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
 }
 
 function toStringList(value: unknown): string[] {
@@ -301,7 +410,9 @@ function createEmptyExtractedDealData(): VoiceCaptureExtractedDealData {
   };
 }
 
-function normalizeEvidence(raw: unknown): VoiceCaptureExtractedDealData["evidence"] {
+function normalizeEvidence(
+  raw: unknown,
+): VoiceCaptureExtractedDealData["evidence"] {
   const source = asObject(raw);
   const snippets = Array.isArray(source.snippets)
     ? source.snippets.flatMap((item) => {
@@ -340,7 +451,8 @@ export function normalizeVoiceCaptureExtractedDealData(
   const base = createEmptyExtractedDealData();
   const source = asObject(raw);
 
-  const hasNestedShape = "record" in source || "opportunity" in source || "operations" in source ||
+  const hasNestedShape = "record" in source || "opportunity" in source ||
+    "operations" in source ||
     "guidance" in source || "evidence" in source;
 
   if (!hasNestedShape) {
@@ -353,7 +465,10 @@ export function normalizeVoiceCaptureExtractedDealData(
         ? legacy.attachments_discussed.split(",")
         : legacy.attachments_discussed,
     );
-    base.opportunity.dealStage = toOptionalEnum(legacy.deal_stage, VALID_DEAL_STAGES);
+    base.opportunity.dealStage = toOptionalEnum(
+      legacy.deal_stage,
+      VALID_DEAL_STAGES,
+    );
     base.opportunity.budgetRange = toStringOrNull(legacy.budget_range);
     base.opportunity.keyConcerns = toStringOrNull(legacy.key_concerns);
     base.opportunity.actionItems = toStringList(legacy.action_items);
@@ -374,7 +489,13 @@ export function normalizeVoiceCaptureExtractedDealData(
     companyType: toStringOrNull(record.companyType),
     decisionMakerStatus: toEnum(
       record.decisionMakerStatus,
-      ["decision_maker", "influencer", "operator", "gatekeeper", "unknown"] as const,
+      [
+        "decision_maker",
+        "influencer",
+        "operator",
+        "gatekeeper",
+        "unknown",
+      ] as const,
       "unknown",
     ),
     preferredContactChannel: toEnum(
@@ -396,7 +517,14 @@ export function normalizeVoiceCaptureExtractedDealData(
     dealStage: toOptionalEnum(opportunity.dealStage, VALID_DEAL_STAGES),
     intentLevel: toEnum(
       opportunity.intentLevel,
-      ["curious", "evaluating", "quote_ready", "demo_ready", "ready_to_buy", "unknown"] as const,
+      [
+        "curious",
+        "evaluating",
+        "quote_ready",
+        "demo_ready",
+        "ready_to_buy",
+        "unknown",
+      ] as const,
       "unknown",
     ),
     urgencyLevel: toEnum(
@@ -470,7 +598,14 @@ export function normalizeVoiceCaptureExtractedDealData(
   base.guidance = {
     customerSentiment: toEnum(
       guidance.customerSentiment,
-      ["positive", "neutral", "cautious", "skeptical", "frustrated", "unknown"] as const,
+      [
+        "positive",
+        "neutral",
+        "cautious",
+        "skeptical",
+        "frustrated",
+        "unknown",
+      ] as const,
       "unknown",
     ),
     probabilitySignal: toEnum(
@@ -485,7 +620,14 @@ export function normalizeVoiceCaptureExtractedDealData(
     ),
     buyerPersona: toEnum(
       guidance.buyerPersona,
-      ["price_first", "uptime_first", "growth_owner", "spec_driven", "rental_first", "unknown"] as const,
+      [
+        "price_first",
+        "uptime_first",
+        "growth_owner",
+        "spec_driven",
+        "rental_first",
+        "unknown",
+      ] as const,
       "unknown",
     ),
     managerAttentionFlag: toBoolean(guidance.managerAttentionFlag),
@@ -503,11 +645,15 @@ export function normalizeVoiceCaptureExtractedDealData(
   return base;
 }
 
-export function getVoiceCaptureContactName(extracted: VoiceCaptureExtractedDealData): string | null {
+export function getVoiceCaptureContactName(
+  extracted: VoiceCaptureExtractedDealData,
+): string | null {
   return extracted.record.contactName;
 }
 
-export function getVoiceCaptureCompanyName(extracted: VoiceCaptureExtractedDealData): string | null {
+export function getVoiceCaptureCompanyName(
+  extracted: VoiceCaptureExtractedDealData,
+): string | null {
   return extracted.record.companyName;
 }
 
@@ -540,12 +686,17 @@ export function buildVoiceCaptureNoteBody(
   extracted: VoiceCaptureExtractedDealData,
 ): string {
   const lines: string[] = [];
-  const contactLine = [getVoiceCaptureContactName(extracted), getVoiceCaptureCompanyName(extracted)]
+  const contactLine = [
+    getVoiceCaptureContactName(extracted),
+    getVoiceCaptureCompanyName(extracted),
+  ]
     .filter(Boolean)
     .join(" · ");
 
   if (contactLine) lines.push(contactLine);
-  if (extracted.record.contactRole) lines.push(`Role: ${extracted.record.contactRole}`);
+  if (extracted.record.contactRole) {
+    lines.push(`Role: ${extracted.record.contactRole}`);
+  }
 
   const equipment = getVoiceCaptureMachineLabel(extracted);
   if (equipment) lines.push(`Equipment: ${equipment}`);
@@ -574,10 +725,14 @@ export function buildVoiceCaptureNoteBody(
     lines.push(`Concerns: ${extracted.opportunity.keyConcerns}`);
   }
   if (extracted.guidance.recommendedNextAction) {
-    lines.push(`AI recommendation: ${extracted.guidance.recommendedNextAction}`);
+    lines.push(
+      `AI recommendation: ${extracted.guidance.recommendedNextAction}`,
+    );
   }
   if (extracted.opportunity.actionItems.length > 0) {
-    lines.push(`Action items: ${extracted.opportunity.actionItems.join(" | ")}`);
+    lines.push(
+      `Action items: ${extracted.opportunity.actionItems.join(" | ")}`,
+    );
   }
 
   lines.push("", transcript);
@@ -615,6 +770,10 @@ function getDueAt(followUpDate: string | null): string {
   return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 }
 
+function transcriptFallbackFromActions(actionItems: string[]): string {
+  return actionItems.join(" | ");
+}
+
 function isDuplicateKeyError(error: unknown): boolean {
   return typeof error === "object" && error !== null &&
     (error as InsertErrorLike).code === "23505";
@@ -641,10 +800,20 @@ async function findExistingVoiceCaptureActivityId(
 
   const { data } = await (
     target.source === "deal" && target.dealId
-      ? query.eq("deal_id", target.dealId).is("company_id", null).is("contact_id", null)
-      : (target.source === "company" || target.source === "inbox") && target.companyId
-        ? query.eq("company_id", target.companyId).is("deal_id", null).is("contact_id", null)
-        : query.eq("contact_id", target.contactId).is("deal_id", null).is("company_id", null)
+      ? query.eq("deal_id", target.dealId).is("company_id", null).is(
+        "contact_id",
+        null,
+      )
+      : (target.source === "company" || target.source === "inbox") &&
+          target.companyId
+      ? query.eq("company_id", target.companyId).is("deal_id", null).is(
+        "contact_id",
+        null,
+      )
+      : query.eq("contact_id", target.contactId).is("deal_id", null).is(
+        "company_id",
+        null,
+      )
   ).maybeSingle();
 
   return data?.id ?? null;
@@ -658,10 +827,93 @@ function buildActivitySubject(target: LocalCrmTarget): {
   if (target.source === "deal" && target.dealId) {
     return { deal_id: target.dealId, contact_id: null, company_id: null };
   }
-  if ((target.source === "company" || target.source === "inbox") && target.companyId) {
+  if (
+    (target.source === "company" || target.source === "inbox") &&
+    target.companyId
+  ) {
     return { deal_id: null, contact_id: null, company_id: target.companyId };
   }
   return { deal_id: null, contact_id: target.contactId, company_id: null };
+}
+
+async function listVoiceClusterCandidates(
+  supabaseAdmin: SupabaseClient,
+  workspaceId: string,
+  target: LocalCrmTarget,
+  activityType: "note" | "task",
+  occurredAtIso: string,
+): Promise<VoiceClusterCandidate[]> {
+  const dayKey = getClusterDateKey(occurredAtIso);
+  const dayStart = `${dayKey}T00:00:00.000Z`;
+  const dayEnd = `${dayKey}T23:59:59.999Z`;
+  const query = supabaseAdmin
+    .from("crm_activities")
+    .select("id, metadata")
+    .eq("workspace_id", workspaceId)
+    .eq("activity_type", activityType)
+    .is("deleted_at", null)
+    .gte("occurred_at", dayStart)
+    .lte("occurred_at", dayEnd)
+    .contains("metadata", {
+      source: "voice_capture",
+      activityKind: activityType,
+    })
+    .limit(25);
+
+  const targetQuery = target.source === "deal" && target.dealId
+    ? query.eq("deal_id", target.dealId).is("company_id", null).is(
+      "contact_id",
+      null,
+    )
+    : (target.source === "company" || target.source === "inbox") &&
+        target.companyId
+    ? query.eq("company_id", target.companyId).is("deal_id", null).is(
+      "contact_id",
+      null,
+    )
+    : query.eq("contact_id", target.contactId).is("deal_id", null).is(
+      "company_id",
+      null,
+    );
+
+  const { data } = await targetQuery;
+  return (data ?? []) as VoiceClusterCandidate[];
+}
+
+async function findVoiceClusterDuplicateActivityId(
+  supabaseAdmin: SupabaseClient,
+  workspaceId: string,
+  target: LocalCrmTarget,
+  activityType: "note" | "task",
+  occurredAtIso: string,
+  transcript: string,
+  summary: VoiceClusterMetadataSummary,
+): Promise<string | null> {
+  const candidates = await listVoiceClusterCandidates(
+    supabaseAdmin,
+    workspaceId,
+    target,
+    activityType,
+    occurredAtIso,
+  );
+
+  for (const candidate of candidates) {
+    const candidateSummary = asObject(
+      candidate.metadata.extractedSummary,
+    ) as Partial<VoiceClusterMetadataSummary>;
+    const candidateTranscript = toStringOrNull(candidate.metadata.transcript);
+    if (
+      isVoiceCaptureClusterMatch({
+        transcript,
+        summary,
+        candidateTranscript,
+        candidateSummary,
+      })
+    ) {
+      return candidate.id;
+    }
+  }
+  return null;
 }
 
 async function resolveCompanyTarget(
@@ -678,7 +930,12 @@ async function resolveCompanyTarget(
     .maybeSingle();
 
   if (error || !data?.id) return null;
-  return { dealId: null, contactId: null, companyId: data.id, source: "company" };
+  return {
+    dealId: null,
+    contactId: null,
+    companyId: data.id,
+    source: "company",
+  };
 }
 
 async function resolveContactTarget(
@@ -721,7 +978,12 @@ async function resolveExtractedCompanyTarget(
     .maybeSingle();
 
   if (error || !data?.id) return null;
-  return { dealId: null, contactId: null, companyId: data.id, source: "company" };
+  return {
+    dealId: null,
+    contactId: null,
+    companyId: data.id,
+    source: "company",
+  };
 }
 
 async function ensureVoiceCaptureInboxCompany(
@@ -741,7 +1003,12 @@ async function ensureVoiceCaptureInboxCompany(
     .maybeSingle();
 
   if (existing?.id) {
-    return { dealId: null, contactId: null, companyId: existing.id, source: "inbox" };
+    return {
+      dealId: null,
+      contactId: null,
+      companyId: existing.id,
+      source: "inbox",
+    };
   }
 
   const { data, error } = await supabaseAdmin
@@ -752,7 +1019,8 @@ async function ensureVoiceCaptureInboxCompany(
       assigned_rep_id: actorUserId,
       metadata: {
         ...inboxMetadata,
-        description: "System holding account for voice captures that could not be matched to a QRM customer yet.",
+        description:
+          "System holding account for voice captures that could not be matched to a QRM customer yet.",
       },
     })
     .select("id")
@@ -794,19 +1062,35 @@ async function resolveLocalTarget(
   }
 
   if (companyId) {
-    const target = await resolveCompanyTarget(supabaseAdmin, workspaceId, companyId);
+    const target = await resolveCompanyTarget(
+      supabaseAdmin,
+      workspaceId,
+      companyId,
+    );
     if (target) return target;
   }
 
   if (contactId) {
-    const target = await resolveContactTarget(supabaseAdmin, workspaceId, contactId);
+    const target = await resolveContactTarget(
+      supabaseAdmin,
+      workspaceId,
+      contactId,
+    );
     if (target) return target;
   }
 
-  const extractedCompanyTarget = await resolveExtractedCompanyTarget(supabaseAdmin, workspaceId, extracted);
+  const extractedCompanyTarget = await resolveExtractedCompanyTarget(
+    supabaseAdmin,
+    workspaceId,
+    extracted,
+  );
   if (extractedCompanyTarget) return extractedCompanyTarget;
 
-  return await ensureVoiceCaptureInboxCompany(supabaseAdmin, workspaceId, actorUserId);
+  return await ensureVoiceCaptureInboxCompany(
+    supabaseAdmin,
+    workspaceId,
+    actorUserId,
+  );
 }
 
 async function ensureNoteActivity(
@@ -819,6 +1103,8 @@ async function ensureNoteActivity(
   transcript: string,
   extracted: VoiceCaptureExtractedDealData,
 ): Promise<string | null> {
+  const extractedSummary = buildCrmSummary(extracted);
+  const voiceClusterKey = buildVoiceClusterKey(target, occurredAtIso);
   const existingQuery = supabaseAdmin
     .from("crm_activities")
     .select("id")
@@ -833,13 +1119,34 @@ async function ensureNoteActivity(
 
   const { data: existing } = await (
     target.source === "deal" && target.dealId
-      ? existingQuery.eq("deal_id", target.dealId).is("company_id", null).is("contact_id", null)
-      : (target.source === "company" || target.source === "inbox") && target.companyId
-        ? existingQuery.eq("company_id", target.companyId).is("deal_id", null).is("contact_id", null)
-        : existingQuery.eq("contact_id", target.contactId).is("deal_id", null).is("company_id", null)
+      ? existingQuery.eq("deal_id", target.dealId).is("company_id", null).is(
+        "contact_id",
+        null,
+      )
+      : (target.source === "company" || target.source === "inbox") &&
+          target.companyId
+      ? existingQuery.eq("company_id", target.companyId).is("deal_id", null).is(
+        "contact_id",
+        null,
+      )
+      : existingQuery.eq("contact_id", target.contactId).is("deal_id", null).is(
+        "company_id",
+        null,
+      )
   ).maybeSingle();
 
   if (existing?.id) return existing.id;
+
+  const clusteredExistingId = await findVoiceClusterDuplicateActivityId(
+    supabaseAdmin,
+    workspaceId,
+    target,
+    "note",
+    occurredAtIso,
+    transcript,
+    buildVoiceClusterSummary(extracted),
+  );
+  if (clusteredExistingId) return clusteredExistingId;
 
   const subject = buildActivitySubject(target);
   const { data, error } = await supabaseAdmin
@@ -856,9 +1163,14 @@ async function ensureNoteActivity(
         source: "voice_capture",
         voiceCaptureId: captureId,
         activityKind: "note",
+        voiceClusterKey,
+        voiceClusterDate: getClusterDateKey(occurredAtIso),
+        voiceClusterTargetType: target.source,
+        voiceClusterTargetId: target.dealId ?? target.companyId ??
+          target.contactId,
         targetSource: target.source,
         transcript,
-        extractedSummary: buildCrmSummary(extracted),
+        extractedSummary,
         resolvedContactId: target.contactId,
         resolvedCompanyId: target.companyId,
         resolvedDealId: target.dealId,
@@ -891,10 +1203,14 @@ async function ensureTaskActivity(
   target: LocalCrmTarget,
   extracted: VoiceCaptureExtractedDealData,
 ): Promise<string | null> {
-  if (!extracted.opportunity.nextStep && extracted.opportunity.actionItems.length === 0) {
+  if (
+    !extracted.opportunity.nextStep &&
+    extracted.opportunity.actionItems.length === 0
+  ) {
     return null;
   }
 
+  const voiceClusterKey = buildVoiceClusterKey(target, occurredAtIso);
   const existingQuery = supabaseAdmin
     .from("crm_activities")
     .select("id")
@@ -909,17 +1225,40 @@ async function ensureTaskActivity(
 
   const { data: existing } = await (
     target.source === "deal" && target.dealId
-      ? existingQuery.eq("deal_id", target.dealId).is("company_id", null).is("contact_id", null)
-      : (target.source === "company" || target.source === "inbox") && target.companyId
-        ? existingQuery.eq("company_id", target.companyId).is("deal_id", null).is("contact_id", null)
-        : existingQuery.eq("contact_id", target.contactId).is("deal_id", null).is("company_id", null)
+      ? existingQuery.eq("deal_id", target.dealId).is("company_id", null).is(
+        "contact_id",
+        null,
+      )
+      : (target.source === "company" || target.source === "inbox") &&
+          target.companyId
+      ? existingQuery.eq("company_id", target.companyId).is("deal_id", null).is(
+        "contact_id",
+        null,
+      )
+      : existingQuery.eq("contact_id", target.contactId).is("deal_id", null).is(
+        "company_id",
+        null,
+      )
   ).maybeSingle();
 
   if (existing?.id) return existing.id;
 
+  const clusteredExistingId = await findVoiceClusterDuplicateActivityId(
+    supabaseAdmin,
+    workspaceId,
+    target,
+    "task",
+    occurredAtIso,
+    extracted.opportunity.nextStep ??
+      transcriptFallbackFromActions(extracted.opportunity.actionItems),
+    buildVoiceClusterSummary(extracted),
+  );
+  if (clusteredExistingId) return clusteredExistingId;
+
   const taskBody = extracted.opportunity.nextStep
     ? `Field note follow-up: ${extracted.opportunity.nextStep}`
-    : extracted.opportunity.actionItems[0] ?? "Review field note and follow up.";
+    : extracted.opportunity.actionItems[0] ??
+      "Review field note and follow up.";
 
   const { data, error } = await supabaseAdmin
     .from("crm_activities")
@@ -934,6 +1273,11 @@ async function ensureTaskActivity(
         source: "voice_capture",
         voiceCaptureId: captureId,
         activityKind: "task",
+        voiceClusterKey,
+        voiceClusterDate: getClusterDateKey(occurredAtIso),
+        voiceClusterTargetType: target.source,
+        voiceClusterTargetId: target.dealId ?? target.companyId ??
+          target.contactId,
         targetSource: target.source,
         task: {
           dueAt: getDueAt(extracted.opportunity.followUpDate),
