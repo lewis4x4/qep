@@ -106,6 +106,14 @@ export interface RepPipelineDeal {
   deal_score: number | null;
 }
 
+export interface CustomerEquipmentSummary {
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  category: string | null;
+  name: string | null;
+}
+
 export interface RepCustomer {
   customer_id: string;
   company_name: string;
@@ -121,6 +129,7 @@ export interface RepCustomer {
   last_interaction: string | null;
   days_since_contact: number | null;
   opportunity_score: number;
+  equipment_summary: CustomerEquipmentSummary[];
 }
 
 export interface CustomerEquipment {

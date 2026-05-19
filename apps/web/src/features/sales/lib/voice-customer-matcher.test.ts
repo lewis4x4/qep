@@ -18,6 +18,7 @@ function customer(name: string, id?: string): RepCustomer {
     last_interaction: null,
     days_since_contact: null,
     opportunity_score: 0,
+    equipment_summary: [],
   };
 }
 
@@ -237,6 +238,104 @@ describe("matchCustomerInTranscript", () => {
         extracted: {},
       });
       expect(result.top).toBeNull();
+    });
+  });
+
+  // ── Equipment cross-match (Slice A) ───────────────────────────
+  describe("equipment cross-match", () => {
+    test("single equipment match disambiguates between two same-named customers", () => {
+      const beaconRidge = customer("Beacon", "a");
+      beaconRidge.equipment_summary = [
+        { make: "Yanmar", model: "ViO 55", year: 2022, category: "excavator", name: null },
+      ];
+      const beaconConstruction = customer("Beacon", "b");
+      beaconConstruction.equipment_summary = [
+        { make: "Cat", model: "D6", year: 2020, category: "dozer", name: null },
+      ];
+
+      const result = matchCustomerInTranscript(
+        "Talked to Beacon about the Yanmar ViO 55.",
+        [beaconRidge, beaconConstruction],
+        { extracted: { equipment_mentioned: ["Yanmar ViO 55"] } },
+      );
+
+      expect(result.top?.customer_id).toBe("a");
+      expect(result.signals.some((s) => s.kind === "ai_equipment")).toBe(true);
+      expect(result.reasoning).toContain("owns matching");
+    });
+
+    test("dampening: generic phrase matching ≥3 customers drops per-hit weight", () => {
+      // Five customers all own a Toyota forklift — phrase shares 2 tokens
+      // (toyota, forklift) with every row, so all five match and dampening
+      // triggers.
+      const heavyBook = Array.from({ length: 5 }, (_, i) => {
+        const c = customer(`Acme ${i}`, `c${i}`);
+        c.equipment_summary = [
+          { make: "Toyota", model: `8FG${i}`, year: 2020, category: "forklift", name: null },
+        ];
+        return c;
+      });
+
+      const heavyResult = matchCustomerInTranscript(
+        "We talked about the Toyota forklift.",
+        heavyBook,
+        { extracted: { equipment_mentioned: ["Toyota forklift"] } },
+      );
+
+      // With 5 matching customers, damping is 1/sqrt(5) ≈ 0.447, so per-hit
+      // weight is 3.0 * 0.447 ≈ 1.34. No customer should auto-accept on this
+      // generic mention alone.
+      expect(heavyResult.confidence).toBeLessThan(0.7);
+
+      // Control: a SINGLE customer with the same fleet should NOT be dampened
+      // — N < 3 means damping factor stays 1.0.
+      const solo = customer("Acme", "solo");
+      solo.equipment_summary = [
+        { make: "Toyota", model: "8FG", year: 2020, category: "forklift", name: null },
+      ];
+      const soloResult = matchCustomerInTranscript(
+        "We talked about the Toyota forklift.",
+        [solo],
+        { extracted: { equipment_mentioned: ["Toyota forklift"] } },
+      );
+      const soloEq = soloResult.signals.find((s) => s.kind === "ai_equipment");
+      const heavyEq = heavyResult.signals.find((s) => s.kind === "ai_equipment");
+      expect(soloEq).toBeDefined();
+      expect(heavyEq).toBeDefined();
+      // Per-hit weight in heavy book should be materially smaller.
+      expect(heavyEq!.weight).toBeLessThan(soloEq!.weight * 0.7);
+    });
+
+    test("empty equipment_summary is a no-op — other lanes still fire", () => {
+      const c = customer("Beacon Ridge");
+      // equipment_summary defaults to [] via factory
+      const result = matchCustomerInTranscript(
+        "Talked to Beacon Ridge about the forklift.",
+        [c],
+        { extracted: { equipment_mentioned: ["forklift"] } },
+      );
+      expect(result.top?.customer_id).toBe(c.customer_id);
+      expect(result.signals.some((s) => s.kind === "ai_equipment")).toBe(false);
+      expect(result.signals.some((s) => s.kind === "company_name")).toBe(true);
+    });
+
+    test("multiple matching units on one customer count as a single hit per phrase", () => {
+      const c = customer("Beacon Ridge", "a");
+      c.equipment_summary = [
+        { make: "Yanmar", model: "ViO 55", year: 2022, category: "excavator", name: null },
+        { make: "Yanmar", model: "ViO 55", year: 2021, category: "excavator", name: null },
+        { make: "Yanmar", model: "ViO 55", year: 2020, category: "excavator", name: null },
+      ];
+
+      const result = matchCustomerInTranscript(
+        "Looking at the Yanmar ViO 55.",
+        [c],
+        { extracted: { equipment_mentioned: ["Yanmar ViO 55"] } },
+      );
+
+      const equipmentHits = result.signals.filter((s) => s.kind === "ai_equipment");
+      expect(equipmentHits).toHaveLength(1);
+      expect(equipmentHits[0]?.count).toBe(1);
     });
   });
 });

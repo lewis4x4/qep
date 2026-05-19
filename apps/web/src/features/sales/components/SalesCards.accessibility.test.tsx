@@ -61,6 +61,7 @@ describe("sales card accessibility interactions", () => {
       last_interaction: null,
       days_since_contact: 3,
       opportunity_score: 72,
+      equipment_summary: [],
     };
 
     render(

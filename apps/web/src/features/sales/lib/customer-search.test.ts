@@ -17,6 +17,7 @@ const baseCustomer: RepCustomer = {
   last_interaction: null,
   days_since_contact: null,
   opportunity_score: 0,
+  equipment_summary: [],
 };
 
 describe("matchesRepCustomerSearch", () => {

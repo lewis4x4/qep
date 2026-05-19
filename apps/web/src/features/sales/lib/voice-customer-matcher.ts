@@ -28,6 +28,8 @@ export interface ExtractedMatchSignals {
   phone_mentions?: string[];
   /** AI-extracted location mentions (cities, regions). */
   location_mentions?: string[];
+  /** AI-extracted equipment phrases ("5T forklift", "Yanmar ViO 55"). */
+  equipment_mentioned?: string[];
 }
 
 export interface MatcherOptions {
@@ -45,7 +47,8 @@ export type SignalKind =
   | "ai_customer"
   | "ai_contact"
   | "ai_phone"
-  | "ai_location";
+  | "ai_location"
+  | "ai_equipment";
 
 export interface SignalHit {
   kind: SignalKind;
@@ -97,7 +100,29 @@ const W = {
   ai_contact_full: 2.5,
   ai_phone_exact: 5.0,
   ai_location_token: 1.5,
+  ai_equipment: 3.0,
 } as const;
+
+/**
+ * Equipment-vocabulary stopwords. We deliberately KEEP class words like
+ * "forklift" or "excavator" — those carry signal even though `nameTokens`
+ * would strip them as generic. We only drop filler that adds no value to
+ * a fleet-row token bag.
+ */
+const EQUIPMENT_STOPWORDS = new Set([
+  "the",
+  "and",
+  "of",
+  "for",
+  "in",
+  "to",
+  "at",
+  "by",
+  "with",
+  "a",
+  "an",
+  "on",
+]);
 
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -108,6 +133,15 @@ function nameTokens(name: string): string[] {
     .toLowerCase()
     .split(/[\s,\-\.]+/)
     .filter((token) => token.length >= 3 && !STOPWORDS.has(token));
+}
+
+function equipmentTokens(text: string | null | undefined): string[] {
+  if (!text) return [];
+  return text
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .split(/[\s,\-\.\/]+/)
+    .filter((token) => token.length >= 2 && !EQUIPMENT_STOPWORDS.has(token));
 }
 
 function firstDisplayWord(name: string): string {
@@ -146,6 +180,90 @@ interface SignalAccumulator {
   rawScore: number;
 }
 
+interface EquipmentPhraseHit {
+  /** Reasoning label e.g. "Yanmar ViO 55" or "forklift". */
+  label: string;
+}
+
+/**
+ * Check whether a single fleet row matches an equipment phrase.
+ * Hit when at least 2 tokens overlap OR when the fleet's `model` appears as a
+ * substring in the phrase (case-insensitive).
+ */
+function fleetRowMatchesPhrase(
+  row: { make: string | null; model: string | null; category: string | null; name: string | null },
+  phrase: string,
+  phraseTokens: Set<string>,
+  phraseLower: string,
+): EquipmentPhraseHit | null {
+  const modelLower = row.model?.toLowerCase().trim() ?? "";
+  if (modelLower.length >= 2 && phraseLower.includes(modelLower)) {
+    const label = [row.make, row.model].filter(Boolean).join(" ").trim();
+    return { label: label || row.category || row.name || "equipment" };
+  }
+
+  const rowTokens = new Set<string>();
+  for (const field of [row.make, row.model, row.category, row.name]) {
+    for (const token of equipmentTokens(field)) rowTokens.add(token);
+  }
+  let overlap = 0;
+  for (const token of rowTokens) {
+    if (phraseTokens.has(token)) overlap += 1;
+    if (overlap >= 2) break;
+  }
+  if (overlap >= 2) {
+    const label = [row.make, row.model].filter(Boolean).join(" ").trim()
+      || row.category
+      || row.name
+      || "equipment";
+    return { label };
+  }
+  return null;
+}
+
+/**
+ * For each phrase, find at most ONE matching fleet row per customer.
+ * Returns the per-customer match (or null if no row matched).
+ */
+function findEquipmentHit(
+  customer: RepCustomer,
+  phrase: string,
+): EquipmentPhraseHit | null {
+  if (!customer.equipment_summary?.length) return null;
+  const phraseLower = phrase.toLowerCase();
+  const phraseTokens = new Set(equipmentTokens(phrase));
+  if (phraseTokens.size === 0 && phraseLower.length < 2) return null;
+
+  for (const row of customer.equipment_summary) {
+    const hit = fleetRowMatchesPhrase(row, phrase, phraseTokens, phraseLower);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/**
+ * Per-phrase damping factor. Generic phrases that match many customers in the
+ * rep's book carry less signal — divide weight by sqrt(N) when N >= 3 so a
+ * "forklift" mention against 5 customers stops dominating.
+ */
+function buildEquipmentDampingMap(
+  customers: RepCustomer[],
+  phrases: string[],
+): Map<string, number> {
+  const damping = new Map<string, number>();
+  for (const phrase of phrases) {
+    const trimmed = phrase.trim();
+    if (!trimmed) continue;
+    let matchingCustomers = 0;
+    for (const customer of customers) {
+      if (findEquipmentHit(customer, trimmed)) matchingCustomers += 1;
+    }
+    const factor = matchingCustomers >= 3 ? 1 / Math.sqrt(matchingCustomers) : 1;
+    damping.set(trimmed, factor);
+  }
+  return damping;
+}
+
 function addSignal(
   acc: SignalAccumulator,
   kind: SignalKind,
@@ -163,6 +281,7 @@ function scoreCustomer(
   customer: RepCustomer,
   transcriptLower: string,
   extracted: ExtractedMatchSignals | undefined,
+  equipmentDamping: Map<string, number> | null,
 ): { signals: SignalHit[]; score: number } {
   const acc: SignalAccumulator = { hits: [], rawScore: 0 };
 
@@ -292,6 +411,20 @@ function scoreCustomer(
     }
   }
 
+  // ── Lane 9: AI-extracted equipment_mentioned vs owned fleet ──
+  if (extracted?.equipment_mentioned?.length && customer.equipment_summary?.length) {
+    const seen = new Set<string>();
+    for (const rawPhrase of extracted.equipment_mentioned) {
+      const phrase = rawPhrase.trim();
+      if (!phrase || seen.has(phrase)) continue;
+      seen.add(phrase);
+      const hit = findEquipmentHit(customer, phrase);
+      if (!hit) continue;
+      const damping = equipmentDamping?.get(phrase) ?? 1;
+      addSignal(acc, "ai_equipment", hit.label, 1, W.ai_equipment * damping);
+    }
+  }
+
   // ── Apply recency multiplier ─────────────────────────────────
   const recency = recencyMultiplier(customer.days_since_contact);
   const score = acc.rawScore * recency;
@@ -322,6 +455,9 @@ function buildReasoning(signals: SignalHit[], customer: RepCustomer): string {
   const loc = signals.find((s) => s.kind === "city" || s.kind === "state" || s.kind === "ai_location");
   if (loc) clauses.push(`location matches ${loc.phrase}`);
 
+  const equipment = signals.find((s) => s.kind === "ai_equipment");
+  if (equipment) clauses.push(`owns matching ${equipment.phrase}`);
+
   const recency = recencyMultiplier(customer.days_since_contact);
   if (recency > 1 && customer.days_since_contact != null) {
     clauses.push(`active ${customer.days_since_contact}d ago`);
@@ -347,7 +483,8 @@ export function matchCustomerInTranscript(
     options.extracted?.customer_mentions?.length ||
     options.extracted?.contact_mentions?.length ||
     options.extracted?.phone_mentions?.length ||
-    options.extracted?.location_mentions?.length
+    options.extracted?.location_mentions?.length ||
+    options.extracted?.equipment_mentioned?.length
   );
 
   if (!transcript && !haveExtraction) return empty;
@@ -355,9 +492,15 @@ export function matchCustomerInTranscript(
 
   const text = (transcript ?? "").toLowerCase();
 
+  // Pre-pass: damping for equipment phrases that match many customers.
+  // Done once per call so each scoreCustomer pass sees the same factors.
+  const equipmentDamping = options.extracted?.equipment_mentioned?.length
+    ? buildEquipmentDampingMap(customers, options.extracted.equipment_mentioned)
+    : null;
+
   const scored: CustomerMatchCandidate[] = customers
     .map((customer) => {
-      const { signals, score } = scoreCustomer(customer, text, options.extracted);
+      const { signals, score } = scoreCustomer(customer, text, options.extracted, equipmentDamping);
       return { customer, score, signals };
     })
     .filter((c) => c.score > 0)

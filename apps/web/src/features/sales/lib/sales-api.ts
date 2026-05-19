@@ -149,6 +149,7 @@ function mapCompanyPickerRow(row: CompanyPickerRow): RepCustomer {
     last_interaction: null,
     days_since_contact: null,
     opportunity_score: 0,
+    equipment_summary: [],
   };
 }
 
@@ -231,6 +232,7 @@ export async function fetchCustomerByCompanyId(
     last_interaction: null,
     days_since_contact: null,
     opportunity_score: 0,
+    equipment_summary: [],
   };
 }
 

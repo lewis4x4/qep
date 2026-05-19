@@ -329,6 +329,7 @@ export function SmartVoiceCapture({
                     contact_mentions: res.contact_mentions,
                     phone_mentions: res.phone_mentions,
                     location_mentions: res.location_mentions,
+                    equipment_mentioned: res.equipment_mentioned,
                   },
                 });
                 setMatchResult(secondMatch);

@@ -2,6 +2,7 @@ import type {
   BriefingContent,
   CustomerActivity,
   CustomerEquipment,
+  CustomerEquipmentSummary,
   DailyBriefing,
   HeatStatus,
   ManagerPendingApproval,
@@ -218,6 +219,20 @@ export function normalizeRepPipelineDeals(rows: unknown): RepPipelineDeal[] {
   });
 }
 
+function normalizeEquipmentSummary(value: unknown): CustomerEquipmentSummary[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    return [{
+      make: stringOrNull(item.make),
+      model: stringOrNull(item.model),
+      year: integerOrNull(item.year),
+      category: stringOrNull(item.category),
+      name: stringOrNull(item.name),
+    }];
+  });
+}
+
 export function normalizeRepCustomers(rows: unknown): RepCustomer[] {
   if (!Array.isArray(rows)) return [];
 
@@ -242,6 +257,7 @@ export function normalizeRepCustomers(rows: unknown): RepCustomer[] {
       last_interaction: validDateStringOrNull(row.last_interaction),
       days_since_contact: finiteNumberOrNull(row.days_since_contact),
       opportunity_score: finiteNumberOrDefault(row.opportunity_score),
+      equipment_summary: normalizeEquipmentSummary(row.equipment_summary),
     }];
   });
 
