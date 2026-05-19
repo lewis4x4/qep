@@ -8,6 +8,7 @@
  * builder, and the activity timeline.
  */
 
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ChevronLeft,
@@ -23,13 +24,53 @@ import { useSalesDealDetail } from "../hooks/useSalesDealDetail";
 import { formatCurrency } from "@/lib/format";
 import { MobileKpiGrid } from "../components/MobileKpiGrid";
 import { MobileStickyActionBar } from "../components/MobileStickyActionBar";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { QuickLogSheet } from "../components/QuickLogSheet";
+import { logSalesActivity } from "../lib/sales-api";
+import { useToast } from "@/hooks/use-toast";
 
 export function DealDetailPage() {
   const { dealId } = useParams<{ dealId: string }>();
   const navigate = useNavigate();
+  const [quickLogOpen, setQuickLogOpen] = useState(false);
+  const { toast } = useToast();
 
   const dealQuery = useSalesDealDetail(dealId);
   const deal = dealQuery.data ?? null;
+  async function handleCall(phone: string) {
+    try {
+      await logSalesActivity({
+        activityType: "call",
+        dealId,
+        companyId: deal?.customer.id ?? undefined,
+      });
+    } catch {
+      toast({
+        title: "Call log not saved",
+        description: "Call will continue, but activity logging failed.",
+        variant: "destructive",
+      });
+    } finally {
+      window.location.href = `tel:${phone}`;
+    }
+  }
+  async function handleEmail(email: string) {
+    try {
+      await logSalesActivity({
+        activityType: "email",
+        dealId,
+        companyId: deal?.customer.id ?? undefined,
+      });
+    } catch {
+      toast({
+        title: "Email log not saved",
+        description: "Email will continue, but activity logging failed.",
+        variant: "destructive",
+      });
+    } finally {
+      window.location.href = `mailto:${email}`;
+    }
+  }
 
   return (
     <div className="flex w-full flex-col gap-4 px-4 pb-28 pt-3" data-testid="deal-detail-page">
@@ -136,24 +177,26 @@ export function DealDetailPage() {
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {deal.customer.phone && (
-                  <a
-                    href={`tel:${deal.customer.phone}`}
+                  <button
+                    type="button"
+                    onClick={() => handleCall(deal.customer.phone ?? "")}
                     className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-foreground/[0.04] px-3 py-2 text-xs font-semibold text-foreground hover:border-qep-orange/60 hover:text-qep-orange transition-colors"
                     data-testid="deal-detail-tel"
                   >
                     <Phone className="h-3.5 w-3.5" aria-hidden />
                     {deal.customer.phone}
-                  </a>
+                  </button>
                 )}
                 {deal.customer.email && (
-                  <a
-                    href={`mailto:${deal.customer.email}`}
+                  <button
+                    type="button"
+                    onClick={() => handleEmail(deal.customer.email ?? "")}
                     className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-foreground/[0.04] px-3 py-2 text-xs font-semibold text-foreground hover:border-qep-orange/60 hover:text-qep-orange transition-colors"
                     data-testid="deal-detail-mailto"
                   >
                     <Mail className="h-3.5 w-3.5" aria-hidden />
                     Email
-                  </a>
+                  </button>
                 )}
                 {deal.customer.id && (
                   <Link
@@ -203,7 +246,7 @@ export function DealDetailPage() {
               </p>
               <button
                 type="button"
-                onClick={() => navigate("/sales/capture")}
+                onClick={() => setQuickLogOpen(true)}
                 className="inline-flex items-center gap-1 text-xs font-semibold text-qep-orange"
               >
                 <PlusCircle className="h-3.5 w-3.5" aria-hidden />
@@ -249,7 +292,7 @@ export function DealDetailPage() {
         secondary={
           <button
             type="button"
-            onClick={() => navigate("/sales/capture")}
+            onClick={() => setQuickLogOpen(true)}
             className="inline-flex h-12 items-center gap-1.5 rounded-full border border-white/[0.06] bg-foreground/[0.04] px-4 text-sm font-semibold text-foreground hover:border-white/20 transition-colors"
           >
             <Calendar className="h-4 w-4" aria-hidden />
@@ -266,6 +309,15 @@ export function DealDetailPage() {
           </Link>
         }
       />
+      <Sheet open={quickLogOpen} onOpenChange={setQuickLogOpen}>
+        <SheetContent side="bottom">
+          <QuickLogSheet
+            dealId={dealId}
+            companyId={deal?.customer.id ?? undefined}
+            onLogged={() => setQuickLogOpen(false)}
+          />
+        </SheetContent>
+      </Sheet>
 
     </div>
   );

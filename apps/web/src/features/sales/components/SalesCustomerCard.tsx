@@ -9,7 +9,17 @@ import {
   Star,
   Truck,
 } from "lucide-react";
+import { logSalesActivity } from "../lib/sales-api";
 import type { RepCustomer } from "../lib/types";
+import { useToast } from "@/hooks/use-toast";
+
+export function getOneTapLogFailureToast(channel: "call" | "email") {
+  return {
+    title: `${channel === "call" ? "Call" : "Email"} log not saved`,
+    description: `${channel === "call" ? "Call" : "Email"} will continue, but activity logging failed.`,
+    variant: "destructive" as const,
+  };
+}
 
 /* ── Heat color mapping ─────────────────────────────────── */
 function getHeatAccent(score: number): {
@@ -104,13 +114,46 @@ export function SalesCustomerCard({
 }) {
   const navigate = useNavigate();
   const accent = getHeatAccent(customer.opportunity_score);
+  const { toast } = useToast();
+  async function handleCall() {
+    if (!customer.primary_contact_phone) return;
+    try {
+      await logSalesActivity({
+        activityType: "call",
+        companyId: customer.customer_id,
+      });
+    } catch {
+      toast(getOneTapLogFailureToast("call"));
+    } finally {
+      window.location.href = `tel:${customer.primary_contact_phone}`;
+    }
+  }
+  async function handleEmail() {
+    if (!customer.primary_contact_email) return;
+    try {
+      await logSalesActivity({
+        activityType: "email",
+        companyId: customer.customer_id,
+      });
+    } catch {
+      toast(getOneTapLogFailureToast("email"));
+    } finally {
+      window.location.href = `mailto:${customer.primary_contact_email}`;
+    }
+  }
+
+  function openCustomer() {
+    navigate(`/sales/customers/${customer.customer_id}`);
+  }
 
   return (
-    <button
-      onClick={() => navigate(`/sales/customers/${customer.customer_id}`)}
-      className="w-full text-left p-0 border-none bg-transparent cursor-pointer"
-    >
-      <div className="relative rounded-2xl bg-[hsl(var(--card))] border border-white/[0.06] overflow-hidden transition-all duration-150 hover:border-white/20 hover:shadow-lg hover:shadow-black/20">
+    <div className="relative rounded-2xl bg-[hsl(var(--card))] border border-white/[0.06] overflow-hidden transition-all duration-150 hover:border-white/20 hover:shadow-lg hover:shadow-black/20">
+      <button
+        type="button"
+        onClick={openCustomer}
+        className="w-full text-left p-0 border-none bg-transparent cursor-pointer"
+        aria-label={`Open ${customer.company_name} customer details`}
+      >
         {/* Priority rank badge (top 3) */}
         {showRank && rank != null && rank < 3 && (
           <div
@@ -225,38 +268,43 @@ export function SalesCustomerCard({
           )}
         </div>
 
-        {/* Footer: last contact + call/email */}
-        <div className="flex border-t border-white/[0.06] bg-foreground/[0.02] mt-3">
-          <div className="flex-1 flex items-center gap-1.5 px-3.5 py-2.5 text-[11px] text-muted-foreground/60 font-semibold">
-            <Clock className="w-[11px] h-[11px]" />
-            Last contact:{" "}
-            {customer.days_since_contact != null
-              ? `${customer.days_since_contact}d ago`
-              : customer.last_interaction ?? "N/A"}
-          </div>
-          {customer.primary_contact_phone && (
-            <a
-              href={`tel:${customer.primary_contact_phone}`}
-              onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1.5 px-3.5 border-l border-white/[0.06] text-qep-orange text-[11px] font-bold hover:bg-foreground/[0.04] transition-colors"
-            >
-              <Phone className="w-3 h-3" />
-              Call
-            </a>
-          )}
-          {customer.primary_contact_email && (
-            <a
-              href={`mailto:${customer.primary_contact_email}`}
-              onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1.5 px-3.5 border-l border-white/[0.06] text-foreground text-[11px] font-bold hover:bg-foreground/[0.04] transition-colors"
-            >
-              <Mail className="w-3 h-3 text-muted-foreground" />
-              Email
-            </a>
-          )}
+
+      </button>
+
+      <div className="flex border-t border-white/[0.06] bg-foreground/[0.02] mt-3">
+        <div className="flex-1 flex items-center gap-1.5 px-3.5 py-2.5 text-[11px] text-muted-foreground/60 font-semibold">
+          <Clock className="w-[11px] h-[11px]" />
+          Last contact:{" "}
+          {customer.days_since_contact != null
+            ? `${customer.days_since_contact}d ago`
+            : customer.last_interaction ?? "N/A"}
         </div>
+        {customer.primary_contact_phone && (
+          <button
+            type="button"
+            onClick={async () => {
+              await handleCall();
+            }}
+            className="flex items-center gap-1.5 px-3.5 border-l border-white/[0.06] text-qep-orange text-[11px] font-bold hover:bg-foreground/[0.04] transition-colors"
+          >
+            <Phone className="w-3 h-3" />
+            Call
+          </button>
+        )}
+        {customer.primary_contact_email && (
+          <button
+            type="button"
+            onClick={async () => {
+              await handleEmail();
+            }}
+            className="flex items-center gap-1.5 px-3.5 border-l border-white/[0.06] text-foreground text-[11px] font-bold hover:bg-foreground/[0.04] transition-colors"
+          >
+            <Mail className="w-3 h-3 text-muted-foreground" />
+            Email
+          </button>
+        )}
       </div>
-    </button>
+    </div>
   );
 }
 
