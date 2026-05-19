@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import type { UserRole } from "@/lib/database.types";
 import { getEffectiveIronRole, type IronRole } from "@/features/qrm/lib/iron-roles";
 import { useIronRoleBlend } from "@/features/qrm/lib/useIronRoleBlend";
@@ -46,14 +46,6 @@ export interface FloorPageProps {
 }
 
 const ADMIN_ROLES: UserRole[] = ["admin", "manager", "owner"];
-const PREVIEWABLE_ROLES = new Set<IronRole>([
-  "iron_manager",
-  "iron_advisor",
-  "iron_parts_counter",
-  "iron_parts_manager",
-  "iron_woman",
-  "iron_man",
-]);
 
 const ROLE_HOME_COPY: Record<IronRole, {
   title: string;
@@ -154,18 +146,12 @@ export function FloorPage({
   userFullName,
   ironRoleFromProfile,
 }: FloorPageProps) {
-  const [searchParams] = useSearchParams();
   const { blend } = useIronRoleBlend(userId);
   const resolvedIronRole = getEffectiveIronRole(userRole, blend, ironRoleFromProfile);
-  const previewRoleParam = searchParams.get("view_as");
   const isAdmin = ADMIN_ROLES.includes(userRole);
-  const previewRole =
-    isAdmin && previewRoleParam && PREVIEWABLE_ROLES.has(previewRoleParam as IronRole)
-      ? (previewRoleParam as IronRole)
-      : null;
-  const activeRole = previewRole ?? resolvedIronRole.role;
+  const activeRole = resolvedIronRole.role;
   const copy = ROLE_HOME_COPY[activeRole];
-  const { layout, updatedAt, isLoading } = useFloorLayout(activeRole, previewRole ? null : userId);
+  const { layout, updatedAt, isLoading } = useFloorLayout(activeRole, userId);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -225,11 +211,6 @@ export function FloorPage({
             <span className="rounded-full border border-[#f28a07]/35 bg-[#f28a07]/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[#f6a53a]">
               Role Home
             </span>
-            {previewRole ? (
-              <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-200">
-                Read-only preview
-              </span>
-            ) : null}
           </div>
           <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
             {copy.title}
