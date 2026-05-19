@@ -691,7 +691,7 @@ function CustomerReviewBlock({
             className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.12] bg-card px-3 py-1.5 text-xs font-semibold text-foreground active:scale-95"
           >
             <Search className="h-3 w-3" />
-            Different customer
+            Find a different customer
           </button>
           <button
             type="button"
@@ -743,7 +743,7 @@ function CustomerReviewBlock({
           className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-white/[0.12] bg-card px-3 py-1.5 text-xs font-semibold text-foreground active:scale-95"
         >
           <Search className="h-3 w-3" />
-          Search the book
+          Find a customer
         </button>
       </section>
     );
@@ -762,7 +762,7 @@ function CustomerReviewBlock({
         No customer name detected.
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
-        You can save without attaching, or pick one manually.
+        Save without attaching, or find the customer manually.
       </p>
       <button
         type="button"
@@ -770,7 +770,7 @@ function CustomerReviewBlock({
         className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-white/[0.12] bg-card px-3 py-1.5 text-xs font-semibold text-foreground active:scale-95"
       >
         <Search className="h-3 w-3" />
-        Pick a customer
+        Find a customer
       </button>
     </section>
   );
@@ -826,7 +826,7 @@ function CustomerPickerInline({
     >
       <div className="flex items-center justify-between gap-2 mb-2">
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-          {showFallback ? "Search book + workspace" : "Search your book"}
+          Find a customer
         </p>
         <button
           type="button"
@@ -855,7 +855,7 @@ function CustomerPickerInline({
         ))}
         {showFallback && fallbackQuery.isLoading && (
           <p className="px-3 py-2 text-[11px] text-muted-foreground">
-            Searching the workspace…
+            Looking beyond your book…
           </p>
         )}
         {fallbackRows.map((c) => (
@@ -868,12 +868,12 @@ function CustomerPickerInline({
         ))}
         {!showFallback && bookMatches.length === 0 && debounced.length < 2 && (
           <p className="px-3 py-3 text-xs text-muted-foreground">
-            Type 2+ characters to search your book or the workspace.
+            Start typing to find a customer.
           </p>
         )}
         {showFallback && !fallbackQuery.isLoading && fallbackRows.length === 0 && (
           <p className="px-3 py-3 text-xs text-muted-foreground">
-            No matches in your book or the workspace.
+            No customer matches. Try a different spelling.
           </p>
         )}
       </div>
