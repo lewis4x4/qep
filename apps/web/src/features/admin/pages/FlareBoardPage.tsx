@@ -20,7 +20,12 @@ import {
 const db = supabase as SupabaseClient<Database>;
 
 type FlareRow = Database["public"]["Tables"]["flare_reports"]["Row"];
-type FlareHistoryRow = Database["public"]["Tables"]["flare_status_history"]["Row"];
+
+interface BoardRollups {
+  reportedThisWeek: number;
+  shippedThisWeek: number;
+  avgFixHours: number | null;
+}
 
 interface ColumnDef {
   key: FlareBoardStatus;
@@ -69,8 +74,6 @@ const PRIORITY_OPTIONS: { value: FlarePriority; label: string; tone: "neutral" |
   { value: "urgent", label: "Urgent", tone: "red" },
 ];
 
-const SHIPPED_STATUSES = new Set<FlareBoardStatus>(["shipped", "verified"]);
-
 function ageLabel(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   if (diff < 60_000) return "just now";
@@ -89,54 +92,42 @@ function truncate(value: string | null, max: number): string | null {
 
 interface BoardData {
   reports: FlareRow[];
-  history: FlareHistoryRow[];
+  rollups: BoardRollups;
 }
+
+const EMPTY_ROLLUPS: BoardRollups = {
+  reportedThisWeek: 0,
+  shippedThisWeek: 0,
+  avgFixHours: null,
+};
 
 async function loadBoardData(): Promise<BoardData> {
-  const [reportsRes, historyRes] = await Promise.all([
+  const [reportsRes, rollupsRes] = await Promise.all([
     db.from("flare_reports").select("*").order("status_updated_at", { ascending: false, nullsFirst: false }).limit(500),
-    // 90-day history window is enough for the avg-fix-time tile + drawer thread.
-    db.from("flare_status_history").select("*")
-      .gte("created_at", new Date(Date.now() - 90 * 86_400_000).toISOString())
-      .order("created_at", { ascending: false })
-      .limit(2000),
+    // Single round-trip aggregate from the public.flare_board_rollups RPC.
+    // Replaces fetching up to 2000 history rows client-side every refetch.
+    (db as unknown as {
+      rpc: (fn: "flare_board_rollups") => Promise<{
+        data: Array<{ reported_this_week: number; shipped_this_week: number; avg_fix_hours: number | null }> | null;
+        error: { message?: string } | null;
+      }>;
+    }).rpc("flare_board_rollups"),
   ]);
   if (reportsRes.error) throw new Error(reportsRes.error.message || "load_reports_failed");
+
+  const rollupRow = rollupsRes.data?.[0] ?? null;
+  const rollups: BoardRollups = rollupRow
+    ? {
+      reportedThisWeek: Number(rollupRow.reported_this_week) || 0,
+      shippedThisWeek: Number(rollupRow.shipped_this_week) || 0,
+      avgFixHours: rollupRow.avg_fix_hours == null ? null : Number(rollupRow.avg_fix_hours),
+    }
+    : EMPTY_ROLLUPS;
+
   return {
     reports: (reportsRes.data ?? []) as FlareRow[],
-    history: (historyRes.data ?? []) as FlareHistoryRow[],
+    rollups,
   };
-}
-
-function computeRollups(data: BoardData) {
-  const sevenDaysAgo = Date.now() - 7 * 86_400_000;
-  const reportedThisWeek = data.reports.filter((r) => new Date(r.created_at).getTime() > sevenDaysAgo).length;
-
-  // Bugs "shipped this week" = transitioned into shipped or verified in last 7d.
-  const shippedHistoryThisWeek = data.history.filter((h) =>
-    SHIPPED_STATUSES.has(h.to_status as FlareBoardStatus) &&
-    new Date(h.created_at).getTime() > sevenDaysAgo,
-  );
-  const shippedFlareIds = new Set(shippedHistoryThisWeek.map((h) => h.flare_id));
-  const shippedThisWeek = shippedFlareIds.size;
-
-  // Avg fix time = created_at → first 'shipped' (or 'verified') history row.
-  const firstShipBy: Record<string, number> = {};
-  for (const h of data.history) {
-    if (!SHIPPED_STATUSES.has(h.to_status as FlareBoardStatus)) continue;
-    const t = new Date(h.created_at).getTime();
-    if (firstShipBy[h.flare_id] == null || firstShipBy[h.flare_id] > t) firstShipBy[h.flare_id] = t;
-  }
-  const reportsById = new Map(data.reports.map((r) => [r.id, r] as const));
-  const durations: number[] = [];
-  for (const [flareId, shipTs] of Object.entries(firstShipBy)) {
-    const row = reportsById.get(flareId);
-    if (!row) continue;
-    durations.push(shipTs - new Date(row.created_at).getTime());
-  }
-  const avgMs = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : null;
-
-  return { reportedThisWeek, shippedThisWeek, avgFixHours: avgMs == null ? null : avgMs / 3_600_000 };
 }
 
 function fmtFixTime(hours: number | null): string {
@@ -157,7 +148,7 @@ export function FlareBoardPage() {
     refetchInterval: 60_000,
   });
 
-  const rollups = useMemo(() => computeRollups(data ?? { reports: [], history: [] }), [data]);
+  const rollups = data?.rollups ?? EMPTY_ROLLUPS;
 
   const grouped = useMemo(() => {
     const map = new Map<FlareBoardStatus, FlareRow[]>();

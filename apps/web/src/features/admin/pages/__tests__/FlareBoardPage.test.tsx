@@ -100,14 +100,11 @@ const fixtureReports: FakeFlareRow[] = [
   baseRow({ id: "r-verified",     status: "verified",     user_description: "Verified flare F" }),
 ];
 
-const fixtureHistory: Array<{
-  id: string; flare_id: string; workspace_id: string; from_status: string | null;
-  to_status: string; changed_by: string | null; note: string | null; created_at: string;
-}> = [
+const fixtureRollups = [
   {
-    id: "h-1", flare_id: "r-shipped", workspace_id: "ws", from_status: "fixing", to_status: "shipped",
-    changed_by: null, note: null,
-    created_at: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+    reported_this_week: 6,
+    shipped_this_week: 1,
+    avg_fix_hours: 18.4,
   },
 ];
 
@@ -115,7 +112,6 @@ mock.module("@/lib/supabase", () => {
   function makeChain(table: string) {
     let payload: { data: unknown; error: { message: string } | null };
     if (table === "flare_reports") payload = { data: fixtureReports, error: null };
-    else if (table === "flare_status_history") payload = { data: fixtureHistory, error: null };
     else payload = { data: [], error: null };
 
     const resolved = Promise.resolve(payload);
@@ -134,6 +130,12 @@ mock.module("@/lib/supabase", () => {
   return {
     supabase: {
       from: (table: string) => makeChain(table),
+      rpc: (fn: string) => {
+        if (fn === "flare_board_rollups") {
+          return Promise.resolve({ data: fixtureRollups, error: null });
+        }
+        return Promise.resolve({ data: null, error: null });
+      },
       storage: {
         from: () => ({
           createSignedUrl: () => Promise.resolve({ data: null, error: null }),

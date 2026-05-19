@@ -42,6 +42,8 @@ const ALLOWED_STATUSES = new Set([
 
 const ALLOWED_PRIORITIES = new Set(["low", "medium", "high", "urgent"]);
 
+const RATE_LIMIT_PER_MINUTE = 30;
+
 interface UpdateBody {
   flare_id?: string;
   status?: string;
@@ -96,6 +98,25 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    // Rate limit per admin — protects against status flapping / accidental
+    // mutation loops. Counts the caller's status-history rows in the last
+    // minute; rejects with 429 above the threshold.
+    const oneMinuteAgo = new Date(Date.now() - 60_000).toISOString();
+    const { count: recentCount, error: rateErr } = await supabaseAdmin
+      .from("flare_status_history")
+      .select("id", { count: "exact", head: true })
+      .eq("changed_by", auth.userId)
+      .gte("created_at", oneMinuteAgo);
+    if (rateErr) {
+      console.warn("[flare-status-update] rate-limit read failed:", rateErr);
+    } else if ((recentCount ?? 0) >= RATE_LIMIT_PER_MINUTE) {
+      return safeJsonError(
+        `rate_limited — ${RATE_LIMIT_PER_MINUTE} status changes per minute max`,
+        429,
+        origin,
+      );
+    }
 
     // Service-role read — caller's workspace gate is downstream on the update.
     const { data: existing, error: existingErr } = await supabaseAdmin

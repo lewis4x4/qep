@@ -46,14 +46,16 @@ export const EMPTY_VOICE_EXTRACTION: VoiceExtractionResult = {
 export async function extractVoiceEntities(
   transcript: string,
   customerName?: string,
+  signal?: AbortSignal,
 ): Promise<VoiceExtractionResult> {
   if (!transcript.trim()) return { ...EMPTY_VOICE_EXTRACTION };
+  if (signal?.aborted) return { ...EMPTY_VOICE_EXTRACTION };
 
   const fns = (supabase as unknown as {
     functions: {
       invoke: (
         name: string,
-        opts: { body: Record<string, unknown> },
+        opts: { body: Record<string, unknown>; signal?: AbortSignal },
       ) => Promise<{ data: unknown; error: { message?: string } | null }>;
     };
   }).functions;
@@ -64,7 +66,9 @@ export async function extractVoiceEntities(
         transcript,
         customer_name: customerName?.trim() || undefined,
       },
+      signal,
     });
+    if (signal?.aborted) return { ...EMPTY_VOICE_EXTRACTION };
     if (error || !data || typeof data !== "object") {
       return { ...EMPTY_VOICE_EXTRACTION };
     }

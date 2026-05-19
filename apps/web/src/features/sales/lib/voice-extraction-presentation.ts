@@ -48,8 +48,7 @@ export interface SmartAction {
   id:
     | "log_activity"
     | "schedule_follow_up"
-    | "open_quote_builder"
-    | "mark_deal_cooling";
+    | "open_quote_builder";
   /** Mobile-truncatable headline. */
   label: string;
   /** One-line subtext explaining the consequence. */
@@ -67,13 +66,17 @@ export interface SmartAction {
 export interface PickSmartActionsArgs {
   extraction: VoiceExtractionResult | null;
   selectedCustomerId: string | null;
+  // selectedDealId is reserved for a future "mark_deal_cooling" action
+  // that needs rep-book-customer → deal resolution wired through first.
+  // Kept on the args shape so callers don't need a follow-up rename when
+  // that action is reinstated.
   selectedDealId: string | null;
 }
 
 export function pickSmartActions({
   extraction,
-  selectedCustomerId,
-  selectedDealId,
+  selectedCustomerId: _selectedCustomerId,
+  selectedDealId: _selectedDealId,
 }: PickSmartActionsArgs): SmartAction[] {
   const actions: SmartAction[] = [];
 
@@ -110,15 +113,8 @@ export function pickSmartActions({
     });
   }
 
-  if (extraction?.sentiment === "cooling" && selectedCustomerId && selectedDealId) {
-    actions.push({
-      id: "mark_deal_cooling",
-      label: "Mark deal as cooling",
-      detail: "Flags the deal in the pipeline for manager attention.",
-      defaultOn: false,
-      wired: false,
-    });
-  }
+  // mark_deal_cooling intentionally omitted until rep-book-customer →
+  // deal resolution lands. The hook + args shape stays compatible.
 
   return actions;
 }
