@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { LogVisitFlow } from "../components/LogVisitFlow";
-import { VoiceNoteCapture } from "../components/VoiceNoteCapture";
+import { SmartVoiceCapture } from "../components/SmartVoiceCapture";
 import { ScheduleFollowUp } from "../components/ScheduleFollowUp";
 import { QuickNote, type QuickNoteTag } from "../components/QuickNote";
 import { fetchRepCustomers } from "../lib/sales-api";
@@ -189,7 +189,6 @@ function MiniAvatar({ name, size = 24 }: { name: string; size?: number }) {
 export function CapturePage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<CaptureMode>(null);
-  const [recording, setRecording] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
   const [noteTag, setNoteTag] = useState<QuickNoteTag | null>(null);
 
@@ -204,7 +203,6 @@ export function CapturePage() {
 
   function resetAll() {
     setMode(null);
-    setRecording(false);
     setNoteTag(null);
   }
 
@@ -224,7 +222,13 @@ export function CapturePage() {
           Cancel
         </button>
         {mode === "log_visit" && <LogVisitFlow onComplete={resetAll} />}
-        {mode === "voice_note" && <VoiceNoteCapture onComplete={resetAll} />}
+        {mode === "voice_note" && (
+          <SmartVoiceCapture
+            onComplete={resetAll}
+            onCancel={resetAll}
+            presetCustomerId={selectedCustomer ?? undefined}
+          />
+        )}
         {mode === "schedule" && <ScheduleFollowUp onComplete={resetAll} />}
         {mode === "quick_note" && (
           <QuickNote onComplete={resetAll} tag={noteTag ?? undefined} />
@@ -246,43 +250,29 @@ export function CapturePage() {
 
       <div className="px-5 pb-5">
         <button
-          onClick={() => {
-            if (recording) {
-              setRecording(false);
-              setMode("voice_note");
-            } else {
-              setRecording(true);
-            }
-          }}
+          type="button"
+          data-testid="capture-tap-to-record"
+          onClick={() => setMode("voice_note")}
           className="w-full rounded-[18px] border-none cursor-pointer flex items-center gap-4 text-left transition-all duration-200 active:scale-[0.99]"
           style={{
             padding: "20px 18px",
-            background: recording
-              ? "linear-gradient(135deg, #EF4444 0%, #DC2626 100%)"
-              : "linear-gradient(135deg, #E87722 0%, #FF8A3D 100%)",
-            boxShadow: recording
-              ? "0 12px 30px rgba(239,68,68,0.4)"
-              : "0 12px 30px rgba(232,119,34,0.25)",
+            background: "linear-gradient(135deg, #E87722 0%, #FF8A3D 100%)",
+            boxShadow: "0 12px 30px rgba(232,119,34,0.25)",
           }}
         >
           <div className="relative w-[60px] h-[60px] rounded-full bg-white/20 flex items-center justify-center shrink-0">
-            {recording && (
-              <div className="absolute -inset-1 rounded-full border-2 border-white/50 animate-ping" />
-            )}
             <Mic className="w-7 h-7 text-white" strokeWidth={2.5} />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[17px] font-extrabold text-white tracking-[-0.01em]">
-              {recording ? "Recording..." : "Tap to record"}
+              Tap to record
             </p>
             <p className="text-xs text-white/85 mt-0.5 font-medium">
-              {recording
-                ? "Release to transcribe"
-                : "Iron auto-extracts deals, contacts, follow-ups"}
+              Recording starts instantly · JARVIS finds the customer
             </p>
           </div>
           <span className="px-2.5 py-1 rounded-[20px] bg-white/20 text-[10px] font-extrabold text-white uppercase tracking-[0.06em]">
-            {recording ? "LIVE" : "AI"}
+            AI
           </span>
         </button>
       </div>
