@@ -509,7 +509,7 @@ export function SmartVoiceCapture({
         : {};
 
       const workspaceId = await getWorkspaceId();
-      const { error: insertErr } = await supabase.from("voice_captures").insert({
+      const { data: insertedCapture, error: insertErr } = await supabase.from("voice_captures").insert({
         user_id: user.id,
         workspace_id: workspaceId,
         audio_storage_path: fileName,
@@ -518,8 +518,16 @@ export function SmartVoiceCapture({
         sync_status: "pending",
         linked_company_id: selectedCustomerId,
         extracted_data: extractedData,
-      });
+      }).select("id").single();
       if (insertErr) throw insertErr;
+      if (!insertedCapture?.id) throw new Error("Voice note saved without a capture id.");
+
+      const { error: syncErr } = await supabase.functions.invoke("voice-capture-sync", {
+        body: { capture_id: insertedCapture.id },
+      });
+      if (syncErr) {
+        throw new Error(`Voice note saved, but QRM activity attach failed: ${syncErr.message}`);
+      }
 
       // Fire wired side effects after the insert. Open Quote Builder is the
       // only navigation effect today — the rest store intent and complete.

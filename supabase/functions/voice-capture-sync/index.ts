@@ -25,6 +25,9 @@ interface CaptureRow {
   hubspot_contact_id: string | null;
   hubspot_note_id: string | null;
   hubspot_task_id: string | null;
+  linked_deal_id: string | null;
+  linked_company_id: string | null;
+  linked_contact_id: string | null;
 }
 
 function jsonError(message: string, status: number, headers: Record<string, string>): Response {
@@ -36,20 +39,54 @@ function jsonError(message: string, status: number, headers: Record<string, stri
 
 async function resolveCaptureWorkspaceId(
   supabase: SupabaseClient,
-  capture: Pick<CaptureRow, "hubspot_deal_id">,
+  capture: Pick<CaptureRow, "hubspot_deal_id" | "linked_deal_id" | "linked_company_id" | "linked_contact_id">,
 ): Promise<string | null> {
-  if (!capture.hubspot_deal_id || !isUuid(capture.hubspot_deal_id)) return null;
+  const dealId = isUuid(capture.linked_deal_id ?? "")
+    ? capture.linked_deal_id
+    : isUuid(capture.hubspot_deal_id ?? "")
+      ? capture.hubspot_deal_id
+      : null;
 
-  const { data: deal } = await supabase
-    .from("crm_deals")
-    .select("workspace_id")
-    .eq("id", capture.hubspot_deal_id)
-    .is("deleted_at", null)
-    .maybeSingle();
-  const dealWorkspaceId = (deal as { workspace_id?: unknown } | null)?.workspace_id;
-  return typeof dealWorkspaceId === "string" && dealWorkspaceId.trim().length > 0
-    ? dealWorkspaceId
-    : null;
+  if (dealId) {
+    const { data: deal } = await supabase
+      .from("crm_deals")
+      .select("workspace_id")
+      .eq("id", dealId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    const dealWorkspaceId = (deal as { workspace_id?: unknown } | null)?.workspace_id;
+    if (typeof dealWorkspaceId === "string" && dealWorkspaceId.trim().length > 0) {
+      return dealWorkspaceId;
+    }
+  }
+
+  if (isUuid(capture.linked_company_id ?? "")) {
+    const { data: company } = await supabase
+      .from("crm_companies")
+      .select("workspace_id")
+      .eq("id", capture.linked_company_id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    const companyWorkspaceId = (company as { workspace_id?: unknown } | null)?.workspace_id;
+    if (typeof companyWorkspaceId === "string" && companyWorkspaceId.trim().length > 0) {
+      return companyWorkspaceId;
+    }
+  }
+
+  if (isUuid(capture.linked_contact_id ?? "")) {
+    const { data: contact } = await supabase
+      .from("crm_contacts")
+      .select("workspace_id")
+      .eq("id", capture.linked_contact_id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    const contactWorkspaceId = (contact as { workspace_id?: unknown } | null)?.workspace_id;
+    if (typeof contactWorkspaceId === "string" && contactWorkspaceId.trim().length > 0) {
+      return contactWorkspaceId;
+    }
+  }
+
+  return null;
 }
 
 function isUuid(value: string): boolean {
@@ -141,7 +178,6 @@ Deno.serve(async (req) => {
     if (!auth.ok) {
       return jsonError("Unauthorized", 401, headers);
     }
-    const supabase = auth.supabase;
     const user = { id: auth.userId };
     const workspaceId = auth.workspaceId;
 
@@ -158,7 +194,7 @@ Deno.serve(async (req) => {
 
     const { data: captureData, error: captureError } = await supabaseAdmin
       .from("voice_captures")
-      .select("id, user_id, workspace_id, transcript, extracted_data, hubspot_deal_id, hubspot_contact_id, hubspot_note_id, hubspot_task_id")
+      .select("id, user_id, workspace_id, transcript, extracted_data, hubspot_deal_id, hubspot_contact_id, hubspot_note_id, hubspot_task_id, linked_deal_id, linked_company_id, linked_contact_id")
       .eq("id", captureId)
       .single();
 
@@ -196,7 +232,13 @@ Deno.serve(async (req) => {
       workspaceId: captureWorkspaceId,
       actorUserId: user.id,
       captureId,
-      dealId: isUuid(capture.hubspot_deal_id ?? "") ? capture.hubspot_deal_id : null,
+      dealId: isUuid(capture.linked_deal_id ?? "")
+        ? capture.linked_deal_id
+        : isUuid(capture.hubspot_deal_id ?? "")
+          ? capture.hubspot_deal_id
+          : null,
+      companyId: isUuid(capture.linked_company_id ?? "") ? capture.linked_company_id : null,
+      contactId: isUuid(capture.linked_contact_id ?? "") ? capture.linked_contact_id : null,
       occurredAtIso: new Date().toISOString(),
       transcript: capture.transcript,
       extracted,
@@ -207,6 +249,38 @@ Deno.serve(async (req) => {
     let noteId: string | null = capture.hubspot_note_id;
     let taskId: string | null = capture.hubspot_task_id;
     const externalSyncErrors: string[] = [];
+
+    const hasHubSpotDealTarget = isHubSpotObjectId(resolvedDealId);
+    if (localCrmSync.saved && !hasHubSpotDealTarget) {
+      await supabaseAdmin
+        .from("voice_captures")
+        .update({
+          sync_status: "synced",
+          sync_error: null,
+          hubspot_deal_id: localCrmSync.dealId,
+          hubspot_contact_id: localCrmSync.contactId,
+          hubspot_note_id: localCrmSync.noteActivityId,
+          hubspot_task_id: localCrmSync.taskActivityId,
+          hubspot_synced_at: new Date().toISOString(),
+        })
+        .eq("id", captureId);
+
+      return new Response(
+        JSON.stringify({
+          id: captureId,
+          hubspot_synced: false,
+          hubspot_skipped_reason: "No HubSpot deal target; local QRM activity saved.",
+          hubspot_deal_id: localCrmSync.dealId,
+          hubspot_note_id: localCrmSync.noteActivityId,
+          hubspot_task_id: localCrmSync.taskActivityId,
+          local_crm_saved: true,
+        }),
+        {
+          status: 200,
+          headers: { ...headers, "Content-Type": "application/json" },
+        },
+      );
+    }
 
     const { data: connectionData } = await supabaseAdmin
       .from("hubspot_connections")

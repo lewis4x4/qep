@@ -172,9 +172,10 @@ export interface LocalVoiceCaptureCrmSyncResult {
 }
 
 interface LocalCrmTarget {
-  dealId: string;
+  dealId: string | null;
   contactId: string | null;
   companyId: string | null;
+  source: "deal" | "company" | "contact" | "inbox";
 }
 
 interface InsertErrorLike {
@@ -622,49 +623,190 @@ function isDuplicateKeyError(error: unknown): boolean {
 async function findExistingVoiceCaptureActivityId(
   supabaseAdmin: SupabaseClient,
   workspaceId: string,
-  dealId: string,
+  target: LocalCrmTarget,
   activityType: "note" | "task",
   captureId: string,
 ): Promise<string | null> {
-  const { data } = await supabaseAdmin
+  const query = supabaseAdmin
     .from("crm_activities")
     .select("id")
     .eq("workspace_id", workspaceId)
-    .eq("deal_id", dealId)
     .eq("activity_type", activityType)
     .is("deleted_at", null)
     .contains("metadata", {
       source: "voice_capture",
       voiceCaptureId: captureId,
       activityKind: activityType,
-    })
-    .maybeSingle();
+    });
+
+  const { data } = await (
+    target.source === "deal" && target.dealId
+      ? query.eq("deal_id", target.dealId).is("company_id", null).is("contact_id", null)
+      : (target.source === "company" || target.source === "inbox") && target.companyId
+        ? query.eq("company_id", target.companyId).is("deal_id", null).is("contact_id", null)
+        : query.eq("contact_id", target.contactId).is("deal_id", null).is("company_id", null)
+  ).maybeSingle();
 
   return data?.id ?? null;
+}
+
+function buildActivitySubject(target: LocalCrmTarget): {
+  deal_id: string | null;
+  contact_id: string | null;
+  company_id: string | null;
+} {
+  if (target.source === "deal" && target.dealId) {
+    return { deal_id: target.dealId, contact_id: null, company_id: null };
+  }
+  if ((target.source === "company" || target.source === "inbox") && target.companyId) {
+    return { deal_id: null, contact_id: null, company_id: target.companyId };
+  }
+  return { deal_id: null, contact_id: target.contactId, company_id: null };
+}
+
+async function resolveCompanyTarget(
+  supabaseAdmin: SupabaseClient,
+  workspaceId: string,
+  companyId: string,
+): Promise<LocalCrmTarget | null> {
+  const { data, error } = await supabaseAdmin
+    .from("crm_companies")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("id", companyId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error || !data?.id) return null;
+  return { dealId: null, contactId: null, companyId: data.id, source: "company" };
+}
+
+async function resolveContactTarget(
+  supabaseAdmin: SupabaseClient,
+  workspaceId: string,
+  contactId: string,
+): Promise<LocalCrmTarget | null> {
+  const { data, error } = await supabaseAdmin
+    .from("crm_contacts")
+    .select("id, primary_company_id")
+    .eq("workspace_id", workspaceId)
+    .eq("id", contactId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error || !data?.id) return null;
+  return {
+    dealId: null,
+    contactId: data.id,
+    companyId: data.primary_company_id ?? null,
+    source: "contact",
+  };
+}
+
+async function resolveExtractedCompanyTarget(
+  supabaseAdmin: SupabaseClient,
+  workspaceId: string,
+  extracted: VoiceCaptureExtractedDealData,
+): Promise<LocalCrmTarget | null> {
+  const companyName = getVoiceCaptureCompanyName(extracted);
+  if (!companyName) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from("crm_companies")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .ilike("name", companyName)
+    .is("deleted_at", null)
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data?.id) return null;
+  return { dealId: null, contactId: null, companyId: data.id, source: "company" };
+}
+
+async function ensureVoiceCaptureInboxCompany(
+  supabaseAdmin: SupabaseClient,
+  workspaceId: string,
+  actorUserId: string,
+): Promise<LocalCrmTarget> {
+  const inboxMetadata = { source: "voice_capture_inbox", system: true };
+  const { data: existing } = await supabaseAdmin
+    .from("crm_companies")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("name", "Voice Capture Inbox")
+    .contains("metadata", inboxMetadata)
+    .is("deleted_at", null)
+    .limit(1)
+    .maybeSingle();
+
+  if (existing?.id) {
+    return { dealId: null, contactId: null, companyId: existing.id, source: "inbox" };
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("crm_companies")
+    .insert({
+      workspace_id: workspaceId,
+      name: "Voice Capture Inbox",
+      assigned_rep_id: actorUserId,
+      metadata: {
+        ...inboxMetadata,
+        description: "System holding account for voice captures that could not be matched to a QRM customer yet.",
+      },
+    })
+    .select("id")
+    .single();
+
+  if (error || !data?.id) {
+    throw error ?? new Error("Unable to create Voice Capture Inbox company.");
+  }
+
+  return { dealId: null, contactId: null, companyId: data.id, source: "inbox" };
 }
 
 async function resolveLocalTarget(
   supabaseAdmin: SupabaseClient,
   workspaceId: string,
   dealId: string | null,
+  companyId: string | null,
+  contactId: string | null,
+  actorUserId: string,
+  extracted: VoiceCaptureExtractedDealData,
 ): Promise<LocalCrmTarget | null> {
-  if (!dealId) return null;
+  if (dealId) {
+    const { data, error } = await supabaseAdmin
+      .from("crm_deals")
+      .select("id, primary_contact_id, company_id")
+      .eq("workspace_id", workspaceId)
+      .eq("id", dealId)
+      .is("deleted_at", null)
+      .maybeSingle();
 
-  const { data, error } = await supabaseAdmin
-    .from("crm_deals")
-    .select("id, primary_contact_id, company_id")
-    .eq("workspace_id", workspaceId)
-    .eq("id", dealId)
-    .is("deleted_at", null)
-    .maybeSingle();
+    if (!error && data) {
+      return {
+        dealId: data.id,
+        contactId: data.primary_contact_id,
+        companyId: data.company_id,
+        source: "deal",
+      };
+    }
+  }
 
-  if (error || !data) return null;
+  if (companyId) {
+    const target = await resolveCompanyTarget(supabaseAdmin, workspaceId, companyId);
+    if (target) return target;
+  }
 
-  return {
-    dealId: data.id,
-    contactId: data.primary_contact_id,
-    companyId: data.company_id,
-  };
+  if (contactId) {
+    const target = await resolveContactTarget(supabaseAdmin, workspaceId, contactId);
+    if (target) return target;
+  }
+
+  const extractedCompanyTarget = await resolveExtractedCompanyTarget(supabaseAdmin, workspaceId, extracted);
+  if (extractedCompanyTarget) return extractedCompanyTarget;
+
+  return await ensureVoiceCaptureInboxCompany(supabaseAdmin, workspaceId, actorUserId);
 }
 
 async function ensureNoteActivity(
@@ -677,22 +819,29 @@ async function ensureNoteActivity(
   transcript: string,
   extracted: VoiceCaptureExtractedDealData,
 ): Promise<string | null> {
-  const { data: existing } = await supabaseAdmin
+  const existingQuery = supabaseAdmin
     .from("crm_activities")
     .select("id")
     .eq("workspace_id", workspaceId)
-    .eq("deal_id", target.dealId)
     .eq("activity_type", "note")
     .is("deleted_at", null)
     .contains("metadata", {
       source: "voice_capture",
       voiceCaptureId: captureId,
       activityKind: "note",
-    })
-    .maybeSingle();
+    });
+
+  const { data: existing } = await (
+    target.source === "deal" && target.dealId
+      ? existingQuery.eq("deal_id", target.dealId).is("company_id", null).is("contact_id", null)
+      : (target.source === "company" || target.source === "inbox") && target.companyId
+        ? existingQuery.eq("company_id", target.companyId).is("deal_id", null).is("contact_id", null)
+        : existingQuery.eq("contact_id", target.contactId).is("deal_id", null).is("company_id", null)
+  ).maybeSingle();
 
   if (existing?.id) return existing.id;
 
+  const subject = buildActivitySubject(target);
   const { data, error } = await supabaseAdmin
     .from("crm_activities")
     .insert({
@@ -701,18 +850,18 @@ async function ensureNoteActivity(
       body: buildVoiceCaptureNoteBody(transcript, extracted),
       occurred_at: occurredAtIso,
       // Exactly one of contact_id / deal_id / company_id (see crm_activities check constraint).
-      deal_id: target.dealId,
-      contact_id: null,
-      company_id: null,
+      ...subject,
       created_by: actorUserId,
       metadata: {
         source: "voice_capture",
         voiceCaptureId: captureId,
         activityKind: "note",
+        targetSource: target.source,
         transcript,
         extractedSummary: buildCrmSummary(extracted),
         resolvedContactId: target.contactId,
         resolvedCompanyId: target.companyId,
+        resolvedDealId: target.dealId,
       },
     })
     .select("id")
@@ -723,7 +872,7 @@ async function ensureNoteActivity(
       return await findExistingVoiceCaptureActivityId(
         supabaseAdmin,
         workspaceId,
-        target.dealId,
+        target,
         "note",
         captureId,
       );
@@ -746,19 +895,25 @@ async function ensureTaskActivity(
     return null;
   }
 
-  const { data: existing } = await supabaseAdmin
+  const existingQuery = supabaseAdmin
     .from("crm_activities")
     .select("id")
     .eq("workspace_id", workspaceId)
-    .eq("deal_id", target.dealId)
     .eq("activity_type", "task")
     .is("deleted_at", null)
     .contains("metadata", {
       source: "voice_capture",
       voiceCaptureId: captureId,
       activityKind: "task",
-    })
-    .maybeSingle();
+    });
+
+  const { data: existing } = await (
+    target.source === "deal" && target.dealId
+      ? existingQuery.eq("deal_id", target.dealId).is("company_id", null).is("contact_id", null)
+      : (target.source === "company" || target.source === "inbox") && target.companyId
+        ? existingQuery.eq("company_id", target.companyId).is("deal_id", null).is("contact_id", null)
+        : existingQuery.eq("contact_id", target.contactId).is("deal_id", null).is("company_id", null)
+  ).maybeSingle();
 
   if (existing?.id) return existing.id;
 
@@ -773,14 +928,13 @@ async function ensureTaskActivity(
       activity_type: "task",
       body: taskBody,
       occurred_at: occurredAtIso,
-      deal_id: target.dealId,
-      contact_id: null,
-      company_id: null,
+      ...buildActivitySubject(target),
       created_by: actorUserId,
       metadata: {
         source: "voice_capture",
         voiceCaptureId: captureId,
         activityKind: "task",
+        targetSource: target.source,
         task: {
           dueAt: getDueAt(extracted.opportunity.followUpDate),
           status: "open",
@@ -789,6 +943,7 @@ async function ensureTaskActivity(
         extractedSummary: buildCrmSummary(extracted),
         resolvedContactId: target.contactId,
         resolvedCompanyId: target.companyId,
+        resolvedDealId: target.dealId,
       },
     })
     .select("id")
@@ -799,7 +954,7 @@ async function ensureTaskActivity(
       return await findExistingVoiceCaptureActivityId(
         supabaseAdmin,
         workspaceId,
-        target.dealId,
+        target,
         "task",
         captureId,
       );
@@ -816,6 +971,8 @@ export async function writeVoiceCaptureToLocalCrm(
     actorUserId: string;
     captureId: string;
     dealId: string | null;
+    companyId?: string | null;
+    contactId?: string | null;
     occurredAtIso: string;
     transcript: string;
     extracted: VoiceCaptureExtractedDealData;
@@ -825,6 +982,10 @@ export async function writeVoiceCaptureToLocalCrm(
     supabaseAdmin,
     input.workspaceId,
     input.dealId,
+    input.companyId ?? null,
+    input.contactId ?? null,
+    input.actorUserId,
+    input.extracted,
   );
 
   if (!target) {
