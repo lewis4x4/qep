@@ -53,7 +53,14 @@ module.exports = {
         ? "./scripts/lighthouse-puppeteer-auth.cjs"
         : undefined,
       settings: {
-        preset: "mobile",
+        formFactor: "mobile",
+        screenEmulation: {
+          mobile: true,
+          width: 390,
+          height: 844,
+          deviceScaleFactor: 3,
+          disabled: false,
+        },
         throttlingMethod: "simulate",
         onlyCategories: ["performance", "accessibility", "best-practices", "seo"],
         skipAudits: [
