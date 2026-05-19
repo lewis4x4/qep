@@ -24,8 +24,8 @@ describe("VoiceQuotePage (integration)", () => {
     expect(screen.getByText("Extracted customer, equipment, budget, and follow-up details will appear after transcription.")).toBeTruthy();
     expect(screen.queryByText("Option A · Value")).toBeNull();
     expect(screen.queryByText("Red River Demolition")).toBeNull();
-    expect(screen.getByText("Recent Voice Quotes")).toBeTruthy();
-    expect(screen.getByText("Recent voice quotes will appear after real sessions are recorded or restored.")).toBeTruthy();
+    expect(screen.getByText("Offline & Sync")).toBeTruthy();
+    expect(screen.getByText("Sessions are saved locally when you're offline.")).toBeTruthy();
     expect(screen.queryByPlaceholderText(/Customer needs an ASV RT-135/i)).toBeNull();
     expect(container.querySelector(".fixed.inset-y-0.right-0.z-50")).toBeNull();
   });
