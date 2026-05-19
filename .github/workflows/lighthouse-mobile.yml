@@ -98,6 +98,8 @@ jobs:
 
       - name: Lighthouse — guest fallback when no credentials
         if: env.HAS_CREDS != 'true'
+        env:
+          LHCI_GUEST_FALLBACK: "true"
         run: |
           echo "::warning::Running Lighthouse against guest routes only (PLAYWRIGHT_TEST_EMAIL / PLAYWRIGHT_TEST_PASSWORD not available — typically a fork PR)."
           bun run lighthouse:mobile
