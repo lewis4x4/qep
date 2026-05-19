@@ -25,6 +25,11 @@ interface SectionDef {
   steps: Step[];
 }
 
+type MobileSectionTone = {
+  frameClassName: string;
+  eyebrowClassName: string;
+};
+
 const SECTIONS: readonly SectionDef[] = [
   { id: "who_what", label: "Who & What", steps: ["customer", "equipment", "configure", "tradeIn"] },
   { id: "price", label: "Price", steps: ["pricing", "promotions", "financing"] },
@@ -32,8 +37,31 @@ const SECTIONS: readonly SectionDef[] = [
   { id: "send", label: "Send", steps: ["document", "send"] },
 ];
 
+const MOBILE_SECTION_TONES: Record<SectionId, MobileSectionTone> = {
+  who_what: {
+    frameClassName: "border-white/[0.08] bg-foreground/[0.03]",
+    eyebrowClassName: "text-qep-orange",
+  },
+  price: {
+    frameClassName: "border-qep-orange/25 bg-qep-orange/[0.06]",
+    eyebrowClassName: "text-qep-orange",
+  },
+  refine: {
+    frameClassName: "border-white/[0.08] bg-foreground/[0.03]",
+    eyebrowClassName: "text-qep-orange",
+  },
+  send: {
+    frameClassName: "border-qep-orange/25 bg-qep-orange/[0.06]",
+    eyebrowClassName: "text-qep-orange",
+  },
+};
+
 function sectionForStep(step: Step): SectionDef {
   return SECTIONS.find((section) => section.steps.includes(step)) ?? SECTIONS[0];
+}
+
+export function mobileSectionToneForStep(step: Step): MobileSectionTone {
+  return MOBILE_SECTION_TONES[sectionForStep(step).id];
 }
 
 function autosaveDisplay(state: AutoSaveState, savedLabel: string | null): {
@@ -150,6 +178,7 @@ export function QuoteBuilderV2PageMobileShell({
   const [openSection, setOpenSection] = useState<"iron" | "coach" | "talk" | null>(null);
 
   const activeSection = sectionForStep(step);
+  const activeSectionTone = mobileSectionToneForStep(step);
   const totalSteps = WIZARD_STEPS.length;
   const autosave = autosaveDisplay(autoSaveState, displayedSavedLabel);
 
@@ -231,7 +260,26 @@ export function QuoteBuilderV2PageMobileShell({
         className="min-h-0 flex-1 overflow-y-auto pb-[calc(var(--sales-shell-bottom-offset)+5rem)]"
         data-testid="quote-mobile-scroll-root"
       >
-        <div className="px-4 pt-3">{wizardStepRouter}</div>
+        <div className="px-4 pt-3">
+          <section
+            className={cn(
+              "rounded-2xl border p-3 shadow-[0_0_0_1px_rgba(255,255,255,0.02)_inset]",
+              activeSectionTone.frameClassName,
+            )}
+            data-testid="quote-mobile-active-section-frame"
+            data-section-id={activeSection.id}
+          >
+            <p
+              className={cn(
+                "mb-2 text-[10px] font-extrabold uppercase tracking-[0.16em]",
+                activeSectionTone.eyebrowClassName,
+              )}
+            >
+              {activeSection.label} section
+            </p>
+            {wizardStepRouter}
+          </section>
+        </div>
 
         <div className="px-4 pt-4">
           <QuoteBuilderStatusBanners
