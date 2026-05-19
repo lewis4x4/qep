@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTodayFeed } from "../hooks/useTodayFeed";
+import { useRepStreaks } from "../hooks/useRepStreaks";
 import { useAuth } from "@/hooks/useAuth";
 import { EveningBriefingHero } from "../components/EveningBriefingHero";
 import { SalesNarrativeBlock } from "../components/SalesNarrativeBlock";
@@ -8,6 +9,7 @@ import { SalesActionsBlock } from "../components/SalesActionsBlock";
 import { SalesQuickTools } from "../components/SalesQuickTools";
 import { TomorrowFirstMove } from "../components/TomorrowFirstMove";
 import { LiveSignalsStrip } from "../components/LiveSignalsStrip";
+import { StreakBadge } from "../components/StreakBadge";
 import { TodayFeedSkeleton } from "../components/TodayFeedSkeleton";
 import { PrepCard } from "../components/PrepCard";
 import { ActionItemCard } from "../components/ActionItemCard";
@@ -108,6 +110,7 @@ export function TodayFeedPage() {
     timeOfDay,
     isLoading,
   } = useTodayFeed();
+  const streaks = useRepStreaks();
   const { profile } = useAuth();
   const [logVisitOpen, setLogVisitOpen] = useState(false);
 
@@ -200,6 +203,14 @@ export function TodayFeedPage() {
         <LiveSignalsStrip
           pipeline={pipeline}
           expiringQuoteCount={briefing?.expiring_quotes?.length ?? 0}
+        />
+      )}
+
+      {(pipeline.length > 0 || streaks.currentStreak > 0) && (
+        <StreakBadge
+          currentStreak={streaks.currentStreak}
+          longestStreak={streaks.longestStreak}
+          isLoading={streaks.isLoading}
         />
       )}
 
