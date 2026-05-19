@@ -34,13 +34,20 @@ Return ONLY a JSON object matching this exact schema. Use null when a field is n
   "sentiment": "warming | cooling | neutral | null — directional read of customer interest",
   "topic": "visit | call | quote_followup | parts | service | competitor | trade_in | other",
   "summary": "string — ~2 short sentences capturing the gist in first person, e.g. 'Met with Frank at Acme. He wants a revised quote on the 5T forklift by Friday.'",
+  "customer_mentions": ["string array — company/customer names heard, INCLUDING any DBA or shorthand. e.g. 'Lewis Tree Services', 'Beacon Ridge', 'Acme'. Empty array if none."],
+  "contact_mentions": ["string array — person/contact names mentioned (the human at the customer, not the rep themselves). e.g. 'Frank Acres', 'Frank', 'Mr. Holt'. Empty array if none."],
+  "phone_mentions": ["string array — phone numbers heard, normalized to digits-only (10-digit US). e.g. '5555551212'. Empty array if none."],
+  "location_mentions": ["string array — cities, regions, or jobsite locations mentioned. e.g. 'Bend', 'Bend, Oregon', 'Eastside lot'. Empty array if none."],
   "confidence": "number 0..1 — your overall confidence that the extraction is faithful to the transcript"
 }
 
 Rules:
 - Resolve relative dates against the rep's perspective today. Pick a concrete YYYY-MM-DD when possible.
 - amount_cents must be an integer or null. No strings, no decimals.
-- equipment_mentioned must always be an array (empty if nothing).
+- equipment_mentioned, customer_mentions, contact_mentions, phone_mentions, location_mentions must always be arrays (empty if nothing).
+- For phone_mentions, output digits only — strip parens, dashes, spaces, and the leading 1 if present. Drop entries that aren't valid 10-digit US numbers.
+- customer_mentions: include every distinct company name you hear, even if it's just a fragment ("Lewis", "Beacon"). The downstream matcher needs the raw names, not your guess at which is canonical.
+- contact_mentions: only the customer-side humans. Do NOT include the rep dictating the note. Phrases like "I met with Frank" → "Frank"; "told me his name was Mike Holt" → "Mike Holt".
 - topic must be one of the listed values; pick the dominant frame of the conversation.
 - summary should never be longer than 240 characters.
 - Return JSON only. No prose before or after.`;
@@ -62,6 +69,10 @@ interface VoiceExtractionResult {
     | "trade_in"
     | "other";
   summary: string;
+  customer_mentions: string[];
+  contact_mentions: string[];
+  phone_mentions: string[];
+  location_mentions: string[];
   confidence: number;
 }
 
@@ -74,6 +85,10 @@ const EMPTY_RESULT: VoiceExtractionResult = {
   sentiment: null,
   topic: "other",
   summary: "",
+  customer_mentions: [],
+  contact_mentions: [],
+  phone_mentions: [],
+  location_mentions: [],
   confidence: 0,
 };
 
@@ -94,16 +109,35 @@ const VALID_TOPICS = new Set<VoiceExtractionResult["topic"]>([
   "other",
 ]);
 
+function pickStringArray(value: unknown, max: number, perItemMax = 120): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+    .map((v) => v.trim().slice(0, perItemMax))
+    .slice(0, max);
+}
+
+function normalizePhoneArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const v of value) {
+    if (typeof v !== "string") continue;
+    const digits = v.replace(/\D+/g, "").replace(/^1(?=\d{10}$)/, "");
+    if (digits.length === 10) out.push(digits);
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
 function normalizeResult(raw: unknown): VoiceExtractionResult {
   if (!raw || typeof raw !== "object") return { ...EMPTY_RESULT };
   const r = raw as Record<string, unknown>;
 
-  const equipment = Array.isArray(r.equipment_mentioned)
-    ? r.equipment_mentioned
-      .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
-      .map((v) => v.trim())
-      .slice(0, 12)
-    : [];
+  const equipment = pickStringArray(r.equipment_mentioned, 12);
+  const customerMentions = pickStringArray(r.customer_mentions, 8);
+  const contactMentions = pickStringArray(r.contact_mentions, 8);
+  const phoneMentions = normalizePhoneArray(r.phone_mentions);
+  const locationMentions = pickStringArray(r.location_mentions, 6);
 
   const sentimentRaw = typeof r.sentiment === "string" ? r.sentiment : null;
   const sentiment = sentimentRaw && VALID_SENTIMENTS.has(sentimentRaw as never)
@@ -138,6 +172,10 @@ function normalizeResult(raw: unknown): VoiceExtractionResult {
     sentiment,
     topic,
     summary,
+    customer_mentions: customerMentions,
+    contact_mentions: contactMentions,
+    phone_mentions: phoneMentions,
+    location_mentions: locationMentions,
     confidence,
   };
 }

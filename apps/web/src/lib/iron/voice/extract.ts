@@ -28,6 +28,15 @@ export interface VoiceExtractionResult {
     | "trade_in"
     | "other";
   summary: string;
+  /** Company/customer names heard in the transcript. Drives the matcher's
+   *  second pass when initial confidence is low. */
+  customer_mentions: string[];
+  /** Person/contact names heard. */
+  contact_mentions: string[];
+  /** Phone numbers heard, normalized to 10-digit US digits. */
+  phone_mentions: string[];
+  /** Cities, regions, or jobsite locations heard. */
+  location_mentions: string[];
   confidence: number;
 }
 
@@ -40,6 +49,10 @@ export const EMPTY_VOICE_EXTRACTION: VoiceExtractionResult = {
   sentiment: null,
   topic: "other",
   summary: "",
+  customer_mentions: [],
+  contact_mentions: [],
+  phone_mentions: [],
+  location_mentions: [],
   confidence: 0,
 };
 
@@ -78,12 +91,32 @@ export async function extractVoiceEntities(
   }
 }
 
+function pickStringArray(value: unknown, max: number): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+    .map((v) => v.trim())
+    .slice(0, max);
+}
+
+function pickPhoneArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const v of value) {
+    if (typeof v !== "string") continue;
+    const digits = v.replace(/\D+/g, "").replace(/^1(?=\d{10}$)/, "");
+    if (digits.length === 10) out.push(digits);
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
 function sanitize(raw: Record<string, unknown>): VoiceExtractionResult {
-  const equipment = Array.isArray(raw.equipment_mentioned)
-    ? raw.equipment_mentioned
-      .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
-      .map((v) => v.trim())
-    : [];
+  const equipment = pickStringArray(raw.equipment_mentioned, 12);
+  const customer_mentions = pickStringArray(raw.customer_mentions, 8);
+  const contact_mentions = pickStringArray(raw.contact_mentions, 8);
+  const phone_mentions = pickPhoneArray(raw.phone_mentions);
+  const location_mentions = pickStringArray(raw.location_mentions, 6);
 
   const sentiment = raw.sentiment === "warming" || raw.sentiment === "cooling" || raw.sentiment === "neutral"
     ? raw.sentiment
@@ -109,6 +142,10 @@ function sanitize(raw: Record<string, unknown>): VoiceExtractionResult {
     sentiment,
     topic,
     summary: typeof raw.summary === "string" ? raw.summary : "",
+    customer_mentions,
+    contact_mentions,
+    phone_mentions,
+    location_mentions,
     confidence: typeof raw.confidence === "number" && Number.isFinite(raw.confidence)
       ? Math.max(0, Math.min(1, raw.confidence))
       : 0,

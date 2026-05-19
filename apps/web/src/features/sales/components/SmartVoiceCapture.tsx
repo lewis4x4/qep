@@ -311,11 +311,43 @@ export function SmartVoiceCapture({
             .then((res) => {
               if (cancelled) return;
               setExtraction(res);
+
+              // ── Second-pass matcher: re-run with AI signals folded in.
+              // Catches the "I met Frank at Beacon" cases where the
+              // first pass missed because Beacon wasn't in the rep's book
+              // but Frank IS the primary contact of Beacon Ridge in book.
+              let secondPassCustomerId = matchedCustomerId;
+              if (!presetCustomerId) {
+                const secondMatch = matchCustomerInTranscript(text, allCustomers, {
+                  extracted: {
+                    customer_mentions: res.customer_mentions,
+                    contact_mentions: res.contact_mentions,
+                    phone_mentions: res.phone_mentions,
+                    location_mentions: res.location_mentions,
+                  },
+                });
+                setMatchResult(secondMatch);
+                if (
+                  secondMatch.confidence >= AUTO_ACCEPT_CONFIDENCE &&
+                  secondMatch.top
+                ) {
+                  setSelectedCustomerId(secondMatch.top.customer_id);
+                  setSelectedCustomerName(secondMatch.top.company_name);
+                  secondPassCustomerId = secondMatch.top.customer_id;
+                } else if (secondMatch.top) {
+                  // Picker seed sharpened by extraction — prefer the
+                  // strongest customer_mention if the AI returned one.
+                  const seed = res.customer_mentions[0]
+                    ?? secondMatch.top.company_name.split(/\s+/)[0];
+                  if (seed && seed.length >= 2) setInitialPickerSearch(seed);
+                }
+              }
+
               setAcceptedActionIds(() => {
                 const next = new Set<SmartAction["id"]>();
                 const actions = pickSmartActions({
                   extraction: res,
-                  selectedCustomerId: matchedCustomerId,
+                  selectedCustomerId: secondPassCustomerId,
                   selectedDealId: null,
                 });
                 for (const a of actions) if (a.defaultOn) next.add(a.id);
