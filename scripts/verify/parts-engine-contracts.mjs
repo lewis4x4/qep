@@ -100,5 +100,10 @@ mustContain(
   "parseVendorInboundContract",
   "service-vendor-inbound applies vendor contract to metadata and mirror",
 );
+mustContain(
+  "supabase/functions/service-vendor-inbound/index.ts",
+  "resolveVendorInboundAccess",
+  "service-vendor-inbound uses fail-closed webhook auth helper",
+);
 
 console.log("parts-engine-contracts: all static checks passed.");

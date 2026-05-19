@@ -1,6 +1,7 @@
 /**
  * Inbound vendor email / webhook — extract PO reference and update parts actions.
- * verify_jwt false; protect with shared secret header in production.
+ * verify_jwt false; auth: `x-webhook-secret` must match `VENDOR_INBOUND_WEBHOOK_SECRET`
+ * on hosted Supabase (fail-closed). Local CLI may omit the secret for dev-only.
  *
  * Optional EDI/API-shaped JSON (validated when present): `edi_control_number`,
  * `vendor_transaction_id`, `asn_reference`, `shipment_reference`,
@@ -13,22 +14,28 @@ import {
 } from "../_shared/parts-fulfillment-mirror.ts";
 import { parseJsonBody } from "../_shared/parse-json-body.ts";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { resolveVendorInboundAccess } from "../_shared/service-vendor-inbound-auth.ts";
 import { parseVendorInboundContract } from "../_shared/vendor-inbound-contract.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { status: 200 });
 
-  const secret = Deno.env.get("VENDOR_INBOUND_WEBHOOK_SECRET");
-  if (secret && req.headers.get("x-webhook-secret") !== secret) {
-    return safeJsonError("Unauthorized", 401, null);
-  }
-
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceKey) {
     return safeJsonError("Service misconfigured", 503, null);
   }
+
+  const access = resolveVendorInboundAccess({
+    supabaseUrl,
+    secretEnv: Deno.env.get("VENDOR_INBOUND_WEBHOOK_SECRET"),
+    webhookHeader: req.headers.get("x-webhook-secret"),
+  });
+  if (!access.ok) {
+    return safeJsonError(access.message, access.status, null);
+  }
+  const { strictInbound } = access;
 
   try {
     const parsed = await parseJsonBody(req, null);
@@ -55,9 +62,6 @@ Deno.serve(async (req) => {
       normalizeFulfillmentEventIdempotencyKey(
         req.headers.get("Idempotency-Key") ?? req.headers.get("x-idempotency-key"),
       ) ?? normalizeFulfillmentEventIdempotencyKey(body.idempotency_key);
-    const strictInbound =
-      Deno.env.get("ENV") === "production" ||
-      Boolean(Deno.env.get("VENDOR_INBOUND_WEBHOOK_SECRET"));
     const allowOpenOrderMatch =
       Deno.env.get("ALLOW_VENDOR_INBOUND_OPEN_MATCH") === "true";
 
@@ -68,7 +72,7 @@ Deno.serve(async (req) => {
 
     if (strictInbound && !hasStrongIds) {
       return safeJsonError(
-        "requirement_id or (job_id + part_number) required in production or when VENDOR_INBOUND_WEBHOOK_SECRET is set",
+        "requirement_id or (job_id + part_number) required when inbound webhook secret is configured or not using local Supabase",
         400,
         null,
       );

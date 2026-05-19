@@ -59,7 +59,8 @@ function getDgeInternalServiceSecret(): string | null {
   return Deno.env.get("DGE_INTERNAL_SERVICE_SECRET") ?? null;
 }
 
-function isLocalSupabaseUrl(value: string): boolean {
+/** True when `SUPABASE_URL` targets local CLI (`127.0.0.1` / `localhost`). Used by vendor inbound and other edge gates. */
+export function isLocalSupabaseUrl(value: string): boolean {
   try {
     const hostname = new URL(value).hostname;
     return hostname === "127.0.0.1" || hostname === "localhost";
