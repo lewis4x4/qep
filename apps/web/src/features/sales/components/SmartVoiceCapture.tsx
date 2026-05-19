@@ -23,7 +23,7 @@ import {
   Sparkles,
   Undo2,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useCustomers } from "../hooks/useCustomers";
 import { matchesRepCustomerSearch } from "../lib/customer-search";
@@ -60,7 +60,20 @@ type CaptureState =
   | "processing"
   | "review"
   | "saving"
+  | "saved"
   | "error";
+
+type SaveResolution = "auto_matched" | "manual_pick" | "inbox_fallback";
+
+type SyncTargetType = "company" | "contact" | "deal" | "inbox" | null;
+
+interface VoiceCaptureSyncResponse {
+  local_crm_saved?: boolean;
+  qrm_activity_id?: string | null;
+  target_type?: SyncTargetType;
+  target_id?: string | null;
+  target_display_name?: string | null;
+}
 
 const MAX_DURATION_SECONDS = 60;
 const AUTO_ACCEPT_CONFIDENCE = 0.7;
@@ -125,6 +138,10 @@ export function SmartVoiceCapture({
   const [autoAttachedSimilarity, setAutoAttachedSimilarity] = useState<
     number | null
   >(null);
+  const [saveResolution, setSaveResolution] = useState<SaveResolution | null>(null);
+  const [saveTargetName, setSaveTargetName] = useState<string | null>(null);
+  const [saveTargetType, setSaveTargetType] = useState<SyncTargetType>(null);
+  const [savedActivityId, setSavedActivityId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   // Refs we manage outside React state to avoid re-render churn.
@@ -301,6 +318,7 @@ export function SmartVoiceCapture({
           if (match.confidence >= AUTO_ACCEPT_CONFIDENCE && match.top) {
             setSelectedCustomerId(match.top.customer_id);
             setSelectedCustomerName(match.top.company_name);
+            setSaveResolution((current) => current ?? "auto_matched");
             matchedCustomerId = match.top.customer_id;
             matchedCustomerName = match.top.company_name;
           } else if (match.top) {
@@ -374,6 +392,7 @@ export function SmartVoiceCapture({
                   const winnerName = secondMatch.top.company_name;
                   setSelectedCustomerId((current) => current ?? winnerId);
                   setSelectedCustomerName((current) => current ?? winnerName);
+                  setSaveResolution((current) => current ?? "auto_matched");
                   secondPassCustomerId = winnerId;
                 } else if (secondMatch.top) {
                   // Picker seed sharpened by extraction — only set when
@@ -416,6 +435,7 @@ export function SmartVoiceCapture({
                         if (current) return current;
                         setSelectedCustomerName(phase2Pick.customer.company_name);
                         setAutoAttachedSimilarity(phase2Pick.similarity);
+                        setSaveResolution((existing) => existing ?? "auto_matched");
                         // Stash the un-picked candidates so Undo can restore
                         // the inline workspace block.
                         setWorkspaceCandidates(
@@ -522,11 +542,27 @@ export function SmartVoiceCapture({
       if (insertErr) throw insertErr;
       if (!insertedCapture?.id) throw new Error("Voice note saved without a capture id.");
 
-      const { error: syncErr } = await supabase.functions.invoke("voice-capture-sync", {
+      const { data: syncData, error: syncErr } = await supabase.functions.invoke<VoiceCaptureSyncResponse>("voice-capture-sync", {
         body: { capture_id: insertedCapture.id },
       });
       if (syncErr) {
         throw new Error(`Voice note saved, but QRM activity attach failed: ${syncErr.message}`);
+      }
+      if (!syncData?.qrm_activity_id && syncData?.local_crm_saved === false) {
+        throw new Error("Voice note saved, but QRM activity attach did not return a valid receipt.");
+      }
+
+      const syncTargetType = syncData?.target_type ?? (selectedCustomerId ? "company" : "inbox");
+      const syncTargetName = syncData?.target_display_name
+        ?? (selectedCustomer?.name ?? null)
+        ?? "Voice Capture Inbox";
+      setSaveTargetType(syncTargetType);
+      setSaveTargetName(syncTargetName);
+      setSavedActivityId(syncData?.qrm_activity_id ?? null);
+      if (syncTargetType === "inbox") {
+        setSaveResolution("inbox_fallback");
+      } else if (!saveResolution) {
+        setSaveResolution(selectedCustomerId ? "auto_matched" : "manual_pick");
       }
 
       // Fire wired side effects after the insert. Open Quote Builder is the
@@ -542,7 +578,7 @@ export function SmartVoiceCapture({
         return;
       }
 
-      onComplete();
+      setState("saved");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to save voice note.";
@@ -578,6 +614,57 @@ export function SmartVoiceCapture({
         >
           Close
         </button>
+      </div>
+    );
+  }
+
+  if (state === "saved") {
+    const destinationLabel = saveTargetType === "inbox"
+      ? "Saved to Voice Capture Inbox"
+      : `Saved to QRM under ${saveTargetName ?? "the selected target"}`;
+    const resolutionLabel = saveResolution === "inbox_fallback"
+      ? "Needs assignment"
+      : saveResolution === "manual_pick"
+        ? "Manually selected"
+        : "Auto-matched";
+
+    return (
+      <div className="space-y-4 p-2" data-testid="smart-voice-capture-saved">
+        <section className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <Check className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-foreground">Voice note saved</p>
+              <p className="mt-1 text-xs text-muted-foreground">{destinationLabel}</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                <span className="rounded-full border border-white/[0.12] bg-card px-2 py-0.5 text-muted-foreground">
+                  {resolutionLabel}
+                </span>
+                {savedActivityId && (
+                  <span className="rounded-full border border-white/[0.12] bg-card px-2 py-0.5 text-muted-foreground">
+                    Activity receipt confirmed
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Link
+            to={saveTargetType === "inbox" ? "/qrm/voice-inbox" : "/qrm"}
+            className="inline-flex items-center justify-center rounded-2xl border border-white/[0.08] bg-card px-4 py-3 text-sm font-semibold text-foreground"
+          >
+            {saveTargetType === "inbox" ? "Assign now" : "View in QRM"}
+          </Link>
+          <button
+            type="button"
+            onClick={onComplete}
+            className="rounded-2xl bg-qep-orange px-4 py-3 text-sm font-bold text-white shadow-lg active:scale-[0.98]"
+          >
+            Done
+          </button>
+        </div>
       </div>
     );
   }
@@ -722,6 +809,7 @@ export function SmartVoiceCapture({
     setSelectedCustomerName(c.company_name);
     setWorkspaceCandidates([]);
     setAutoAttachedSimilarity(null);
+    setSaveResolution("manual_pick");
   }
 
   return (
@@ -751,6 +839,7 @@ export function SmartVoiceCapture({
           onPick={(picked) => {
             setSelectedCustomerId(picked.id);
             setSelectedCustomerName(picked.name);
+            setSaveResolution("manual_pick");
             setShowCustomerPicker(false);
             setInitialPickerSearch("");
             setWorkspaceCandidates([]);

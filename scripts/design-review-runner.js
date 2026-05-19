@@ -141,7 +141,7 @@ async function resolveBaseUrl() {
   }
 
   const port = Number.parseInt(process.env.FLOOR_DESIGN_PREVIEW_PORT ?? "4173", 10);
-  const baseUrl = `http://127.0.0.1:${port}`;
+  const requestedBaseUrl = `http://127.0.0.1:${port}`;
   const child = spawn("bun", [
     "run",
     "--filter",
@@ -166,7 +166,12 @@ async function resolveBaseUrl() {
     output += chunk.toString();
   });
 
-  await waitForUrl(baseUrl, 20_000, () => output);
+  const baseUrl = await waitForPreviewUrl({
+    requestedBaseUrl,
+    timeoutMs: 20_000,
+    getOutput: () => output,
+    hasExited: () => child.exitCode !== null,
+  });
   return {
     baseUrl,
     cleanup: async () => {
@@ -357,18 +362,38 @@ async function runA11yScan(page, label, checks) {
   });
 }
 
-async function waitForUrl(url, timeoutMs, getOutput) {
+async function waitForPreviewUrl({ requestedBaseUrl, timeoutMs, getOutput, hasExited }) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) return;
-    } catch {
-      // preview not up yet
+    const output = getOutput();
+    const detectedBaseUrl = extractPreviewBaseUrl(output);
+    const candidateUrls = [requestedBaseUrl, ...(detectedBaseUrl ? [detectedBaseUrl] : [])];
+
+    for (const url of candidateUrls) {
+      try {
+        const response = await fetch(url);
+        if (response.ok) return url;
+      } catch {
+        // preview not up yet
+      }
     }
+
+    if (hasExited()) {
+      throw new Error(`Preview process exited before responding at ${candidateUrls.join(", ")}. Output:\n${output}`);
+    }
+
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  throw new Error(`Timed out waiting for ${url}. Preview output:\n${getOutput()}`);
+
+  const output = getOutput();
+  const detectedBaseUrl = extractPreviewBaseUrl(output);
+  const target = detectedBaseUrl ?? requestedBaseUrl;
+  throw new Error(`Timed out waiting for ${target}. Preview output:\n${output}`);
+}
+
+function extractPreviewBaseUrl(output) {
+  const match = output.match(/Local:\s*(https?:\/\/[^\s/]+(?::\d+)?)/i);
+  return match ? trimTrailingSlash(match[1]) : null;
 }
 
 function trimTrailingSlash(value) {
