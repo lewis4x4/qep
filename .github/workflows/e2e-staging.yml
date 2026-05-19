@@ -1,4 +1,6 @@
-# Quote Builder Playwright suite against production staging (https://qep.blackrockai.co).
+# Quote Builder Playwright suite. Pull requests run against their Netlify
+# deploy preview; workflow_dispatch/default staging runs use
+# https://qep.blackrockai.co.
 # IRON_WIZARD_DECOMPOSITION_PLAN_2026-05-15 §7 step 5.
 #
 # Required repo secrets (same-repo PRs):
@@ -51,10 +53,25 @@ jobs:
       - name: Install Playwright Chromium
         run: bunx playwright install chromium --with-deps
 
+      - name: Wait for deploy preview
+        if: github.event_name == 'pull_request'
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ format('https://deploy-preview-{0}--qualityequipmentparts.netlify.app', github.event.pull_request.number) }}
+        run: |
+          for attempt in {1..30}; do
+            if curl -fsSIL "$PLAYWRIGHT_BASE_URL/" >/dev/null; then
+              exit 0
+            fi
+            echo "Waiting for $PLAYWRIGHT_BASE_URL to become reachable ($attempt/30)..."
+            sleep 5
+          done
+          echo "::error::Deploy preview did not become reachable: $PLAYWRIGHT_BASE_URL"
+          exit 1
+
       - name: Run quote builder staging e2e
         env:
           CI: "true"
-          PLAYWRIGHT_BASE_URL: https://qep.blackrockai.co
+          PLAYWRIGHT_BASE_URL: ${{ github.event_name == 'pull_request' && format('https://deploy-preview-{0}--qualityequipmentparts.netlify.app', github.event.pull_request.number) || 'https://qep.blackrockai.co' }}
           PLAYWRIGHT_SKIP_WEBSERVER: "1"
           PLAYWRIGHT_TEST_EMAIL: ${{ secrets.PLAYWRIGHT_TEST_EMAIL }}
           PLAYWRIGHT_TEST_PASSWORD: ${{ secrets.PLAYWRIGHT_TEST_PASSWORD }}
