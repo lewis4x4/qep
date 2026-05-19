@@ -7,6 +7,7 @@ describe("buildAccountDetailMenuItems", () => {
 
     expect(items.map((item) => item.key)).toEqual([
       "legacy",
+      "voice-note",
       "timeline",
       "genome",
       "operating-profile",
@@ -20,6 +21,7 @@ describe("buildAccountDetailMenuItems", () => {
     ]);
     expect(items.map((item) => item.label)).toEqual([
       "Legacy detail",
+      "Record voice note",
       "Timeline",
       "Customer Genome",
       "Operating Profile",
@@ -33,6 +35,7 @@ describe("buildAccountDetailMenuItems", () => {
     ]);
     expect(items.map((item) => item.href)).toEqual([
       "/qrm/companies/co-1",
+      "/voice-qrm?linked_company_id=co-1",
       "/qrm/accounts/co-1/timeline",
       "/qrm/accounts/co-1/genome",
       "/qrm/accounts/co-1/operating-profile",

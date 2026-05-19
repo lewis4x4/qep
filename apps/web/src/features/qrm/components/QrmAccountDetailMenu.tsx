@@ -7,6 +7,7 @@ import {
   Gauge,
   GitMerge,
   LayoutGrid,
+  Mic,
   MoreHorizontal,
   Network,
   Radar,
@@ -40,6 +41,7 @@ interface QrmAccountDetailMenuProps {
 
 const MENU_ICONS: Record<AccountDetailMenuKey, LucideIcon> = {
   legacy: Building2,
+  "voice-note": Mic,
   timeline: Clock,
   genome: Dna,
   "operating-profile": Gauge,
@@ -56,7 +58,7 @@ const MENU_GROUPS: Array<{
   label: string;
   keys: AccountDetailMenuKey[];
 }> = [
-  { label: "Foundation", keys: ["legacy", "timeline"] },
+  { label: "Foundation", keys: ["legacy", "voice-note", "timeline"] },
   {
     label: "Intelligence",
     keys: ["genome", "operating-profile", "fleet-intelligence", "relationship-map", "white-space"],
@@ -76,6 +78,9 @@ function isActiveAccountMenuItem(item: AccountDetailMenuItem, pathname: string, 
   }
   if (item.key === "duplicates") {
     return pathname === "/admin/duplicates" || pathname.startsWith("/admin/duplicates/") || pathname === "/qrm/duplicates";
+  }
+  if (item.key === "voice-note") {
+    return pathname === "/voice-qrm";
   }
   return pathname === item.href;
 }
