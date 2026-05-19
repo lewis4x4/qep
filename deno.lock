@@ -5941,6 +5941,10 @@
     "https://esm.sh/ws@8.20.1?target=denonext": "18c4c364174bf6617c624328196002a67b310fadb6894ba1152e72f7e8d65c86"
   },
   "workspace": {
+    "dependencies": [
+      "jsr:@std/assert@1",
+      "jsr:@supabase/supabase-js@2"
+    ],
     "packageJson": {
       "dependencies": [
         "npm:@supabase/supabase-js@^2.49.1",
