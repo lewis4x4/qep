@@ -137,14 +137,14 @@ export function VoiceNoteCapture({ onComplete }: { onComplete: () => void }) {
           value={customerSearch}
           onChange={(e) => setCustomerSearch(e.target.value)}
           placeholder="Search..."
-          className="w-full h-11 px-4 rounded-xl bg-slate-100 text-sm outline-none focus:ring-2 focus:ring-qep-orange/30"
+          className="w-full h-11 px-4 rounded-xl bg-[hsl(var(--card))] text-foreground text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-qep-orange/30"
         />
         <div className="max-h-60 overflow-y-auto space-y-1">
           {visible.map((c) => (
             <button
               key={c.customer_id}
               onClick={() => setCustomerId(c.customer_id)}
-              className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-sm font-medium text-slate-900"
+              className="w-full text-left px-4 py-3 rounded-xl text-sm font-medium bg-[hsl(var(--card))] text-foreground border border-white/[0.06] hover:border-qep-orange/40 hover:bg-qep-orange/5"
             >
               {c.company_name}
               {showFallback && c.primary_contact_name ? (
