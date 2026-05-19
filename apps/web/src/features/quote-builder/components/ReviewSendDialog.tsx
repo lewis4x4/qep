@@ -219,11 +219,13 @@ export function ReviewSendDialog({
             </Card>
 
             {activeQuotePackageId ? (
-              <SendQuoteSection
-                quotePackageId={activeQuotePackageId}
-                contactName={draft.customerName || draft.customerCompany || "customer"}
-                onSent={onSent}
-              />
+              <div className="sticky bottom-0 z-10 -mx-2 rounded-lg bg-[hsl(var(--card))]/95 px-2 pb-2 pt-1 backdrop-blur">
+                <SendQuoteSection
+                  quotePackageId={activeQuotePackageId}
+                  contactName={draft.customerName || draft.customerCompany || "customer"}
+                  onSent={onSent}
+                />
+              </div>
             ) : (
               <Card className="border-amber-500/20 bg-amber-500/5 p-4">
                 <p className="text-sm font-medium text-amber-400">Save before sending</p>
@@ -238,21 +240,24 @@ export function ReviewSendDialog({
 
   if (isMobile) {
     return (
-      <MobileBottomSheet
-        open={open}
-        onOpenChange={onOpenChange}
-        title="Review & Send"
-        description="Confirm the customer packet, choose delivery, and send without leaving the workspace."
-        size="tall"
-      >
-        {body}
-      </MobileBottomSheet>
+      <div className={open ? "fixed inset-0 z-[60] pointer-events-auto" : "fixed inset-0 z-[60] pointer-events-none"}>
+        <MobileBottomSheet
+          open={open}
+          onOpenChange={onOpenChange}
+          title="Review & Send"
+          description="Confirm the customer packet, choose delivery, and send without leaving the workspace."
+          size="tall"
+          className="mx-4 w-auto max-w-[calc(100vw-2rem)]"
+        >
+          {body}
+        </MobileBottomSheet>
+      </div>
     );
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+      <DialogContent className="z-[60] mt-8 max-h-[90vh] w-[calc(100vw-2rem)] max-w-5xl overflow-y-auto sm:w-full">
         <DialogHeader>
           <DialogTitle>Review & Send</DialogTitle>
           <DialogDescription>
