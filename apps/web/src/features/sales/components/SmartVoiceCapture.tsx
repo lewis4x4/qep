@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Mic,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
   Square,
   Loader2,
   Check,
@@ -8,7 +14,15 @@ import {
   Search,
   AlertCircle,
   ArrowRight,
+  Calendar,
+  DollarSign,
+  Truck,
+  Flame,
+  Trophy,
+  Tag,
+  Sparkles,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useCustomers } from "../hooks/useCustomers";
 import { matchesRepCustomerSearch } from "../lib/customer-search";
 import {
@@ -18,6 +32,18 @@ import {
 import type { RepCustomer } from "../lib/types";
 import { supabase } from "@/lib/supabase";
 import { ironTranscribe } from "@/lib/iron/voice/api";
+import {
+  extractVoiceEntities,
+  EMPTY_VOICE_EXTRACTION,
+  type VoiceExtractionResult,
+} from "@/lib/iron/voice/extract";
+import {
+  formatExtractedAmount,
+  isExtractionEmpty,
+  pickSmartActions,
+  titleCaseTopic,
+  type SmartAction,
+} from "../lib/voice-extraction-presentation";
 
 type CaptureState =
   | "starting"
@@ -62,6 +88,14 @@ export function SmartVoiceCapture({
   );
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
+  const [extraction, setExtraction] = useState<VoiceExtractionResult | null>(
+    null,
+  );
+  const [extractionLoading, setExtractionLoading] = useState(false);
+  const [acceptedActionIds, setAcceptedActionIds] = useState<Set<SmartAction["id"]>>(
+    () => new Set(["log_activity"]),
+  );
+  const navigate = useNavigate();
 
   // Refs we manage outside React state to avoid re-render churn.
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -219,6 +253,9 @@ export function SmartVoiceCapture({
   }
 
   // ── Once we have the blob, transcribe + match in parallel ──────
+  // After transcription completes, JARVIS entity extraction is fired off
+  // in the background and lands on the review screen as soon as it
+  // resolves. The review UI never blocks on it — fail-open is the rule.
   useEffect(() => {
     if (state !== "processing" || !audioBlob) return;
     let cancelled = false;
@@ -230,14 +267,49 @@ export function SmartVoiceCapture({
         if (cancelled) return;
         const text = result.transcript ?? "";
         setTranscript(text);
+
+        let matchedCustomerName: string | null = null;
         if (!presetCustomerId) {
           const match = matchCustomerInTranscript(text, allCustomers);
           setMatchResult(match);
           if (match.confidence >= AUTO_ACCEPT_CONFIDENCE && match.top) {
             setSelectedCustomerId(match.top.customer_id);
+            matchedCustomerName = match.top.company_name;
           }
+        } else {
+          const preset = allCustomers.find((c) => c.customer_id === presetCustomerId);
+          matchedCustomerName = preset?.company_name ?? null;
         }
+
         setState("review");
+
+        if (text.trim().length > 0) {
+          setExtractionLoading(true);
+          void extractVoiceEntities(text, matchedCustomerName ?? undefined)
+            .then((res) => {
+              if (cancelled) return;
+              setExtraction(res);
+              setAcceptedActionIds(() => {
+                const next = new Set<SmartAction["id"]>();
+                const actions = pickSmartActions({
+                  extraction: res,
+                  selectedCustomerId: matchedCustomerName ? "preset" : null,
+                  selectedDealId: null,
+                });
+                for (const a of actions) if (a.defaultOn) next.add(a.id);
+                return next;
+              });
+            })
+            .catch(() => {
+              if (cancelled) return;
+              setExtraction({ ...EMPTY_VOICE_EXTRACTION });
+            })
+            .finally(() => {
+              if (!cancelled) setExtractionLoading(false);
+            });
+        } else {
+          setExtraction({ ...EMPTY_VOICE_EXTRACTION });
+        }
       } catch (err) {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : "Transcription failed.";
@@ -252,7 +324,7 @@ export function SmartVoiceCapture({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, audioBlob]);
 
-  // ── Save: upload audio + insert row ────────────────────────────
+  // ── Save: upload audio + insert row + fire accepted smart actions ──
   async function handleSave() {
     if (!audioBlob) return;
     setState("saving");
@@ -269,6 +341,19 @@ export function SmartVoiceCapture({
         .upload(fileName, audioBlob, { contentType: audioBlob.type });
       if (uploadErr) throw uploadErr;
 
+      const acceptedActions = Array.from(acceptedActionIds);
+      // Stamp the extraction + the actions the rep accepted onto
+      // extracted_data so the next deploy can wire the not-yet-fully-wired
+      // actions (schedule_follow_up, mark_deal_cooling) through to
+      // their real backend touchpoints.
+      const extractedData = extraction
+        ? {
+          extraction,
+          accepted_actions: acceptedActions,
+          source: "smart_voice_capture",
+        }
+        : {};
+
       const { error: insertErr } = await supabase.from("voice_captures").insert({
         user_id: user.id,
         audio_storage_path: fileName,
@@ -276,8 +361,23 @@ export function SmartVoiceCapture({
         transcript: transcript || null,
         sync_status: "transcribed",
         customer_id: selectedCustomerId,
+        extracted_data: extractedData,
       });
       if (insertErr) throw insertErr;
+
+      // Fire wired side effects after the insert. Open Quote Builder is the
+      // only navigation effect today — the rest store intent and complete.
+      if (
+        acceptedActionIds.has("open_quote_builder")
+        && extraction
+        && extraction.equipment_mentioned.length > 0
+      ) {
+        const prefill = encodeURIComponent(extraction.equipment_mentioned.join(", "));
+        onComplete();
+        navigate(`/sales/quotes/new?prefill_equipment=${prefill}`);
+        return;
+      }
+
       onComplete();
     } catch (err) {
       const message =
@@ -397,6 +497,21 @@ export function SmartVoiceCapture({
   const showAlternates =
     matchResult && matchResult.confidence < AUTO_ACCEPT_CONFIDENCE;
 
+  const smartActions = pickSmartActions({
+    extraction,
+    selectedCustomerId,
+    selectedDealId: null,
+  });
+
+  function toggleAction(id: SmartAction["id"]) {
+    setAcceptedActionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   return (
     <div className="space-y-4 p-2" data-testid="smart-voice-capture-review">
       <div className="flex items-center justify-between">
@@ -455,6 +570,18 @@ export function SmartVoiceCapture({
           </p>
         )}
       </section>
+
+      {/* JARVIS extracted block */}
+      <ExtractedBlock extraction={extraction} loading={extractionLoading} />
+
+      {/* JARVIS smart actions block */}
+      {smartActions.length > 0 && (
+        <SmartActionsBlock
+          actions={smartActions}
+          acceptedIds={acceptedActionIds}
+          onToggle={toggleAction}
+        />
+      )}
 
       <div className="grid grid-cols-2 gap-2">
         <button
@@ -679,6 +806,205 @@ function CustomerPickerInline({
           </p>
         )}
       </div>
+    </section>
+  );
+}
+
+// ── Sub-component: extracted entities ───────────────────────────
+function ExtractedBlock({
+  extraction,
+  loading,
+}: {
+  extraction: VoiceExtractionResult | null;
+  loading: boolean;
+}) {
+  const empty = isExtractionEmpty(extraction);
+  const amount = formatExtractedAmount(extraction?.amount_cents ?? null);
+  return (
+    <section
+      className="rounded-2xl border border-white/[0.06] bg-card p-4"
+      data-testid="jarvis-extracted-block"
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-qep-orange">
+          JARVIS extracted
+        </p>
+        {loading && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-qep-orange" />
+            extracting…
+          </span>
+        )}
+      </div>
+
+      {extraction?.summary && (
+        <p className="mt-2 text-xs italic leading-relaxed text-foreground/80">
+          {extraction.summary}
+        </p>
+      )}
+
+      {empty && !loading ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          No structured details detected.
+        </p>
+      ) : null}
+
+      {!empty && (
+        <ul className="mt-3 space-y-2">
+          {extraction?.next_step && (
+            <ExtractedRow
+              icon={<Calendar className="h-3.5 w-3.5 text-qep-orange" />}
+              label="Next step"
+              value={
+                extraction.next_step_due
+                  ? `${extraction.next_step} · due ${extraction.next_step_due}`
+                  : extraction.next_step
+              }
+            />
+          )}
+          {amount && (
+            <ExtractedRow
+              icon={<DollarSign className="h-3.5 w-3.5 text-emerald-400" />}
+              label="Amount"
+              value={amount}
+            />
+          )}
+          {extraction && extraction.equipment_mentioned.length > 0 && (
+            <ExtractedRow
+              icon={<Truck className="h-3.5 w-3.5 text-sky-400" />}
+              label="Equipment"
+              value={extraction.equipment_mentioned.join(", ")}
+            />
+          )}
+          {extraction?.sentiment && (
+            <ExtractedRow
+              icon={<Flame className="h-3.5 w-3.5 text-orange-400" />}
+              label="Heat"
+              value={titleCaseSentiment(extraction.sentiment)}
+            />
+          )}
+          {extraction?.competitor && (
+            <ExtractedRow
+              icon={<Trophy className="h-3.5 w-3.5 text-amber-400" />}
+              label="Competitor"
+              value={extraction.competitor}
+            />
+          )}
+          {extraction?.topic && extraction.topic !== "other" && (
+            <ExtractedRow
+              icon={<Tag className="h-3.5 w-3.5 text-purple-400" />}
+              label="Topic"
+              value={titleCaseTopic(extraction.topic)}
+            />
+          )}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function titleCaseSentiment(s: "warming" | "cooling" | "neutral"): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function ExtractedRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <li className="flex items-start gap-2">
+      <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-white/[0.04]">
+        {icon}
+      </span>
+      <div className="flex min-w-0 flex-1 items-baseline gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+          {label}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+          {value}
+        </span>
+      </div>
+    </li>
+  );
+}
+
+// ── Sub-component: smart actions toggle list ────────────────────
+function SmartActionsBlock({
+  actions,
+  acceptedIds,
+  onToggle,
+}: {
+  actions: SmartAction[];
+  acceptedIds: Set<SmartAction["id"]>;
+  onToggle: (id: SmartAction["id"]) => void;
+}) {
+  return (
+    <section
+      className="rounded-2xl border border-white/[0.06] bg-card p-4"
+      data-testid="jarvis-proposed-block"
+    >
+      <div className="flex items-center gap-2">
+        <Sparkles className="h-3.5 w-3.5 text-qep-orange" />
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-qep-orange">
+          JARVIS proposes
+        </p>
+      </div>
+      <ul className="mt-2 space-y-2">
+        {actions.map((action) => {
+          const accepted = acceptedIds.has(action.id);
+          return (
+            <li key={action.id}>
+              <button
+                type="button"
+                onClick={() => onToggle(action.id)}
+                aria-pressed={accepted}
+                data-testid={`smart-action-${action.id}`}
+                className={`w-full rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.99] ${
+                  accepted
+                    ? "border-qep-orange/50 bg-qep-orange/[0.08]"
+                    : "border-white/[0.08] bg-background/40"
+                }`}
+              >
+                <div className="flex items-start gap-2.5">
+                  <span
+                    className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                      accepted
+                        ? "border-qep-orange bg-qep-orange text-white"
+                        : "border-white/20 bg-transparent"
+                    }`}
+                  >
+                    {accepted && <Check className="h-3 w-3" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={`text-sm font-semibold ${
+                        accepted ? "text-foreground" : "text-foreground/80"
+                      }`}
+                    >
+                      {action.label}
+                    </p>
+                    {action.detail && (
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                        {action.detail}
+                      </p>
+                    )}
+                    {!action.wired && (
+                      <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-amber-400/80">
+                        intent stored
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }
