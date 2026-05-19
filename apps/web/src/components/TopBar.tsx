@@ -45,8 +45,6 @@ import {
 } from "@/lib/nav-config";
 import { supabase } from "@/lib/supabase";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
-import type { IronRole } from "@/features/qrm/lib/iron-roles";
-import { isIronRole } from "@/features/qrm/lib/iron-roles";
 
 interface Profile {
   id: string;
@@ -182,15 +180,6 @@ const QUICK_ACTION_MAP: Record<string, QuickAction | null> = {
 };
 
 const DEFAULT_QUICK_ACTION: QuickAction = { label: "QRM Hub", route: "/qrm" };
-
-const ROLE_PREVIEW_OPTIONS: Array<{ role: IronRole; label: string }> = [
-  { role: "iron_manager", label: "Sales Manager" },
-  { role: "iron_advisor", label: "Sales Rep" },
-  { role: "iron_parts_counter", label: "Parts Counter" },
-  { role: "iron_parts_manager", label: "Parts Manager" },
-  { role: "iron_woman", label: "Deal Desk" },
-  { role: "iron_man", label: "Prep / Service" },
-];
 
 function dispatchOpenOmniCommand() {
   window.dispatchEvent(new CustomEvent("qep:open-omni-command"));
@@ -356,6 +345,8 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
   const navigate = useNavigate();
   const [searchValue, setSearchValue] = useState("");
   const [showSignOutDialog, setShowSignOutDialog] = useState(false);
+  const [openingRepSession, setOpeningRepSession] = useState(false);
+  const [repSessionFailure, setRepSessionFailure] = useState<string | null>(null);
   const {
     showBadge,
     docVoiceBadge,
@@ -366,14 +357,10 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     markCrmNotificationRead,
   } = useTopBarBell(profile.id);
   const { preference, resolvedDark } = useTheme();
-  const searchParams = new URLSearchParams(location.search);
-  const previewRole = searchParams.get("view_as");
-  const canPreviewRoles = ["admin", "manager", "owner"].includes(profile.role);
-  const activePreview = canPreviewRoles && isIronRole(previewRole) ? previewRole : null;
-  const activePreviewLabel =
-    ROLE_PREVIEW_OPTIONS.find((option) => option.role === activePreview)?.label ?? "Own role";
+  const isAdminRole = ["admin", "manager", "owner"].includes(profile.role);
+  const canOpenRepTestSession = ["manager", "owner"].includes(profile.role);
   const isFloorRoute = location.pathname === "/floor" || location.pathname.startsWith("/floor/");
-  const showOfficeViewLabel = canPreviewRoles && isFloorRoute;
+  const showOfficeViewLabel = isAdminRole && isFloorRoute;
 
   const primaryNavGroups = resolvePrimaryNavGroups(
     quoteBuilderEnabled,
@@ -458,14 +445,22 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     }
   }
 
-  function handlePreviewRole(role: IronRole | null) {
-    const next = new URLSearchParams(location.search);
-    if (role) {
-      next.set("view_as", role);
-    } else {
-      next.delete("view_as");
+  async function handleOpenRepTestSession() {
+    if (openingRepSession) return;
+    setRepSessionFailure(null);
+    setOpeningRepSession(true);
+    try {
+      const { data, error } = await supabase.functions.invoke<{ actionLink?: string }>("rep-test-session", {
+        body: {},
+      });
+      if (error) throw error;
+      if (!data?.actionLink) throw new Error("Rep test session link was not returned.");
+      window.open(data.actionLink, "_blank", "noopener,noreferrer");
+    } catch {
+      setRepSessionFailure("Could not open rep test session. Please try again.");
+    } finally {
+      setOpeningRepSession(false);
     }
-    navigate({ pathname: "/floor", search: next.toString() ? `?${next.toString()}` : "" });
   }
 
   function isNavHrefActive(href: string) {
@@ -577,32 +572,6 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
                     </kbd>
                   </DropdownMenuItem>
                 </div>
-                {canPreviewRoles && (
-                  <div className="mt-2 border-t border-white/10 pt-2">
-                    <DropdownMenuLabel className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                      View as
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem
-                      className="cursor-pointer rounded-xl px-3 py-3 focus:bg-white/10 focus:text-white"
-                      onClick={() => handlePreviewRole(null)}
-                    >
-                      <span className={cn("flex-1 text-sm font-medium tracking-normal", !activePreview && "text-qep-orange")}>
-                        Own role
-                      </span>
-                    </DropdownMenuItem>
-                    {ROLE_PREVIEW_OPTIONS.map((option) => (
-                      <DropdownMenuItem
-                        key={`compact-preview-${option.role}`}
-                        className="cursor-pointer rounded-xl px-3 py-3 focus:bg-white/10 focus:text-white"
-                        onClick={() => handlePreviewRole(option.role)}
-                      >
-                        <span className={cn("flex-1 text-sm font-medium tracking-normal", activePreview === option.role && "text-qep-orange")}>
-                          {option.label}
-                        </span>
-                      </DropdownMenuItem>
-                    ))}
-                  </div>
-                )}
                 {utilitySections.length > 0 && (
                   <div className="mt-2 border-t border-white/10 pt-2">
                     <DropdownMenuLabel className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
@@ -812,47 +781,23 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
               Office view
             </span>
           )}
-          {canPreviewRoles && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className={cn(
-                    "hidden items-center gap-1.5 rounded-full border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] outline-none transition-colors xl:inline-flex",
-                    activePreview
-                      ? "border-qep-orange/40 bg-qep-orange/10 text-qep-orange"
-                      : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/10 hover:text-white",
-                  )}
-                  aria-label="Preview the Floor as another role"
-                >
-                  <span>View as</span>
-                  <span className="max-w-[110px] truncate text-white">{activePreviewLabel}</span>
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 rounded-2xl border-white/10 bg-slate-900/95 p-2 text-white backdrop-blur-xl">
-                <DropdownMenuLabel className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                  View as
-                </DropdownMenuLabel>
-                <DropdownMenuItem
-                  className="cursor-pointer rounded-xl px-3 py-2 focus:bg-white/10 focus:text-white"
-                  onClick={() => handlePreviewRole(null)}
-                >
-                  Own role
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {ROLE_PREVIEW_OPTIONS.map((option) => (
-                  <DropdownMenuItem
-                    key={option.role}
-                    className="cursor-pointer rounded-xl px-3 py-2 focus:bg-white/10 focus:text-white"
-                    onClick={() => handlePreviewRole(option.role)}
-                  >
-                    <span className={cn("flex-1", activePreview === option.role && "text-qep-orange")}>{option.label}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          {canOpenRepTestSession ? (
+            <div className="hidden flex-col items-end gap-1 xl:flex">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleOpenRepTestSession()}
+                disabled={openingRepSession}
+                className="rounded-full border-white/15 bg-white/[0.04] text-[10px] font-bold uppercase tracking-[0.12em] text-slate-200 hover:bg-white/10 hover:text-white"
+              >
+                {openingRepSession ? "Opening…" : "Open Rep Test Session"}
+              </Button>
+              {repSessionFailure ? (
+                <span className="text-[10px] font-medium text-amber-300">{repSessionFailure}</span>
+              ) : null}
+            </div>
+          ) : null}
           {/* Quick action pill */}
           {quickAction && (
             <Button

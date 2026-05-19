@@ -416,6 +416,9 @@ verify_jwt = false
 [functions.demo-manager]
 verify_jwt = false
 
+[functions.rep-test-session]
+verify_jwt = false
+
 [functions.deposit-calculator]
 verify_jwt = false
 
