@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import {
   isVoiceCaptureActivity,
+  readVoiceCaptureTargetMetadata,
   readVoiceCaptureTimelineSignals,
+  readVoiceCaptureTranscript,
   voiceCaptureSignalsHaveContent,
 } from "./voice-capture-activity-metadata";
 import type { QrmActivityItem } from "./types";
@@ -60,8 +62,29 @@ describe("voice capture activity metadata", () => {
     expect(signals && voiceCaptureSignalsHaveContent(signals)).toBe(true);
   });
 
+  it("reads transcript and inbox target metadata for voice-capture activity", () => {
+    const activity = activityWithMetadata({
+      source: "voice_capture",
+      targetSource: "inbox",
+      transcript: "Customer asked for a same-day quote.",
+      resolvedCompanyId: "company-inbox",
+    });
+
+    expect(readVoiceCaptureTranscript(activity)).toBe("Customer asked for a same-day quote.");
+    expect(readVoiceCaptureTargetMetadata(activity)).toEqual({
+      source: "inbox",
+      label: "Voice Capture Inbox",
+      needsAssignment: true,
+      resolvedDealId: null,
+      resolvedCompanyId: "company-inbox",
+      resolvedContactId: null,
+    });
+  });
+
   it("ignores non-voice and malformed summary metadata", () => {
     expect(isVoiceCaptureActivity(activityWithMetadata({ source: "note" }))).toBe(false);
+    expect(readVoiceCaptureTranscript(activityWithMetadata({ source: "note" }))).toBeNull();
+    expect(readVoiceCaptureTargetMetadata(activityWithMetadata({ source: "note" }))).toBeNull();
     expect(readVoiceCaptureTimelineSignals(activityWithMetadata({
       source: "voice_capture",
       extractedSummary: [],

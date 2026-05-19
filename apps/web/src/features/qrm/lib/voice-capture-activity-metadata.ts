@@ -25,6 +25,17 @@ export type QrmVoiceCaptureTimelineSignals = {
   actionItems: string[];
 };
 
+export type QrmVoiceCaptureTargetSource = "deal" | "company" | "contact" | "inbox";
+
+export type QrmVoiceCaptureTargetMetadata = {
+  source: QrmVoiceCaptureTargetSource | null;
+  label: string;
+  needsAssignment: boolean;
+  resolvedDealId: string | null;
+  resolvedCompanyId: string | null;
+  resolvedContactId: string | null;
+};
+
 const DEAL_STAGE_LABELS: Record<string, string> = {
   initial_contact: "Initial Contact",
   follow_up: "Follow-Up",
@@ -33,6 +44,13 @@ const DEAL_STAGE_LABELS: Record<string, string> = {
   negotiation: "Negotiation",
   closed_won: "Closed Won",
   closed_lost: "Closed Lost",
+};
+
+const TARGET_SOURCE_LABELS: Record<QrmVoiceCaptureTargetSource, string> = {
+  deal: "Deal timeline",
+  company: "Company timeline",
+  contact: "Contact timeline",
+  inbox: "Voice Capture Inbox",
 };
 
 function asString(v: unknown): string | null {
@@ -53,6 +71,13 @@ function asBool(v: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function readTargetSource(value: unknown): QrmVoiceCaptureTargetSource | null {
+  if (value === "deal" || value === "company" || value === "contact" || value === "inbox") {
+    return value;
+  }
+  return null;
 }
 
 export function formatVoiceCaptureDealStage(value: string | null | undefined): string | null {
@@ -100,6 +125,35 @@ function parseExtractedSummary(raw: unknown): QrmVoiceCaptureExtractedSummary | 
 
 export function isVoiceCaptureActivity(activity: QrmActivityItem): boolean {
   return activity.metadata.source === "voice_capture";
+}
+
+export function readVoiceCaptureTranscript(activity: QrmActivityItem): string | null {
+  if (!isVoiceCaptureActivity(activity)) return null;
+  return asString(activity.metadata.transcript) ?? asString(activity.body);
+}
+
+export function readVoiceCaptureTargetMetadata(activity: QrmActivityItem): QrmVoiceCaptureTargetMetadata | null {
+  if (!isVoiceCaptureActivity(activity)) return null;
+
+  const source = readTargetSource(activity.metadata.targetSource);
+  const resolvedDealId = asString(activity.metadata.resolvedDealId);
+  const resolvedCompanyId = asString(activity.metadata.resolvedCompanyId);
+  const resolvedContactId = asString(activity.metadata.resolvedContactId);
+
+  const fallbackSource: QrmVoiceCaptureTargetSource | null = source
+    ?? (activity.dealId ? "deal" : activity.companyId ? "company" : activity.contactId ? "contact" : null);
+
+  const effectiveSource = source ?? fallbackSource;
+  const needsAssignment = effectiveSource === "inbox";
+
+  return {
+    source: effectiveSource,
+    label: effectiveSource ? TARGET_SOURCE_LABELS[effectiveSource] : "Timeline target not set",
+    needsAssignment,
+    resolvedDealId,
+    resolvedCompanyId,
+    resolvedContactId,
+  };
 }
 
 export function readVoiceCaptureTimelineSignals(activity: QrmActivityItem): QrmVoiceCaptureTimelineSignals | null {

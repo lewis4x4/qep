@@ -11,7 +11,7 @@ import {
   readVoiceCaptureTimelineSignals,
   voiceCaptureSignalsHaveContent,
 } from "../lib/voice-capture-activity-metadata";
-import { QrmVoiceCaptureSignalBlock } from "./QrmVoiceCaptureSignalBlock";
+import { QrmVoiceCaptureActivityCard } from "./QrmVoiceCaptureActivityCard";
 
 export interface QrmActivityEmptyStateCue {
   headline?: string;
@@ -569,7 +569,6 @@ export function QrmActivityTimeline({
         const voiceSignals = readVoiceCaptureTimelineSignals(activity);
         const voiceCapture = isVoiceCaptureActivity(activity);
         const showVoiceSignalBlock = Boolean(voiceSignals && voiceCaptureSignalsHaveContent(voiceSignals));
-        const showVoiceCaptureFallback = voiceCapture && !showVoiceSignalBlock;
 
         return (
           <article
@@ -615,12 +614,12 @@ export function QrmActivityTimeline({
               </div>
             </div>
 
-            {showVoiceSignalBlock && voiceSignals && <QrmVoiceCaptureSignalBlock signals={voiceSignals} />}
-            {showVoiceCaptureFallback && (
-              <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                <Mic className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-                Field note activity — open the Field Note screen for the full extracted summary, or re-sync from a new capture.
-              </p>
+            {voiceCapture && (
+              <QrmVoiceCaptureActivityCard
+                activity={activity}
+                signals={voiceSignals}
+                showSignals={showVoiceSignalBlock}
+              />
             )}
 
             {isEditingOccurredAt && (
