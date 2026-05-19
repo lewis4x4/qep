@@ -2,7 +2,7 @@
 import { supabase } from "@/lib/supabase";
 
 /** Resolve workspace_id from the authenticated user's profile */
-async function getWorkspaceId(): Promise<string> {
+export async function getWorkspaceId(): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return "default";
   const { data } = await supabase

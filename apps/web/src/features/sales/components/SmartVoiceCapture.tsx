@@ -32,6 +32,7 @@ import {
 import type { RepCustomer } from "../lib/types";
 import { supabase } from "@/lib/supabase";
 import { ironTranscribe } from "@/lib/iron/voice/api";
+import { getWorkspaceId } from "../lib/sales-api";
 import {
   extractVoiceEntities,
   EMPTY_VOICE_EXTRACTION,
@@ -354,13 +355,15 @@ export function SmartVoiceCapture({
         }
         : {};
 
+      const workspaceId = await getWorkspaceId();
       const { error: insertErr } = await supabase.from("voice_captures").insert({
         user_id: user.id,
+        workspace_id: workspaceId,
         audio_storage_path: fileName,
         duration_seconds: duration,
         transcript: transcript || null,
-        sync_status: "transcribed",
-        customer_id: selectedCustomerId,
+        sync_status: "pending",
+        linked_company_id: selectedCustomerId,
         extracted_data: extractedData,
       });
       if (insertErr) throw insertErr;
