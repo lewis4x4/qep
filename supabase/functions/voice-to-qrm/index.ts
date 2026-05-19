@@ -17,9 +17,13 @@
  *
  * Auth: rep/admin/manager/owner
  */
-import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { requireServiceUser } from "../_shared/service-auth.ts";
-import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import {
+  optionsResponse,
+  safeJsonError,
+  safeJsonOk,
+} from "../_shared/safe-cors.ts";
 import {
   isGenericAudioMimeType,
   isSupportedAudioMimeType,
@@ -33,9 +37,13 @@ import { resolveVoiceToQrmCompanyDecision } from "./company-resolution.ts";
 import {
   assertCallerCanAccessLinkedCompany,
   buildVoiceCaptureInsertPayload,
-  insertVoiceCaptureWithVc1Links,
   insertKnownCompanyOrDealActivity,
+  insertVoiceCaptureWithVc1Links,
 } from "./vc1-company-linking.ts";
+import {
+  buildVoiceTaskCandidates,
+  intentToRoutingContentType,
+} from "./task-routing.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { resolveProfileActiveWorkspaceId } from "../_shared/workspace.ts";
@@ -91,7 +99,12 @@ interface VoiceQrmEquipmentMention {
   model?: string | null;
   year?: number | null;
   hours?: number | null;
-  mentioned_as?: "current_fleet" | "trade_in" | "competitor" | "interest" | null;
+  mentioned_as?:
+    | "current_fleet"
+    | "trade_in"
+    | "competitor"
+    | "interest"
+    | null;
   raw_mention?: string | null;
 }
 
@@ -139,7 +152,8 @@ interface VoiceQrmExtraction {
 }
 
 // Enhanced extraction schema per QEP-OS-Build-Roadmap-LLM.md lines 177-219
-const EXTRACTION_PROMPT_TEMPLATE = (transcript: string) => `You are a QRM (Quality Relationship Manager) data extraction assistant for QEP, a heavy equipment dealership.
+const EXTRACTION_PROMPT_TEMPLATE = (transcript: string) =>
+  `You are a QRM (Quality Relationship Manager) data extraction assistant for QEP, a heavy equipment dealership.
 A sales rep (Iron Advisor) just recorded a field note about a customer interaction. Extract ALL available information.
 
 Transcript:
@@ -260,10 +274,17 @@ Deno.serve(async (req) => {
 
   try {
     // Canonical ES256-safe JWT auth; route-aligned rep/admin/manager/owner role gate.
-    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    const auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+    );
     if (!auth.ok) return auth.response;
     if (!["rep", "admin", "manager", "owner"].includes(auth.role)) {
-      return safeJsonError("Your role does not have access to voice-to-QRM.", 403, origin);
+      return safeJsonError(
+        "Your role does not have access to voice-to-QRM.",
+        403,
+        origin,
+      );
     }
     const supabase = auth.supabase;
     const user = { id: auth.userId };
@@ -274,10 +295,17 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const workspace = await resolveProfileActiveWorkspaceId(supabaseAdmin, user.id);
+    const workspace = await resolveProfileActiveWorkspaceId(
+      supabaseAdmin,
+      user.id,
+    );
     const allowed = await checkVoiceToQrmRateLimit(supabaseAdmin, user.id);
     if (!allowed) {
-      return safeJsonError("Too many voice-to-QRM requests. Please wait a minute and try again.", 429, origin);
+      return safeJsonError(
+        "Too many voice-to-QRM requests. Please wait a minute and try again.",
+        429,
+        origin,
+      );
     }
 
     // ── 1. Parse multipart form data ───���──────────────────────────────────
@@ -288,8 +316,11 @@ Deno.serve(async (req) => {
 
     const formData = await req.formData();
     const audioFile = formData.get("audio") as File | null;
-    const dealIdParam = ((formData.get("deal_id") as string | null) ?? "").trim() || null;
-    const linkedCompanyIdParam = ((formData.get("linked_company_id") as string | null) ?? "").trim() || null;
+    const dealIdParam =
+      ((formData.get("deal_id") as string | null) ?? "").trim() || null;
+    const linkedCompanyIdParam =
+      ((formData.get("linked_company_id") as string | null) ?? "").trim() ||
+      null;
 
     if (!audioFile) {
       return safeJsonError("audio field is required", 400, origin);
@@ -301,21 +332,33 @@ Deno.serve(async (req) => {
 
     let authorizedDealId: string | null = null;
     if (dealIdParam) {
-      const { data: authorizedDeal, error: dealLookupError } = await supabaseAdmin
-        .from("crm_deals")
-        .select("id")
-        .eq("id", dealIdParam)
-        .eq("workspace_id", workspace)
-        .is("deleted_at", null)
-        .maybeSingle();
+      const { data: authorizedDeal, error: dealLookupError } =
+        await supabaseAdmin
+          .from("crm_deals")
+          .select("id")
+          .eq("id", dealIdParam)
+          .eq("workspace_id", workspace)
+          .is("deleted_at", null)
+          .maybeSingle();
 
       if (dealLookupError) {
-        console.error("voice-to-qrm deal authorization lookup failed:", dealLookupError);
-        return safeJsonError("Could not verify the selected deal.", 500, origin);
+        console.error(
+          "voice-to-qrm deal authorization lookup failed:",
+          dealLookupError,
+        );
+        return safeJsonError(
+          "Could not verify the selected deal.",
+          500,
+          origin,
+        );
       }
 
       if (!authorizedDeal) {
-        return safeJsonError("Selected QRM deal was not found in your workspace.", 404, origin);
+        return safeJsonError(
+          "Selected QRM deal was not found in your workspace.",
+          404,
+          origin,
+        );
       }
 
       authorizedDealId = authorizedDeal.id;
@@ -323,26 +366,54 @@ Deno.serve(async (req) => {
 
     let authorizedLinkedCompanyId: string | null = null;
     try {
-      authorizedLinkedCompanyId = await assertCallerCanAccessLinkedCompany(supabase, linkedCompanyIdParam);
+      authorizedLinkedCompanyId = await assertCallerCanAccessLinkedCompany(
+        supabase,
+        linkedCompanyIdParam,
+      );
     } catch (error) {
-      if (error instanceof Error && error.message === "FORBIDDEN_LINKED_COMPANY") {
-        return safeJsonError("You do not have access to the selected company.", 403, origin);
+      if (
+        error instanceof Error && error.message === "FORBIDDEN_LINKED_COMPANY"
+      ) {
+        return safeJsonError(
+          "You do not have access to the selected company.",
+          403,
+          origin,
+        );
       }
-      return safeJsonError("Could not verify the selected company.", 500, origin);
+      return safeJsonError(
+        "Could not verify the selected company.",
+        500,
+        origin,
+      );
     }
 
     // ── 2. Upload audio to storage ────────��───────────────────────────────
     const audioBuffer = await audioFile.arrayBuffer();
-    const audioMetadata = resolveAudioUploadMetadata(audioFile.type, audioFile.name, audioBuffer);
+    const audioMetadata = resolveAudioUploadMetadata(
+      audioFile.type,
+      audioFile.name,
+      audioBuffer,
+    );
     const audioMimeType = audioMetadata.mimeType;
     const ext = audioMetadata.extension;
 
     if (!isSupportedAudioMimeType(audioMimeType)) {
-      return safeJsonError("The uploaded recording is not a supported audio format. Please re-record and try again.", 415, origin);
+      return safeJsonError(
+        "The uploaded recording is not a supported audio format. Please re-record and try again.",
+        415,
+        origin,
+      );
     }
 
-    if (!audioMetadata.detectedMimeType && isGenericAudioMimeType(audioMetadata.declaredMimeType)) {
-      return safeJsonError("The uploaded recording does not look like a supported audio file. Please re-record and try again.", 415, origin);
+    if (
+      !audioMetadata.detectedMimeType &&
+      isGenericAudioMimeType(audioMetadata.declaredMimeType)
+    ) {
+      return safeJsonError(
+        "The uploaded recording does not look like a supported audio file. Please re-record and try again.",
+        415,
+        origin,
+      );
     }
 
     // Keep Voice Quote recordings in the same private bucket + user-folder
@@ -370,7 +441,10 @@ Deno.serve(async (req) => {
 
     const transcriptionModel = modelConfig.transcriptionModel;
     const transcriptionForm = new FormData();
-    transcriptionForm.append("file", new File([audioBuffer], `recording.${ext}`, { type: audioMimeType }));
+    transcriptionForm.append(
+      "file",
+      new File([audioBuffer], `recording.${ext}`, { type: audioMimeType }),
+    );
     transcriptionForm.append("model", transcriptionModel);
     if (transcriptionModel === WHISPER_TRANSCRIPTION_MODEL) {
       transcriptionForm.append("response_format", "json");
@@ -378,12 +452,15 @@ Deno.serve(async (req) => {
       transcriptionForm.append("response_format", "json");
     }
 
-    const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${openAiKey}` },
-      body: transcriptionForm,
-      signal: AbortSignal.timeout(30_000),
-    });
+    const whisperRes = await fetch(
+      "https://api.openai.com/v1/audio/transcriptions",
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${openAiKey}` },
+        body: transcriptionForm,
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
 
     if (!whisperRes.ok) {
       const errText = await whisperRes.text();
@@ -407,7 +484,11 @@ Deno.serve(async (req) => {
     //
     // The classifier also buckets the idea into a category so we can
     // later route by tag.
-    const ideaSignal = await detectIdea(transcript, openAiKey, modelConfig.extractionModel);
+    const ideaSignal = await detectIdea(
+      transcript,
+      openAiKey,
+      modelConfig.extractionModel,
+    );
 
     if (ideaSignal.isIdea) {
       const rawTitle = ideaSignal.title || transcript.substring(0, 200);
@@ -416,7 +497,9 @@ Deno.serve(async (req) => {
 
       const tagsArray: string[] = [];
       if (ideaSignal.category) tagsArray.push(ideaSignal.category);
-      if (ideaSignal.matchedVia) tagsArray.push(`detected:${ideaSignal.matchedVia}`);
+      if (ideaSignal.matchedVia) {
+        tagsArray.push(`detected:${ideaSignal.matchedVia}`);
+      }
 
       const { data: ideaRow, error: ideaErr } = await supabaseAdmin
         .from("qrm_idea_backlog")
@@ -453,25 +536,29 @@ Deno.serve(async (req) => {
     // ── 4. Extract structured data via enhanced GPT prompt ────────────────
     const extractionStart = Date.now();
 
-    const extractionRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openAiKey}`,
-        "Content-Type": "application/json",
+    const extractionRes = await fetch(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openAiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: modelConfig.extractionModel,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content:
+                "Extract QRM-ready dealership field-note data. Return valid JSON only.",
+            },
+            { role: "user", content: EXTRACTION_PROMPT_TEMPLATE(transcript) },
+          ],
+        }),
+        signal: AbortSignal.timeout(60_000),
       },
-      body: JSON.stringify({
-        model: modelConfig.extractionModel,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: "Extract QRM-ready dealership field-note data. Return valid JSON only.",
-          },
-          { role: "user", content: EXTRACTION_PROMPT_TEMPLATE(transcript) },
-        ],
-      }),
-      signal: AbortSignal.timeout(60_000),
-    });
+    );
 
     if (!extractionRes.ok) {
       const errText = await extractionRes.text();
@@ -489,8 +576,17 @@ Deno.serve(async (req) => {
     try {
       extracted = JSON.parse(rawJson) as VoiceQrmExtraction;
     } catch (parseErr) {
-      console.error("voice-to-qrm JSON parse failed:", parseErr, "raw:", rawJson?.substring(0, 500));
-      return safeJsonError("Data extraction returned malformed JSON", 422, origin);
+      console.error(
+        "voice-to-qrm JSON parse failed:",
+        parseErr,
+        "raw:",
+        rawJson?.substring(0, 500),
+      );
+      return safeJsonError(
+        "Data extraction returned malformed JSON",
+        422,
+        origin,
+      );
     }
     const extractionDuration = Date.now() - extractionStart;
 
@@ -518,7 +614,10 @@ Deno.serve(async (req) => {
           p_company_name: extracted.company.name,
         });
 
-      if (companyMatches && companyMatches.length > 0 && companyMatches[0].name_similarity >= 0.5) {
+      if (
+        companyMatches && companyMatches.length > 0 &&
+        companyMatches[0].name_similarity >= 0.5
+      ) {
         companyId = companyMatches[0].company_id;
         companyMatchMethod = companyMatches[0].match_method;
         companyConfidence = companyMatches[0].name_similarity;
@@ -559,7 +658,10 @@ Deno.serve(async (req) => {
           p_last_name: extracted.contact.last_name || "",
         });
 
-      if (contactMatches && contactMatches.length > 0 && contactMatches[0].name_similarity >= 0.5) {
+      if (
+        contactMatches && contactMatches.length > 0 &&
+        contactMatches[0].name_similarity >= 0.5
+      ) {
         contactId = contactMatches[0].contact_id;
         contactMatchMethod = contactMatches[0].match_method;
         contactConfidence = contactMatches[0].name_similarity;
@@ -573,9 +675,15 @@ Deno.serve(async (req) => {
             last_name: extracted.contact.last_name,
             company_id: companyId,
             metadata: {
-              ...(extracted.contact.role ? { role: extracted.contact.role } : {}),
-              ...(extracted.contact.phone ? { phone: extracted.contact.phone } : {}),
-              ...(extracted.contact.email ? { email: extracted.contact.email } : {}),
+              ...(extracted.contact.role
+                ? { role: extracted.contact.role }
+                : {}),
+              ...(extracted.contact.phone
+                ? { phone: extracted.contact.phone }
+                : {}),
+              ...(extracted.contact.email
+                ? { email: extracted.contact.email }
+                : {}),
             },
           })
           .select("id")
@@ -611,8 +719,12 @@ Deno.serve(async (req) => {
 
       if (stageId) {
         const dealName = extracted.company?.name
-          ? `${extracted.company.name} - ${extracted.needs_assessment?.machine_interest || "New Opportunity"}`
-          : `${extracted.contact?.first_name || "New"} ${extracted.contact?.last_name || "Deal"}`;
+          ? `${extracted.company.name} - ${
+            extracted.needs_assessment?.machine_interest || "New Opportunity"
+          }`
+          : `${extracted.contact?.first_name || "New"} ${
+            extracted.contact?.last_name || "Deal"
+          }`;
 
         const { data: newDeal, error: dealError } = await supabaseAdmin
           .from("crm_deals")
@@ -641,7 +753,9 @@ Deno.serve(async (req) => {
       const updates: Record<string, unknown> = {};
       if (contactId && !dealIdParam) updates.primary_contact_id = contactId;
       if (companyId) updates.company_id = companyId;
-      if (extracted.deal?.estimated_value) updates.amount = extracted.deal.estimated_value;
+      if (extracted.deal?.estimated_value) {
+        updates.amount = extracted.deal.estimated_value;
+      }
 
       if (Object.keys(updates).length > 0) {
         await supabaseAdmin
@@ -727,7 +841,10 @@ Deno.serve(async (req) => {
 
     // ── 7b. Multi-deal extraction ──────────────────────────────────────────
     const additionalDealIds: string[] = [];
-    if (Array.isArray(extracted.additional_deals) && extracted.additional_deals.length > 0) {
+    if (
+      Array.isArray(extracted.additional_deals) &&
+      extracted.additional_deals.length > 0
+    ) {
       // Find a stage id for default sort_order = 3 (needs assessment)
       const { data: fallbackStage } = await supabaseAdmin
         .from("crm_deal_stages")
@@ -750,8 +867,12 @@ Deno.serve(async (req) => {
 
         if (!extraStageId) continue;
 
-        const extraName = extraDeal.description
-          || (extracted.company?.name ? `${extracted.company.name} — ${extraDeal.machine_interest || "Additional Unit"}` : "Additional Opportunity");
+        const extraName = extraDeal.description ||
+          (extracted.company?.name
+            ? `${extracted.company.name} — ${
+              extraDeal.machine_interest || "Additional Unit"
+            }`
+            : "Additional Opportunity");
 
         const { data: extraDealRow, error: extraDealErr } = await supabaseAdmin
           .from("crm_deals")
@@ -768,7 +889,9 @@ Deno.serve(async (req) => {
           .single();
 
         if (extraDealErr) {
-          errors.push(`Additional deal creation failed: ${extraDealErr.message}`);
+          errors.push(
+            `Additional deal creation failed: ${extraDealErr.message}`,
+          );
         } else if (extraDealRow) {
           additionalDealIds.push(extraDealRow.id);
         }
@@ -782,7 +905,11 @@ Deno.serve(async (req) => {
 
     // ── 7d. Budget timeline capture ────────────────────────────────────────
     let budgetCaptured = false;
-    if (extracted.budget_timeline && (extracted.budget_timeline.cycle_month || extracted.budget_timeline.fiscal_year_end_month)) {
+    if (
+      extracted.budget_timeline &&
+      (extracted.budget_timeline.cycle_month ||
+        extracted.budget_timeline.fiscal_year_end_month)
+    ) {
       if (companyId) {
         // Upsert customer_profiles_extended with budget fields. This DGE table is not
         // workspace-scoped, so anchor updates to the workspace-owned CRM company id.
@@ -796,8 +923,10 @@ Deno.serve(async (req) => {
           await supabaseAdmin
             .from("customer_profiles_extended")
             .update({
-              budget_cycle_month: extracted.budget_timeline.cycle_month ?? undefined,
-              fiscal_year_end_month: extracted.budget_timeline.fiscal_year_end_month ?? undefined,
+              budget_cycle_month: extracted.budget_timeline.cycle_month ??
+                undefined,
+              fiscal_year_end_month:
+                extracted.budget_timeline.fiscal_year_end_month ?? undefined,
               budget_cycle_notes: extracted.budget_timeline.notes ?? undefined,
             })
             .eq("id", existingProfile.id)
@@ -812,7 +941,8 @@ Deno.serve(async (req) => {
               customer_name: extracted.company.name,
               company_name: extracted.company.name,
               budget_cycle_month: extracted.budget_timeline.cycle_month ?? null,
-              fiscal_year_end_month: extracted.budget_timeline.fiscal_year_end_month ?? null,
+              fiscal_year_end_month:
+                extracted.budget_timeline.fiscal_year_end_month ?? null,
               budget_cycle_notes: extracted.budget_timeline.notes ?? null,
             });
           budgetCaptured = true;
@@ -820,39 +950,79 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── 7e. Future-dated follow-up tasks ────────────────────────────────────
+    // ── 7e. Spoken commitment tasks (future_tasks + follow_up_suggestions) ──
     const scheduledFollowUpIds: string[] = [];
-    if (Array.isArray(extracted.future_tasks) && extracted.future_tasks.length > 0) {
-      for (const task of extracted.future_tasks) {
-        if (!task.title || !task.scheduled_for) continue;
+    const commitmentTasks = buildVoiceTaskCandidates({
+      futureTasks: extracted.future_tasks,
+      followUpSuggestions: extracted.follow_up_suggestions,
+    });
 
-        // Validate date format
-        const taskDate = new Date(task.scheduled_for);
-        if (isNaN(taskDate.getTime())) continue;
+    const routeAssigneeByContentType: Record<string, string> = {};
+    for (const type of ["parts", "service", "process_improvement"] as const) {
+      const { data: routingRule } = await supabaseAdmin
+        .from("voice_routing_rules")
+        .select("route_to_role, route_to_user_id")
+        .eq("workspace_id", workspace)
+        .eq("content_type", type)
+        .eq("is_active", true)
+        .maybeSingle();
 
-        const { data: futureTask, error: taskErr } = await supabaseAdmin
-          .from("scheduled_follow_ups")
-          .insert({
-            workspace_id: workspace,
-            assigned_to: user.id,
-            created_by: user.id,
-            deal_id: dealId,
-            contact_id: contactId,
-            company_id: companyId,
-            title: task.title,
-            description: task.description || null,
-            scheduled_for: task.scheduled_for,
-            source: "voice_extraction",
-            extraction_confidence: 0.8,
-          })
+      if (!routingRule) continue;
+
+      if (routingRule.route_to_user_id) {
+        const { data: routedUser } = await supabaseAdmin
+          .from("profiles")
           .select("id")
-          .single();
-
-        if (taskErr) {
-          errors.push(`Future task creation failed: ${taskErr.message}`);
-        } else if (futureTask) {
-          scheduledFollowUpIds.push(futureTask.id);
+          .eq("id", routingRule.route_to_user_id)
+          .eq("active_workspace_id", workspace)
+          .maybeSingle();
+        if (routedUser?.id) {
+          routeAssigneeByContentType[type] = routedUser.id as string;
         }
+        continue;
+      }
+
+      if (routingRule.route_to_role) {
+        const { data: roleUsers } = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .eq("active_workspace_id", workspace)
+          .eq("iron_role", routingRule.route_to_role)
+          .limit(1);
+        if (roleUsers?.[0]?.id) {
+          routeAssigneeByContentType[type] = roleUsers[0].id as string;
+        }
+      }
+    }
+
+    for (const task of commitmentTasks) {
+      const routedContentType = intentToRoutingContentType(task.intent);
+      const assignedTo =
+        (routedContentType && routeAssigneeByContentType[routedContentType]) ||
+        user.id;
+
+      const { data: createdTask, error: taskErr } = await supabaseAdmin
+        .from("scheduled_follow_ups")
+        .insert({
+          workspace_id: workspace,
+          assigned_to: assignedTo,
+          created_by: user.id,
+          deal_id: dealId,
+          contact_id: contactId,
+          company_id: companyId,
+          title: task.title,
+          description: task.description,
+          scheduled_for: task.scheduledFor,
+          source: "voice_extraction",
+          extraction_confidence: 0.8,
+        })
+        .select("id")
+        .single();
+
+      if (taskErr) {
+        errors.push(`Commitment task creation failed: ${taskErr.message}`);
+      } else if (createdTask) {
+        scheduledFollowUpIds.push(createdTask.id);
       }
     }
 
@@ -881,14 +1051,17 @@ Deno.serve(async (req) => {
     // a first-class crm_equipment row so the machine becomes addressable
     // throughout the dealership (parts, service, fleet view, deal linking).
     // Every mention is also recorded in voice_extracted_equipment for audit.
-    if (capture && Array.isArray(extracted.equipment_mentions) && extracted.equipment_mentions.length > 0) {
+    if (
+      capture && Array.isArray(extracted.equipment_mentions) &&
+      extracted.equipment_mentions.length > 0
+    ) {
       for (const eq of extracted.equipment_mentions) {
         if (!eq.make && !eq.model) continue;
 
         let crmEquipmentId: string | null = null;
-        const shouldCreateCrmEquipment =
-          companyId &&
-          (eq.mentioned_as === "current_fleet" || eq.mentioned_as === "trade_in");
+        const shouldCreateCrmEquipment = companyId &&
+          (eq.mentioned_as === "current_fleet" ||
+            eq.mentioned_as === "trade_in");
 
         if (shouldCreateCrmEquipment) {
           const equipmentName = [eq.year, eq.make, eq.model]
@@ -906,7 +1079,9 @@ Deno.serve(async (req) => {
               model: eq.model || null,
               year: eq.year || null,
               engine_hours: eq.hours || null,
-              ownership: eq.mentioned_as === "trade_in" ? "customer_owned" : "customer_owned",
+              ownership: eq.mentioned_as === "trade_in"
+                ? "customer_owned"
+                : "customer_owned",
               availability: "available",
               metadata: {
                 source: "voice_extraction",
@@ -966,10 +1141,15 @@ Deno.serve(async (req) => {
     const totalDuration = Date.now() - pipelineStart;
 
     // Map sentiment to numeric score (used in result + response)
-    const sentimentMap: Record<string, number> = { positive: 0.8, neutral: 0.5, negative: 0.2 };
+    const sentimentMap: Record<string, number> = {
+      positive: 0.8,
+      neutral: 0.5,
+      negative: 0.2,
+    };
 
     if (capture) {
-      const sentimentScore = sentimentMap[extracted.intelligence?.sentiment ?? ""] ?? null;
+      const sentimentScore =
+        sentimentMap[extracted.intelligence?.sentiment ?? ""] ?? null;
 
       await supabaseAdmin.from("voice_qrm_results").insert({
         workspace_id: workspace,
@@ -1030,10 +1210,13 @@ Deno.serve(async (req) => {
               .eq("active_workspace_id", workspace)
               .eq("iron_role", routingRule.route_to_role)
               .limit(5);
-            if (roleUsers) targetUsers.push(...roleUsers.map((u: { id: string }) => u.id));
+            if (roleUsers) {
+              targetUsers.push(...roleUsers.map((u: { id: string }) => u.id));
+            }
           }
 
-          const snippet = extracted.qrm_narrative?.substring(0, 200) || "New voice capture routed to your department.";
+          const snippet = extracted.qrm_narrative?.substring(0, 200) ||
+            "New voice capture routed to your department.";
 
           // Notifications still fire for in-app visibility
           for (const uid of targetUsers) {
@@ -1055,36 +1238,41 @@ Deno.serve(async (req) => {
           // ── Create actual downstream work (not just notifications) ────
           // For non-sales content types, create a scheduled follow-up task
           // assigned to the target user so it shows up in their task list.
-          const shouldCreateTask = ["parts", "service", "process_improvement"].includes(contentType);
+          const shouldCreateTask =
+            ["parts", "service", "process_improvement"].includes(contentType) &&
+            commitmentTasks.length === 0;
           if (shouldCreateTask && targetUsers.length > 0) {
             const primaryAssignee = targetUsers[0];
             const taskTitle = contentType === "parts"
               ? `Parts request from voice capture`
               : contentType === "service"
-                ? `Service issue from voice capture`
-                : `Process improvement idea from voice capture`;
+              ? `Service issue from voice capture`
+              : `Process improvement idea from voice capture`;
 
-            const { data: routedTask, error: routedTaskErr } = await supabaseAdmin
-              .from("scheduled_follow_ups")
-              .insert({
-                workspace_id: workspace,
-                assigned_to: primaryAssignee,
-                created_by: user.id,
-                deal_id: dealId,
-                contact_id: contactId,
-                company_id: companyId,
-                voice_capture_id: capture.id,
-                title: taskTitle,
-                description: snippet,
-                scheduled_for: new Date().toISOString().split("T")[0],
-                source: "voice_extraction",
-                extraction_confidence: 0.9,
-              })
-              .select("id")
-              .single();
+            const { data: routedTask, error: routedTaskErr } =
+              await supabaseAdmin
+                .from("scheduled_follow_ups")
+                .insert({
+                  workspace_id: workspace,
+                  assigned_to: primaryAssignee,
+                  created_by: user.id,
+                  deal_id: dealId,
+                  contact_id: contactId,
+                  company_id: companyId,
+                  voice_capture_id: capture.id,
+                  title: taskTitle,
+                  description: snippet,
+                  scheduled_for: new Date().toISOString().split("T")[0],
+                  source: "voice_extraction",
+                  extraction_confidence: 0.9,
+                })
+                .select("id")
+                .single();
 
             if (routedTaskErr) {
-              errors.push(`Routed task creation failed: ${routedTaskErr.message}`);
+              errors.push(
+                `Routed task creation failed: ${routedTaskErr.message}`,
+              );
             } else if (routedTask) {
               scheduledFollowUpIds.push(routedTask.id);
             }
@@ -1096,7 +1284,8 @@ Deno.serve(async (req) => {
     // ── 10. Create QRM activity note ──────────────────────────────────────
     // crm_activities_check: exactly one of contact_id / deal_id / company_id (migration 021).
     try {
-      const activityBody = extracted.qrm_narrative || `Voice capture: ${transcript.substring(0, 500)}`;
+      const activityBody = extracted.qrm_narrative ||
+        `Voice capture: ${transcript.substring(0, 500)}`;
       await insertKnownCompanyOrDealActivity(supabaseAdmin, {
         workspaceId: workspace,
         createdBy: user.id,
@@ -1115,7 +1304,9 @@ Deno.serve(async (req) => {
       });
     } catch (error) {
       return safeJsonError(
-        error instanceof Error ? error.message : "Unable to create company activity timeline entry.",
+        error instanceof Error
+          ? error.message
+          : "Unable to create company activity timeline entry.",
         500,
         origin,
       );
@@ -1180,7 +1371,9 @@ Deno.serve(async (req) => {
           id: contactId,
           match_method: contactMatchMethod,
           confidence: contactConfidence,
-          name: `${extracted.contact?.first_name || ""} ${extracted.contact?.last_name || ""}`.trim(),
+          name: `${extracted.contact?.first_name || ""} ${
+            extracted.contact?.last_name || ""
+          }`.trim(),
         },
         company: {
           id: companyId,
@@ -1195,22 +1388,33 @@ Deno.serve(async (req) => {
         },
         needs_assessment: {
           id: needsAssessmentId,
-          completeness: na ? Object.values(na).filter(v => v != null && v !== false && !(Array.isArray(v) && v.length === 0)).length : 0,
+          completeness: na
+            ? Object.values(na).filter((v) =>
+              v != null && v !== false && !(Array.isArray(v) && v.length === 0)
+            ).length
+            : 0,
         },
         cadence: { id: cadenceId },
-        additional_deals: { count: additionalDealIds.length, ids: additionalDealIds },
+        additional_deals: {
+          count: additionalDealIds.length,
+          ids: additionalDealIds,
+        },
         equipment: {
           count: extractedEquipmentIds.length,
           ids: extractedEquipmentIds,
           crm_equipment_ids: createdCrmEquipmentIds,
         },
-        scheduled_follow_ups: { count: scheduledFollowUpIds.length, ids: scheduledFollowUpIds },
+        scheduled_follow_ups: {
+          count: scheduledFollowUpIds.length,
+          ids: scheduledFollowUpIds,
+        },
         budget_timeline_captured: budgetCaptured,
       },
       intelligence: extracted.intelligence,
       content_type: extracted.content_type ?? "general",
       follow_up_suggestions: extracted.follow_up_suggestions ?? [],
-      sentiment_score: sentimentMap[extracted.intelligence?.sentiment ?? ""] ?? null,
+      sentiment_score: sentimentMap[extracted.intelligence?.sentiment ?? ""] ??
+        null,
       voice_capture_id: capture?.id,
       errors: errors.length > 0 ? errors : undefined,
     }, origin);
@@ -1218,7 +1422,11 @@ Deno.serve(async (req) => {
     captureEdgeException(err, { fn: "voice-to-qrm", req });
     console.error("voice-to-qrm error:", err);
     // Log full error server-side, return generic message to client
-    return safeJsonError("Internal server error", 500, req.headers.get("origin"));
+    return safeJsonError(
+      "Internal server error",
+      500,
+      req.headers.get("origin"),
+    );
   }
 });
 
@@ -1237,7 +1445,10 @@ async function checkVoiceToQrmRateLimit(
     return rpcResult.data !== false;
   }
 
-  console.warn("voice-to-qrm check_rate_limit RPC unavailable, using table fallback", rpcResult.error);
+  console.warn(
+    "voice-to-qrm check_rate_limit RPC unavailable, using table fallback",
+    rpcResult.error,
+  );
 
   const windowStartIso = new Date(Date.now() - 60_000).toISOString();
   const countResult = await supabaseAdmin
@@ -1248,7 +1459,10 @@ async function checkVoiceToQrmRateLimit(
     .gte("created_at", windowStartIso);
 
   if (countResult.error) {
-    console.error("voice-to-qrm rate limit fallback count failed:", countResult.error);
+    console.error(
+      "voice-to-qrm rate limit fallback count failed:",
+      countResult.error,
+    );
     return true;
   }
 
@@ -1261,7 +1475,10 @@ async function checkVoiceToQrmRateLimit(
     .insert({ user_id: userId, endpoint: "voice-to-qrm" });
 
   if (insertResult.error) {
-    console.error("voice-to-qrm rate limit fallback insert failed:", insertResult.error);
+    console.error(
+      "voice-to-qrm rate limit fallback insert failed:",
+      insertResult.error,
+    );
   }
 
   return true;
@@ -1269,7 +1486,11 @@ async function checkVoiceToQrmRateLimit(
 
 /* ── Idea detection helpers (Enhancement 2) ─────────────────────── */
 
-type IdeaCategory = "idea" | "process_improvement" | "bug_report" | "feature_request";
+type IdeaCategory =
+  | "idea"
+  | "process_improvement"
+  | "bug_report"
+  | "feature_request";
 
 interface IdeaSignal {
   isIdea: boolean;
@@ -1281,16 +1502,22 @@ interface IdeaSignal {
 }
 
 const IDEA_LEAD_PATTERNS: Array<{ re: RegExp; category: IdeaCategory }> = [
-  { re: /^\s*idea\s*[:\-]/i,                                          category: "idea" },
-  { re: /^\s*process\s+improvement\s*[:\-]/i,                         category: "process_improvement" },
-  { re: /^\s*bug\s*[:\-]/i,                                           category: "bug_report" },
-  { re: /^\s*feature\s+request\s*[:\-]/i,                             category: "feature_request" },
-  { re: /^\s*we\s+should\b/i,                                         category: "idea" },
-  { re: /^\s*we\s+need\s+to\b/i,                                      category: "process_improvement" },
-  { re: /^\s*(?:can|could)\s+we\s+(?:add|build|improve|change)\b/i,   category: "feature_request" },
-  { re: /^\s*(?:here['']?s|here\s+is)\s+an?\s+idea\b/i,               category: "idea" },
-  { re: /^\s*what\s+if\s+we\b/i,                                      category: "idea" },
-  { re: /^\s*one\s+thing\s+that\s+(?:bugs|annoys|bothers)\s+me\b/i,   category: "bug_report" },
+  { re: /^\s*idea\s*[:\-]/i, category: "idea" },
+  { re: /^\s*process\s+improvement\s*[:\-]/i, category: "process_improvement" },
+  { re: /^\s*bug\s*[:\-]/i, category: "bug_report" },
+  { re: /^\s*feature\s+request\s*[:\-]/i, category: "feature_request" },
+  { re: /^\s*we\s+should\b/i, category: "idea" },
+  { re: /^\s*we\s+need\s+to\b/i, category: "process_improvement" },
+  {
+    re: /^\s*(?:can|could)\s+we\s+(?:add|build|improve|change)\b/i,
+    category: "feature_request",
+  },
+  { re: /^\s*(?:here['']?s|here\s+is)\s+an?\s+idea\b/i, category: "idea" },
+  { re: /^\s*what\s+if\s+we\b/i, category: "idea" },
+  {
+    re: /^\s*one\s+thing\s+that\s+(?:bugs|annoys|bothers)\s+me\b/i,
+    category: "bug_report",
+  },
 ];
 
 /**
@@ -1306,9 +1533,13 @@ async function detectIdea(
   // Pass A: regex — fast path
   for (const { re, category } of IDEA_LEAD_PATTERNS) {
     if (re.test(transcript)) {
-      const firstSentence = transcript.match(/^[^.!?\n]+/)?.[0] ?? transcript.substring(0, 200);
+      const firstSentence = transcript.match(/^[^.!?\n]+/)?.[0] ??
+        transcript.substring(0, 200);
       const cleanedTitle = firstSentence
-        .replace(/^\s*(idea|process improvement|bug|feature request)\s*[:\-]\s*/i, "")
+        .replace(
+          /^\s*(idea|process improvement|bug|feature request)\s*[:\-]\s*/i,
+          "",
+        )
         .replace(/^\s*we\s+should\s+/i, "")
         .replace(/^\s*we\s+need\s+to\s+/i, "")
         .trim();
@@ -1331,19 +1562,22 @@ async function detectIdea(
   }
 
   try {
-    const classifierRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openAiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: classifierModel,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: `You classify short voice transcripts from a heavy equipment dealership's internal tools.
+    const classifierRes = await fetch(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openAiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: classifierModel,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content:
+                `You classify short voice transcripts from a heavy equipment dealership's internal tools.
 Decide if the transcript is:
   A. A customer field note / activity capture (deal, contact, equipment observation, sales call recap)
   B. An internal IDEA, process improvement, bug report, or feature request
@@ -1363,12 +1597,13 @@ Examples:
 - "The quote builder is broken on mobile" → bug_report, 0.95 confidence
 - "Budget opens October for Bob's Excavating" → NOT an idea (timing note)
 Lean toward is_idea=false when uncertain.`,
-          },
-          { role: "user", content: transcript },
-        ],
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
+            },
+            { role: "user", content: transcript },
+          ],
+        }),
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
 
     if (!classifierRes.ok) return { isIdea: false, confidence: 0 };
     const data = await classifierRes.json();
@@ -1379,11 +1614,20 @@ Lean toward is_idea=false when uncertain.`,
       return {
         isIdea: true,
         title: typeof parsed.title === "string" ? parsed.title : undefined,
-        category: (["idea", "process_improvement", "bug_report", "feature_request"] as const)
-          .includes(parsed.category) ? parsed.category : "idea",
+        category: ([
+            "idea",
+            "process_improvement",
+            "bug_report",
+            "feature_request",
+          ] as const)
+            .includes(parsed.category)
+          ? parsed.category
+          : "idea",
         confidence: Number(parsed.confidence),
         priority: (["low", "medium", "high", "critical"] as const)
-          .includes(parsed.priority) ? parsed.priority : "medium",
+            .includes(parsed.priority)
+          ? parsed.priority
+          : "medium",
         matchedVia: "classifier",
       };
     }

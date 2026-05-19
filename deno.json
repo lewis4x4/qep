@@ -1,3 +1,7 @@
 {
-  "nodeModulesDir": "auto"
+  "nodeModulesDir": "auto",
+  "imports": {
+    "@std/assert@1": "jsr:@std/assert@1",
+    "@supabase/supabase-js": "jsr:@supabase/supabase-js@2"
+  }
 }
