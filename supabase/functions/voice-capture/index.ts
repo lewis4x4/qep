@@ -64,7 +64,6 @@ Deno.serve(async (req) => {
     if (!auth.ok) {
       return jsonError("Unauthorized", 401, ch);
     }
-    const supabase = auth.supabase;
     const user = { id: auth.userId };
     const workspaceId = auth.workspaceId;
     const modelConfig = resolveVoiceCaptureModelConfig();
@@ -513,10 +512,10 @@ Return ONLY valid JSON matching this exact structure:
           extracted_data: extracted,
           sync_status: localCrmSync.saved ? "synced" : "pending",
           sync_error: null,
+          qrm_activity_id: localCrmSync.noteActivityId,
+          qrm_synced_at: localCrmSync.saved ? new Date().toISOString() : null,
           hubspot_deal_id: localCrmSync.dealId ?? hubspotDealId,
           hubspot_contact_id: localCrmSync.contactId,
-          hubspot_note_id: localCrmSync.noteActivityId,
-          hubspot_task_id: localCrmSync.taskActivityId,
           hubspot_synced_at: null,
         })
         .eq("id", captureId);
@@ -708,10 +707,12 @@ Return ONLY valid JSON matching this exact structure:
     const finalUpdate: Record<string, unknown> = {
       sync_status: localCrmSync.saved || hubspotSynced ? "synced" : "pending",
       sync_error: externalSyncErrors.length > 0 ? externalSyncErrors.join(" ") : null,
+      qrm_activity_id: localCrmSync.noteActivityId,
+      qrm_synced_at: localCrmSync.saved ? new Date().toISOString() : null,
       hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
       hubspot_contact_id: localCrmSync.contactId ?? resolvedContactId,
-      hubspot_note_id: localCrmSync.noteActivityId ?? noteId,
-      hubspot_task_id: localCrmSync.taskActivityId ?? taskId,
+      hubspot_note_id: noteId,
+      hubspot_task_id: taskId,
       hubspot_synced_at: hubspotSynced
         ? new Date().toISOString()
         : null,
@@ -736,8 +737,10 @@ Return ONLY valid JSON matching this exact structure:
       extracted_data: extracted,
       hubspot_synced: hubspotSynced,
       hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
-      hubspot_note_id: localCrmSync.noteActivityId ?? noteId,
-      hubspot_task_id: localCrmSync.taskActivityId ?? taskId,
+      hubspot_note_id: noteId,
+      hubspot_task_id: taskId,
+      qrm_activity_id: localCrmSync.noteActivityId,
+      qrm_synced_at: localCrmSync.saved ? new Date().toISOString() : null,
       local_crm_saved: localCrmSync.saved,
       local_crm_note_id: localCrmSync.noteActivityId,
       local_crm_task_id: localCrmSync.taskActivityId,
@@ -756,8 +759,10 @@ Return ONLY valid JSON matching this exact structure:
         extracted_data: {},
         hubspot_synced: hubspotSynced,
         hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
-        hubspot_note_id: localCrmSync.noteActivityId ?? noteId,
-        hubspot_task_id: localCrmSync.taskActivityId ?? taskId,
+        hubspot_note_id: noteId,
+        hubspot_task_id: taskId,
+        qrm_activity_id: localCrmSync.noteActivityId,
+        qrm_synced_at: localCrmSync.saved ? new Date().toISOString() : null,
         local_crm_saved: localCrmSync.saved,
         local_crm_note_id: localCrmSync.noteActivityId,
         local_crm_task_id: localCrmSync.taskActivityId,

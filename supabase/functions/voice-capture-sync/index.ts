@@ -257,11 +257,10 @@ Deno.serve(async (req) => {
         .update({
           sync_status: "synced",
           sync_error: null,
+          qrm_activity_id: localCrmSync.noteActivityId,
+          qrm_synced_at: new Date().toISOString(),
           hubspot_deal_id: localCrmSync.dealId,
           hubspot_contact_id: localCrmSync.contactId,
-          hubspot_note_id: localCrmSync.noteActivityId,
-          hubspot_task_id: localCrmSync.taskActivityId,
-          hubspot_synced_at: new Date().toISOString(),
         })
         .eq("id", captureId);
 
@@ -271,8 +270,8 @@ Deno.serve(async (req) => {
           hubspot_synced: false,
           hubspot_skipped_reason: "No HubSpot deal target; local QRM activity saved.",
           hubspot_deal_id: localCrmSync.dealId,
-          hubspot_note_id: localCrmSync.noteActivityId,
-          hubspot_task_id: localCrmSync.taskActivityId,
+          qrm_activity_id: localCrmSync.noteActivityId,
+          qrm_synced_at: new Date().toISOString(),
           local_crm_saved: true,
         }),
         {
@@ -304,11 +303,10 @@ Deno.serve(async (req) => {
           .update({
             sync_status: "synced",
             sync_error: null,
+            qrm_activity_id: localCrmSync.noteActivityId,
+            qrm_synced_at: new Date().toISOString(),
             hubspot_deal_id: localCrmSync.dealId,
             hubspot_contact_id: localCrmSync.contactId,
-            hubspot_note_id: localCrmSync.noteActivityId,
-            hubspot_task_id: localCrmSync.taskActivityId,
-            hubspot_synced_at: new Date().toISOString(),
           })
           .eq("id", captureId);
 
@@ -317,8 +315,8 @@ Deno.serve(async (req) => {
             id: captureId,
             hubspot_synced: false,
             hubspot_deal_id: localCrmSync.dealId,
-            hubspot_note_id: localCrmSync.noteActivityId,
-            hubspot_task_id: localCrmSync.taskActivityId,
+            qrm_activity_id: localCrmSync.noteActivityId,
+            qrm_synced_at: new Date().toISOString(),
             local_crm_saved: true,
           }),
           {
@@ -391,11 +389,10 @@ Deno.serve(async (req) => {
           .update({
             sync_status: "synced",
             sync_error: "Skipped HubSpot sync because the resolved QRM deal is not a HubSpot object id.",
+            qrm_activity_id: localCrmSync.noteActivityId,
+            qrm_synced_at: new Date().toISOString(),
             hubspot_deal_id: localCrmSync.dealId,
             hubspot_contact_id: localCrmSync.contactId,
-            hubspot_note_id: localCrmSync.noteActivityId,
-            hubspot_task_id: localCrmSync.taskActivityId,
-            hubspot_synced_at: new Date().toISOString(),
           })
           .eq("id", captureId);
 
@@ -404,8 +401,8 @@ Deno.serve(async (req) => {
             id: captureId,
             hubspot_synced: false,
             hubspot_deal_id: localCrmSync.dealId,
-            hubspot_note_id: localCrmSync.noteActivityId,
-            hubspot_task_id: localCrmSync.taskActivityId,
+            qrm_activity_id: localCrmSync.noteActivityId,
+            qrm_synced_at: new Date().toISOString(),
             local_crm_saved: true,
           }),
           {
@@ -493,10 +490,12 @@ Deno.serve(async (req) => {
       .update({
         sync_status: localCrmSync.saved || hubspotSynced ? "synced" : "pending",
         sync_error: externalSyncErrors.length > 0 ? externalSyncErrors.join(" ") : null,
+        qrm_activity_id: localCrmSync.noteActivityId,
+        qrm_synced_at: localCrmSync.saved ? new Date().toISOString() : null,
         hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
         hubspot_contact_id: localCrmSync.contactId ?? resolvedContactId,
-        hubspot_note_id: localCrmSync.noteActivityId ?? noteId,
-        hubspot_task_id: localCrmSync.taskActivityId ?? taskId,
+        hubspot_note_id: noteId,
+        hubspot_task_id: taskId,
         hubspot_synced_at: hubspotSynced ? new Date().toISOString() : null,
       })
       .eq("id", captureId);
@@ -506,8 +505,10 @@ Deno.serve(async (req) => {
         id: captureId,
         hubspot_synced: hubspotSynced,
         hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
-        hubspot_note_id: localCrmSync.noteActivityId ?? noteId,
-        hubspot_task_id: localCrmSync.taskActivityId ?? taskId,
+        hubspot_note_id: noteId,
+        hubspot_task_id: taskId,
+        qrm_activity_id: localCrmSync.noteActivityId,
+        qrm_synced_at: localCrmSync.saved ? new Date().toISOString() : null,
         local_crm_saved: localCrmSync.saved,
         local_crm_note_id: localCrmSync.noteActivityId,
         local_crm_task_id: localCrmSync.taskActivityId,
