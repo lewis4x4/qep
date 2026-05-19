@@ -156,16 +156,25 @@ function mapCompanyPickerRow(row: CompanyPickerRow): RepCustomer {
 export async function searchCompaniesForPicker(
   rawQuery: string,
   limit = 8,
+  signal?: AbortSignal,
 ): Promise<RepCustomer[]> {
   const query = rawQuery.trim();
   if (query.length < 2) return [];
+  if (signal?.aborted) return [];
 
   const wsId = await getWorkspaceId();
-  const { data, error } = await supabase.rpc("search_companies_for_picker_ranked", {
+  if (signal?.aborted) return [];
+
+  let builder = supabase.rpc("search_companies_for_picker_ranked", {
     p_query: query,
     p_workspace_id: wsId,
     p_limit: limit,
   });
+  if (signal) {
+    builder = (builder as unknown as { abortSignal: (s: AbortSignal) => typeof builder })
+      .abortSignal(signal);
+  }
+  const { data, error } = await builder;
   if (error) throw error;
   return ((data ?? []) as CompanyPickerRow[]).map(mapCompanyPickerRow);
 }

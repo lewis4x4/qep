@@ -21,6 +21,7 @@ import {
   Trophy,
   Tag,
   Sparkles,
+  Undo2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -47,6 +48,11 @@ import {
   titleCaseTopic,
   type SmartAction,
 } from "../lib/voice-extraction-presentation";
+import {
+  pickPhase2AutoAttach,
+  resolveCustomerBlockBranch,
+  type CustomerBlockBranch,
+} from "../lib/customer-block-state";
 
 type CaptureState =
   | "starting"
@@ -105,6 +111,20 @@ export function SmartVoiceCapture({
   const [acceptedActionIds, setAcceptedActionIds] = useState<Set<SmartAction["id"]>>(
     () => new Set(["log_activity"]),
   );
+  // Workspace search results surfaced when the rep-book matcher came back
+  // empty but the AI extraction yielded a customer mention. These are
+  // tappable alternates the rep can pick without opening the full picker.
+  const [workspaceCandidates, setWorkspaceCandidates] = useState<RepCustomer[]>(
+    [],
+  );
+  const [workspaceSearchLoading, setWorkspaceSearchLoading] = useState(false);
+  // When non-null, the currently selected customer was Phase-2 auto-
+  // attached via a high-confidence semantic match; the value is the
+  // cosine similarity. The review block renders the auto-attach card
+  // with Undo when this is set instead of the normal selected card.
+  const [autoAttachedSimilarity, setAutoAttachedSimilarity] = useState<
+    number | null
+  >(null);
   const navigate = useNavigate();
 
   // Refs we manage outside React state to avoid re-render churn.
@@ -332,6 +352,7 @@ export function SmartVoiceCapture({
               // manually in that window — never overwrite their choice.
               // Use functional setters that only fill when state is null.
               let secondPassCustomerId = matchedCustomerId;
+              let secondMatchResult: ReturnType<typeof matchCustomerInTranscript> | null = null;
               if (!presetCustomerId) {
                 const secondMatch = matchCustomerInTranscript(text, allCustomers, {
                   extracted: {
@@ -343,6 +364,7 @@ export function SmartVoiceCapture({
                   },
                   semantic: semanticMap,
                 });
+                secondMatchResult = secondMatch;
                 setMatchResult(secondMatch);
                 if (
                   secondMatch.confidence >= AUTO_ACCEPT_CONFIDENCE &&
@@ -362,6 +384,62 @@ export function SmartVoiceCapture({
                     setInitialPickerSearch((current) => current || seed);
                   }
                 }
+              }
+
+              // ── Phase 2: workspace fallback for unknown customers ──
+              // When the rep-book second pass came back empty AND the AI
+              // surfaced a customer name, search the workspace and surface
+              // the top three as inline alternates. If the semantic vector
+              // points hard at one of them (cosine ≥ 0.9) we auto-attach
+              // and offer Undo so the rep can reverse.
+              const firstMention = res.customer_mentions[0]?.trim() ?? "";
+              const needWorkspaceFallback =
+                !presetCustomerId
+                && !secondPassCustomerId
+                && !!secondMatchResult
+                && !secondMatchResult.top
+                && firstMention.length >= 2;
+              if (needWorkspaceFallback) {
+                setWorkspaceSearchLoading(true);
+                // Phase-2 auto-attach intentionally only considers the top 3
+                // workspace search results — even if the semantic RPC scored
+                // a higher-cosine customer outside that slice, we want the
+                // textual+semantic agreement before silently attaching.
+                searchCompaniesForPicker(firstMention, 5, abortController.signal)
+                  .then((rows) => {
+                    if (cancelled || abortController.signal.aborted) return;
+                    const top3 = rows.slice(0, 3);
+                    const phase2Pick = pickPhase2AutoAttach(top3, semanticMap, 0.9);
+                    if (phase2Pick) {
+                      // Only auto-attach if the rep still hasn't picked.
+                      setSelectedCustomerId((current) => {
+                        if (current) return current;
+                        setSelectedCustomerName(phase2Pick.customer.company_name);
+                        setAutoAttachedSimilarity(phase2Pick.similarity);
+                        // Stash the un-picked candidates so Undo can restore
+                        // the inline workspace block.
+                        setWorkspaceCandidates(
+                          top3.filter(
+                            (c) => c.customer_id !== phase2Pick.customer.customer_id,
+                          ),
+                        );
+                        return phase2Pick.customer.customer_id;
+                      });
+                    } else {
+                      setWorkspaceCandidates(top3);
+                    }
+                  })
+                  .catch(() => {
+                    // Fail-open: workspace fallback is best-effort. Rep can
+                    // still tap "Find a customer" to open the full picker.
+                  })
+                  .finally(() => {
+                    // Always reset the loading flag — React tolerates
+                    // state writes on unmounted components, and a stuck
+                    // `true` would freeze the loading UI if the effect
+                    // re-fires on the same component instance.
+                    setWorkspaceSearchLoading(false);
+                  });
               }
 
               setAcceptedActionIds(() => {
@@ -572,8 +650,14 @@ export function SmartVoiceCapture({
   }
 
   // ── Review state ──────────────────────────────────────────────
-  const showAlternates =
-    matchResult && matchResult.confidence < AUTO_ACCEPT_CONFIDENCE;
+  // Render branch order is owned by `resolveCustomerBlockBranch` so it
+  // can be unit-tested. See lib/customer-block-state.ts.
+  const customerBlockBranch = resolveCustomerBlockBranch({
+    selectedCustomer,
+    autoAttachedSimilarity,
+    workspaceCandidates,
+    matchResult,
+  });
 
   const smartActions = pickSmartActions({
     extraction,
@@ -588,6 +672,48 @@ export function SmartVoiceCapture({
       else next.add(id);
       return next;
     });
+  }
+
+  function handleUndoAutoAttach() {
+    // Restore the workspace candidates block so the rep can pick a
+    // different match. The previously-attached customer goes back into
+    // the candidate list so they can re-pick it if Undo was a misfire.
+    setSelectedCustomerId((prevId) => {
+      if (prevId && selectedCustomerName) {
+        const restored: RepCustomer = {
+          customer_id: prevId,
+          company_name: selectedCustomerName,
+          search_1: null,
+          search_2: null,
+          primary_contact_name: null,
+          primary_contact_phone: null,
+          primary_contact_email: null,
+          city: null,
+          state: null,
+          open_deals: 0,
+          active_quotes: 0,
+          last_interaction: null,
+          days_since_contact: null,
+          opportunity_score: 0,
+          equipment_summary: [],
+        };
+        setWorkspaceCandidates((current) => {
+          // Avoid double-adding if Undo is tapped twice.
+          if (current.some((c) => c.customer_id === prevId)) return current;
+          return [restored, ...current].slice(0, 3);
+        });
+      }
+      return null;
+    });
+    setSelectedCustomerName(null);
+    setAutoAttachedSimilarity(null);
+  }
+
+  function handlePickWorkspaceCandidate(c: RepCustomer) {
+    setSelectedCustomerId(c.customer_id);
+    setSelectedCustomerName(c.company_name);
+    setWorkspaceCandidates([]);
+    setAutoAttachedSimilarity(null);
   }
 
   return (
@@ -619,22 +745,31 @@ export function SmartVoiceCapture({
             setSelectedCustomerName(picked.name);
             setShowCustomerPicker(false);
             setInitialPickerSearch("");
+            setWorkspaceCandidates([]);
+            setAutoAttachedSimilarity(null);
           }}
           onClose={() => setShowCustomerPicker(false)}
         />
       ) : (
         <CustomerReviewBlock
+          branch={customerBlockBranch}
           selectedCustomer={selectedCustomer}
           matchResult={matchResult}
-          showAlternates={!!showAlternates && !selectedCustomer}
+          workspaceCandidates={workspaceCandidates}
+          workspaceSearchLoading={workspaceSearchLoading}
+          autoAttachedSimilarity={autoAttachedSimilarity}
+          customerMention={extraction?.customer_mentions?.[0] ?? null}
           onPickAlternate={(customer) => {
             setSelectedCustomerId(customer.customer_id);
             setSelectedCustomerName(customer.company_name);
           }}
+          onPickWorkspaceCandidate={handlePickWorkspaceCandidate}
+          onUndoAutoAttach={handleUndoAutoAttach}
           onOpenPicker={() => setShowCustomerPicker(true)}
           onClearSelection={() => {
             setSelectedCustomerId(null);
             setSelectedCustomerName(null);
+            setAutoAttachedSimilarity(null);
           }}
         />
       )}
@@ -695,21 +830,69 @@ export function SmartVoiceCapture({
 
 // ── Sub-component: customer review block ────────────────────────
 function CustomerReviewBlock({
+  branch,
   selectedCustomer,
   matchResult,
-  showAlternates,
+  workspaceCandidates,
+  workspaceSearchLoading,
+  autoAttachedSimilarity,
+  customerMention,
   onPickAlternate,
+  onPickWorkspaceCandidate,
+  onUndoAutoAttach,
   onOpenPicker,
   onClearSelection,
 }: {
+  branch: CustomerBlockBranch;
   selectedCustomer: { id: string; name: string } | null;
   matchResult: CustomerMatchResult | null;
-  showAlternates: boolean;
+  workspaceCandidates: RepCustomer[];
+  workspaceSearchLoading: boolean;
+  autoAttachedSimilarity: number | null;
+  customerMention: string | null;
   onPickAlternate: (customer: RepCustomer) => void;
+  onPickWorkspaceCandidate: (customer: RepCustomer) => void;
+  onUndoAutoAttach: () => void;
   onOpenPicker: () => void;
   onClearSelection: () => void;
 }) {
-  if (selectedCustomer) {
+  // ── Phase 2 auto-attach card (with Undo) ──────────────────────
+  if (branch === "phase2_auto_attach" && selectedCustomer) {
+    const sim = autoAttachedSimilarity ?? 0;
+    return (
+      <section
+        className="rounded-2xl border border-emerald-400/30 bg-emerald-400/[0.08] p-4"
+        data-testid="customer-review-block"
+        data-branch="phase2_auto_attach"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-300">
+              <Sparkles className="mr-1 inline h-3 w-3" />
+              Auto-attached
+            </p>
+            <p className="mt-1 text-base font-bold text-foreground">
+              {selectedCustomer.name}
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Semantic match ({sim.toFixed(2)})
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onUndoAutoAttach}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-300/40 bg-emerald-500/[0.12] px-3 py-1.5 text-xs font-semibold text-emerald-100 active:scale-95"
+          >
+            <Undo2 className="h-3 w-3" />
+            Undo
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  // ── Normal selected-customer card ─────────────────────────────
+  if (branch === "selected" && selectedCustomer) {
     const confidencePct = matchResult
       ? Math.round(matchResult.confidence * 100)
       : null;
@@ -717,6 +900,7 @@ function CustomerReviewBlock({
       <section
         className="rounded-2xl border border-qep-orange/40 bg-qep-orange/[0.08] p-4"
         data-testid="customer-review-block"
+        data-branch="selected"
       >
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-qep-orange">
           Customer
@@ -759,7 +943,54 @@ function CustomerReviewBlock({
     );
   }
 
-  if (showAlternates && matchResult) {
+  // ── Workspace candidates (rep-book empty, AI surfaced a name) ─
+  if (branch === "workspace_candidates") {
+    return (
+      <section
+        className="rounded-2xl border border-amber-400/30 bg-amber-400/[0.06] p-4"
+        data-testid="customer-review-block"
+        data-branch="workspace_candidates"
+      >
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-amber-300">
+          Not in your book yet
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {customerMention
+            ? <>We heard "<span className="font-semibold text-foreground/80">{customerMention.trim()}</span>" — pick one to attach:</>
+            : "Pick one to attach:"}
+        </p>
+        <div className="mt-3 space-y-2">
+          {workspaceCandidates.map((c) => (
+            <button
+              key={`ws-${c.customer_id}`}
+              type="button"
+              onClick={() => onPickWorkspaceCandidate(c)}
+              className="w-full flex items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-card px-3 py-2.5 text-left active:scale-[0.98]"
+            >
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                {c.company_name}
+              </span>
+              <span className="shrink-0 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Workspace
+              </span>
+              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={onOpenPicker}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-white/[0.12] bg-card px-3 py-1.5 text-xs font-semibold text-foreground active:scale-95"
+        >
+          <Search className="h-3 w-3" />
+          Find a different customer
+        </button>
+      </section>
+    );
+  }
+
+  // ── Rep-book alternates (low-confidence multi-match) ──────────
+  if (branch === "book_alternates" && matchResult) {
     const all = [
       ...(matchResult.top ? [{ customer: matchResult.top, score: 0 }] : []),
       ...matchResult.alternates,
@@ -768,6 +999,7 @@ function CustomerReviewBlock({
       <section
         className="rounded-2xl border border-amber-400/30 bg-amber-400/[0.06] p-4"
         data-testid="customer-review-block"
+        data-branch="book_alternates"
       >
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-amber-300">
           Not sure which customer
@@ -802,17 +1034,20 @@ function CustomerReviewBlock({
     );
   }
 
-  // No match found at all
+  // ── Empty state ────────────────────────────────────────────────
   return (
     <section
       className="rounded-2xl border border-white/[0.08] bg-card p-4"
       data-testid="customer-review-block"
+      data-branch="empty"
     >
       <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
         Customer
       </p>
       <p className="mt-1 text-sm text-foreground">
-        No customer name detected.
+        {workspaceSearchLoading
+          ? "Looking for a match…"
+          : "No customer name detected."}
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
         Save without attaching, or find the customer manually.
