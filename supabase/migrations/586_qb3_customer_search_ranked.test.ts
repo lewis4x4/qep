@@ -6,12 +6,12 @@ const migrationPath = join(
   process.cwd(),
   "supabase",
   "migrations",
-  "585_qb3_customer_search_ranked.sql"
+  "586_qb3_customer_search_ranked.sql"
 );
 
 const sql = readFileSync(migrationPath, "utf8");
 
-describe("585_qb3_customer_search_ranked.sql regressions", () => {
+describe("586_qb3_customer_search_ranked.sql regressions", () => {
   it("does not use invalid LIMIT st.lim syntax", () => {
     expect(sql).not.toContain("limit st.lim");
   });

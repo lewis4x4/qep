@@ -1,5 +1,5 @@
 -- ============================================================================
--- 585_qb3_customer_search_ranked.sql
+-- 586_qb3_customer_search_ranked.sql
 -- QB-3 cycle 2:
 --   1) Restore v_rep_customers one-row-per-company via lateral primary-contact
 --      selection (preserves search_1/search_2).
