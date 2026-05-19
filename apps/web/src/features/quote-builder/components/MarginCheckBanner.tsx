@@ -8,7 +8,6 @@ interface MarginCheckBannerProps {
   waterfall?: {
     equipmentTotal: number;
     dealerCost: number;
-    tradeAllowance: number;
     netTotal: number;
     marginAmount: number;
   } | null;
@@ -76,9 +75,6 @@ export function MarginCheckBanner({ marginPct, waterfall }: MarginCheckBannerPro
           <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground mb-2">Margin Waterfall</p>
           <WaterfallBar label="Equipment" value={waterfall.equipmentTotal} maxValue={waterfall.equipmentTotal} isPositive={true} />
           <WaterfallBar label="Dealer Cost" value={waterfall.dealerCost} maxValue={waterfall.equipmentTotal} isPositive={false} />
-          {waterfall.tradeAllowance > 0 && (
-            <WaterfallBar label="Trade-In" value={waterfall.tradeAllowance} maxValue={waterfall.equipmentTotal} isPositive={false} />
-          )}
           <div className="border-t border-border/60 pt-2 mt-1">
             <WaterfallBar
               label="Net Margin"

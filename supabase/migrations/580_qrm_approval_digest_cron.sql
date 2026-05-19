@@ -53,7 +53,7 @@ create policy qrm_approval_digest_log_self_select
   on public.qrm_approval_digest_log
   for select
   to authenticated
-  using (user_id = auth.uid());
+  using (user_id = (select auth.uid()));
 
 -- ── 2. Cron registration ────────────────────────────────────────────────────
 do $cron$

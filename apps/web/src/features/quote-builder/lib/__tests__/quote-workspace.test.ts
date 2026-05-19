@@ -184,7 +184,7 @@ describe("computeQuoteWorkspace", () => {
       branchSlug: "lake-city",
       customerName: "Anderson",
       customerEmail: "buyer@example.com",
-      equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 105_000 }],
+      equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 105_000, dealerCost: 95_000 }],
       attachments: [{ kind: "attachment", title: "Mulcher", quantity: 1, unitPrice: 10_000 }],
       commercialDiscountType: "percent",
       commercialDiscountValue: 10,
@@ -203,6 +203,27 @@ describe("computeQuoteWorkspace", () => {
     expect(result.packetReadiness.canSave).toBe(true);
     expect(result.packetReadiness.canSend).toBe(false);
     expect(result.packetReadiness.send.missing).toContain("manager approval (margin below 10%)");
+  });
+
+  test("trade allowance reduces taxable basis but not margin", () => {
+    const baseDraft = {
+      branchSlug: "lake-city",
+      customerName: "Anderson",
+      customerEmail: "buyer@example.com",
+      equipment: [{ kind: "equipment" as const, title: "Bobcat E85", quantity: 1, unitPrice: 145_000, dealerCost: 119_000 }],
+      taxTotal: 0,
+    };
+    const noTrade = computeQuoteWorkspace(makeDraft({ ...baseDraft, tradeAllowance: 0 }));
+    const withTrade = computeQuoteWorkspace(makeDraft({ ...baseDraft, tradeAllowance: 22_000 }));
+
+    // Trade reduces what the customer pays and the taxable basis…
+    expect(withTrade.taxableBasis).toBe(noTrade.taxableBasis - 22_000);
+    expect(withTrade.customerTotal).toBe(noTrade.customerTotal - 22_000);
+
+    // …but margin is dealer gross on the sale and stays put.
+    expect(withTrade.marginAmount).toBe(noTrade.marginAmount);
+    expect(withTrade.marginPct).toBe(noTrade.marginPct);
+    expect(withTrade.marginAmount).toBe(26_000);
   });
 
   test("includes wizard pricing adders and rebate lines in taxable workspace totals", () => {
@@ -375,7 +396,7 @@ describe("computeQuoteWorkspace", () => {
       customerName: "Anderson",
       customerEmail: "buyer@example.com",
       quoteStatus: "approved",
-      equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 105_000 }],
+      equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 105_000, dealerCost: 95_000 }],
       attachments: [{ kind: "attachment", title: "Mulcher", quantity: 1, unitPrice: 10_000 }],
       commercialDiscountType: "percent",
       commercialDiscountValue: 10,
@@ -396,7 +417,7 @@ describe("computeQuoteWorkspace", () => {
       customerName: "Anderson",
       customerEmail: "buyer@example.com",
       quoteStatus: "pending_approval",
-      equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 105_000 }],
+      equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 105_000, dealerCost: 95_000 }],
       attachments: [{ kind: "attachment", title: "Mulcher", quantity: 1, unitPrice: 10_000 }],
       commercialDiscountType: "percent",
       commercialDiscountValue: 10,

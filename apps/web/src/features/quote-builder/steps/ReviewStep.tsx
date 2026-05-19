@@ -352,7 +352,6 @@ export function ReviewStep({
         waterfall={{
           equipmentTotal: subtotal,
           dealerCost,
-          tradeAllowance: draft.tradeAllowance,
           netTotal,
           marginAmount,
         }}

@@ -246,8 +246,13 @@ export function computeQuoteWorkspace(draft: QuoteWorkspaceDraft): QuoteWorkspac
   const cashDown = clampMoney(draft.cashDown);
   const amountFinanced = clampMoney(customerTotal - cashDown);
   const dealerCost = sumDealerCost([...draft.equipment, ...draft.attachments, ...pricingLines]);
-  const marginAmount = netTotal - dealerCost;
-  const marginPct = netTotal > 0 ? (marginAmount / netTotal) * 100 : 0;
+  // Margin is dealer gross on the sale (revenue − dealer cost), based on the
+  // pre-trade discounted subtotal. Trade allowance reduces what the customer
+  // pays out of pocket (and the taxable basis) but is a separate inventory
+  // exchange — it doesn't shrink the gross on this deal.
+  const marginRevenue = discountedSubtotal;
+  const marginAmount = marginRevenue - dealerCost;
+  const marginPct = marginRevenue > 0 ? (marginAmount / marginRevenue) * 100 : 0;
 
   const draftMissing: string[] = [];
   if (draft.equipment.length === 0) draftMissing.push("equipment selection");
