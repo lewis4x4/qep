@@ -8366,6 +8366,7 @@ export type Database = {
           dispatch_errors: Json
           dom_snapshot_path: string | null
           duplicate_of: string | null
+          eta_date: string | null
           exception_queue_id: string | null
           feature_flags: Json
           fix_deploy_sha: string | null
@@ -8379,10 +8380,12 @@ export type Database = {
           network_trail: Json
           network_type: string | null
           os: string | null
+          owner_summary: string | null
           page_title: string | null
           paperclip_issue_id: string | null
           paperclip_issue_url: string | null
           performance_metrics: Json | null
+          priority: string | null
           react_query_cache_keys: Json
           recent_activity_id: string | null
           reporter_email: string | null
@@ -8398,6 +8401,8 @@ export type Database = {
           severity: string
           slack_ts: string | null
           status: string
+          status_updated_at: string | null
+          status_updated_by: string | null
           store_snapshot: Json | null
           tab_id: string | null
           time_on_page_ms: number | null
@@ -8426,6 +8431,7 @@ export type Database = {
           dispatch_errors?: Json
           dom_snapshot_path?: string | null
           duplicate_of?: string | null
+          eta_date?: string | null
           exception_queue_id?: string | null
           feature_flags?: Json
           fix_deploy_sha?: string | null
@@ -8439,10 +8445,12 @@ export type Database = {
           network_trail?: Json
           network_type?: string | null
           os?: string | null
+          owner_summary?: string | null
           page_title?: string | null
           paperclip_issue_id?: string | null
           paperclip_issue_url?: string | null
           performance_metrics?: Json | null
+          priority?: string | null
           react_query_cache_keys?: Json
           recent_activity_id?: string | null
           reporter_email?: string | null
@@ -8458,6 +8466,8 @@ export type Database = {
           severity: string
           slack_ts?: string | null
           status?: string
+          status_updated_at?: string | null
+          status_updated_by?: string | null
           store_snapshot?: Json | null
           tab_id?: string | null
           time_on_page_ms?: number | null
@@ -8486,6 +8496,7 @@ export type Database = {
           dispatch_errors?: Json
           dom_snapshot_path?: string | null
           duplicate_of?: string | null
+          eta_date?: string | null
           exception_queue_id?: string | null
           feature_flags?: Json
           fix_deploy_sha?: string | null
@@ -8499,10 +8510,12 @@ export type Database = {
           network_trail?: Json
           network_type?: string | null
           os?: string | null
+          owner_summary?: string | null
           page_title?: string | null
           paperclip_issue_id?: string | null
           paperclip_issue_url?: string | null
           performance_metrics?: Json | null
+          priority?: string | null
           react_query_cache_keys?: Json
           recent_activity_id?: string | null
           reporter_email?: string | null
@@ -8518,6 +8531,8 @@ export type Database = {
           severity?: string
           slack_ts?: string | null
           status?: string
+          status_updated_at?: string | null
+          status_updated_by?: string | null
           store_snapshot?: Json | null
           tab_id?: string | null
           time_on_page_ms?: number | null
@@ -8557,6 +8572,47 @@ export type Database = {
             columns: ["triaged_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      flare_status_history: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          flare_id: string
+          from_status: string | null
+          id: string
+          note: string | null
+          to_status: string
+          workspace_id: string
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          flare_id: string
+          from_status?: string | null
+          id?: string
+          note?: string | null
+          to_status: string
+          workspace_id?: string
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          flare_id?: string
+          from_status?: string | null
+          id?: string
+          note?: string | null
+          to_status?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flare_status_history_flare_id_fkey"
+            columns: ["flare_id"]
+            isOneToOne: false
+            referencedRelation: "flare_reports"
             referencedColumns: ["id"]
           },
         ]

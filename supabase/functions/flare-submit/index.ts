@@ -27,7 +27,7 @@ import { generateReproducerSteps, detectHypothesisPattern } from "./intelligence
 import { dispatchToLinear } from "./linear.ts";
 import { dispatchToPaperclip } from "./paperclip.ts";
 import { dispatchToSlack } from "./slack.ts";
-import { dispatchBlockerEmail } from "./email.ts";
+import { dispatchFlareEmail } from "./email.ts";
 
 const RATE_LIMIT_PER_HOUR = 20;
 const BUCKET_NAME = "flare-artifacts";
@@ -440,17 +440,20 @@ ${consoleErrText || "(none)"}`,
         linearIssueUrl: linearOk?.issue_url ?? null,
         paperclipIssueUrl: paperclipOk?.issue_url ?? null,
       }),
-      body.severity === "blocker"
-        ? dispatchBlockerEmail({
-            reportId,
-            description: body.user_description,
-            route: body.context.route,
-            url: body.context.url,
-            reporterDisplayName,
-            reporterRole: (profile?.role as string | undefined) ?? "unknown",
-            signedScreenshotUrl: signedScreenshotUrlEmail,
-          })
-        : Promise.resolve(null),
+      // Quality Center Phase 1: email every severity, not just blocker.
+      // Stakeholder owners + Brian see the full inbox now; subject prefix
+      // makes triage one glance.
+      dispatchFlareEmail({
+        reportId,
+        severity: body.severity,
+        description: body.user_description,
+        route: body.context.route,
+        url: body.context.url,
+        reporterDisplayName,
+        reporterRole: (profile?.role as string | undefined) ?? "unknown",
+        signedScreenshotUrl: signedScreenshotUrlEmail,
+        status: "new",
+      }),
     ]);
     const slackResult = notifyDispatches[0];
     const emailResult = notifyDispatches[1];

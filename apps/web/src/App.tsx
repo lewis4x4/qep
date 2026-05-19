@@ -418,6 +418,9 @@ const FlowAdminPage = lazy(() =>
 const FlareAdminPage = lazy(() =>
   import("./features/admin/pages/FlareAdminPage").then((m) => ({ default: m.FlareAdminPage }))
 );
+const FlareBoardPage = lazy(() =>
+  import("./features/admin/pages/FlareBoardPage").then((m) => ({ default: m.FlareBoardPage }))
+);
 const IntelliDealerImportDashboardPage = lazy(() =>
   import("./features/admin/pages/IntelliDealerImportDashboardPage").then((m) => ({ default: m.IntelliDealerImportDashboardPage }))
 );
@@ -2612,6 +2615,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <FlareAdminPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/flare/board"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <FlareBoardPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

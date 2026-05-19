@@ -372,6 +372,9 @@ verify_jwt = false
 [functions.flare-notify-fixed]
 verify_jwt = false
 
+[functions.flare-status-update]
+verify_jwt = false
+
 [functions.handoff-trust-scorer]
 verify_jwt = false
 

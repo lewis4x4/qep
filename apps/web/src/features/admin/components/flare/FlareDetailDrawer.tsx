@@ -27,7 +27,16 @@ export interface FlareReportRow {
   severity: "blocker" | "bug" | "annoyance" | "idea" | "aha_moment";
   screenshot_path: string | null;
   dom_snapshot_path: string | null;
-  status: "new" | "triaged" | "in_progress" | "fixed" | "wontfix" | "duplicate";
+  status:
+    | "new"
+    | "acknowledged"
+    | "investigating"
+    | "fixing"
+    | "shipped"
+    | "verified"
+    | "wont_fix"
+    | "duplicate"
+    | "needs_info";
   user_description: string;
   url: string;
   route: string | null;
@@ -81,7 +90,16 @@ function toSeverity(value: string): FlareReportRow["severity"] {
 }
 
 function toStatus(value: string): FlareReportRow["status"] {
-  if (value === "triaged" || value === "in_progress" || value === "fixed" || value === "wontfix" || value === "duplicate") {
+  if (
+    value === "acknowledged" ||
+    value === "investigating" ||
+    value === "fixing" ||
+    value === "shipped" ||
+    value === "verified" ||
+    value === "wont_fix" ||
+    value === "duplicate" ||
+    value === "needs_info"
+  ) {
     return value;
   }
   return "new";
@@ -215,11 +233,14 @@ const SEVERITY_TONE: Record<FlareReportRow["severity"], "red" | "orange" | "yell
 
 const STATUS_TONE: Record<FlareReportRow["status"], "blue" | "purple" | "orange" | "green" | "neutral" | "red"> = {
   new: "blue",
-  triaged: "purple",
-  in_progress: "orange",
-  fixed: "green",
-  wontfix: "neutral",
+  acknowledged: "purple",
+  investigating: "purple",
+  fixing: "orange",
+  shipped: "green",
+  verified: "green",
+  wont_fix: "neutral",
   duplicate: "neutral",
+  needs_info: "neutral",
 };
 
 const EMPTY_ARTIFACT_URLS: { screenshotUrl: string | null; domUrl: string | null } = {
@@ -273,14 +294,14 @@ export function FlareDetailDrawer({ report, onClose }: FlareDetailDrawerProps) {
         status: input.status,
         triaged_at: new Date().toISOString(),
       };
-      if (input.status === "fixed") {
+      if (input.status === "shipped" || input.status === "verified") {
         patch.fixed_at = new Date().toISOString();
         if (input.fix_deploy_sha) patch.fix_deploy_sha = input.fix_deploy_sha;
       }
       const { error } = await db.from("flare_reports").update(patch).eq("id", report.id);
       if (error) throw new Error(error.message || "Update failed");
-      // Fire close-the-loop notify on transitions to fixed
-      if (input.status === "fixed") {
+      // Fire close-the-loop notify on transitions to shipped or verified
+      if (input.status === "shipped" || input.status === "verified") {
         await notifyFlareFixed(report.id);
       }
     },
@@ -470,26 +491,28 @@ export function FlareDetailDrawer({ report, onClose }: FlareDetailDrawerProps) {
           )}
 
           {/* Status transition actions */}
-          {report.status !== "fixed" && report.status !== "wontfix" && (
+          {report.status !== "shipped" &&
+            report.status !== "verified" &&
+            report.status !== "wont_fix" && (
             <Card className="p-3">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Triage actions</p>
               <div className="flex flex-wrap gap-2">
                 {report.status === "new" && (
                   <Button size="sm" variant="outline"
-                    onClick={() => updateMutation.mutate({ status: "triaged" })}
+                    onClick={() => updateMutation.mutate({ status: "acknowledged" })}
                     disabled={updateMutation.isPending}>
-                    <Check className="mr-1 h-3 w-3" /> Mark triaged
+                    <Check className="mr-1 h-3 w-3" /> Acknowledge
                   </Button>
                 )}
-                {(report.status === "new" || report.status === "triaged") && (
+                {(report.status === "new" || report.status === "acknowledged") && (
                   <Button size="sm" variant="outline"
-                    onClick={() => updateMutation.mutate({ status: "in_progress" })}
+                    onClick={() => updateMutation.mutate({ status: "fixing" })}
                     disabled={updateMutation.isPending}>
                     Start fixing
                   </Button>
                 )}
                 <Button size="sm" variant="ghost"
-                  onClick={() => updateMutation.mutate({ status: "wontfix" })}
+                  onClick={() => updateMutation.mutate({ status: "wont_fix" })}
                   disabled={updateMutation.isPending}>
                   <XCircle className="mr-1 h-3 w-3" /> Won't fix
                 </Button>
@@ -509,10 +532,10 @@ export function FlareDetailDrawer({ report, onClose }: FlareDetailDrawerProps) {
                   className="flex-1 rounded-md border border-border bg-card px-2 py-1 text-xs font-mono"
                 />
                 <Button size="sm"
-                  onClick={() => updateMutation.mutate({ status: "fixed", fix_deploy_sha: deploySha || undefined })}
+                  onClick={() => updateMutation.mutate({ status: "shipped", fix_deploy_sha: deploySha || undefined })}
                   disabled={updateMutation.isPending}>
                   {updateMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
-                  Mark fixed
+                  Mark shipped
                 </Button>
               </div>
               {updateMutation.isError && (
@@ -523,7 +546,7 @@ export function FlareDetailDrawer({ report, onClose }: FlareDetailDrawerProps) {
             </Card>
           )}
 
-          {report.status === "fixed" && report.fixed_at && (
+          {(report.status === "shipped" || report.status === "verified") && report.fixed_at && (
             <Card className="border-emerald-500/30 bg-emerald-500/5 p-3">
               <p className="text-xs text-emerald-400">
                 <Check className="inline h-3 w-3" /> Fixed {new Date(report.fixed_at).toLocaleString()}

@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
-import { Flame, AlertOctagon, Bug, Search, Lightbulb } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Flame, AlertOctagon, Bug, Search, Lightbulb, LayoutGrid } from "lucide-react";
 import { ForwardForecastBar, FilterBar, StatusChipStack, type FilterDef } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import type { Database } from "@/lib/database.types";
@@ -19,11 +21,14 @@ const SEVERITY_TONE: Record<string, "red" | "orange" | "yellow" | "blue" | "neut
 
 const STATUS_TONE: Record<string, "blue" | "purple" | "orange" | "green" | "neutral"> = {
   new: "blue",
-  triaged: "purple",
-  in_progress: "orange",
-  fixed: "green",
-  wontfix: "neutral",
+  acknowledged: "purple",
+  investigating: "purple",
+  fixing: "orange",
+  shipped: "green",
+  verified: "green",
+  wont_fix: "neutral",
   duplicate: "neutral",
+  needs_info: "neutral",
 };
 
 const FILTERS: FilterDef[] = [
@@ -40,14 +45,21 @@ const FILTERS: FilterDef[] = [
     key: "status", label: "Status", type: "select",
     options: [
       { value: "new", label: "New" },
-      { value: "triaged", label: "Triaged" },
-      { value: "in_progress", label: "In progress" },
-      { value: "fixed", label: "Fixed" },
-      { value: "wontfix", label: "Won't fix" },
+      { value: "acknowledged", label: "Acknowledged" },
+      { value: "investigating", label: "Investigating" },
+      { value: "fixing", label: "Fixing" },
+      { value: "shipped", label: "Shipped" },
+      { value: "verified", label: "Verified" },
+      { value: "wont_fix", label: "Won't fix" },
+      { value: "needs_info", label: "Needs info" },
     ],
   },
   { key: "route", label: "Route", type: "text" },
 ];
+
+// Migration 583 renamed legacy status values; "closed" buckets (no longer
+// counted as open) are now: shipped, verified, wont_fix, duplicate.
+const CLOSED_STATUSES = ["shipped", "verified", "wont_fix", "duplicate"];
 
 export function FlareAdminPage() {
   const [selectedReport, setSelectedReport] = useState<FlareReportRow | null>(null);
@@ -79,24 +91,36 @@ export function FlareAdminPage() {
 
   // Rollup tile counts
   const counts = useMemo(() => {
-    const blockers = reports.filter((r) => r.severity === "blocker" && !["fixed", "wontfix", "duplicate"].includes(r.status)).length;
-    const bugs = reports.filter((r) => r.severity === "bug" && !["fixed", "wontfix", "duplicate"].includes(r.status)).length;
+    const blockers = reports.filter((r) => r.severity === "blocker" && !CLOSED_STATUSES.includes(r.status)).length;
+    const bugs = reports.filter((r) => r.severity === "bug" && !CLOSED_STATUSES.includes(r.status)).length;
     const ideas = reports.filter((r) => r.severity === "idea").length;
     const sevenDaysAgo = Date.now() - 7 * 86_400_000;
-    const fixedRecent = reports.filter((r) => r.status === "fixed" && r.fixed_at && new Date(r.fixed_at).getTime() > sevenDaysAgo).length;
+    const fixedRecent = reports.filter(
+      (r) =>
+        (r.status === "shipped" || r.status === "verified") &&
+        r.fixed_at &&
+        new Date(r.fixed_at).getTime() > sevenDaysAgo,
+    ).length;
     return { blockers, bugs, ideas, fixedRecent };
   }, [reports]);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-      <div>
-        <div className="flex items-center gap-2">
-          <Flame className="h-5 w-5 text-qep-orange" aria-hidden />
-          <h1 className="text-xl font-bold text-foreground">Flare Triage</h1>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="flex items-center gap-2">
+            <Flame className="h-5 w-5 text-qep-orange" aria-hidden />
+            <h1 className="text-xl font-bold text-foreground">Flare Triage</h1>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Wave 6.11 — in-app context-aware bug capture. Press <kbd className="rounded bg-muted px-1 text-[10px]">⌘+⇧+B</kbd> on any page to file a flare.
+          </p>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Wave 6.11 — in-app context-aware bug capture. Press <kbd className="rounded bg-muted px-1 text-[10px]">⌘+⇧+B</kbd> on any page to file a flare.
-        </p>
+        <Button asChild variant="outline" size="sm">
+          <Link to="/admin/flare/board">
+            <LayoutGrid className="mr-1 h-3.5 w-3.5" /> Board view
+          </Link>
+        </Button>
       </div>
 
       <ForwardForecastBar

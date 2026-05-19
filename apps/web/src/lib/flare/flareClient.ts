@@ -8,7 +8,23 @@ import { enqueueSubmission } from "./submitQueue";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUBMIT_URL = `${SUPABASE_URL}/functions/v1/flare-submit`;
 const NOTIFY_FIXED_URL = `${SUPABASE_URL}/functions/v1/flare-notify-fixed`;
+const STATUS_UPDATE_URL = `${SUPABASE_URL}/functions/v1/flare-status-update`;
 const DEDUPE_URL = `${SUPABASE_URL}/functions/v1/flare-submit/dedupe`;
+
+export type FlareBoardStatus =
+  | "new" | "acknowledged" | "investigating" | "fixing"
+  | "shipped" | "verified" | "wont_fix" | "duplicate" | "needs_info";
+
+export type FlarePriority = "low" | "medium" | "high" | "urgent";
+
+export interface FlareStatusUpdateInput {
+  flare_id: string;
+  status: FlareBoardStatus;
+  eta_date?: string | null;
+  owner_summary?: string | null;
+  priority?: FlarePriority | null;
+  note?: string | null;
+}
 
 async function authHeaders(): Promise<Record<string, string>> {
   const session = (await supabase.auth.getSession()).data.session;
@@ -83,6 +99,22 @@ export async function notifyFlareFixed(reportId: string): Promise<void> {
     }
   } catch (err) {
     console.warn("[flare] notify-fixed error:", err);
+  }
+}
+
+export async function updateFlareStatus(input: FlareStatusUpdateInput): Promise<void> {
+  const res = await fetch(STATUS_UPDATE_URL, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    let detail = `status_update_failed_${res.status}`;
+    try {
+      const body = await res.json();
+      if (body && typeof body.error === "string") detail = body.error;
+    } catch { /* ignore */ }
+    throw new Error(detail);
   }
 }
 
