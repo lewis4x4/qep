@@ -19,8 +19,8 @@
 //     table chronically out of sync with the repo.
 //
 // What this does:
-//   1. Resolves an access token (env SUPABASE_ACCESS_TOKEN, or the
-//      macOS keychain entry the `supabase` CLI stores after `supabase login`).
+//   1. Resolves an access token (env SUPABASE_ACCESS_TOKEN, or the OS
+//      keyring entry the `supabase` CLI stores after `supabase login`).
 //   2. Reads every NNN_name.sql in supabase/migrations/.
 //   3. Queries supabase_migrations.schema_migrations on the remote to see
 //      which NNN versions are already applied.
@@ -61,7 +61,7 @@
 //     rolled back cleanly.
 // ============================================================================
 
-import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { loadLocalEnv } from "./_shared/local-env.mjs";
@@ -84,14 +84,24 @@ const VERBOSE = args.has("--verbose") || args.has("-v");
 // someone applied out-of-band and forgot to stamp schema_migrations".
 // Use only after confirming every signature object is present on remote.
 function parseStampList() {
-  const flagIdx = rawArgs.findIndex((a) => a === "--stamp" || a.startsWith("--stamp="));
+  const flagIdx = rawArgs.findIndex((a) =>
+    a === "--stamp" || a.startsWith("--stamp=")
+  );
   if (flagIdx < 0) return null;
   const arg = rawArgs[flagIdx];
-  const value = arg.includes("=") ? arg.slice(arg.indexOf("=") + 1) : rawArgs[flagIdx + 1];
-  if (!value) die("--stamp requires a comma-separated version list, e.g. --stamp=304,305,316");
+  const value = arg.includes("=")
+    ? arg.slice(arg.indexOf("=") + 1)
+    : rawArgs[flagIdx + 1];
+  if (!value) {
+    die(
+      "--stamp requires a comma-separated version list, e.g. --stamp=304,305,316",
+    );
+  }
   const versions = value.split(",").map((s) => s.trim()).filter(Boolean);
   for (const v of versions) {
-    if (!/^\d{3}$/.test(v)) die(`invalid stamp version "${v}" — must be 3 digits`);
+    if (!/^\d{3}$/.test(v)) {
+      die(`invalid stamp version "${v}" — must be 3 digits`);
+    }
   }
   return versions;
 }
@@ -101,8 +111,12 @@ function die(msg, code = 1) {
   console.error(`db-push: ${msg}`);
   process.exit(code);
 }
-function info(msg) { console.log(`db-push: ${msg}`); }
-function vinfo(msg) { if (VERBOSE) console.log(`db-push: ${msg}`); }
+function info(msg) {
+  console.log(`db-push: ${msg}`);
+}
+function vinfo(msg) {
+  if (VERBOSE) console.log(`db-push: ${msg}`);
+}
 
 // ── 1. Resolve project ref + access token ─────────────────────────────────
 function resolveProjectRef() {
@@ -113,7 +127,34 @@ function resolveProjectRef() {
     const m = toml.match(/^project_id\s*=\s*"([a-z0-9]+)"/m);
     if (m) return m[1];
   } catch { /* fall through */ }
-  die("no project ref — set SUPABASE_PROJECT_REF or put project_id in supabase/config.toml");
+  die(
+    "no project ref — set SUPABASE_PROJECT_REF or put project_id in supabase/config.toml",
+  );
+}
+
+function decodeKeyringToken(raw, sourceLabel) {
+  const value = raw.trim();
+  if (!value) return null;
+
+  // go-keyring wraps values as `go-keyring-base64:<base64>` or
+  // `go-keyring-encrypted:<aes>`. We only decode the base64 form here;
+  // the encrypted form requires the CLI's keyring key (not exposed).
+  if (value.startsWith("go-keyring-base64:")) {
+    const decoded = Buffer.from(
+      value.slice("go-keyring-base64:".length),
+      "base64",
+    ).toString("utf8");
+    vinfo(`loaded access token from ${sourceLabel} (Supabase CLI base64)`);
+    return decoded;
+  }
+
+  // Legacy plain-string storage.
+  if (value.length > 20 && !value.startsWith("go-keyring-")) {
+    vinfo(`loaded access token from ${sourceLabel} (plain)`);
+    return value;
+  }
+
+  return null;
 }
 
 function resolveAccessToken() {
@@ -124,36 +165,38 @@ function resolveAccessToken() {
   }
 
   // The Supabase CLI stores its token in the OS keyring under
-  // service="Supabase CLI", account="supabase". On macOS we can read
-  // it via `security find-generic-password`. Linux is a TODO (libsecret
-  // via `secret-tool` works similarly).
+  // service="Supabase CLI", account="supabase".
   if (process.platform === "darwin") {
     try {
       const raw = execSync(
         "security find-generic-password -s 'Supabase CLI' -a 'supabase' -w",
         { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
-      ).trim();
-      // go-keyring wraps values as `go-keyring-base64:<base64>` or
-      // `go-keyring-encrypted:<aes>`. We only decode the base64 form here;
-      // the encrypted form requires the CLI's keyring key (not exposed).
-      if (raw.startsWith("go-keyring-base64:")) {
-        const decoded = Buffer.from(raw.slice("go-keyring-base64:".length), "base64").toString("utf8");
-        vinfo("loaded access token from macOS keychain (Supabase CLI)");
-        return decoded;
-      }
-      // Legacy plain-string storage.
-      if (raw.length > 20 && !raw.startsWith("go-keyring-")) {
-        vinfo("loaded access token from macOS keychain (plain)");
-        return raw;
-      }
+      );
+      const token = decodeKeyringToken(raw, "macOS keychain");
+      if (token) return token;
     } catch {
       /* keychain miss is fine — fall through to the helpful error */
+    }
+  } else if (process.platform === "linux") {
+    try {
+      const raw = execSync(
+        "secret-tool lookup service 'Supabase CLI' account 'supabase'",
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+      );
+      const token = decodeKeyringToken(raw, "Linux libsecret keyring");
+      if (token) return token;
+    } catch {
+      die(
+        "no access token. On Linux, install libsecret's `secret-tool` " +
+          "(`sudo apt-get install libsecret-tools` or distro equivalent), run `supabase login`, " +
+          "or export SUPABASE_ACCESS_TOKEN before running this command.",
+      );
     }
   }
 
   die(
-    "no access token. Either run `supabase login` first (we'll read the " +
-    "CLI's keychain entry automatically) or export SUPABASE_ACCESS_TOKEN.",
+    "no access token. Run `supabase login` first so this script can read the " +
+      "Supabase CLI OS keyring entry, or export SUPABASE_ACCESS_TOKEN.",
   );
 }
 
@@ -166,7 +209,11 @@ function readLocalMigrations() {
   for (const name of entries) {
     const m = name.match(FILENAME_PATTERN);
     if (!m) die(`filename does not match NNN_name.sql: ${name}`);
-    out.push({ version: m[1], filename: name, path: join(MIGRATIONS_DIR, name) });
+    out.push({
+      version: m[1],
+      filename: name,
+      path: join(MIGRATIONS_DIR, name),
+    });
   }
   return out;
 }
@@ -184,14 +231,20 @@ async function runSql(token, projectRef, query) {
   });
   const text = await res.text();
   let body;
-  try { body = JSON.parse(text); } catch { body = text; }
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = text;
+  }
   if (!res.ok) {
     const msg = typeof body === "object" && body?.message ? body.message : text;
     throw new Error(`HTTP ${res.status}: ${msg}`);
   }
   // The API returns 2xx + a `{ message }` body on some SQL errors too
   // (e.g. "Failed to run sql query: ERROR: …"). Surface those as failures.
-  if (body && typeof body === "object" && !Array.isArray(body) && body.message) {
+  if (
+    body && typeof body === "object" && !Array.isArray(body) && body.message
+  ) {
     throw new Error(body.message);
   }
   return body;
@@ -208,7 +261,9 @@ async function fetchRemoteVersions(token, projectRef) {
     return new Set(rows.map((r) => String(r.version)));
   } catch (e) {
     if (String(e.message).includes("does not exist")) {
-      info("remote supabase_migrations table not found — treating as fresh project");
+      info(
+        "remote supabase_migrations table not found — treating as fresh project",
+      );
       return new Set();
     }
     throw e;
@@ -222,8 +277,7 @@ async function applyOne(token, projectRef, mig) {
   // API forwards multi-statement SQL to Postgres as-is; a failure in
   // either part rolls back the other. `on conflict do nothing` guards
   // against a pre-existing stamp (manual out-of-band apply).
-  const sql =
-    "begin;\n" +
+  const sql = "begin;\n" +
     body.trimEnd() + "\n;\n" +
     `insert into supabase_migrations.schema_migrations (version) values ('${mig.version}') on conflict do nothing;\n` +
     "commit;\n";
@@ -247,7 +301,9 @@ async function stampOnly(token, projectRef, versions) {
 
 // ── 5. Orchestrate ─────────────────────────────────────────────────────────
 async function main() {
-  if (!existsSync(MIGRATIONS_DIR)) die(`migrations dir not found: ${MIGRATIONS_DIR}`);
+  if (!existsSync(MIGRATIONS_DIR)) {
+    die(`migrations dir not found: ${MIGRATIONS_DIR}`);
+  }
 
   const local = readLocalMigrations();
   if (local.length === 0) die("no local migrations");
@@ -265,13 +321,19 @@ async function main() {
   }
 
   const pending = local.filter((m) => !remote.has(m.version));
-  const extraRemote = [...remote].filter((v) => !local.some((m) => m.version === v));
+  const extraRemote = [...remote].filter((v) =>
+    !local.some((m) => m.version === v)
+  );
 
   info(`local migrations:       ${local.length}`);
   info(`already applied remote: ${remote.size}`);
   info(`pending to apply:       ${pending.length}`);
   if (extraRemote.length > 0) {
-    info(`remote has ${extraRemote.length} version(s) not in repo: ${extraRemote.join(", ")}`);
+    info(
+      `remote has ${extraRemote.length} version(s) not in repo: ${
+        extraRemote.join(", ")
+      }`,
+    );
   }
 
   // Stamp-only short-circuit: record the requested versions as applied and
@@ -283,7 +345,11 @@ async function main() {
     const localSet = new Set(local.map((m) => m.version));
     const unknown = STAMP_ONLY.filter((v) => !localSet.has(v));
     if (unknown.length > 0) {
-      die(`unknown version(s) for stamp (no matching local migration): ${unknown.join(", ")}`);
+      die(
+        `unknown version(s) for stamp (no matching local migration): ${
+          unknown.join(", ")
+        }`,
+      );
     }
     const toStamp = STAMP_ONLY.filter((v) => !remote.has(v));
     const alreadyStamped = STAMP_ONLY.filter((v) => remote.has(v));
@@ -296,7 +362,11 @@ async function main() {
     }
     info(`stamping (no SQL run): ${toStamp.join(", ")}`);
     const { stamped, skipped } = await stampOnly(token, projectRef, toStamp);
-    info(`stamped ${stamped.length} version(s)${skipped.length ? ` (race: ${skipped.join(", ")} pre-existed)` : ""}`);
+    info(
+      `stamped ${stamped.length} version(s)${
+        skipped.length ? ` (race: ${skipped.join(", ")} pre-existed)` : ""
+      }`,
+    );
     return;
   }
 

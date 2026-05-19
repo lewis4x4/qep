@@ -20,11 +20,12 @@
  *   pdi_default_cents     = 50_000  ($500)
  *   good_faith_pct        = 0.01  (1%)
  *   attachment_markup_pct = 0.20  (20%)
- *   Note: ⚠ PLACEHOLDER — Develon brand not in Slice 01 seed;
- *   update these when Angela configures Develon discount rates.
+ *   Note: fixture keeps the original Slice 02 discount assumptions so the CIL
+ *   approval regression remains stable across live catalog changes.
  *
- * Freight: 250_000¢ ($2,500)  ⚠ PLACEHOLDER
- *   TODO(slice-04): confirm Develon FL freight zone with Rylee.
+ * Freight: 250_000¢ ($2,500) synthetic regression input.
+ *   Live Supabase has no Develon FL freight zone as of 2026-05-19; this fixture
+ *   pins CIL approval math until Develon freight is configured in qb_freight_zones.
  *
  * CIL rebate: $7,500 = 750_000¢
  *   Source: SLICE_02_PRICING_ENGINE_CORE.md §"Fixture 3"
@@ -49,7 +50,7 @@
  *                    = Math.round(243_847.44) = 243_847
  *   subtotal_with_good_faith = 24_434_744 + 243_847 = 24_678_591
  *
- * STEP 5 — Freight ($2,500 PLACEHOLDER)
+ * STEP 5 — Freight ($2,500 synthetic regression input)
  *   freight_cents = 250_000
  *   subtotal_with_freight = 24_678_591 + 250_000 = 24_928_591
  *
@@ -91,9 +92,9 @@ import type { PriceQuoteRequest, QuoteContext } from "../../types";
 
 // ── Stable UUIDs ──────────────────────────────────────────────────────────────
 
-export const DEVELON_BRAND_ID       = "00000000-0000-0000-0000-000000000005";
+export const DEVELON_BRAND_ID = "00000000-0000-0000-0000-000000000005";
 export const DEVELON_DX225_MODEL_ID = "00000000-0000-0000-0000-000000000006";
-export const PROGRAM_CIL_7500_ID    = "00000000-0000-0000-0000-000000000021";
+export const PROGRAM_CIL_7500_ID = "00000000-0000-0000-0000-000000000021";
 
 // ── Request ───────────────────────────────────────────────────────────────────
 
@@ -120,7 +121,7 @@ export const CTX: QuoteContext = {
       id: DEVELON_BRAND_ID,
       code: "DEVELON",
       name: "Develon",
-      discount_configured: true, // ⚠ PLACEHOLDER — will be set by Angela
+      discount_configured: true, // fixture override for pricing-engine regression
       dealer_discount_pct: 0.30,
       markup_target_pct: 0.12,
       markup_floor_pct: 0.10,
@@ -130,7 +131,7 @@ export const CTX: QuoteContext = {
       attachment_markup_pct: 0.20,
     },
   },
-  freightCents: 250_000,  // ⚠ PLACEHOLDER — TODO(slice-04): confirm Develon FL freight with Rylee
+  freightCents: 250_000, // synthetic regression input; no live Develon FL freight zone yet
   freightZone: "FL_LARGE",
   taxRatePct: 0.07,
   programs: [
@@ -154,40 +155,40 @@ export const CTX: QuoteContext = {
 
 export const EXPECTED = {
   breakdown: {
-    listPriceCents:           34_835_349,
-    dealerDiscountCents:      10_450_605,
-    dealerDiscountPct:        0.30,
-    discountedPriceCents:     24_384_744,
-    pdiCents:                     50_000,
-    goodFaithCents:              243_847,
-    goodFaithPct:                0.01,
-    freightCents:                250_000,
-    freightZone:             "FL_LARGE",
-    tariffCents:               1_741_767,
-    tariffPct:                   0.05,
-    equipmentCostCents:       26_670_358,
-    markupPct:                    0.12,
-    markupCents:               3_200_443,
-    baselineSalesPriceCents:  29_870_801,
+    listPriceCents: 34_835_349,
+    dealerDiscountCents: 10_450_605,
+    dealerDiscountPct: 0.30,
+    discountedPriceCents: 24_384_744,
+    pdiCents: 50_000,
+    goodFaithCents: 243_847,
+    goodFaithPct: 0.01,
+    freightCents: 250_000,
+    freightZone: "FL_LARGE",
+    tariffCents: 1_741_767,
+    tariffPct: 0.05,
+    equipmentCostCents: 26_670_358,
+    markupPct: 0.12,
+    markupCents: 3_200_443,
+    baselineSalesPriceCents: 29_870_801,
   },
 
-  customerSubtotalCents:             29_870_801,
-  customerRebatesCents:                 750_000,  // CIL $7,500
-  customerPriceAfterRebatesCents:    29_120_801,
-  customerTradeInAllowanceCents:              0,
-  taxRatePct:                            0.07,
-  taxCents:                          2_038_456,  // Math.round(29_120_801 × 0.07)
-  docFeeCents:                          40_000,
-  customerTotalCents:                31_199_257,  // 29_120_801 + 2_038_456 + 40_000
+  customerSubtotalCents: 29_870_801,
+  customerRebatesCents: 750_000, // CIL $7,500
+  customerPriceAfterRebatesCents: 29_120_801,
+  customerTradeInAllowanceCents: 0,
+  taxRatePct: 0.07,
+  taxCents: 2_038_456, // Math.round(29_120_801 × 0.07)
+  docFeeCents: 40_000,
+  customerTotalCents: 31_199_257, // 29_120_801 + 2_038_456 + 40_000
 
-  dealerCostTotalCents:    26_670_358,
-  dealerRevenueCents:      29_120_801,
-  grossMarginCents:         2_450_443,
-  grossMarginPctApprox:     0.0841,  // 2_450_443 / 29_120_801
-  markupAchievedPctApprox:  0.0919,  // 2_450_443 / 26_670_358 — below 10% floor!
-  commissionCents:            367_566,  // Math.floor(2_450_443 × 0.15)
+  dealerCostTotalCents: 26_670_358,
+  dealerRevenueCents: 29_120_801,
+  grossMarginCents: 2_450_443,
+  grossMarginPctApprox: 0.0841, // 2_450_443 / 29_120_801
+  markupAchievedPctApprox: 0.0919, // 2_450_443 / 26_670_358 — below 10% floor!
+  commissionCents: 367_566, // Math.floor(2_450_443 × 0.15)
 
-  requiresApproval: true,            // markup < 10% floor triggers approval
-  approvalReasonsLength: 1,          // one reason: markup below floor
+  requiresApproval: true, // markup < 10% floor triggers approval
+  approvalReasonsLength: 1, // one reason: markup below floor
   programStackingWarnings: [] as string[],
 } as const;

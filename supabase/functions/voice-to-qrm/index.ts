@@ -17,7 +17,7 @@
  *
  * Auth: rep/admin/manager/owner
  */
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import {
   optionsResponse,

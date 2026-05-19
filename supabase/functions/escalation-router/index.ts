@@ -17,14 +17,19 @@
  * Auth: rep/admin/manager/owner OR service-role OR internal-service-secret
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import {
+  optionsResponse,
+  safeJsonError,
+  safeJsonOk,
+} from "../_shared/safe-cors.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 import {
+  type ManagerCandidate,
   resolveEscalationManager,
   scoreEscalationSeverity,
   suggestResolution,
-  type ManagerCandidate,
 } from "../_shared/escalation-intelligence.ts";
 
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
@@ -50,7 +55,8 @@ async function generateEscalationEmail(
   input: EscalationInput & { resolved_manager_name?: string | null },
   contactName: string,
 ): Promise<string> {
-  const managerName = input.resolved_manager_name || input.department_manager_name || "Manager";
+  const managerName = input.resolved_manager_name ||
+    input.department_manager_name || "Manager";
   if (!OPENAI_API_KEY) {
     return `Dear ${managerName},\n\nI am writing to bring to your attention an issue reported by ${contactName} during a follow-up call.\n\n${input.issue_description}\n\nPlease reach out to the customer at your earliest convenience.\n\nThank you.`;
   }
@@ -66,7 +72,10 @@ async function generateEscalationEmail(
         model: "gpt-4o-mini",
         messages: [{
           role: "user",
-          content: `Write a professional internal email from a QEP sales rep to ${managerName} at QEP ${input.branch || ""} branch about a customer issue.
+          content:
+            `Write a professional internal email from a QEP sales rep to ${managerName} at QEP ${
+              input.branch || ""
+            } branch about a customer issue.
 
 Customer: ${contactName}
 Department: ${input.department || "Service"}
@@ -87,7 +96,8 @@ Write just the email body, no subject line.`,
 
     if (!res.ok) return input.issue_description;
     const data = await res.json();
-    return data.choices?.[0]?.message?.content?.trim() || input.issue_description;
+    return data.choices?.[0]?.message?.content?.trim() ||
+      input.issue_description;
   } catch {
     return input.issue_description;
   }
@@ -98,15 +108,16 @@ Write just the email body, no subject line.`,
 function isServiceRoleRequest(req: Request): boolean {
   const authHeader = req.headers.get("Authorization") ?? "";
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  const internalSecretHeader = req.headers.get("x-internal-service-secret") ?? "";
-  const internalServiceSecret =
-    Deno.env.get("INTERNAL_SERVICE_SECRET") ??
+  const internalSecretHeader = req.headers.get("x-internal-service-secret") ??
+    "";
+  const internalServiceSecret = Deno.env.get("INTERNAL_SERVICE_SECRET") ??
     Deno.env.get("DGE_INTERNAL_SERVICE_SECRET") ??
     "";
 
   return (
-    (serviceRoleKey.length > 0 && authHeader === `Bearer ${serviceRoleKey}`)
-    || (internalServiceSecret.length > 0 && internalSecretHeader === internalServiceSecret)
+    (serviceRoleKey.length > 0 && authHeader === `Bearer ${serviceRoleKey}`) ||
+    (internalServiceSecret.length > 0 &&
+      internalSecretHeader === internalServiceSecret)
   );
 }
 
@@ -129,37 +140,29 @@ Deno.serve(async (req) => {
 
     const serviceRole = isServiceRoleRequest(req);
 
-    // Per-user path: verify JWT and derive the caller's id for attribution.
+    // Per-user path: verify JWT and derive the caller's workspace before
+    // any admin-client mutation. Service/internal callers are still allowed
+    // for voice-to-QRM dispatch, but user callers must stay workspace-bound.
     let callerUserId: string | null = null;
     let callerWorkspaceId: string | null = null;
     if (!serviceRole) {
-      const authHeader = req.headers.get("Authorization")?.trim();
-      if (!authHeader) return safeJsonError("Unauthorized", 401, origin);
-
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } },
+      const auth = await requireServiceUser(
+        req.headers.get("Authorization"),
+        origin,
       );
-
-      const token = authHeader.replace(/^Bearer\s+/i, "");
-      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-      if (authError || !user) return safeJsonError("Unauthorized", 401, origin);
-
-      callerUserId = user.id;
-
-      const { data: profile } = await supabaseAdmin
-        .from("profiles")
-        .select("workspace_id")
-        .eq("id", user.id)
-        .maybeSingle();
-      callerWorkspaceId = (profile as { workspace_id?: string } | null)?.workspace_id ?? null;
+      if (!auth.ok) return auth.response;
+      callerUserId = auth.userId;
+      callerWorkspaceId = auth.workspaceId;
     }
 
     const body: EscalationInput = await req.json();
 
     if (!body.deal_id || !body.issue_description) {
-      return safeJsonError("deal_id and issue_description are required", 400, origin);
+      return safeJsonError(
+        "deal_id and issue_description are required",
+        400,
+        origin,
+      );
     }
 
     // Look up the deal: amount for severity scoring + workspace for manager scope.
@@ -169,9 +172,20 @@ Deno.serve(async (req) => {
       .eq("id", body.deal_id)
       .maybeSingle();
 
-    const dealRow = deal as { amount: number | null; workspace_id: string; assigned_rep_id: string | null } | null;
-    const dealAmount = dealRow?.amount ?? null;
-    const dealWorkspace = dealRow?.workspace_id ?? callerWorkspaceId;
+    const dealRow = deal as {
+      amount: number | null;
+      workspace_id: string;
+      assigned_rep_id: string | null;
+    } | null;
+    if (!dealRow) {
+      return safeJsonError("Deal not found", 404, origin);
+    }
+    if (!serviceRole && dealRow.workspace_id !== callerWorkspaceId) {
+      return safeJsonError("Forbidden", 403, origin);
+    }
+
+    const dealAmount = dealRow.amount ?? null;
+    const dealWorkspace = dealRow.workspace_id;
 
     if (!dealWorkspace) {
       return safeJsonError("Could not resolve workspace for deal", 400, origin);
@@ -181,18 +195,33 @@ Deno.serve(async (req) => {
     // rep so rows carry a non-null `escalated_by` (matches existing semantics).
     const escalatedBy = callerUserId ?? dealRow?.assigned_rep_id ?? null;
 
-    // Contact name
+    // Contact name. A caller-supplied contact must belong to the same
+    // workspace as the deal; otherwise it could attach cross-workspace PII
+    // to the escalation task/ticket through the admin client.
     let contactName = "Customer";
+    let validatedContactId: string | null = null;
     if (body.contact_id) {
       const { data: contact } = await supabaseAdmin
         .from("crm_contacts")
-        .select("first_name, last_name")
+        .select("first_name, last_name, workspace_id")
         .eq("id", body.contact_id)
+        .eq("workspace_id", dealWorkspace)
         .maybeSingle();
-      if (contact) {
-        const c = contact as { first_name: string | null; last_name: string | null };
-        contactName = `${c.first_name || ""} ${c.last_name || ""}`.trim() || "Customer";
+      if (!contact) {
+        return safeJsonError(
+          "Contact not found for deal workspace",
+          400,
+          origin,
+        );
       }
+      const c = contact as {
+        first_name: string | null;
+        last_name: string | null;
+        workspace_id: string;
+      };
+      validatedContactId = body.contact_id;
+      contactName = `${c.first_name || ""} ${c.last_name || ""}`.trim() ||
+        "Customer";
     }
 
     // Score severity (Slice 2.5).
@@ -217,17 +246,18 @@ Deno.serve(async (req) => {
         .eq("workspace_id", dealWorkspace)
         .in("role", ["admin", "manager", "owner"]);
 
-      const pool: ManagerCandidate[] = ((candidates ?? []) as Array<Record<string, unknown>>).map((row) => ({
-        id: String(row.id),
-        full_name: (row.full_name as string | null) ?? null,
-        email: (row.email as string | null) ?? null,
-        role: String(row.role),
-        iron_role: (row.iron_role as string | null) ?? null,
-        // We don't have a department→profile mapping table yet, so no
-        // candidate is marked department_match; the resolver will fall
-        // through to iron_manager / workspace admin.
-        department_match: false,
-      }));
+      const pool: ManagerCandidate[] =
+        ((candidates ?? []) as Array<Record<string, unknown>>).map((row) => ({
+          id: String(row.id),
+          full_name: (row.full_name as string | null) ?? null,
+          email: (row.email as string | null) ?? null,
+          role: String(row.role),
+          iron_role: (row.iron_role as string | null) ?? null,
+          // We don't have a department→profile mapping table yet, so no
+          // candidate is marked department_match; the resolver will fall
+          // through to iron_manager / workspace admin.
+          department_match: false,
+        }));
 
       const resolved = resolveEscalationManager({
         department: body.department,
@@ -257,9 +287,11 @@ Deno.serve(async (req) => {
       .insert({
         workspace_id: dealWorkspace,
         activity_type: "task",
-        body: `Follow up with ${resolvedManagerName || body.department || "department"} about ${contactName}'s issue: ${body.issue_description}`,
+        body: `Follow up with ${
+          resolvedManagerName || body.department || "department"
+        } about ${contactName}'s issue: ${body.issue_description}`,
         deal_id: body.deal_id,
-        contact_id: body.contact_id,
+        contact_id: validatedContactId,
         created_by: escalatedBy,
         metadata: {
           source: "escalation_router",
@@ -278,7 +310,7 @@ Deno.serve(async (req) => {
       .from("escalation_tickets")
       .insert({
         deal_id: body.deal_id,
-        contact_id: body.contact_id,
+        contact_id: validatedContactId,
         touchpoint_id: body.touchpoint_id,
         issue_description: body.issue_description,
         department: body.department,
@@ -299,25 +331,33 @@ Deno.serve(async (req) => {
       return safeJsonError("Failed to create escalation ticket", 500, origin);
     }
 
-    return safeJsonOk({
-      ticket,
-      email_draft: emailContent,
-      follow_up_task: task,
-      contact_name: contactName,
-      severity,
-      resolution_hint: suggestedResolution,
-      manager: {
-        name: resolvedManagerName,
-        email: resolvedManagerEmail,
-        user_id: resolvedManagerUserId,
-        reason: managerResolutionReason,
+    return safeJsonOk(
+      {
+        ticket,
+        email_draft: emailContent,
+        follow_up_task: task,
+        contact_name: contactName,
+        severity,
+        resolution_hint: suggestedResolution,
+        manager: {
+          name: resolvedManagerName,
+          email: resolvedManagerEmail,
+          user_id: resolvedManagerUserId,
+          reason: managerResolutionReason,
+        },
+        source: body.source ?? "manual",
+        detection_reason: body.detection_reason ?? null,
       },
-      source: body.source ?? "manual",
-      detection_reason: body.detection_reason ?? null,
-    }, origin, 201);
+      origin,
+      201,
+    );
   } catch (err) {
     captureEdgeException(err, { fn: "escalation-router", req });
     console.error("escalation-router error:", err);
-    return safeJsonError("Internal server error", 500, req.headers.get("origin"));
+    return safeJsonError(
+      "Internal server error",
+      500,
+      req.headers.get("origin"),
+    );
   }
 });

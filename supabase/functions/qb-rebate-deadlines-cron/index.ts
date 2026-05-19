@@ -28,12 +28,12 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import {
   optionsResponse,
-  safeJsonOk,
   safeJsonError,
+  safeJsonOk,
 } from "../_shared/safe-cors.ts";
 import {
-  getUpcomingRebateDeadlines,
   enrichWithProgramDetails,
+  getUpcomingRebateDeadlines,
 } from "../../../apps/web/src/lib/programs/rebate-tracker.ts";
 import type { RebateDeadline } from "../../../apps/web/src/lib/programs/types.ts";
 
@@ -54,11 +54,15 @@ Deno.serve(async (req: Request) => {
     return safeJsonError("Unauthorized — service role required", 401, origin);
   }
 
-  const supabaseUrl     = Deno.env.get("SUPABASE_URL")!;
-  const serviceRoleKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
   if (!supabaseUrl || !serviceRoleKey) {
-    return safeJsonError("Server misconfiguration: SUPABASE_URL or SERVICE_ROLE_KEY missing", 500, origin);
+    return safeJsonError(
+      "Server misconfiguration: SUPABASE_URL or SERVICE_ROLE_KEY missing",
+      500,
+      origin,
+    );
   }
 
   // Service-role client — bypasses RLS so the cron can see all workspaces
@@ -68,7 +72,9 @@ Deno.serve(async (req: Request) => {
   // ── Fetch deadlines ──────────────────────────────────────────────────────────
   let deadlines: RebateDeadline[];
   try {
-    const raw = await getUpcomingRebateDeadlines({ daysAhead: ALERT_DAYS_AHEAD }, programSupabase);
+    const raw = await getUpcomingRebateDeadlines({
+      daysAhead: ALERT_DAYS_AHEAD,
+    }, programSupabase);
     deadlines = await enrichWithProgramDetails(raw, programSupabase);
   } catch (err: unknown) {
     console.error("[qb-rebate-deadlines-cron] fetch error:", err);
@@ -76,7 +82,11 @@ Deno.serve(async (req: Request) => {
   }
 
   if (deadlines.length === 0) {
-    console.log("[qb-rebate-deadlines-cron] No rebate deadlines in the next", ALERT_DAYS_AHEAD, "days.");
+    console.log(
+      "[qb-rebate-deadlines-cron] No rebate deadlines in the next",
+      ALERT_DAYS_AHEAD,
+      "days.",
+    );
     return safeJsonOk({ notified: 0, deadlines: [] }, origin);
   }
 
@@ -109,17 +119,21 @@ Deno.serve(async (req: Request) => {
   }> = [];
 
   for (const d of deadlines) {
-    const urgencyLabel =
-      d.urgency === "overdue"  ? "OVERDUE — past the filing deadline!"
-      : d.urgency === "red"    ? `${d.daysRemaining} days left — act now`
-      : d.urgency === "yellow" ? `${d.daysRemaining} days left`
+    const urgencyLabel = d.urgency === "overdue"
+      ? "OVERDUE — past the filing deadline!"
+      : d.urgency === "red"
+      ? `${d.daysRemaining} days left — act now`
+      : d.urgency === "yellow"
+      ? `${d.daysRemaining} days left`
       : `${d.daysRemaining} days left`;
 
     const title = `Rebate deadline: ${d.dealNumber} — ${urgencyLabel}`;
-    const body  = d.urgency === "overdue"
+    const body = d.urgency === "overdue"
       ? `The rebate filing deadline for deal ${d.dealNumber} (${d.companyName}) has passed. File with the manufacturer immediately or the rebate may be lost.`
       : `Deal ${d.dealNumber} for ${d.companyName} has a rebate filing deadline on ${d.filingDueDate}. ` +
-        `${d.daysRemaining} day${d.daysRemaining === 1 ? "" : "s"} remaining — ` +
+        `${d.daysRemaining} day${
+          d.daysRemaining === 1 ? "" : "s"
+        } remaining — ` +
         `${d.programs.map((p) => p.name).join(", ")}.`;
 
     const metadata = {
@@ -136,18 +150,32 @@ Deno.serve(async (req: Request) => {
     // Notify admins in *this deal's* workspace only.
     const adminIds = await adminsForWorkspace(d.workspaceId);
     for (const adminId of adminIds) {
-      notifications.push({ user_id: adminId, type: "rebate_deadline_warning", title, body, metadata });
+      notifications.push({
+        user_id: adminId,
+        type: "rebate_deadline_warning",
+        title,
+        body,
+        metadata,
+      });
     }
 
-    // Also notify the owning salesman if not already in admin list
-    // (salesman_id is on the deal but not surfaced by rebate-tracker — look it up)
-    // For simplicity: angela gets the notification; salesman gets one too via separate lookup.
-    // Full salesman-level notification requires the salesman_id column on RebateDeadline,
-    // which we'll add in a follow-up. TODO(slice-07): add salesman_id to RebateDeadline and notify rep.
+    // Also notify the owning salesman if not already in the admin fan-out.
+    if (d.salesmanId && !adminIds.includes(d.salesmanId)) {
+      notifications.push({
+        user_id: d.salesmanId,
+        type: "rebate_deadline_warning",
+        title,
+        body,
+        metadata,
+      });
+    }
   }
 
   if (notifications.length === 0) {
-    return safeJsonOk({ notified: 0, message: "No admin users found to notify." }, origin);
+    return safeJsonOk({
+      notified: 0,
+      message: "No admin users found to notify.",
+    }, origin);
   }
 
   const { error: insertError } = await supabase

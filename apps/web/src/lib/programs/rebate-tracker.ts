@@ -28,10 +28,15 @@ interface SupabaseQueryResult<Data> {
   error: { message: string } | null;
 }
 
-interface SupabaseQueryBuilder<Row> extends PromiseLike<SupabaseQueryResult<Row[]>> {
+interface SupabaseQueryBuilder<Row>
+  extends PromiseLike<SupabaseQueryResult<Row[]>> {
   select(columns: string): SupabaseQueryBuilder<Row>;
   is(column: string, value: unknown): SupabaseQueryBuilder<Row>;
-  not(column: string, operator: string, value: unknown): SupabaseQueryBuilder<Row>;
+  not(
+    column: string,
+    operator: string,
+    value: unknown,
+  ): SupabaseQueryBuilder<Row>;
   lte(column: string, value: unknown): SupabaseQueryBuilder<Row>;
   eq(column: string, value: unknown): SupabaseQueryBuilder<Row>;
   in(column: string, values: readonly unknown[]): SupabaseQueryBuilder<Row>;
@@ -81,7 +86,8 @@ function firstJoin<T>(value: T | T[] | null): T | null {
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return Array.isArray(value) &&
+    value.every((item) => typeof item === "string");
 }
 
 function joinedSalesmanName(salesman: SalesmanJoin | null): string {
@@ -123,7 +129,7 @@ export async function getUpcomingRebateDeadlines(
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() + daysAhead);
   const cutoffIso = cutoffDate.toISOString().split("T")[0];
-  const todayIso  = new Date().toISOString().split("T")[0];
+  const todayIso = new Date().toISOString().split("T")[0];
 
   // Fetch deals within the window (include overdue — past due_date but unfiled)
   // workspace_id is required so the cron can scope fan-out to the owning tenant.
@@ -166,19 +172,21 @@ export async function getUpcomingRebateDeadlines(
     const daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
     let urgency: RebateDeadline["urgency"];
-    if (daysRemaining <= 0)       urgency = "overdue";
-    else if (daysRemaining <= 6)  urgency = "red";
+    if (daysRemaining <= 0) urgency = "overdue";
+    else if (daysRemaining <= 6) urgency = "red";
     else if (daysRemaining <= 13) urgency = "yellow";
-    else                          urgency = "green";
+    else urgency = "green";
 
     // Program details — we resolve names from applied_program_ids if present
     // For now we surface the program IDs; the edge function enriches with names.
-    const programIds = isStringArray(deal.applied_program_ids) ? deal.applied_program_ids : [];
+    const programIds = isStringArray(deal.applied_program_ids)
+      ? deal.applied_program_ids
+      : [];
 
     // Company and salesman names from joins
     const company = firstJoin(deal.company);
     const salesman = firstJoin(deal.salesman);
-    const companyName  = company?.name ?? "Unknown Company";
+    const companyName = company?.name ?? "Unknown Company";
     const salesmanName = joinedSalesmanName(salesman);
 
     results.push({
@@ -186,6 +194,7 @@ export async function getUpcomingRebateDeadlines(
       dealNumber: deal.deal_number,
       workspaceId: deal.workspace_id ?? "default",
       companyName,
+      salesmanId: deal.salesman_id,
       salesmanName,
       programs: programIds.map((id) => ({
         name: id, // edge function will resolve IDs to names
@@ -219,7 +228,9 @@ export async function enrichWithProgramDetails(
   supabase: SupabaseLike,
 ): Promise<RebateDeadline[]> {
   // Collect all unique program IDs (currently stored as UUIDs in programs[].name)
-  const allIds = [...new Set(deadlines.flatMap((d) => d.programs.map((p) => p.name)))].filter(
+  const allIds = [
+    ...new Set(deadlines.flatMap((d) => d.programs.map((p) => p.name))),
+  ].filter(
     (id) => id.length === 36, // basic UUID format check
   );
 

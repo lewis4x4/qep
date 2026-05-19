@@ -1,9 +1,4 @@
--- Bridge every stored voice capture into the QRM activity timeline.
---
--- Direct client captures can insert a voice_captures row without going through
--- the edge-function sync path. The business invariant is stronger than the UI:
--- if a capture has a transcript, QRM must have an activity receipt attached to
--- the best available subject. This trigger is idempotent and schema-drift safe.
+-- Post-build hardening for voice capture/QRM attachment integrity.
 
 alter table public.voice_captures
   add column if not exists qrm_activity_id uuid,
@@ -11,44 +6,54 @@ alter table public.voice_captures
 
 do $$
 begin
-  if exists (
+  if not exists (
     select 1
-    from pg_class c
-    join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = 'public'
-      and c.relname = 'qrm_activities'
-      and c.relkind in ('r', 'p')
+    from pg_constraint
+    where conname = 'voice_captures_qrm_activity_id_fkey'
+      and conrelid = 'public.voice_captures'::regclass
   ) then
-    create unique index if not exists crm_activities_voice_capture_subject_unique_idx
-    on public.qrm_activities (
-      workspace_id,
-      activity_type,
-      coalesce(deal_id::text, company_id::text, contact_id::text),
-      ((metadata ->> 'voiceCaptureId')),
-      ((metadata ->> 'activityKind'))
-    )
-    where deleted_at is null
-      and metadata ->> 'source' = 'voice_capture';
-  elsif exists (
+    alter table public.voice_captures
+      add constraint voice_captures_qrm_activity_id_fkey
+      foreign key (qrm_activity_id)
+      references public.qrm_activities(id)
+      on delete set null;
+  end if;
+
+  if not exists (
     select 1
-    from pg_class c
-    join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = 'public'
-      and c.relname = 'crm_activities'
-      and c.relkind in ('r', 'p')
+    from pg_constraint
+    where conname = 'qrm_activities_workspace_id_id_unique'
+      and conrelid = 'public.qrm_activities'::regclass
   ) then
-    create unique index if not exists crm_activities_voice_capture_subject_unique_idx
-    on public.crm_activities (
-      workspace_id,
-      activity_type,
-      coalesce(deal_id::text, company_id::text, contact_id::text),
-      ((metadata ->> 'voiceCaptureId')),
-      ((metadata ->> 'activityKind'))
-    )
-    where deleted_at is null
-      and metadata ->> 'source' = 'voice_capture';
+    alter table public.qrm_activities
+      add constraint qrm_activities_workspace_id_id_unique
+      unique (workspace_id, id);
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'voice_captures_qrm_activity_workspace_fkey'
+      and conrelid = 'public.voice_captures'::regclass
+  ) then
+    alter table public.voice_captures
+      add constraint voice_captures_qrm_activity_workspace_fkey
+      foreign key (workspace_id, qrm_activity_id)
+      references public.qrm_activities(workspace_id, id);
   end if;
 end $$;
+
+create unique index if not exists crm_activities_voice_capture_cluster_unique_idx
+on public.qrm_activities (
+  workspace_id,
+  activity_type,
+  coalesce(deal_id::text, company_id::text, contact_id::text),
+  (metadata ->> 'voiceClusterKey'),
+  (metadata ->> 'activityKind')
+)
+where deleted_at is null
+  and metadata ->> 'source' = 'voice_capture'
+  and metadata ? 'voiceClusterKey';
 
 create or replace function public.ensure_voice_capture_qrm_activity()
 returns trigger
@@ -296,24 +301,48 @@ begin
 end;
 $$;
 
-drop trigger if exists trg_voice_capture_qrm_activity on public.voice_captures;
-create trigger trg_voice_capture_qrm_activity
-  after insert or update of transcript, linked_deal_id, linked_company_id, linked_contact_id, extracted_data, sync_status
-  on public.voice_captures
-  for each row execute function public.ensure_voice_capture_qrm_activity();
 
--- Backfill existing successful/pending captures so historical notes become QRM
--- activities as soon as this migration is applied.
-update public.voice_captures
+update public.voice_captures vc
 set
-  transcript = transcript,
-  updated_at = now()
-where transcript is not null
-  and nullif(trim(transcript), '') is not null
-  and sync_status is distinct from 'failed'
-  and (
-    workspace_id is not null
-    or linked_deal_id is not null
-    or linked_company_id is not null
-    or linked_contact_id is not null
+  qrm_activity_id = a.id,
+  qrm_synced_at = coalesce(vc.qrm_synced_at, now())
+from public.qrm_activities a
+where a.workspace_id = vc.workspace_id
+  and a.deleted_at is null
+  and a.activity_type = 'note'
+  and a.metadata ->> 'source' = 'voice_capture'
+  and a.metadata ->> 'voiceCaptureId' = vc.id::text
+  and vc.qrm_activity_id is null;
+
+drop policy if exists "voice_recordings_insert" on storage.objects;
+create policy "voice_recordings_insert" on storage.objects
+  for insert with check (
+    bucket_id = 'voice-recordings'
+    and (select auth.role()) = 'authenticated'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
+drop policy if exists "voice_recordings_select" on storage.objects;
+create policy "voice_recordings_select" on storage.objects
+  for select using (
+    bucket_id = 'voice-recordings'
+    and (
+      (storage.foldername(name))[1] = (select auth.uid())::text
+      or (
+        (select public.get_my_role()) in ('manager', 'owner')
+        and exists (
+          select 1
+          from public.voice_captures vc
+          where vc.audio_storage_path = storage.objects.name
+            and vc.workspace_id = (select public.get_my_workspace())
+        )
+      )
+    )
+  );
+
+drop policy if exists "voice_recordings_delete" on storage.objects;
+create policy "voice_recordings_delete" on storage.objects
+  for delete using (
+    bucket_id = 'voice-recordings'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
   );

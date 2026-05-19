@@ -31,7 +31,7 @@ export interface QbProgram {
   program_type: string;
   name: string;
   effective_from: string; // ISO date string
-  effective_to: string;   // ISO date string
+  effective_to: string; // ISO date string
   details: Record<string, unknown>;
   source_document_url: string | null;
   active: boolean;
@@ -136,6 +136,8 @@ export interface RebateDeadline {
    */
   workspaceId: string;
   companyName: string;
+  /** Owning rep profile id. Used by rebate cron to notify the accountable seller. */
+  salesmanId: string | null;
   salesmanName: string;
   programs: Array<{
     name: string;
@@ -143,7 +145,7 @@ export interface RebateDeadline {
     programCode: string;
   }>;
   warrantyRegistrationDate: string; // ISO date string
-  filingDueDate: string;            // ISO date string
+  filingDueDate: string; // ISO date string
   daysRemaining: number;
   /** Green ≥ 14 days, yellow 7–13, red 1–6, overdue ≤ 0 */
   urgency: "green" | "yellow" | "red" | "overdue";

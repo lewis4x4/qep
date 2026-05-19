@@ -16,28 +16,156 @@
  *   - Table names: qb_* prefix throughout
  *   - discount_configured guard: surfaced as 400 with clear message
  *
- * Slice 02 note: taxRatePct is hardcoded to 0.07 (7% FL generic).
- * Slice 03+: call the existing tax-calculator edge fn with deliveryState/deliveryZip.
+ * Tax: delegates jurisdiction lookup to the tax-calculator edge function using
+ * deliveryState + deliveryCounty, then feeds the effective rate into the
+ * deterministic pricing engine.
  */
 
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import {
   optionsResponse,
-  safeJsonOk,
   safeJsonError,
+  safeJsonOk,
 } from "../_shared/safe-cors.ts";
 import { calculateQuote } from "../../../apps/web/src/lib/pricing/calculator.ts";
 import { PricingError } from "../../../apps/web/src/lib/pricing/errors.ts";
 import type {
   PriceQuoteRequest,
-  QuoteContext,
   ProgramFixture,
+  QuoteContext,
 } from "../../../apps/web/src/lib/pricing/types.ts";
 
-// ── Florida generic tax rate (stub) ──────────────────────────────────────────
-// TODO(slice-03): replace with a call to the existing tax-calculator edge fn
-//   using request.deliveryState + request.deliveryZip for county-level precision.
-const FL_TAX_RATE_PCT = 0.07;
+type QuoteRequestWithTaxFields = PriceQuoteRequest & {
+  branchSlug?: string;
+  branch_slug?: string;
+  companyId?: string;
+  company_id?: string;
+  deliveryCounty?: string;
+  delivery_county?: string;
+  taxProfile?: string;
+  tax_profile?: string;
+  taxOverrideAmount?: number | null;
+  tax_override_amount?: number | null;
+  taxOverrideReason?: string | null;
+  tax_override_reason?: string | null;
+};
+
+type TaxRateResolution =
+  | { ok: true; taxRatePct: number }
+  | { ok: false; response: Response };
+
+function stringField(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+function numberField(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+async function resolveTaxRatePct(params: {
+  req: Request;
+  origin: string | null;
+  request: PriceQuoteRequest;
+  preliminaryQuote: ReturnType<typeof calculateQuote>;
+}): Promise<TaxRateResolution> {
+  const { req, origin, request, preliminaryQuote } = params;
+  if (request.taxExempt) return { ok: true, taxRatePct: 0 };
+
+  const taxableBaseCents = preliminaryQuote.customerPriceAfterRebatesCents;
+  if (taxableBaseCents <= 0) return { ok: true, taxRatePct: 0 };
+
+  const extended = request as QuoteRequestWithTaxFields;
+  const deliveryState = request.deliveryState.trim().toUpperCase();
+  const deliveryCounty = stringField(extended.deliveryCounty) ??
+    stringField(extended.delivery_county);
+  if (deliveryState === "FL" && !deliveryCounty) {
+    return {
+      ok: false,
+      response: safeJsonError(
+        "deliveryCounty is required for Florida county tax calculation",
+        400,
+        origin,
+      ),
+    };
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const authorization = req.headers.get("authorization") ??
+    req.headers.get("Authorization");
+  if (!supabaseUrl || !authorization) {
+    return {
+      ok: false,
+      response: safeJsonError(
+        "Tax calculator configuration or authorization is missing",
+        500,
+        origin,
+      ),
+    };
+  }
+
+  const taxResponse = await fetch(
+    `${supabaseUrl}/functions/v1/tax-calculator`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: authorization,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        branch_slug: stringField(extended.branch_slug) ??
+          stringField(extended.branchSlug),
+        company_id: stringField(extended.company_id) ??
+          stringField(extended.companyId),
+        subtotal: taxableBaseCents / 100,
+        discount_total: 0,
+        trade_allowance: 0,
+        tax_profile: stringField(extended.tax_profile) ??
+          stringField(extended.taxProfile) ?? "standard",
+        delivery_state: deliveryState,
+        delivery_county: deliveryCounty,
+        tax_override_amount: numberField(extended.tax_override_amount) ??
+          numberField(extended.taxOverrideAmount),
+        tax_override_reason: stringField(extended.tax_override_reason) ??
+          stringField(extended.taxOverrideReason),
+        include_179: false,
+      }),
+    },
+  );
+
+  const taxBody = await taxResponse.json().catch(() => null) as {
+    error?: string;
+    total_tax?: unknown;
+  } | null;
+  if (!taxResponse.ok) {
+    return {
+      ok: false,
+      response: safeJsonError(
+        taxBody?.error ?? `Tax calculation failed (${taxResponse.status})`,
+        taxResponse.status,
+        origin,
+      ),
+    };
+  }
+
+  const totalTaxDollars = Number(taxBody?.total_tax ?? 0);
+  if (!Number.isFinite(totalTaxDollars) || totalTaxDollars < 0) {
+    return {
+      ok: false,
+      response: safeJsonError(
+        "Tax calculator returned an invalid total_tax",
+        502,
+        origin,
+      ),
+    };
+  }
+
+  const totalTaxCents = Math.round(totalTaxDollars * 100);
+  return { ok: true, taxRatePct: totalTaxCents / taxableBaseCents };
+}
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
@@ -157,10 +285,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const freightCents =
-      frameSize === "small"
-        ? (freightZone.freight_small_cents ?? freightZone.freight_large_cents)
-        : freightZone.freight_large_cents;
+    const freightCents = frameSize === "small"
+      ? (freightZone.freight_small_cents ?? freightZone.freight_large_cents)
+      : freightZone.freight_large_cents;
 
     // ── 3. Active programs for this brand ─────────────────────────────────
     // F1 fix: qb_programs uses `active` (not `is_active`), `effective_from`/`effective_to` (not start_date/end_date).
@@ -168,7 +295,9 @@ Deno.serve(async (req: Request) => {
     // `today` is already declared above for the freight-zone window; reuse it.
     const { data: programRows, error: progErr } = await supabase
       .from("qb_programs")
-      .select("id, program_type, name, brand_id, active, effective_from, effective_to, details")
+      .select(
+        "id, program_type, name, brand_id, active, effective_from, effective_to, details",
+      )
       .eq("brand_id", brand.id)
       .eq("active", true)
       .lte("effective_from", today)
@@ -252,23 +381,43 @@ Deno.serve(async (req: Request) => {
       },
       freightCents: freightCents as number,
       freightZone: freightZone.zone_name as string,
-      taxRatePct: FL_TAX_RATE_PCT,
+      taxRatePct: 0,
       programs,
       catalogAttachments,
     };
 
-    const result = calculateQuote(request, ctx);
+    const preliminaryQuote = calculateQuote(request, ctx);
+    const taxRate = await resolveTaxRatePct({
+      req,
+      origin,
+      request,
+      preliminaryQuote,
+    });
+    if (!taxRate.ok) return taxRate.response;
+
+    const result = calculateQuote(request, {
+      ...ctx,
+      taxRatePct: taxRate.taxRatePct,
+    });
     return safeJsonOk(result, origin);
   } catch (err) {
     if (err instanceof PricingError) {
       return safeJsonError(
-        JSON.stringify({ code: err.code, message: err.message, details: err.details }),
+        JSON.stringify({
+          code: err.code,
+          message: err.message,
+          details: err.details,
+        }),
         400,
         origin,
       );
     }
     // Unexpected — log and return generic error
     console.error("[qb-calculate] unexpected error:", err);
-    return safeJsonError("Something went wrong calculating the quote. Try again or contact support.", 500, origin);
+    return safeJsonError(
+      "Something went wrong calculating the quote. Try again or contact support.",
+      500,
+      origin,
+    );
   }
 });

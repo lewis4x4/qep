@@ -1,28 +1,61 @@
 #!/usr/bin/env node
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
 
 const root = process.cwd();
-const ignoredDirs = new Set([
-  ".git",
-  "node_modules",
-  "dist",
-  "build",
-  ".netlify",
-  "test-results",
-]);
+const ignoredPathPrefixes = [
+  "dist/",
+  "build/",
+  ".netlify/",
+  "test-results/",
+  "scratch/",
+];
 const allowedExampleFiles = new Set([
   ".env.example",
   "apps/web/.env.example",
 ]);
+
+function listScannableFiles() {
+  const result = spawnSync("git", [
+    "ls-files",
+    "-z",
+    "--cached",
+    "--others",
+    "--exclude-standard",
+  ], {
+    cwd: root,
+    encoding: "buffer",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  if (result.status !== 0) {
+    const stderr = result.stderr?.toString("utf8").trim();
+    throw new Error(
+      stderr || "Unable to list repository files for secret scan.",
+    );
+  }
+
+  return result.stdout
+    .toString("utf8")
+    .split("\0")
+    .filter(Boolean)
+    .filter((rel) =>
+      !ignoredPathPrefixes.some((prefix) => rel.startsWith(prefix))
+    );
+}
 const serviceRoleAssignment = /^(VITE_)?SUPABASE_SERVICE_ROLE_KEY=(?!<|$)/;
-const jwtPattern = /eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/g;
+const jwtPattern =
+  /eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/g;
 const findings = [];
 
 function decodeBase64UrlJson(segment) {
   try {
-    const padded = segment.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(segment.length / 4) * 4, "=");
+    const padded = segment.replace(/-/g, "+").replace(/_/g, "/").padEnd(
+      Math.ceil(segment.length / 4) * 4,
+      "=",
+    );
     return JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
   } catch {
     return null;
@@ -38,32 +71,31 @@ function containsServiceRoleJwt(line) {
   return false;
 }
 
-function walk(dir) {
-  for (const entry of readdirSync(dir)) {
-    if (ignoredDirs.has(entry)) continue;
-    const full = join(dir, entry);
-    const rel = relative(root, full);
-    const stat = statSync(full);
-    if (stat.isDirectory()) {
-      walk(full);
-      continue;
-    }
-    if (stat.size > 2_000_000) continue;
-    const text = readFileSync(full, "utf8");
-    const lines = text.split(/\r?\n/);
-    lines.forEach((line, index) => {
-      if (allowedExampleFiles.has(rel)) return;
-      if (serviceRoleAssignment.test(line) || containsServiceRoleJwt(line)) {
-        findings.push(`${rel}:${index + 1}`);
-      }
-    });
+for (const rel of listScannableFiles()) {
+  const full = join(root, rel);
+  const stat = statSync(full);
+  if (!stat.isFile() || stat.size > 2_000_000) continue;
+
+  let text;
+  try {
+    text = readFileSync(full, "utf8");
+  } catch {
+    continue;
   }
+
+  const lines = text.split(/\r?\n/);
+  lines.forEach((line, index) => {
+    if (allowedExampleFiles.has(rel)) return;
+    if (serviceRoleAssignment.test(line) || containsServiceRoleJwt(line)) {
+      findings.push(`${rel}:${index + 1}`);
+    }
+  });
 }
 
-walk(root);
-
 if (findings.length > 0) {
-  console.error("Plaintext secret scan failed. Remove real service-role/JWT values from:");
+  console.error(
+    "Plaintext secret scan failed. Remove real service-role/JWT values from:",
+  );
   for (const finding of findings) console.error(`  ${finding}`);
   process.exit(1);
 }

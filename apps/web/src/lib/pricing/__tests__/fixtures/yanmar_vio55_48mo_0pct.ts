@@ -148,15 +148,15 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import type { PriceQuoteRequest, PricedQuote, QuoteContext } from "../../types";
+import type { PricedQuote, PriceQuoteRequest, QuoteContext } from "../../types";
 
 // ── Stable UUIDs for the fixture (not real DB rows — seeded by tests) ─────────
 
-export const YANMAR_BRAND_ID      = "00000000-0000-0000-0000-000000000001";
+export const YANMAR_BRAND_ID = "00000000-0000-0000-0000-000000000001";
 export const YANMAR_VIO55_MODEL_ID = "00000000-0000-0000-0000-000000000002";
-export const ATT_TRENCHING_24_ID  = "00000000-0000-0000-0000-000000000010";
-export const ATT_DITCHING_30_ID   = "00000000-0000-0000-0000-000000000011";
-export const ATT_THUMB_ID         = "00000000-0000-0000-0000-000000000012";
+export const ATT_TRENCHING_24_ID = "00000000-0000-0000-0000-000000000010";
+export const ATT_DITCHING_30_ID = "00000000-0000-0000-0000-000000000011";
+export const ATT_THUMB_ID = "00000000-0000-0000-0000-000000000012";
 export const PROGRAM_48MO_0PCT_ID = "00000000-0000-0000-0000-000000000020";
 
 // ── Request ───────────────────────────────────────────────────────────────────
@@ -167,8 +167,8 @@ export const REQUEST: PriceQuoteRequest = {
   deliveryState: "FL",
   attachments: [
     { attachmentId: ATT_TRENCHING_24_ID, quantity: 1 },
-    { attachmentId: ATT_DITCHING_30_ID,  quantity: 1 },
-    { attachmentId: ATT_THUMB_ID,        quantity: 1 },
+    { attachmentId: ATT_DITCHING_30_ID, quantity: 1 },
+    { attachmentId: ATT_THUMB_ID, quantity: 1 },
   ],
   financing: {
     programId: PROGRAM_48MO_0PCT_ID,
@@ -201,10 +201,9 @@ export const CTX: QuoteContext = {
       attachment_markup_pct: 0.20,
     },
   },
-  // TODO(slice-04): confirm Yanmar FL freight with Rylee — may differ from ASV $1,942
-  freightCents: 194_200,  // FL large frame — SLICE_01 seed (ASV zone, shared with Yanmar for now)
+  freightCents: 194_200, // FL large frame — confirmed shared ASV/Yanmar FL zone
   freightZone: "FL_LARGE",
-  taxRatePct: 0.07,       // 7% FL generic stub; Slice 03+ uses tax-calculator fn
+  taxRatePct: 0.07, // 7% FL generic stub; Slice 03+ uses tax-calculator fn
   programs: [
     {
       id: PROGRAM_48MO_0PCT_ID,
@@ -226,7 +225,7 @@ export const CTX: QuoteContext = {
     {
       id: ATT_TRENCHING_24_ID,
       name: '24" Trenching Bucket',
-      list_price_cents: 220_000,  // ⚠ PLACEHOLDER
+      list_price_cents: 220_000, // ⚠ PLACEHOLDER
       oem_branded: true,
       compatible_model_ids: null,
       universal: false,
@@ -234,7 +233,7 @@ export const CTX: QuoteContext = {
     {
       id: ATT_DITCHING_30_ID,
       name: '30" Smooth-Edge Ditching Bucket',
-      list_price_cents: 275_000,  // ⚠ PLACEHOLDER
+      list_price_cents: 275_000, // ⚠ PLACEHOLDER
       oem_branded: true,
       compatible_model_ids: null,
       universal: false,
@@ -242,7 +241,7 @@ export const CTX: QuoteContext = {
     {
       id: ATT_THUMB_ID,
       name: "Hydraulic Thumb",
-      list_price_cents: 325_000,  // ⚠ PLACEHOLDER
+      list_price_cents: 325_000, // ⚠ PLACEHOLDER
       oem_branded: true,
       compatible_model_ids: null,
       universal: false,
@@ -258,20 +257,20 @@ export const CTX: QuoteContext = {
 export const EXPECTED = {
   // ── Equipment breakdown ──────────────────────────────────────────────────
   breakdown: {
-    listPriceCents:          9_500_000,
-    dealerDiscountCents:     2_850_000,
-    dealerDiscountPct:       0.30,
-    discountedPriceCents:    6_650_000,
-    pdiCents:                  50_000,
-    goodFaithCents:            66_500,
-    goodFaithPct:              0.01,
-    freightCents:             194_200,
-    freightZone:           "FL_LARGE",
-    tariffCents:              475_000,
-    tariffPct:                 0.05,
-    equipmentCostCents:     7_435_700,
-    markupPct:                 0.12,
-    markupCents:              892_284,
+    listPriceCents: 9_500_000,
+    dealerDiscountCents: 2_850_000,
+    dealerDiscountPct: 0.30,
+    discountedPriceCents: 6_650_000,
+    pdiCents: 50_000,
+    goodFaithCents: 66_500,
+    goodFaithPct: 0.01,
+    freightCents: 194_200,
+    freightZone: "FL_LARGE",
+    tariffCents: 475_000,
+    tariffPct: 0.05,
+    equipmentCostCents: 7_435_700,
+    markupPct: 0.12,
+    markupCents: 892_284,
     baselineSalesPriceCents: 8_327_984,
   },
 
@@ -279,72 +278,72 @@ export const EXPECTED = {
   attachments: [
     {
       attachmentId: ATT_TRENCHING_24_ID,
-      listPriceCents:   220_000,
-      discountCents:     66_000,
-      costCents:        154_000,
-      markupPct:           0.20,
-      markupCents:       30_800,
-      salesPriceCents:  184_800,
+      listPriceCents: 220_000,
+      discountCents: 66_000,
+      costCents: 154_000,
+      markupPct: 0.20,
+      markupCents: 30_800,
+      salesPriceCents: 184_800,
       oemBranded: true,
     },
     {
       attachmentId: ATT_DITCHING_30_ID,
-      listPriceCents:   275_000,
-      discountCents:     82_500,
-      costCents:        192_500,
-      markupPct:           0.20,
-      markupCents:       38_500,
-      salesPriceCents:  231_000,
+      listPriceCents: 275_000,
+      discountCents: 82_500,
+      costCents: 192_500,
+      markupPct: 0.20,
+      markupCents: 38_500,
+      salesPriceCents: 231_000,
       oemBranded: true,
     },
     {
       attachmentId: ATT_THUMB_ID,
-      listPriceCents:   325_000,
-      discountCents:     97_500,
-      costCents:        227_500,
-      markupPct:           0.20,
-      markupCents:       45_500,
-      salesPriceCents:  273_000,
+      listPriceCents: 325_000,
+      discountCents: 97_500,
+      costCents: 227_500,
+      markupPct: 0.20,
+      markupCents: 45_500,
+      salesPriceCents: 273_000,
       oemBranded: true,
     },
   ],
   attachmentsSubtotal: {
-    totalListCents:        820_000,
-    totalCostCents:        574_000,
-    totalSalesPriceCents:  688_800,
+    totalListCents: 820_000,
+    totalCostCents: 574_000,
+    totalSalesPriceCents: 688_800,
   },
 
   // ── Financing scenario ───────────────────────────────────────────────────
   financingScenario: {
-    programId:                   PROGRAM_48MO_0PCT_ID,
-    lenderName:                  "Yanmar Financial Services",
-    termMonths:                  48,
-    ratePct:                     0.0,
-    paymentCents:                187_850,  // Math.round(9_016_784 / 48)
-    totalFinancedCents:          9_016_784,
-    dealerParticipationPct:      0.0,
+    programId: PROGRAM_48MO_0PCT_ID,
+    lenderName: "Yanmar Financial Services",
+    termMonths: 48,
+    ratePct: 0.0,
+    paymentCents: 187_850, // Math.round(9_016_784 / 48)
+    totalFinancedCents: 9_016_784,
+    dealerParticipationPct: 0.0,
     dealerParticipationCostCents: 0,
   },
 
   // ── Customer totals ──────────────────────────────────────────────────────
-  customerSubtotalCents:            9_016_784,
-  customerRebatesCents:             0,
-  customerPriceAfterRebatesCents:   9_016_784,
-  customerTradeInAllowanceCents:    0,
-  customerNetOfTradeCents:          9_016_784,
-  taxRatePct:                       0.07,
-  taxCents:                         631_175,  // Math.round(9_016_784 × 0.07)
-  docFeeCents:                      40_000,
-  customerTotalCents:               9_687_959, // 9_016_784 + 631_175 + 40_000
+  customerSubtotalCents: 9_016_784,
+  customerRebatesCents: 0,
+  customerPriceAfterRebatesCents: 9_016_784,
+  customerTradeInAllowanceCents: 0,
+  customerNetOfTradeCents: 9_016_784,
+  taxRatePct: 0.07,
+  taxCents: 631_175, // Math.round(9_016_784 × 0.07)
+  docFeeCents: 40_000,
+  customerTotalCents: 9_687_959, // 9_016_784 + 631_175 + 40_000
 
   // ── Margin ───────────────────────────────────────────────────────────────
-  dealerCostTotalCents:   8_009_700,  // 7_435_700 + 574_000 + 0
-  dealerRevenueCents:     9_016_784,
-  grossMarginCents:       1_007_084,  // 9_016_784 − 8_009_700
+  dealerCostTotalCents: 8_009_700, // 7_435_700 + 574_000 + 0
+  dealerRevenueCents: 9_016_784,
+  grossMarginCents: 1_007_084, // 9_016_784 − 8_009_700
   // grossMarginPct and markupAchievedPct are floating-point — test with toBeCloseTo
-  grossMarginPctApprox:      0.1117,  // 1_007_084 / 9_016_784
-  markupAchievedPctApprox:   0.1257,  // 1_007_084 / 8_009_700
-  commissionCents:           151_062, // Math.floor(1_007_084 × 0.15)
+  grossMarginPctApprox: 0.1117, // 1_007_084 / 9_016_784
+  markupAchievedPctApprox: 0.1257, // 1_007_084 / 8_009_700
+  commissionCents: 151_062, // Math.floor(1_007_084 × 0.15)
 
   // ── Approval ─────────────────────────────────────────────────────────────
   requiresApproval: false,

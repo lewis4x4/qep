@@ -30,7 +30,8 @@ export interface PriceQuoteRequest {
     poNumber?: string;
   };
   deliveryState: string; // e.g. 'FL'
-  deliveryZip?: string; // for tax lookup
+  deliveryCounty?: string; // for FL county surtax lookup
+  deliveryZip?: string; // reserved for future ZIP-to-jurisdiction lookup
   attachments?: Array<{
     /** UUID — references qb_attachments.id */
     attachmentId: string;

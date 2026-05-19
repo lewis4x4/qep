@@ -2,13 +2,14 @@ import { NavLink, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Activity, LayoutGrid, Radio, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { StatusDot, LiveBadge } from "../components/command-deck";
+import { useAuth } from "@/hooks/useAuth";
+import { LiveBadge, StatusDot } from "../components/command-deck";
 import {
-  SURFACES,
-  SURFACE_ORDER,
-  SURFACE_LENSES,
   resolveSurface,
+  SURFACE_LENSES,
+  SURFACE_ORDER,
   type SurfaceId,
+  SURFACES,
 } from "./shellMap";
 
 /**
@@ -24,7 +25,10 @@ import {
  *   └────────────────────────────────────────────────────────────────┘
  */
 
-const SURFACE_ICONS: Record<SurfaceId, React.ComponentType<{ className?: string }>> = {
+const SURFACE_ICONS: Record<
+  SurfaceId,
+  React.ComponentType<{ className?: string }>
+> = {
   today: Activity,
   graph: LayoutGrid,
   pulse: Radio,
@@ -47,7 +51,10 @@ const SURFACE_HINT: Record<SurfaceId, string> = {
  * today; subsequent slices will subscribe to the actual signal counts from
  * the activity / pulse / inventory streams.
  */
-const SURFACE_SIGNAL: Record<SurfaceId, { count: number; tone: "active" | "live" | "hot" | "cool" }> = {
+const SURFACE_SIGNAL: Record<
+  SurfaceId,
+  { count: number; tone: "active" | "live" | "hot" | "cool" }
+> = {
   today: { count: 7, tone: "active" },
   graph: { count: 0, tone: "cool" },
   pulse: { count: 12, tone: "hot" },
@@ -65,8 +72,17 @@ function useClock() {
 
 export function QrmShellV2() {
   const { pathname } = useLocation();
+  const { profile } = useAuth();
   const { surface: activeSurface, lens: activeLens } = resolveSurface(pathname);
-  const lenses = SURFACE_LENSES[activeSurface];
+  const role = profile?.role as
+    | "rep"
+    | "admin"
+    | "manager"
+    | "owner"
+    | undefined;
+  const lenses = SURFACE_LENSES[activeSurface].filter((lens) =>
+    !lens.roles || (role ? lens.roles.includes(role) : false)
+  );
   const now = useClock();
   const clock = now.toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -136,10 +152,10 @@ export function QrmShellV2() {
                     signal.tone === "hot"
                       ? "bg-qep-hot/15 text-qep-hot"
                       : signal.tone === "live"
-                        ? "bg-qep-live/15 text-qep-live"
-                        : signal.tone === "active"
-                          ? "bg-qep-orange/15 text-qep-orange"
-                          : "bg-muted text-muted-foreground",
+                      ? "bg-qep-live/15 text-qep-live"
+                      : signal.tone === "active"
+                      ? "bg-qep-orange/15 text-qep-orange"
+                      : "bg-muted text-muted-foreground",
                   )}
                 >
                   {signal.count}

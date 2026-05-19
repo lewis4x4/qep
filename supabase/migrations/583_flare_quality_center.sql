@@ -88,6 +88,10 @@ create index if not exists idx_flare_status_history_workspace_to_status
 
 alter table public.flare_status_history enable row level security;
 
+drop policy if exists "flare_status_history_workspace_read" on public.flare_status_history;
+drop policy if exists "flare_status_history_workspace_insert" on public.flare_status_history;
+drop policy if exists "flare_status_history_service_all" on public.flare_status_history;
+
 -- Mirror the flare_reports policy stack: workspace members in
 -- admin/manager/owner read + write; service role bypasses.
 -- Helper calls wrapped in (select ...) to keep the planner happy
