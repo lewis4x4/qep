@@ -206,10 +206,11 @@ export function TodayFeedPage() {
         />
       )}
 
-      {(pipeline.length > 0 || streaks.currentStreak > 0) && (
+      {(pipeline.length > 0 || streaks.currentStreak > 0 || streaks.longestStreak > 0) && (
         <StreakBadge
           currentStreak={streaks.currentStreak}
           longestStreak={streaks.longestStreak}
+          lastActiveAt={streaks.lastActiveAt}
           isLoading={streaks.isLoading}
         />
       )}

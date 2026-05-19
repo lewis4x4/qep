@@ -89,21 +89,21 @@ create index if not exists idx_flare_status_history_workspace_to_status
 alter table public.flare_status_history enable row level security;
 
 -- Mirror the flare_reports policy stack: workspace members in
--- admin/manager/owner/support read + write; service role bypasses.
+-- admin/manager/owner read + write; service role bypasses.
 -- Helper calls wrapped in (select ...) to keep the planner happy
 -- (init-plan-safe — see scripts/check-rls-initplan.mjs).
 create policy "flare_status_history_workspace_read"
   on public.flare_status_history for select
   using (
     workspace_id = (select public.get_my_workspace())
-    and (select public.get_my_role()) in ('owner', 'admin', 'manager', 'support')
+    and (select public.get_my_role()) in ('owner', 'admin', 'manager')
   );
 
 create policy "flare_status_history_workspace_insert"
   on public.flare_status_history for insert
   with check (
     workspace_id = (select public.get_my_workspace())
-    and (select public.get_my_role()) in ('owner', 'admin', 'manager', 'support')
+    and (select public.get_my_role()) in ('owner', 'admin', 'manager')
   );
 
 create policy "flare_status_history_service_all"

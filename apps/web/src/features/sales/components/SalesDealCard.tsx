@@ -10,8 +10,9 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { advanceDealStage } from "../lib/sales-api";
+import { advanceDealStage, logSalesActivity } from "../lib/sales-api";
 import type { RepPipelineDeal } from "../lib/types";
+import { useToast } from "@/hooks/use-toast";
 
 /* ── AI score chip ──────────────────────────────────────── */
 function AiScoreChip({ score }: { score: number }) {
@@ -100,6 +101,7 @@ export function SalesDealCard({
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [advancing, setAdvancing] = useState(false);
   const [advanceError, setAdvanceError] = useState<string | null>(null);
 
@@ -131,6 +133,25 @@ export function SalesDealCard({
       setAdvanceError("Failed to advance stage. Try again.");
     } finally {
       setAdvancing(false);
+    }
+  }
+
+  async function handleCall() {
+    if (!deal.primary_contact_phone) return;
+    try {
+      await logSalesActivity({
+        activityType: "call",
+        dealId: deal.deal_id,
+        companyId: deal.company_id,
+      });
+    } catch {
+      toast({
+        title: "Call log not saved",
+        description: "Call will continue, but activity logging failed.",
+        variant: "destructive",
+      });
+    } finally {
+      window.location.href = `tel:${deal.primary_contact_phone}`;
     }
   }
 
@@ -232,13 +253,14 @@ export function SalesDealCard({
         onClick={(e) => e.stopPropagation()}
       >
         {deal.primary_contact_phone ? (
-          <a
-            href={`tel:${deal.primary_contact_phone}`}
+          <button
+            type="button"
+            onClick={handleCall}
             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-foreground text-xs font-bold hover:bg-foreground/[0.04] transition-colors"
           >
             <PhoneCall className="w-[13px] h-[13px] text-qep-orange" />
             Call
-          </a>
+          </button>
         ) : (
           <button
             disabled

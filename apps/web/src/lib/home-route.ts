@@ -4,14 +4,6 @@ export function resolveHomeRoute(
   audience?: string | null,
   floorMode?: boolean | null,
 ): string {
-  // The Floor is now the role-home surface. Any user with an assigned
-  // Iron role lands there; /floor resolves the exact role layout at render
-  // time. This also lets stakeholder viewers with real Iron roles (Ryan,
-  // Rylee, etc.) inspect the same operator home they are accountable for.
-  if (floorMode || isFloorIronRole(ironRole)) {
-    return "/floor";
-  }
-
   // Stakeholder audience (external QEP USA build observers — Ryan, Rylee,
   // Juan, Angela) always lands on the Build Hub regardless of role/iron role.
   // Internal operators keep their role-based routing below.
@@ -19,7 +11,7 @@ export function resolveHomeRoute(
     return "/brief";
   }
 
-  const normalizedRole = (userRole ?? "").trim().toLowerCase();
+  const normalizedRole = normalizeRole(userRole);
 
   switch (normalizedRole) {
     case "owner":
@@ -37,8 +29,15 @@ export function resolveHomeRoute(
     case "rep":
       return "/sales/today";
     default:
+      if (floorMode || isFloorIronRole(ironRole)) {
+        return "/floor";
+      }
       return "/dashboard";
   }
+}
+
+function normalizeRole(userRole: string | null | undefined): string {
+  return (userRole ?? "").trim().toLowerCase();
 }
 
 function isFloorIronRole(ironRole: string | null | undefined): boolean {
@@ -57,11 +56,44 @@ export function canUseElevatedQrmScopes(
   userRole: string | null | undefined,
   ironRole?: string | null,
 ): boolean {
-  const normalizedRole = (userRole ?? "").trim().toLowerCase();
+  const normalizedRole = normalizeRole(userRole);
   return (
     normalizedRole === "owner" ||
     normalizedRole === "admin" ||
     normalizedRole === "manager" ||
     ironRole === "iron_manager"
   );
+}
+
+export function canAccessFloorSurface(userRole: string | null | undefined): boolean {
+  return normalizeRole(userRole) !== "rep";
+}
+
+export function canAccessQrmSurface(userRole: string | null | undefined): boolean {
+  const normalizedRole = normalizeRole(userRole);
+  return normalizedRole === "owner" || normalizedRole === "admin" || normalizedRole === "manager";
+}
+
+export function canAccessManagerAdminSurface(userRole: string | null | undefined): boolean {
+  return canAccessQrmSurface(userRole);
+}
+
+export type ManagerAdminRouteKey =
+  | "qrm_activities_templates"
+  | "admin_sequences"
+  | "admin_duplicates";
+
+export function canAccessManagerAdminRoute(
+  userRole: string | null | undefined,
+  _routeKey: ManagerAdminRouteKey,
+): boolean {
+  return canAccessManagerAdminSurface(userRole);
+}
+
+export function resolveManagerAdminRouteRedirect(
+  userRole: string | null | undefined,
+  homeRoute: string,
+  routeKey: ManagerAdminRouteKey,
+): string | null {
+  return canAccessManagerAdminRoute(userRole, routeKey) ? null : homeRoute;
 }

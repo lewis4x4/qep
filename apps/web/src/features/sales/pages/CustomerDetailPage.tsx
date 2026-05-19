@@ -1,4 +1,5 @@
 import { useParams, useNavigate, Navigate } from "react-router-dom";
+import { useState } from "react";
 import {
   ChevronLeft,
   PhoneCall,
@@ -17,6 +18,14 @@ import { InteractionTimeline } from "../components/InteractionTimeline";
 import { CustomerDetailSkeleton } from "../components/CustomerDetailSkeleton";
 import type { RepPipelineDeal } from "../lib/types";
 import { accountCommandUrl } from "@/features/qrm/lib/account-links";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { QuickLogSheet } from "../components/QuickLogSheet";
+import { logSalesActivity } from "../lib/sales-api";
+import { useToast } from "@/hooks/use-toast";
+
+export function getCustomerQuickLogSubject(companyId: string) {
+  return { companyId };
+}
 
 /* ── Avatar ─────────────────────────────────────────────── */
 function CustomerAvatar({
@@ -98,6 +107,8 @@ export function CustomerDetailPage() {
   const navigate = useNavigate();
   const { customer, equipment, deals, activities, quotes, isLoading } =
     useCustomerDetail(safeId);
+  const [quickLogOpen, setQuickLogOpen] = useState(false);
+  const { toast } = useToast();
 
   if (!companyId) {
     return <Navigate to="/sales/customers" replace />;
@@ -121,8 +132,37 @@ export function CustomerDetailPage() {
     );
   }
 
-  const scoreAccent = getScoreAccent(customer.opportunity_score);
+  const selectedCustomer = customer;
+  const scoreAccent = getScoreAccent(selectedCustomer.opportunity_score);
   const primaryDeal = deals.length > 0 ? deals[0] : null;
+  async function handleCall() {
+    if (!selectedCustomer.primary_contact_phone) return;
+    try {
+      await logSalesActivity({ activityType: "call", companyId });
+    } catch {
+      toast({
+        title: "Call log not saved",
+        description: "Call will continue, but activity logging failed.",
+        variant: "destructive",
+      });
+    } finally {
+      window.location.href = `tel:${selectedCustomer.primary_contact_phone}`;
+    }
+  }
+  async function handleEmail() {
+    if (!selectedCustomer.primary_contact_email) return;
+    try {
+      await logSalesActivity({ activityType: "email", companyId });
+    } catch {
+      toast({
+        title: "Email log not saved",
+        description: "Email will continue, but activity logging failed.",
+        variant: "destructive",
+      });
+    } finally {
+      window.location.href = `mailto:${selectedCustomer.primary_contact_email}`;
+    }
+  }
 
   return (
     <div className="pb-20 max-w-lg mx-auto">
@@ -145,20 +185,20 @@ export function CustomerDetailPage() {
 
         {/* Avatar + Name + Score */}
         <div className="flex items-start gap-3 mb-3">
-          <CustomerAvatar name={customer.company_name} />
+          <CustomerAvatar name={selectedCustomer.company_name} />
           <div className="flex-1 min-w-0">
             <p className="text-[19px] font-extrabold text-foreground tracking-[-0.01em]">
-              {customer.company_name}
+              {selectedCustomer.company_name}
             </p>
-            {customer.primary_contact_name && (
+            {selectedCustomer.primary_contact_name && (
               <p className="text-[13px] text-muted-foreground mt-0.5">
-                {customer.primary_contact_name}
+                {selectedCustomer.primary_contact_name}
               </p>
             )}
-            {customer.city && (
+            {selectedCustomer.city && (
               <div className="flex items-center gap-1 mt-1 text-[11px] text-muted-foreground/60">
                 <MapPin className="w-[11px] h-[11px]" />
-                {customer.city}, {customer.state}
+                {selectedCustomer.city}, {selectedCustomer.state}
               </div>
             )}
           </div>
@@ -171,7 +211,7 @@ export function CustomerDetailPage() {
             <span
               className={`text-[13px] font-extrabold ${scoreAccent.text}`}
             >
-              {customer.opportunity_score}
+              {selectedCustomer.opportunity_score}
             </span>
           </div>
         </div>
@@ -187,28 +227,30 @@ export function CustomerDetailPage() {
               }`;
             return (
               <>
-                {customer.primary_contact_phone ? (
-                  <a
-                    href={`tel:${customer.primary_contact_phone}`}
+                {selectedCustomer.primary_contact_phone ? (
+                  <button
+                    type="button"
+                    onClick={handleCall}
                     className={baseClass(true)}
                   >
                     <PhoneCall className="w-4 h-4" />
                     Call
-                  </a>
+                  </button>
                 ) : (
                   <button type="button" disabled className={baseClass(true)}>
                     <PhoneCall className="w-4 h-4" />
                     Call
                   </button>
                 )}
-                {customer.primary_contact_email ? (
-                  <a
-                    href={`mailto:${customer.primary_contact_email}`}
+                {selectedCustomer.primary_contact_email ? (
+                  <button
+                    type="button"
+                    onClick={handleEmail}
                     className={baseClass()}
                   >
                     <Mail className="w-4 h-4" />
                     Email
-                  </a>
+                  </button>
                 ) : (
                   <button type="button" disabled className={baseClass()}>
                     <Mail className="w-4 h-4" />
@@ -229,7 +271,7 @@ export function CustomerDetailPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => navigate("/sales/capture")}
+                  onClick={() => setQuickLogOpen(true)}
                   className={baseClass()}
                 >
                   <Edit3 className="w-4 h-4" />
@@ -346,6 +388,14 @@ export function CustomerDetailPage() {
           </button>
         </div>
       </div>
+      <Sheet open={quickLogOpen} onOpenChange={setQuickLogOpen}>
+        <SheetContent side="bottom">
+          <QuickLogSheet
+            {...getCustomerQuickLogSubject(companyId)}
+            onLogged={() => setQuickLogOpen(false)}
+          />
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

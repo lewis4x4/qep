@@ -117,20 +117,16 @@ describe("pickSmartActions", () => {
     expect(qb?.label).toContain("5T forklift");
   });
 
-  test("mark_deal_cooling requires sentiment cooling AND deal selected", () => {
-    const noDeal = pickSmartActions({
-      extraction: ext({ sentiment: "cooling" }),
-      selectedCustomerId: "cust-1",
-      selectedDealId: null,
-    });
-    expect(noDeal.find((a) => a.id === "mark_deal_cooling")).toBeUndefined();
-
-    const withDeal = pickSmartActions({
+  test("mark_deal_cooling is intentionally suppressed until deal resolution is wired", () => {
+    const actions = pickSmartActions({
       extraction: ext({ sentiment: "cooling" }),
       selectedCustomerId: "cust-1",
       selectedDealId: "deal-1",
     });
-    expect(withDeal.find((a) => a.id === "mark_deal_cooling")).toBeDefined();
+    // Even with a deal id present we no longer surface this action — the
+    // backend effect to mark the deal cooling needs rep-book-customer →
+    // deal resolution first. Reinstate when that lands.
+    expect(actions.find((a) => a.id === ("mark_deal_cooling" as never))).toBeUndefined();
   });
 
   test("log_activity label reflects extracted topic", () => {

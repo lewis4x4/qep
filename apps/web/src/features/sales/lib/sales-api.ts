@@ -2,7 +2,7 @@
 import { supabase } from "@/lib/supabase";
 
 /** Resolve workspace_id from the authenticated user's profile */
-async function getWorkspaceId(): Promise<string> {
+export async function getWorkspaceId(): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return "default";
   const { data } = await supabase
@@ -28,6 +28,66 @@ import {
   normalizeRepPipelineDeals,
   type DealStageOption,
 } from "./sales-api-normalizers";
+
+export type SalesActivityType = "call" | "email" | "visit" | "note";
+
+export interface SalesActivitySubjectInput {
+  companyId?: string;
+  dealId?: string;
+  contactId?: string;
+}
+
+export interface SalesActivityInsertPayload {
+  workspace_id: string;
+  activity_type: string;
+  body: string;
+  occurred_at: string;
+  created_by: string;
+  company_id: string | null;
+  deal_id: string | null;
+  contact_id: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export function resolveSalesActivitySubject(params: SalesActivitySubjectInput): {
+  company_id: string | null;
+  deal_id: string | null;
+  contact_id: string | null;
+} {
+  if (params.dealId) {
+    return { company_id: null, deal_id: params.dealId, contact_id: null };
+  }
+  if (params.companyId) {
+    return { company_id: params.companyId, deal_id: null, contact_id: null };
+  }
+  if (params.contactId) {
+    return { company_id: null, deal_id: null, contact_id: params.contactId };
+  }
+  throw new Error("A company, deal, or contact subject is required");
+}
+
+export function buildSalesActivityInsertPayload(params: {
+  workspaceId: string;
+  userId: string;
+  activityType: SalesActivityType;
+  body: string;
+  subject: SalesActivitySubjectInput;
+  metadata?: Record<string, unknown>;
+}): SalesActivityInsertPayload {
+  const subject = resolveSalesActivitySubject(params.subject);
+  return {
+    workspace_id: params.workspaceId,
+    activity_type: params.activityType === "visit" ? "meeting" : params.activityType,
+    body: params.body,
+    occurred_at: new Date().toISOString(),
+    created_by: params.userId,
+    ...subject,
+    metadata: {
+      source: "sales_companion",
+      ...params.metadata,
+    },
+  };
+}
 
 export async function fetchTodayBriefing(): Promise<DailyBriefing | null> {
   const today = new Date().toISOString().split("T")[0];
@@ -262,6 +322,8 @@ export async function logVisit(params: {
   notes?: string;
   nextAction?: string;
 }) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
   const wsId = await getWorkspaceId();
   const body = [
     `Visit outcome: ${params.outcome}`,
@@ -271,19 +333,18 @@ export async function logVisit(params: {
     .filter(Boolean)
     .join("\n");
 
-  const { error } = await supabase.from("crm_activities").insert({
-    workspace_id: wsId,
-    activity_type: "meeting",
+  const payload = buildSalesActivityInsertPayload({
+    workspaceId: wsId,
+    userId: user.id,
+    activityType: "visit",
     body,
-    occurred_at: new Date().toISOString(),
-    company_id: params.companyId,
-    deal_id: params.dealId ?? null,
+    subject: { dealId: params.dealId, companyId: params.companyId },
     metadata: {
-      source: "sales_companion",
       outcome: params.outcome,
       next_action: params.nextAction,
     },
   });
+  const { error } = await supabase.from("crm_activities").insert(payload);
 
   if (error) throw error;
 }
@@ -306,16 +367,40 @@ export async function createQuickNote(params: {
   dealId?: string;
   text: string;
 }) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
   const wsId = await getWorkspaceId();
-  const { error } = await supabase.from("crm_activities").insert({
-    workspace_id: wsId,
-    activity_type: "note",
+  const payload = buildSalesActivityInsertPayload({
+    workspaceId: wsId,
+    userId: user.id,
+    activityType: "note",
     body: params.text,
-    occurred_at: new Date().toISOString(),
-    company_id: params.companyId ?? null,
-    deal_id: params.dealId ?? null,
-    metadata: { source: "sales_companion" },
+    subject: { dealId: params.dealId, companyId: params.companyId },
   });
+  const { error } = await supabase.from("crm_activities").insert(payload);
 
+  if (error) throw error;
+}
+
+export async function logSalesActivity(params: {
+  activityType: SalesActivityType;
+  companyId?: string;
+  dealId?: string;
+  body?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const wsId = await getWorkspaceId();
+  const defaultBody = `${params.activityType[0].toUpperCase()}${params.activityType.slice(1)} logged from quick action`;
+  const payload = buildSalesActivityInsertPayload({
+    workspaceId: wsId,
+    userId: user.id,
+    activityType: params.activityType,
+    body: params.body?.trim() || defaultBody,
+    subject: { dealId: params.dealId, companyId: params.companyId },
+    metadata: params.metadata,
+  });
+  const { error } = await supabase.from("crm_activities").insert(payload);
   if (error) throw error;
 }

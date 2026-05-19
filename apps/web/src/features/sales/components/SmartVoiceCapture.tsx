@@ -32,6 +32,7 @@ import {
 import type { RepCustomer } from "../lib/types";
 import { supabase } from "@/lib/supabase";
 import { ironTranscribe } from "@/lib/iron/voice/api";
+import { getWorkspaceId } from "../lib/sales-api";
 import {
   extractVoiceEntities,
   EMPTY_VOICE_EXTRACTION,
@@ -259,6 +260,7 @@ export function SmartVoiceCapture({
   useEffect(() => {
     if (state !== "processing" || !audioBlob) return;
     let cancelled = false;
+    const abortController = new AbortController();
     async function process(blob: Blob) {
       try {
         const ext = blob.type.includes("mp4") ? ".mp4" : ".webm";
@@ -268,16 +270,19 @@ export function SmartVoiceCapture({
         const text = result.transcript ?? "";
         setTranscript(text);
 
+        let matchedCustomerId: string | null = null;
         let matchedCustomerName: string | null = null;
         if (!presetCustomerId) {
           const match = matchCustomerInTranscript(text, allCustomers);
           setMatchResult(match);
           if (match.confidence >= AUTO_ACCEPT_CONFIDENCE && match.top) {
             setSelectedCustomerId(match.top.customer_id);
+            matchedCustomerId = match.top.customer_id;
             matchedCustomerName = match.top.company_name;
           }
         } else {
           const preset = allCustomers.find((c) => c.customer_id === presetCustomerId);
+          matchedCustomerId = presetCustomerId;
           matchedCustomerName = preset?.company_name ?? null;
         }
 
@@ -285,7 +290,7 @@ export function SmartVoiceCapture({
 
         if (text.trim().length > 0) {
           setExtractionLoading(true);
-          void extractVoiceEntities(text, matchedCustomerName ?? undefined)
+          void extractVoiceEntities(text, matchedCustomerName ?? undefined, abortController.signal)
             .then((res) => {
               if (cancelled) return;
               setExtraction(res);
@@ -293,7 +298,7 @@ export function SmartVoiceCapture({
                 const next = new Set<SmartAction["id"]>();
                 const actions = pickSmartActions({
                   extraction: res,
-                  selectedCustomerId: matchedCustomerName ? "preset" : null,
+                  selectedCustomerId: matchedCustomerId,
                   selectedDealId: null,
                 });
                 for (const a of actions) if (a.defaultOn) next.add(a.id);
@@ -320,6 +325,7 @@ export function SmartVoiceCapture({
     void process(audioBlob);
     return () => {
       cancelled = true;
+      abortController.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, audioBlob]);
@@ -354,13 +360,15 @@ export function SmartVoiceCapture({
         }
         : {};
 
+      const workspaceId = await getWorkspaceId();
       const { error: insertErr } = await supabase.from("voice_captures").insert({
         user_id: user.id,
+        workspace_id: workspaceId,
         audio_storage_path: fileName,
         duration_seconds: duration,
         transcript: transcript || null,
-        sync_status: "transcribed",
-        customer_id: selectedCustomerId,
+        sync_status: "pending",
+        linked_company_id: selectedCustomerId,
         extracted_data: extractedData,
       });
       if (insertErr) throw insertErr;
