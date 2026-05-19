@@ -1,16 +1,29 @@
-import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import {
+  optionsResponse,
+  safeJsonError,
+  safeJsonOk,
+} from "../_shared/safe-cors.ts";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { resolveVoiceRealtimeModelConfig } from "../_shared/voice-model-config.ts";
+import {
+  buildClientSecretPayload,
+  buildLegacyRealtimeSessionPayload,
+  isUnsupportedTurnDetectionError,
+  type VoiceRealtimeSessionInput,
+} from "./session-payload.ts";
 
 type RealtimeSessionRequest = {
   language?: string | null;
 };
 
-const REALTIME_SESSION_MODEL = Deno.env.get("OPENAI_REALTIME_MODEL")?.trim() || "gpt-realtime-2";
-const REALTIME_CLIENT_SECRET_ENDPOINT = "https://api.openai.com/v1/realtime/client_secrets";
-const LEGACY_REALTIME_SESSION_ENDPOINT = "https://api.openai.com/v1/realtime/sessions";
+const REALTIME_SESSION_MODEL = Deno.env.get("OPENAI_REALTIME_MODEL")?.trim() ||
+  "gpt-realtime-2";
+const REALTIME_CLIENT_SECRET_ENDPOINT =
+  "https://api.openai.com/v1/realtime/client_secrets";
+const LEGACY_REALTIME_SESSION_ENDPOINT =
+  "https://api.openai.com/v1/realtime/sessions";
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
@@ -21,19 +34,33 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    const auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+    );
     if (!auth.ok) return auth.response;
     if (!["rep", "admin", "manager", "owner"].includes(auth.role)) {
-      return safeJsonError("Your role does not have access to realtime voice capture.", 403, origin);
+      return safeJsonError(
+        "Your role does not have access to realtime voice capture.",
+        403,
+        origin,
+      );
     }
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    const allowed = await checkRealtimeVoiceRateLimit(supabaseAdmin, auth.userId);
+    const allowed = await checkRealtimeVoiceRateLimit(
+      supabaseAdmin,
+      auth.userId,
+    );
     if (!allowed) {
-      return safeJsonError("Too many realtime voice session requests. Please wait a minute and try again.", 429, origin);
+      return safeJsonError(
+        "Too many realtime voice session requests. Please wait a minute and try again.",
+        429,
+        origin,
+      );
     }
 
     const openAiKey = Deno.env.get("OPENAI_API_KEY");
@@ -61,7 +88,9 @@ Deno.serve(async (req) => {
       model: session.realtimeModel,
       sdp_url: session.mode === "client_secret"
         ? "https://api.openai.com/v1/realtime/calls"
-        : `https://api.openai.com/v1/realtime?model=${encodeURIComponent(session.realtimeModel)}`,
+        : `https://api.openai.com/v1/realtime?model=${
+          encodeURIComponent(session.realtimeModel)
+        }`,
       transcription_model: modelConfig.transcriptionModel,
       language,
       session: session.payload,
@@ -69,37 +98,25 @@ Deno.serve(async (req) => {
   } catch (error) {
     captureEdgeException(error, { fn: "voice-realtime-session", req });
     console.error("voice-realtime-session failed:", error);
-    return safeJsonError("Could not create a realtime voice session.", 502, origin);
+    return safeJsonError(
+      "Could not create a realtime voice session.",
+      502,
+      origin,
+    );
   }
 });
 
 async function createRealtimeClientSecret(
   openAiKey: string,
-  input: {
-    language: string;
+  input: VoiceRealtimeSessionInput,
+): Promise<
+  {
+    mode: "client_secret" | "legacy_session";
     realtimeModel: string;
-    transcriptionModel: string;
-  },
-): Promise<{ mode: "client_secret" | "legacy_session"; realtimeModel: string; payload: unknown }> {
-  const clientSecretPayload = {
-    session: {
-      type: "transcription",
-      audio: {
-        input: {
-          transcription: {
-            model: input.transcriptionModel,
-            language: input.language,
-          },
-          turn_detection: {
-            type: "server_vad",
-            threshold: 0.5,
-            prefix_padding_ms: 300,
-            silence_duration_ms: 500,
-          },
-        },
-      },
-    },
-  };
+    payload: unknown;
+  }
+> {
+  const clientSecretPayload = buildClientSecretPayload(input);
 
   const clientSecretRes = await fetch(REALTIME_CLIENT_SECRET_ENDPOINT, {
     method: "POST",
@@ -120,8 +137,42 @@ async function createRealtimeClientSecret(
   }
 
   const clientSecretError = await clientSecretRes.text().catch(() => "");
+  if (
+    isUnsupportedTurnDetectionError(clientSecretRes.status, clientSecretError)
+  ) {
+    console.warn(
+      `OpenAI realtime transcription model ${input.transcriptionModel} rejected turn_detection; retrying without server VAD.`,
+    );
+    const retryRes = await fetch(REALTIME_CLIENT_SECRET_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openAiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(
+        buildClientSecretPayload(input, { includeTurnDetection: false }),
+      ),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (retryRes.ok) {
+      return {
+        mode: "client_secret",
+        realtimeModel: input.realtimeModel,
+        payload: await retryRes.json(),
+      };
+    }
+
+    throw new Error(
+      `OpenAI realtime client secret retry failed (${retryRes.status}): ${await retryRes
+        .text()}`,
+    );
+  }
+
   if (clientSecretRes.status !== 404) {
-    throw new Error(`OpenAI realtime client secret failed (${clientSecretRes.status}): ${clientSecretError}`);
+    throw new Error(
+      `OpenAI realtime client secret failed (${clientSecretRes.status}): ${clientSecretError}`,
+    );
   }
 
   // Backward-compatible fallback for OpenAI projects still using the older
@@ -133,25 +184,47 @@ async function createRealtimeClientSecret(
       Authorization: `Bearer ${openAiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: input.realtimeModel,
-      modalities: ["audio", "text"],
-      input_audio_transcription: {
-        model: input.transcriptionModel,
-        language: input.language,
-      },
-      turn_detection: {
-        type: "server_vad",
-        threshold: 0.5,
-        prefix_padding_ms: 300,
-        silence_duration_ms: 500,
-      },
-    }),
+    body: JSON.stringify(buildLegacyRealtimeSessionPayload(input)),
     signal: AbortSignal.timeout(15_000),
   });
 
   if (!legacyRes.ok) {
-    throw new Error(`OpenAI realtime session failed (${legacyRes.status}): ${await legacyRes.text()}`);
+    const legacyError = await legacyRes.text();
+    if (isUnsupportedTurnDetectionError(legacyRes.status, legacyError)) {
+      console.warn(
+        `OpenAI legacy realtime model ${input.realtimeModel} rejected turn_detection; retrying without server VAD.`,
+      );
+      const retryLegacyRes = await fetch(LEGACY_REALTIME_SESSION_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openAiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(
+          buildLegacyRealtimeSessionPayload(input, {
+            includeTurnDetection: false,
+          }),
+        ),
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      if (retryLegacyRes.ok) {
+        return {
+          mode: "legacy_session",
+          realtimeModel: input.realtimeModel,
+          payload: await retryLegacyRes.json(),
+        };
+      }
+
+      throw new Error(
+        `OpenAI realtime session retry failed (${retryLegacyRes.status}): ${await retryLegacyRes
+          .text()}`,
+      );
+    }
+
+    throw new Error(
+      `OpenAI realtime session failed (${legacyRes.status}): ${legacyError}`,
+    );
   }
 
   return {
@@ -182,7 +255,10 @@ async function checkRealtimeVoiceRateLimit(
     return rpcResult.data !== false;
   }
 
-  console.warn("voice-realtime-session check_rate_limit RPC unavailable, using table fallback", rpcResult.error);
+  console.warn(
+    "voice-realtime-session check_rate_limit RPC unavailable, using table fallback",
+    rpcResult.error,
+  );
 
   const windowStartIso = new Date(Date.now() - 60_000).toISOString();
   const countResult = await supabaseAdmin
@@ -193,7 +269,10 @@ async function checkRealtimeVoiceRateLimit(
     .gte("created_at", windowStartIso);
 
   if (countResult.error) {
-    console.error("voice-realtime-session rate limit fallback count failed:", countResult.error);
+    console.error(
+      "voice-realtime-session rate limit fallback count failed:",
+      countResult.error,
+    );
     return true;
   }
 
@@ -206,7 +285,10 @@ async function checkRealtimeVoiceRateLimit(
     .insert({ user_id: userId, endpoint: "voice-realtime-session" });
 
   if (insertResult.error) {
-    console.error("voice-realtime-session rate limit fallback insert failed:", insertResult.error);
+    console.error(
+      "voice-realtime-session rate limit fallback insert failed:",
+      insertResult.error,
+    );
   }
 
   return true;
