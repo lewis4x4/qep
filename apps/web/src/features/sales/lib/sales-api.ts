@@ -61,6 +61,76 @@ export async function fetchRepCustomers(): Promise<RepCustomer[]> {
   return normalizeRepCustomers(data);
 }
 
+
+interface CompanyPickerRow {
+  id: string;
+  name: string | null;
+  dba: string | null;
+  search_1: string | null;
+  search_2: string | null;
+  city: string | null;
+  state: string | null;
+  phone: string | null;
+}
+
+function escapeIlikePattern(value: string): string {
+  return value.replace(/[\%_]/g, "\\$&");
+}
+
+function mapCompanyPickerRow(row: CompanyPickerRow): RepCustomer {
+  return {
+    customer_id: row.id,
+    company_name: row.name ?? row.dba ?? "Customer",
+    search_1: row.search_1 ?? null,
+    search_2: row.search_2 ?? null,
+    primary_contact_name: null,
+    primary_contact_phone: row.phone ?? null,
+    primary_contact_email: null,
+    city: row.city ?? null,
+    state: row.state ?? null,
+    open_deals: 0,
+    active_quotes: 0,
+    last_interaction: null,
+    days_since_contact: null,
+    opportunity_score: 0,
+  };
+}
+
+export async function searchCompaniesForPicker(
+  rawQuery: string,
+  limit = 8,
+): Promise<RepCustomer[]> {
+  const query = rawQuery.trim();
+  if (query.length < 2) return [];
+
+  const wsId = await getWorkspaceId();
+  const pattern = `%${escapeIlikePattern(query)}%`;
+  const fields = ["name", "dba", "search_1", "search_2", "phone"] as const;
+  const byId = new Map<string, CompanyPickerRow>();
+
+  for (const field of fields) {
+    if (byId.size >= limit) break;
+
+    const { data, error } = await supabase
+      .from("crm_companies")
+      .select("id, name, dba, search_1, search_2, city, state, phone")
+      .eq("workspace_id", wsId)
+      .is("deleted_at", null)
+      .ilike(field, pattern)
+      .order("name", { ascending: true, nullsFirst: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    for (const row of (data ?? []) as CompanyPickerRow[]) {
+      if (!byId.has(row.id)) byId.set(row.id, row);
+      if (byId.size >= limit) break;
+    }
+  }
+
+  return Array.from(byId.values()).slice(0, limit).map(mapCompanyPickerRow);
+}
+
 /**
  * Fallback fetch for customer detail pages when the company isn't in the
  * rep's book (v_rep_customers). Pulls the company row directly from

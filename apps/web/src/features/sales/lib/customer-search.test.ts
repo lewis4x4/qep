@@ -36,4 +36,11 @@ describe("matchesRepCustomerSearch", () => {
     expect(matchesRepCustomerSearch(baseCustomer, "awesome")).toBe(true);
     expect(matchesRepCustomerSearch(baseCustomer, "lake")).toBe(true);
   });
+
+
+  test("matches DREC legacy code by prefix", () => {
+    const drec = { ...baseCustomer, search_1: "DREC", search_2: null };
+    expect(matchesRepCustomerSearch(drec, "dr")).toBe(true);
+    expect(matchesRepCustomerSearch(drec, "rec")).toBe(false);
+  });
 });
