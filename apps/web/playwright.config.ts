@@ -7,7 +7,11 @@ const appRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(appRoot, "../..");
 const viteEnv = loadEnv("development", repoRoot, "");
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5173";
+const defaultPort = process.env.PLAYWRIGHT_PORT ?? "4173";
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${defaultPort}`;
+const webServerUrl = new URL(baseURL);
+const webServerPort = webServerUrl.port || (webServerUrl.protocol === "https:" ? "443" : "80");
+const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER === "1" || process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER === "true";
 
 /** Same fallbacks as apps/web/test-setup/env-vars.ts — lets the Vite dev server boot without a local .env. */
 const supabaseUrl =
@@ -37,9 +41,9 @@ export default defineConfig({
   webServer: process.env.PLAYWRIGHT_SKIP_WEBSERVER
     ? undefined
     : {
-        command: "bun run dev --host 127.0.0.1 --port 5173",
+        command: `bun run dev --host 127.0.0.1 --port ${webServerPort}`,
         url: baseURL,
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer,
         timeout: 120_000,
         env: {
           ...process.env,
