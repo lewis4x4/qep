@@ -263,7 +263,7 @@ export function QuoteBuilderV2PageMobileShell({
       </main>
 
       <div
-        className="fixed inset-x-0 bottom-16 z-50 border-t border-white/[0.06] bg-[hsl(var(--background))]/95 backdrop-blur-lg"
+        className="fixed inset-x-0 bottom-16 z-40 border-t border-white/[0.06] bg-[hsl(var(--background))]/95 backdrop-blur-lg"
         style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         <div className="flex items-center gap-2 p-3">
