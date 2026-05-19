@@ -12,7 +12,14 @@ import {
   shouldShowProtectedRouteBootstrap,
 } from "./lib/auth-route-bootstrap";
 import { hasCachedAuthProfile } from "./lib/auth-recovery";
-import { resolveHomeRoute } from "./lib/home-route";
+import {
+  canAccessFloorSurface,
+  canAccessManagerAdminRoute,
+  canAccessManagerAdminSurface,
+  canAccessQrmSurface,
+  resolveManagerAdminRouteRedirect,
+  resolveHomeRoute,
+} from "./lib/home-route";
 import { canAccessAccountModuleForIronRole, canAccessNavHrefForIronRole, canAccessPrimaryHeaderForIronRole } from "./lib/nav-config";
 import { portalRouteElements } from "./features/portal/PortalRoutes";
 
@@ -974,6 +981,21 @@ function App() {
   const canAccessRentalsSurface = hasRepOrAboveRole && canAccessRentalsHeader;
   const canAccessAccountModule = (moduleKey: string) =>
     hasRepOrAboveRole && canAccessAccountModuleForIronRole(profile.iron_role, moduleKey);
+  const managerAdminTemplatesRedirect = resolveManagerAdminRouteRedirect(
+    profile.role,
+    homeRoute,
+    "qrm_activities_templates",
+  );
+  const managerAdminSequencesRedirect = resolveManagerAdminRouteRedirect(
+    profile.role,
+    homeRoute,
+    "admin_sequences",
+  );
+  const managerAdminDuplicatesRedirect = resolveManagerAdminRouteRedirect(
+    profile.role,
+    homeRoute,
+    "admin_duplicates",
+  );
   const accountModuleFallback = hasRepOrAboveRole
     ? <AccountModuleAccessRedirect />
     : <Navigate to="/dashboard" replace />;
@@ -1003,18 +1025,22 @@ function App() {
               <Route path="/" element={<Navigate to={homeRoute} replace />} />
               <Route
                 path="/dashboard"
-                element={<Navigate to="/floor" replace />}
+                element={<Navigate to={homeRoute} replace />}
               />
               {/* Slice: The Floor — parallel to /dashboard, team-facing */}
               <Route
                 path="/floor"
                 element={
-                  <FloorPage
-                    userId={profile.id}
-                    userRole={profile.role}
-                    userFullName={profile.full_name}
-                    ironRoleFromProfile={profile.iron_role}
-                  />
+                  !canAccessFloorSurface(profile.role) ? (
+                    <Navigate to={homeRoute} replace />
+                  ) : (
+                    <FloorPage
+                      userId={profile.id}
+                      userRole={profile.role}
+                      userFullName={profile.full_name}
+                      ironRoleFromProfile={profile.iron_role}
+                    />
+                  )
                 }
               />
               <Route
@@ -1038,10 +1064,10 @@ function App() {
               <Route
                 path="/admin"
                 element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessManagerAdminSurface(profile.role) ? (
                     <AdminPage userRole={profile.role} userId={profile.id} />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    <Navigate to={homeRoute} replace />
                   )
                 }
               />
@@ -1957,10 +1983,10 @@ function App() {
               <Route
                 path="/qrm"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessQrmSurface(profile.role) ? (
                     <QrmCommandCenterPage userRole={profile.role} userId={profile.id} userName={profile.full_name} userEmail={profile.email} ironRoleFromProfile={profile.iron_role} />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    <Navigate to={homeRoute} replace />
                   )
                 }
               />
@@ -1982,10 +2008,10 @@ function App() {
               <Route
                 path="/qrm/command/approvals"
                 element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessManagerAdminSurface(profile.role) ? (
                     <ApprovalCenterPage />
                   ) : (
-                    <Navigate to="/qrm" replace />
+                    <Navigate to={homeRoute} replace />
                   )
                 }
               />
@@ -2005,10 +2031,10 @@ function App() {
               <Route
                 path="/qrm/command/trace/:predictionId"
                 element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessManagerAdminSurface(profile.role) ? (
                     <PredictionTracePage />
                   ) : (
-                    <Navigate to="/qrm" replace />
+                    <Navigate to={homeRoute} replace />
                   )
                 }
               />
@@ -2657,10 +2683,10 @@ function App() {
               <Route
                 path="/qrm/activities/templates"
                 element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessManagerAdminRoute(profile.role, "qrm_activities_templates") ? (
                     <QrmActivityTemplatesPage userId={profile.id} />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    <Navigate to={managerAdminTemplatesRedirect ?? homeRoute} replace />
                   )
                 }
               />
@@ -2671,20 +2697,20 @@ function App() {
               <Route
                 path="/admin/sequences"
                 element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessManagerAdminRoute(profile.role, "admin_sequences") ? (
                     <QrmFollowUpSequencesPage userId={profile.id} />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    <Navigate to={managerAdminSequencesRedirect ?? homeRoute} replace />
                   )
                 }
               />
               <Route
                 path="/admin/duplicates"
                 element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                  canAccessManagerAdminRoute(profile.role, "admin_duplicates") ? (
                     <QrmDuplicatesPage userRole={profile.role} />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    <Navigate to={managerAdminDuplicatesRedirect ?? homeRoute} replace />
                   )
                 }
               />
