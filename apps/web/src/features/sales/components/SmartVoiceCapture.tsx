@@ -316,6 +316,11 @@ export function SmartVoiceCapture({
               // Catches the "I met Frank at Beacon" cases where the
               // first pass missed because Beacon wasn't in the rep's book
               // but Frank IS the primary contact of Beacon Ridge in book.
+              //
+              // IMPORTANT: this fires 2–3s after the review screen
+              // appeared. The rep may have already picked a customer
+              // manually in that window — never overwrite their choice.
+              // Use functional setters that only fill when state is null.
               let secondPassCustomerId = matchedCustomerId;
               if (!presetCustomerId) {
                 const secondMatch = matchCustomerInTranscript(text, allCustomers, {
@@ -331,15 +336,19 @@ export function SmartVoiceCapture({
                   secondMatch.confidence >= AUTO_ACCEPT_CONFIDENCE &&
                   secondMatch.top
                 ) {
-                  setSelectedCustomerId(secondMatch.top.customer_id);
-                  setSelectedCustomerName(secondMatch.top.company_name);
-                  secondPassCustomerId = secondMatch.top.customer_id;
+                  const winnerId = secondMatch.top.customer_id;
+                  const winnerName = secondMatch.top.company_name;
+                  setSelectedCustomerId((current) => current ?? winnerId);
+                  setSelectedCustomerName((current) => current ?? winnerName);
+                  secondPassCustomerId = winnerId;
                 } else if (secondMatch.top) {
-                  // Picker seed sharpened by extraction — prefer the
-                  // strongest customer_mention if the AI returned one.
+                  // Picker seed sharpened by extraction — only set when
+                  // the rep hasn't already typed their own search.
                   const seed = res.customer_mentions[0]
                     ?? secondMatch.top.company_name.split(/\s+/)[0];
-                  if (seed && seed.length >= 2) setInitialPickerSearch(seed);
+                  if (seed && seed.length >= 2) {
+                    setInitialPickerSearch((current) => current || seed);
+                  }
                 }
               }
 
