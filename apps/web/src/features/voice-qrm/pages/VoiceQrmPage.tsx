@@ -12,11 +12,12 @@ import { AskIronAdvisorButton } from "@/components/primitives";
 export function VoiceQrmPage() {
   const [searchParams] = useSearchParams();
   const dealId = searchParams.get("deal_id") ?? undefined;
+  const linkedCompanyId = searchParams.get("linked_company_id") ?? undefined;
   const [result, setResult] = useState<VoiceQrmResult | null>(null);
 
   const submitMutation = useMutation({
     mutationFn: (args: { audioBlob: Blob; fileName: string }) =>
-      submitVoiceToQrm({ audioBlob: args.audioBlob, fileName: args.fileName, dealId }),
+      submitVoiceToQrm({ audioBlob: args.audioBlob, fileName: args.fileName, dealId, linkedCompanyId }),
     onSuccess: (data) => setResult(data),
   });
 
@@ -46,6 +47,11 @@ export function VoiceQrmPage() {
         {dealId && (
           <p className="mt-1 text-xs text-muted-foreground">
             Linking to deal <code className="rounded bg-muted px-1 py-0.5 text-[10px]">{dealId.substring(0, 8)}…</code>
+          </p>
+        )}
+        {linkedCompanyId && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Linking to company <code className="rounded bg-muted px-1 py-0.5 text-[10px]">{linkedCompanyId.substring(0, 8)}…</code>
           </p>
         )}
       </div>

@@ -91,6 +91,19 @@ export interface SubmitVoiceOptions {
   audioBlob: Blob;
   fileName?: string;
   dealId?: string;
+  linkedCompanyId?: string;
+}
+
+export function buildVoiceQrmFormData(opts: SubmitVoiceOptions): FormData {
+  const form = new FormData();
+  form.append("audio", opts.audioBlob, opts.fileName ?? "recording.webm");
+  if (opts.dealId) {
+    form.append("deal_id", opts.dealId);
+  }
+  if (opts.linkedCompanyId) {
+    form.append("linked_company_id", opts.linkedCompanyId);
+  }
+  return form;
 }
 
 export async function submitVoiceToQrm(opts: SubmitVoiceOptions): Promise<VoiceQrmResult> {
@@ -99,11 +112,7 @@ export async function submitVoiceToQrm(opts: SubmitVoiceOptions): Promise<VoiceQ
     throw new Error("Not signed in");
   }
 
-  const form = new FormData();
-  form.append("audio", opts.audioBlob, opts.fileName ?? "recording.webm");
-  if (opts.dealId) {
-    form.append("deal_id", opts.dealId);
-  }
+  const form = buildVoiceQrmFormData(opts);
 
   const res = await fetch(VOICE_QRM_URL, {
     method: "POST",

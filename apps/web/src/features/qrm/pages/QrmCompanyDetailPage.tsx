@@ -331,6 +331,11 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
             Edit Company
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={`/voice-qrm?linked_company_id=${encodeURIComponent(companyId)}`}>
+              Record Voice Note
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={`/chat?company_id=${companyId}`}>
               Ask Knowledge
             </Link>

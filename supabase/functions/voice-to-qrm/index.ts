@@ -29,6 +29,13 @@ import {
   resolveVoiceToQrmModelConfig,
   WHISPER_TRANSCRIPTION_MODEL,
 } from "../_shared/voice-model-config.ts";
+import { resolveVoiceToQrmCompanyDecision } from "./company-resolution.ts";
+import {
+  assertCallerCanAccessLinkedCompany,
+  buildVoiceCaptureInsertPayload,
+  insertVoiceCaptureWithVc1Links,
+  insertKnownCompanyOrDealActivity,
+} from "./vc1-company-linking.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { resolveProfileActiveWorkspaceId } from "../_shared/workspace.ts";
@@ -282,6 +289,7 @@ Deno.serve(async (req) => {
     const formData = await req.formData();
     const audioFile = formData.get("audio") as File | null;
     const dealIdParam = ((formData.get("deal_id") as string | null) ?? "").trim() || null;
+    const linkedCompanyIdParam = ((formData.get("linked_company_id") as string | null) ?? "").trim() || null;
 
     if (!audioFile) {
       return safeJsonError("audio field is required", 400, origin);
@@ -311,6 +319,16 @@ Deno.serve(async (req) => {
       }
 
       authorizedDealId = authorizedDeal.id;
+    }
+
+    let authorizedLinkedCompanyId: string | null = null;
+    try {
+      authorizedLinkedCompanyId = await assertCallerCanAccessLinkedCompany(supabase, linkedCompanyIdParam);
+    } catch (error) {
+      if (error instanceof Error && error.message === "FORBIDDEN_LINKED_COMPANY") {
+        return safeJsonError("You do not have access to the selected company.", 403, origin);
+      }
+      return safeJsonError("Could not verify the selected company.", 500, origin);
     }
 
     // ── 2. Upload audio to storage ────────��───────────────────────────────
@@ -484,7 +502,16 @@ Deno.serve(async (req) => {
     let companyMatchMethod: string | null = null;
     let companyConfidence: number | null = null;
 
-    if (extracted.company?.name) {
+    const companyDecision = resolveVoiceToQrmCompanyDecision({
+      authorizedLinkedCompanyId,
+      extractedCompanyName: extracted.company?.name ?? null,
+    });
+
+    if (companyDecision.forceCompanyId) {
+      companyId = companyDecision.forceCompanyId;
+      companyMatchMethod = "exact";
+      companyConfidence = 1.0;
+    } else if (companyDecision.shouldFuzzyMatch && extracted.company?.name) {
       const { data: companyMatches } = await supabaseAdmin
         .rpc("fuzzy_match_company", {
           p_workspace_id: workspace,
@@ -495,7 +522,7 @@ Deno.serve(async (req) => {
         companyId = companyMatches[0].company_id;
         companyMatchMethod = companyMatches[0].match_method;
         companyConfidence = companyMatches[0].name_similarity;
-      } else {
+      } else if (companyDecision.shouldCreateCompany) {
         // Auto-create company
         const { data: newCompany, error: companyError } = await supabaseAdmin
           .from("crm_companies")
@@ -830,19 +857,24 @@ Deno.serve(async (req) => {
     }
 
     // ── 8. Save voice capture record ───────────��──────────────────────────
-    const { data: capture } = await supabaseAdmin
-      .from("voice_captures")
-      .insert({
-        user_id: user.id,
-        workspace_id: workspace,
-        audio_url: storagePath,
-        transcript,
-        extracted_data: extracted,
-        sync_status: "completed",
-        deal_id: dealId,
-      })
-      .select("id")
-      .single();
+    let capture: { id: string } | null = null;
+    try {
+      capture = await insertVoiceCaptureWithVc1Links(
+        supabaseAdmin,
+        buildVoiceCaptureInsertPayload({
+          userId: user.id,
+          workspaceId: workspace,
+          audioUrl: storagePath,
+          transcript,
+          extractedData: extracted,
+          dealId,
+          companyId,
+          contactId,
+        }),
+      );
+    } catch {
+      return safeJsonError("Failed to persist voice capture.", 500, origin);
+    }
 
     // ── 8b. Equipment mentions → crm_equipment + voice_extracted_equipment ──
     // For current_fleet / trade_in mentions tied to a known company we create
@@ -1063,15 +1095,14 @@ Deno.serve(async (req) => {
 
     // ── 10. Create QRM activity note ──────────────────────────────────────
     // crm_activities_check: exactly one of contact_id / deal_id / company_id (migration 021).
-    if (dealId) {
-      await supabaseAdmin.from("crm_activities").insert({
-        workspace_id: workspace,
-        activity_type: "note",
-        body: extracted.qrm_narrative || `Voice capture: ${transcript.substring(0, 500)}`,
-        deal_id: dealId,
-        contact_id: null,
-        company_id: null,
-        created_by: user.id,
+    try {
+      const activityBody = extracted.qrm_narrative || `Voice capture: ${transcript.substring(0, 500)}`;
+      await insertKnownCompanyOrDealActivity(supabaseAdmin, {
+        workspaceId: workspace,
+        createdBy: user.id,
+        body: activityBody,
+        companyId,
+        dealId,
         metadata: {
           source: "voice_to_qrm",
           voice_capture_id: capture?.id,
@@ -1079,8 +1110,15 @@ Deno.serve(async (req) => {
           sentiment: extracted.intelligence?.sentiment,
           resolved_contact_id: contactId,
           resolved_company_id: companyId,
+          resolved_deal_id: dealId,
         },
       });
+    } catch (error) {
+      return safeJsonError(
+        error instanceof Error ? error.message : "Unable to create company activity timeline entry.",
+        500,
+        origin,
+      );
     }
 
     // ── 11. Voice → Escalation (Slice 2.5) ──────────────────────────────────
