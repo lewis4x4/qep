@@ -365,6 +365,14 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     sectionLabel: "Core",
   },
   {
+    label: "Voice Inbox",
+    href: "/qrm/voice-inbox",
+    icon: Mic,
+    roles: ["admin", "manager", "owner"],
+    primaryHeaderId: "qrm",
+    sectionLabel: "Core",
+  },
+  {
     label: "Deals",
     href: "/qrm/deals",
     icon: LayoutGrid,

@@ -42,6 +42,7 @@ interface SubNavItem {
 
 const CRM_SUB_NAV_ITEMS: SubNavItem[] = [
   { label: "Activities", href: "/qrm/activities", icon: MessageCircleMore },
+  { label: "Voice Inbox", href: "/qrm/voice-inbox", icon: Mic2, roles: ["admin", "manager", "owner"] },
   { label: "Campaigns", href: "/qrm/campaigns", icon: Megaphone, roles: ["admin", "manager", "owner"] },
   { label: "Deals", href: "/qrm/deals", icon: LayoutGrid },
   { label: "Contacts", href: "/qrm/contacts", icon: UsersRound },
