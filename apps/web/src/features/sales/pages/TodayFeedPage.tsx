@@ -3,10 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { useTodayFeed } from "../hooks/useTodayFeed";
 import { useAuth } from "@/hooks/useAuth";
 import { EveningBriefingHero } from "../components/EveningBriefingHero";
-import { MomentumStrip } from "../components/MomentumStrip";
+import { SalesNarrativeBlock } from "../components/SalesNarrativeBlock";
+import { SalesActionsBlock } from "../components/SalesActionsBlock";
+import { SalesQuickTools } from "../components/SalesQuickTools";
 import { TomorrowFirstMove } from "../components/TomorrowFirstMove";
 import { LiveSignalsStrip } from "../components/LiveSignalsStrip";
-import { EmptyStateQuickStart } from "../components/EmptyStateQuickStart";
 import { TodayFeedSkeleton } from "../components/TodayFeedSkeleton";
 import { PrepCard } from "../components/PrepCard";
 import { ActionItemCard } from "../components/ActionItemCard";
@@ -159,12 +160,10 @@ export function TodayFeedPage() {
     quotesThisWeek: liveStats.quotes_sent_this_week,
   });
 
-  const hasData = pipeline.length > 0 || Boolean(briefing);
-
   const handleVoiceDictate = () => setLogVisitOpen(true);
 
   return (
-    <div className="px-4 py-4 space-y-5 max-w-lg mx-auto pb-8">
+    <div className="px-4 py-4 space-y-4 max-w-lg mx-auto pb-8">
       <div className="flex items-center justify-between px-4 py-3 sm:hidden">
         <h1 className="text-xl font-bold text-foreground">Today</h1>
         <button
@@ -191,25 +190,28 @@ export function TodayFeedPage() {
         followup={briefingCopy.followup}
         assistantStatus={briefingCopy.assistantStatus}
         onVoicePress={handleVoiceDictate}
+        collapsible
+        storageKey="today-hero"
       />
 
-      {hasData && (
-        <MomentumStrip
-          pipeline={pipeline}
-          quotesThisWeek={liveStats.quotes_sent_this_week}
-        />
-      )}
+      <SalesNarrativeBlock firstName={firstName} />
 
       {pipeline.length > 0 && (
         <LiveSignalsStrip
           pipeline={pipeline}
-          expiringQuoteCount={
-            briefing?.expiring_quotes?.length ?? 0
-          }
+          expiringQuoteCount={briefing?.expiring_quotes?.length ?? 0}
         />
       )}
 
+      <SalesActionsBlock
+        pipeline={pipeline}
+        liveStats={liveStats}
+        onVoiceQuote={handleVoiceDictate}
+      />
+
       {pipeline.length > 0 && <TomorrowFirstMove pipeline={pipeline} />}
+
+      <SalesQuickTools />
 
       {priorities.length > 0 && (
         <div>
@@ -250,10 +252,6 @@ export function TodayFeedPage() {
             ))}
           </div>
         </div>
-      )}
-
-      {!hasData && (
-        <EmptyStateQuickStart onLogVisit={() => setLogVisitOpen(true)} />
       )}
     </div>
   );
