@@ -578,6 +578,9 @@ verify_jwt = false
 [functions.voice-extract-entities]
 verify_jwt = false
 
+[functions.embed-text]
+verify_jwt = false
+
 [functions.iron-tts]
 verify_jwt = false
 

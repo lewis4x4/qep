@@ -35,6 +35,11 @@ export interface ExtractedMatchSignals {
 export interface MatcherOptions {
   /** Signals from the AI extraction pass; trigger a richer second-pass match. */
   extracted?: ExtractedMatchSignals;
+  /**
+   * pgvector cosine results — map of customer_id → cosine similarity in [0,1].
+   * Folded into the score when similarity ≥ 0.7. Empty/absent map = no-op lane.
+   */
+  semantic?: Map<string, number>;
 }
 
 export type SignalKind =
@@ -48,7 +53,8 @@ export type SignalKind =
   | "ai_contact"
   | "ai_phone"
   | "ai_location"
-  | "ai_equipment";
+  | "ai_equipment"
+  | "semantic";
 
 export interface SignalHit {
   kind: SignalKind;
@@ -101,6 +107,8 @@ const W = {
   ai_phone_exact: 5.0,
   ai_location_token: 1.5,
   ai_equipment: 3.0,
+  /** Slice B — pgvector cosine. Applied to max(0, similarity − 0.7). */
+  semantic: 2.0,
 } as const;
 
 /**
@@ -282,6 +290,7 @@ function scoreCustomer(
   transcriptLower: string,
   extracted: ExtractedMatchSignals | undefined,
   equipmentDamping: Map<string, number> | null,
+  semantic: Map<string, number> | undefined,
 ): { signals: SignalHit[]; score: number } {
   const acc: SignalAccumulator = { hits: [], rawScore: 0 };
 
@@ -425,6 +434,19 @@ function scoreCustomer(
     }
   }
 
+  // ── Lane 10: pgvector semantic similarity (Slice B) ──────────
+  // Cosine score lives in [-1, 1]; we only fold in hits ≥ 0.7 so paraphrase
+  // matches need to be meaningfully close before they sway the rank. The
+  // delta-from-threshold weighting (2.0 * (s − 0.7)) means a 0.7 just-on-
+  // the-line hit contributes nothing, while a 0.9 confident match adds 0.4.
+  if (semantic) {
+    const sim = semantic.get(customer.customer_id);
+    if (typeof sim === "number" && sim >= 0.7) {
+      const weight = W.semantic * Math.max(0, sim - 0.7);
+      if (weight > 0) addSignal(acc, "semantic", `semantic match (${sim.toFixed(2)})`, 1, weight);
+    }
+  }
+
   // ── Apply recency multiplier ─────────────────────────────────
   const recency = recencyMultiplier(customer.days_since_contact);
   const score = acc.rawScore * recency;
@@ -458,6 +480,14 @@ function buildReasoning(signals: SignalHit[], customer: RepCustomer): string {
   const equipment = signals.find((s) => s.kind === "ai_equipment");
   if (equipment) clauses.push(`owns matching ${equipment.phrase}`);
 
+  const semantic = signals.find((s) => s.kind === "semantic");
+  if (semantic) {
+    // Pull the cosine value back out of the phrase ("semantic match (0.82)").
+    const m = semantic.phrase.match(/\(([0-9.]+)\)/);
+    const sim = m ? Number(m[1]) : null;
+    clauses.push(sim != null ? `matches by meaning (${sim.toFixed(2)})` : "matches by meaning");
+  }
+
   const recency = recencyMultiplier(customer.days_since_contact);
   if (recency > 1 && customer.days_since_contact != null) {
     clauses.push(`active ${customer.days_since_contact}d ago`);
@@ -486,8 +516,9 @@ export function matchCustomerInTranscript(
     options.extracted?.location_mentions?.length ||
     options.extracted?.equipment_mentioned?.length
   );
+  const haveSemantic = !!(options.semantic && options.semantic.size > 0);
 
-  if (!transcript && !haveExtraction) return empty;
+  if (!transcript && !haveExtraction && !haveSemantic) return empty;
   if (customers.length === 0) return empty;
 
   const text = (transcript ?? "").toLowerCase();
@@ -500,7 +531,13 @@ export function matchCustomerInTranscript(
 
   const scored: CustomerMatchCandidate[] = customers
     .map((customer) => {
-      const { signals, score } = scoreCustomer(customer, text, options.extracted, equipmentDamping);
+      const { signals, score } = scoreCustomer(
+        customer,
+        text,
+        options.extracted,
+        equipmentDamping,
+        options.semantic,
+      );
       return { customer, score, signals };
     })
     .filter((c) => c.score > 0)

@@ -44,7 +44,14 @@ function contactSummary(r: Record<string, unknown>): string {
 }
 
 function companySummary(r: Record<string, unknown>): string {
-  const parts = [`QRM Company: ${r.name ?? "Unknown"}`];
+  const parts = [`Company: ${r.name ?? "Unknown"}`];
+  if (r.dba) parts.push(`DBA: ${r.dba}`);
+  // Aliases — search_1/search_2 are the rep-facing shorthand the voice matcher
+  // consults. Embedding them lets paraphrases ("tree-cutting guys at Lewis")
+  // surface the right company via cosine similarity.
+  const aliasParts = [r.search_1, r.search_2].filter(Boolean).join(" ").trim();
+  if (aliasParts) parts.push(`Alias: ${aliasParts}`);
+  if (r.primary_contact_name) parts.push(`Primary Contact: ${r.primary_contact_name}`);
   if (r.industry) parts.push(`Industry: ${r.industry}`);
   if (r.city || r.state || r.country) {
     parts.push(`Location: ${[r.city, r.state, r.country].filter(Boolean).join(", ")}`);
@@ -141,16 +148,44 @@ async function fetchPendingContacts(db: AdminClient, since: string | null): Prom
 async function fetchPendingCompanies(db: AdminClient, since: string | null): Promise<PendingRecord[]> {
   let query = db
     .from("crm_companies")
-    .select("id, name, industry, city, state, country, website, phone, employee_count, updated_at")
+    .select("id, name, dba, search_1, search_2, industry, city, state, country, website, phone, employee_count, updated_at")
     .is("deleted_at", null)
     .order("updated_at", { ascending: true })
     .limit(200);
   if (since) query = query.gt("updated_at", since);
   const { data } = await query;
   if (!data) return [];
-  return (data as Record<string, unknown>[]).map((r) => ({
+
+  const rows = data as Record<string, unknown>[];
+  const companyIds = rows.map((r) => r.id as string);
+
+  // Primary-contact lookup matches the v_rep_customers contract:
+  // earliest-created live contact per primary_company_id wins. One query
+  // for the page; deduped in-memory because the supabase JS client doesn't
+  // expose a clean "first per partition" without an RPC.
+  let primaryContactMap: Record<string, string> = {};
+  if (companyIds.length > 0) {
+    const { data: contacts } = await db
+      .from("crm_contacts")
+      .select("primary_company_id, first_name, last_name, created_at")
+      .in("primary_company_id", companyIds)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true });
+    if (contacts) {
+      for (const c of contacts as { primary_company_id: string; first_name: string | null; last_name: string | null }[]) {
+        if (primaryContactMap[c.primary_company_id]) continue;
+        const name = [c.first_name, c.last_name].filter(Boolean).join(" ").trim();
+        if (name) primaryContactMap[c.primary_company_id] = name;
+      }
+    }
+  }
+
+  return rows.map((r) => ({
     id: r.id as string,
-    summary: companySummary(r),
+    summary: companySummary({
+      ...r,
+      primary_contact_name: primaryContactMap[r.id as string],
+    }),
     metadata: { updated_at: r.updated_at },
   }));
 }

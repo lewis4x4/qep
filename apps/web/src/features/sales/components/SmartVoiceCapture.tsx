@@ -39,6 +39,7 @@ import {
   EMPTY_VOICE_EXTRACTION,
   type VoiceExtractionResult,
 } from "@/lib/iron/voice/extract";
+import { embedTranscript, semanticMatchCustomers } from "@/lib/iron/voice/embed";
 import {
   formatExtractedAmount,
   isExtractionEmpty,
@@ -307,8 +308,17 @@ export function SmartVoiceCapture({
 
         if (text.trim().length > 0) {
           setExtractionLoading(true);
-          void extractVoiceEntities(text, matchedCustomerName ?? undefined, abortController.signal)
-            .then((res) => {
+          // Fire extraction + semantic embedding in parallel. Both feed the
+          // second-pass matcher: AI fields cover named entities, semantic
+          // covers paraphrase ("tree-cutting guys at Lewis" → Lewis Tree).
+          const semanticPromise = embedTranscript(text, abortController.signal)
+            .then((vec) => semanticMatchCustomers(vec, 10, 0.7, abortController.signal))
+            .catch(() => new Map<string, number>());
+          void Promise.all([
+            extractVoiceEntities(text, matchedCustomerName ?? undefined, abortController.signal),
+            semanticPromise,
+          ])
+            .then(([res, semanticMap]) => {
               if (cancelled) return;
               setExtraction(res);
 
@@ -331,6 +341,7 @@ export function SmartVoiceCapture({
                     location_mentions: res.location_mentions,
                     equipment_mentioned: res.equipment_mentioned,
                   },
+                  semantic: semanticMap,
                 });
                 setMatchResult(secondMatch);
                 if (

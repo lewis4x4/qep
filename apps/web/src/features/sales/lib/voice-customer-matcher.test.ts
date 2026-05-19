@@ -338,4 +338,81 @@ describe("matchCustomerInTranscript", () => {
       expect(equipmentHits[0]?.count).toBe(1);
     });
   });
+
+  // ── Semantic lane (Slice B) ────────────────────────────────────
+  describe("semantic lane", () => {
+    test("semantic similarity ≥ 0.7 boosts the right candidate when token lanes find nothing", () => {
+      const a = customer("Lewis Holdings LLC", "a");
+      const b = customer("Acme Equipment", "b");
+      const semantic = new Map<string, number>([
+        ["a", 0.85],
+      ]);
+
+      // Transcript intentionally avoids any token from either company name —
+      // only the semantic lane can pick the winner here.
+      const result = matchCustomerInTranscript(
+        "Talked to the tree-cutting guys today about pricing.",
+        [a, b],
+        { semantic },
+      );
+
+      expect(result.top?.customer_id).toBe("a");
+      expect(result.signals.some((s) => s.kind === "semantic")).toBe(true);
+      expect(result.reasoning).toContain("matches by meaning");
+    });
+
+    test("semantic similarity < 0.7 fires no signal", () => {
+      const a = customer("Lewis Holdings LLC", "a");
+      const semantic = new Map<string, number>([
+        ["a", 0.68],
+      ]);
+
+      const result = matchCustomerInTranscript(
+        "Talked to the tree-cutting guys today.",
+        [a],
+        { semantic },
+      );
+
+      // Below threshold → no signal, no winner.
+      expect(result.top).toBeNull();
+      expect(result.signals.some((s) => s.kind === "semantic")).toBe(false);
+    });
+
+    test("semantic + name signals stack", () => {
+      const beacon = customer("Beacon Ridge", "a");
+      const acme = customer("Acme Equipment", "b");
+      const semanticBoosted = matchCustomerInTranscript(
+        "Beacon today.",
+        [beacon, acme],
+        { semantic: new Map([["a", 0.9]]) },
+      );
+
+      expect(semanticBoosted.top?.customer_id).toBe("a");
+      // Both name + semantic fired on the winner.
+      expect(semanticBoosted.signals.some((s) => s.kind === "company_name")).toBe(true);
+      expect(semanticBoosted.signals.some((s) => s.kind === "semantic")).toBe(true);
+      // Both signal weights contribute to the accumulated score: 1.0 (name)
+      // + 2.0 * (0.9 - 0.7) = 1.4. Each signal stored is non-zero.
+      const nameWeight = semanticBoosted.signals
+        .filter((s) => s.kind === "company_name")
+        .reduce((sum, s) => sum + s.weight, 0);
+      const semanticWeight = semanticBoosted.signals
+        .filter((s) => s.kind === "semantic")
+        .reduce((sum, s) => sum + s.weight, 0);
+      expect(nameWeight).toBeGreaterThan(0);
+      expect(semanticWeight).toBeGreaterThan(0);
+    });
+
+    test("empty semantic Map is a no-op", () => {
+      const a = customer("Beacon Ridge", "a");
+      const result = matchCustomerInTranscript(
+        "Beacon today.",
+        [a],
+        { semantic: new Map() },
+      );
+
+      expect(result.top?.customer_id).toBe("a");
+      expect(result.signals.some((s) => s.kind === "semantic")).toBe(false);
+    });
+  });
 });
