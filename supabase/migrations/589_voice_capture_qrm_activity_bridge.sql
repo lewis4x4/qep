@@ -189,7 +189,8 @@ begin
       set
         sync_status = 'synced',
         sync_error = null,
-        hubspot_synced_at = coalesce(vc.hubspot_synced_at, now())
+        qrm_activity_id = v_existing_activity_id,
+        qrm_synced_at = coalesce(vc.qrm_synced_at, now())
       where vc.id = new.id;
     end if;
     return new;
@@ -234,7 +235,17 @@ begin
   set
     sync_status = case when vc.sync_status = 'failed' then vc.sync_status else 'synced' end,
     sync_error = case when vc.sync_status = 'failed' then vc.sync_error else null end,
-    hubspot_synced_at = coalesce(vc.hubspot_synced_at, now())
+    qrm_activity_id = coalesce(vc.qrm_activity_id, (
+      select a.id
+      from public.crm_activities a
+      where a.workspace_id = v_workspace_id
+        and a.deleted_at is null
+        and a.metadata ->> 'source' = 'voice_capture'
+        and a.metadata ->> 'voiceCaptureId' = new.id::text
+        and a.metadata ->> 'activityKind' = 'note'
+      limit 1
+    )),
+    qrm_synced_at = coalesce(vc.qrm_synced_at, now())
   where vc.id = new.id
     and vc.sync_status is distinct from 'failed';
 
