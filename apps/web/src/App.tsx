@@ -579,6 +579,9 @@ const QrmEquipmentDetailPage = lazy(() =>
 const QrmActivitiesPage = lazy(() =>
   import("./features/qrm/pages/QrmActivitiesPage").then((m) => ({ default: m.QrmActivitiesPage }))
 );
+const VoiceCaptureInboxPage = lazy(() =>
+  import("./features/qrm/pages/VoiceCaptureInboxPage").then((m) => ({ default: m.VoiceCaptureInboxPage }))
+);
 const QrmActivityTemplatesPage = lazy(() =>
   import("./features/qrm/pages/QrmActivityTemplatesPage").then((m) => ({
     default: m.QrmActivityTemplatesPage,
@@ -2051,6 +2054,17 @@ function App() {
                   )
                 }
               />
+              <Route
+                path="/qrm/voice-inbox"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <WithTodaySurface fallback={<VoiceCaptureInboxPage />} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route path="/qrm/voice-captures/inbox" element={<Navigate to="/qrm/voice-inbox" replace />} />
               <Route
                 path="/qrm/templates"
                 element={<Navigate to="/qrm/activities/templates" replace />}
