@@ -221,7 +221,7 @@ export function normalizeRepPipelineDeals(rows: unknown): RepPipelineDeal[] {
 export function normalizeRepCustomers(rows: unknown): RepCustomer[] {
   if (!Array.isArray(rows)) return [];
 
-  return rows.flatMap((row) => {
+  const normalized = rows.flatMap((row) => {
     if (!isRecord(row)) return [];
     const customerId = stringOrNull(row.customer_id);
     const companyName = stringOrNull(row.company_name);
@@ -244,6 +244,12 @@ export function normalizeRepCustomers(rows: unknown): RepCustomer[] {
       opportunity_score: finiteNumberOrDefault(row.opportunity_score),
     }];
   });
+
+  const byCustomerId = new Map<string, RepCustomer>();
+  for (const row of normalized) {
+    if (!byCustomerId.has(row.customer_id)) byCustomerId.set(row.customer_id, row);
+  }
+  return [...byCustomerId.values()];
 }
 
 export function normalizeCustomerEquipmentRows(rows: unknown): CustomerEquipment[] {

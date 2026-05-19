@@ -310,6 +310,7 @@ function ContactRow({ row }: { row: CustomerSearchContact }) {
           {row.companyName && (
             <span className="text-[11px] text-muted-foreground">@ {row.companyName}</span>
           )}
+          {row.phoneMatch && <Badge variant="outline" className="text-[10px]">Phone match</Badge>}
           <WarmthBadge warmth={row.warmth} />
         </div>
         <div className="mt-0.5 flex items-center gap-3 text-[11px] text-muted-foreground flex-wrap">
@@ -332,6 +333,7 @@ function CompanyRow({ row }: { row: CustomerSearchCompany }) {
           {row.companyDba && (
             <span className="text-[11px] text-muted-foreground">dba {row.companyDba}</span>
           )}
+          {row.phoneMatch && <Badge variant="outline" className="text-[10px]">Phone match</Badge>}
           <WarmthBadge warmth={row.warmth} />
         </div>
         <div className="mt-0.5 flex items-center gap-3 text-[11px] text-muted-foreground flex-wrap">

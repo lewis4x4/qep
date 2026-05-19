@@ -115,6 +115,18 @@ describe("sales API normalizers", () => {
     ])).toEqual([{ id: "stage-1", name: "Quote", sort_order: 3 }]);
   });
 
+  test("deduplicates multi-contact customer rows by customer_id", () => {
+    const out = normalizeRepCustomers([
+      { customer_id: "company-1", company_name: "ACME", primary_contact_name: "First Contact" },
+      { customer_id: "company-1", company_name: "ACME", primary_contact_name: "Second Contact" },
+      { customer_id: "company-2", company_name: "Bravo" },
+    ]);
+
+    expect(out).toHaveLength(2);
+    expect(out.map((row) => row.customer_id)).toEqual(["company-1", "company-2"]);
+    expect(out[0]?.primary_contact_name).toBe("First Contact");
+  });
+
   test("returns safe empty values for malformed inputs", () => {
     expect(normalizeDailyBriefing({})).toBeNull();
     expect(normalizeRepPipelineDeals(null)).toEqual([]);

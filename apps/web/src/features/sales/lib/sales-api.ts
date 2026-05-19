@@ -73,10 +73,6 @@ interface CompanyPickerRow {
   phone: string | null;
 }
 
-function escapeIlikePattern(value: string): string {
-  return value.replace(/[\%_]/g, "\\$&");
-}
-
 function mapCompanyPickerRow(row: CompanyPickerRow): RepCustomer {
   return {
     customer_id: row.id,
@@ -104,31 +100,13 @@ export async function searchCompaniesForPicker(
   if (query.length < 2) return [];
 
   const wsId = await getWorkspaceId();
-  const pattern = `%${escapeIlikePattern(query)}%`;
-  const fields = ["name", "dba", "search_1", "search_2", "phone"] as const;
-  const byId = new Map<string, CompanyPickerRow>();
-
-  for (const field of fields) {
-    if (byId.size >= limit) break;
-
-    const { data, error } = await supabase
-      .from("crm_companies")
-      .select("id, name, dba, search_1, search_2, city, state, phone")
-      .eq("workspace_id", wsId)
-      .is("deleted_at", null)
-      .ilike(field, pattern)
-      .order("name", { ascending: true, nullsFirst: false })
-      .limit(limit);
-
-    if (error) throw error;
-
-    for (const row of (data ?? []) as CompanyPickerRow[]) {
-      if (!byId.has(row.id)) byId.set(row.id, row);
-      if (byId.size >= limit) break;
-    }
-  }
-
-  return Array.from(byId.values()).slice(0, limit).map(mapCompanyPickerRow);
+  const { data, error } = await supabase.rpc("search_companies_for_picker_ranked", {
+    p_query: query,
+    p_workspace_id: wsId,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return ((data ?? []) as CompanyPickerRow[]).map(mapCompanyPickerRow);
 }
 
 /**

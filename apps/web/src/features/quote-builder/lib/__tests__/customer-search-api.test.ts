@@ -4,6 +4,7 @@ import {
   daysBetween,
   deriveWarmth,
   formatContactName,
+  matchesPhoneDigits,
   normalizeCustomerSearchCompanyRefRows,
   normalizeCustomerSearchCompanyRows,
   normalizeCustomerSearchContactRows,
@@ -127,6 +128,14 @@ describe("daysBetween", () => {
   });
 });
 
+describe("matchesPhoneDigits", () => {
+  test("matches formatted/unformatted phone input", () => {
+    expect(matchesPhoneDigits("(352) 555-0100", "3525550100")).toBe(true);
+    expect(matchesPhoneDigits("352.555.0100", "5550100")).toBe(true);
+    expect(matchesPhoneDigits("(352) 555-0100", "999")).toBe(false);
+  });
+});
+
 // ── deriveWarmth ────────────────────────────────────────────────────────
 
 describe("deriveWarmth", () => {
@@ -168,6 +177,7 @@ describe("toQuoteBuilderCustomerIdentity", () => {
       companyName: "Acme Landscaping",
       companyCity: "Lake City",
       companyState: "FL",
+      phoneMatch: false,
       signals: EMPTY_SIGNALS,
       warmth: "new",
     };
@@ -195,6 +205,7 @@ describe("toQuoteBuilderCustomerIdentity", () => {
       companyName: null,
       companyCity: null,
       companyState: null,
+      phoneMatch: false,
       signals: EMPTY_SIGNALS,
       warmth: "new",
     };
@@ -221,6 +232,7 @@ describe("toQuoteBuilderCustomerIdentity", () => {
       companyState: "FL",
       companyClassification: "landscape",
       contactCount: 2,
+      phoneMatch: false,
       signals: EMPTY_SIGNALS,
       warmth: "new",
     };
@@ -353,5 +365,26 @@ describe("assembleResults", () => {
       limit: 3,
     });
     expect(out).toHaveLength(3);
+  });
+
+  test("ranks phone matches first and tags phoneMatch badge state", () => {
+    const out = assembleResults({
+      contacts: [{
+        id: "ct-no-phone", first_name: "No", last_name: "Phone", title: null,
+        email: null, phone: null, primary_company_id: null,
+      }],
+      companies: [{
+        id: "c-phone", name: "Phone Co", dba: null, phone: "(352) 555-0100",
+        city: null, state: null, classification: null,
+      }],
+      signalsByCompany: new Map(),
+      contactCountByCompany: new Map(),
+      companyById: new Map(),
+      phoneQueryDigits: "352555",
+      limit: 8,
+    });
+    expect(out[0].kind).toBe("company");
+    expect(out[0].phoneMatch).toBe(true);
+    expect(out[1].phoneMatch).toBe(false);
   });
 });

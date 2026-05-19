@@ -50,6 +50,7 @@ export interface CustomerSearchContact {
   companyName:   string | null;
   companyCity:   string | null;
   companyState:  string | null;
+  phoneMatch:    boolean;
   signals:       CompanySignals;
   warmth:        CustomerWarmth;
 }
@@ -64,6 +65,7 @@ export interface CustomerSearchCompany {
   companyState:  string | null;
   companyClassification: string | null;
   contactCount:  number;
+  phoneMatch:    boolean;
   signals:       CompanySignals;
   warmth:        CustomerWarmth;
 }
@@ -171,6 +173,23 @@ interface HydrateCompanyRow {
   name: string | null;
 }
 
+interface RankedCustomerSearchRow {
+  row_kind: "contact" | "company";
+  contact_id: string | null;
+  contact_name: string | null;
+  contact_title: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  company_id: string | null;
+  company_name: string | null;
+  company_dba: string | null;
+  company_phone: string | null;
+  company_city: string | null;
+  company_state: string | null;
+  company_classification: string | null;
+  phone_match: boolean | null;
+}
+
 // ── Search constants ─────────────────────────────────────────────────────
 
 export const MIN_QUERY_CHARS  = 2;
@@ -180,6 +199,20 @@ export const MAX_COMPANIES    = 4;
 // Warmth thresholds (days since last contact activity)
 export const WARM_DAYS_MAX    = 30;
 export const COOL_DAYS_MAX    = 90;
+
+function digitsOnly(value: string): string {
+  return value.replace(/\D+/g, "");
+}
+
+function toPhoneSearchDigits(value: string): string {
+  const digits = digitsOnly(value);
+  return digits.length >= 3 ? digits : "";
+}
+
+export function matchesPhoneDigits(phone: string | null, queryDigits: string): boolean {
+  if (!phone || !queryDigits) return false;
+  return digitsOnly(phone).includes(queryDigits);
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -346,69 +379,48 @@ export async function searchCustomers(
   const query = rawQuery.trim();
   if (query.length < MIN_QUERY_CHARS) return [];
 
-  // Sanitize ilike wildcards — chars that would change pattern semantics.
-  // Strip commas so PostgREST `.or(a,b,c)` filter strings are not broken by
-  // user input containing `,`.
-  // Also search individual name tokens so "John Smith" can match a row stored
-  // as first_name="John", last_name="Smith" instead of only looking for the
-  // full string in each column independently.
-  const sanitized = query.replace(/[\\%_,]/g, "");
-  const pattern = `%${sanitized}%`;
-  const nameTokens = sanitized
-    .split(/\s+/)
-    .map((part) => part.trim())
-    .filter((part) => part.length >= MIN_QUERY_CHARS)
-    .slice(0, 4);
-  const contactTerms = Array.from(new Set([sanitized, ...nameTokens]));
-  const contactOr = [
-    ...contactTerms.flatMap((term) => {
-      const tokenPattern = `%${term}%`;
-      return [`first_name.ilike.${tokenPattern}`, `last_name.ilike.${tokenPattern}`];
-    }),
-    `email.ilike.${pattern}`,
-    `phone.ilike.${pattern}`,
-  ].join(",");
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("active_workspace_id")
+    .eq("id", user.id)
+    .maybeSingle();
+  const workspaceId = (profile as { active_workspace_id?: string } | null)?.active_workspace_id ?? "default";
+  const phoneQueryDigits = toPhoneSearchDigits(query);
 
-  // Company match: legal + IntelliDealer search keys + legacy customer #, not
-  // only display `name` / `dba` (imports often park alternate spellings in
-  // search_1 / search_2 / legal_name).
-  const companyOr = [
-    "name",
-    "dba",
-    "phone",
-    "legal_name",
-    "search_1",
-    "search_2",
-    "owner_name",
-    "legacy_customer_number",
-  ]
-    .map((col) => `${col}.ilike.${pattern}`)
-    .join(",");
-
-  const [contactsRes, companiesRes] = await Promise.all([
-    supabase
-      .from("crm_contacts")
-      .select("id, first_name, last_name, title, email, phone, primary_company_id")
-      .is("deleted_at", null)
-      .or(contactOr)
-      .limit(MAX_CONTACTS),
-    supabase
-      .from("crm_companies")
-      .select("id, name, dba, phone, city, state, classification")
-      .is("deleted_at", null)
-      .or(companyOr)
-      .limit(MAX_COMPANIES),
-  ]);
-
-  if (contactsRes.error) {
-    throw new Error(contactsRes.error.message || "Contact search failed");
-  }
-  if (companiesRes.error) {
-    throw new Error(companiesRes.error.message || "Company search failed");
+  const { data: rankedRows, error: rankedError } = await supabase.rpc("search_customer_picker_ranked", {
+    p_query: query,
+    p_workspace_id: workspaceId,
+    p_limit: limit,
+  });
+  if (rankedError) {
+    throw new Error(rankedError.message || "Customer search failed");
   }
 
-  const contacts = normalizeCustomerSearchContactRows(contactsRes.data);
-  const companies = normalizeCustomerSearchCompanyRows(companiesRes.data);
+  const rows = (Array.isArray(rankedRows) ? rankedRows : []) as RankedCustomerSearchRow[];
+  const contacts = normalizeCustomerSearchContactRows(rows
+    .filter((row) => row.row_kind === "contact")
+    .map((row) => ({
+      id: row.contact_id,
+      first_name: row.contact_name,
+      last_name: null,
+      title: row.contact_title,
+      email: row.contact_email,
+      phone: row.contact_phone,
+      primary_company_id: row.company_id,
+    })));
+  const companies = normalizeCustomerSearchCompanyRows(rows
+    .filter((row) => row.row_kind === "company")
+    .map((row) => ({
+      id: row.company_id,
+      name: row.company_name,
+      dba: row.company_dba,
+      phone: row.company_phone,
+      city: row.company_city,
+      state: row.company_state,
+      classification: row.company_classification,
+    })));
 
   // Collect every distinct company id referenced — both by direct company
   // hits AND by the contacts' primary_company_id — so we hydrate signals
@@ -439,8 +451,17 @@ export async function searchCustomers(
       .filter((v): v is string => !!v),
   )];
   const companyById = new Map<string, CustomerSearchCompanyRefRow>();
+  for (const row of rows) {
+    if (!row.company_id) continue;
+    companyById.set(row.company_id, {
+      id: row.company_id,
+      name: row.company_name ?? "",
+      city: row.company_city ?? null,
+      state: row.company_state ?? null,
+    });
+  }
   for (const c of companies) {
-    if (c.id) companyById.set(c.id, { id: c.id, name: c.name ?? "", city: c.city, state: c.state });
+    if (c.id && !companyById.has(c.id)) companyById.set(c.id, { id: c.id, name: c.name ?? "", city: c.city, state: c.state });
   }
   const missingCompanyIds = contactCompanyIds.filter((id) => !companyById.has(id));
   if (missingCompanyIds.length > 0) {
@@ -459,6 +480,7 @@ export async function searchCustomers(
   return assembleResults({
     contacts, companies, signalsByCompany, contactCountByCompany, companyById,
     limit,
+    phoneQueryDigits,
   });
 }
 
@@ -471,6 +493,7 @@ export function assembleResults(input: {
   contactCountByCompany:  Map<string, number>;
   companyById:            Map<string, CustomerSearchCompanyRefRow>;
   limit:                  number;
+  phoneQueryDigits?:      string;
 }): CustomerSearchResult[] {
   const contactRows: CustomerSearchContact[] = input.contacts.map((c) => {
     const companyRef = c.primary_company_id ? input.companyById.get(c.primary_company_id) : null;
@@ -488,6 +511,7 @@ export function assembleResults(input: {
       companyName:   companyRef?.name ?? null,
       companyCity:   companyRef?.city ?? null,
       companyState:  companyRef?.state ?? null,
+      phoneMatch:    matchesPhoneDigits(c.phone, input.phoneQueryDigits ?? ""),
       signals,
       warmth:        deriveWarmth(signals),
     };
@@ -506,15 +530,19 @@ export function assembleResults(input: {
       companyState:          c.state ?? null,
       companyClassification: c.classification ?? null,
       contactCount:          input.contactCountByCompany.get(companyId) ?? 0,
+      phoneMatch:            matchesPhoneDigits(c.phone, input.phoneQueryDigits ?? ""),
       signals,
       warmth:                deriveWarmth(signals),
     };
   });
 
-  // Interleave: contacts first (primary operator intent is "who am I
-  // selling to"), then bare-company hits for cases where the rep typed
-  // the company name but no contact matched. Then cap at limit.
-  return [...contactRows, ...companyRows].slice(0, input.limit);
+  return [...contactRows, ...companyRows]
+    .sort((a, b) => {
+      if (a.phoneMatch !== b.phoneMatch) return a.phoneMatch ? -1 : 1;
+      if (a.kind !== b.kind) return a.kind === "contact" ? -1 : 1;
+      return 0;
+    })
+    .slice(0, input.limit);
 }
 
 export function formatContactName(first: string | null, last: string | null): string {
