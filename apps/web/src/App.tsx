@@ -589,6 +589,9 @@ const QrmFollowUpSequencesPage = lazy(() =>
     default: m.QrmFollowUpSequencesPage,
   }))
 );
+const VoiceCaptureHealthPage = lazy(() =>
+  import("./features/qrm/pages/VoiceCaptureHealthPage").then((m) => ({ default: m.VoiceCaptureHealthPage }))
+);
 const QrmCommandCenterPage = lazy(() =>
   import("./features/qrm/command-center/components/QrmCommandCenterPage").then((m) => ({
     default: m.QrmCommandCenterPage,
@@ -2581,6 +2584,16 @@ function App() {
                 element={
                   hasManagerOrAboveRole && canAccessNavHref("/qrm/workflow-audit") ? (
                     <WorkflowAuditPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/voice-capture-health"
+                element={
+                  hasManagerOrAboveRole && canAccessNavHref("/qrm/voice-capture-health") ? (
+                    <VoiceCaptureHealthPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

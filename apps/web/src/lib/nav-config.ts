@@ -525,6 +525,14 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     sectionLabel: "Signals",
   },
   {
+    label: "Voice Capture Health",
+    href: "/qrm/voice-capture-health",
+    icon: Activity,
+    roles: ["admin", "manager", "owner"],
+    primaryHeaderId: "qrm",
+    sectionLabel: "Signals",
+  },
+  {
     label: "SOP + Folk",
     href: "/qrm/sop-folk",
     icon: LibraryBig,
