@@ -328,7 +328,7 @@ Each risk is paired with the **mitigation** that protects against it. We are not
 | Risk | Mitigation |
 |---|---|
 | **Parser bug ships a bad price** — A CSV parsing error mistakes a column, every quote gets re-priced wrong, a customer accepts | Decision 2 (always rep-review on price increases) prevents customer exposure. Plus: every re-price action is reversible from the audit log for 7 days. |
-| **Rep ignores the alert** | The chip appears prominently on Today; if the rep dismisses without acting, JARVIS escalates to their manager after 48h on quotes > $50K. |
+| **Rep ignores the alert** | The chip appears prominently on Today; if the rep dismisses without acting, IRON escalates to their manager after 48h on quotes > $50K. |
 | **Customer trust damage** — "Your quote went up because the manufacturer changed prices" feels like bait-and-switch | Decision 2: customer never sees a price increase without rep eyes on it. The customer-facing email template (which we will draft for you to approve) explains the change without throwing the OEM under the bus. |
 | **Reps lose pricing autonomy and resent the system** | Decision 1 (re-pricing is rep-initiated, not autonomous, in Phase 1) keeps the rep in control. Decision 10 makes commission impact transparent. |
 | **OEM NDA violation** — Some OEM agreements restrict storage of price data outside the ERP | Section 5 includes a legal check item. We will not load any OEM sheet whose agreement we have not confirmed allows it. |

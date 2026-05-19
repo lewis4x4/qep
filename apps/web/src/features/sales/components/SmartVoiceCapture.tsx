@@ -23,6 +23,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useCustomers } from "../hooks/useCustomers";
 import { matchesRepCustomerSearch } from "../lib/customer-search";
 import {
@@ -32,7 +33,7 @@ import {
 import type { RepCustomer } from "../lib/types";
 import { supabase } from "@/lib/supabase";
 import { ironTranscribe } from "@/lib/iron/voice/api";
-import { getWorkspaceId } from "../lib/sales-api";
+import { getWorkspaceId, searchCompaniesForPicker } from "../lib/sales-api";
 import {
   extractVoiceEntities,
   EMPTY_VOICE_EXTRACTION,
@@ -87,8 +88,15 @@ export function SmartVoiceCapture({
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
     presetCustomerId ?? null,
   );
+  // selectedCustomerName is the display label for the picked customer.
+  // When the rep picks a workspace company that isn't in their book,
+  // allCustomers.find() returns nothing — we need the name cached here.
+  const [selectedCustomerName, setSelectedCustomerName] = useState<string | null>(null);
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
-  const [customerSearch, setCustomerSearch] = useState("");
+  // initialPickerSearch — when matcher fails to find a customer in the
+  // book, we seed the picker with the most-mentioned name token so the
+  // workspace fallback can fire immediately.
+  const [initialPickerSearch, setInitialPickerSearch] = useState("");
   const [extraction, setExtraction] = useState<VoiceExtractionResult | null>(
     null,
   );
@@ -107,19 +115,13 @@ export function SmartVoiceCapture({
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
 
-  const selectedCustomer = useMemo<RepCustomer | null>(() => {
+  const selectedCustomer = useMemo<{ id: string; name: string } | null>(() => {
     if (!selectedCustomerId) return null;
-    return (
-      allCustomers.find((c) => c.customer_id === selectedCustomerId) ?? null
-    );
-  }, [allCustomers, selectedCustomerId]);
-
-  const filteredCustomers = useMemo(() => {
-    if (!customerSearch.trim()) return allCustomers.slice(0, 12);
-    return allCustomers
-      .filter((c) => matchesRepCustomerSearch(c, customerSearch))
-      .slice(0, 12);
-  }, [allCustomers, customerSearch]);
+    const inBook = allCustomers.find((c) => c.customer_id === selectedCustomerId);
+    if (inBook) return { id: inBook.customer_id, name: inBook.company_name };
+    if (selectedCustomerName) return { id: selectedCustomerId, name: selectedCustomerName };
+    return { id: selectedCustomerId, name: "Customer" };
+  }, [allCustomers, selectedCustomerId, selectedCustomerName]);
 
   // ── Cleanup helper ─────────────────────────────────────────────
   const cleanup = useCallback(() => {
@@ -254,7 +256,7 @@ export function SmartVoiceCapture({
   }
 
   // ── Once we have the blob, transcribe + match in parallel ──────
-  // After transcription completes, JARVIS entity extraction is fired off
+  // After transcription completes, IRON entity extraction is fired off
   // in the background and lands on the review screen as soon as it
   // resolves. The review UI never blocks on it — fail-open is the rule.
   useEffect(() => {
@@ -277,11 +279,26 @@ export function SmartVoiceCapture({
           setMatchResult(match);
           if (match.confidence >= AUTO_ACCEPT_CONFIDENCE && match.top) {
             setSelectedCustomerId(match.top.customer_id);
+            setSelectedCustomerName(match.top.company_name);
             matchedCustomerId = match.top.customer_id;
             matchedCustomerName = match.top.company_name;
+          } else if (match.top) {
+            // Seed the picker with the first word of the best (but low-
+            // confidence) candidate so the workspace fallback fires on
+            // open. "Beacon" hits the workspace even if Beacon Ridge
+            // isn't in the rep's book yet.
+            const seed = match.top.company_name.split(/\s+/)[0];
+            if (seed && seed.length >= 2) setInitialPickerSearch(seed);
+          } else {
+            // No book match at all — seed the picker with the strongest
+            // capitalized word from the transcript so the rep doesn't
+            // have to type it themselves.
+            const seed = pickSeedFromTranscript(text);
+            if (seed) setInitialPickerSearch(seed);
           }
         } else {
           const preset = allCustomers.find((c) => c.customer_id === presetCustomerId);
+          if (preset) setSelectedCustomerName(preset.company_name);
           matchedCustomerId = presetCustomerId;
           matchedCustomerName = preset?.company_name ?? null;
         }
@@ -442,7 +459,7 @@ export function SmartVoiceCapture({
             {String(duration % 60).padStart(2, "0")}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            JARVIS is listening for the customer name automatically.
+            IRON is listening for the customer name automatically.
           </p>
         </div>
 
@@ -494,7 +511,7 @@ export function SmartVoiceCapture({
             Transcribing & matching customer…
           </p>
           <p className="text-xs text-muted-foreground">
-            Captured {duration}s · running JARVIS extractors
+            Captured {duration}s · running IRON extractors
           </p>
         </div>
       </div>
@@ -542,13 +559,13 @@ export function SmartVoiceCapture({
       {/* Customer block */}
       {showCustomerPicker ? (
         <CustomerPickerInline
-          customers={filteredCustomers}
-          search={customerSearch}
-          setSearch={setCustomerSearch}
-          onPick={(id) => {
-            setSelectedCustomerId(id);
+          bookCustomers={allCustomers}
+          initialSearch={initialPickerSearch}
+          onPick={(picked) => {
+            setSelectedCustomerId(picked.id);
+            setSelectedCustomerName(picked.name);
             setShowCustomerPicker(false);
-            setCustomerSearch("");
+            setInitialPickerSearch("");
           }}
           onClose={() => setShowCustomerPicker(false)}
         />
@@ -557,9 +574,15 @@ export function SmartVoiceCapture({
           selectedCustomer={selectedCustomer}
           matchResult={matchResult}
           showAlternates={!!showAlternates && !selectedCustomer}
-          onPickAlternate={(id) => setSelectedCustomerId(id)}
+          onPickAlternate={(customer) => {
+            setSelectedCustomerId(customer.customer_id);
+            setSelectedCustomerName(customer.company_name);
+          }}
           onOpenPicker={() => setShowCustomerPicker(true)}
-          onClearSelection={() => setSelectedCustomerId(null)}
+          onClearSelection={() => {
+            setSelectedCustomerId(null);
+            setSelectedCustomerName(null);
+          }}
         />
       )}
 
@@ -579,10 +602,10 @@ export function SmartVoiceCapture({
         )}
       </section>
 
-      {/* JARVIS extracted block */}
+      {/* IRON extracted block */}
       <ExtractedBlock extraction={extraction} loading={extractionLoading} />
 
-      {/* JARVIS smart actions block */}
+      {/* IRON smart actions block */}
       {smartActions.length > 0 && (
         <SmartActionsBlock
           actions={smartActions}
@@ -609,7 +632,7 @@ export function SmartVoiceCapture({
           {state === "saving"
             ? "Saving…"
             : selectedCustomer
-              ? `Save to ${selectedCustomer.company_name.split(/\s+/)[0]}`
+              ? `Save to ${selectedCustomer.name.split(/\s+/)[0]}`
               : "Save"}
         </button>
       </div>
@@ -626,10 +649,10 @@ function CustomerReviewBlock({
   onOpenPicker,
   onClearSelection,
 }: {
-  selectedCustomer: RepCustomer | null;
+  selectedCustomer: { id: string; name: string } | null;
   matchResult: CustomerMatchResult | null;
   showAlternates: boolean;
-  onPickAlternate: (id: string) => void;
+  onPickAlternate: (customer: RepCustomer) => void;
   onOpenPicker: () => void;
   onClearSelection: () => void;
 }) {
@@ -646,7 +669,7 @@ function CustomerReviewBlock({
           Customer
         </p>
         <p className="mt-1 text-base font-bold text-foreground">
-          {selectedCustomer.company_name}
+          {selectedCustomer.name}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
           {confidencePct !== null && (
@@ -704,7 +727,7 @@ function CustomerReviewBlock({
             <button
               key={alt.customer.customer_id}
               type="button"
-              onClick={() => onPickAlternate(alt.customer.customer_id)}
+              onClick={() => onPickAlternate(alt.customer)}
               className="w-full flex items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-card px-3 py-2.5 text-left active:scale-[0.98]"
             >
               <span className="text-sm font-semibold text-foreground">
@@ -754,19 +777,48 @@ function CustomerReviewBlock({
 }
 
 // ── Sub-component: inline customer picker ───────────────────────
+// Two-tier search: rep's own book (v_rep_customers) first, then a
+// workspace-wide fallback via searchCompaniesForPicker when the book
+// has no matches and the rep has typed at least 2 chars. Prevents the
+// "Lewis Tree Services exists in the dealership but isn't in my book
+// yet" dead end the rebuild introduced.
 function CustomerPickerInline({
-  customers,
-  search,
-  setSearch,
+  bookCustomers,
+  initialSearch,
   onPick,
   onClose,
 }: {
-  customers: RepCustomer[];
-  search: string;
-  setSearch: (s: string) => void;
-  onPick: (id: string) => void;
+  bookCustomers: RepCustomer[];
+  initialSearch?: string;
+  onPick: (picked: { id: string; name: string }) => void;
   onClose: () => void;
 }) {
+  const [search, setSearch] = useState(initialSearch ?? "");
+  const [debounced, setDebounced] = useState((initialSearch ?? "").trim());
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebounced(search.trim()), 220);
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  const bookMatches = useMemo(() => {
+    if (!debounced) return bookCustomers.slice(0, 12);
+    return bookCustomers
+      .filter((c) => matchesRepCustomerSearch(c, debounced))
+      .slice(0, 12);
+  }, [bookCustomers, debounced]);
+
+  const showFallback = debounced.length >= 2 && bookMatches.length === 0;
+
+  const fallbackQuery = useQuery({
+    queryKey: ["sales", "smart-voice-capture", "ws-fallback", debounced.toLowerCase()],
+    queryFn: () => searchCompaniesForPicker(debounced, 8),
+    enabled: showFallback,
+    staleTime: 60_000,
+  });
+
+  const fallbackRows = showFallback ? (fallbackQuery.data ?? []) : [];
+
   return (
     <section
       className="rounded-2xl border border-white/[0.08] bg-card p-3"
@@ -774,7 +826,7 @@ function CustomerPickerInline({
     >
       <div className="flex items-center justify-between gap-2 mb-2">
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-          Search your book
+          {showFallback ? "Search book + workspace" : "Search your book"}
         </p>
         <button
           type="button"
@@ -793,29 +845,83 @@ function CustomerPickerInline({
         className="w-full rounded-xl bg-background border border-white/[0.08] px-3 py-2 text-sm outline-none focus:border-qep-orange/60"
       />
       <div className="mt-2 max-h-60 overflow-y-auto space-y-1">
-        {customers.map((c) => (
-          <button
-            key={c.customer_id}
-            type="button"
-            onClick={() => onPick(c.customer_id)}
-            className="w-full text-left rounded-lg px-3 py-2 text-sm font-medium text-foreground hover:bg-white/[0.04] active:bg-white/[0.06]"
-          >
-            {c.company_name}
-            {c.primary_contact_name && (
-              <span className="block text-[11px] text-muted-foreground">
-                {c.primary_contact_name}
-              </span>
-            )}
-          </button>
+        {bookMatches.map((c) => (
+          <CustomerPickerRow
+            key={`book-${c.customer_id}`}
+            customer={c}
+            source="book"
+            onPick={() => onPick({ id: c.customer_id, name: c.company_name })}
+          />
         ))}
-        {customers.length === 0 && (
+        {showFallback && fallbackQuery.isLoading && (
+          <p className="px-3 py-2 text-[11px] text-muted-foreground">
+            Searching the workspace…
+          </p>
+        )}
+        {fallbackRows.map((c) => (
+          <CustomerPickerRow
+            key={`ws-${c.customer_id}`}
+            customer={c}
+            source="workspace"
+            onPick={() => onPick({ id: c.customer_id, name: c.company_name })}
+          />
+        ))}
+        {!showFallback && bookMatches.length === 0 && debounced.length < 2 && (
           <p className="px-3 py-3 text-xs text-muted-foreground">
-            No matches in your book.
+            Type 2+ characters to search your book or the workspace.
+          </p>
+        )}
+        {showFallback && !fallbackQuery.isLoading && fallbackRows.length === 0 && (
+          <p className="px-3 py-3 text-xs text-muted-foreground">
+            No matches in your book or the workspace.
           </p>
         )}
       </div>
     </section>
   );
+}
+
+function CustomerPickerRow({
+  customer,
+  source,
+  onPick,
+}: {
+  customer: RepCustomer;
+  source: "book" | "workspace";
+  onPick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      className="w-full text-left rounded-lg px-3 py-2 text-sm font-medium text-foreground hover:bg-white/[0.04] active:bg-white/[0.06]"
+    >
+      <span className="flex items-center justify-between gap-2">
+        <span className="truncate">{customer.company_name}</span>
+        {source === "workspace" && (
+          <span className="shrink-0 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Workspace
+          </span>
+        )}
+      </span>
+      {customer.primary_contact_name && (
+        <span className="block text-[11px] text-muted-foreground">
+          {customer.primary_contact_name}
+        </span>
+      )}
+    </button>
+  );
+}
+
+// Pull a usable workspace-search seed out of a transcript. Prefers
+// capitalized two-word tokens ("Lewis Tree"), falls back to the
+// strongest capitalized single word ≥ 3 chars.
+function pickSeedFromTranscript(text: string): string | null {
+  if (!text) return null;
+  const twoWord = text.match(/\b[A-Z][a-z]{2,}\s+[A-Z][a-z]{2,}\b/);
+  if (twoWord) return twoWord[0];
+  const single = text.match(/\b[A-Z][a-z]{2,}\b/);
+  return single ? single[0] : null;
 }
 
 // ── Sub-component: extracted entities ───────────────────────────
@@ -831,11 +937,11 @@ function ExtractedBlock({
   return (
     <section
       className="rounded-2xl border border-white/[0.06] bg-card p-4"
-      data-testid="jarvis-extracted-block"
+      data-testid="iron-extracted-block"
     >
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-qep-orange">
-          JARVIS extracted
+          IRON extracted
         </p>
         {loading && (
           <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground">
@@ -954,12 +1060,12 @@ function SmartActionsBlock({
   return (
     <section
       className="rounded-2xl border border-white/[0.06] bg-card p-4"
-      data-testid="jarvis-proposed-block"
+      data-testid="iron-proposed-block"
     >
       <div className="flex items-center gap-2">
         <Sparkles className="h-3.5 w-3.5 text-qep-orange" />
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-qep-orange">
-          JARVIS proposes
+          IRON proposes
         </p>
       </div>
       <ul className="mt-2 space-y-2">

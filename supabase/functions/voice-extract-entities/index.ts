@@ -1,5 +1,5 @@
 /**
- * voice-extract-entities — JARVIS field-note extractor for the rep voice
+ * voice-extract-entities — IRON field-note extractor for the rep voice
  * capture review screen.
  *
  * This is intentionally a separate function from voice-to-qrm. That one is

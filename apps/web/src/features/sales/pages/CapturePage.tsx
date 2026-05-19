@@ -268,7 +268,7 @@ export function CapturePage() {
               Tap to record
             </p>
             <p className="text-xs text-white/85 mt-0.5 font-medium">
-              Recording starts instantly · JARVIS finds the customer
+              Recording starts instantly · IRON finds the customer
             </p>
           </div>
           <span className="px-2.5 py-1 rounded-[20px] bg-white/20 text-[10px] font-extrabold text-white uppercase tracking-[0.06em]">
