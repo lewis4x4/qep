@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { Mic, Square, Upload } from "lucide-react";
 import { useCustomers } from "../hooks/useCustomers";
+import { matchesRepCustomerSearch } from "../lib/customer-search";
+import { searchCompaniesForPicker } from "../lib/sales-api";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 
 export function VoiceNoteCapture({ onComplete }: { onComplete: () => void }) {
@@ -14,12 +17,28 @@ export function VoiceNoteCapture({ onComplete }: { onComplete: () => void }) {
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
   const [customerSearch, setCustomerSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  const filtered = customerSearch.trim()
-    ? allCustomers.filter((c) =>
-        c.company_name?.toLowerCase().includes(customerSearch.toLowerCase()),
-      )
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      setDebouncedSearch(customerSearch.trim());
+    }, 250);
+    return () => window.clearTimeout(id);
+  }, [customerSearch]);
+
+  const bookMatches = customerSearch.trim()
+    ? allCustomers.filter((c) => matchesRepCustomerSearch(c, customerSearch))
     : allCustomers.slice(0, 8);
+
+  const fallbackQuery = useQuery({
+    queryKey: ["sales", "voice-note", "workspace-fallback", debouncedSearch.toLowerCase()],
+    queryFn: () => searchCompaniesForPicker(debouncedSearch, 8),
+    enabled: debouncedSearch.length >= 2 && bookMatches.length === 0,
+    staleTime: 60 * 1000,
+  });
+
+  const showFallback = debouncedSearch.length >= 2 && bookMatches.length === 0;
+  const visible = showFallback ? (fallbackQuery.data ?? []) : bookMatches;
 
   useEffect(() => {
     return () => {
@@ -76,7 +95,9 @@ export function VoiceNoteCapture({ onComplete }: { onComplete: () => void }) {
     if (!audioBlob || !customerId) return;
     setSubmitting(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
       const mimeType = mediaRecorderRef.current?.mimeType ?? "audio/webm";
@@ -89,14 +110,12 @@ export function VoiceNoteCapture({ onComplete }: { onComplete: () => void }) {
 
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await supabase
-        .from("voice_captures")
-        .insert({
-          user_id: user.id,
-          audio_storage_path: fileName,
-          duration_seconds: duration,
-          sync_status: "pending",
-        });
+      const { error: insertError } = await supabase.from("voice_captures").insert({
+        user_id: user.id,
+        audio_storage_path: fileName,
+        duration_seconds: duration,
+        sync_status: "pending",
+      });
 
       if (insertError) throw insertError;
       onComplete();
@@ -121,15 +140,26 @@ export function VoiceNoteCapture({ onComplete }: { onComplete: () => void }) {
           className="w-full h-11 px-4 rounded-xl bg-slate-100 text-sm outline-none focus:ring-2 focus:ring-qep-orange/30"
         />
         <div className="max-h-60 overflow-y-auto space-y-1">
-          {filtered.map((c) => (
+          {visible.map((c) => (
             <button
               key={c.customer_id}
               onClick={() => setCustomerId(c.customer_id)}
               className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-sm font-medium text-slate-900"
             >
               {c.company_name}
+              {showFallback && c.primary_contact_name ? (
+                <span className="block text-xs text-slate-500">{c.primary_contact_name}</span>
+              ) : null}
             </button>
           ))}
+          {showFallback && fallbackQuery.isLoading ? (
+            <p className="px-4 py-2 text-xs text-slate-500">No book matches. Searching workspace…</p>
+          ) : null}
+          {showFallback && !fallbackQuery.isLoading && visible.length === 0 ? (
+            <p className="px-4 py-2 text-xs text-slate-500">
+              No matches in your book or workspace.
+            </p>
+          ) : null}
         </div>
       </div>
     );
