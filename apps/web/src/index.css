@@ -264,6 +264,14 @@
     outline: 2px solid hsl(var(--qep-orange));
     outline-offset: 2px;
   }
+
+  :root {
+    --sales-shell-bottom-tab-height: 64px;
+    --sales-shell-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --sales-shell-bottom-offset: calc(
+      var(--sales-shell-bottom-tab-height) + var(--sales-shell-safe-area-bottom)
+    );
+  }
 }
 
 @media print {

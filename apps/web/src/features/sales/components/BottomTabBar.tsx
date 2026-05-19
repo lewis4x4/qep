@@ -59,6 +59,9 @@ export function BottomTabBar() {
       className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-lg border-t border-slate-200/80 safe-area-bottom"
       role="tablist"
       aria-label="Sales navigation"
+      data-testid="sales-bottom-tab-bar"
+      data-bottom-tab-height="64"
+      style={{ height: "var(--sales-shell-bottom-offset)" }}
     >
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-2">
         {TABS.map((tab) => (

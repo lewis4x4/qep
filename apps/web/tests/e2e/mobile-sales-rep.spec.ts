@@ -28,6 +28,27 @@ async function assertNoHorizontalOverflow(page: Page): Promise<void> {
   expect(overflow.overflow, JSON.stringify(overflow)).toBeLessThanOrEqual(1);
 }
 
+async function assertBottomTabPersistsAfterShellScroll(
+  page: Page,
+  scrollRootTestId: string,
+): Promise<void> {
+  const bottomTab = page.getByTestId("sales-bottom-tab-bar");
+  await expect(bottomTab).toBeVisible();
+
+  await page.getByTestId(scrollRootTestId).evaluate((node) => {
+    node.scrollTo({ top: node.scrollHeight, behavior: "auto" });
+  });
+
+  const metrics = await page.evaluate(() => ({
+    viewportHeight: window.innerHeight,
+    pageScrollY: window.scrollY,
+  }));
+  const box = await bottomTab.boundingBox();
+  expect(box).not.toBeNull();
+  expect(metrics.pageScrollY).toBe(0);
+  expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(metrics.viewportHeight + 1);
+}
+
 test.describe("mobile sales rep surface", () => {
   test.use({ viewport: IPHONE_14_VIEWPORT });
 
@@ -72,6 +93,7 @@ test.describe("mobile sales rep surface", () => {
       await page.goto("/sales/today");
       await expect(page).toHaveURL(/\/sales\/today/);
       await assertNoHorizontalOverflow(page);
+      await assertBottomTabPersistsAfterShellScroll(page, "sales-shell-scroll-root");
 
       // BottomTabBar present and clickable on Pipeline.
       const pipelineTab = page.getByRole("tab", { name: /Pipeline/i });
@@ -84,11 +106,13 @@ test.describe("mobile sales rep surface", () => {
       await page.goto("/sales/quotes");
       await expect(page).toHaveURL(/\/sales\/quotes$/);
       await assertNoHorizontalOverflow(page);
+      await assertBottomTabPersistsAfterShellScroll(page, "sales-shell-scroll-root");
 
       // /sales/quotes/new mounts QuoteBuilder.
       await page.goto("/sales/quotes/new");
       await expect(page).toHaveURL(/\/sales\/quotes\/new/);
       await assertNoHorizontalOverflow(page);
+      await assertBottomTabPersistsAfterShellScroll(page, "quote-mobile-scroll-root");
 
       // /sales/field-note mounts the voice cockpit.
       await page.goto("/sales/field-note");
@@ -99,6 +123,7 @@ test.describe("mobile sales rep surface", () => {
       await page.goto("/sales/voice-quote");
       await expect(page).toHaveURL(/\/sales\/voice-quote/);
       await assertNoHorizontalOverflow(page);
+      await assertBottomTabPersistsAfterShellScroll(page, "sales-shell-scroll-root");
 
       // /sales/my-mirror.
       await page.goto("/sales/my-mirror");

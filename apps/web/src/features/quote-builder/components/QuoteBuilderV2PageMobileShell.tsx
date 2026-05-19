@@ -160,7 +160,7 @@ export function QuoteBuilderV2PageMobileShell({
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[hsl(var(--background))]">
+    <div className="flex h-full min-h-0 flex-col bg-[hsl(var(--background))]">
       <div className="px-4 pt-3 pb-2">
         <div className="flex items-center justify-between gap-2 mb-2">
           <button
@@ -227,7 +227,10 @@ export function QuoteBuilderV2PageMobileShell({
         </div>
       )}
 
-      <main className="flex-1 overflow-y-auto pb-36">
+      <main
+        className="min-h-0 flex-1 overflow-y-auto pb-[calc(var(--sales-shell-bottom-offset)+5rem)]"
+        data-testid="quote-mobile-scroll-root"
+      >
         <div className="px-4 pt-3">{wizardStepRouter}</div>
 
         <div className="px-4 pt-4">
