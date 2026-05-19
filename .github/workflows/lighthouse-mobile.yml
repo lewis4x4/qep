@@ -20,8 +20,10 @@
 #       lighthouse:mobile` which still hits the eight URLs but
 #       measures the login page for routes that gate.
 #
-# Targets the staging host by default (https://qep.blackrockai.co).
-# LHCI_BASE_URL can be overridden via workflow_dispatch input.
+# Pull requests target their Netlify deploy preview so CI is validating
+# the exact branch artifact. workflow_dispatch still targets staging by
+# default (https://qep.blackrockai.co), with LHCI_BASE_URL overridable by
+# the base_url input.
 name: Lighthouse Mobile
 
 on:
@@ -48,7 +50,7 @@ jobs:
     # to branch between the authenticated path and the guest fallback.
     env:
       HAS_CREDS: ${{ secrets.PLAYWRIGHT_TEST_EMAIL != '' && secrets.PLAYWRIGHT_TEST_PASSWORD != '' && 'true' || '' }}
-      LHCI_BASE_URL: ${{ github.event.inputs.base_url || 'https://qep.blackrockai.co' }}
+      LHCI_BASE_URL: ${{ github.event_name == 'pull_request' && format('https://deploy-preview-{0}--qualityequipmentparts.netlify.app', github.event.pull_request.number) || github.event.inputs.base_url || 'https://qep.blackrockai.co' }}
     defaults:
       run:
         working-directory: apps/web
@@ -68,6 +70,19 @@ jobs:
         if: env.HAS_CREDS == 'true'
         run: bunx playwright install chromium --with-deps
 
+      - name: Wait for deploy preview
+        if: github.event_name == 'pull_request'
+        run: |
+          for attempt in {1..30}; do
+            if curl -fsSIL "$LHCI_BASE_URL/" >/dev/null; then
+              exit 0
+            fi
+            echo "Waiting for $LHCI_BASE_URL to become reachable ($attempt/30)..."
+            sleep 5
+          done
+          echo "::error::Deploy preview did not become reachable: $LHCI_BASE_URL"
+          exit 1
+
       - name: Capture authenticated storage state
         if: env.HAS_CREDS == 'true'
         env:
@@ -83,6 +98,8 @@ jobs:
 
       - name: Lighthouse — guest fallback when no credentials
         if: env.HAS_CREDS != 'true'
+        env:
+          LHCI_GUEST_FALLBACK: "true"
         run: |
           echo "::warning::Running Lighthouse against guest routes only (PLAYWRIGHT_TEST_EMAIL / PLAYWRIGHT_TEST_PASSWORD not available — typically a fork PR)."
           bun run lighthouse:mobile

@@ -26,6 +26,10 @@
  *     captured by scripts/lighthouse-auth-setup.mjs into the headless
  *     browser before each audit, so SalesShell renders for real
  *     instead of bouncing through the login redirect.
+ *   - LHCI_GUEST_FALLBACK="true": no credentials are available. Routes
+ *     still prove reachability and accessibility/CLS, but performance is
+ *     downgraded to a warning because the audited surface is the login
+ *     shell, not the authenticated sales workspace.
  *
  * (Quality Tail Slice 1)
  */
@@ -43,6 +47,7 @@ const SALES_REP_ROUTES = [
 
 const baseUrl = process.env.LHCI_BASE_URL || "https://qep.blackrockai.co";
 const authenticated = process.env.LHCI_AUTHENTICATED === "true";
+const guestFallback = process.env.LHCI_GUEST_FALLBACK === "true";
 
 module.exports = {
   ci: {
@@ -53,7 +58,14 @@ module.exports = {
         ? "./scripts/lighthouse-puppeteer-auth.cjs"
         : undefined,
       settings: {
-        preset: "mobile",
+        formFactor: "mobile",
+        screenEmulation: {
+          mobile: true,
+          width: 390,
+          height: 844,
+          deviceScaleFactor: 3,
+          disabled: false,
+        },
         throttlingMethod: "simulate",
         onlyCategories: ["performance", "accessibility", "best-practices", "seo"],
         skipAudits: [
@@ -65,7 +77,7 @@ module.exports = {
     },
     assert: {
       assertions: {
-        "categories:performance": ["error", { minScore: 0.85 }],
+        "categories:performance": [guestFallback ? "warn" : "error", { minScore: 0.85 }],
         "categories:accessibility": ["error", { minScore: 0.95 }],
         "categories:best-practices": ["warn", { minScore: 0.9 }],
         "first-contentful-paint": ["warn", { maxNumericValue: 2500 }],
