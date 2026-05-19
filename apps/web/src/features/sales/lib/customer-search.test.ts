@@ -37,6 +37,12 @@ describe("matchesRepCustomerSearch", () => {
     expect(matchesRepCustomerSearch(baseCustomer, "lake")).toBe(true);
   });
 
+  test("matches phone across formatted/unformatted input", () => {
+    const withPhone = { ...baseCustomer, primary_contact_phone: "(352) 555-0100" };
+    expect(matchesRepCustomerSearch(withPhone, "3525550100")).toBe(true);
+    expect(matchesRepCustomerSearch(withPhone, "(352) 555")).toBe(true);
+  });
+
 
   test("matches DREC legacy code by prefix", () => {
     const drec = { ...baseCustomer, search_1: "DREC", search_2: null };

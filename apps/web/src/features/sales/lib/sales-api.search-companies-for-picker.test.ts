@@ -11,26 +11,19 @@ type CompanyRow = {
   phone: string | null;
 };
 
-const rowsByField = new Map<string, CompanyRow[]>();
-const calls: Array<{ table: string; field?: string; pattern?: string; workspace?: string }> = [];
+const rpcCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
+let rpcRows: CompanyRow[] = [];
 
 function makeSelectChain(table: string) {
   const chain: Record<string, unknown> = {};
   chain.select = mock(() => chain);
   chain.eq = mock((field: string, value: string) => {
-    if (field === "workspace_id") calls.push({ table, workspace: value });
     return chain;
   });
   chain.is = mock(() => chain);
-  chain.ilike = mock((field: string, pattern: string) => {
-    calls.push({ table, field, pattern });
-    return chain;
-  });
+  chain.ilike = mock(() => chain);
   chain.order = mock(() => chain);
-  chain.limit = mock(async () => {
-    const lastField = [...calls].reverse().find((call) => call.table === table && call.field)?.field;
-    return { data: lastField ? rowsByField.get(lastField) ?? [] : [], error: null };
-  });
+  chain.limit = mock(async () => ({ data: [], error: null }));
   chain.maybeSingle = mock(async () => ({ data: { active_workspace_id: "ws-1" }, error: null }));
   chain.insert = mock(async () => ({ error: null }));
   chain.update = mock(() => chain);
@@ -42,6 +35,10 @@ mock.module("@/lib/supabase", () => ({
   supabase: {
     auth: { getUser: mock(async () => ({ data: { user: { id: "rep-1" } } })) },
     from: mock((table: string) => makeSelectChain(table)),
+    rpc: mock(async (name: string, args: Record<string, unknown>) => {
+      rpcCalls.push({ name, args });
+      return { data: rpcRows, error: null };
+    }),
     storage: { from: mock(() => ({ upload: mock(async () => ({ error: null })) })) },
   },
 }));
@@ -50,18 +47,18 @@ const { searchCompaniesForPicker } = await import("./sales-api");
 
 describe("searchCompaniesForPicker", () => {
   beforeEach(() => {
-    rowsByField.clear();
-    calls.length = 0;
+    rpcCalls.length = 0;
+    rpcRows = [];
   });
 
   test("returns empty when query is shorter than 2 chars", async () => {
     const rows = await searchCompaniesForPicker("d", 8);
     expect(rows).toEqual([]);
-    expect(calls).toEqual([]);
+    expect(rpcCalls).toEqual([]);
   });
 
-  test("searches workspace companies and maps them to RepCustomer shape", async () => {
-    rowsByField.set("search_1", [
+  test("calls ranked RPC and maps rows to RepCustomer shape", async () => {
+    rpcRows = [
       {
         id: "c-1",
         name: "DREC Holdings",
@@ -72,12 +69,14 @@ describe("searchCompaniesForPicker", () => {
         state: "TX",
         phone: "(555) 111-2233",
       },
-    ]);
+    ];
 
     const rows = await searchCompaniesForPicker("DREC", 8);
 
-    expect(calls).toContainEqual({ table: "crm_companies", workspace: "ws-1" });
-    expect(calls).toContainEqual({ table: "crm_companies", field: "search_1", pattern: "%DREC%" });
+    expect(rpcCalls).toContainEqual({
+      name: "search_companies_for_picker_ranked",
+      args: { p_query: "DREC", p_workspace_id: "ws-1", p_limit: 8 },
+    });
     expect(rows[0]).toMatchObject({
       customer_id: "c-1",
       company_name: "DREC Holdings",
@@ -88,23 +87,11 @@ describe("searchCompaniesForPicker", () => {
     });
   });
 
-  test("deduplicates matches from multiple fields and respects the limit", async () => {
-    const row = {
-      id: "c-1",
-      name: "Precision Landworks",
-      dba: null,
-      search_1: "PLW",
-      search_2: "P100",
-      city: "Waco",
-      state: "TX",
-      phone: "555-222-1000",
-    };
-    rowsByField.set("name", [row]);
-    rowsByField.set("phone", [row]);
-
-    const rows = await searchCompaniesForPicker("Precision", 1);
-
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.customer_id).toBe("c-1");
+  test("passes formatted/unformatted phone query to ranked RPC", async () => {
+    await searchCompaniesForPicker("(352) 555-0100", 5);
+    expect(rpcCalls[0]).toEqual({
+      name: "search_companies_for_picker_ranked",
+      args: { p_query: "(352) 555-0100", p_workspace_id: "ws-1", p_limit: 5 },
+    });
   });
 });
