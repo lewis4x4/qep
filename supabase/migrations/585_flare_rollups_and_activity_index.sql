@@ -10,9 +10,9 @@
 --    The RPC is workspace-scoped (security invoker), so RLS on the
 --    underlying tables governs visibility.
 --
--- 2) idx_crm_activities_creator_occurred — index supporting the
+-- 2) idx_qrm_activities_creator_occurred — index supporting the
 --    v_rep_streaks view (mig 584). Without it the streak view does a seq
---    scan over crm_activities on every dashboard load.
+--    scan over qrm_activities on every dashboard load.
 -- ============================================================================
 
 -- ── 1. RPC: flare_board_rollups ─────────────────────────────────────────────
@@ -71,9 +71,9 @@ comment on function public.flare_board_rollups() is
 grant execute on function public.flare_board_rollups() to authenticated;
 
 -- ── 2. Index for v_rep_streaks performance ──────────────────────────────────
-create index if not exists idx_crm_activities_creator_occurred
-  on public.crm_activities (created_by, occurred_at desc)
+create index if not exists idx_qrm_activities_creator_occurred
+  on public.qrm_activities (created_by, occurred_at desc)
   where deleted_at is null;
 
-comment on index public.idx_crm_activities_creator_occurred is
-  'Supports v_rep_streaks (mig 584): per-rep streak math filters on (created_by, occurred_at) and on the partial deleted_at is null predicate.';
+comment on index public.idx_qrm_activities_creator_occurred is
+  'Supports v_rep_streaks (mig 584): per-rep streak math filters on qrm_activities(created_by, occurred_at) and on the partial deleted_at is null predicate. The crm_activities compatibility view plans against this base-table index.';
