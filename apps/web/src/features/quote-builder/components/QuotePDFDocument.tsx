@@ -55,6 +55,12 @@ export interface QuoteProposalLine {
   vendorLogo?: QuoteProposalAsset | null;
 }
 
+export interface QuoteProposalCoverUnit {
+  title: string;
+  meta: string | null;
+  photos: QuoteProposalAsset[];
+}
+
 export interface QuoteProposalNarrative {
   text: string | null;
   confirmed: boolean;
@@ -105,6 +111,7 @@ export interface QuotePDFData {
   equipment: Array<{ make: string; model: string; year?: number | null; price: number; quantity?: number; extendedPrice?: number }>;
   attachments: Array<{ name: string; price: number; quantity?: number; extendedPrice?: number }>;
   lineItems: QuoteProposalLine[];
+  coverGalleryUnits: QuoteProposalCoverUnit[];
   brandAssets: {
     qepLogo: QuoteProposalAsset | null;
     vendorLogos: QuoteProposalAsset[];
@@ -161,6 +168,17 @@ const s = StyleSheet.create({
   coverMetricLabel: { fontSize: 8, color: GEAR_GRAY, textTransform: "uppercase" as const, letterSpacing: 1.2 },
   coverMetric: { fontSize: 18, color: ORANGE, fontFamily: "Helvetica-Bold", marginTop: 5 },
   coverMetricSub: { fontSize: 8, color: GEAR_GRAY, marginTop: 4, lineHeight: 1.35 },
+  coverTitleCompact: { marginTop: 18, fontSize: 28 },
+  coverGallery: { marginTop: 13, marginBottom: 13 },
+  coverGalleryLabel: { fontSize: 8, color: ORANGE, fontFamily: "Helvetica-Bold", letterSpacing: 1.2, textTransform: "uppercase" as const, marginBottom: 6 },
+  coverGalleryCards: { flexDirection: "row" },
+  coverGalleryCard: { flex: 1, marginRight: 7, padding: 7, backgroundColor: PAPER, borderWidth: 1, borderColor: "#E6E2DB", borderBottomWidth: 3, borderBottomColor: ORANGE },
+  coverGalleryCardTitle: { fontSize: 8.5, fontFamily: "Helvetica-Bold", color: CHARCOAL, marginBottom: 3, lineHeight: 1.2 },
+  coverGalleryMeta: { fontSize: 6.5, color: MUTED, marginBottom: 5, lineHeight: 1.2 },
+  coverGalleryMainPhoto: { width: "100%", height: 62, objectFit: "cover" as const, marginBottom: 4 },
+  coverGalleryThumbRow: { flexDirection: "row" },
+  coverGalleryThumb: { width: 30, height: 22, objectFit: "cover" as const, marginRight: 3, borderWidth: 1, borderColor: WHITE },
+  coverGalleryMoreNote: { fontSize: 7, color: MUTED, marginTop: 5, lineHeight: 1.3 },
   sectionTitle: { fontSize: 12, fontFamily: "Helvetica-Bold", color: CHARCOAL, marginBottom: 9, marginTop: 6, textTransform: "uppercase" as const, letterSpacing: 1.1 },
   sectionDeck: { fontSize: 9, color: MUTED, lineHeight: 1.45, marginBottom: 10 },
   tableHeader: { flexDirection: "row", backgroundColor: CHARCOAL, paddingVertical: 7, paddingHorizontal: 8 },
@@ -319,6 +337,37 @@ function LineItemsTable({ lines }: { lines: QuoteProposalLine[] }) {
   );
 }
 
+function CoverGallery({ units }: { units: QuoteProposalCoverUnit[] }) {
+  const visibleUnits = units.slice(0, 3);
+  if (visibleUnits.length === 0) return null;
+
+  return (
+    <View style={s.coverGallery}>
+      <Text style={s.coverGalleryLabel}>Equipment photo gallery</Text>
+      <View style={s.coverGalleryCards}>
+        {visibleUnits.map((unit, index) => {
+          const [primaryPhoto, ...thumbs] = unit.photos.slice(0, 5);
+          return (
+            <View key={`${unit.title}-${index}`} style={s.coverGalleryCard}>
+              <Text style={s.coverGalleryCardTitle}>{unit.title}</Text>
+              {unit.meta ? <Text style={s.coverGalleryMeta}>{unit.meta}</Text> : null}
+              {primaryPhoto ? <Image src={primaryPhoto.src} style={s.coverGalleryMainPhoto} /> : null}
+              {thumbs.length > 0 ? (
+                <View style={s.coverGalleryThumbRow}>
+                  {thumbs.map((photo) => <Image key={photo.src} src={photo.src} style={s.coverGalleryThumb} />)}
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+      {units.length > visibleUnits.length ? (
+        <Text style={s.coverGalleryMoreNote}>Additional equipment appears in the configuration summary.</Text>
+      ) : null}
+    </View>
+  );
+}
+
 function FinancingCard({ option, selected }: { option: QuotePDFData["financing"][number]; selected: boolean }) {
   const payment = option.type === "cash"
     ? (option.totalCost != null ? fmt(option.totalCost) : "Cash purchase")
@@ -342,13 +391,15 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
   const selectedFinancing = financingOptions.find((option) => data.selectedFinancingLabel && option.label === data.selectedFinancingLabel) ?? financingOptions[0] ?? null;
   const facts = data.narrative.facts.slice(0, 4);
   const highlights = data.narrative.highlights.slice(0, 2);
+  const hasCoverGallery = data.coverGalleryUnits.length > 0;
 
   return (
     <Document>
       <Page size="LETTER" style={s.page}>
         <PageHeader data={data} />
         <Text style={s.coverKicker}>Customer equipment proposal</Text>
-        <Text style={s.coverTitle}>Built for the job. Backed by QEP.</Text>
+        <Text style={hasCoverGallery ? [s.coverTitle, s.coverTitleCompact] : s.coverTitle}>Built for the job. Backed by QEP.</Text>
+        <CoverGallery units={data.coverGalleryUnits} />
         <View style={s.coverGrid}>
           <View style={s.coverLeft}>
             <Text style={s.coverLabel}>Prepared for</Text>

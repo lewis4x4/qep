@@ -58,6 +58,34 @@ function image(asset: QuoteProposalAsset | null | undefined, className: string):
   return asset?.src ? `<img class="${className}" src="${escapeAttr(asset.src)}" alt="${escapeAttr(asset.alt)}" />` : "";
 }
 
+function buildCoverGallery(data: QuotePDFData, fallbackLine: QuoteProposalLine | null): string {
+  const units = data.coverGalleryUnits.slice(0, 3);
+  if (units.length === 0) {
+    return fallbackLine?.media?.primaryPhoto
+      ? image(fallbackLine.media.primaryPhoto, "hero-photo")
+      : `<div class="hero-fallback">${escapeHtml(data.primaryMachineTitle || "Equipment configuration")}</div>`;
+  }
+
+  const cards = units.map((unit) => {
+    const [primaryPhoto, ...thumbs] = unit.photos.slice(0, 5);
+    return `
+      <article class="cover-gallery-card">
+        ${primaryPhoto ? image(primaryPhoto, "cover-gallery-main") : ""}
+        <div class="cover-gallery-title">${escapeHtml(unit.title)}</div>
+        ${unit.meta ? `<div class="cover-gallery-meta">${escapeHtml(unit.meta)}</div>` : ""}
+        ${thumbs.length > 0 ? `<div class="cover-gallery-thumbs">${thumbs.map((photo) => image(photo, "cover-gallery-thumb")).join("")}</div>` : ""}
+      </article>
+    `;
+  }).join("");
+
+  return `
+    <section class="cover-gallery" aria-label="Equipment photo gallery">
+      ${cards}
+      ${data.coverGalleryUnits.length > units.length ? `<p class="cover-gallery-more-note">Additional equipment appears in the configuration summary.</p>` : ""}
+    </section>
+  `;
+}
+
 function buildHeader(data: QuotePDFData, page: number, totalPages: number): string {
   const address = [data.branch.address, data.branch.city, data.branch.state, data.branch.postalCode].filter(Boolean).join(", ");
   const vendorLogos = data.brandAssets.vendorLogos
@@ -257,6 +285,14 @@ export function buildPrintableQuoteHtml(data: QuotePDFData): string {
       .hero-photo { width:100%; height:2.05in; object-fit:cover; border:1px solid var(--line); border-bottom:.06in solid var(--orange); }
       .hero-fallback,.total-callout { min-height:2.05in; }
       .hero-fallback { display:grid; place-items:center; background:var(--paper); border-bottom:.06in solid var(--orange); color:var(--muted); font-weight:900; }
+      .cover-gallery { min-height:2.05in; display:grid; grid-template-columns:repeat(3,1fr); gap:.055in; align-content:start; }
+      .cover-gallery-card { min-width:0; border:1px solid var(--line); border-bottom:.05in solid var(--orange); background:var(--paper); padding:.045in; page-break-inside:avoid; }
+      .cover-gallery-main { width:100%; height:.78in; object-fit:cover; display:block; margin-bottom:.035in; }
+      .cover-gallery-title { color:var(--charcoal); font-size:.067in; font-weight:900; line-height:1.15; text-transform:uppercase; }
+      .cover-gallery-meta { color:var(--muted); font-size:.056in; font-weight:750; line-height:1.2; margin-top:.02in; }
+      .cover-gallery-thumbs { display:grid; grid-template-columns:repeat(4,1fr); gap:.02in; margin-top:.035in; }
+      .cover-gallery-thumb { width:100%; height:.34in; object-fit:cover; border:1px solid #fff; }
+      .cover-gallery-more-note { grid-column:1/-1; margin:.02in 0 0; color:var(--muted); font-size:.058in; font-weight:750; }
       .total-callout { display:flex; flex-direction:column; justify-content:center; color:white; background:linear-gradient(135deg,var(--charcoal),#343434); padding:.14in; text-align:right; border-bottom:.07in solid var(--orange); }
       .total-callout small { color:#cfcfcf; font-size:.075in; font-weight:900; letter-spacing:.018in; text-transform:uppercase; }
       .total-callout strong { color:var(--orange); font-size:.28in; font-weight:900; }
@@ -317,7 +353,7 @@ export function buildPrintableQuoteHtml(data: QuotePDFData): string {
         ${buildHeader(data, 1, totalPages)}
         ${buildAddressBlocks(data)}
         <section class="hero">
-          ${primaryLine?.media?.primaryPhoto ? image(primaryLine.media.primaryPhoto, "hero-photo") : `<div class="hero-fallback">${escapeHtml(data.primaryMachineTitle || "Equipment configuration")}</div>`}
+          ${buildCoverGallery(data, primaryLine)}
           <aside class="total-callout"><small>${escapeHtml(data.compliance.primaryTotalLabel)}</small><strong>${escapeHtml(formatCurrency(selectedTotal(data)))}</strong><small>Customer total: ${escapeHtml(formatCurrency(data.customerTotal))}</small><small>${escapeHtml(referenceBadge)}</small></aside>
         </section>
         ${data.narrative.text ? `<section class="narrative"><div class="narrative-label">Why this machine</div>${escapeHtml(data.narrative.text)}</section>` : ""}

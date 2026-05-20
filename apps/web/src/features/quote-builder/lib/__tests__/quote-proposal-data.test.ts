@@ -246,10 +246,102 @@ describe("buildQuoteProposalData", () => {
     expect(line?.specBullets).toHaveLength(8);
     expect(line?.media?.primaryPhoto?.src).toBe("/storage/quote/asv.jpg");
     expect(line?.media?.gallery?.map((asset) => asset.src)).toEqual(["https://cdn.qep.example/asv-side.jpg", "https://cdn.qep.example/asv-cab.jpg"]);
+    expect(data.coverGalleryUnits[0]?.photos.map((asset) => asset.src)).toEqual(["/storage/quote/asv.jpg", "https://cdn.qep.example/asv-side.jpg", "https://cdn.qep.example/asv-cab.jpg"]);
     expect(line?.vendorLogo?.src).toBe("https://cdn.qep.example/asv-logo.png");
     expect(JSON.stringify(line)).not.toContain("dealer_cost");
     expect(JSON.stringify(line)).not.toContain("internal-catalog-row");
     expect(JSON.stringify(line)).not.toContain("private transcript excerpt");
+  });
+
+  test("builds customer-facing cover gallery units from equipment media only", () => {
+    const data = build({
+      equipment: [{
+        kind: "equipment",
+        title: "RT-135F",
+        make: "ASV",
+        model: "RT-135F",
+        year: 2026,
+        quantity: 1,
+        unitPrice: 148_950,
+        metadata: {
+          stock_number: "Q003403",
+          serial_number: "ASVRT135LTDF01723",
+          condition: "new",
+          photo_url: "https://cdn.qep.example/asv-front.jpg",
+          photo_urls: [
+            "https://cdn.qep.example/asv-front.jpg",
+            "https://cdn.qep.example/asv-side.jpg",
+            "https://cdn.qep.example/asv-cab.jpg",
+            "https://cdn.qep.example/asv-rear.jpg",
+            "https://cdn.qep.example/asv-left.jpg",
+            "https://cdn.qep.example/asv-right.jpg",
+            "http://localhost/private.jpg",
+          ],
+          media_kind: "actual",
+        },
+      }, {
+        kind: "equipment",
+        title: "T770",
+        make: "Bobcat",
+        model: "T770",
+        year: 2026,
+        quantity: 1,
+        unitPrice: 100_000,
+        metadata: {
+          photo_urls: ["https://cdn.qep.example/t770-front.jpg", "https://cdn.qep.example/t770-side.jpg"],
+          media_kind: "model_generic",
+        },
+      }],
+      attachments: [{
+        kind: "attachment",
+        title: "Forestry mulcher",
+        quantity: 1,
+        unitPrice: 10_000,
+        metadata: { photo_url: "https://cdn.qep.example/mulcher.jpg" },
+      }],
+      tradeAllowance: 40_000,
+      tradeValuationId: "trade-hero-gallery",
+    }, [], {
+      tradeValuation: {
+        id: "trade-hero-gallery",
+        make: "Deere",
+        model: "333G",
+        year: 2021,
+        serialNumber: "SN123",
+        hours: 2400,
+        photos: [{ type: "point_shoot", url: "https://cdn.qep.example/trade-front.jpg" }],
+        marketComps: [],
+        auctionValue: null,
+        discountedValue: null,
+        reconditioningEstimate: null,
+        preliminaryValue: 40_000,
+        conditionalLanguage: null,
+        aiConditionNotes: null,
+        operationalStatus: "daily_use",
+      },
+    });
+
+    expect(data.coverGalleryUnits).toHaveLength(2);
+    expect(data.coverGalleryUnits[0]).toMatchObject({
+      title: "2026 ASV RT-135F",
+      meta: "Stock #: Q003403 · Serial #: ASVRT135LTDF01723 · new",
+    });
+    expect(data.coverGalleryUnits[0]?.photos.map((asset) => asset.src)).toEqual([
+      "https://cdn.qep.example/asv-front.jpg",
+      "https://cdn.qep.example/asv-side.jpg",
+      "https://cdn.qep.example/asv-cab.jpg",
+      "https://cdn.qep.example/asv-rear.jpg",
+      "https://cdn.qep.example/asv-left.jpg",
+    ]);
+    expect(data.coverGalleryUnits[1]?.photos.map((asset) => asset.src)).toEqual([
+      "https://cdn.qep.example/t770-front.jpg",
+      "https://cdn.qep.example/t770-side.jpg",
+    ]);
+    const coverJson = JSON.stringify(data.coverGalleryUnits);
+    expect(coverJson).not.toContain("asv-right.jpg");
+    expect(coverJson).not.toContain("localhost");
+    expect(coverJson).not.toContain("mulcher.jpg");
+    expect(coverJson).not.toContain("trade-front.jpg");
   });
 
   test("rejects unsafe customer media URLs from metadata", () => {
@@ -402,6 +494,34 @@ describe("buildQuoteProposalData", () => {
     expect(html).toContain("FMV lease");
   });
 
+  test("printable HTML renders the cover equipment gallery when media is available", () => {
+    const data = build({
+      equipment: [{
+        kind: "equipment",
+        title: "ASV RT-135F",
+        make: "ASV",
+        model: "RT-135F",
+        year: 2026,
+        quantity: 1,
+        unitPrice: 148_950,
+        metadata: {
+          stock_number: "Q003403",
+          photo_url: "https://cdn.qep.example/asv-front.jpg",
+          photo_urls: ["https://cdn.qep.example/asv-side.jpg", "https://cdn.qep.example/asv-cab.jpg"],
+        },
+      }],
+    });
+    const html = buildPrintableQuoteHtml(data);
+
+    expect(html).toContain("cover-gallery");
+    expect(html).toContain("cover-gallery-main");
+    expect(html).toContain("cover-gallery-thumb");
+    expect(html).toContain("https://cdn.qep.example/asv-front.jpg");
+    expect(html).toContain("https://cdn.qep.example/asv-side.jpg");
+    expect(html).toContain("https://cdn.qep.example/asv-cab.jpg");
+    expect(html).toContain("Q003403");
+  });
+
   test("printable HTML renders trade-in photo evidence without changing website QR wording", () => {
     const data = build({ tradeAllowance: 35_000, tradeValuationId: "trade-456" }, [], {
       tradeValuation: {
@@ -474,6 +594,8 @@ describe("buildQuoteProposalData", () => {
 
     expect(document).toBeTruthy();
     expect(rendered).toContain("https://cdn.qep.example/asv-front.jpg");
+    expect(rendered).toContain("https://cdn.qep.example/asv-side.jpg");
+    expect(rendered).toContain("coverGalleryUnits");
     expect(rendered).toContain("Q003403");
     expect(rendered).toContain("/brand/qep/quote/qep-qr.png");
     expect(QEP_WEBSITE_QR_LABEL).toBe("Scan to visit QEP online");

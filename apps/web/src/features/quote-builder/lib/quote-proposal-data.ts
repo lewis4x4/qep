@@ -316,6 +316,39 @@ function buildLineItems(
   return lines;
 }
 
+function coverLineMeta(line: QuotePDFData["lineItems"][number]): string | null {
+  const meta = [
+    line.stockNumber ? `Stock #: ${line.stockNumber}` : null,
+    line.serialNumber ? `Serial #: ${line.serialNumber}` : null,
+    line.condition,
+  ].filter(Boolean).join(" · ");
+  return optionalText(meta);
+}
+
+function buildCoverGalleryUnits(lines: QuotePDFData["lineItems"]): QuotePDFData["coverGalleryUnits"] {
+  return lines.flatMap((line) => {
+    if (line.lineType !== "equipment") return [];
+    const media = line.media;
+    if (!media || (!media.primaryPhoto && media.gallery.length === 0)) return [];
+
+    const seen = new Set<string>();
+    const photos = [media.primaryPhoto ?? null, ...media.gallery]
+      .flatMap((asset) => {
+        if (!asset || asset.mediaKind === "trade_in" || seen.has(asset.src)) return [];
+        seen.add(asset.src);
+        return [asset];
+      })
+      .slice(0, 5);
+
+    if (photos.length === 0) return [];
+    return [{
+      title: line.description,
+      meta: coverLineMeta(line),
+      photos,
+    }];
+  });
+}
+
 function buildNarrative(draft: QuoteWorkspaceDraft): QuotePDFData["narrative"] {
   const recommendation: QuoteRecommendation | null = draft.recommendation ?? null;
   const confirmed = draft.whyThisMachineConfirmed === true;
@@ -433,6 +466,7 @@ export function buildQuoteProposalData(input: {
   const tax = buildTaxDetail(draft);
   const customerEquipment = draft.equipment.filter(isCustomerVisibleLine);
   const primaryEquipment = customerEquipment[0] ?? null;
+  const lineItems = buildLineItems(draft, computed, input.tradeValuation);
 
   return {
     dealName: draft.dealId || draft.customerCompany || draft.customerName || "Quote",
@@ -455,7 +489,8 @@ export function buildQuoteProposalData(input: {
       quantity: item.quantity,
       extendedPrice: money(lineExtendedAmount(item)),
     })),
-    lineItems: buildLineItems(draft, computed, input.tradeValuation),
+    lineItems,
+    coverGalleryUnits: buildCoverGalleryUnits(lineItems),
     brandAssets: QEP_BRAND_ASSETS,
     narrative: buildNarrative(draft),
     equipmentTotal: money(computed.equipmentTotal),

@@ -382,42 +382,35 @@
     ]
   },
   "current_cycle": {
-    "task_id": "A1.5",
-    "title": "Brand voice pass on every Iron Quote string",
+    "task_id": "A3.1",
+    "title": "M1 \u2014 Equipment hero photo gallery",
     "stream": "A",
-    "wave": "A1",
-    "linear_issue_identifier": "QEP-5",
-    "linear_url": "https://linear.app/jarvislewis/issue/QEP-5/a15-brand-voice-pass-on-every-iron-quote-string",
+    "wave": "A3",
+    "linear_issue_identifier": "QEP-14",
+    "linear_url": "https://linear.app/jarvislewis/issue/QEP-14/a31-m1-equipment-hero-photo-gallery",
     "status": "review_passed_dispatching_release",
-    "plan_export": "/Users/brianlewis/Projects/qep-knowledge-assistant/prompt-exports/oracle-plan-2026-05-19-222105-a1-5-voice-pass-0293-f00f.md",
+    "plan_export": "/Users/brianlewis/Projects/qep-knowledge-assistant/prompt-exports/oracle-plan-2026-05-19-223411-a3-1-hero-gallery-dd-77cb.md",
     "expected_files": [
-      "supabase/functions/quote-builder-v2/quote-public-safety.ts",
-      "supabase/functions/quote-builder-v2/quote-public-safety.test.ts",
-      "supabase/functions/quote-builder-v2/index.ts",
-      "apps/web/src/features/quote-builder/steps/DetailsStep.tsx",
-      "apps/web/src/features/quote-builder/steps/SendStep.tsx",
-      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderDocumentActions.ts (if user-visible text copy exists)"
+      "apps/web/src/features/quote-builder/components/QuotePDFDocument.tsx",
+      "apps/web/src/features/quote-builder/lib/quote-proposal-data.ts",
+      "apps/web/src/features/quote-builder/lib/quote-print-html.ts",
+      "apps/web/src/features/quote-builder/lib/__tests__/quote-proposal-data.test.ts",
+      "apps/web/src/features/quote-builder/lib/__tests__/quote-api.test.ts (only if fixtures/types require)"
     ],
     "acceptance_criteria": [
-      "Email Quote body uses QEP plainspoken brand voice and preserves legal/TILA-safe disclaimer semantics.",
-      "Text Quote/SMS pathway copy is honest that SMS transport is not connected and does not add provider scope.",
-      "Why This Machine pre-suggest prompt discourages AI-sounding copy and remains grounded in transcript facts.",
-      "Rep confirmation and all quote send/share readiness gates remain unchanged.",
-      "Relevant tests/type checks pass or failures are documented as pre-existing/blocking."
-    ],
-    "verification_commands": [
-      "deno test supabase/functions/quote-builder-v2/quote-public-safety.test.ts",
-      "deno check supabase/functions/quote-builder-v2/index.ts",
-      "( cd apps/web && bun run typecheck )",
-      "( cd apps/web && bun test src/features/quote-builder/lib/__tests__/quote-proposal-data.test.ts src/features/quote-builder/lib/__tests__/quote-workspace.test.ts )"
+      "Customer proposal data projects safe equipment photo galleries from existing equipment line metadata.",
+      "React PDF cover renders 3\u20135 photos per equipment unit when available, with safe fallbacks.",
+      "Printable HTML fallback renders the same gallery data and preserves escaping/safety.",
+      "No send/share/readiness/approval/tax/why-this-machine gating changes.",
+      "Targeted tests and typecheck pass or blockers are documented."
     ],
     "deployment_needs": {
       "migrations": false,
-      "edge_functions": "quote-builder-v2 if backend edge prompt/email changes are deployed after verification"
+      "edge_functions": false
     },
-    "updated_at": "2026-05-20T00:05:00-04:00",
-    "builder_session_id": "673EEB0D-AEDA-4087-9EEC-C6CFFF3801D7",
-    "reviewer_session_id": "893682B8-EA2B-4886-B4C5-1EFD307FFA52",
+    "updated_at": "2026-05-20T00:25:00-04:00",
+    "builder_session_id": "AFDD5654-75DA-4C6C-98C6-9582B4C66628",
+    "reviewer_session_id": "17621319-F41D-4C91-9B93-99751CED769B",
     "review_result": "pass"
   }
 }
