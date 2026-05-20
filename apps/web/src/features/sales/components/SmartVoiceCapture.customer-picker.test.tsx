@@ -69,6 +69,30 @@ afterEach(cleanup);
 
 
 describe("CustomerPickerInline", () => {
+  test("uses token-based contrast classes for input and option states", () => {
+    renderPicker({
+      bookCustomers: [
+        customer({
+          customer_id: "book-contrast",
+          company_name: "Contrast Ready Customer",
+        }),
+      ],
+    });
+
+    const input = screen.getByPlaceholderText("Customer name…");
+    expect(input.className).toContain("border-input");
+    expect(input.className).toContain("text-foreground");
+    expect(input.className).toContain("placeholder:text-muted-foreground");
+    expect(input.className).toContain("focus-visible:ring-2");
+    expect(input.className).toContain("focus-visible:ring-ring/40");
+
+    const optionButton = screen.getByRole("button", { name: /Contrast Ready Customer/i });
+    expect(optionButton.className).toContain("hover:bg-accent");
+    expect(optionButton.className).toContain("hover:text-accent-foreground");
+    expect(optionButton.className).toContain("focus-visible:bg-accent");
+    expect(optionButton.className).toContain("focus-visible:text-accent-foreground");
+  });
+
   test("keeps DREC legacy prefix matches inside the rep book", () => {
     renderPicker({
       initialSearch: "dr",

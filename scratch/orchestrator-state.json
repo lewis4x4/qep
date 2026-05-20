@@ -275,6 +275,29 @@
       "gate_report": "test-results/agent-gates/20260520T230316Z-A5.1-qb-3-fuzzy-phone-customer-search.json",
       "notes": "Main working tree has unrelated OEM/admin WIP and duplicate untracked migration numbers, so migration/order and full segment gates were verified in a clean detached worktree with only A5.1 scoped files applied.",
       "updated_at": "2026-05-20T23:03:16Z"
+    },
+    {
+      "task_id": "B5.3/QEP-59",
+      "status": "complete",
+      "title": "HF-2 \u2014 Voice-note dropdown contrast",
+      "stream": "B",
+      "wave": "B5",
+      "goal": "Customer picker input and option rows use token-based classes so dropdown text, hover, and focus states are readable in light and dark themes.",
+      "changed_files": [
+        "apps/web/src/features/sales/components/CustomerPickerInline.tsx",
+        "apps/web/src/features/sales/components/SmartVoiceCapture.customer-picker.test.tsx"
+      ],
+      "verification": [
+        "bun test apps/web/src/features/sales/components/SmartVoiceCapture.customer-picker.test.tsx",
+        "bun run --filter @qep/web typecheck",
+        "bun run migrations:check (clean temp worktree)",
+        "git diff --check -- scoped HF-2 files",
+        "Oracle review: no P0/P1 findings",
+        "bun run segment:gates --segment B5.3-hf-2-voice-note-dropdown-contrast --ui (clean temp worktree)"
+      ],
+      "gate_report": "test-results/agent-gates/20260520T231012Z-B5.3-hf-2-voice-note-dropdown-contrast.json",
+      "notes": "Roadmap names VoiceNoteCapture, but shipped HF-1 extracted the relevant picker to CustomerPickerInline. Main working tree has unrelated OEM/admin WIP and duplicate untracked migration numbers, so full gate ran in a clean detached worktree with only HF-2 scoped files applied.",
+      "updated_at": "2026-05-20T23:10:12Z"
     }
   ],
   "agents": [
@@ -604,30 +627,27 @@
     }
   },
   "current_task": {
-    "task_id": "A5.1/QEP-33",
+    "task_id": "B5.3/QEP-59",
     "status": "complete",
-    "title": "QB-3 \u2014 Fuzzy phone customer search",
-    "stream": "A",
-    "wave": "A5",
-    "goal": "Quote Builder customer picker shares HF-1 ranked search semantics with phone-digit matching, phone-first ranking, and protected v_rep_customers one-row-per-company behavior.",
+    "title": "HF-2 \u2014 Voice-note dropdown contrast",
+    "stream": "B",
+    "wave": "B5",
+    "goal": "Customer picker input and option rows use token-based classes so dropdown text, hover, and focus states are readable in light and dark themes.",
     "changed_files": [
-      "apps/web/src/features/quote-builder/components/CustomerPicker.tsx",
-      "apps/web/src/features/quote-builder/lib/__tests__/customer-search-api.test.ts",
-      "apps/web/src/features/quote-builder/lib/__tests__/customer-search-api.rpc.test.ts",
-      "supabase/migrations/586_qb3_customer_search_ranked.sql",
-      "supabase/migrations/586_qb3_customer_search_ranked.test.ts"
+      "apps/web/src/features/sales/components/CustomerPickerInline.tsx",
+      "apps/web/src/features/sales/components/SmartVoiceCapture.customer-picker.test.tsx"
     ],
     "verification": [
-      "bun test apps/web/src/features/quote-builder/lib/__tests__/customer-search-api.test.ts apps/web/src/features/quote-builder/lib/__tests__/customer-search-api.rpc.test.ts apps/web/src/features/sales/lib/customer-search.test.ts apps/web/src/features/sales/lib/sales-api.search-companies-for-picker.test.ts ./supabase/migrations/586_qb3_customer_search_ranked.test.ts",
+      "bun test apps/web/src/features/sales/components/SmartVoiceCapture.customer-picker.test.tsx",
       "bun run --filter @qep/web typecheck",
       "bun run migrations:check (clean temp worktree)",
-      "git diff --check -- scoped A5.1 files",
+      "git diff --check -- scoped HF-2 files",
       "Oracle review: no P0/P1 findings",
-      "bun run segment:gates --segment A5.1-qb-3-fuzzy-phone-customer-search --ui (clean temp worktree)"
+      "bun run segment:gates --segment B5.3-hf-2-voice-note-dropdown-contrast --ui (clean temp worktree)"
     ],
-    "gate_report": "test-results/agent-gates/20260520T230316Z-A5.1-qb-3-fuzzy-phone-customer-search.json",
-    "notes": "Main working tree has unrelated OEM/admin WIP and duplicate untracked migration numbers, so migration/order and full segment gates were verified in a clean detached worktree with only A5.1 scoped files applied.",
-    "updated_at": "2026-05-20T23:03:16Z"
+    "gate_report": "test-results/agent-gates/20260520T231012Z-B5.3-hf-2-voice-note-dropdown-contrast.json",
+    "notes": "Roadmap names VoiceNoteCapture, but shipped HF-1 extracted the relevant picker to CustomerPickerInline. Main working tree has unrelated OEM/admin WIP and duplicate untracked migration numbers, so full gate ran in a clean detached worktree with only HF-2 scoped files applied.",
+    "updated_at": "2026-05-20T23:10:12Z"
   },
-  "updated_at": "2026-05-20T23:03:16Z"
+  "updated_at": "2026-05-20T23:10:12Z"
 }

@@ -52,7 +52,7 @@ export function CustomerPickerInline({
 
   return (
     <section
-      className="rounded-2xl border border-white/[0.08] bg-card p-3"
+      className="rounded-2xl border border-border bg-card p-3"
       data-testid="customer-picker-inline"
     >
       <div className="flex items-center justify-between gap-2 mb-2">
@@ -73,7 +73,7 @@ export function CustomerPickerInline({
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="Customer name…"
-        className="w-full rounded-xl bg-background border border-white/[0.08] px-3 py-2 text-sm outline-none focus:border-qep-orange/60"
+        className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
       />
       <div className="mt-2 max-h-60 overflow-y-auto space-y-1">
         {bookMatches.map((c) => (
@@ -127,12 +127,12 @@ function CustomerPickerRow({
     <button
       type="button"
       onClick={onPick}
-      className="w-full text-left rounded-lg px-3 py-2 text-sm font-medium text-foreground hover:bg-white/[0.04] active:bg-white/[0.06]"
+      className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground"
     >
       <span className="flex items-center justify-between gap-2">
         <span className="truncate">{customer.company_name}</span>
         {source === "workspace" && (
-          <span className="shrink-0 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
             Workspace
           </span>
         )}
