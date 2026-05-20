@@ -9,7 +9,7 @@
  */
 
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import {
   ChevronLeft,
   Mail,
@@ -29,19 +29,33 @@ import { QuickLogSheet } from "../components/QuickLogSheet";
 import { logSalesActivity } from "../lib/sales-api";
 import { useToast } from "@/hooks/use-toast";
 
+export function getDealDetailQuickLogSubject(
+  dealId: string | null | undefined,
+  companyId?: string | null,
+): { dealId: string; companyId?: string } | null {
+  if (!dealId) return null;
+  return companyId ? { dealId, companyId } : { dealId };
+}
+
 export function DealDetailPage() {
   const { dealId } = useParams<{ dealId: string }>();
+  const safeDealId = dealId ?? "";
   const navigate = useNavigate();
   const [quickLogOpen, setQuickLogOpen] = useState(false);
   const { toast } = useToast();
 
-  const dealQuery = useSalesDealDetail(dealId);
+  const dealQuery = useSalesDealDetail(safeDealId || undefined);
   const deal = dealQuery.data ?? null;
+  const quickLogSubject = getDealDetailQuickLogSubject(safeDealId, deal?.customer.id);
+
+  if (!safeDealId) {
+    return <Navigate to="/sales/pipeline" replace />;
+  }
   async function handleCall(phone: string) {
     try {
       await logSalesActivity({
         activityType: "call",
-        dealId,
+        dealId: safeDealId,
         companyId: deal?.customer.id ?? undefined,
       });
     } catch {
@@ -58,7 +72,7 @@ export function DealDetailPage() {
     try {
       await logSalesActivity({
         activityType: "email",
-        dealId,
+        dealId: safeDealId,
         companyId: deal?.customer.id ?? undefined,
       });
     } catch {
@@ -227,7 +241,7 @@ export function DealDetailPage() {
               </div>
             </div>
             <Link
-              to={`/sales/quotes/new?crm_deal_id=${encodeURIComponent(dealId ?? "")}`}
+              to={`/sales/quotes/new?crm_deal_id=${encodeURIComponent(safeDealId)}`}
               className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-qep-orange px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-qep-orange/30 active:scale-[0.98] transition-all"
             >
               Open Quote Builder
@@ -301,7 +315,7 @@ export function DealDetailPage() {
         }
         primary={
           <Link
-            to={`/sales/quotes/new?crm_deal_id=${encodeURIComponent(dealId ?? "")}`}
+            to={`/sales/quotes/new?crm_deal_id=${encodeURIComponent(safeDealId)}`}
             className="flex h-12 w-full items-center justify-center gap-1.5 rounded-full bg-qep-orange text-sm font-semibold text-white shadow-sm shadow-qep-orange/30 active:scale-[0.98] transition-all"
           >
             Open Quote Builder
@@ -312,8 +326,8 @@ export function DealDetailPage() {
       <Sheet open={quickLogOpen} onOpenChange={setQuickLogOpen}>
         <SheetContent side="bottom">
           <QuickLogSheet
-            dealId={dealId}
-            companyId={deal?.customer.id ?? undefined}
+            dealId={quickLogSubject?.dealId}
+            companyId={quickLogSubject?.companyId}
             onLogged={() => setQuickLogOpen(false)}
           />
         </SheetContent>

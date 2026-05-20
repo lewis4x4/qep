@@ -9,9 +9,19 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { DealDetailPage } from "./DealDetailPage";
+import { DealDetailPage, getDealDetailQuickLogSubject } from "./DealDetailPage";
 
 describe("DealDetailPage — WAVE phase 5 surface", () => {
+  test("routes deal detail quick logs to deal subject only", () => {
+    expect(getDealDetailQuickLogSubject(undefined, "company-1")).toBeNull();
+    expect(getDealDetailQuickLogSubject(null, "company-1")).toBeNull();
+    expect(getDealDetailQuickLogSubject("deal-1", "company-1")).toEqual({
+      dealId: "deal-1",
+      companyId: "company-1",
+    });
+    expect(getDealDetailQuickLogSubject("deal-1")).toEqual({ dealId: "deal-1" });
+  });
+
   test("exports a function component", () => {
     expect(typeof DealDetailPage).toBe("function");
     expect(DealDetailPage.name).toBe("DealDetailPage");

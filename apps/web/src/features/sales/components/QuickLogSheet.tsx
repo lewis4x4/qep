@@ -15,8 +15,18 @@ export function QuickLogSheet({ companyId, dealId, onLogged }: QuickLogSheetProp
   const { toast } = useToast();
   const [noteText, setNoteText] = useState("");
   const [saving, setSaving] = useState(false);
+  const hasSubject = Boolean(dealId || companyId);
 
   async function save(type: "call" | "email" | "visit" | "note", body?: string) {
+    if (!hasSubject) {
+      toast({
+        title: "Activity subject required",
+        description: "Open a deal or customer before logging activity.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       await logSalesActivity({
@@ -44,34 +54,34 @@ export function QuickLogSheet({ companyId, dealId, onLogged }: QuickLogSheetProp
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
-          disabled={saving}
+          disabled={saving || !hasSubject}
           onClick={() => save("call")}
-          className="flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-foreground/[0.04] py-3 text-sm font-semibold text-foreground"
+          className="flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-foreground/[0.04] py-3 text-sm font-semibold text-foreground disabled:opacity-40"
         >
           <PhoneCall className="h-4 w-4 text-qep-orange" />
           Call
         </button>
         <button
           type="button"
-          disabled={saving}
+          disabled={saving || !hasSubject}
           onClick={() => save("email")}
-          className="flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-foreground/[0.04] py-3 text-sm font-semibold text-foreground"
+          className="flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-foreground/[0.04] py-3 text-sm font-semibold text-foreground disabled:opacity-40"
         >
           <Mail className="h-4 w-4 text-qep-orange" />
           Email
         </button>
         <button
           type="button"
-          disabled={saving}
+          disabled={saving || !hasSubject}
           onClick={() => save("visit")}
-          className="flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-foreground/[0.04] py-3 text-sm font-semibold text-foreground"
+          className="flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-foreground/[0.04] py-3 text-sm font-semibold text-foreground disabled:opacity-40"
         >
           <MapPin className="h-4 w-4 text-qep-orange" />
           Visit
         </button>
         <button
           type="button"
-          disabled={saving || !noteText.trim()}
+          disabled={saving || !hasSubject || !noteText.trim()}
           onClick={() => save("note", noteText.trim())}
           className="flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-foreground/[0.04] py-3 text-sm font-semibold text-foreground disabled:opacity-40"
         >

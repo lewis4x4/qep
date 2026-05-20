@@ -37,9 +37,11 @@ export interface SalesActivitySubjectInput {
   contactId?: string;
 }
 
+type CrmActivityInsertType = "call" | "email" | "meeting" | "note";
+
 export interface SalesActivityInsertPayload {
   workspace_id: string;
-  activity_type: string;
+  activity_type: CrmActivityInsertType;
   body: string;
   occurred_at: string;
   created_by: string;

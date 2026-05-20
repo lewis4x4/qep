@@ -25,6 +25,12 @@ describe("sales activity payload helpers", () => {
     });
   });
 
+  test("rejects a missing activity subject before insert payload creation", () => {
+    expect(() => resolveSalesActivitySubject({})).toThrow(
+      "A company, deal, or contact subject is required",
+    );
+  });
+
   test("builds RLS-safe insert payload with created_by and exactly one subject", () => {
     const payload = buildSalesActivityInsertPayload({
       workspaceId: "ws-1",
@@ -42,5 +48,22 @@ describe("sales activity payload helpers", () => {
     expect(payload.contact_id).toBeNull();
     expect(payload.metadata).toMatchObject({ source: "sales_companion" });
     expect(typeof payload.occurred_at).toBe("string");
+  });
+
+  test("maps visit logs to meeting activity inserts and preserves caller metadata", () => {
+    const payload = buildSalesActivityInsertPayload({
+      workspaceId: "ws-1",
+      userId: "rep-1",
+      activityType: "visit",
+      body: "Visited customer",
+      subject: { companyId: "company-1" },
+      metadata: { outcome: "demo" },
+    });
+
+    expect(payload.activity_type).toBe("meeting");
+    expect(payload.company_id).toBe("company-1");
+    expect(payload.deal_id).toBeNull();
+    expect(payload.contact_id).toBeNull();
+    expect(payload.metadata).toEqual({ source: "sales_companion", outcome: "demo" });
   });
 });
