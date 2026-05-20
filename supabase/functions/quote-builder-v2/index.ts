@@ -748,7 +748,7 @@ Return JSON exactly matching this shape:
 {
   "machine": "Make Model",
   "attachments": ["Attachment 1", "Attachment 2"],
-  "reasoning": "A concrete 2-4 sentence narrative addressed to the customer. Reference specific job details they mentioned (acreage, terrain, existing equipment, workloads, budget constraints). Explain WHY this model is the right fit for THEIR situation — not generic marketing.",
+  "reasoning": "2-3 plainspoken sentences addressed to the customer. Explain why this machine fits the work they described, using only facts from the transcript. Sound like a QEP rep writing after a real conversation: specific, useful, no hype, no AI phrasing.",
   "alternative": {
     "machine": "Make Model",
     "attachments": ["Attachment"],
@@ -770,7 +770,12 @@ Return JSON exactly matching this shape:
 Rules:
 - machine and alternative.machine MUST be exact labels copied from Available equipment below. Do not invent make/model names.
 - If no Available equipment label is a responsible fit, return machine as an empty string, attachments as [], reasoning explaining that no active QEP catalog match is available, and alternative as null.
-- reasoning: write to the customer (you / your), not about them. No marketing fluff.
+- Voice and tone: sound like a QEP salesperson after a real conversation. Plainspoken, practical, and concrete.
+- Address the customer directly (you / your), not in third person.
+- Use only transcript facts. Do not invent details, promises, or capabilities.
+- Never overpromise availability, financing terms, delivery timing, machine performance, tax outcomes, or approvals.
+- Avoid AI-sounding or hype phrasing including: "based on your needs", "tailored solution", "optimize", "leverage", "robust", "seamless", "comprehensive", "designed to meet", "delve", and "unlock".
+- reasoning should be 2-3 sentences. If transcript evidence is thin, state what is known and what QEP should confirm.
 - alternative: set to null ONLY when the catalog truly has no close second.
 - jobConsiderations: 2-3 practical notes (permit, ground conditions, seasonality, operator training). Concrete, not vague.
 - jobFacts: 2-5 structured extractions from the transcript. Omit fields the customer didn't mention — don't invent.

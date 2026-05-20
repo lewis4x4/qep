@@ -304,12 +304,12 @@ export function useQuoteBuilderDocumentActions({
       }
 
       if (!textEnabled) {
-        setDeliveryActionMessage("Twilio is not configured. No customer text was sent and no delivery event was logged.");
+        setDeliveryActionMessage("Text delivery is not connected yet. Email the proposal or use the approved proposal link for now.");
         return;
       }
 
       setDeliveryActionError(
-        "Twilio flag is enabled, but the text send endpoint is not implemented yet. No customer message was sent or logged.",
+        "Text delivery is not connected yet. Email the proposal or use the approved proposal link for now.",
       );
     } catch (error) {
       setDeliveryActionError(error instanceof Error ? error.message : "Quote delivery action failed.");

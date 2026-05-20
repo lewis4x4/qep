@@ -116,11 +116,11 @@ export function DetailsStep() {
 
       <Card className="p-4">
         <p className="text-sm font-semibold text-foreground">Why this machine</p>
-        <p className="mt-1 text-xs text-muted-foreground">QRM can suggest a reason, but the rep must edit or confirm it before customer-facing send.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Use the pre-suggest as a starting point. Edit it until it sounds like your conversation, then confirm it before customer-facing send.</p>
         <MobileVoiceTextarea
           value={draft.whyThisMachine ?? ""}
           onChange={(event) => setDraft((current) => ({ ...current, whyThisMachine: event.target.value, whyThisMachineConfirmed: false }))}
-          placeholder="Explain why this unit fits the customer's job, terrain, timeline, and budget."
+          placeholder="Explain, in your own words, why this unit fits the customer’s job, terrain, timeline, and budget."
           className="mt-3 min-h-[120px] w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm"
           data-testid="details-why-this-machine"
         />

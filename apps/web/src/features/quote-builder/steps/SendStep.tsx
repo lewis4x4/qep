@@ -211,8 +211,8 @@ export function SendStep({
           />
           <QuoteSendActionCard
             icon={<Smartphone className="h-4 w-4" />}
-            title="Text Quote"
-            detail={textQuoteEnabled ? "Twilio flag enabled, but provider endpoint must be wired before customer send." : "Twilio text delivery is not configured; no text will be sent."}
+            title="Text proposal link"
+            detail={textQuoteEnabled ? "SMS delivery is not connected yet. Keep using email or the approved proposal link until the provider endpoint is wired." : "Text delivery is off for this workspace. Email the proposal or share the approved proposal link."}
             readiness={textReadiness}
             setupBlocked={!textQuoteEnabled}
             busy={deliveryActionBusy === "text"}

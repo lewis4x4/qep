@@ -439,29 +439,29 @@ export function buildCustomerProposalEmailText(
   const lines = [
     `Dear ${contactName},`,
     "",
-    "Your Quality Equipment & Parts proposal is ready for review.",
+    "Thank you for working with Quality Equipment & Parts. Your equipment proposal is ready for review.",
+    "",
     input.quoteNumber ? `Quote: ${input.quoteNumber}` : null,
     customerTotal ? `Customer total: ${customerTotal}` : null,
     amountFinanced ? `Estimated amount financed: ${amountFinanced}` : null,
     input.selectedFinanceScenario
-      ? `Selected payment option: ${input.selectedFinanceScenario}`
+      ? `Payment option reviewed: ${input.selectedFinanceScenario}`
       : null,
     "",
-    confirmedNarrative ? "Why this machine:" : null,
+    confirmedNarrative ? "Why this setup fits your work:" : null,
     confirmedNarrative,
     confirmedNarrative ? "" : null,
-    input.specialTerms ? "Special terms:" : null,
+    input.specialTerms ? "Notes from your QEP team:" : null,
     input.specialTerms ? text(input.specialTerms, 4000) : null,
     input.specialTerms ? "" : null,
     input.expiresAt
-      ? `Proposal valid until: ${formatDate(input.expiresAt)}`
+      ? `Proposal valid through: ${formatDate(input.expiresAt)}`
       : "Proposal validity and final terms are shown in the proposal.",
-    input.publicUrl ? `Review your proposal: ${input.publicUrl}` : null,
+    input.publicUrl ? `Review the proposal and next steps: ${input.publicUrl}` : null,
     "",
-    "Financing and payment figures are estimates until final lender, tax, title, registration, and documentation details are confirmed.",
+    "Payment figures are estimates until lender approval, taxes, title, registration, documentation, and signed agreements are complete.",
     "",
-    "Best regards,",
-    branchName,
+    `Questions? Reply to this email or contact ${branchName}.`,
     branchPhone,
     branchEmail,
     branchWebsite,

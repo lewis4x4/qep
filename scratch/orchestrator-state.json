@@ -380,5 +380,44 @@
       "scoped deno check/tests",
       "migrations:check"
     ]
+  },
+  "current_cycle": {
+    "task_id": "A1.5",
+    "title": "Brand voice pass on every Iron Quote string",
+    "stream": "A",
+    "wave": "A1",
+    "linear_issue_identifier": "QEP-5",
+    "linear_url": "https://linear.app/jarvislewis/issue/QEP-5/a15-brand-voice-pass-on-every-iron-quote-string",
+    "status": "review_passed_dispatching_release",
+    "plan_export": "/Users/brianlewis/Projects/qep-knowledge-assistant/prompt-exports/oracle-plan-2026-05-19-222105-a1-5-voice-pass-0293-f00f.md",
+    "expected_files": [
+      "supabase/functions/quote-builder-v2/quote-public-safety.ts",
+      "supabase/functions/quote-builder-v2/quote-public-safety.test.ts",
+      "supabase/functions/quote-builder-v2/index.ts",
+      "apps/web/src/features/quote-builder/steps/DetailsStep.tsx",
+      "apps/web/src/features/quote-builder/steps/SendStep.tsx",
+      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderDocumentActions.ts (if user-visible text copy exists)"
+    ],
+    "acceptance_criteria": [
+      "Email Quote body uses QEP plainspoken brand voice and preserves legal/TILA-safe disclaimer semantics.",
+      "Text Quote/SMS pathway copy is honest that SMS transport is not connected and does not add provider scope.",
+      "Why This Machine pre-suggest prompt discourages AI-sounding copy and remains grounded in transcript facts.",
+      "Rep confirmation and all quote send/share readiness gates remain unchanged.",
+      "Relevant tests/type checks pass or failures are documented as pre-existing/blocking."
+    ],
+    "verification_commands": [
+      "deno test supabase/functions/quote-builder-v2/quote-public-safety.test.ts",
+      "deno check supabase/functions/quote-builder-v2/index.ts",
+      "( cd apps/web && bun run typecheck )",
+      "( cd apps/web && bun test src/features/quote-builder/lib/__tests__/quote-proposal-data.test.ts src/features/quote-builder/lib/__tests__/quote-workspace.test.ts )"
+    ],
+    "deployment_needs": {
+      "migrations": false,
+      "edge_functions": "quote-builder-v2 if backend edge prompt/email changes are deployed after verification"
+    },
+    "updated_at": "2026-05-20T00:05:00-04:00",
+    "builder_session_id": "673EEB0D-AEDA-4087-9EEC-C6CFFF3801D7",
+    "reviewer_session_id": "893682B8-EA2B-4886-B4C5-1EFD307FFA52",
+    "review_result": "pass"
   }
 }

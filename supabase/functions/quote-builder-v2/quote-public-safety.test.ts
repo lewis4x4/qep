@@ -276,13 +276,15 @@ Deno.test("customer proposal email is a safe notification, not a raw proposal du
 
   assert(
     body.includes(
-      "Your Quality Equipment & Parts proposal is ready for review.",
+      "Thank you for working with Quality Equipment & Parts. Your equipment proposal is ready for review.",
     ),
   );
   assert(body.includes("Quote: QEP-2026-0001"));
   assert(body.includes("Customer total: $125,000"));
-  assert(body.includes("Why this machine:"));
-  assert(body.includes("Review your proposal: https://qep.example/q/token"));
+  assert(body.includes("Payment option reviewed: 60 month finance"));
+  assert(body.includes("Why this setup fits your work:"));
+  assert(body.includes("Review the proposal and next steps: https://qep.example/q/token"));
+  assert(body.includes("Payment figures are estimates until lender approval, taxes, title, registration, documentation, and signed agreements are complete."));
   assert(!body.includes("dealer cost"));
   assert(!body.includes("margin"));
   assert(!body.includes("approval_required"));
