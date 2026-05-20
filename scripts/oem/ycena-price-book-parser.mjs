@@ -10,6 +10,7 @@ const PRICE_BOOK_TITLE_RE = /\b(ASV|Yanmar) Retail Price Book\b/i;
 const EFFECTIVE_RE = /Pricing Effective:\s*([0-9]{1,2}\/[0-9]{1,2}\/[0-9]{4})/i;
 const UPDATED_RE = /Pricing Updated:\s*([0-9]{1,2}\/[0-9]{1,2}\/[0-9]{4})/i;
 const PUBLISHED_RE = /Published:\s*([0-9]{1,2}\/[0-9]{1,2}\/[0-9]{4})/i;
+const SUPPORTED_SOURCE_EXTENSIONS = new Set([".pdf", ".txt"]);
 
 const SECTION_MARKERS = [
   ["standard configuration", "base"],
@@ -78,6 +79,8 @@ function classifyTarget(section) {
 }
 
 export function parseYcenaPriceBookText(text, options = {}) {
+  if (!text || !text.trim()) throw new Error("Source text is empty");
+
   const brand = options.brand ?? firstMatch(text, PRICE_BOOK_TITLE_RE) ?? "YCENA";
   const dealerDiscountOffListPct = options.dealerDiscountOffListPct ?? 30;
   const effectiveDate = toIsoDate(firstMatch(text, EFFECTIVE_RE));
@@ -160,6 +163,11 @@ export function parseYcenaPriceBookText(text, options = {}) {
 
       if (/^[A-Za-z*]/.test(line) && !line.includes("List Price") && !line.includes("Part#")) {
         pendingPrefix = pendingPrefix ? `${pendingPrefix} ${normalizeWhitespace(line)}` : normalizeWhitespace(line);
+        continue;
+      }
+
+      if (/^\s*\d{4}-\d{3}\b/.test(line)) {
+        skipped.push({ page: pageIndex + 1, line: normalizeWhitespace(line), reason: "unclassified_part_row" });
       }
     }
   }
@@ -211,13 +219,29 @@ function parseArgs(argv) {
     else throw new Error(`Unexpected argument: ${arg}`);
   }
   if (!args.path) throw new Error("Usage: node scripts/oem/ycena-price-book-parser.mjs <price-book.pdf|text> [--brand ASV|Yanmar] [--discount 30] [--rows]");
+
+  const extension = extname(args.path).toLowerCase();
+  if (!SUPPORTED_SOURCE_EXTENSIONS.has(extension)) {
+    throw new Error(`Unsupported source extension: ${extension || "(none)"}. Use .pdf or .txt`);
+  }
+
   if (!Number.isFinite(args.discount)) throw new Error("--discount must be a number");
+  if (args.discount < 0 || args.discount > 100) throw new Error("--discount must be between 0 and 100");
   return args;
 }
 
 export function parseYcenaPriceBookFile(path, options = {}) {
+  const extension = extname(path).toLowerCase();
+  if (!SUPPORTED_SOURCE_EXTENSIONS.has(extension)) {
+    throw new Error(`Unsupported source extension: ${extension || "(none)"}. Use .pdf or .txt`);
+  }
+
   const bytes = readFileSync(path);
-  const text = extname(path).toLowerCase() === ".pdf" ? extractPdfText(path) : bytes.toString("utf8");
+  const text = extension === ".pdf" ? extractPdfText(path) : bytes.toString("utf8");
+  if (!text.trim()) {
+    throw new Error(`No extractable text found in source file: ${basename(path)}`);
+  }
+
   const parsed = parseYcenaPriceBookText(text, options);
   return {
     ...parsed,
