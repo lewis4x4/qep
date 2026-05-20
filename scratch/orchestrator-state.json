@@ -224,6 +224,31 @@
       "builder_output_summary": "Hardened one-tap sales activity logging: deal detail stays deal-scoped, QuickLogSheet blocks no-subject logging, shared payload typing matches crm_activities insert values, and tests cover created_by, subject precedence, missing auth/subject, and visit-to-meeting mapping.",
       "verification_summary": "PASS: focused DH-3 tests, web typecheck, migrations:check, scoped diff check, Oracle review, and full segment gates with UI/design review. Local DB-backed rep RLS smoke remained blocked by missing Supabase DB container; static policy and payload tests cover created_by/one-subject constraints.",
       "gate_report": "test-results/agent-gates/20260520T221146Z-B5.1-dh-3-one-tap-activity-logging.json"
+    },
+    {
+      "task_id": "B5.2/QEP-58",
+      "status": "complete",
+      "title": "HF-1 \u2014 Customer attach dropdown search",
+      "stream": "B",
+      "wave": "B5",
+      "goal": "Customer attach dropdown search uses shared rep-book matching plus debounced workspace-wide fallback for companies outside the first local customer page.",
+      "changed_files": [
+        "apps/web/src/features/sales/components/SmartVoiceCapture.tsx",
+        "apps/web/src/features/sales/components/CustomerPickerInline.tsx",
+        "apps/web/src/features/sales/components/SmartVoiceCapture.customer-picker.test.tsx",
+        "supabase/migrations/586_qb3_customer_search_ranked.test.ts"
+      ],
+      "verification": [
+        "bun test apps/web/src/features/sales/lib/customer-search.test.ts apps/web/src/features/sales/components/SmartVoiceCapture.customer-picker.test.tsx apps/web/src/features/sales/lib/sales-api.search-companies-for-picker.test.ts ./supabase/migrations/586_qb3_customer_search_ranked.test.ts",
+        "bun run --filter @qep/web typecheck",
+        "bun run migrations:check",
+        "git diff --check -- apps/web/src/features/sales/components/SmartVoiceCapture.tsx apps/web/src/features/sales/components/CustomerPickerInline.tsx apps/web/src/features/sales/components/SmartVoiceCapture.customer-picker.test.tsx supabase/migrations/586_qb3_customer_search_ranked.test.ts",
+        "Oracle review: no P0/P1 findings",
+        "bun run segment:gates --segment B5.2-hf-1-customer-attach-dropdown-search --ui (clean temp worktree)"
+      ],
+      "gate_report": "test-results/agent-gates/20260520T224556Z-B5.2-hf-1-customer-attach-dropdown-search.json",
+      "notes": "Main working tree had unrelated OEM/admin WIP, so full gate was verified in a clean detached worktree with only HF-1 scoped files applied. Temporary worktree dependency repairs were not copied into this repo.",
+      "updated_at": "2026-05-20T22:45:56Z"
     }
   ],
   "agents": [
@@ -553,49 +578,29 @@
     }
   },
   "current_task": {
-    "task_id": "B2.2",
-    "linear": "QEP-50",
+    "task_id": "B5.2/QEP-58",
+    "status": "complete",
+    "title": "HF-1 \u2014 Customer attach dropdown search",
     "stream": "B",
-    "wave": "B2",
-    "goal": "VC-2 \u2014 Bullet summarization in voice-capture: persist best-effort 5-8 bullet summaries without blocking transcript/QRM sync, and render bullets above expandable transcripts.",
-    "status": "verified_pending_commit",
-    "expected_files": [
-      "supabase/migrations/604_voice_captures_summary_bullets.sql",
-      "supabase/functions/_shared/voice-capture-summary.ts",
-      "supabase/functions/_shared/voice-capture-summary.test.ts",
-      "supabase/functions/voice-capture/index.ts",
-      "supabase/functions/voice-capture-sync/index.ts",
-      "apps/web/src/lib/voice-summary-column.ts",
-      "apps/web/src/lib/database.types.ts",
-      "apps/web/src/components/voice/VoiceSummaryBullets.tsx",
-      "apps/web/src/components/VoiceCapturePage.tsx",
-      "apps/web/src/components/VoiceHistoryPage.tsx",
+    "wave": "B5",
+    "goal": "Customer attach dropdown search uses shared rep-book matching plus debounced workspace-wide fallback for companies outside the first local customer page.",
+    "changed_files": [
       "apps/web/src/features/sales/components/SmartVoiceCapture.tsx",
-      "apps/web/src/features/sales/hooks/useRecentCaptures.ts",
-      "apps/web/src/features/sales/pages/CapturePage.tsx",
-      "apps/web/src/components/__tests__/VoiceCapturePage.integration.test.tsx"
-    ],
-    "acceptance": [
-      "voice_captures has nullable summary_bullets persistence via migration 604.",
-      "Canonical voice-capture and pending-row voice-capture-sync generate summaries best-effort after critical transcript/QRM/sync persistence.",
-      "Summary failure or missing summary_bullets column does not block transcript persistence, QRM sync, sync status, sync error, or frontend history/recent capture loading.",
-      "Sales voice review/history/saved-confirmation surfaces render bullets above expandable transcript when summaries exist."
+      "apps/web/src/features/sales/components/CustomerPickerInline.tsx",
+      "apps/web/src/features/sales/components/SmartVoiceCapture.customer-picker.test.tsx",
+      "supabase/migrations/586_qb3_customer_search_ranked.test.ts"
     ],
     "verification": [
-      "bun run migrations:check",
-      "deno test supabase/functions/_shared/voice-capture-summary.test.ts --allow-net=api.openai.com",
-      "bun test apps/web/src/components/__tests__/VoiceCapturePage.integration.test.tsx",
-      "deno check supabase/functions/_shared/voice-capture-summary.ts supabase/functions/voice-capture/index.ts supabase/functions/voice-capture-sync/index.ts",
+      "bun test apps/web/src/features/sales/lib/customer-search.test.ts apps/web/src/features/sales/components/SmartVoiceCapture.customer-picker.test.tsx apps/web/src/features/sales/lib/sales-api.search-companies-for-picker.test.ts ./supabase/migrations/586_qb3_customer_search_ranked.test.ts",
       "bun run --filter @qep/web typecheck",
-      "bun run build:web",
-      "bun run audit:edges",
-      "git diff --check",
-      "Oracle review P1 fixes applied: post-persistence summary update and missing-column fallbacks",
-      "bun run segment:gates --segment B2.2-vc-2-bullet-summarization --ui"
+      "bun run migrations:check",
+      "git diff --check -- apps/web/src/features/sales/components/SmartVoiceCapture.tsx apps/web/src/features/sales/components/CustomerPickerInline.tsx apps/web/src/features/sales/components/SmartVoiceCapture.customer-picker.test.tsx supabase/migrations/586_qb3_customer_search_ranked.test.ts",
+      "Oracle review: no P0/P1 findings",
+      "bun run segment:gates --segment B5.2-hf-1-customer-attach-dropdown-search --ui (clean temp worktree)"
     ],
-    "gate_report": "test-results/agent-gates/20260520T205201Z-B2.2-vc-2-bullet-summarization.json",
-    "oracle_review": "P1 blockers fixed: summary no longer blocks critical persistence; missing-column fallback added for deploy-order tolerance.",
-    "deployment_needs": "Apply migration 604 before relying on persisted summaries. Edge/frontend include fallback for missing column, but production summaries persist only after migration is applied; deploy voice-capture and voice-capture-sync after migration for full behavior.",
-    "updated_at": "2026-05-20T20:52:01.175Z"
-  }
+    "gate_report": "test-results/agent-gates/20260520T224556Z-B5.2-hf-1-customer-attach-dropdown-search.json",
+    "notes": "Main working tree had unrelated OEM/admin WIP, so full gate was verified in a clean detached worktree with only HF-1 scoped files applied. Temporary worktree dependency repairs were not copied into this repo.",
+    "updated_at": "2026-05-20T22:45:56Z"
+  },
+  "updated_at": "2026-05-20T22:45:56Z"
 }
