@@ -22,6 +22,7 @@ export type StatusBannerError = QuoteErrorCopy | string | null | undefined;
 export interface QuoteBuilderStatusBannersProps {
   existingQuoteLoadError?: StatusBannerError;
   existingQuoteEditingMessage?: string | null;
+  draftSavePausedMessage?: string | null;
   pdfError?: StatusBannerError;
   saveSuccess?: boolean;
   saveErrorMessage?: StatusBannerError;
@@ -33,6 +34,7 @@ export interface QuoteBuilderStatusBannersProps {
 export function QuoteBuilderStatusBanners({
   existingQuoteLoadError = null,
   existingQuoteEditingMessage = null,
+  draftSavePausedMessage = null,
   pdfError = null,
   saveSuccess = false,
   saveErrorMessage = null,
@@ -52,6 +54,13 @@ export function QuoteBuilderStatusBanners({
       {existingQuoteEditingMessage ? (
         <Card className="border-blue-500/20 bg-blue-500/5 p-4">
           <p className="text-sm text-blue-300">{existingQuoteEditingMessage}</p>
+        </Card>
+      ) : null}
+
+      {draftSavePausedMessage ? (
+        <Card role="status" className="border-amber-500/30 bg-amber-500/5 p-4">
+          <p className="text-sm font-semibold text-amber-300">Draft save paused</p>
+          <p className="mt-1 text-sm text-amber-200/85">{draftSavePausedMessage}</p>
         </Card>
       ) : null}
 

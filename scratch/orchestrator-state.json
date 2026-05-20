@@ -492,42 +492,42 @@
     }
   },
   "current_task": {
-    "task_id": "A5.7",
-    "linear": "QEP-39",
+    "task_id": "A5.8",
+    "linear": "QEP-40",
     "stream": "A",
     "wave": "A5",
-    "goal": "Build owner-facing margin exception report from existing qb_margin_exceptions enriched with latest quote_approval_cases context.",
+    "goal": "Build QB-12 Save Draft reason logging: manual low-margin draft saves require a reason while autosave never opens an interrupting modal.",
     "status": "verified_pending_commit",
     "expected_files": [
-      "supabase/migrations/602_v_margin_exceptions.sql",
-      "apps/web/src/lib/database.types.ts",
-      "apps/web/src/features/owner/lib/owner-api-normalizers.ts",
-      "apps/web/src/features/owner/lib/owner-api.ts",
-      "apps/web/src/features/owner/pages/MarginExceptionsPage.tsx",
-      "apps/web/src/App.tsx",
-      "apps/web/src/lib/nav-config.ts",
-      "apps/web/src/components/TopBar.tsx",
-      "apps/web/src/features/owner/pages/OwnerDashboardPage.tsx"
+      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderSave.ts",
+      "apps/web/src/features/quote-builder/hooks/useDraftAutosave.ts",
+      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderV2Orchestrator.tsx",
+      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderDocumentActions.ts",
+      "apps/web/src/features/quote-builder/components/QuoteBuilderStatusBanners.tsx",
+      "apps/web/src/features/quote-builder/components/QuoteBuilderV2PageShell.tsx",
+      "apps/web/src/features/quote-builder/components/QuoteBuilderV2PageMobileShell.tsx",
+      "apps/web/src/features/quote-builder/hooks/__tests__/useQuoteBuilderSave.test.ts",
+      "apps/web/src/features/quote-builder/hooks/__tests__/useDraftAutosave.test.ts"
     ],
     "acceptance": [
-      "Owner-only report view exposes rep/customer/quote/margin/status/approver context.",
-      "Report data is derived from qb_margin_exceptions plus latest quote_approval_cases context, not a disconnected store.",
-      "Owner route/nav/dashboard discoverability exists and non-owner nav visibility is tested.",
-      "Existing admin margin discipline tests remain green."
+      "Manual low-margin Save Draft requires a rep reason before saving.",
+      "Successful manual reason capture writes qb_margin_exceptions atomically enough to avoid silent uncaptured drafts; failures surface a hard warning.",
+      "Autosave pauses/flags low-margin drafts without opening a modal or logging a fake exception.",
+      "No quote_approval_cases draft_low_margin migration was added for this slice; qb_margin_exceptions remains canonical audit storage."
     ],
     "verification": [
-      "bun test owner normalizer/API/page/nav/admin margin focused tests",
-      "bun run migrations:check",
+      "bun test quote-builder save/autosave hook tests",
       "cd apps/web && bun run typecheck",
+      "cd apps/web && bun run build",
       "Oracle review: no P0/P1 blockers",
+      "bun run migrations:check",
       "bun run audit:secrets",
       "git diff --check",
-      "cd apps/web && bun run build",
-      "bun run segment:gates --segment A5.7-qb-11-margin-exception-report --ui"
+      "bun run segment:gates --segment A5.8-qb-12-save-draft-reason-logging --ui"
     ],
-    "deployment_needs": "Supabase migration 602 must be applied before frontend deploy in hosted environments; no edge function deploy required.",
-    "gate_report": "test-results/agent-gates/20260520T182710Z-A5.7-qb-11-margin-exception-report.json",
+    "deployment_needs": "Frontend deploy only; no database migration or edge deploy required for this slice.",
+    "gate_report": "test-results/agent-gates/20260520T184753Z-A5.8-qb-12-save-draft-reason-logging.json",
     "oracle_review": "no P0/P1 blockers",
-    "updated_at": "2026-05-20T18:27:29.599972+00:00"
+    "updated_at": "2026-05-20T18:49:44.418686+00:00"
   }
 }

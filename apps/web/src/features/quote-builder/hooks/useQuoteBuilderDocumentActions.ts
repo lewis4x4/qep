@@ -19,6 +19,7 @@ import {
   sendQuotePackage,
   type QuotePackageSaveResponse,
 } from "../lib/quote-api";
+import type { SaveQuoteVariables } from "./useQuoteBuilderSave";
 import type { QuotePDFData } from "../components/QuotePDFDocument";
 import { buildQuotePdfVersionSnapshot } from "../lib/quote-pdf-version-snapshot";
 import { buildQuoteLandingQrData } from "../lib/quote-qr";
@@ -46,7 +47,7 @@ export interface UseQuoteBuilderDocumentActionsInput {
   setDeliveryActionError: Dispatch<SetStateAction<string | null>>;
   setDeliveryActionBusy: Dispatch<SetStateAction<QuoteSendActionChannel | null>>;
   packetReadinessDraftReady: boolean;
-  saveMutation: UseMutationResult<QuotePackageSaveResponse, Error, void, unknown>;
+  saveMutation: UseMutationResult<QuotePackageSaveResponse, Error, SaveQuoteVariables | void, unknown>;
   refetchActiveApprovalCase: () => Promise<{
     error: Error | null;
     data?: { canSend?: boolean } | null;

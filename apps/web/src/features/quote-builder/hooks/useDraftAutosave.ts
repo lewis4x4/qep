@@ -24,6 +24,20 @@ import type { AutoSaveState } from "../wizard/wizard-types";
 
 const DEFAULT_AUTOSAVE_DEBOUNCE_MS = 10_000;
 
+export type DraftAutosavePauseReason = "low_margin_reason_required";
+
+export function draftAutosaveImmediateState(input: {
+  enabled: boolean;
+  draftReady: boolean;
+  draftIsEmpty: boolean;
+  pauseReason?: DraftAutosavePauseReason | null;
+}): AutoSaveState | null {
+  if (!input.enabled) return null;
+  if (!input.draftReady) return input.draftIsEmpty ? "idle" : "local";
+  if (input.pauseReason === "low_margin_reason_required") return "local";
+  return null;
+}
+
 export interface UseDraftAutosaveInput {
   /** Don't autosave until local-draft hydration has finished. */
   enabled: boolean;
@@ -37,6 +51,8 @@ export interface UseDraftAutosaveInput {
   signatureRef: MutableRefObject<string>;
   /** True when a manual save or submit-for-approval is in flight. */
   isPaused: boolean;
+  /** Non-modal reason to pause autosave while keeping local draft state visible. */
+  pauseReason?: DraftAutosavePauseReason | null;
   /** The save call. Resolves on success, rejects on error. */
   save: () => Promise<unknown>;
   /** Page-local autosave state setter. */
@@ -52,6 +68,7 @@ export function useDraftAutosave({
   draftSignature,
   signatureRef,
   isPaused,
+  pauseReason = null,
   save,
   setAutoSaveState,
   debounceMs = DEFAULT_AUTOSAVE_DEBOUNCE_MS,
@@ -73,9 +90,15 @@ export function useDraftAutosave({
   }, [setAutoSaveState]);
 
   useEffect(() => {
+    const immediateState = draftAutosaveImmediateState({
+      enabled,
+      draftReady,
+      draftIsEmpty,
+      pauseReason,
+    });
     if (!enabled) return;
-    if (!draftReady) {
-      setAutoSaveStateRef.current(draftIsEmpty ? "idle" : "local");
+    if (immediateState) {
+      setAutoSaveStateRef.current(immediateState);
       return;
     }
     if (isPaused) return;
@@ -94,5 +117,5 @@ export function useDraftAutosave({
     }, debounceMs);
 
     return () => window.clearTimeout(timer);
-  }, [enabled, draftReady, draftIsEmpty, draftSignature, isPaused, signatureRef, debounceMs]);
+  }, [enabled, draftReady, draftIsEmpty, pauseReason, draftSignature, isPaused, signatureRef, debounceMs]);
 }

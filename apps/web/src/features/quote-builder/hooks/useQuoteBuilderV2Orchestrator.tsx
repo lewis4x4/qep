@@ -419,6 +419,8 @@ export function useQuoteBuilderV2Orchestrator() {
     activeQuotePackageId,
     activeQuoteRecord,
     activeQuoteNumber,
+    lowMarginDraftReasonRequired,
+    lowMarginDraftReasonMessage,
   } = useQuoteBuilderSave({
     draft,
     setDraft,
@@ -662,7 +664,8 @@ export function useQuoteBuilderV2Orchestrator() {
     draftSignature: draftSaveSignature,
     signatureRef: lastAutoSaveSignatureRef,
     isPaused: saveMutation.isPending || submitApprovalMutation.isPending,
-    save: saveMutation.mutateAsync,
+    pauseReason: lowMarginDraftReasonRequired ? "low_margin_reason_required" : null,
+    save: () => saveMutation.mutateAsync({ saveMode: "autosave" }),
     setAutoSaveState,
   });
 
@@ -997,6 +1000,7 @@ export function useQuoteBuilderV2Orchestrator() {
         existingQuoteEditingMessage: !existingQuoteQuery.isError && existingQuote
           ? `Editing saved quote${typeof existingQuote.quote_number === "string" && existingQuote.quote_number ? ` ${existingQuote.quote_number}` : ""}. Update any step below, then save to keep working in the same quote.`
           : null,
+        draftSavePausedMessage: lowMarginDraftReasonMessage,
         currentWizardStepNumber,
         signalsReady,
         marginPct,

@@ -86,6 +86,10 @@ export interface UseQuoteBuilderSaveInput {
 }
 
 /** Phase 1 quote-approval feedback loop: submission justification payload. */
+export interface SaveQuoteVariables {
+  saveMode?: "manual" | "autosave";
+}
+
 export interface SubmitApprovalVariables {
   submissionNote?: string | null;
 }
@@ -102,7 +106,7 @@ export interface WithdrawApprovalVariables {
 }
 
 export interface UseQuoteBuilderSaveResult {
-  saveMutation: UseMutationResult<QuotePackageSaveResponse, Error, void, unknown>;
+  saveMutation: UseMutationResult<QuotePackageSaveResponse, Error, SaveQuoteVariables | void, unknown>;
   submitApprovalMutation: UseMutationResult<
     Awaited<ReturnType<typeof submitQuoteForApproval>>,
     Error,
@@ -126,10 +130,28 @@ export interface UseQuoteBuilderSaveResult {
   activeQuotePackageId: string | null;
   activeQuoteRecord: Record<string, unknown> | null;
   activeQuoteNumber: string | null;
+  lowMarginDraftReasonRequired: boolean;
+  lowMarginDraftReasonMessage: string | null;
 }
+
+export const LOW_MARGIN_DRAFT_REASON_MESSAGE =
+  "Autosave paused: margin is below floor. Tap Save Draft to add a reason and save this draft.";
+
+export const LOW_MARGIN_AUDIT_WARNING =
+  "Quote saved, but the margin exception was not logged. Save Draft again to retry the required audit log before sending.";
 
 export function marginKeyFor(quoteId: string | null, marginPctValue: number): string {
   return `${quoteId ?? "new"}|${Math.round(marginPctValue * 10) / 10}`;
+}
+
+export function requiresLowMarginDraftReason(input: {
+  quoteId: string | null;
+  marginPct: number;
+  marginFloorPct: number | null;
+  capturedKey: string | null;
+}): boolean {
+  const key = marginKeyFor(input.quoteId, input.marginPct);
+  return isUnderThreshold(input.marginPct, input.marginFloorPct) && input.capturedKey !== key;
 }
 
 /** Exported for tests — stable package id for approval, persist, and margin gate. */
@@ -171,8 +193,11 @@ export function useQuoteBuilderSave({
   const queryClient = useQueryClient();
   const { marginPct } = totals;
 
-  const saveMutation = useMutation({
-    mutationFn: (): Promise<QuotePackageSaveResponse> => {
+  const saveMutation = useMutation<QuotePackageSaveResponse, Error, SaveQuoteVariables | void>({
+    mutationFn: (variables): Promise<QuotePackageSaveResponse> => {
+      const saveMode = variables && typeof variables === "object"
+        ? variables.saveMode ?? "manual"
+        : "manual";
       const wp = computeWinProbability(draft, winProbContext);
       const snapshot = {
         score: wp.score,
@@ -195,6 +220,7 @@ export function useQuoteBuilderSave({
               urlPackageId: urlPackageId ?? null,
               persistedId: persistedQuotePackageIdRef.current,
             }),
+            saveMode,
           },
         ),
       );
@@ -365,20 +391,35 @@ export function useQuoteBuilderSave({
     setMarginReasonCaptured(null);
   }, [existingQuote?.id]);
 
+  const lowMarginDraftReasonRequired = useMemo(() => requiresLowMarginDraftReason({
+    quoteId: activeQuotePackageId,
+    marginPct,
+    marginFloorPct,
+    capturedKey: marginReasonCaptured,
+  }), [activeQuotePackageId, marginFloorPct, marginPct, marginReasonCaptured]);
+
+  const lowMarginDraftReasonMessage = lowMarginDraftReasonRequired
+    ? LOW_MARGIN_DRAFT_REASON_MESSAGE
+    : null;
+
   const handleSaveClick = useCallback(async () => {
-    const key = marginKeyFor(activeQuotePackageId, marginPct);
-    if (isUnderThreshold(marginPct, marginFloorPct) && marginReasonCaptured !== key) {
+    if (lowMarginDraftReasonRequired) {
       setMarginGateOpen(true);
       return;
     }
-    saveMutation.mutate();
+    saveMutation.mutate({ saveMode: "manual" });
   }, [
-    activeQuotePackageId,
-    marginFloorPct,
-    marginPct,
-    marginReasonCaptured,
+    lowMarginDraftReasonRequired,
     saveMutation.mutate,
   ]);
+
+  const hardWarnMarginAuditFailure = useCallback((detail?: string | null) => {
+    toast({
+      title: "Margin exception audit not logged",
+      description: detail ? `${LOW_MARGIN_AUDIT_WARNING} (${detail})` : LOW_MARGIN_AUDIT_WARNING,
+      variant: "destructive",
+    });
+  }, []);
 
   const handleMarginReasonConfirm = useCallback(async (payload: {
     reason: string;
@@ -386,11 +427,26 @@ export function useQuoteBuilderSave({
     estimatedGapCents: number;
   }) => {
     setMarginGateOpen(false);
+    let saveResult: QuotePackageSaveResponse;
     try {
-      const saveResult = await saveMutation.mutateAsync();
-      const savedId = saveResult.quote?.id ?? saveResult.id;
-      if (!savedId || !profile) return;
-      await logMarginException({
+      saveResult = await saveMutation.mutateAsync({ saveMode: "manual" });
+    } catch {
+      // saveMutation.onError handles user-visible save failures.
+      return;
+    }
+
+    const savedId = saveResult.quote?.id ?? saveResult.id;
+    if (!savedId) {
+      hardWarnMarginAuditFailure("saved quote id was missing");
+      return;
+    }
+    if (!profile) {
+      hardWarnMarginAuditFailure("user profile was unavailable");
+      return;
+    }
+
+    try {
+      const auditResult = await logMarginException({
         workspaceId: profile.active_workspace_id ?? "default",
         quotePackageId: savedId,
         brandId: null,
@@ -400,11 +456,15 @@ export function useQuoteBuilderSave({
         reason: payload.reason,
         repId: profile.id,
       });
+      if ("error" in auditResult) {
+        hardWarnMarginAuditFailure(auditResult.error);
+        return;
+      }
       setMarginReasonCaptured(marginKeyFor(savedId, marginPct));
-    } catch {
-      // saveMutation.error path handles user-visible feedback.
+    } catch (error) {
+      hardWarnMarginAuditFailure(error instanceof Error ? error.message : "unknown audit error");
     }
-  }, [marginPct, profile, saveMutation.mutateAsync]);
+  }, [hardWarnMarginAuditFailure, marginPct, profile, saveMutation.mutateAsync]);
 
   return {
     saveMutation,
@@ -417,5 +477,7 @@ export function useQuoteBuilderSave({
     activeQuotePackageId,
     activeQuoteRecord,
     activeQuoteNumber,
+    lowMarginDraftReasonRequired,
+    lowMarginDraftReasonMessage,
   };
 }

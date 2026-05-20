@@ -150,6 +150,7 @@ export function QuoteBuilderV2PageMobileShell({
   activeQuoteNumber,
   existingQuoteLoadError,
   existingQuoteEditingMessage,
+  draftSavePausedMessage,
   currentWizardStepNumber,
   marginPct,
   marginAmount,
@@ -308,6 +309,7 @@ export function QuoteBuilderV2PageMobileShell({
 
         <div className="px-4 pt-4">
           <QuoteBuilderStatusBanners
+            draftSavePausedMessage={draftSavePausedMessage}
             pdfError={pdfError}
             saveSuccess={saveSuccess}
             saveErrorMessage={saveErrorMessage}

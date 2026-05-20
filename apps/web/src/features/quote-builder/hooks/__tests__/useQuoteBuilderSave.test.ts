@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { marginKeyFor, resolveActiveQuotePackageId } from "../useQuoteBuilderSave";
+import {
+  marginKeyFor,
+  requiresLowMarginDraftReason,
+  resolveActiveQuotePackageId,
+} from "../useQuoteBuilderSave";
 
 describe("marginKeyFor", () => {
   test("keys new quotes without an id", () => {
@@ -9,6 +13,53 @@ describe("marginKeyFor", () => {
 
   test("keys saved quotes by id and rounded margin", () => {
     expect(marginKeyFor("pkg-1", 8.456)).toBe("pkg-1|8.5");
+  });
+});
+
+describe("requiresLowMarginDraftReason", () => {
+  test("requires a reason when margin is below floor and current key is uncaptured", () => {
+    expect(requiresLowMarginDraftReason({
+      quoteId: "pkg-1",
+      marginPct: 8.9,
+      marginFloorPct: 10,
+      capturedKey: null,
+    })).toBe(true);
+  });
+
+  test("does not require a reason when current low-margin key is captured", () => {
+    expect(requiresLowMarginDraftReason({
+      quoteId: "pkg-1",
+      marginPct: 8.94,
+      marginFloorPct: 10,
+      capturedKey: marginKeyFor("pkg-1", 8.94),
+    })).toBe(false);
+  });
+
+  test("requires a fresh reason when the saved quote id changes from the new-quote key", () => {
+    expect(requiresLowMarginDraftReason({
+      quoteId: "pkg-1",
+      marginPct: 8.9,
+      marginFloorPct: 10,
+      capturedKey: marginKeyFor(null, 8.9),
+    })).toBe(true);
+  });
+
+  test("does not require a reason at or above floor", () => {
+    expect(requiresLowMarginDraftReason({
+      quoteId: "pkg-1",
+      marginPct: 10,
+      marginFloorPct: 10,
+      capturedKey: null,
+    })).toBe(false);
+  });
+
+  test("does not require a reason when no floor applies", () => {
+    expect(requiresLowMarginDraftReason({
+      quoteId: "pkg-1",
+      marginPct: 5,
+      marginFloorPct: null,
+      capturedKey: null,
+    })).toBe(false);
   });
 });
 

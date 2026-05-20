@@ -47,6 +47,7 @@ export interface QuoteBuilderV2PageShellProps {
   activeQuoteUpdatedAt: string | null;
   existingQuoteLoadError: string | null;
   existingQuoteEditingMessage: string | null;
+  draftSavePausedMessage: string | null;
   currentWizardStepNumber: number;
   signalsReady: boolean;
   marginPct: number;
@@ -111,6 +112,7 @@ export function QuoteBuilderV2PageShell({
   activeQuoteUpdatedAt,
   existingQuoteLoadError,
   existingQuoteEditingMessage,
+  draftSavePausedMessage,
   currentWizardStepNumber,
   signalsReady,
   marginPct,
@@ -317,6 +319,7 @@ export function QuoteBuilderV2PageShell({
           />
 
           <QuoteBuilderStatusBanners
+            draftSavePausedMessage={draftSavePausedMessage}
             pdfError={pdfError}
             saveSuccess={saveSuccess}
             saveErrorMessage={saveErrorMessage}
