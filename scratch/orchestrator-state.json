@@ -388,7 +388,7 @@
     "wave": "A3",
     "linear_issue_identifier": "QEP-23",
     "linear_url": "https://linear.app/jarvislewis/issue/QEP-23/a310-m10-qr-landing-page-with-nps-feedback",
-    "status": "item_1_review_passed_dispatching_downstream",
+    "status": "items_2_3_review_passed_final_gates_pending",
     "plan_export": "/Users/brianlewis/Projects/qep-knowledge-assistant/prompt-exports/oracle-plan-2026-05-20-112906-a3-10-qr-nps-plan-ef-842a.md",
     "work_items": [
       {
@@ -408,7 +408,7 @@
       {
         "id": "A3.10-2",
         "goal": "Add DealRoom branded landing action hub, feedback form, and valid signature accept UI",
-        "status": "pending",
+        "status": "review_passed",
         "depends_on": [
           "A3.10-1"
         ],
@@ -416,12 +416,16 @@
           "apps/web/src/features/deal-room/pages/DealRoomPage.tsx",
           "apps/web/src/features/deal-room/lib/deal-room-api.ts"
         ],
-        "done_when": "/q/:token page shows quote status/actions/latest PDF/contact/feedback; submits three-question feedback via new API with clientSubmissionId dedupe; accept flow captures real PNG signature; focused runtime tests pass."
+        "done_when": "/q/:token page shows quote status/actions/latest PDF/contact/feedback; submits three-question feedback via new API with clientSubmissionId dedupe; accept flow captures real PNG signature; focused runtime tests pass.",
+        "builder_session_id": "B8FDBD55-7495-481E-958E-BAA0DE4EF906",
+        "reviewer_session_id": "72D39AF5-6B92-4912-8E45-326A5D8F7B8C",
+        "fixer_session_id": "629A6AD2-C1E5-4433-BBB5-AA20C9B43FC8",
+        "review_summary": "PASS after P1 fixes: submit-time clientSubmissionId fallback, storage-safe success handling, latest PDF CTA gated on URL+version, valid PNG accept signature retained."
       },
       {
         "id": "A3.10-3",
         "goal": "Generate quote-specific QR codes and embed QR landing link in immutable customer-send PDFs",
-        "status": "pending",
+        "status": "review_passed",
         "depends_on": [
           "A3.10-1"
         ],
@@ -433,7 +437,11 @@
           "apps/web/src/features/quote-builder/lib/quote-api.ts",
           "shared/qep-moonshot-contracts.ts"
         ],
-        "done_when": "Email send ensures public link before PDF generation; immutable PDF snapshot uses QR-enriched data; static QR remains fallback; QR module has focused tests/type coverage."
+        "done_when": "Email send ensures public link before PDF generation; immutable PDF snapshot uses QR-enriched data; static QR remains fallback; QR module has focused tests/type coverage.",
+        "builder_session_id": "CAD2F3FA-1B53-4D27-85A4-AB2967B99514",
+        "reviewer_session_id": "72D39AF5-6B92-4912-8E45-326A5D8F7B8C",
+        "fixer_session_id": "629A6AD2-C1E5-4433-BBB5-AA20C9B43FC8",
+        "review_summary": "PASS after P1 fixes: unsafe QR hosts rejected, QR quiet zone rendered in PDF, focused quote-qr tests pass, email send uses QR-enriched immutable PDF data."
       },
       {
         "id": "A3.10-4",
@@ -447,6 +455,6 @@
         "done_when": "Oracle/reviewer passes integrated flow; required gates pass; migration/edge/client deployed if prerequisites allow; roadmap task shipped or blocked with manual task logged."
       }
     ],
-    "updated_at": "2026-05-20T11:55:00-04:00"
+    "updated_at": "2026-05-20T12:15:00-04:00"
   }
 }

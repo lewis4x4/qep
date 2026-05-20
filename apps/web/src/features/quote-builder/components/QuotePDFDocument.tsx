@@ -5,7 +5,7 @@
  * trigger data, source IDs, metadata, or approval internals are rendered.
  */
 
-import { Document, Image, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { Document, Image, Page, Text, View, StyleSheet, Svg, Rect } from "@react-pdf/renderer";
 import type { QuoteFinanceAprSource, QuoteFinanceScenarioKind, QuoteLineItemKind } from "../../../../../../shared/qep-moonshot-contracts";
 import { formatAprSourceAttribution } from "../lib/finance-apr-source";
 import { isDisplayableProposalFinanceScenario } from "../lib/quote-proposal-data";
@@ -104,6 +104,13 @@ export interface QuotePDFFinancingScenario {
   isDefault?: boolean;
 }
 
+export interface QuoteLandingQrData {
+  url: string;
+  label: string;
+  modules: boolean[][];
+  svgDataUrl: string;
+}
+
 export interface QuotePDFData {
   dealName: string;
   customerName: string;
@@ -143,6 +150,8 @@ export interface QuotePDFData {
   validUntil?: string | null;
   compliance: QuoteProposalCompliance;
   branch: { name: string; address?: string; city?: string; state?: string; postalCode?: string; phone?: string; email?: string; website?: string; footerText?: string };
+  publicLandingUrl?: string | null;
+  landingQr?: QuoteLandingQrData | null;
 }
 
 const s = StyleSheet.create({
@@ -162,6 +171,7 @@ const s = StyleSheet.create({
   footerCopy: { flex: 1, paddingRight: 10 },
   footerText: { fontSize: 7, color: MUTED, textAlign: "center" as TextAlign, lineHeight: 1.35 },
   footerQr: { width: 44, height: 44, objectFit: "contain" as const, borderWidth: 1, borderColor: "#E6E2DB", padding: 2 },
+  footerQrVectorWrap: { width: 44, height: 44, borderWidth: 1, borderColor: "#E6E2DB", backgroundColor: WHITE, padding: 2 },
   footerQrLabel: { fontSize: 6, color: CHARCOAL, textAlign: "center" as TextAlign, marginTop: 2, fontFamily: "Helvetica-Bold" },
   coverTitle: { fontSize: 32, fontFamily: "Helvetica-Bold", color: CHARCOAL, marginTop: 64, lineHeight: 1.05 },
   coverKicker: { fontSize: 9, color: ORANGE, fontFamily: "Helvetica-Bold", letterSpacing: 1.8, textTransform: "uppercase" as const },
@@ -253,6 +263,11 @@ function financeSectionTitle(data: QuotePDFData, options: QuotePDFData["financin
 
 function PageFooter({ data }: { data: QuotePDFData }) {
   const reference = data.quoteNumber || data.dealName || "QEP Proposal";
+  const qrModules = data.landingQr?.modules ?? null;
+  const qrSize = qrModules?.length ?? 0;
+  const qrQuietZone = 4;
+  const qrCanvasSize = qrSize + qrQuietZone * 2;
+  const qrLabel = data.landingQr?.label || QEP_WEBSITE_QR_LABEL;
   return (
     <View style={s.footer}>
       <View style={s.footerRow}>
@@ -260,7 +275,19 @@ function PageFooter({ data }: { data: QuotePDFData }) {
           <Text style={s.footerText}>{data.compliance.proposalDisclaimer}</Text>
           <Text style={[s.footerText, { marginTop: 3 }]}>{data.branch.name || "Quality Equipment & Parts"} | {reference} | Generated {data.preparedDate}</Text>
         </View>
-        {data.brandAssets.qrCode?.src ? (
+        {qrModules && qrSize > 0 ? (
+          <View>
+            <View style={s.footerQrVectorWrap}>
+              <Svg width="100%" height="100%" viewBox={`0 0 ${qrCanvasSize} ${qrCanvasSize}`}>
+                <Rect x={0} y={0} width={qrCanvasSize} height={qrCanvasSize} fill="#FFFFFF" />
+                {qrModules.flatMap((row, y) => row.flatMap((dark, x) => dark ? [
+                  <Rect key={`${x}-${y}`} x={x + qrQuietZone} y={y + qrQuietZone} width={1} height={1} fill="#000000" />,
+                ] : []))}
+              </Svg>
+            </View>
+            <Text style={s.footerQrLabel}>{qrLabel}</Text>
+          </View>
+        ) : data.brandAssets.qrCode?.src ? (
           <View>
             <Image src={data.brandAssets.qrCode.src} style={s.footerQr} />
             <Text style={s.footerQrLabel}>{QEP_WEBSITE_QR_LABEL}</Text>

@@ -32,6 +32,7 @@ import type { FactorVerdict } from "./factor-verdict";
 import type { CalibrationObservation, CalibrationOutcome } from "./scorer-calibration";
 import { equipmentOverridePriceCents, equipmentSystemBasePrice } from "./equipment-override-price";
 import { quoteLineCostVisibility } from "./quote-workspace";
+import { assertSafePublicQuoteQrUrl } from "./quote-qr";
 
 const QUOTE_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/quote-builder-v2`;
 
@@ -400,11 +401,13 @@ export interface SendQuotePackageResponse {
 
 export function normalizeSendQuotePackageResponse(value: unknown): SendQuotePackageResponse {
   const record = recordOrEmpty(value);
+  const publicUrl = nullableString(record.public_url ?? record.publicUrl);
+  const safePublicUrl = publicUrl ? assertSafePublicQuoteQrUrl(publicUrl).toString() : null;
   return {
     sent: record.sent === true,
     to_email: firstString(record.to_email, record.toEmail) ?? "",
     share_token: nullableString(record.share_token ?? record.shareToken),
-    public_url: nullableString(record.public_url ?? record.publicUrl),
+    public_url: safePublicUrl,
     delivery_event_id: nullableString(record.delivery_event_id ?? record.deliveryEventId),
     pdf_version_number: numOrNull(record.pdf_version_number ?? record.pdfVersionNumber),
     document_artifact_id: nullableString(record.document_artifact_id ?? record.documentArtifactId),
@@ -1554,6 +1557,33 @@ export async function saveQuotePackage(data: Record<string, unknown>): Promise<Q
     throw new Error(detail.trim() || `Failed to save quote (HTTP ${res.status})`);
   }
   return res.json();
+}
+
+export interface EnsureQuotePublicLinkResponse {
+  token: string;
+  public_url: string;
+}
+
+function normalizeEnsureQuotePublicLinkResponse(value: unknown): EnsureQuotePublicLinkResponse {
+  const record = recordOrEmpty(value);
+  const token = firstString(record.token);
+  const public_url = firstString(record.public_url, record.publicUrl);
+  if (!token || !public_url) {
+    throw new Error("Failed to ensure quote public link.");
+  }
+  return { token, public_url: assertSafePublicQuoteQrUrl(public_url).toString() };
+}
+
+export async function ensureQuotePublicLink(quotePackageId: string): Promise<EnsureQuotePublicLinkResponse> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/ensure-share-token`, {
+    method: "POST",
+    body: JSON.stringify({ quote_package_id: quotePackageId }),
+  });
+  if (!res.ok) {
+    const err = await readJsonRecord(res);
+    throw new Error(quoteApiErrorMessage(res.status, err, "Failed to ensure quote public link"));
+  }
+  return normalizeEnsureQuotePublicLinkResponse(await res.json().catch(() => ({})));
 }
 
 export async function sendQuotePackage(quotePackageId: string, options?: { documentArtifactId?: string | null; followUpAt?: string | null }): Promise<SendQuotePackageResponse> {

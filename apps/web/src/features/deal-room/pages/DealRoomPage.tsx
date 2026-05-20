@@ -7,6 +7,7 @@ import {
   fetchPublicDealRoomAttachments,
   fetchPublicSocialProof,
   fetchPublicTradeEstimate,
+  submitPublicQuoteFeedback,
   type DealRoomBranch,
   type DealRoomCompatibleAttachment,
   type DealRoomFinanceScenario,
@@ -73,6 +74,14 @@ const TRANSIENT_STATUSES = new Set([
   "changes_requested",
   "approved_with_conditions",
 ]);
+
+function generateClientSubmissionId(): string {
+  const randomUuid = globalThis.crypto?.randomUUID;
+  if (typeof randomUuid === "function") {
+    return randomUuid();
+  }
+  return `fallback-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export function DealRoomPage() {
   const { token = "" } = useParams<{ token: string }>();
@@ -304,6 +313,8 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
   const refBadge = referenceBadge(quote);
   const preparedDate = formatDate(quote.created_at) || formatDate(quote.updated_at);
   const displayCustomer = quote.customer_name?.trim() || quote.customer_company?.trim() || "Customer";
+  const latestPdfUrl = quote.latest_pdf_url?.trim() || null;
+  const latestPdfVersionNumber = quote.latest_pdf_version_number ?? null;
   const customerTotal = adjustedQuote.customer_total ?? 0;
   const primaryLine = useMemo(() => getPrimaryProposalLine(quote), [quote]);
   const additionalLines = useMemo(() => getAdditionalProposalLineItems(quote), [quote]);
@@ -327,6 +338,11 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
             whyThisMachineText={confirmedWhyThisMachine}
           />
         )}
+        <LandingActionHub
+          latestPdfUrl={latestPdfUrl}
+          latestPdfVersionNumber={latestPdfVersionNumber}
+          branch={branch}
+        />
         {confirmedWhyThisMachine && (
           <WhyThisMachine
             narrative={confirmedWhyThisMachine}
@@ -355,6 +371,7 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
           token={token}
           quote={adjustedQuote}
           customerHint={displayCustomer}
+          sectionId="accept"
           scenarioKey={selectedKey}
           computed={computed}
           cashDown={cashDown}
@@ -364,6 +381,7 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
             .filter((o) => selectedAttachments.has(o.key))
             .map((o) => ({ key: o.key, name: o.name, price: o.price }))}
         />
+        <QuoteFeedbackPanel token={token} customerHint={displayCustomer} />
         <div className="mt-9 grid gap-5 sm:grid-cols-[1.15fr_1fr]">
           <PricingSummary quote={adjustedQuote} cashDownOverride={cashDown} computed={computed} />
           <FinancingPanel
@@ -1127,6 +1145,172 @@ function TradeEstimatorPanel({
   );
 }
 
+function LandingActionHub({
+  latestPdfUrl,
+  latestPdfVersionNumber,
+  branch,
+}: {
+  latestPdfUrl: string | null;
+  latestPdfVersionNumber: number | null;
+  branch: DealRoomBranch | null;
+}) {
+  const phoneHref = branch?.phone ? `tel:${branch.phone}` : null;
+  const emailHref = branch?.email ? `mailto:${branch.email}` : null;
+  const pdfLabel = latestPdfVersionNumber != null
+    ? `View sent PDF v${latestPdfVersionNumber}`
+    : "View sent PDF";
+  const hasVersionedPdf = Boolean(latestPdfUrl && latestPdfVersionNumber != null);
+
+  return (
+    <section className="mt-7 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+      <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Action hub</div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {hasVersionedPdf && (
+          <a href={latestPdfUrl ?? undefined} target="_blank" rel="noreferrer" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 no-underline hover:border-slate-400">
+            {pdfLabel}
+          </a>
+        )}
+        <a href="#accept" className="rounded-md bg-[#F28A07] px-3 py-2 text-xs font-semibold text-white no-underline hover:bg-[#d06a1e]">
+          Accept quote
+        </a>
+        {phoneHref && (
+          <a href={phoneHref} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 no-underline hover:border-slate-400">
+            Call rep
+          </a>
+        )}
+        {emailHref && (
+          <a href={emailHref} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 no-underline hover:border-slate-400">
+            Email rep
+          </a>
+        )}
+        <a href="#feedback" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 no-underline hover:border-slate-400">
+          Send feedback
+        </a>
+      </div>
+    </section>
+  );
+}
+
+function QuoteFeedbackPanel({ token, customerHint }: { token: string; customerHint: string }) {
+  const storageKey = `qep_quote_feedback:${token}`;
+  const initialName = customerHint !== "Customer" ? customerHint : "";
+  const [npsScore, setNpsScore] = useState<number | null>(null);
+  const [fitScore, setFitScore] = useState<number | null>(null);
+  const [missingOrUnclear, setMissingOrUnclear] = useState("");
+  const [contactRequested, setContactRequested] = useState(false);
+  const [submittedName, setSubmittedName] = useState(initialName);
+  const [submittedEmail, setSubmittedEmail] = useState("");
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [submittedAt, setSubmittedAt] = useState<string | null>(null);
+  const clientSubmissionIdRef = useRef<string | null>(null);
+
+  function getClientSubmissionId(): string {
+    if (!clientSubmissionIdRef.current) {
+      clientSubmissionIdRef.current = generateClientSubmissionId();
+    }
+    return clientSubmissionIdRef.current;
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { clientSubmissionId?: string; submittedAt?: string };
+      if (parsed.clientSubmissionId) clientSubmissionIdRef.current = parsed.clientSubmissionId;
+      if (parsed.submittedAt) {
+        setSubmittedAt(parsed.submittedAt);
+        setStatusMessage("Thanks — we already received your feedback.");
+      }
+    } catch {
+      // ignore
+    }
+  }, [storageKey]);
+
+  const feedbackMutation = useMutation({
+    mutationFn: () => submitPublicQuoteFeedback(token, {
+      clientSubmissionId: getClientSubmissionId(),
+      npsScore: npsScore ?? 0,
+      fitScore: fitScore ?? 0,
+      missingOrUnclear: missingOrUnclear.trim() || null,
+      contactRequested,
+      submittedName: submittedName.trim() || null,
+      submittedEmail: submittedEmail.trim() || null,
+      source: "qr_landing",
+    }),
+    onSuccess: (result) => {
+      const at = new Date().toISOString();
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(storageKey, JSON.stringify({
+            clientSubmissionId: clientSubmissionIdRef.current,
+            submittedAt: at,
+          }));
+        } catch {
+          // Storage can be disabled; success UX must still continue.
+        }
+      }
+      setSubmittedAt(at);
+      setStatusMessage(result.deduped ? "Thanks — we already received your feedback." : "Thanks — your feedback was sent.");
+    },
+    onError: (err) => {
+      setStatusMessage(err instanceof Error ? err.message : "Could not submit feedback.");
+    },
+  });
+
+  return (
+    <section id="feedback" className="mt-9 rounded-2xl border border-slate-200 p-6 sm:p-7">
+      <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Proposal feedback</div>
+      <p className="mt-1 text-sm text-slate-700">Help us improve this quote in under a minute.</p>
+
+      <div className="mt-4">
+        <div className="text-sm font-semibold text-slate-900">How likely are you to recommend QEP?</div>
+        <div className="mt-2 flex flex-wrap gap-1">
+          {Array.from({ length: 11 }, (_, i) => i).map((value) => (
+            <button key={value} type="button" aria-pressed={npsScore === value} onClick={() => setNpsScore(value)} className={`h-8 w-8 rounded border text-xs font-semibold ${npsScore === value ? "border-[#F28A07] bg-[#fff7ed] text-[#F28A07]" : "border-slate-300 text-slate-700"}`}>
+              {value}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <div className="text-sm font-semibold text-slate-900">How confident are you this proposal fits your job?</div>
+        <div className="mt-2 flex flex-wrap gap-1">
+          {[1, 2, 3, 4, 5].map((value) => (
+            <button key={value} type="button" aria-pressed={fitScore === value} onClick={() => setFitScore(value)} className={`rounded border px-3 py-1 text-xs font-semibold ${fitScore === value ? "border-[#F28A07] bg-[#fff7ed] text-[#F28A07]" : "border-slate-300 text-slate-700"}`}>
+              {value}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <label className="mt-4 block">
+        <span className="text-sm font-semibold text-slate-900">What, if anything, is missing or unclear?</span>
+        <textarea value={missingOrUnclear} onChange={(e) => setMissingOrUnclear(e.target.value.slice(0, 1000))} className="mt-2 min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+      </label>
+
+      <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" checked={contactRequested} onChange={(e) => setContactRequested(e.target.checked)} />
+        Have my QEP rep follow up about this.
+      </label>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <input type="text" value={submittedName} onChange={(e) => setSubmittedName(e.target.value)} placeholder="Your name (optional)" className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
+        <input type="email" value={submittedEmail} onChange={(e) => setSubmittedEmail(e.target.value)} placeholder="Your email (optional)" className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
+      </div>
+
+      <div className="mt-4 flex items-center gap-3">
+        <button type="button" onClick={() => feedbackMutation.mutate()} disabled={feedbackMutation.isPending || submittedAt != null || npsScore == null || fitScore == null} className="rounded-md bg-[#F28A07] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
+          {feedbackMutation.isPending ? "Sending…" : "Submit feedback"}
+        </button>
+        {submittedAt && <span className="text-xs text-emerald-700">Submitted</span>}
+      </div>
+      <div className="mt-2 text-xs" aria-live="polite">{statusMessage}</div>
+    </section>
+  );
+}
+
 function SocialProofPanel({ token, primaryPrice }: { token: string; primaryPrice: number | null }) {
   // Social proof loads in parallel with the main quote fetch; silently
   // hides if neither dataset has enough comps to be meaningful.
@@ -1261,10 +1445,88 @@ function ApprovalStatusBanner({ status }: { status: string }) {
   );
 }
 
+function SignaturePad({ onChange }: { onChange: (dataUrl: string | null) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const drawingRef = useRef(false);
+
+  const point = (e: { clientX: number; clientY: number }) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+
+  const ensureContext = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#0f172a";
+    ctx.lineWidth = 2;
+    return ctx;
+  };
+
+  const start = (e: { clientX: number; clientY: number }) => {
+    const ctx = ensureContext();
+    if (!ctx) return;
+    drawingRef.current = true;
+    const p = point(e);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+  };
+
+  const move = (e: { clientX: number; clientY: number }) => {
+    if (!drawingRef.current) return;
+    const ctx = ensureContext();
+    if (!ctx) return;
+    const p = point(e);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  };
+
+  const end = () => {
+    if (!drawingRef.current) return;
+    drawingRef.current = false;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const pngDataUrl = canvas.toDataURL("image/png");
+    onChange(pngDataUrl);
+  };
+
+  const clear = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    onChange(null);
+  };
+
+  return (
+    <div>
+      <canvas
+        ref={canvasRef}
+        width={520}
+        height={140}
+        className="mt-1 w-full max-w-[520px] rounded-md border border-slate-300 bg-white"
+        onPointerDown={start}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerLeave={end}
+      />
+      <div className="mt-2">
+        <button type="button" onClick={clear} className="text-xs font-semibold text-slate-600 underline">Clear signature</button>
+      </div>
+    </div>
+  );
+}
+
 function AcceptPanel({
   token,
   quote,
   customerHint,
+  sectionId,
   scenarioKey: selectedScenarioKey,
   computed,
   cashDown,
@@ -1275,6 +1537,7 @@ function AcceptPanel({
   token: string;
   quote: DealRoomQuote;
   customerHint: string;
+  sectionId?: string;
   scenarioKey: string;
   computed: ComputedPayment | null;
   cashDown: number;
@@ -1283,6 +1546,7 @@ function AcceptPanel({
   configuratorSelections: Array<{ key: string; name: string; price: number }>;
 }) {
   const [signerName, setSignerName] = useState(customerHint === "Customer" ? "" : customerHint);
+  const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   // Quote-status-based affordance: already-accepted quotes render the
@@ -1314,15 +1578,10 @@ function AcceptPanel({
         trade_credit: tradeCredit,
         attachments: configuratorSelections,
       };
-      // QEP's workflow doesn't require a customer signature — the
-      // accept is a non-binding "yes, move forward" indication. The
-      // binding paperwork happens offline with the rep. Server-side
-      // still records signer_name + a blank signature_data_url so the
-      // existing accept endpoint shape stays compatible.
       return acceptPublicQuote(token, {
         signerName: signerName.trim() || (customerHint === "Customer" ? "Customer" : customerHint),
         signerEmail: null,
-        signatureDataUrl: "data:image/png;base64,",
+        signatureDataUrl: signatureDataUrl ?? "",
         customerConfiguration: configuration,
       });
     },
@@ -1362,7 +1621,7 @@ function AcceptPanel({
   }
 
   return (
-    <section className="mt-9 rounded-2xl border-2 border-[#F28A07] bg-[#fff7ed] p-6 sm:p-7">
+    <section id={sectionId} className="mt-9 rounded-2xl border-2 border-[#F28A07] bg-[#fff7ed] p-6 sm:p-7">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#F28A07]">
@@ -1380,11 +1639,15 @@ function AcceptPanel({
               className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm sm:max-w-xs"
             />
           </div>
+          <div className="mt-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Signature</div>
+            <SignaturePad onChange={setSignatureDataUrl} />
+          </div>
         </div>
         <button
           type="button"
           onClick={() => acceptMutation.mutate()}
-          disabled={!signerName.trim() || acceptMutation.isPending}
+          disabled={!signerName.trim() || !signatureDataUrl || acceptMutation.isPending}
           className="rounded-lg bg-[#F28A07] px-6 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#d06a1e] disabled:opacity-40"
         >
           {acceptMutation.isPending ? "Recording…" : "Accept this proposal"}

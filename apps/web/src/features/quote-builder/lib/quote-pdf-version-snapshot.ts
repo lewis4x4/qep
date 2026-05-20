@@ -124,5 +124,6 @@ export function buildQuotePdfVersionSnapshot(
       taxDetail: optionalText(data.compliance.taxDetail),
     },
     narrativeText: data.narrative.confirmed ? optionalText(data.narrative.text) : null,
+    publicLandingUrl: optionalText(data.publicLandingUrl),
   };
 }

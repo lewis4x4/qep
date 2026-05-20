@@ -457,6 +457,7 @@ export interface QuotePdfVersionSnapshot {
   financing: QuotePdfVersionFinanceSnapshot[];
   terms: QuotePdfVersionTermsSnapshot;
   narrativeText: string | null;
+  publicLandingUrl?: string | null;
 }
 
 export type QuotePdfVersionLineDiffStatus = "added" | "removed" | "changed" | "unchanged";

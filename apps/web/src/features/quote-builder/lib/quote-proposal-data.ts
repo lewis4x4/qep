@@ -1,5 +1,6 @@
 import type { QuotePDFData, QuoteProposalAsset } from "../components/QuotePDFDocument";
 import type { TradeValuationProposalSnapshot } from "./point-shoot-trade-api";
+import { buildQuoteLandingQrData } from "./quote-qr";
 import { quoteLineCostVisibility, type QuoteWorkspaceComputed } from "./quote-workspace";
 import type {
   QuoteFinanceScenario,
@@ -550,6 +551,7 @@ export function buildQuoteProposalData(input: {
   tradeValuation?: TradeValuationProposalSnapshot | null;
   includeLeaseScenarios?: boolean;
   showFinanceComparisonOnCustomerCopy?: boolean;
+  publicQuoteUrl?: string | null;
 }): QuotePDFData {
   const { draft, computed } = input;
   const includeLeaseScenarios = input.includeLeaseScenarios !== false;
@@ -568,6 +570,8 @@ export function buildQuoteProposalData(input: {
   const customerEquipment = draft.equipment.filter(isCustomerVisibleLine);
   const primaryEquipment = customerEquipment[0] ?? null;
   const lineItems = buildLineItems(draft, computed, input.tradeValuation);
+  const publicLandingUrl = optionalText(input.publicQuoteUrl);
+  const landingQr = publicLandingUrl ? buildQuoteLandingQrData(publicLandingUrl) : null;
 
   return {
     dealName: draft.dealId || draft.customerCompany || draft.customerName || "Quote",
@@ -592,7 +596,9 @@ export function buildQuoteProposalData(input: {
     })),
     lineItems,
     coverGalleryUnits: buildCoverGalleryUnits(lineItems),
-    brandAssets: QEP_BRAND_ASSETS,
+    brandAssets: landingQr
+      ? { ...QEP_BRAND_ASSETS, qrCode: { src: landingQr.svgDataUrl, alt: "Quote landing QR code" } }
+      : QEP_BRAND_ASSETS,
     narrative: buildNarrative(draft),
     equipmentTotal: money(computed.equipmentTotal),
     attachmentTotal: money(computed.attachmentTotal),
@@ -624,5 +630,7 @@ export function buildQuoteProposalData(input: {
       primaryTotalLabel: selectedPaymentKind === "finance" || selectedPaymentKind === "lease" ? "Amount financed" : "Customer total",
     },
     branch: input.branch,
+    publicLandingUrl,
+    landingQr,
   };
 }

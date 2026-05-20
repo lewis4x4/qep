@@ -12,6 +12,7 @@ import {
   type QuoteSendActionChannel,
 } from "../lib/quote-workspace";
 import {
+  ensureQuotePublicLink,
   logQuoteDeliveryEvent,
   persistImmutableQuotePdfVersion,
   persistQuoteDocumentArtifact,
@@ -20,6 +21,7 @@ import {
 } from "../lib/quote-api";
 import type { QuotePDFData } from "../components/QuotePDFDocument";
 import { buildQuotePdfVersionSnapshot } from "../lib/quote-pdf-version-snapshot";
+import { buildQuoteLandingQrData } from "../lib/quote-qr";
 import type { QuotePdfBlobResult, QuotePdfGenerationResult } from "./useQuotePDF";
 import type { DocumentArtifactState } from "./useQuoteBuilderDocumentInvalidation";
 
@@ -324,11 +326,17 @@ export function useQuoteBuilderDocumentActions({
 
       const textEnabled = import.meta.env.VITE_FEATURE_QRM_TEXT_QUOTE === "true";
       if (channel === "email") {
-        const pdfResult = await generatePdfBlob(quotePdfData);
+        const ensuredLink = await ensureQuotePublicLink(activeQuotePackageId);
+        const customerSendPdfData: QuotePDFData = {
+          ...quotePdfData,
+          publicLandingUrl: ensuredLink.public_url,
+          landingQr: buildQuoteLandingQrData(ensuredLink.public_url),
+        };
+        const pdfResult = await generatePdfBlob(customerSendPdfData);
         const quotePackageVersionId = latestCustomerFacingSaveResponseRef.current?.quote_package_version_id
           ?? saveMutation.data?.quote_package_version_id
           ?? null;
-        const proposalSnapshot = buildQuotePdfVersionSnapshot(quotePdfData, {
+        const proposalSnapshot = buildQuotePdfVersionSnapshot(customerSendPdfData, {
           quotePackageId: activeQuotePackageId,
           quotePackageVersionId,
         });

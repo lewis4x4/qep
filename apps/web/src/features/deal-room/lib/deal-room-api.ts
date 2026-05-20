@@ -91,6 +91,8 @@ export interface DealRoomQuote {
   expires_at: string | null;
   sent_at: string | null;
   viewed_at: string | null;
+  latest_pdf_url?: string | null;
+  latest_pdf_version_number?: number | null;
 }
 
 export interface DealRoomBranch {
@@ -160,6 +162,25 @@ export interface PublicAcceptResponse {
   signed_at: string | null;
   status: string;
   document_hash: string;
+}
+
+export interface PublicQuoteFeedbackRequest {
+  clientSubmissionId: string;
+  npsScore: number;
+  fitScore: number;
+  missingOrUnclear?: string | null;
+  contactRequested?: boolean;
+  submittedName?: string | null;
+  submittedEmail?: string | null;
+  source?: "qr_landing" | "deal_room" | "email_link";
+}
+
+export interface PublicQuoteFeedbackResponse {
+  ok: true;
+  feedback_id: string | null;
+  deduped: boolean;
+  rep_notified: boolean;
+  lifecycle_event_id: string | null;
 }
 
 export async function acceptPublicQuote(
@@ -255,6 +276,36 @@ export async function fetchPublicTradeEstimate(
       model: input.model,
       year: input.year ?? null,
       hours: input.hours ?? null,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string }).error ?? `HTTP ${res.status}`;
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+export async function submitPublicQuoteFeedback(
+  token: string,
+  input: PublicQuoteFeedbackRequest,
+): Promise<PublicQuoteFeedbackResponse> {
+  const res = await fetch(`${QUOTE_FN_URL}/public-feedback?token=${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${ANON_KEY}`,
+    },
+    body: JSON.stringify({
+      client_submission_id: input.clientSubmissionId,
+      nps_score: input.npsScore,
+      fit_score: input.fitScore,
+      missing_or_unclear: input.missingOrUnclear ?? null,
+      contact_requested: input.contactRequested ?? false,
+      submitted_name: input.submittedName ?? null,
+      submitted_email: input.submittedEmail ?? null,
+      source: input.source ?? "qr_landing",
     }),
   });
   if (!res.ok) {
