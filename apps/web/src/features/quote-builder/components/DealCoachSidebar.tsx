@@ -29,9 +29,13 @@ import {
   type RuleAcceptanceStat,
 } from "../lib/deal-intelligence-api";
 import type { AcceptanceSnapshot } from "../lib/coach-rules/adaptive";
-import { hasQuoteCustomerIdentity } from "../lib/quote-workspace";
+import { computeQuoteWorkspace, hasQuoteCustomerIdentity } from "../lib/quote-workspace";
+import { computeDealIqSummary } from "../lib/deal-iq";
+import { getQuoteApprovalPolicy } from "../lib/quote-api";
+import { DealIQSummaryCard } from "./DealIQSummaryCard";
 import { TradeMarketContextCard } from "@/features/qrm/components/TradeMarketContextCard";
 import type { TradeMarketContext } from "@/features/qrm/lib/trade-market-context";
+import type { QuoteApprovalPolicy } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
  * Slice 13 — Deal Coach Sidebar v1.
@@ -111,6 +115,12 @@ export function DealCoachSidebar({
 
   // Slice 18 — workspace acceptance snapshots drive adaptive demote/suppress
   const [acceptanceStats, setAcceptanceStats] = useState<AcceptanceSnapshot[]>([]);
+
+  // A3.6 — Deal IQ reads approval-policy caps, but falls back safely if unavailable.
+  const [approvalPolicy, setApprovalPolicy] = useState<QuoteApprovalPolicy | null>(null);
+  const [approvalPolicyLoading, setApprovalPolicyLoading] = useState(false);
+  const [approvalPolicyError, setApprovalPolicyError] = useState<string | null>(null);
+
   const coachReady = hasQuoteCustomerIdentity(draft) && draft.equipment.length > 0;
 
   const draftRef = useRef(draft);
@@ -145,6 +155,17 @@ export function DealCoachSidebar({
     [draft.branchSlug, draft.equipment.length, equipmentMakesKey],
   );
 
+  const dealIqComputed = useMemo(() => computeQuoteWorkspace(draft), [draft]);
+  const dealIqSummary = useMemo(
+    () => computeDealIqSummary({
+      draft,
+      computed: dealIqComputed,
+      policy: approvalPolicy,
+      marginBaselineMedianPct: marginBaseline?.medianPct ?? null,
+    }),
+    [approvalPolicy, dealIqComputed, draft, marginBaseline?.medianPct],
+  );
+
   useEffect(() => {
     if (!profile) return;
     let cancelled = false;
@@ -174,6 +195,33 @@ export function DealCoachSidebar({
 
     return () => { cancelled = true; };
   }, [profile?.id, programsDraftKey]);
+
+  useEffect(() => {
+    if (!profile) {
+      setApprovalPolicy(null);
+      setApprovalPolicyLoading(false);
+      setApprovalPolicyError(null);
+      return;
+    }
+    let cancelled = false;
+    setApprovalPolicy(null);
+    setApprovalPolicyLoading(true);
+    setApprovalPolicyError(null);
+    getQuoteApprovalPolicy()
+      .then((policy) => {
+        if (cancelled) return;
+        setApprovalPolicy(policy);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setApprovalPolicy(null);
+        setApprovalPolicyError(error instanceof Error ? error.message : "Approval policy unavailable");
+      })
+      .finally(() => {
+        if (!cancelled) setApprovalPolicyLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [profile?.id, profile?.active_workspace_id]);
 
   // Similar-deals query depends on brand + netTotal. Refetches when either
   // meaningfully changes — debounced at the netTotal level via rounding to
@@ -349,6 +397,12 @@ export function DealCoachSidebar({
 
       {expanded && (
         <div className="space-y-2">
+          <DealIQSummaryCard
+            summary={dealIqSummary}
+            policyLoading={approvalPolicyLoading}
+            policyError={approvalPolicyError}
+          />
+
           {(tradeMarketContextLoading || tradeMarketContext) && (
             <TradeMarketContextCard
               context={tradeMarketContext}

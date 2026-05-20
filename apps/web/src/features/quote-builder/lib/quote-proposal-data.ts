@@ -43,6 +43,26 @@ const FORBIDDEN_CUSTOMER_TRADE_PROSE = [
   "final value",
   "valuation id",
 ];
+const FORBIDDEN_CUSTOMER_INTERNAL_ECONOMICS_PROSE = [
+  "deal iq",
+  "win probability",
+  "commission",
+  "commission projection",
+  "margin pct",
+  "margin %",
+  "margin amount",
+  "marginpct",
+  "marginamount",
+  "dealer cost",
+  "dealercost",
+  "gross margin",
+  "flagged risk",
+  "approval policy",
+  "trade credit max",
+  "discount cap",
+  "rep discount max",
+  "standard margin floor",
+];
 
 /**
  * Customer-safe quote media metadata contract.
@@ -81,6 +101,25 @@ function customerSafeTradeProse(value: string | null | undefined): string | null
   if (!text) return null;
   const normalized = text.toLowerCase();
   return FORBIDDEN_CUSTOMER_TRADE_PROSE.some((term) => normalized.includes(term)) ? null : text;
+}
+
+function customerSafeInternalEconomicsProse(value: string | null | undefined): string | null {
+  const text = optionalText(value);
+  if (!text) return null;
+  const normalized = text.toLowerCase();
+  const compact = normalized.replace(/[^a-z0-9]+/g, "");
+  const hasForbidden = FORBIDDEN_CUSTOMER_INTERNAL_ECONOMICS_PROSE.some((term) => {
+    const lowerTerm = term.toLowerCase();
+    if (lowerTerm === "commission") return /\bcommission\b/.test(normalized);
+    if (normalized.includes(lowerTerm)) return true;
+    const compactTerm = lowerTerm.replace(/[^a-z0-9]+/g, "");
+    return compactTerm.length > 0 && compact.includes(compactTerm);
+  });
+  return hasForbidden ? null : text;
+}
+
+function customerSafeProposalProse(value: string | null | undefined): string | null {
+  return customerSafeInternalEconomicsProse(customerSafeTradeProse(value));
 }
 
 function metadataRecord(value: QuoteLineItemDraft["metadata"]): Record<string, unknown> {
@@ -166,7 +205,7 @@ function specBullets(metadata: Record<string, unknown>): string[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((item) => {
     if (typeof item !== "string") return [];
-    const text = optionalText(item);
+    const text = customerSafeProposalProse(item);
     return text ? [text] : [];
   }).slice(0, 8);
 }
@@ -207,7 +246,7 @@ function displayMoney(value: number, tone: ProposalLineTone): number {
 
 function lineDescription(line: QuoteLineItemDraft): string {
   const machine = [line.year, line.make, line.model].filter(Boolean).join(" ").trim();
-  return optionalText(machine) ?? optionalText(line.title) ?? "Line item";
+  return customerSafeProposalProse(machine) ?? customerSafeProposalProse(line.title) ?? "Line item";
 }
 
 function toProposalLine(line: QuoteLineItemDraft, fallbackType?: QuoteLineItemKind): QuotePDFData["lineItems"][number] {
@@ -219,20 +258,20 @@ function toProposalLine(line: QuoteLineItemDraft, fallbackType?: QuoteLineItemKi
   return {
     lineType,
     description,
-    make: optionalText(line.make),
-    model: optionalText(line.model),
+    make: customerSafeProposalProse(line.make),
+    model: customerSafeProposalProse(line.model),
     year: line.year ?? null,
     quantity: Number.isFinite(line.quantity) ? line.quantity : 1,
     unitPrice: displayMoney(line.unitPrice, tone),
     extendedPrice: displayMoney(extendedPrice, tone),
     displayAmount: displayMoney(extendedPrice, tone),
     tone,
-    reasonCode: optionalText(line.reasonCode ?? null),
+    reasonCode: customerSafeProposalProse(line.reasonCode ?? null),
     stockNumber: metadataText(metadata, "stock_number", "stockNumber"),
     serialNumber: metadataText(metadata, "serial_number", "serialNumber"),
-    condition: metadataText(metadata, "condition"),
-    warrantyText: metadataText(metadata, "warranty_text", "warrantyText"),
-    longDescription: metadataText(metadata, "long_description", "longDescription"),
+    condition: customerSafeProposalProse(metadataText(metadata, "condition")),
+    warrantyText: customerSafeProposalProse(metadataText(metadata, "warranty_text", "warrantyText")),
+    longDescription: customerSafeProposalProse(metadataText(metadata, "long_description", "longDescription")),
     specBullets: specBullets(metadata),
     media: buildLineMedia(metadata, description),
     vendorLogo: buildVendorLogo(metadata, description),
@@ -268,8 +307,8 @@ function buildTradeAllowanceLine(
     media_kind: "trade_in",
   };
   const condition = tradeConditionLabel(tradeValuation?.operationalStatus ?? null);
-  const safeConditionalLanguage = customerSafeTradeProse(tradeValuation?.conditionalLanguage ?? null);
-  const safeAiConditionNotes = customerSafeTradeProse(tradeValuation?.aiConditionNotes ?? null);
+  const safeConditionalLanguage = customerSafeProposalProse(tradeValuation?.conditionalLanguage ?? null);
+  const safeAiConditionNotes = customerSafeProposalProse(tradeValuation?.aiConditionNotes ?? null);
   const specs = [
     tradeValuation?.hours != null ? `Hours: ${formatInteger(tradeValuation.hours)}` : null,
     safeConditionalLanguage ? `Condition note: ${safeConditionalLanguage}` : null,
@@ -375,25 +414,39 @@ function buildCoverGalleryUnits(lines: QuotePDFData["lineItems"]): QuotePDFData[
 function buildNarrative(draft: QuoteWorkspaceDraft): QuotePDFData["narrative"] {
   const recommendation: QuoteRecommendation | null = draft.recommendation ?? null;
   const confirmed = draft.whyThisMachineConfirmed === true;
-  const confirmedText = confirmed ? optionalText(draft.whyThisMachine) : null;
+  const confirmedText = confirmed ? customerSafeProposalProse(draft.whyThisMachine) : null;
   return {
     text: confirmedText,
     confirmed,
-    facts: confirmed ? (recommendation?.jobFacts ?? []).filter((fact) => optionalText(fact.label) && optionalText(fact.value)) : [],
+    facts: confirmed
+      ? (recommendation?.jobFacts ?? []).flatMap((fact) => {
+          const label = customerSafeProposalProse(fact.label);
+          const value = customerSafeProposalProse(fact.value);
+          return label && value ? [{ label, value }] : [];
+        })
+      : [],
     highlights: confirmed
       ? (recommendation?.transcriptHighlights ?? [])
         .flatMap((item) => {
-          const supports = optionalText(item.supports);
+          const supports = customerSafeProposalProse(item.supports);
           return supports ? [{ quote: "", supports }] : [];
         })
       : [],
-    considerations: confirmed ? (recommendation?.jobConsiderations ?? []).filter((item): item is string => Boolean(optionalText(item))) : [],
+    considerations: confirmed
+      ? (recommendation?.jobConsiderations ?? []).flatMap((item) => {
+          const text = customerSafeProposalProse(item);
+          return text ? [text] : [];
+        })
+      : [],
     alternative: confirmed && recommendation?.alternative
       ? {
-          machine: optionalText(recommendation.alternative.machine) ?? "Alternative machine",
-          attachments: recommendation.alternative.attachments ?? [],
-          reasoning: optionalText(recommendation.alternative.reasoning) ?? "",
-          whyNotChosen: optionalText(recommendation.alternative.whyNotChosen ?? null),
+          machine: customerSafeProposalProse(recommendation.alternative.machine) ?? "Alternative machine",
+          attachments: (recommendation.alternative.attachments ?? []).flatMap((item) => {
+            const text = customerSafeProposalProse(item);
+            return text ? [text] : [];
+          }),
+          reasoning: customerSafeProposalProse(recommendation.alternative.reasoning) ?? "",
+          whyNotChosen: customerSafeProposalProse(recommendation.alternative.whyNotChosen ?? null),
         }
       : null,
   };
@@ -448,9 +501,10 @@ function buildFinancing(scenarios: QuoteFinanceScenario[]): QuotePDFData["financ
 function buildTaxDetail(draft: QuoteWorkspaceDraft): Pick<QuotePDFData["compliance"], "taxLabel" | "taxDetail"> {
   const profileLabel = TAX_PROFILE_LABELS[draft.taxProfile] ?? draft.taxProfile;
   if (draft.taxOverrideAmount != null) {
+    const safeReason = customerSafeProposalProse(draft.taxOverrideReason);
     return {
       taxLabel: "Tax override applied",
-      taxDetail: `Manual tax override recorded${draft.taxOverrideReason ? `: ${draft.taxOverrideReason}` : ". Reason pending."}`,
+      taxDetail: `Manual tax override recorded${safeReason ? `: ${safeReason}` : ". Reason pending."}`,
     };
   }
   if (draft.taxProfile !== "standard") {
@@ -523,15 +577,15 @@ export function buildQuoteProposalData(input: {
     preparedDate: input.preparedDate,
     aiRecommendationSummary: null,
     equipment: customerEquipment.map((item) => ({
-      make: item.make ?? "",
-      model: item.model ?? item.title,
+      make: customerSafeProposalProse(item.make) ?? "",
+      model: customerSafeProposalProse(item.model ?? item.title) ?? "Equipment",
       year: item.year ?? null,
       price: money(item.unitPrice),
       quantity: item.quantity,
       extendedPrice: money(lineExtendedAmount(item)),
     })),
     attachments: draft.attachments.filter(isCustomerVisibleLine).map((item) => ({
-      name: item.title,
+      name: customerSafeProposalProse(item.title) ?? "Attachment",
       price: money(item.unitPrice),
       quantity: item.quantity,
       extendedPrice: money(lineExtendedAmount(item)),
@@ -557,11 +611,11 @@ export function buildQuoteProposalData(input: {
     primaryMachineTitle: primaryEquipment ? lineDescription(primaryEquipment) : null,
     deliveryEta: formatDate(draft.deliveryEta),
     depositRequiredAmount: draft.depositRequiredAmount ?? null,
-    specialTerms: optionalText(draft.specialTerms),
+    specialTerms: customerSafeProposalProse(draft.specialTerms),
     validUntil: formatDate(draft.expiresAt) ?? input.branch.footerText ?? null,
     compliance: {
       validUntil: formatDate(draft.expiresAt) ?? null,
-      specialTerms: optionalText(draft.specialTerms),
+      specialTerms: customerSafeProposalProse(draft.specialTerms),
       taxLabel: tax.taxLabel,
       taxDetail: tax.taxDetail,
       financingDisclaimer: hasDisplayedFinanceOrLease ? FINANCING_DISCLOSURE : "Payment terms shown are estimates and remain subject to final QEP confirmation.",

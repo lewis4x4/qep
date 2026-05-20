@@ -77,6 +77,34 @@ function expectNoCustomerTradeInternals(rendered: string, valuationId = "trade-1
   }
 }
 
+const FORBIDDEN_DEAL_IQ_INTERNALS = [
+  "Deal IQ says",
+  "win probability is",
+  "commission projection",
+  "flagged risk",
+  "marginPct",
+  "marginAmount",
+  "dealerCost",
+  "dealer_cost",
+  "gross margin",
+  "approval policy",
+  "approval_policy",
+  "discount cap",
+  "discount_cap",
+  "rep discount max",
+  "standard margin floor",
+  "margin_pct",
+  "win_probability",
+  "commission_projection",
+];
+
+function expectNoDealIqInternals(rendered: string) {
+  const normalized = rendered.toLowerCase();
+  for (const term of FORBIDDEN_DEAL_IQ_INTERNALS) {
+    expect(normalized).not.toContain(term.toLowerCase());
+  }
+}
+
 function build(
   overrides: Partial<QuoteWorkspaceDraft> = {},
   financeScenarios: QuoteFinanceScenario[] = [],
@@ -133,6 +161,86 @@ describe("buildQuoteProposalData", () => {
     expect(data.narrative.text).toBeNull();
     expect(data.narrative.facts).toEqual([]);
     expect(JSON.stringify(data)).not.toContain("AI fallback unsafe");
+  });
+
+  test("filters Deal IQ and internal economics from customer proposal, printable HTML, and PDF data", () => {
+    const data = build({
+      whyThisMachine: "Deal IQ says win probability is 82 and commission projection is ready.",
+      whyThisMachineConfirmed: true,
+      specialTerms: "Approval policy says discount cap exception was approved.",
+      taxOverrideAmount: 250,
+      taxOverrideReason: "Commission projection marginAmount review.",
+      recommendation: {
+        machine: "Bobcat T770",
+        attachments: ["Forestry mulcher", "dealerCost worksheet"],
+        reasoning: "RAW AI reasoning should not render.",
+        jobFacts: [
+          { label: "Application", value: "Forestry cleanup" },
+          { label: "Dealer cost", value: "dealerCost 70000" },
+        ],
+        transcriptHighlights: [
+          { quote: "", supports: "Customer wants high-flow hydraulics" },
+          { quote: "", supports: "flagged risk: rep discount max exceeded" },
+        ],
+        jobConsiderations: ["Customer needs high-flow hydraulics", "gross margin needs review"],
+        alternative: {
+          machine: "Alternative CTL",
+          attachments: ["Safe bucket", "standard margin floor worksheet"],
+          reasoning: "marginPct 22 with approval policy path",
+          whyNotChosen: "standard margin floor risk",
+        },
+      },
+      equipment: [{
+        kind: "equipment",
+        title: "T770",
+        make: "Bobcat",
+        model: "T770",
+        year: 2026,
+        quantity: 1,
+        unitPrice: 100_000,
+        metadata: {
+          condition: "win_probability high",
+          long_description: "dealer cost and marginAmount should stay internal",
+          spec_bullets: ["High-flow hydraulics", "commission projection ready"],
+        },
+      }],
+      attachments: [
+        { kind: "attachment", title: "Safe bucket", quantity: 1, unitPrice: 1_000 },
+        { kind: "attachment", title: "commission_projection kit", quantity: 1, unitPrice: 500 },
+      ],
+      pricingLines: [{
+        kind: "custom",
+        title: "dealer_cost worksheet",
+        quantity: 1,
+        unitPrice: 100,
+        reasonCode: "approval_policy discount_cap",
+      }],
+    });
+    const json = JSON.stringify(data);
+    const html = buildPrintableQuoteHtml(data);
+    const pdfRendered = JSON.stringify(QuotePDFDocument({ data }));
+
+    expect(data.narrative.text).toBeNull();
+    expect(data.narrative.facts).toEqual([{ label: "Application", value: "Forestry cleanup" }]);
+    expect(data.narrative.highlights).toEqual([{ quote: "", supports: "Customer wants high-flow hydraulics" }]);
+    expect(data.narrative.considerations).toEqual(["Customer needs high-flow hydraulics"]);
+    expect(data.narrative.alternative).toMatchObject({
+      machine: "Alternative CTL",
+      attachments: ["Safe bucket"],
+      reasoning: "",
+      whyNotChosen: null,
+    });
+    expect(data.lineItems[0]?.condition).toBeNull();
+    expect(data.lineItems[0]?.longDescription).toBeNull();
+    expect(data.lineItems[0]?.specBullets).toEqual(["High-flow hydraulics"]);
+    expect(data.attachments.map((item) => item.name)).toEqual(["Safe bucket", "Attachment"]);
+    expect(data.lineItems.some((item) => item.reasonCode === "approval_policy discount_cap")).toBe(false);
+    expect(data.specialTerms).toBeNull();
+    expect(data.compliance.specialTerms).toBeNull();
+    expect(data.compliance.taxDetail).toBe("Manual tax override recorded. Reason pending.");
+    expectNoDealIqInternals(json);
+    expectNoDealIqInternals(html);
+    expectNoDealIqInternals(pdfRendered);
   });
 
   test("builds a customer-visible line-item waterfall with credits", () => {

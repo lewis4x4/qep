@@ -382,18 +382,18 @@
     ]
   },
   "current_cycle": {
-    "task_id": "A3.4",
-    "title": "M4 \u2014 Trade-in market context (rep-facing only)",
+    "task_id": "A3.6",
+    "title": "M6 \u2014 Deal IQ sidebar (rep-facing only)",
     "stream": "A",
     "wave": "A3",
-    "linear_issue_identifier": "QEP-17",
-    "linear_url": "https://linear.app/jarvislewis/issue/QEP-17/a34-m4-trade-in-market-context-rep-facing-only",
+    "linear_issue_identifier": "QEP-19",
+    "linear_url": "https://linear.app/jarvislewis/issue/QEP-19/a36-m6-deal-iq-sidebar-rep-facing-only",
     "status": "oracle_passed_dispatching_release",
-    "plan_export": "/Users/brianlewis/Projects/qep-knowledge-assistant/prompt-exports/oracle-plan-2026-05-19-233733-a3-4-trade-context-d-e46c.md",
+    "plan_export": "/Users/brianlewis/Projects/qep-knowledge-assistant/prompt-exports/oracle-plan-2026-05-20-093432-a3-6-deal-iq-d41964-c70b.md",
     "acceptance_criteria": [
-      "Trade comparable market context renders only in rep/internal Deal IQ and QRM trade detail surfaces.",
-      "Customer PDF, printable HTML, public/customer copy, and acceptance surfaces do not expose comp ranges, source names, valuation IDs, auction/final/prelim internals, or internal-only language.",
-      "Synthetic/model-derived ranges are clearly labeled internal/rep-facing if shown.",
+      "Deal IQ card renders rep/internal-only margin %, margin $, win probability, commission status, and flagged risks in Deal Coach sidebar.",
+      "Commission projection is honest/status-only unless a real commission plan feed exists.",
+      "Customer PDF/print/proposal/public paths do not leak Deal IQ, margin, commission, win-probability, dealer-cost, or flagged-risk internals.",
       "No approval/tax/why-this-machine/send gating changes.",
       "Focused tests and typecheck pass."
     ],
@@ -401,9 +401,9 @@
       "migrations": false,
       "edge_functions": false
     },
-    "updated_at": "2026-05-20T01:25:00-04:00",
-    "builder_session_id": "2C9DE4FC-FB3E-4323-AD52-34C3F773D03C",
-    "reviewer_session_id": "4C818C51-6FCC-44DC-BABB-D06C0CB9427E",
-    "oracle_review": "pass_after_deal_coach_wiring_fix"
+    "updated_at": "2026-05-20T09:50:00-04:00",
+    "builder_session_id": "944CCDDA-EA9A-4360-A6BB-E27371725726",
+    "reviewer_session_id": "BF75AB46-0927-4BC9-BEE9-C75BEE3A3B30",
+    "oracle_review": "pass"
   }
 }
