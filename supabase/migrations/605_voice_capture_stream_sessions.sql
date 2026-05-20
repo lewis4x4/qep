@@ -12,9 +12,11 @@ create table if not exists public.voice_capture_stream_sessions (
   workspace_id text not null,
   user_id uuid not null references public.profiles(id) on delete cascade,
   client_session_id text not null,
-  company_id uuid references public.crm_companies(id) on delete set null,
-  contact_id uuid references public.crm_contacts(id) on delete set null,
-  deal_id uuid references public.crm_deals(id) on delete set null,
+  -- Migration 170 renamed crm_* tables to qrm_* and left crm_* as compatibility views.
+  -- Foreign keys must target the underlying tables, not the views.
+  company_id uuid references public.qrm_companies(id) on delete set null,
+  contact_id uuid references public.qrm_contacts(id) on delete set null,
+  deal_id uuid references public.qrm_deals(id) on delete set null,
   status text not null default 'active' check (status in ('active', 'finalizing', 'finalized', 'failed', 'cancelled')),
   started_at timestamptz not null default now(),
   stopped_at timestamptz,
