@@ -492,42 +492,38 @@
     }
   },
   "current_task": {
-    "task_id": "A5.9",
-    "linear": "QEP-41",
+    "task_id": "A5.10",
+    "linear": "QEP-42",
     "stream": "A",
     "wave": "A5",
-    "goal": "Build QB-13 auto-send-aware rep notification copy for approval decisions using public.qb_notifications.",
-    "status": "verified_pending_commit",
+    "goal": "Build QB-14 realistic demo seed with deterministic IDs, idempotent natural-key guards, and provenance metadata for QRM/Quote Builder demos.",
+    "status": "committed_pending_push",
     "expected_files": [
-      "shared/qep-moonshot-contracts.ts",
-      "supabase/functions/quote-builder-v2/index.ts",
-      "supabase/functions/quote-builder-v2/quote-approval-notifications.ts",
-      "supabase/functions/quote-builder-v2/quote-approval-notifications.test.ts",
-      "apps/web/src/features/sales/hooks/useQbNotifications.ts",
-      "apps/web/src/components/QbNotificationBell.tsx",
-      "apps/web/src/components/QbNotificationBell.test.tsx"
+      "supabase/migrations/603_seed_realistic_data.sql",
+      "scripts/demo/seed-ids.mjs",
+      "scripts/demo/verify-seed.mjs",
+      "supabase/migrations/README.md"
     ],
     "acceptance": [
-      "Rep notifications distinguish approved+auto-sent, approved+auto-send failed/incomplete, and approved+return-to-rep.",
-      "qb_notifications metadata includes auto_send status and delivery fields when available.",
-      "Bell UI surfaces Auto-sent / Send needs attention / Ready to send and preserves internal deep-link navigation.",
-      "No crm_notifications or quote-send function path was added; consolidated roadmap qb_notifications path remains authoritative."
+      "Seed is deterministic and rerunnable through natural-key/on-conflict guards.",
+      "Seed populates QRM base tables for companies, contacts, equipment, deals, and activities without live VitalEdge/IntelliDealer/API dependencies.",
+      "Seed carries provenance metadata for the QB-14 demo batch.",
+      "Verification covers service-role data presence and authenticated app/RLS Quote Builder visibility requirements."
     ],
     "verification": [
-      "deno test supabase/functions/quote-builder-v2/quote-approval-notifications.test.ts --allow-read",
-      "bun test apps/web/src/components/QbNotificationBell.test.tsx",
-      "deno check supabase/functions/quote-builder-v2/index.ts supabase/functions/quote-builder-v2/quote-approval-notifications.ts",
-      "Oracle review P1 fixed: return_to_rep no longer emits failure_code",
       "bun run migrations:check",
-      "bun run audit:secrets",
+      "node --check scripts/demo/verify-seed.mjs",
+      "node --check scripts/demo/seed-ids.mjs",
+      "QB-14 post-fix static seed/auth verifier checks",
       "git diff --check",
-      "cd apps/web && bun run typecheck",
-      "cd apps/web && bun run build",
-      "bun run segment:gates --segment A5.9-qb-13-auto-send-rep-notification-copy --ui"
+      "Oracle review P1 fixed: verify-seed now includes authenticated app/RLS checks",
+      "targeted KB integration rerun after unrelated flaky gate: deno test supabase/functions/knowledge-base.integration.test.ts --allow-env --allow-net --allow-read",
+      "bun run segment:gates --segment A5.10-qb-14-realistic-demo-seed --ui"
     ],
-    "deployment_needs": "Deploy quote-builder-v2 edge function and frontend bundle in hosted environments; no database migration required.",
-    "gate_report": "test-results/agent-gates/20260520T191427Z-A5.9-qb-13-auto-send-rep-notification-copy.json",
-    "oracle_review": "one P1 fixed; no remaining blockers after targeted verification",
-    "updated_at": "2026-05-20T19:14:59.024306+00:00"
+    "gate_report": "test-results/agent-gates/20260520T195039Z-A5.10-qb-14-realistic-demo-seed.json",
+    "oracle_review": "one P1 fixed; no remaining A5.10 blockers after targeted and full-gate verification",
+    "deployment_needs": "Apply migrations 602 and 603 after reconciling remote migration version 20260520154601; local Supabase apply was not run because port 54322 is already allocated by another local Supabase project.",
+    "updated_at": "2026-05-20T19:52:01.903522+00:00",
+    "release_pushed": false
   }
 }

@@ -18,4 +18,4 @@ This directory uses a canonical, contiguous migration sequence.
 
 ## Current canonical head
 
-- As of this baseline, canonical sequence is `001..031`.
+- As of this baseline, canonical sequence is `001..603` with explicit gaps listed in `scripts/migration-gaps.json`.

@@ -1,20 +1,34 @@
 #!/usr/bin/env bun
 /**
  * Post-seed checks: row counts + FK integrity for demo UUIDs.
- * Optional RLS smoke: set SUPABASE_ANON_KEY + uses demo login (best effort).
+ * QB-14 verification requires an anon-authenticated demo user so Quote Builder
+ * customer/equipment/catalog visibility is proven through the app/RLS path.
+ * Optional parts RLS smoke remains best effort.
  */
 import { createClient } from "@supabase/supabase-js";
 import {
   DEMO_WORKSPACE_ID,
   SERVICE_DEMO_IDS,
   DEMO_USERS,
+  QB14_REALISTIC_DEMO_BATCH_ID,
+  QB14_REALISTIC_EXPECTED_COUNTS,
+  QB14_REALISTIC_WORKSPACE_ID,
 } from "./seed-ids.mjs";
 
-function admin() {
-  const url =
+function resolveSupabaseUrl() {
+  return (
     process.env.SUPABASE_URL ??
     process.env.VITE_SUPABASE_URL ??
-    process.env.NEXT_PUBLIC_SUPABASE_URL;
+    process.env.NEXT_PUBLIC_SUPABASE_URL
+  );
+}
+
+function resolveAnonKey() {
+  return process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY;
+}
+
+function admin() {
+  const url = resolveSupabaseUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!url || !key) {
     throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required");
@@ -37,6 +51,301 @@ async function main() {
       console.log(`OK: ${name}`);
     }
   };
+
+  const qb14Ws = QB14_REALISTIC_WORKSPACE_ID;
+
+  const countQb14Rows = async (table, { activeDeals = false } = {}) => {
+    let query = supabase
+      .from(table)
+      .select("*", { count: "exact", head: true })
+      .eq("workspace_id", qb14Ws)
+      .contains("metadata", { seedBatchId: QB14_REALISTIC_DEMO_BATCH_ID });
+    if (activeDeals) {
+      query = query.is("closed_at", null).is("deleted_at", null);
+    }
+    const { count, error } = await query;
+    if (error) throw new Error(`QB-14 ${table} count failed: ${error.message}`);
+    return count ?? 0;
+  };
+
+  const fetchQb14Rows = async (table, select) => {
+    const { data, error } = await supabase
+      .from(table)
+      .select(select)
+      .eq("workspace_id", qb14Ws)
+      .contains("metadata", { seedBatchId: QB14_REALISTIC_DEMO_BATCH_ID });
+    if (error) throw new Error(`QB-14 ${table} fetch failed: ${error.message}`);
+    return data ?? [];
+  };
+
+  // ── QB-14 realistic demo seed checks ───────────────────────────────────────
+  {
+    const expected = QB14_REALISTIC_EXPECTED_COUNTS;
+    const baseCounts = {
+      companies: await countQb14Rows("qrm_companies"),
+      contacts: await countQb14Rows("qrm_contacts"),
+      equipment: await countQb14Rows("qrm_equipment"),
+      activeDeals: await countQb14Rows("qrm_deals", { activeDeals: true }),
+      activities: await countQb14Rows("qrm_activities"),
+    };
+    check("QB-14 qrm_companies rows (60)", baseCounts.companies === expected.companies, `got ${baseCounts.companies}`);
+    check("QB-14 qrm_contacts rows (200)", baseCounts.contacts === expected.contacts, `got ${baseCounts.contacts}`);
+    check("QB-14 qrm_equipment rows (100)", baseCounts.equipment === expected.equipment, `got ${baseCounts.equipment}`);
+    check("QB-14 active qrm_deals rows (20)", baseCounts.activeDeals === expected.activeDeals, `got ${baseCounts.activeDeals}`);
+    check("QB-14 qrm_activities rows (>=80)", baseCounts.activities >= expected.activities, `got ${baseCounts.activities}`);
+
+    const compatCounts = {
+      companies: await countQb14Rows("crm_companies"),
+      contacts: await countQb14Rows("crm_contacts"),
+      equipment: await countQb14Rows("crm_equipment"),
+      activeDeals: await countQb14Rows("crm_deals", { activeDeals: true }),
+      activities: await countQb14Rows("crm_activities"),
+    };
+    check("QB-14 crm_companies compat rows (60)", compatCounts.companies === expected.companies, `got ${compatCounts.companies}`);
+    check("QB-14 crm_contacts compat rows (200)", compatCounts.contacts === expected.contacts, `got ${compatCounts.contacts}`);
+    check("QB-14 crm_equipment compat rows (100)", compatCounts.equipment === expected.equipment, `got ${compatCounts.equipment}`);
+    check("QB-14 active crm_deals compat rows (20)", compatCounts.activeDeals === expected.activeDeals, `got ${compatCounts.activeDeals}`);
+    check("QB-14 crm_activities compat rows (>=80)", compatCounts.activities >= expected.activities, `got ${compatCounts.activities}`);
+
+    const companies = await fetchQb14Rows("qrm_companies", "id, name");
+    const contacts = await fetchQb14Rows("qrm_contacts", "id, primary_company_id");
+    const equipment = await fetchQb14Rows("qrm_equipment", "id, company_id, primary_contact_id, make, model");
+    const deals = await fetchQb14Rows("qrm_deals", "id, company_id, primary_contact_id, stage_id, closed_at, deleted_at");
+    const activities = await fetchQb14Rows("qrm_activities", "id, contact_id, deal_id, company_id");
+
+    const companyIds = new Set(companies.map((row) => row.id));
+    const contactIds = new Set(contacts.map((row) => row.id));
+    const dealIds = new Set(deals.map((row) => row.id));
+
+    check(
+      "QB-14 contact primary companies exist",
+      contacts.every((row) => companyIds.has(row.primary_company_id)),
+    );
+
+    const { data: associations, error: assocErr } = await supabase
+      .from("qrm_contact_companies")
+      .select("contact_id, company_id, is_primary")
+      .eq("workspace_id", qb14Ws)
+      .in("contact_id", contacts.map((row) => row.id));
+    if (assocErr) throw new Error(`QB-14 contact-company association fetch failed: ${assocErr.message}`);
+    const primaryAssociationKeys = new Set(
+      (associations ?? [])
+        .filter((row) => row.is_primary)
+        .map((row) => `${row.contact_id}|${row.company_id}`),
+    );
+    check(
+      "QB-14 contacts have primary contact-company associations",
+      contacts.every((row) => primaryAssociationKeys.has(`${row.id}|${row.primary_company_id}`)),
+    );
+
+    check(
+      "QB-14 equipment company/contact FKs exist",
+      equipment.every((row) => companyIds.has(row.company_id) && contactIds.has(row.primary_contact_id)),
+    );
+
+    const uniqueStageIds = [...new Set(deals.map((row) => row.stage_id).filter(Boolean))];
+    const { data: stages, error: stageErr } = await supabase
+      .from("qrm_deal_stages")
+      .select("id")
+      .eq("workspace_id", qb14Ws)
+      .in("id", uniqueStageIds);
+    if (stageErr) throw new Error(`QB-14 deal-stage fetch failed: ${stageErr.message}`);
+    const stageIds = new Set((stages ?? []).map((row) => row.id));
+    check(
+      "QB-14 deal company/contact/stage FKs exist",
+      deals.every((row) =>
+        companyIds.has(row.company_id) &&
+        contactIds.has(row.primary_contact_id) &&
+        stageIds.has(row.stage_id) &&
+        row.closed_at == null &&
+        row.deleted_at == null,
+      ),
+    );
+
+    check(
+      "QB-14 activities have exactly one subject FK",
+      activities.every((row) =>
+        [row.contact_id, row.deal_id, row.company_id].filter(Boolean).length === 1 &&
+        (row.deal_id == null || dealIds.has(row.deal_id)) &&
+        (row.company_id == null || companyIds.has(row.company_id)) &&
+        (row.contact_id == null || contactIds.has(row.contact_id)),
+      ),
+    );
+
+    for (const query of ["Big Oak", "Precision", "DREC", "1001"]) {
+      const { data, error } = await supabase.rpc("search_customer_picker_ranked", {
+        p_query: query,
+        p_workspace_id: qb14Ws,
+        p_limit: 8,
+      });
+      check(
+        `QB-14 customer picker RPC finds ${query}`,
+        !error && (data?.length ?? 0) > 0,
+        error?.message ?? `rows=${data?.length ?? 0}`,
+      );
+    }
+
+    for (const companyName of ["Big Oak Underbrushing", "Precision Land Services", "DREC"]) {
+      const { data: companyRows, error: companyErr } = await supabase
+        .from("crm_companies")
+        .select("id")
+        .eq("workspace_id", qb14Ws)
+        .eq("name", companyName)
+        .limit(1);
+      if (companyErr) throw new Error(`QB-14 anchor company lookup failed: ${companyErr.message}`);
+      const companyId = companyRows?.[0]?.id;
+      if (!companyId) {
+        check(`QB-14 Quote Builder signals for ${companyName}`, false, "missing company");
+        continue;
+      }
+      const { count: dealCount, error: dealErr } = await supabase
+        .from("crm_deals")
+        .select("*", { count: "exact", head: true })
+        .eq("workspace_id", qb14Ws)
+        .eq("company_id", companyId)
+        .is("closed_at", null)
+        .is("deleted_at", null);
+      if (dealErr) throw new Error(`QB-14 anchor deal lookup failed: ${dealErr.message}`);
+      const { count: activityCount, error: activityErr } = await supabase
+        .from("crm_activities")
+        .select("*", { count: "exact", head: true })
+        .eq("workspace_id", qb14Ws)
+        .eq("company_id", companyId)
+        .contains("metadata", { seedBatchId: QB14_REALISTIC_DEMO_BATCH_ID });
+      if (activityErr) throw new Error(`QB-14 anchor activity lookup failed: ${activityErr.message}`);
+      check(
+        `QB-14 Quote Builder signals for ${companyName}`,
+        Boolean(companyId) && (dealCount ?? 0) > 0 && (activityCount ?? 0) > 0,
+        `dealCount=${dealCount ?? 0}, activityCount=${activityCount ?? 0}`,
+      );
+    }
+
+    const catalogBrands = ["BANDIT", "DEVELON", "YANMAR", "ASV"];
+    const { data: brands, error: brandErr } = await supabase
+      .from("qb_brands")
+      .select("id, code")
+      .eq("workspace_id", qb14Ws)
+      .in("code", catalogBrands);
+    if (brandErr) throw new Error(`QB-14 catalog brand lookup failed: ${brandErr.message}`);
+    const brandByCode = new Map((brands ?? []).map((row) => [row.code, row.id]));
+    for (const code of catalogBrands) {
+      const brandId = brandByCode.get(code);
+      if (!brandId) {
+        check(`QB-14 catalog brand exists for ${code}`, false, "missing qb_brands row");
+        continue;
+      }
+      const { count: catalogCount, error: catalogErr } = await supabase
+        .from("qb_equipment_models")
+        .select("*", { count: "exact", head: true })
+        .eq("workspace_id", qb14Ws)
+        .eq("brand_id", brandId)
+        .eq("active", true);
+      if (catalogErr) throw new Error(`QB-14 ${code} catalog lookup failed: ${catalogErr.message}`);
+      const make = { BANDIT: "Bandit", DEVELON: "Develon", YANMAR: "Yanmar", ASV: "ASV" }[code];
+      const { count: fleetCount, error: fleetErr } = await supabase
+        .from("crm_equipment")
+        .select("*", { count: "exact", head: true })
+        .eq("workspace_id", qb14Ws)
+        .eq("make", make)
+        .contains("metadata", { seedBatchId: QB14_REALISTIC_DEMO_BATCH_ID });
+      if (fleetErr) throw new Error(`QB-14 ${make} fleet lookup failed: ${fleetErr.message}`);
+      check(
+        `QB-14 catalog and CRM equipment visible for ${code}`,
+        Boolean(brandId) && (catalogCount ?? 0) > 0 && (fleetCount ?? 0) > 0,
+        `catalog=${catalogCount ?? 0}, fleet=${fleetCount ?? 0}`,
+      );
+    }
+
+    const qb14Anon = resolveAnonKey();
+    const qb14Url = resolveSupabaseUrl();
+    const qb14UserKey = process.env.QEP_QB14_VERIFY_USER_KEY ?? "manager";
+    const qb14User = DEMO_USERS.find((user) => user.key === qb14UserKey);
+    const qb14Password = process.env.QEP_QB14_VERIFY_PASSWORD ?? process.env.QEP_DEMO_PASSWORD ?? "QepDemo!2026";
+
+    if (!qb14Url || !qb14Anon || !qb14User) {
+      check(
+        "QB-14 authenticated app/RLS verification config",
+        false,
+        "set SUPABASE_URL, SUPABASE_ANON_KEY or VITE_SUPABASE_ANON_KEY, and QEP_QB14_VERIFY_USER_KEY to one of owner/admin/manager/rep_primary/rep_secondary with QEP_QB14_VERIFY_PASSWORD or QEP_DEMO_PASSWORD",
+      );
+    } else {
+      const appClient = createClient(qb14Url, qb14Anon, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { error: signErr } = await appClient.auth.signInWithPassword({
+        email: qb14User.email,
+        password: qb14Password,
+      });
+
+      if (signErr) {
+        check(
+          `QB-14 authenticated app/RLS login (${qb14User.key})`,
+          false,
+          `${signErr.message}; configure seeded demo auth or set QEP_QB14_VERIFY_USER_KEY/QEP_QB14_VERIFY_PASSWORD`,
+        );
+      } else {
+        check(`QB-14 authenticated app/RLS login (${qb14User.key})`, true);
+
+        for (const query of ["Big Oak", "Precision", "DREC"]) {
+          const { data, error } = await appClient.rpc("search_customer_picker_ranked", {
+            p_query: query,
+            p_workspace_id: qb14Ws,
+            p_limit: 8,
+          });
+          check(
+            `QB-14 authenticated customer picker finds ${query}`,
+            !error && (data?.length ?? 0) > 0,
+            error?.message ?? `rows=${data?.length ?? 0}`,
+          );
+        }
+
+        for (const make of ["Bandit", "Develon", "Yanmar", "ASV"]) {
+          const { count, error } = await appClient
+            .from("crm_equipment")
+            .select("*", { count: "exact", head: true })
+            .eq("workspace_id", qb14Ws)
+            .eq("make", make)
+            .contains("metadata", { seedBatchId: QB14_REALISTIC_DEMO_BATCH_ID });
+          check(
+            `QB-14 authenticated CRM equipment visible for ${make}`,
+            !error && (count ?? 0) > 0,
+            error?.message ?? `count=${count ?? 0}`,
+          );
+        }
+
+        const { data: appBrands, error: appBrandErr } = await appClient
+          .from("qb_brands")
+          .select("id, code")
+          .eq("workspace_id", qb14Ws)
+          .in("code", catalogBrands);
+        if (appBrandErr) {
+          check("QB-14 authenticated catalog brands visible", false, appBrandErr.message);
+        } else {
+          const appBrandByCode = new Map((appBrands ?? []).map((row) => [row.code, row.id]));
+          for (const code of catalogBrands) {
+            const brandId = appBrandByCode.get(code);
+            if (!brandId) {
+              check(`QB-14 authenticated catalog brand exists for ${code}`, false, "missing visible qb_brands row");
+              continue;
+            }
+            const { count, error } = await appClient
+              .from("qb_equipment_models")
+              .select("*", { count: "exact", head: true })
+              .eq("workspace_id", qb14Ws)
+              .eq("brand_id", brandId)
+              .eq("active", true);
+            check(
+              `QB-14 authenticated catalog models visible for ${code}`,
+              !error && (count ?? 0) > 0,
+              error?.message ?? `count=${count ?? 0}`,
+            );
+          }
+        }
+
+        await appClient.auth.signOut();
+      }
+    }
+  }
 
   const invIds = [
     ...SERVICE_DEMO_IDS.partsInventory,

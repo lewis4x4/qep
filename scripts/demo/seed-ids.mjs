@@ -53,6 +53,15 @@ loadDemoEnv();
 
 export const DEMO_BATCH_ID = "crm-demo-thursday-2026-04-02";
 export const SERVICE_PARTS_SEED_BATCH_ID = "service-parts-seed-2026-04-05";
+export const QB14_REALISTIC_DEMO_BATCH_ID = "qb14-realistic-demo-2026-05-20";
+export const QB14_REALISTIC_WORKSPACE_ID = "default";
+export const QB14_REALISTIC_EXPECTED_COUNTS = Object.freeze({
+  companies: 60,
+  contacts: 200,
+  equipment: 100,
+  activeDeals: 20,
+  activities: 80,
+});
 export const DEMO_WORKSPACE_ID = process.env.QEP_DEMO_WORKSPACE_ID ?? "default";
 export const DEMO_PASSWORD = process.env.QEP_DEMO_PASSWORD ?? "QepDemo!2026";
 export const PREFER_LOCAL_RUNTIME = process.env.QEP_DEMO_PREFER_LOCAL === "1";
