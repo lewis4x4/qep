@@ -13,6 +13,15 @@ import {
   buildFallbackMorningBriefing,
   type MorningBriefingData,
 } from "../_shared/morning-briefing-fallback.ts";
+import {
+  getDateInTimeZone,
+  shouldRunEtScheduledBatch,
+} from "../_shared/briefing-time.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
+import {
+  gatherPendingApprovals,
+  type PendingApprovals,
+} from "../_shared/sales-briefing-approvals.ts";
 import { safeCorsHeaders as corsHeaders, optionsResponse } from "../_shared/safe-cors.ts";
 
 const BRIEFING_MODEL = "gpt-5.4-mini";
@@ -23,13 +32,13 @@ async function gatherUserData(
 ): Promise<MorningBriefingData | null> {
   const { data: profile } = await db
     .from("profiles")
-    .select("id, full_name, role")
+    .select("id, full_name, role, active_workspace_id")
     .eq("id", userId)
     .maybeSingle();
 
   if (!profile) return null;
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getDateInTimeZone();
   const sevenDaysOut = new Date();
   sevenDaysOut.setDate(sevenDaysOut.getDate() + 7);
   const weekAhead = sevenDaysOut.toISOString().split("T")[0];
@@ -38,7 +47,11 @@ async function gatherUserData(
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayIso = yesterday.toISOString();
 
-  const [closingDeals, overdueDeals, activities, allDeals, voiceNotes] = await Promise.all([
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const weekAgoIso = weekAgo.toISOString();
+
+  const [closingDeals, overdueDeals, activities, allDeals, voiceNotes, quotes] = await Promise.all([
     db.from("crm_deals")
       .select("id, name, amount, expected_close_on, stage_id, company_id")
       .eq("assigned_rep_id", userId)
@@ -73,6 +86,12 @@ async function gatherUserData(
       .select("id")
       .eq("user_id", userId)
       .gte("created_at", yesterdayIso),
+
+    db.from("quotes")
+      .select("id, title, status")
+      .eq("created_by", userId)
+      .is("deleted_at", null)
+      .gte("created_at", weekAgoIso),
   ]);
 
   // Resolve FKs
@@ -104,7 +123,12 @@ async function gatherUserData(
     userId,
     fullName: (profile as Record<string, unknown>).full_name as string ?? "Team Member",
     role: (profile as Record<string, unknown>).role as string ?? "rep",
+    workspaceId:
+      typeof (profile as Record<string, unknown>).active_workspace_id === "string"
+        ? (profile as Record<string, unknown>).active_workspace_id as string
+        : null,
     dealsClosingSoon: (closingDeals.data ?? []).map((d: Record<string, unknown>) => ({
+      deal_id: d.id as string,
       name: d.name as string,
       amount: d.amount as number | null,
       expected_close: d.expected_close_on as string,
@@ -112,6 +136,7 @@ async function gatherUserData(
       company: companyMap[d.company_id as string] ?? null,
     })),
     overdueFollowUps: (overdueDeals.data ?? []).map((d: Record<string, unknown>) => ({
+      deal_id: d.id as string,
       name: d.name as string,
       amount: d.amount as number | null,
       follow_up_date: d.next_follow_up_at as string,
@@ -124,6 +149,11 @@ async function gatherUserData(
     })),
     pipelineTotal,
     openDealCount: (allDeals.data ?? []).length,
+    quotesSentThisWeek: (quotes.data ?? []).length,
+    // Keep expiring_quotes empty until a reliable expiration/valid-through
+    // field is available on the quote source; quotes_sent_this_week above
+    // still preserves the Sales Today stats signal without mislabeling urgency.
+    expiringQuotes: [],
     newVoiceNotes: (voiceNotes.data ?? []).length,
   };
 }
@@ -133,6 +163,129 @@ function statusToUserMessage(status: string): string {
   if (status === "user_not_found") return "No profile was found for the signed-in user.";
   if (status.startsWith("error:")) return status.slice("error:".length).trim();
   return "Morning briefing did not generate.";
+}
+
+type SalesTodayBriefingContent = {
+  greeting: string;
+  priority_actions: Array<{
+    type: string;
+    customer_name: string | null;
+    deal_id: string | null;
+    summary: string;
+  }>;
+  expiring_quotes: Array<{
+    quote_id: string;
+    customer_name: string | null;
+    equipment: string | null;
+    status: string;
+  }>;
+  opportunities: Array<{ type: string; summary: string }>;
+  prep_cards: Array<{
+    customer_id: string | null;
+    customer_name: string | null;
+    meeting_time: string | null;
+    fleet_summary: string | null;
+    last_interaction: string | null;
+    talking_points: string[];
+  }>;
+  stats: {
+    deals_in_pipeline: number;
+    quotes_sent_this_week: number;
+    total_pipeline_value: number;
+  };
+  pending_approvals: PendingApprovals;
+};
+
+function buildSalesTodayBriefingContent(
+  data: MorningBriefingData,
+  pendingApprovals: PendingApprovals,
+  now: Date = new Date(),
+): SalesTodayBriefingContent {
+  const firstName = data.fullName.split(" ")[0] || data.fullName || "there";
+  const greetingDate = now.toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
+  const priorityActions = [
+    ...data.overdueFollowUps.map((deal) => ({
+      type: "follow_up_overdue",
+      customer_name: deal.company,
+      deal_id: deal.deal_id ?? null,
+      summary: `${deal.name} needs an overdue follow-up from ${deal.follow_up_date}.`,
+    })),
+    ...data.dealsClosingSoon.map((deal) => ({
+      type: "closing_soon",
+      customer_name: deal.company,
+      deal_id: deal.deal_id ?? null,
+      summary: `${deal.name} is closing ${deal.expected_close}${deal.stage ? ` in ${deal.stage}` : ""}.`,
+    })),
+    ...(data.newVoiceNotes > 0
+      ? [{
+        type: "review_voice_notes",
+        customer_name: null,
+        deal_id: null,
+        summary: `Review ${data.newVoiceNotes} new voice note${data.newVoiceNotes === 1 ? "" : "s"} and convert next steps into CRM activity.`,
+      }]
+      : []),
+  ].slice(0, 5);
+
+  return {
+    greeting: `Good morning, ${firstName} — ${greetingDate}.`,
+    priority_actions: priorityActions,
+    expiring_quotes: (data.expiringQuotes ?? []).slice(0, 5).map((quote) => ({
+      quote_id: quote.quote_id,
+      customer_name: quote.customer_name,
+      equipment: quote.title,
+      status: quote.status,
+    })),
+    opportunities: [],
+    prep_cards: [],
+    stats: {
+      deals_in_pipeline: data.openDealCount,
+      quotes_sent_this_week: data.quotesSentThisWeek ?? 0,
+      total_pipeline_value: data.pipelineTotal,
+    },
+    pending_approvals: pendingApprovals,
+  };
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const record = error as Record<string, unknown>;
+  const message = typeof record.message === "string" ? record.message.toLowerCase() : "";
+  return record.code === "23505" || message.includes("duplicate key");
+}
+
+async function reserveMorningBriefing(
+  db: ReturnType<typeof createAdminClient>,
+  userId: string,
+  briefingDate: string,
+): Promise<string | null> {
+  const { data, error } = await db
+    .from("morning_briefings")
+    .insert({
+      user_id: userId,
+      briefing_date: briefingDate,
+      content: "Morning briefing generation is in progress.",
+      audience: "internal",
+      data: {
+        generation_status: "in_progress",
+        reserved_at: new Date().toISOString(),
+      },
+    })
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    if (isUniqueViolation(error)) return null;
+    throw error;
+  }
+
+  const id = (data as Record<string, unknown> | null)?.id;
+  return typeof id === "string" ? id : null;
 }
 
 async function generateBriefing(data: MorningBriefingData): Promise<string> {
@@ -214,29 +367,23 @@ Deno.serve(async (req) => {
   }
 
   const adminClient = createAdminClient();
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  const internalSecretHeader = req.headers.get("x-internal-service-secret") ?? "";
-  // Two env var names exist in this project: INTERNAL_SERVICE_SECRET (used by
-  // flow-runner / analytics-* crons) and DGE_INTERNAL_SERVICE_SECRET (used by
-  // dge-auth.ts). Accept either so the cron works regardless of which is set.
-  const internalServiceSecret =
-    Deno.env.get("INTERNAL_SERVICE_SECRET") ??
-    Deno.env.get("DGE_INTERNAL_SERVICE_SECRET") ??
-    "";
-
-  // Three privileged auth paths:
-  //   1. Bearer <SUPABASE_SERVICE_ROLE_KEY>            — legacy service-role
-  //   2. x-internal-service-secret: <INTERNAL_SECRET>  — modern pg_cron pattern
-  //   3. Bearer <user JWT>                             — per-user, returns own brief
-  const isServiceRole =
-    (serviceRoleKey.length > 0 && authHeader === `Bearer ${serviceRoleKey}`) ||
-    (internalServiceSecret.length > 0 && internalSecretHeader === internalServiceSecret);
+  const isServiceRole = isServiceRoleCaller(req);
 
   // Parse body once so both batch and per-user paths can read flags like
   // { regenerate: true } or { user_ids: [...] }.
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
   const regenerate = body.regenerate === true;
+
+  if (isServiceRole && !shouldRunEtScheduledBatch(body)) {
+    return new Response(JSON.stringify({
+      skipped: true,
+      reason: "outside_enforced_america_new_york_hour",
+      enforce_et_hour: body.enforce_et_hour,
+    }), {
+      status: 200,
+      headers: { ...ch, "Content-Type": "application/json" },
+    });
+  }
 
   let targetUserIds: string[] = [];
 
@@ -277,21 +424,18 @@ Deno.serve(async (req) => {
     targetUserIds = [caller.userId];
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getDateInTimeZone();
   const results: Array<{ userId: string; status: string }> = [];
 
   for (const userId of targetUserIds) {
+    let reservationId: string | null = null;
     try {
-      // Check if already generated today (skip the guard when caller asked for a refresh)
+      // Reserve the unique (user_id, briefing_date) row before expensive data
+      // gathering/OpenAI work. A concurrent first-open loses the reservation
+      // race and returns the row being generated instead of calling OpenAI too.
       if (!regenerate) {
-        const { data: existing } = await adminClient
-          .from("morning_briefings")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("briefing_date", today)
-          .maybeSingle();
-
-        if (existing) {
+        reservationId = await reserveMorningBriefing(adminClient, userId, today);
+        if (!reservationId) {
           results.push({ userId, status: "already_exists" });
           continue;
         }
@@ -306,9 +450,21 @@ Deno.serve(async (req) => {
 
       const data = await gatherUserData(adminClient, userId);
       if (!data) {
+        if (reservationId) {
+          await adminClient.from("morning_briefings").delete().eq("id", reservationId);
+        }
         results.push({ userId, status: "user_not_found" });
         continue;
       }
+
+      const pendingApprovals = await gatherPendingApprovals(
+        adminClient,
+        userId,
+        data.role,
+        data.workspaceId ?? null,
+        "[morning-briefing]",
+      );
+      const salesToday = buildSalesTodayBriefingContent(data, pendingApprovals);
 
       let content: string;
       let usedFallback = false;
@@ -320,7 +476,7 @@ Deno.serve(async (req) => {
         content = buildFallbackMorningBriefing(data);
       }
 
-      const { error: upsertError } = await adminClient.from("morning_briefings").upsert({
+      const briefingPayload = {
         user_id: userId,
         briefing_date: today,
         content,
@@ -332,18 +488,27 @@ Deno.serve(async (req) => {
           overdue_follow_ups: data.overdueFollowUps.length,
           recent_activity_count: data.recentActivities.length,
           new_voice_notes: data.newVoiceNotes,
+          quotes_sent_this_week: data.quotesSentThisWeek ?? 0,
           generation_mode: usedFallback ? "fallback" : "ai",
+          sales_today: salesToday,
         },
-      }, {
-        onConflict: "user_id,briefing_date",
-      });
+      };
 
-      if (upsertError) {
-        throw upsertError;
+      const writeResult = reservationId
+        ? await adminClient.from("morning_briefings").update(briefingPayload).eq("id", reservationId)
+        : await adminClient.from("morning_briefings").upsert(briefingPayload, {
+          onConflict: "user_id,briefing_date",
+        });
+
+      if (writeResult.error) {
+        throw writeResult.error;
       }
 
       results.push({ userId, status: usedFallback ? "generated_fallback" : "generated" });
     } catch (err) {
+      if (reservationId) {
+        await adminClient.from("morning_briefings").delete().eq("id", reservationId);
+      }
       console.error(`[morning-briefing] error for user ${userId}:`, err);
       results.push({ userId, status: `error: ${err instanceof Error ? err.message : "unknown"}` });
     }

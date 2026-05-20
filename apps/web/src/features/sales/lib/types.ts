@@ -1,11 +1,29 @@
 /** Sales Companion type definitions */
 
-export interface DailyBriefing {
+export interface TodayBriefing {
   id: string;
   briefing_date: string;
+  content: string;
+  data: MorningBriefingMetadata;
   briefing_content: BriefingContent;
   created_at: string;
 }
+
+export interface MorningBriefingMetadata {
+  pipeline_total?: number;
+  open_deal_count?: number;
+  closing_this_week?: number;
+  overdue_follow_ups?: number;
+  recent_activity_count?: number;
+  new_voice_notes?: number;
+  quotes_sent_this_week?: number;
+  generation_mode?: "ai" | "fallback" | string;
+  sales_today?: BriefingContent;
+  [key: string]: unknown;
+}
+
+/** @deprecated Sales Today now reads from morning_briefings. */
+export type DailyBriefing = TodayBriefing;
 
 export interface BriefingContent {
   greeting: string;

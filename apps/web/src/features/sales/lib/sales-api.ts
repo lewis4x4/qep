@@ -13,7 +13,7 @@ export async function getWorkspaceId(): Promise<string> {
   return (data as { active_workspace_id: string } | null)?.active_workspace_id ?? "default";
 }
 import type {
-  DailyBriefing,
+  TodayBriefing,
   RepPipelineDeal,
   RepCustomer,
   CustomerEquipment,
@@ -22,7 +22,7 @@ import type {
 import {
   normalizeCustomerActivityRows,
   normalizeCustomerEquipmentRows,
-  normalizeDailyBriefing,
+  normalizeTodayBriefing,
   normalizeDealStageOptions,
   normalizeRepCustomers,
   normalizeRepPipelineDeals,
@@ -89,16 +89,58 @@ export function buildSalesActivityInsertPayload(params: {
   };
 }
 
-export async function fetchTodayBriefing(): Promise<DailyBriefing | null> {
-  const today = new Date().toISOString().split("T")[0];
+function getNewYorkDate(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}`;
+}
+
+type MorningBriefingGenerateResponse = {
+  briefing?: unknown;
+  error?: string;
+};
+
+async function readTodayMorningBriefing(
+  userId: string,
+  today: string,
+): Promise<TodayBriefing | null> {
   const { data, error } = await supabase
-    .from("daily_briefings")
-    .select("id, briefing_date, briefing_content, created_at")
+    .from("morning_briefings")
+    .select("id, content, data, briefing_date, created_at")
+    .eq("user_id", userId)
     .eq("briefing_date", today)
     .maybeSingle();
 
   if (error) throw error;
-  return normalizeDailyBriefing(data);
+  return normalizeTodayBriefing(data);
+}
+
+export async function fetchTodayBriefing(): Promise<TodayBriefing | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const today = getNewYorkDate();
+  const existing = await readTodayMorningBriefing(user.id, today);
+  if (existing) return existing;
+
+  const { data, error } = await supabase.functions.invoke<MorningBriefingGenerateResponse>(
+    "morning-briefing",
+    { body: { regenerate: false } },
+  );
+
+  if (error) {
+    throw new Error(error.message || "morning-briefing generation failed");
+  }
+
+  const generated = normalizeTodayBriefing(data?.briefing);
+  if (generated) return generated;
+
+  return readTodayMorningBriefing(user.id, today);
 }
 
 export async function fetchRepPipeline(): Promise<RepPipelineDeal[]> {

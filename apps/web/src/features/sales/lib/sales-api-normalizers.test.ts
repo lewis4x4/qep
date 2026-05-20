@@ -4,12 +4,58 @@ import {
   normalizeCustomerEquipmentRows,
   normalizeDailyBriefing,
   normalizeDealStageOptions,
+  normalizeTodayBriefing,
   normalizeRepCustomers,
   normalizeRepPipelineDeals,
 } from "./sales-api-normalizers";
 
 describe("sales API normalizers", () => {
-  test("normalizes daily briefing payloads with safe nested defaults", () => {
+  test("normalizes morning briefing rows with sales_today projection", () => {
+    const briefing = normalizeTodayBriefing({
+      id: "brief-1",
+      briefing_date: "2026-05-03",
+      content: "# Morning",
+      data: {
+        sales_today: {
+          greeting: "Morning",
+          priority_actions: [{ type: "call", customer_name: "ACME", deal_id: "deal-1", summary: "Call ACME" }],
+          expiring_quotes: [{ quote_id: "quote-1", customer_name: "ACME", equipment: null, status: "open" }],
+          opportunities: [{ type: "trade_up", summary: "Trade-up opportunity" }],
+          prep_cards: [{ customer_id: "company-1", meeting_time: "2026-05-03T14:00:00Z", talking_points: ["Budget"] }],
+          stats: { deals_in_pipeline: "4", quotes_sent_this_week: "2", total_pipeline_value: "125000" },
+        },
+      },
+      created_at: "2026-05-03T12:00:00Z",
+    });
+
+    expect(briefing?.content).toBe("# Morning");
+    expect(briefing?.briefing_content.stats).toEqual({
+      deals_in_pipeline: 4,
+      quotes_sent_this_week: 2,
+      total_pipeline_value: 125000,
+    });
+    expect(briefing?.briefing_content.priority_actions).toHaveLength(1);
+    expect(briefing?.briefing_content.prep_cards[0]?.talking_points).toEqual(["Budget"]);
+  });
+
+  test("derives safe stats for legacy morning briefing rows without sales_today", () => {
+    const briefing = normalizeTodayBriefing({
+      id: "brief-legacy",
+      briefing_date: "2026-05-03",
+      content: "# Legacy",
+      data: { open_deal_count: "7", pipeline_total: "250000", quotes_sent_this_week: "3" },
+      created_at: "2026-05-03T12:00:00Z",
+    });
+
+    expect(briefing?.briefing_content.priority_actions).toEqual([]);
+    expect(briefing?.briefing_content.stats).toEqual({
+      deals_in_pipeline: 7,
+      quotes_sent_this_week: 3,
+      total_pipeline_value: 250000,
+    });
+  });
+
+  test("keeps deprecated daily briefing payload normalization", () => {
     const briefing = normalizeDailyBriefing({
       id: "brief-1",
       briefing_date: "2026-05-03",
@@ -129,6 +175,7 @@ describe("sales API normalizers", () => {
 
   test("returns safe empty values for malformed inputs", () => {
     expect(normalizeDailyBriefing({})).toBeNull();
+    expect(normalizeTodayBriefing({})).toBeNull();
     expect(normalizeRepPipelineDeals(null)).toEqual([]);
     expect(normalizeRepCustomers(null)).toEqual([]);
     expect(normalizeCustomerEquipmentRows(null)).toEqual([]);

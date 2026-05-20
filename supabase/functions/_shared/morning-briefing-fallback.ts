@@ -2,7 +2,9 @@ export interface MorningBriefingData {
   userId: string;
   fullName: string;
   role: string;
+  workspaceId?: string | null;
   dealsClosingSoon: Array<{
+    deal_id?: string;
     name: string;
     amount: number | null;
     expected_close: string;
@@ -10,6 +12,7 @@ export interface MorningBriefingData {
     company: string | null;
   }>;
   overdueFollowUps: Array<{
+    deal_id?: string;
     name: string;
     amount: number | null;
     follow_up_date: string;
@@ -22,6 +25,13 @@ export interface MorningBriefingData {
   }>;
   pipelineTotal: number;
   openDealCount: number;
+  quotesSentThisWeek?: number;
+  expiringQuotes?: Array<{
+    quote_id: string;
+    title: string | null;
+    customer_name: string | null;
+    status: string;
+  }>;
   newVoiceNotes: number;
 }
 

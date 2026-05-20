@@ -5,11 +5,13 @@ import type {
   CustomerEquipmentSummary,
   DailyBriefing,
   HeatStatus,
+  MorningBriefingMetadata,
   ManagerPendingApproval,
   PendingApprovals,
   RepCustomer,
   RepPipelineDeal,
   RepStuckApproval,
+  TodayBriefing,
 } from "./types";
 
 export interface DealStageOption {
@@ -168,6 +170,46 @@ function normalizeBriefingContent(value: unknown): BriefingContent {
   };
 }
 
+export function normalizeMorningBriefingMetadata(value: unknown): MorningBriefingMetadata {
+  return isRecord(value) ? { ...value } as MorningBriefingMetadata : {};
+}
+
+export function normalizeBriefingContentFromMorningData(
+  data: MorningBriefingMetadata,
+): BriefingContent {
+  if (isRecord(data.sales_today)) {
+    return normalizeBriefingContent(data.sales_today);
+  }
+
+  return normalizeBriefingContent({
+    stats: {
+      deals_in_pipeline: data.open_deal_count,
+      quotes_sent_this_week: data.quotes_sent_this_week,
+      total_pipeline_value: data.pipeline_total,
+    },
+  });
+}
+
+export function normalizeTodayBriefing(row: unknown): TodayBriefing | null {
+  if (!isRecord(row)) return null;
+  const id = stringOrNull(row.id);
+  const briefingDate = stringOrNull(row.briefing_date);
+  const createdAt = validDateStringOrNull(row.created_at);
+  const content = typeof row.content === "string" ? row.content : "";
+  if (!id || !briefingDate || !createdAt) return null;
+
+  const data = normalizeMorningBriefingMetadata(row.data);
+  return {
+    id,
+    briefing_date: briefingDate,
+    content,
+    data,
+    briefing_content: normalizeBriefingContentFromMorningData(data),
+    created_at: createdAt,
+  };
+}
+
+/** @deprecated Sales Today now reads morning_briefings via normalizeTodayBriefing. */
 export function normalizeDailyBriefing(row: unknown): DailyBriefing | null {
   if (!isRecord(row)) return null;
   const id = stringOrNull(row.id);
@@ -178,6 +220,8 @@ export function normalizeDailyBriefing(row: unknown): DailyBriefing | null {
   return {
     id,
     briefing_date: briefingDate,
+    content: "",
+    data: {},
     briefing_content: normalizeBriefingContent(row.briefing_content),
     created_at: createdAt,
   };
