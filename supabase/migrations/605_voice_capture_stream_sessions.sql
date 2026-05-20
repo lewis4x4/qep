@@ -25,7 +25,7 @@ create table if not exists public.voice_capture_stream_sessions (
   expected_chunk_count integer check (expected_chunk_count is null or expected_chunk_count >= 0),
   transcript text,
   voice_capture_id uuid references public.voice_captures(id) on delete set null,
-  crm_activity_id uuid references public.crm_activities(id) on delete set null,
+  crm_activity_id uuid references public.qrm_activities(id) on delete set null,
   sync_error text,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
@@ -76,7 +76,7 @@ create index if not exists voice_capture_stream_chunks_session_index_idx
   on public.voice_capture_stream_chunks(session_id, chunk_index);
 
 create unique index if not exists crm_activities_voice_capture_stream_capture_unique_idx
-  on public.crm_activities(
+  on public.qrm_activities(
     workspace_id,
     (metadata ->> 'voiceCaptureId'),
     (metadata ->> 'activityKind')
