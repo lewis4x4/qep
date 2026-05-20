@@ -23,8 +23,9 @@
  *     ::warning:: when it falls back to this mode.
  *   - LHCI_AUTHENTICATED="true": the puppeteerScript at
  *     scripts/lighthouse-puppeteer-auth.cjs loads the storage state
- *     captured by scripts/lighthouse-auth-setup.mjs into the headless
- *     browser before each audit, so SalesShell renders for real
+ *     captured by scripts/lighthouse-auth-setup.mjs (which now verifies
+ *     the /sales/today signed-in canary before writing state) into the
+ *     headless browser before each audit, so SalesShell renders for real
  *     instead of bouncing through the login redirect.
  *   - LHCI_GUEST_FALLBACK="true": no credentials are available. Routes
  *     still prove reachability and accessibility/CLS, but performance is

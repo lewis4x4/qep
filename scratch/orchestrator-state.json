@@ -492,38 +492,36 @@
     }
   },
   "current_task": {
-    "task_id": "A5.10",
-    "linear": "QEP-42",
+    "task_id": "A6.1",
+    "linear": "QEP-43",
     "stream": "A",
-    "wave": "A5",
-    "goal": "Build QB-14 realistic demo seed with deterministic IDs, idempotent natural-key guards, and provenance metadata for QRM/Quote Builder demos.",
-    "status": "committed_pending_push",
+    "wave": "A6",
+    "goal": "Harden existing bundle size and Lighthouse CI infrastructure beyond the basic Fix D guard.",
+    "status": "verified_pending_commit",
     "expected_files": [
-      "supabase/migrations/603_seed_realistic_data.sql",
-      "scripts/demo/seed-ids.mjs",
-      "scripts/demo/verify-seed.mjs",
-      "supabase/migrations/README.md"
+      ".github/workflows/lighthouse-mobile.yml",
+      "apps/web/.lighthouserc.cjs",
+      "apps/web/scripts/lighthouse-auth-setup.mjs"
     ],
     "acceptance": [
-      "Seed is deterministic and rerunnable through natural-key/on-conflict guards.",
-      "Seed populates QRM base tables for companies, contacts, equipment, deals, and activities without live VitalEdge/IntelliDealer/API dependencies.",
-      "Seed carries provenance metadata for the QB-14 demo batch.",
-      "Verification covers service-role data presence and authenticated app/RLS Quote Builder visibility requirements."
+      "Authenticated Lighthouse storage-state setup must verify a stable signed-in sales route before writing state.",
+      "Guest fallback remains limited to missing credentials; bad/wrong-role credentials fail authenticated CI.",
+      "No app UI changes, new dependencies, or bundle-budget behavior changes are introduced.",
+      "Existing bundle guard still passes after production build."
     ],
     "verification": [
-      "bun run migrations:check",
-      "node --check scripts/demo/verify-seed.mjs",
-      "node --check scripts/demo/seed-ids.mjs",
-      "QB-14 post-fix static seed/auth verifier checks",
+      "node --check apps/web/scripts/lighthouse-auth-setup.mjs",
+      "bun run --cwd apps/web lighthouse:auth-setup without env exits 1 with expected missing-env message",
+      "Oracle review P1 fixed: canary now waits for /sales/today plus visible data-testid=sales-shell before writing state",
+      "data-testid=sales-shell selector verified in apps/web/src/features/sales/SalesShell.tsx",
+      "bun run build:web",
+      "bun run bundle:check (index entry 183106 bytes / 178.8 KiB <= 199711 bytes / 195.0 KiB)",
       "git diff --check",
-      "Oracle review P1 fixed: verify-seed now includes authenticated app/RLS checks",
-      "targeted KB integration rerun after unrelated flaky gate: deno test supabase/functions/knowledge-base.integration.test.ts --allow-env --allow-net --allow-read",
-      "bun run segment:gates --segment A5.10-qb-14-realistic-demo-seed --ui"
+      "bun run segment:gates --segment A6.1-bundle-size-lighthouse-hardening --ui"
     ],
-    "gate_report": "test-results/agent-gates/20260520T195039Z-A5.10-qb-14-realistic-demo-seed.json",
-    "oracle_review": "one P1 fixed; no remaining A5.10 blockers after targeted and full-gate verification",
-    "deployment_needs": "Apply migrations 602 and 603 after reconciling remote migration version 20260520154601; local Supabase apply was not run because port 54322 is already allocated by another local Supabase project.",
-    "updated_at": "2026-05-20T19:52:01.903522+00:00",
-    "release_pushed": false
+    "gate_report": "test-results/agent-gates/20260520T200419Z-A6.1-bundle-size-lighthouse-hardening.json",
+    "oracle_review": "one P1 fixed; no remaining A6.1 blockers after targeted verification and full segment gate",
+    "deployment_needs": "No database or edge deploy. Requires CI secrets PLAYWRIGHT_TEST_EMAIL and PLAYWRIGHT_TEST_PASSWORD to exercise authenticated Lighthouse; fork/no-secret PRs continue guest fallback.",
+    "updated_at": "2026-05-20T20:04:52.398563+00:00"
   }
 }

@@ -3,7 +3,8 @@
  * WAVE Quality Tail — Slice 1: Lighthouse storage-state generator.
  *
  * Drives a Playwright sign-in against LHCI_BASE_URL with rep test
- * credentials and writes the resulting auth state to disk. The
+ * credentials, verifies the authenticated sales canary route
+ * (/sales/today), and only then writes auth state to disk. The
  * companion puppeteerScript (./lighthouse-puppeteer-auth.cjs) loads
  * that state before each Lighthouse audit so /sales/* routes audit
  * as a real rep instead of redirecting to the login page.
@@ -40,6 +41,35 @@ if (!baseUrl || !email || !password) {
 }
 
 const outputPath = resolve(__dirname, "..", ".lighthouse-storage-state.json");
+const AUTH_CANARY_PATH = "/sales/today";
+
+function resolveAppUrl(origin, path) {
+  return new URL(path, origin).toString();
+}
+
+async function assertAuthenticatedSalesCanary(page, canaryUrl) {
+  await page.goto(canaryUrl, { waitUntil: "domcontentloaded" });
+  await page.waitForURL((url) => url.pathname === AUTH_CANARY_PATH, { timeout: 30_000 });
+  await page.locator('[data-testid="sales-shell"]').waitFor({ state: "visible", timeout: 30_000 });
+  // Give SPA auth/route guards one more beat so we don't snapshot a transient state.
+  await page.waitForTimeout(1_000);
+
+  const finalUrl = new URL(page.url());
+  if (finalUrl.pathname !== AUTH_CANARY_PATH) {
+    throw new Error(
+      `[lighthouse-auth-setup] authenticated canary failed: expected stable ${AUTH_CANARY_PATH}, got ${finalUrl.toString()}`,
+    );
+  }
+
+  for (const selector of ["#email-pw", "#password", "#login-button"]) {
+    const loginControl = page.locator(selector);
+    if (await loginControl.isVisible()) {
+      throw new Error(
+        `[lighthouse-auth-setup] authenticated canary failed: login control ${selector} is still visible at ${finalUrl.toString()}`,
+      );
+    }
+  }
+}
 
 const browser = await chromium.launch();
 const context = await browser.newContext();
@@ -54,11 +84,17 @@ try {
   await page.locator("#email-pw").fill(email);
   await page.locator("#password").fill(password);
   await page.locator("#login-button").click();
-  // Wait until we leave /login. SalesShell drops reps on /sales/today,
-  // other roles land on /floor or /dashboard.
-  await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
-    timeout: 30_000,
-  });
+  // Wait for a concrete post-login destination before running the sales canary.
+  // Reps land in /sales/*; other roles often land on /floor or /dashboard.
+  await page.waitForURL(
+    (url) =>
+      url.pathname.startsWith("/sales/") ||
+      url.pathname.startsWith("/floor") ||
+      url.pathname.startsWith("/dashboard"),
+    { timeout: 30_000 },
+  );
+  const canaryUrl = resolveAppUrl(baseUrl, AUTH_CANARY_PATH);
+  await assertAuthenticatedSalesCanary(page, canaryUrl);
   await context.storageState({ path: outputPath });
   console.log(
     `[lighthouse-auth-setup] wrote storage state to ${outputPath}`,

@@ -8,7 +8,8 @@
 #
 #   Authenticated (when PLAYWRIGHT_TEST_EMAIL + PLAYWRIGHT_TEST_PASSWORD
 #   secrets are available — same-repo PRs and workflow_dispatch):
-#     1. `bun run lighthouse:auth-setup` signs in via Playwright and
+#     1. `bun run lighthouse:auth-setup` signs in via Playwright,
+#        verifies /sales/today as a signed-in sales canary, and then
 #        writes apps/web/.lighthouse-storage-state.json.
 #     2. `bunx lhci autorun` runs with LHCI_AUTHENTICATED=true so the
 #        puppeteerScript at scripts/lighthouse-puppeteer-auth.cjs
@@ -83,7 +84,7 @@ jobs:
           echo "::error::Deploy preview did not become reachable: $LHCI_BASE_URL"
           exit 1
 
-      - name: Capture authenticated storage state
+      - name: Capture + verify authenticated sales storage state
         if: env.HAS_CREDS == 'true'
         env:
           PLAYWRIGHT_TEST_EMAIL: ${{ secrets.PLAYWRIGHT_TEST_EMAIL }}
