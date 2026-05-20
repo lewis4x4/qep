@@ -388,8 +388,17 @@
     "wave": "A3",
     "linear_issue_identifier": "QEP-21",
     "linear_url": "https://linear.app/jarvislewis/issue/QEP-21/a38-m8-versioned-immutable-pdfs-in-r2",
-    "status": "item_4_review_passed_final_gates_pending",
-    "plan_export": "/Users/brianlewis/Projects/qep-knowledge-assistant/prompt-exports/oracle-plan-2026-05-20-095744-a3-8-pdf-versioning-225b.md",
+    "status": "blocked_manual_r2_runtime_prerequisites",
+    "plan_export": null,
+    "release_commit": "04b39385798ab5797133bf909d8e3365fb5f1678",
+    "release_pushed": true,
+    "deployment": {
+      "migration_deployed": true,
+      "edge_function": "quote-builder-v2",
+      "edge_version": 81,
+      "project_ref": "iciddijgonywtxoelous",
+      "r2_runtime_prerequisites": "blocked: missing R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_QUOTE_PDFS; R2 bucket CORS browser PUT not verified"
+    },
     "work_items": [
       {
         "id": "A3.8-1",
@@ -433,13 +442,28 @@
       {
         "id": "A3.8-5",
         "goal": "Final gates/deploy/roadmap update",
-        "status": "pending",
+        "status": "blocked_manual_r2_runtime_prerequisites",
         "depends_on": [
           "A3.8-4"
-        ]
+        ],
+        "release_agent_session_id": "4BC1BB8D-E5D8-4D0C-AA9D-2F88BE98944C",
+        "oracle_review_export": "deleted_after_consumed",
+        "verification": [
+          "focused quote-builder tests",
+          "migrations:check",
+          "audit:edges",
+          "audit:secrets",
+          "apps/web typecheck",
+          "apps/web build",
+          "deno check r2-storage + quote-builder-v2",
+          "quote financial integrity regression",
+          "git diff --check"
+        ],
+        "roadmap_shipped": false,
+        "manual_task_logged": true
       }
     ],
     "migration_constraint": "Existing untracked migrations 593-598 remain in workspace; A3.8 migration work must inspect latest and avoid collisions, likely 599+ only if safe.",
-    "updated_at": "2026-05-20T11:05:00-04:00"
+    "updated_at": "2026-05-20T11:25:00-04:00"
   }
 }
