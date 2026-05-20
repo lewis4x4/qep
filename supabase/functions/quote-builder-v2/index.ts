@@ -1934,21 +1934,8 @@ async function handlePublicDealRoomRead(url: URL, origin: string | null): Promis
   // reps can stash share_tokens earlier for setup, but we don't leak
   // in-progress drafts. If the rep wants to share a draft, they can
   // save-to-draft-then-send; status flips forward then.
-  const status = typeof quote.status === "string" ? quote.status : "draft";
-  const shareableStatuses = new Set([
-    "ready",
-    "sent",
-    "viewed",
-    "countered",
-    "accepted",
-    "rejected",
-    "expired",
-    "approved",
-    "approved_with_conditions",
-  ]);
-  if (!shareableStatuses.has(status)) {
-    return safeJsonError("Quote is not shareable in its current state", 403, origin);
-  }
+  const statusGate = assertPublicQuoteReadableStatus(quote as Record<string, unknown>);
+  if (!statusGate.ok) return safeJsonError(statusGate.message, statusGate.status, origin);
 
   const readGate = assertPublicQuoteReadReady(quote as Record<string, unknown>);
   if (!readGate.ok) {
@@ -2584,6 +2571,284 @@ function generateShareToken(): string {
   // for a tidier URL. crypto.randomUUID is cryptographically random in
   // Deno (see whatwg-webcrypto).
   return globalThis.crypto.randomUUID().replace(/-/g, "");
+}
+
+const PUBLIC_QUOTE_READ_STATUSES = new Set([
+  "ready",
+  "sent",
+  "viewed",
+  "countered",
+  "accepted",
+  "rejected",
+  "expired",
+  "approved",
+  "approved_with_conditions",
+]);
+
+function assertPublicQuoteReadableStatus(row: Record<string, unknown>): { ok: true } | { ok: false; message: string; status: number } {
+  const status = typeof row.status === "string" ? row.status : "draft";
+  if (PUBLIC_QUOTE_READ_STATUSES.has(status)) return { ok: true };
+  return { ok: false, message: "Quote is not shareable in its current state", status: 403 };
+}
+
+async function sha256HexText(value: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function quoteFeedbackBodyLabel(input: {
+  quoteNumber: string | null;
+  npsScore: number;
+  fitScore: number;
+  contactRequested: boolean;
+}): string {
+  const quoteLabel = input.quoteNumber ? `Quote ${input.quoteNumber}` : "Customer quote";
+  const followUpLabel = input.contactRequested ? " Customer asked for follow-up." : "";
+  return `${quoteLabel} feedback: NPS ${input.npsScore}/10 · fit ${input.fitScore}/5.${followUpLabel}`;
+}
+
+async function resolveLatestSentQuoteRepUserId(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  quotePackageId: string;
+}): Promise<string | null> {
+  const { data, error } = await input.admin
+    .from("quote_delivery_events")
+    .select("created_by")
+    .eq("quote_package_id", input.quotePackageId)
+    .eq("channel", "email")
+    .eq("status", "sent")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.warn("quote feedback rep resolve failed:", error);
+    return null;
+  }
+  return typeof data?.created_by === "string" && UUID_RE.test(data.created_by) ? data.created_by : null;
+}
+
+async function handlePublicQuoteFeedback(
+  req: Request,
+  url: URL,
+  origin: string | null,
+): Promise<Response> {
+  const token = url.searchParams.get("token")?.trim();
+  if (!token) return safeJsonError("token required", 400, origin);
+  if (token.length < 16 || token.length > 128) return safeJsonError("invalid token", 400, origin);
+
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return safeJsonError("invalid payload", 400, origin);
+  }
+  const payload = body as Record<string, unknown>;
+  const clientSubmissionId = typeof payload.client_submission_id === "string" ? payload.client_submission_id.trim() : "";
+  if (!UUID_RE.test(clientSubmissionId)) return safeJsonError("client_submission_id must be a valid UUID", 400, origin);
+
+  const npsScore = Number(payload.nps_score);
+  if (!Number.isInteger(npsScore) || npsScore < 0 || npsScore > 10) {
+    return safeJsonError("nps_score must be an integer between 0 and 10", 400, origin);
+  }
+  const fitScore = Number(payload.fit_score);
+  if (!Number.isInteger(fitScore) || fitScore < 1 || fitScore > 5) {
+    return safeJsonError("fit_score must be an integer between 1 and 5", 400, origin);
+  }
+
+  const missingOrUnclear = typeof payload.missing_or_unclear === "string"
+    ? payload.missing_or_unclear.trim().slice(0, 1000)
+    : null;
+  const submittedName = typeof payload.submitted_name === "string"
+    ? payload.submitted_name.trim().slice(0, 200)
+    : null;
+  const submittedEmailRaw = typeof payload.submitted_email === "string"
+    ? payload.submitted_email.trim().slice(0, 320)
+    : null;
+  if (submittedEmailRaw && !submittedEmailRaw.includes("@")) {
+    return safeJsonError("submitted_email must be a valid email", 400, origin);
+  }
+  const source = payload.source === "deal_room" || payload.source === "email_link" ? payload.source : "qr_landing";
+  const contactRequested = payload.contact_requested === true;
+
+  const admin = createAdminClient();
+  const { data: quote, error: quoteErr } = await admin
+    .from("quote_packages")
+    .select("id, workspace_id, deal_id, contact_id, company_id, quote_number, customer_name, customer_company, status, expires_at, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
+    .eq("share_token", token)
+    .maybeSingle();
+  if (quoteErr) return safeJsonError("Failed to load quote", 500, origin);
+  if (!quote) return safeJsonError("Quote not found", 404, origin);
+
+  const statusGate = assertPublicQuoteReadableStatus(quote as Record<string, unknown>);
+  if (!statusGate.ok) return safeJsonError(statusGate.message, statusGate.status, origin);
+
+  const readGate = assertPublicQuoteReadReady(quote as Record<string, unknown>);
+  if (!readGate.ok) {
+    return safeJsonErrorWithFields(readGate.message, readGate.status, origin, { blockers: readGate.blockers ?? [] });
+  }
+
+  const sinceIso = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count: recentCount, error: countErr } = await admin
+    .from("quote_customer_feedback")
+    .select("id", { count: "exact", head: true })
+    .eq("quote_package_id", quote.id)
+    .gte("created_at", sinceIso);
+  if (countErr) return safeJsonError("Failed to validate feedback rate", 500, origin);
+  if ((recentCount ?? 0) >= 20) {
+    return safeJsonError("Too many feedback submissions for this quote. Please try again later.", 429, origin);
+  }
+
+  const { data: latestArtifact } = await admin
+    .from("quote_document_artifacts")
+    .select("id, quote_package_version_id")
+    .eq("quote_package_id", quote.id)
+    .eq("artifact_type", "customer_quote_pdf")
+    .eq("storage_provider", "r2")
+    .not("customer_visible_at", "is", null)
+    .order("version_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const repUserId = await resolveLatestSentQuoteRepUserId({
+    admin,
+    quotePackageId: String(quote.id),
+  });
+
+  const signerIp = req.headers.get("cf-connecting-ip")
+    || req.headers.get("x-real-ip")
+    || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    || null;
+  const ipHash = signerIp ? await sha256HexText(signerIp) : null;
+  const userAgent = req.headers.get("user-agent")?.slice(0, 500) ?? null;
+
+  const insertPayload = {
+    workspace_id: typeof quote.workspace_id === "string" ? quote.workspace_id : "default",
+    quote_package_id: quote.id,
+    quote_package_version_id: latestArtifact?.quote_package_version_id ?? null,
+    quote_document_artifact_id: latestArtifact?.id ?? null,
+    deal_id: quote.deal_id ?? null,
+    contact_id: quote.contact_id ?? null,
+    company_id: quote.company_id ?? null,
+    source,
+    client_submission_id: clientSubmissionId,
+    nps_score: npsScore,
+    fit_score: fitScore,
+    missing_or_unclear: missingOrUnclear,
+    contact_requested: contactRequested,
+    submitted_name: submittedName,
+    submitted_email: submittedEmailRaw,
+    user_agent: userAgent,
+    ip_hash: ipHash,
+    rep_user_id: repUserId,
+    metadata: {
+      quote_number: quote.quote_number ?? null,
+      token_source: "public-feedback",
+    },
+  };
+
+  const { data: feedbackRow, error: feedbackErr } = await admin
+    .from("quote_customer_feedback")
+    .insert(insertPayload)
+    .select("id, rep_user_id, workspace_id")
+    .single();
+
+  if (isUniqueConstraintError(feedbackErr)) {
+    const { data: existing } = await admin
+      .from("quote_customer_feedback")
+      .select("id, lifecycle_event_id, rep_notified_at")
+      .eq("quote_package_id", quote.id)
+      .eq("client_submission_id", clientSubmissionId)
+      .maybeSingle();
+    return safeJsonOk({
+      ok: true,
+      feedback_id: existing?.id ?? null,
+      deduped: true,
+      rep_notified: Boolean(existing?.rep_notified_at),
+      lifecycle_event_id: existing?.lifecycle_event_id ?? null,
+    }, origin);
+  }
+  if (feedbackErr || !feedbackRow?.id) {
+    console.error("public feedback insert error:", feedbackErr);
+    return safeJsonError(feedbackErr?.message || "Failed to save feedback", 500, origin);
+  }
+
+  const { data: lifecycleRow, error: lifecycleErr } = await admin
+    .from("customer_lifecycle_events")
+    .insert({
+      workspace_id: feedbackRow.workspace_id,
+      company_id: quote.company_id ?? null,
+      event_type: "nps_response",
+      source_table: "quote_customer_feedback",
+      source_id: feedbackRow.id,
+      metadata: {
+        quote_package_id: quote.id,
+        quote_number: quote.quote_number ?? null,
+        feedback_id: feedbackRow.id,
+        nps_score: npsScore,
+        fit_score: fitScore,
+        contact_requested: contactRequested,
+        has_missing_or_unclear_text: Boolean(missingOrUnclear),
+        source,
+      },
+    })
+    .select("id")
+    .single();
+  if (lifecycleErr) {
+    console.error("public feedback lifecycle insert error:", lifecycleErr);
+    return safeJsonError("Failed to save lifecycle event", 500, origin);
+  }
+
+  await admin
+    .from("quote_customer_feedback")
+    .update({ lifecycle_event_id: lifecycleRow.id })
+    .eq("id", feedbackRow.id);
+
+  let repNotified = false;
+  if (typeof feedbackRow.rep_user_id === "string" && UUID_RE.test(feedbackRow.rep_user_id)) {
+    const { error: notifyErr } = await admin
+      .from("crm_in_app_notifications")
+      .insert({
+        workspace_id: feedbackRow.workspace_id,
+        user_id: feedbackRow.rep_user_id,
+        kind: "quote_feedback_submitted",
+        title: "Customer feedback on quote",
+        body: quoteFeedbackBodyLabel({
+          quoteNumber: typeof quote.quote_number === "string" ? quote.quote_number : null,
+          npsScore,
+          fitScore,
+          contactRequested,
+        }),
+        deal_id: quote.deal_id ?? null,
+        metadata: {
+          type: "quote_feedback_submitted",
+          link: `/sales/quotes/new?packageId=${quote.id}`,
+          quote_package_id: quote.id,
+          quote_number: quote.quote_number ?? null,
+          feedback_id: feedbackRow.id,
+          nps_score: npsScore,
+          fit_score: fitScore,
+          contact_requested: contactRequested,
+          source,
+        },
+      });
+
+    if (notifyErr) {
+      console.warn("public feedback rep notification insert failed:", notifyErr);
+    } else {
+      repNotified = true;
+      await admin
+        .from("quote_customer_feedback")
+        .update({ rep_notified_at: new Date().toISOString() })
+        .eq("id", feedbackRow.id);
+    }
+  }
+
+  return safeJsonOk({
+    ok: true,
+    feedback_id: feedbackRow.id,
+    deduped: false,
+    rep_notified: repNotified,
+    lifecycle_event_id: lifecycleRow.id,
+  }, origin, 201);
 }
 
 function buildDealRoomUrl(token: string | null, requestOrigin: string | null): string | null {
@@ -3963,6 +4228,9 @@ Deno.serve(async (req) => {
     }
     if (req.method === "POST" && publicAction === "public-accept") {
       return await handlePublicAccept(req, publicUrl, origin);
+    }
+    if (req.method === "POST" && publicAction === "public-feedback") {
+      return await handlePublicQuoteFeedback(req, publicUrl, origin);
     }
     if (req.method === "GET" && publicAction === "public-social-proof") {
       return await handlePublicSocialProof(publicUrl, origin);
@@ -7448,6 +7716,59 @@ Deno.serve(async (req) => {
       });
 
       return safeJsonOk({ signature: data, document_hash: documentHash }, origin, 201);
+    }
+
+    // ── POST /ensure-share-token: Stable token/public URL issuance ─────
+    // Idempotent public link issuance for send/QR flows. Reuses the same
+    // shareability gates as /share but does not rotate existing tokens.
+    if (action === "ensure-share-token") {
+      if (!body.quote_package_id || typeof body.quote_package_id !== "string") {
+        return safeJsonError("quote_package_id required", 400, origin);
+      }
+
+      const { data: existing, error: loadErr } = await supabase
+        .from("quote_packages")
+        .select("id, workspace_id, status, margin_pct, share_token, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
+        .eq("id", body.quote_package_id)
+        .maybeSingle();
+      if (loadErr) return safeJsonError(loadErr.message, 500, origin);
+      if (!existing) return safeJsonError("Quote package not found or not accessible", 404, origin);
+
+      const admin = createAdminClient();
+      const shareGate = await assertQuoteCustomerShareable({
+        admin,
+        workspaceId: typeof existing.workspace_id === "string" ? existing.workspace_id : userWorkspaceId,
+        quotePackageId: String(existing.id),
+        status: String(existing.status ?? "draft"),
+        marginPct: typeof existing.margin_pct === "number" ? existing.margin_pct : null,
+        quote: existing as Record<string, unknown>,
+      });
+      if (!shareGate.ok) {
+        return safeJsonErrorWithFields(shareGate.message, 409, origin, { blockers: shareGate.blockers ?? [] });
+      }
+
+      let token = typeof existing.share_token === "string" && existing.share_token.length >= 16
+        ? existing.share_token
+        : null;
+      if (!token) {
+        token = generateShareToken();
+        const { error: updateErr } = await admin
+          .from("quote_packages")
+          .update({
+            share_token: token,
+            share_token_created_at: new Date().toISOString(),
+          })
+          .eq("id", body.quote_package_id);
+        if (updateErr) {
+          console.error("ensure-share-token update error:", updateErr);
+          return safeJsonError(updateErr.message || "Failed to issue share token", 500, origin);
+        }
+      }
+
+      return safeJsonOk({
+        token,
+        public_url: buildDealRoomUrl(token, origin),
+      }, origin);
     }
 
     // ── POST /share: Issue or rotate the public deal-room token ───────
