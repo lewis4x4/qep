@@ -7,6 +7,7 @@ import { AskIronAdvisorButton } from "@/components/primitives";
 import { cn } from "@/lib/utils";
 
 import { MobileBottomSheet } from "@/features/sales/components/MobileBottomSheet";
+import { MobileStickyActionBar } from "@/features/sales/components/MobileStickyActionBar";
 
 import { DealAssistantTrigger } from "./ConversationalDealEngine";
 import { DealCoachSidebar } from "./DealCoachSidebar";
@@ -14,7 +15,6 @@ import { MarginFloorGate } from "./MarginFloorGate";
 import { QuoteBuilderOverlays } from "./QuoteBuilderOverlays";
 import { QuoteBuilderStatusBanners } from "./QuoteBuilderStatusBanners";
 import type { QuoteBuilderV2PageShellProps } from "./QuoteBuilderV2PageShell";
-import { useWizard } from "../wizard/useWizard";
 import { WIZARD_STEPS, type AutoSaveState, type Step } from "../wizard/wizard-types";
 
 type SectionId = "who_what" | "price" | "refine" | "send";
@@ -142,6 +142,7 @@ export function QuoteBuilderV2PageMobileShell({
   primaryActionPending,
   primaryActionShowsSendIcon,
   onPrimaryAction,
+  onSaveDraft,
   draft,
   step,
   dealAssistantOpen,
@@ -179,7 +180,6 @@ export function QuoteBuilderV2PageMobileShell({
   quoteStatus,
 }: QuoteBuilderV2PageShellProps) {
   const navigate = useNavigate();
-  const wizard = useWizard();
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [openSection, setOpenSection] = useState<"iron" | "coach" | "talk" | null>(null);
 
@@ -187,8 +187,7 @@ export function QuoteBuilderV2PageMobileShell({
   const activeSectionTone = mobileSectionToneForStep(step);
   const totalSteps = WIZARD_STEPS.length;
   const autosave = autosaveDisplay(autoSaveState, displayedSavedLabel);
-
-  const previousStep: Step | null = wizard.previousWizardStep;
+  const showProspectCta = !hasCustomer && step === "customer";
 
   function toggleSection(id: "iron" | "coach" | "talk") {
     setOpenSection((current) => (current === id ? null : id));
@@ -323,56 +322,66 @@ export function QuoteBuilderV2PageMobileShell({
       </main>
 
       <div
-        className="fixed inset-x-0 z-40 border-t border-white/[0.06] bg-[hsl(var(--background))]/95 backdrop-blur-lg"
         data-testid="quote-mobile-action-bar"
         data-bottom-offset-contract="sales-shell-bottom-offset"
-        style={{ bottom: "var(--sales-shell-bottom-offset)" }}
       >
-        <div className="flex items-center gap-2 p-3">
-          {!hasCustomer && step === "customer" ? (
+        <MobileStickyActionBar
+          className="bottom-[var(--sales-shell-bottom-offset)]"
+          includeSafeAreaPadding={false}
+          secondary={
             <Button
               type="button"
               variant="outline"
-              className="h-11 flex-1 border-qep-orange/40 text-qep-orange hover:bg-qep-orange/10 hover:text-qep-orange"
-              onClick={onQuoteForProspect}
+              className="h-11"
+              onClick={onSaveDraft}
+              disabled={primaryActionPending}
             >
-              Quote for prospect
+              Save Draft
             </Button>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11 flex-1"
-              disabled={!previousStep}
-              onClick={() => {
-                if (previousStep) wizard.setStep(previousStep);
-              }}
+          }
+          primary={
+            <div
+              className={cn(
+                "flex items-center gap-2",
+                showProspectCta && "flex-wrap",
+              )}
+              data-testid="quote-mobile-primary-actions"
+              data-layout={showProspectCta ? "wrapped" : "inline"}
             >
-              Back
-            </Button>
-          )}
-          <button
-            type="button"
-            onClick={() => setAssistantOpen(true)}
-            aria-label="Open assistant"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-qep-orange/40 bg-qep-orange/10 text-qep-orange hover:bg-qep-orange/20 transition-colors"
-          >
-            <Sparkles className="h-5 w-5" />
-          </button>
-          <Button
-            type="button"
-            className="h-11 flex-[2]"
-            disabled={primaryActionDisabled}
-            onClick={onPrimaryAction}
-          >
-            {primaryActionPending ? (
-              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-            ) : primaryActionShowsSendIcon ? (
-              <Send className="mr-1 h-4 w-4" />
-            ) : null}
-            {primaryActionLabel}
-          </Button>
-        </div>
+              {showProspectCta && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 w-full border-qep-orange/40 text-qep-orange hover:bg-qep-orange/10 hover:text-qep-orange"
+                  onClick={onQuoteForProspect}
+                >
+                  Quote for prospect
+                </Button>
+              )}
+              <button
+                type="button"
+                onClick={() => setAssistantOpen(true)}
+                aria-label="Open assistant"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-qep-orange/40 bg-qep-orange/10 text-qep-orange hover:bg-qep-orange/20 transition-colors"
+              >
+                <Sparkles className="h-5 w-5" />
+              </button>
+              <Button
+                type="button"
+                className="h-11 flex-1"
+                disabled={primaryActionDisabled}
+                onClick={onPrimaryAction}
+              >
+                {primaryActionPending ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : primaryActionShowsSendIcon ? (
+                  <Send className="mr-1 h-4 w-4" />
+                ) : null}
+                {primaryActionLabel}
+              </Button>
+            </div>
+          }
+        />
       </div>
 
       <MobileBottomSheet

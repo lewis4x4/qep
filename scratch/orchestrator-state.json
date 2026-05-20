@@ -328,6 +328,34 @@
       "gate_report": "test-results/agent-gates/20260520T232610Z-B5.4-hf-3-bottom-nav-stability.json",
       "notes": "Main working tree has unrelated OEM/admin WIP and duplicate untracked migration numbers, so full gate ran in a clean detached worktree with only HF-3 scoped files applied. Temporary gate worktree used env from .env.local and temporary dev deps for existing gate prerequisites; those dependency repairs were not copied into the repo.",
       "updated_at": "2026-05-20T23:26:10Z"
+    },
+    {
+      "task_id": "B5.5/QEP-61",
+      "status": "complete",
+      "title": "HF-4 \u2014 Save Draft / back collision",
+      "stream": "B",
+      "wave": "B5",
+      "goal": "Quote Builder mobile uses MobileStickyActionBar with persistent Save Draft separated from contextual primary action and no Back/Previous collision in the save slot.",
+      "changed_files": [
+        "apps/web/src/features/quote-builder/components/QuoteBuilderV2PageMobileShell.tsx",
+        "apps/web/src/features/quote-builder/components/QuoteBuilderV2PageShell.tsx",
+        "apps/web/src/features/quote-builder/hooks/useQuoteBuilderV2Orchestrator.tsx",
+        "apps/web/src/features/quote-builder/components/__tests__/QuoteBuilderV2PageMobileShell.mobile.test.tsx",
+        "apps/web/src/features/quote-builder/components/__tests__/QuoteBuilderV2PageShell.trade-props.test.tsx",
+        "apps/web/src/features/sales/components/MobileStickyActionBar.tsx",
+        "apps/web/src/features/sales/components/MobileStickyActionBar.test.tsx"
+      ],
+      "verification": [
+        "bun test src/features/sales/components/MobileStickyActionBar.test.tsx src/features/quote-builder/components/__tests__/QuoteBuilderV2PageMobileShell.mobile.test.tsx src/features/quote-builder/components/__tests__/QuoteBuilderV2PageShell.trade-props.test.tsx",
+        "bun run typecheck",
+        "bun run test:e2e -- tests/e2e/quote-builder-mobile-deep.spec.ts --project=chromium (2 passed, 6 credential-gated skipped)",
+        "git diff --check -- scoped HF-4 files",
+        "Oracle initial review found two P1 blockers; targeted fixes applied; Oracle follow-up: no blocking findings",
+        "bun run segment:gates --segment B5.5-hf-4-save-draft-back-collision --ui (clean temp worktree)"
+      ],
+      "gate_report": "test-results/agent-gates/20260520T234149Z-B5.5-hf-4-save-draft-back-collision.json",
+      "notes": "Main working tree has unrelated OEM/admin WIP and duplicate untracked migration numbers, so full gate ran in a clean detached worktree with only HF-4 scoped files applied. Temporary gate worktree used env from .env.local and temporary dev deps for existing gate prerequisites; those dependency repairs were not copied into the repo.",
+      "updated_at": "2026-05-20T23:41:49Z"
     }
   ],
   "agents": [
@@ -657,34 +685,32 @@
     }
   },
   "current_task": {
-    "task_id": "B5.4/QEP-60",
+    "task_id": "B5.5/QEP-61",
     "status": "complete",
-    "title": "HF-3 \u2014 Bottom nav stability",
+    "title": "HF-4 \u2014 Save Draft / back collision",
     "stream": "B",
     "wave": "B5",
-    "goal": "SalesShell owns mobile sales-route vertical scrolling with a stable BottomTabBar height/safe-area contract and Quote Builder mobile clears bottom chrome without nested vertical scroll.",
+    "goal": "Quote Builder mobile uses MobileStickyActionBar with persistent Save Draft separated from contextual primary action and no Back/Previous collision in the save slot.",
     "changed_files": [
-      "apps/web/src/features/sales/SalesShell.tsx",
-      "apps/web/src/features/sales/SalesShell.test.tsx",
-      "apps/web/src/features/sales/components/BottomTabBar.tsx",
-      "apps/web/src/features/sales/components/BottomTabBar.test.tsx",
       "apps/web/src/features/quote-builder/components/QuoteBuilderV2PageMobileShell.tsx",
+      "apps/web/src/features/quote-builder/components/QuoteBuilderV2PageShell.tsx",
+      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderV2Orchestrator.tsx",
       "apps/web/src/features/quote-builder/components/__tests__/QuoteBuilderV2PageMobileShell.mobile.test.tsx",
-      "apps/web/src/features/sales/lib/mobile-design-tokens.test.ts",
-      "apps/web/src/index.css",
-      "apps/web/tests/e2e/mobile-sales-rep.spec.ts"
+      "apps/web/src/features/quote-builder/components/__tests__/QuoteBuilderV2PageShell.trade-props.test.tsx",
+      "apps/web/src/features/sales/components/MobileStickyActionBar.tsx",
+      "apps/web/src/features/sales/components/MobileStickyActionBar.test.tsx"
     ],
     "verification": [
-      "bun test --timeout=30000 src/features/sales/SalesShell.test.tsx src/features/sales/components/BottomTabBar.test.tsx src/features/sales/lib/mobile-design-tokens.test.ts src/features/quote-builder/components/__tests__/QuoteBuilderV2PageMobileShell.mobile.test.tsx",
+      "bun test src/features/sales/components/MobileStickyActionBar.test.tsx src/features/quote-builder/components/__tests__/QuoteBuilderV2PageMobileShell.mobile.test.tsx src/features/quote-builder/components/__tests__/QuoteBuilderV2PageShell.trade-props.test.tsx",
       "bun run typecheck",
-      "bun run test:e2e -- tests/e2e/mobile-sales-rep.spec.ts --project=chromium (4 passed, 2 credential-gated skipped)",
-      "git diff --check -- scoped HF-3 files",
-      "Oracle review: no blocking findings",
-      "bun run segment:gates --segment B5.4-hf-3-bottom-nav-stability --ui (clean temp worktree)"
+      "bun run test:e2e -- tests/e2e/quote-builder-mobile-deep.spec.ts --project=chromium (2 passed, 6 credential-gated skipped)",
+      "git diff --check -- scoped HF-4 files",
+      "Oracle initial review found two P1 blockers; targeted fixes applied; Oracle follow-up: no blocking findings",
+      "bun run segment:gates --segment B5.5-hf-4-save-draft-back-collision --ui (clean temp worktree)"
     ],
-    "gate_report": "test-results/agent-gates/20260520T232610Z-B5.4-hf-3-bottom-nav-stability.json",
-    "notes": "Main working tree has unrelated OEM/admin WIP and duplicate untracked migration numbers, so full gate ran in a clean detached worktree with only HF-3 scoped files applied. Temporary gate worktree used env from .env.local and temporary dev deps for existing gate prerequisites; those dependency repairs were not copied into the repo.",
-    "updated_at": "2026-05-20T23:26:10Z"
+    "gate_report": "test-results/agent-gates/20260520T234149Z-B5.5-hf-4-save-draft-back-collision.json",
+    "notes": "Main working tree has unrelated OEM/admin WIP and duplicate untracked migration numbers, so full gate ran in a clean detached worktree with only HF-4 scoped files applied. Temporary gate worktree used env from .env.local and temporary dev deps for existing gate prerequisites; those dependency repairs were not copied into the repo.",
+    "updated_at": "2026-05-20T23:41:49Z"
   },
-  "updated_at": "2026-05-20T23:26:10Z"
+  "updated_at": "2026-05-20T23:41:49Z"
 }

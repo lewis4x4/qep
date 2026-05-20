@@ -72,6 +72,7 @@ function buildProps(step: WizardStateValue["step"]): QuoteBuilderV2PageShellProp
     primaryActionPending: false,
     primaryActionShowsSendIcon: false,
     onPrimaryAction: () => undefined,
+    onSaveDraft: () => undefined,
     draft: {
       equipment: [{ id: "eq-1" }],
       attachments: [],
@@ -208,10 +209,78 @@ describe("QuoteBuilderV2PageMobileShell mobile section framing", () => {
     expect(scrollSurface.style.paddingBottom).toBe("5rem");
 
     const actionBar = screen.getByTestId("quote-mobile-action-bar") as HTMLElement;
-    expect(actionBar.className).not.toContain("bottom-16");
     expect(actionBar.getAttribute("data-bottom-offset-contract")).toBe(
       "sales-shell-bottom-offset",
     );
-    expect(actionBar.style.bottom).toBe("var(--sales-shell-bottom-offset)");
+
+    const stickyBar = screen.getByTestId("mobile-sticky-action-bar") as HTMLElement;
+    expect(stickyBar.className).toContain("bottom-[var(--sales-shell-bottom-offset)]");
+  });
+
+  test("keeps Save Draft as persistent secondary action and removes back collision", () => {
+    const onSaveDraft = mock(() => undefined);
+    const props = buildProps("pricing");
+    props.onSaveDraft = onSaveDraft;
+
+    const wizardValue = buildWizardValue("pricing");
+    render(
+      <MemoryRouter>
+        <WizardStateProvider value={wizardValue}>
+          <QuoteBuilderV2PageMobileShell {...props} />
+        </WizardStateProvider>
+      </MemoryRouter>,
+    );
+
+    const saveDraftButton = screen.getByRole("button", { name: "Save Draft" });
+    expect(saveDraftButton).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+
+    fireEvent.click(saveDraftButton);
+    expect(onSaveDraft).toHaveBeenCalledTimes(1);
+  });
+
+  test("wraps customer-step actions when prospect quote CTA is present", () => {
+    const props = buildProps("customer");
+    props.hasCustomer = false;
+
+    const wizardValue = buildWizardValue("customer");
+    render(
+      <MemoryRouter>
+        <WizardStateProvider value={wizardValue}>
+          <QuoteBuilderV2PageMobileShell {...props} />
+        </WizardStateProvider>
+      </MemoryRouter>,
+    );
+
+    const actions = screen.getByTestId("quote-mobile-primary-actions");
+    expect(actions.getAttribute("data-layout")).toBe("wrapped");
+    expect(actions.className).toContain("flex-wrap");
+
+    const prospectButton = screen.getByRole("button", { name: "Quote for prospect" });
+    expect(prospectButton.className).toContain("w-full");
+    expect(screen.getByRole("button", { name: "Save Draft" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+  });
+
+  test("disables Save Draft while primary action is pending", () => {
+    const onSaveDraft = mock(() => undefined);
+    const props = buildProps("pricing");
+    props.onSaveDraft = onSaveDraft;
+    props.primaryActionPending = true;
+
+    const wizardValue = buildWizardValue("pricing");
+    render(
+      <MemoryRouter>
+        <WizardStateProvider value={wizardValue}>
+          <QuoteBuilderV2PageMobileShell {...props} />
+        </WizardStateProvider>
+      </MemoryRouter>,
+    );
+
+    const saveDraftButton = screen.getByRole("button", { name: "Save Draft" }) as HTMLButtonElement;
+    expect(saveDraftButton.disabled).toBe(true);
+
+    fireEvent.click(saveDraftButton);
+    expect(onSaveDraft).toHaveBeenCalledTimes(0);
   });
 });

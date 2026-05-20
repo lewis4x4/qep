@@ -987,6 +987,7 @@ export function useQuoteBuilderV2Orchestrator() {
         primaryActionPending: saveMutation.isPending || submitApprovalMutation.isPending,
         primaryActionShowsSendIcon: approvalCaseCanSend && packetReadiness.send.ready,
         onPrimaryAction: handlePrimaryAction,
+        onSaveDraft: () => { void handleSaveClick(); },
         draft,
         step,
         dealAssistantOpen,

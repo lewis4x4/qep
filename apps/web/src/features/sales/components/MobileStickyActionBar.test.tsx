@@ -27,6 +27,18 @@ describe("MobileStickyActionBar", () => {
     expect(screen.getByRole("button", { name: /Continue/i })).toBeTruthy();
   });
 
+  test("can skip safe-area padding when host shell already provides bottom offset", () => {
+    const { container } = render(
+      <MobileStickyActionBar
+        includeSafeAreaPadding={false}
+        primary={<button type="button">Continue</button>}
+      />,
+    );
+
+    const safeAreaContainer = container.querySelector(".pointer-events-auto") as HTMLElement;
+    expect(safeAreaContainer.style.paddingBottom).toBe("");
+  });
+
   test("renders a progress bar with the correct aria value", () => {
     render(
       <MobileStickyActionBar

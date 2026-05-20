@@ -38,6 +38,7 @@ export interface QuoteBuilderV2PageShellProps {
   primaryActionPending: boolean;
   primaryActionShowsSendIcon: boolean;
   onPrimaryAction: () => void;
+  onSaveDraft: () => void;
   draft: QuoteWorkspaceDraft;
   step: Step;
   dealAssistantOpen: boolean;
@@ -103,6 +104,7 @@ export function QuoteBuilderV2PageShell({
   primaryActionPending,
   primaryActionShowsSendIcon,
   onPrimaryAction,
+  onSaveDraft,
   draft,
   step,
   dealAssistantOpen,
@@ -148,6 +150,8 @@ export function QuoteBuilderV2PageShell({
   tradeWalkaroundHref,
   overlays,
 }: QuoteBuilderV2PageShellProps) {
+  void onSaveDraft;
+
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-4 pb-[calc(6rem+env(safe-area-inset-bottom,0px))] pt-2 sm:px-6 lg:px-8">
       <QuoteBuilderStickyBar

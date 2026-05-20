@@ -58,6 +58,7 @@ function buildProps(): QuoteBuilderV2PageShellProps {
     primaryActionPending: false,
     primaryActionShowsSendIcon: false,
     onPrimaryAction: () => undefined,
+    onSaveDraft: () => undefined,
     draft: {
       equipment: [{ id: "eq-1" }],
       attachments: [],

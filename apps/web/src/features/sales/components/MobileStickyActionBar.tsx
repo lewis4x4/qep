@@ -19,6 +19,10 @@ export interface MobileStickyActionBarProps {
   progress?: number;
   /** Optional className passthrough on the outer container. */
   className?: string;
+  /**
+   * Set false when the host layout already handles safe-area spacing.
+   */
+  includeSafeAreaPadding?: boolean;
 }
 
 /**
@@ -32,6 +36,7 @@ export function MobileStickyActionBar({
   primary,
   progress,
   className,
+  includeSafeAreaPadding = true,
 }: MobileStickyActionBarProps) {
   return (
     <div
@@ -62,7 +67,7 @@ export function MobileStickyActionBar({
       })()}
       <div
         className="pointer-events-auto bg-[hsl(var(--card))]/95 backdrop-blur-md border-t border-white/[0.06]"
-        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+        style={includeSafeAreaPadding ? { paddingBottom: "env(safe-area-inset-bottom, 0px)" } : undefined}
       >
         <div className="flex items-center gap-3 px-4 py-3 max-w-lg mx-auto min-h-[64px]">
           {secondary && <div className="shrink-0">{secondary}</div>}
