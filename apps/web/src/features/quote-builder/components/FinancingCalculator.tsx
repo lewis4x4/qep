@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
 import { TaxBreakdown } from "./TaxBreakdown";
 import type { QuoteCommercialDiscountType, QuoteFinanceScenario, QuoteTaxProfile } from "../../../../../../shared/qep-moonshot-contracts";
+import { formatAprSourceAttribution } from "../lib/finance-apr-source";
 import type { TaxCalculation } from "../lib/tax-api";
 
 interface TaxProfileOption {
@@ -288,6 +289,11 @@ export function FinancingCalculator({
                   <p className="mt-1 text-xs text-muted-foreground">
                     {customFinancePreview.termMonths} months at {(customFinancePreview.rate ?? customFinancePreview.apr ?? 0).toFixed(2)}% APR
                   </p>
+                  {formatAprSourceAttribution(customFinancePreview) ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {formatAprSourceAttribution(customFinancePreview)}
+                    </p>
+                  ) : null}
                   <p className="mt-1 text-xs text-muted-foreground">
                     Total paid: {formatCurrency(customFinancePreview.totalCost ?? 0)}
                   </p>
@@ -335,6 +341,7 @@ export function FinancingCalculator({
           <div className="grid gap-3 sm:grid-cols-3">
             {financeScenarios.map((scenario) => {
               const selected = selectedScenario === scenario.label;
+              const aprSource = formatAprSourceAttribution(scenario);
               return (
                 <button
                   key={scenario.label}
@@ -355,6 +362,9 @@ export function FinancingCalculator({
                       ? "One-time payment"
                       : `${scenario.termMonths ?? 0} months · ${(scenario.apr ?? scenario.rate ?? 0).toFixed(2)}% APR`}
                   </p>
+                  {aprSource ? (
+                    <p className="mt-1 text-[11px] text-muted-foreground">{aprSource}</p>
+                  ) : null}
                   <p className="mt-1 text-[11px] text-muted-foreground">
                     Total: {formatCurrency(scenario.totalCost ?? 0)}
                   </p>

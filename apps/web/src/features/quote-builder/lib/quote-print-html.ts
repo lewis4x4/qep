@@ -1,4 +1,5 @@
 import type { QuotePDFData, QuoteProposalAsset, QuoteProposalLine } from "../components/QuotePDFDocument";
+import { formatAprSourceAttribution } from "./finance-apr-source";
 import { isDisplayableProposalFinanceScenario } from "./quote-proposal-data";
 
 function escapeHtml(value: string | number | null | undefined): string {
@@ -181,23 +182,29 @@ function buildLineRows(lines: QuoteProposalLine[]): string {
   `).join("");
 }
 
-function buildFinanceGrid(options: QuotePDFData["financing"], selectedLabel: string | null | undefined): string {
+function buildFinanceGrid(data: QuotePDFData, options: QuotePDFData["financing"]): string {
   if (options.length === 0) return "";
-  const selected = options.find((option) => selectedLabel && option.label === selectedLabel) ?? options[0];
+  const selected = options.find((option) => data.selectedFinancingLabel && option.label === data.selectedFinancingLabel) ?? options[0];
+  const hasLease = options.some((option) => option.type === "lease" || option.kind === "lease_fmv" || option.kind === "lease_fppo");
+  const title = data.financeComparisonEnabled
+    ? hasLease ? "Cash / finance / lease comparison" : "Cash / finance comparison"
+    : "Selected payment scenario";
   return `
     <section class="finance-panel">
-      <h3>Finance Options</h3>
+      <h3>${escapeHtml(title)}</h3>
       <div class="finance-grid">
         ${options.map((option) => {
           const isSelected = option === selected;
           const payment = option.type === "cash"
             ? (option.totalCost != null ? formatCurrency(option.totalCost) : "Cash purchase")
             : option.monthlyPayment != null ? `${formatCurrency(option.monthlyPayment)}<span>/mo</span>` : "Estimate pending";
+          const aprSource = formatAprSourceAttribution(option);
           return `
             <div class="finance-card ${isSelected ? "selected" : ""}">
               <div class="finance-label">${escapeHtml(option.label ?? option.type)}${isSelected ? " · Selected" : ""}</div>
               <div class="finance-payment">${payment}</div>
               <div class="finance-meta">${escapeHtml(option.termMonths != null ? `${option.termMonths} months` : "Term TBD")} · ${escapeHtml(option.rate != null ? `${option.rate.toFixed(2)}% APR` : "rate subject to approval")}</div>
+              ${aprSource ? `<div class="finance-source">${escapeHtml(aprSource)}</div>` : ""}
               ${option.lender ? `<div class="finance-meta">via ${escapeHtml(option.lender)}</div>` : ""}
             </div>
           `;
@@ -334,9 +341,10 @@ export function buildPrintableQuoteHtml(data: QuotePDFData): string {
       .finance-card { border:1px solid #555; padding:.06in; background:#1f1f1f; }
       .finance-card.selected { border-color:var(--orange); background:#fff7ec; color:var(--surface); }
       .finance-label { color:var(--orange); font-size:.058in; font-weight:900; text-transform:uppercase; }
-      .finance-payment { font-size:.095in; font-weight:900; margin:.025in 0; }
-      .finance-payment span { font-size:.06in; color:var(--muted); }
+      .finance-payment { font-size:.13in; font-weight:900; margin:.03in 0; }
+      .finance-payment span { font-size:.065in; color:var(--muted); }
       .finance-meta { font-size:.061in; color:inherit; opacity:.78; }
+      .finance-source { margin-top:.025in; font-size:.058in; color:inherit; opacity:.72; line-height:1.25; }
       .terms-box { margin-top:.1in; font-size:.07in; }
       .terms-box p { margin:.035in 0; }
       .disclaimer { margin-top:.07in; color:var(--muted); font-size:.063in; line-height:1.42; }
@@ -367,7 +375,7 @@ export function buildPrintableQuoteHtml(data: QuotePDFData): string {
           <div>
             <h3 class="section-title">Configuration waterfall</h3>
             <table class="lines-table"><thead><tr><th>Trade, parts, charges, credits</th><th>Qty</th><th>Impact</th></tr></thead><tbody>${buildLineRows(commercialLines)}</tbody></table>
-            ${buildFinanceGrid(financingOptions, data.selectedFinancingLabel)}
+            ${buildFinanceGrid(data, financingOptions)}
             <p class="disclaimer">${escapeHtml(data.compliance.financingDisclaimer)}</p>
           </div>
           <div>

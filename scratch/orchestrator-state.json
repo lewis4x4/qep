@@ -382,35 +382,45 @@
     ]
   },
   "current_cycle": {
-    "task_id": "A3.1",
-    "title": "M1 \u2014 Equipment hero photo gallery",
+    "task_id": "A3.3",
+    "title": "M3 \u2014 Cash/finance/lease comparison (payment hero)",
     "stream": "A",
     "wave": "A3",
-    "linear_issue_identifier": "QEP-14",
-    "linear_url": "https://linear.app/jarvislewis/issue/QEP-14/a31-m1-equipment-hero-photo-gallery",
-    "status": "review_passed_dispatching_release",
-    "plan_export": "/Users/brianlewis/Projects/qep-knowledge-assistant/prompt-exports/oracle-plan-2026-05-19-223411-a3-1-hero-gallery-dd-77cb.md",
+    "linear_issue_identifier": "QEP-16",
+    "linear_url": "https://linear.app/jarvislewis/issue/QEP-16/a33-m3-cashfinancelease-comparison-payment-hero",
+    "status": "oracle_passed_dispatching_release",
+    "plan_export": "/Users/brianlewis/Projects/qep-knowledge-assistant/prompt-exports/oracle-plan-2026-05-19-224943-a3-3-finance-hero-55-708d.md",
+    "explore_session_id": "4D987898-9265-4D42-B1ED-59B37092C608",
     "expected_files": [
-      "apps/web/src/features/quote-builder/components/QuotePDFDocument.tsx",
+      "shared/qep-moonshot-contracts.ts",
+      "apps/web/src/features/quote-builder/lib/quote-api.ts",
+      "apps/web/src/features/quote-builder/lib/saved-quote-draft.ts",
+      "apps/web/src/features/quote-builder/hooks/useExistingQuoteLoad.ts",
+      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderV2Orchestrator.tsx",
+      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderReadiness.ts",
+      "apps/web/src/features/quote-builder/steps/FinancingStep.tsx",
+      "apps/web/src/features/quote-builder/components/FinancingCalculator.tsx",
       "apps/web/src/features/quote-builder/lib/quote-proposal-data.ts",
+      "apps/web/src/features/quote-builder/components/QuotePDFDocument.tsx",
       "apps/web/src/features/quote-builder/lib/quote-print-html.ts",
-      "apps/web/src/features/quote-builder/lib/__tests__/quote-proposal-data.test.ts",
-      "apps/web/src/features/quote-builder/lib/__tests__/quote-api.test.ts (only if fixtures/types require)"
+      "tests as needed"
     ],
     "acceptance_criteria": [
-      "Customer proposal data projects safe equipment photo galleries from existing equipment line metadata.",
-      "React PDF cover renders 3\u20135 photos per equipment unit when available, with safe fallbacks.",
-      "Printable HTML fallback renders the same gallery data and preserves escaping/safety.",
-      "No send/share/readiness/approval/tax/why-this-machine gating changes.",
-      "Targeted tests and typecheck pass or blockers are documented."
+      "Payment comparison surfaces are customer-safe, payment-first, and include APR source attribution or legal fallback.",
+      "Lease scenarios do not leak into customer output when lease flag is disabled.",
+      "Comparison toggle is implemented/persisted if safely possible without migration conflict; otherwise blocker is logged precisely.",
+      "ADR-006 gates/disclaimers are preserved and no unflagged risky payment-math expansion ships.",
+      "No unrelated migration/baseline files are touched."
     ],
+    "migration_constraint": "Untracked local migrations 593-598 exist; do not create 595-598. If a new migration is required, use 599 only if safe and explain, or report blocker instead of creating a gap.",
+    "updated_at": "2026-05-20T00:50:00-04:00",
+    "builder_session_id": "AAB57BA3-CB26-45E7-AF6C-B181A606ABFC",
+    "fixer_session_id": "B2F25EC5-049B-426F-B5C7-CCA4D25C79F0",
+    "reviewer_session_id": "C4B0D5FC-F02D-4C71-AC67-F3D914EC5270",
+    "oracle_review": "pass_after_p0_fix",
     "deployment_needs": {
       "migrations": false,
-      "edge_functions": false
-    },
-    "updated_at": "2026-05-20T00:25:00-04:00",
-    "builder_session_id": "AFDD5654-75DA-4C6C-98C6-9582B4C66628",
-    "reviewer_session_id": "17621319-F41D-4C91-9B93-99751CED769B",
-    "review_result": "pass"
+      "edge_functions": "quote-builder-v2"
+    }
   }
 }

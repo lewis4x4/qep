@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildQuoteListActionPayload,
   buildQuoteSavePayload,
+  buildPortalRevisionQuoteData,
   buildQuoteListUrl,
   normalizeAvailabilityRequest,
   normalizeClosedDealsAudit,
@@ -203,6 +204,52 @@ describe("buildQuoteSavePayload", () => {
     expect(lines.find((line) => line.line_type === "discount")?.reason_code).toBe("competitive_match");
   });
 
+  test("serializes APR source attribution with financing scenarios", () => {
+    const payload = buildQuoteSavePayload(
+      makeQuoteDraft({ selectedFinanceScenario: "QEP Finance 60", showFinanceComparisonOnCustomerCopy: false }),
+      computedQuoteTotals,
+      [{
+        type: "finance",
+        kind: "finance",
+        label: "QEP Finance 60",
+        termMonths: 60,
+        apr: 6.5,
+        monthlyPayment: 1999.42,
+        totalCost: 119_965.2,
+        lender: "Preferred lender",
+        aprSource: {
+          kind: "manufacturer_program",
+          label: "Yanmar Spring APR program",
+          provider: "Yanmar",
+          programId: "YAN-APR-2026",
+          effectiveFrom: "2026-04-01",
+        },
+      }],
+    );
+
+    expect(payload.show_finance_comparison_on_customer_copy).toBe(false);
+    const scenarios = payload.financing_scenarios as Array<Record<string, unknown>>;
+    expect(scenarios[0]?.show_finance_comparison_on_customer_copy).toBe(false);
+    expect(scenarios[0]?.apr_source).toEqual({
+      kind: "manufacturer_program",
+      label: "Yanmar Spring APR program",
+      provider: "Yanmar",
+      programId: "YAN-APR-2026",
+      effectiveFrom: "2026-04-01",
+    });
+  });
+
+  test("persists customer comparison toggle even without financing scenarios", () => {
+    const payload = buildQuoteSavePayload(
+      makeQuoteDraft({ showFinanceComparisonOnCustomerCopy: false }),
+      computedQuoteTotals,
+      [],
+    );
+
+    expect(payload.show_finance_comparison_on_customer_copy).toBe(false);
+    expect(payload.financing_scenarios).toEqual([]);
+  });
+
   test("maps inbound and outbound freight amounts from pricing metadata", () => {
     const payload = buildQuoteSavePayload(
       makeQuoteDraft({
@@ -349,6 +396,12 @@ describe("normalizeQuoteFinanceScenario", () => {
       monthly_payment: 1999.42,
       total_cost: 119_965.2,
       lender: "Preferred lender",
+      apr_source: {
+        kind: "manufacturer_program",
+        label: "Yanmar Spring APR program",
+        provider: "Yanmar",
+        effective_from: "2026-04-01",
+      },
     });
 
     expect(scenario.label).toBe("Finance 60 mo");
@@ -356,6 +409,79 @@ describe("normalizeQuoteFinanceScenario", () => {
     expect(scenario.apr).toBe(6.5);
     expect(scenario.monthlyPayment).toBe(1999.42);
     expect(scenario.totalCost).toBe(119_965.2);
+    expect(scenario.aprSource).toEqual({
+      kind: "manufacturer_program",
+      label: "Yanmar Spring APR program",
+      provider: "Yanmar",
+      programId: null,
+      effectiveFrom: "2026-04-01",
+      effectiveTo: null,
+      disclosure: null,
+    });
+  });
+
+  test("normalizes flat APR source fields", () => {
+    const scenario = normalizeQuoteFinanceScenario({
+      type: "finance",
+      apr_source_label: "Dealer rate sheet",
+      apr_source_kind: "dealer_program",
+      apr_source_provider: "QEP Finance Desk",
+      apr_source_program_id: "QEP-60",
+      apr_source_effective_from: "2026-05-01",
+    });
+
+    expect(scenario.aprSource).toMatchObject({
+      kind: "dealer_program",
+      label: "Dealer rate sheet",
+      provider: "QEP Finance Desk",
+      programId: "QEP-60",
+      effectiveFrom: "2026-05-01",
+    });
+  });
+
+  test("does not treat lender-only scenario data as APR source attribution", () => {
+    const scenario = normalizeQuoteFinanceScenario({
+      type: "finance",
+      label: "Finance 60",
+      lender: "Preferred lender",
+      apr: 7.25,
+    });
+
+    expect(scenario.lender).toBe("Preferred lender");
+    expect(scenario.aprSource).toBeNull();
+  });
+});
+
+describe("buildPortalRevisionQuoteData", () => {
+  test("filters disabled leases and hidden comparison options", () => {
+    const quoteData = buildPortalRevisionQuoteData(
+      makeQuoteDraft({
+        selectedFinanceScenario: "60 months",
+        showFinanceComparisonOnCustomerCopy: false,
+      }),
+      {
+        subtotal: 100_000,
+        discountTotal: 0,
+        netTotal: 100_000,
+        taxTotal: 0,
+        customerTotal: 100_000,
+        cashDown: 0,
+        amountFinanced: 100_000,
+      },
+      [
+        { type: "cash", kind: "cash", label: "Cash", totalCost: 100_000 },
+        { type: "finance", kind: "finance", label: "60 months", monthlyPayment: 2_050, termMonths: 60, apr: 7.25, lender: "Preferred lender" },
+        { type: "lease", kind: "lease_fmv", label: "FMV lease", monthlyPayment: 1_850, termMonths: 48, apr: 6.9 },
+      ],
+      null,
+      null,
+      { includeLeaseScenarios: false },
+    );
+
+    expect(quoteData.financeComparisonEnabled).toBe(false);
+    expect((quoteData.financing as Array<Record<string, unknown>>).map((scenario) => scenario.lender ?? scenario.type)).toEqual(["Preferred lender"]);
+    expect(JSON.stringify(quoteData)).not.toContain("FMV lease");
+    expect(JSON.stringify(quoteData)).not.toContain("Cash");
   });
 });
 

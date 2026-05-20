@@ -89,6 +89,13 @@ function booleanValue(value: unknown): boolean {
   return value === true;
 }
 
+function optionalBooleanValue(value: unknown): boolean | null {
+  if (value === true || value === false) return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return null;
+}
+
 function isExpiredAt(value: unknown, now = Date.now()): boolean {
   const raw = text(value, 120);
   if (!raw) return false;
@@ -174,12 +181,34 @@ function publicLegacyAttachments(
   });
 }
 
+function publicAprSource(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value)) return null;
+  const label = text(value.label, 240);
+  const provider = text(value.provider, 160);
+  const kind = text(value.kind, 80) ?? "unknown";
+  const programId = text(value.programId ?? value.program_id, 160);
+  const effectiveFrom = text(value.effectiveFrom ?? value.effective_from, 80);
+  const effectiveTo = text(value.effectiveTo ?? value.effective_to, 80);
+  const disclosure = text(value.disclosure, 500);
+  if (!label && !provider && !programId && !effectiveFrom && !effectiveTo && !disclosure) return null;
+  return {
+    kind,
+    label: label ?? provider ?? "APR program source provided by lender",
+    provider,
+    programId,
+    effectiveFrom,
+    effectiveTo,
+    disclosure,
+  };
+}
+
 function publicFinanceScenarios(
   value: unknown,
 ): Array<Record<string, unknown>> {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
     if (!isRecord(item)) return [];
+    const metadata = isRecord(item.metadata) ? item.metadata : null;
     return [{
       label: text(item.label ?? item.scenario_label, 160),
       type: text(item.type ?? item.kind, 40),
@@ -192,8 +221,36 @@ function publicFinanceScenarios(
       down_payment: numberValue(item.down_payment ?? item.downPayment),
       residual_amount: numberValue(item.residual_amount ?? item.residualAmount),
       lender: text(item.lender, 160),
+      apr_source: publicAprSource(item.apr_source ?? item.aprSource ?? metadata?.apr_source),
     }];
   }).slice(0, 8);
+}
+
+function isLeasePublicFinanceScenario(scenario: Record<string, unknown>): boolean {
+  return scenario.type === "lease" || scenario.kind === "lease_fmv" || scenario.kind === "lease_fppo";
+}
+
+function publicLeaseQuotingEnabled(): boolean {
+  return Deno.env.get("FEATURE_LEASE_QUOTING") === "true" || Deno.env.get("VITE_FEATURE_LEASE_QUOTING") === "true";
+}
+
+function publicFinanceComparisonEnabled(row: Record<string, unknown>, rawScenarios: unknown): boolean {
+  const rowMetadata = isRecord(row.metadata) ? row.metadata : null;
+  const topLevel = optionalBooleanValue(
+    row.show_finance_comparison_on_customer_copy
+      ?? row.showFinanceComparisonOnCustomerCopy
+      ?? rowMetadata?.show_finance_comparison_on_customer_copy
+      ?? rowMetadata?.showFinanceComparisonOnCustomerCopy,
+  );
+  if (topLevel != null) return topLevel;
+  if (!Array.isArray(rawScenarios)) return true;
+  for (const item of rawScenarios) {
+    if (!isRecord(item)) continue;
+    const metadata = isRecord(item.metadata) ? item.metadata : null;
+    const value = optionalBooleanValue(item.show_finance_comparison_on_customer_copy ?? item.showFinanceComparisonOnCustomerCopy ?? metadata?.show_finance_comparison_on_customer_copy);
+    if (value != null) return value;
+  }
+  return true;
 }
 
 export function buildPublicQuoteLineItems(
@@ -255,6 +312,20 @@ export function buildPublicDealRoomPayload(
   const pickString = (v: unknown) => text(v, 500);
   const pickNumber = (v: unknown) => numberValue(v);
   const confirmedNarrative = booleanValue(row.why_this_machine_confirmed) && text(row.why_this_machine, 4000);
+  const selectedFinanceScenario = pickString(row.selected_finance_scenario);
+  const includeLeaseScenarios = publicLeaseQuotingEnabled();
+  const comparisonEnabled = publicFinanceComparisonEnabled(row, row.financing_scenarios);
+  const customerVisibleFinanceScenarios = publicFinanceScenarios(row.financing_scenarios)
+    .filter((scenario) => includeLeaseScenarios || !isLeasePublicFinanceScenario(scenario));
+  const financingScenarios = comparisonEnabled
+    ? customerVisibleFinanceScenarios
+    : selectedFinanceScenario
+      ? customerVisibleFinanceScenarios.filter((scenario) => scenario.label === selectedFinanceScenario).slice(0, 1)
+      : [];
+  const selectedFinanceScenarioVisible = selectedFinanceScenario
+    && financingScenarios.some((scenario) => scenario.label === selectedFinanceScenario)
+    ? selectedFinanceScenario
+    : null;
   return {
     id: pickString(row.id),
     quote_number: pickString(row.quote_number),
@@ -277,8 +348,8 @@ export function buildPublicDealRoomPayload(
     cash_down: pickNumber(row.cash_down),
     amount_financed: pickNumber(row.amount_financed),
     customer_total: pickNumber(row.customer_total),
-    financing_scenarios: publicFinanceScenarios(row.financing_scenarios),
-    selected_finance_scenario: pickString(row.selected_finance_scenario),
+    financing_scenarios: financingScenarios,
+    selected_finance_scenario: selectedFinanceScenarioVisible,
     ai_recommendation: confirmedNarrative ? buildPublicRecommendationPayload(row.ai_recommendation) : null,
     why_this_machine: pickString(row.why_this_machine),
     why_this_machine_confirmed: booleanValue(row.why_this_machine_confirmed),

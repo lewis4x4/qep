@@ -13,6 +13,7 @@ import type { QuoteFinanceScenario } from "../../../../../../shared/qep-moonshot
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SummaryRow } from "../components/SummaryRow";
+import { formatAprSourceAttribution } from "../lib/finance-apr-source";
 import { money } from "../lib/money";
 import { useWizard } from "../wizard/useWizard";
 // WAVE quote-builder deep reflow (A2)
@@ -21,6 +22,23 @@ import { MobileSectionAccordion } from "@/features/sales/components/MobileSectio
 import { useIsMobileViewport } from "@/features/sales/hooks/useIsMobileViewport";
 
 type FinanceStepTab = "cash" | "finance" | "lease";
+
+function isLeaseScenario(scenario: QuoteFinanceScenario): boolean {
+  return scenario.type === "lease" || scenario.kind === "lease_fmv" || scenario.kind === "lease_fppo";
+}
+
+function isFinanceScenarioDisplayable(scenario: QuoteFinanceScenario): boolean {
+  if (scenario.type === "cash" || scenario.kind === "cash") {
+    return scenario.monthlyPayment != null || (scenario.termMonths ?? 0) > 0 || (scenario.rate ?? scenario.apr ?? 0) > 0 || (scenario.totalCost ?? 0) > 0;
+  }
+  return scenario.monthlyPayment != null || (scenario.termMonths ?? 0) > 0 || scenario.totalCost != null;
+}
+
+function scenarioPaymentLabel(scenario: QuoteFinanceScenario, customerTotal: number): string {
+  return scenario.monthlyPayment == null
+    ? money(scenario.totalCost ?? customerTotal)
+    : `${money(scenario.monthlyPayment)}/mo`;
+}
 
 export interface FinancingStepProps {
   allFinanceScenarios: QuoteFinanceScenario[];
@@ -62,11 +80,22 @@ export function FinancingStep({
       financeStepTab === "cash"
         ? scenario.type === "cash" || scenario.kind === "cash"
         : financeStepTab === "lease"
-          ? scenario.type === "lease" || scenario.kind === "lease_fmv" || scenario.kind === "lease_fppo"
+          ? isLeaseScenario(scenario)
           : scenario.type === "finance" || scenario.kind === "finance"
     )),
     [allFinanceScenarios, financeStepTab],
   );
+  const showCustomerComparison = draft.showFinanceComparisonOnCustomerCopy !== false;
+  const customerVisibleScenarios = useMemo(
+    () => allFinanceScenarios
+      .filter((scenario) => leaseQuotingEnabled || !isLeaseScenario(scenario))
+      .filter(isFinanceScenarioDisplayable),
+    [allFinanceScenarios, leaseQuotingEnabled],
+  );
+  const customerCopyScenarios = useMemo(() => {
+    if (showCustomerComparison) return customerVisibleScenarios;
+    return customerVisibleScenarios.filter((scenario) => scenario.label === draft.selectedFinanceScenario);
+  }, [customerVisibleScenarios, draft.selectedFinanceScenario, showCustomerComparison]);
 
   function saveSelectedFinanceScenario(scenario: QuoteFinanceScenario): void {
     setDraft((current) => {
@@ -119,6 +148,56 @@ export function FinancingStep({
           </Button>
           .
         </p>
+      </Card>
+
+      <Card className="border-qep-orange/25 bg-qep-orange/5 p-4" data-testid="customer-finance-comparison-preview">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Customer payment view</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {showCustomerComparison
+                ? `Customer quote shows side-by-side ${leaseQuotingEnabled ? "cash / finance / lease" : "cash / finance"} payment options.`
+                : "Customer quote shows only the selected payment scenario."}
+            </p>
+          </div>
+          <label className="flex min-h-[44px] items-center gap-2 text-sm font-medium text-foreground">
+            <input
+              type="checkbox"
+              checked={showCustomerComparison}
+              onChange={(event) => setDraft((current) => ({
+                ...current,
+                showFinanceComparisonOnCustomerCopy: event.target.checked,
+              }))}
+              className="h-4 w-4 rounded border-input bg-card"
+            />
+            Show {leaseQuotingEnabled ? "cash / finance / lease" : "cash / finance"} comparison on customer quote
+          </label>
+        </div>
+        {customerCopyScenarios.length > 0 ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            {customerCopyScenarios.slice(0, 3).map((scenario) => {
+              const selected = draft.selectedFinanceScenario === scenario.label;
+              const aprSource = formatAprSourceAttribution(scenario);
+              return (
+                <button
+                  key={`customer-copy-${scenario.label}`}
+                  type="button"
+                  onClick={() => setDraft((current) => ({ ...current, selectedFinanceScenario: scenario.label }))}
+                  className={`rounded-xl border p-3 text-left transition ${selected ? "border-qep-orange bg-card" : "border-border/70 bg-card/50 hover:border-qep-orange/40"}`}
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-qep-orange">{scenario.label}</p>
+                  <p className="mt-2 text-2xl font-bold text-foreground">{scenarioPaymentLabel(scenario, customerTotal)}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {scenario.type === "cash" ? "Cash purchase" : `${scenario.termMonths ?? 0} months · ${(scenario.apr ?? scenario.rate ?? 0).toFixed(2)}% APR`}
+                  </p>
+                  {aprSource ? <p className="mt-1 text-[11px] text-muted-foreground">{aprSource}</p> : null}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-muted-foreground">Select or save a finance scenario to preview the customer payment card.</p>
+        )}
       </Card>
 
       <Card className="p-4" data-testid="financing-tabs">
@@ -213,6 +292,7 @@ export function FinancingStep({
             <div className="grid gap-3 sm:grid-cols-2">
               {financeTabScenarios.length > 0 ? financeTabScenarios.map((scenario) => {
                 const selected = draft.selectedFinanceScenario === scenario.label;
+                const aprSource = formatAprSourceAttribution(scenario);
                 return (
                   <button
                     key={scenario.label}
@@ -221,12 +301,13 @@ export function FinancingStep({
                     className={`rounded-lg border p-3 text-left transition ${selected ? "border-qep-orange bg-qep-orange/5" : "border-border bg-card/40 hover:border-qep-orange/40"}`}
                   >
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-qep-orange">{scenario.label}</p>
-                    <p className="mt-2 text-lg font-semibold text-foreground">
-                      {scenario.monthlyPayment == null ? money(scenario.totalCost ?? customerTotal) : `${money(scenario.monthlyPayment)}/mo`}
+                    <p className="mt-2 text-2xl font-bold text-foreground">
+                      {scenarioPaymentLabel(scenario, customerTotal)}
                     </p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
                       {scenario.termMonths ?? 0} months · {(scenario.apr ?? scenario.rate ?? 0).toFixed(2)}% APR · {scenario.lender ?? "Preferred lender"}
                     </p>
+                    {aprSource ? <p className="mt-1 text-[11px] text-muted-foreground">{aprSource}</p> : null}
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Button
                         type="button"
@@ -265,20 +346,49 @@ export function FinancingStep({
         )}
 
         {financeStepTab === "lease" && (
-          <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/20 p-4">
-            <p className="text-sm font-semibold text-foreground">Lease quoting is not enabled yet</p>
-            <p className="mt-1 text-xs text-muted-foreground">FMV and FPPO lease cards stay disabled until feature flag, OEM list, lease rate sheets, and residual tables are seeded.</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-lg border border-border/60 bg-card/40 p-3 opacity-70">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">FMV lease</p>
-                <p className="mt-2 text-sm text-muted-foreground">Awaiting residual table.</p>
-              </div>
-              <div className="rounded-lg border border-border/60 bg-card/40 p-3 opacity-70">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">FPPO lease</p>
-                <p className="mt-2 text-sm text-muted-foreground">Awaiting purchase option rules.</p>
+          leaseQuotingEnabled ? (
+            <div className="mt-4 space-y-3">
+              <p className="text-xs text-muted-foreground">Lease scenarios appear here only while the lease feature flag is enabled.</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {financeTabScenarios.length > 0 ? financeTabScenarios.map((scenario) => {
+                  const selected = draft.selectedFinanceScenario === scenario.label;
+                  const aprSource = formatAprSourceAttribution(scenario);
+                  return (
+                    <button
+                      key={scenario.label}
+                      type="button"
+                      onClick={() => setDraft((current) => ({ ...current, selectedFinanceScenario: scenario.label }))}
+                      className={`rounded-lg border p-3 text-left transition ${selected ? "border-qep-orange bg-qep-orange/5" : "border-border bg-card/40 hover:border-qep-orange/40"}`}
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-qep-orange">{scenario.label}</p>
+                      <p className="mt-2 text-2xl font-bold text-foreground">{scenarioPaymentLabel(scenario, customerTotal)}</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {scenario.termMonths ?? 0} months · {(scenario.apr ?? scenario.rate ?? 0).toFixed(2)}% APR · {scenario.lender ?? "Lease partner"}
+                      </p>
+                      {aprSource ? <p className="mt-1 text-[11px] text-muted-foreground">{aprSource}</p> : null}
+                    </button>
+                  );
+                }) : (
+                  <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">No lease scenario seed is available yet.</div>
+                )}
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/20 p-4">
+              <p className="text-sm font-semibold text-foreground">Lease quoting is not enabled yet</p>
+              <p className="mt-1 text-xs text-muted-foreground">FMV and FPPO lease cards stay disabled until feature flag, OEM list, lease rate sheets, and residual tables are seeded.</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-border/60 bg-card/40 p-3 opacity-70">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">FMV lease</p>
+                  <p className="mt-2 text-sm text-muted-foreground">Awaiting residual table.</p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-card/40 p-3 opacity-70">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">FPPO lease</p>
+                  <p className="mt-2 text-sm text-muted-foreground">Awaiting purchase option rules.</p>
+                </div>
+              </div>
+            </div>
+          )
         )}
       </Card>
 
@@ -326,6 +436,9 @@ export function FinancingStep({
                 label="APR"
                 value={`${(scenarioSheetScenario.apr ?? scenarioSheetScenario.rate ?? 0).toFixed(2)}%`}
               />
+              {formatAprSourceAttribution(scenarioSheetScenario) ? (
+                <p className="text-xs text-muted-foreground">{formatAprSourceAttribution(scenarioSheetScenario)}</p>
+              ) : null}
               {scenarioSheetScenario.totalCost != null && (
                 <SummaryRow
                   label="Total of payments"

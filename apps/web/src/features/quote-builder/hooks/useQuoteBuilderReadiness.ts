@@ -35,6 +35,7 @@ export interface UseQuoteBuilderReadinessInput {
   amountFinanced: number;
   marginPct: number;
   allFinanceScenarios: QuoteFinanceScenario[];
+  leaseQuotingEnabled: boolean;
   activeQuotePackageId: string | null;
   activeQuoteNumber: string | null;
   activeApprovalCaseLoading: boolean;
@@ -66,6 +67,7 @@ export function useQuoteBuilderReadiness({
   amountFinanced,
   marginPct,
   allFinanceScenarios,
+  leaseQuotingEnabled,
   activeQuotePackageId,
   activeQuoteNumber,
   activeApprovalCaseLoading,
@@ -142,6 +144,8 @@ export function useQuoteBuilderReadiness({
     preparedDate: new Date().toLocaleDateString(),
     branch: buildQuotePdfBranch(selectedBranch),
     tradeValuation: tradeValuationSnapshot ?? null,
+    includeLeaseScenarios: leaseQuotingEnabled,
+    showFinanceComparisonOnCustomerCopy: draft.showFinanceComparisonOnCustomerCopy !== false,
   }), [
     activeQuoteNumber,
     allFinanceScenarios,
@@ -152,6 +156,7 @@ export function useQuoteBuilderReadiness({
     discountTotal,
     draft,
     equipmentTotal,
+    leaseQuotingEnabled,
     netTotal,
     pricingLineTotal,
     selectedBranch,

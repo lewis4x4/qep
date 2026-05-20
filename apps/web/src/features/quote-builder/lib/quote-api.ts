@@ -16,6 +16,7 @@ import type {
   QuoteApprovalPolicy,
   QuoteApprovalRouteMode,
   QuoteApprovalSubmitResult,
+  QuoteFinanceAprSource,
   QuoteFinancingPreview,
   QuoteFinanceScenario,
   QuoteListItem,
@@ -1379,6 +1380,51 @@ function normalizeQuoteScenarioKind(value: unknown): QuoteFinanceScenario["kind"
     : undefined;
 }
 
+function normalizeQuoteFinanceAprSourceKind(value: unknown): QuoteFinanceAprSource["kind"] {
+  return value === "manufacturer_program"
+    || value === "dealer_program"
+    || value === "lender_estimate"
+    || value === "manual_rep_entry"
+    || value === "unknown"
+    ? value
+    : "unknown";
+}
+
+function normalizeQuoteFinanceAprSource(raw: Record<string, unknown>): QuoteFinanceAprSource | null {
+  const metadata = normalizeRecord(raw.metadata);
+  const source = normalizeRecord(raw.aprSource ?? raw.apr_source ?? metadata.apr_source);
+  const label = firstString(
+    source.label,
+    raw.apr_source_label,
+    metadata.apr_source_label,
+    raw.program_name,
+    raw.programName,
+  );
+  const explicitProvider = firstString(
+    source.provider,
+    raw.apr_source_provider,
+    metadata.apr_source_provider,
+  );
+  const programId = firstString(source.programId, source.program_id, raw.apr_source_program_id, metadata.apr_source_program_id);
+  const effectiveFrom = firstString(source.effectiveFrom, source.effective_from, raw.apr_source_effective_from, metadata.apr_source_effective_from, raw.effective_from, raw.effectiveFrom);
+  const effectiveTo = firstString(source.effectiveTo, source.effective_to, raw.apr_source_effective_to, metadata.apr_source_effective_to, raw.effective_to, raw.effectiveTo);
+  const disclosure = firstString(source.disclosure, raw.apr_source_disclosure, metadata.apr_source_disclosure);
+  const hasSource = Boolean(label || explicitProvider || programId || effectiveFrom || effectiveTo || disclosure || source.kind || raw.apr_source_kind || metadata.apr_source_kind);
+  const provider = hasSource
+    ? explicitProvider ?? firstString(raw.oem_name, raw.manufacturer)
+    : undefined;
+  if (!hasSource) return null;
+  return {
+    kind: normalizeQuoteFinanceAprSourceKind(source.kind ?? raw.apr_source_kind ?? metadata.apr_source_kind),
+    label: label ?? provider ?? "APR program source provided by lender",
+    provider: provider ?? null,
+    programId: programId ?? null,
+    effectiveFrom: effectiveFrom ?? null,
+    effectiveTo: effectiveTo ?? null,
+    disclosure: disclosure ?? null,
+  };
+}
+
 export function normalizeQuoteFinanceScenario(raw: Record<string, unknown>): QuoteFinanceScenario {
   const kind = normalizeQuoteScenarioKind(raw.kind);
   const type = raw.type == null && kind
@@ -1417,6 +1463,7 @@ export function normalizeQuoteFinanceScenario(raw: Record<string, unknown>): Quo
     downPayment: numOrNull(raw.downPayment ?? raw.down_payment),
     residualAmount: numOrNull(raw.residualAmount ?? raw.residual_amount),
     moneyFactor: numOrNull(raw.moneyFactor ?? raw.money_factor),
+    aprSource: normalizeQuoteFinanceAprSource(raw),
     isDefault: raw.isDefault === true || raw.is_default === true,
   };
 }
@@ -2085,6 +2132,8 @@ export function buildQuoteSavePayload(
       monthly_payment: scenario.monthlyPayment ?? null,
       total_cost: scenario.totalCost ?? null,
       lender: scenario.lender ?? null,
+      apr_source: scenario.aprSource ?? null,
+      show_finance_comparison_on_customer_copy: draft.showFinanceComparisonOnCustomerCopy !== false,
       is_default: scenario.isDefault === true || scenario.label === draft.selectedFinanceScenario,
     })),
     equipment_total: computed.equipmentTotal,
@@ -2103,6 +2152,7 @@ export function buildQuoteSavePayload(
     cash_down: computed.cashDown,
     amount_financed: computed.amountFinanced,
     selected_finance_scenario: draft.selectedFinanceScenario,
+    show_finance_comparison_on_customer_copy: draft.showFinanceComparisonOnCustomerCopy !== false,
     wizard_step: draft.wizardStep ?? null,
     expires_at: draft.expiresAt ?? null,
     follow_up_at: draft.followUpAt ?? null,
@@ -2153,7 +2203,23 @@ export function buildPortalRevisionQuoteData(
   financeScenarios: QuoteFinanceScenario[],
   dealerMessage?: string | null,
   revisionSummary?: string | null,
+  options?: {
+    includeLeaseScenarios?: boolean;
+    showFinanceComparisonOnCustomerCopy?: boolean;
+  },
 ): Record<string, unknown> {
+  const includeLeaseScenarios = options?.includeLeaseScenarios !== false;
+  const comparisonEnabled = options?.showFinanceComparisonOnCustomerCopy ?? draft.showFinanceComparisonOnCustomerCopy ?? true;
+  const customerVisibleFinancing = financeScenarios.filter((scenario) =>
+    includeLeaseScenarios || !(scenario.type === "lease" || scenario.kind === "lease_fmv" || scenario.kind === "lease_fppo")
+  );
+  const selectedScenario = customerVisibleFinancing.find((scenario) => scenario.label === draft.selectedFinanceScenario) ?? null;
+  const revisionFinanceScenarios = comparisonEnabled
+    ? customerVisibleFinancing
+    : selectedScenario
+      ? [selectedScenario]
+      : [];
+
   return {
     summary: draft.recommendation?.reasoning ?? null,
     equipment: draft.equipment.map((item) => ({
@@ -2176,13 +2242,15 @@ export function buildPortalRevisionQuoteData(
         amount: item.unitPrice * item.quantity,
       })),
     ],
-    financing: financeScenarios.map((scenario) => ({
+    financeComparisonEnabled: comparisonEnabled,
+    financing: revisionFinanceScenarios.map((scenario) => ({
       type: scenario.type,
       monthlyPayment: scenario.monthlyPayment ?? null,
       termMonths: scenario.termMonths ?? null,
       totalCost: scenario.totalCost ?? null,
       apr: scenario.apr ?? scenario.rate ?? null,
       lender: scenario.lender ?? null,
+      aprSource: scenario.aprSource ?? null,
     })),
     terms: ["Subject to dealership approval and final document review."],
     subtotal: computed.subtotal,

@@ -149,4 +149,37 @@ describe("quote approval governance", () => {
 
     expect(changedScopes.every((scope) => allowedScopes.includes(scope))).toBe(true);
   });
+
+  test("does not treat missing legacy finance comparison toggle as a finance edit", () => {
+    const next = buildQuoteVersionSnapshot({
+      quotePackageId: "pkg-1",
+      dealId: "deal-1",
+      branchSlug: "raleigh",
+      customerName: "Thomas Sykes",
+      customerCompany: "Sykes Earthworks",
+      customerEmail: "thomas@example.com",
+      customerPhone: "555-0100",
+      commercialDiscountType: "flat",
+      commercialDiscountValue: 1000,
+      tradeAllowance: 15000,
+      cashDown: 5000,
+      selectedFinanceScenario: "Finance 48 mo",
+      showFinanceComparisonOnCustomerCopy: true,
+      taxProfile: "standard",
+      taxTotal: 3500,
+      netTotal: 82000,
+      customerTotal: 85500,
+      amountFinanced: 80500,
+      marginPct: 8.6,
+      amount: 82000,
+      equipment: [{ kind: "equipment", title: "Kubota KX040", quantity: 1, unitPrice: 72000 }],
+      attachments: [],
+      quoteStatus: "approved_with_conditions",
+      savedAt: "2026-04-22T15:00:00.000Z",
+    });
+    const previous = { ...next };
+    delete previous.showFinanceComparisonOnCustomerCopy;
+
+    expect(diffQuoteVersionScopes(previous, next)).not.toContain("finance");
+  });
 });

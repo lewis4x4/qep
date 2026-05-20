@@ -23,6 +23,11 @@ describe("buildCustomFinanceScenario", () => {
     expect(scenario?.label).toBe("Custom Finance 48 mo");
     expect(scenario?.monthlyPayment).toBe(500);
     expect(scenario?.totalCost).toBe(24_000);
+    expect(scenario?.aprSource).toMatchObject({
+      kind: "manual_rep_entry",
+      label: "Manual APR entered by QEP representative",
+      provider: "QEP",
+    });
   });
 
   test("calculates an amortized monthly payment for positive interest", () => {

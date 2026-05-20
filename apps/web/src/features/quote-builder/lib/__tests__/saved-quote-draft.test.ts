@@ -30,7 +30,15 @@ describe("hydrateDraftFromSavedQuote", () => {
       delivery_county: "Columbia",
       tax_override_amount: null,
       follow_up_at: "2026-05-08T14:00:00Z",
-      financing_scenarios: [{ type: "finance", kind: "finance", label: "48 mo @ 0%", term_months: 48, apr: 0 }],
+      financing_scenarios: [{
+        type: "finance",
+        kind: "finance",
+        label: "48 mo @ 0%",
+        term_months: 48,
+        apr: 0,
+        apr_source: { kind: "manufacturer_program", label: "Kubota 0% APR", provider: "Kubota", effective_from: "2026-05-01" },
+        show_finance_comparison_on_customer_copy: false,
+      }],
       customer_name: "Thomas Sykes",
       customer_company: "Sykes Earthworks",
       customer_phone: "919-555-0100",
@@ -58,6 +66,7 @@ describe("hydrateDraftFromSavedQuote", () => {
       taxTotal: 0,
       amountFinanced: 48700,
       selectedFinanceScenario: "48 mo @ 0%",
+      showFinanceComparisonOnCustomerCopy: false,
       wizardStep: 5,
       deliveryState: "FL",
       deliveryCounty: "Columbia",
@@ -102,7 +111,38 @@ describe("hydrateDraftFromSavedQuote", () => {
       label: "48 mo @ 0%",
       termMonths: 48,
       apr: 0,
+      aprSource: {
+        kind: "manufacturer_program",
+        label: "Kubota 0% APR",
+        provider: "Kubota",
+        programId: null,
+        effectiveFrom: "2026-05-01",
+        effectiveTo: null,
+        disclosure: null,
+      },
     });
+  });
+
+  test("hydrates customer comparison toggle from quote metadata when no scenario carries it", () => {
+    const draft = hydrateDraftFromSavedQuote({
+      deal_id: "deal-meta-toggle",
+      metadata: { show_finance_comparison_on_customer_copy: false },
+      equipment: [{ make: "ASV", model: "RT-135", amount: 102000 }],
+      financing_scenarios: [],
+    });
+
+    expect(draft.showFinanceComparisonOnCustomerCopy).toBe(false);
+  });
+
+  test("does not treat lender-only saved finance rows as APR source attribution", () => {
+    const draft = hydrateDraftFromSavedQuote({
+      deal_id: "deal-lender-only",
+      equipment: [{ make: "ASV", model: "RT-135", amount: 102000 }],
+      financing_scenarios: [{ type: "finance", label: "60 months", lender: "Preferred lender" }],
+    });
+
+    expect(draft.savedFinanceScenarios?.[0]?.lender).toBe("Preferred lender");
+    expect(draft.savedFinanceScenarios?.[0]?.aprSource).toBeNull();
   });
 
   test("falls back to safe defaults for sparse or legacy quote rows", () => {

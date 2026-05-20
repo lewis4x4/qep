@@ -26,6 +26,12 @@ export type QuoteLineItemKind =
   | "tax_county"
   | "custom";
 export type QuoteFinanceScenarioKind = "cash" | "finance" | "lease_fmv" | "lease_fppo";
+export type QuoteFinanceAprSourceKind =
+  | "manufacturer_program"
+  | "dealer_program"
+  | "lender_estimate"
+  | "manual_rep_entry"
+  | "unknown";
 export type QuoteSendChannel = "preview" | "email" | "text" | "link" | "print";
 export type QuoteDocumentArtifactType = "customer_quote_pdf";
 export type QuoteLineDiscountReason =
@@ -107,6 +113,16 @@ export interface CompetitorListing {
   scraped_at: string;
 }
 
+export interface QuoteFinanceAprSource {
+  kind: QuoteFinanceAprSourceKind;
+  label: string;
+  provider?: string | null;
+  programId?: string | null;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
+  disclosure?: string | null;
+}
+
 export interface QuoteFinanceScenario {
   type: "cash" | "finance" | "lease";
   kind?: QuoteFinanceScenarioKind;
@@ -120,6 +136,7 @@ export interface QuoteFinanceScenario {
   downPayment?: number | null;
   residualAmount?: number | null;
   moneyFactor?: number | null;
+  aprSource?: QuoteFinanceAprSource | null;
   isDefault?: boolean;
 }
 
@@ -196,6 +213,7 @@ export interface QuoteWorkspaceDraft {
   taxTotal: number;
   amountFinanced: number;
   selectedFinanceScenario: string | null;
+  showFinanceComparisonOnCustomerCopy?: boolean;
   savedFinanceScenarios?: QuoteFinanceScenarioDraft[];
   wizardStep?: number | null;
   expiresAt?: string | null;
@@ -361,6 +379,7 @@ export interface QuoteVersionSnapshot {
   tradeAllowance: number;
   cashDown: number;
   selectedFinanceScenario: string | null;
+  showFinanceComparisonOnCustomerCopy?: boolean;
   taxProfile: QuoteTaxProfile;
   taxTotal: number;
   netTotal: number;
@@ -512,6 +531,7 @@ export function buildQuoteVersionSnapshot(input: {
   tradeAllowance: number;
   cashDown: number;
   selectedFinanceScenario?: string | null;
+  showFinanceComparisonOnCustomerCopy?: boolean;
   taxProfile: QuoteTaxProfile;
   taxTotal: number;
   netTotal: number;
@@ -552,6 +572,7 @@ export function buildQuoteVersionSnapshot(input: {
     tradeAllowance: Number(input.tradeAllowance ?? 0) || 0,
     cashDown: Number(input.cashDown ?? 0) || 0,
     selectedFinanceScenario: input.selectedFinanceScenario ?? null,
+    showFinanceComparisonOnCustomerCopy: input.showFinanceComparisonOnCustomerCopy ?? true,
     taxProfile: input.taxProfile,
     taxTotal: Number(input.taxTotal ?? 0) || 0,
     netTotal: Number(input.netTotal ?? 0) || 0,
@@ -607,6 +628,7 @@ export function diffQuoteVersionScopes(
   if (previous.cashDown !== next.cashDown) changed.add("cash_down");
   if (
     previous.selectedFinanceScenario !== next.selectedFinanceScenario
+    || (previous.showFinanceComparisonOnCustomerCopy ?? true) !== (next.showFinanceComparisonOnCustomerCopy ?? true)
     || previous.amountFinanced !== next.amountFinanced
   ) changed.add("finance");
   if (!shallowEqualLineArrays(previous.attachments, next.attachments)) changed.add("attachments");

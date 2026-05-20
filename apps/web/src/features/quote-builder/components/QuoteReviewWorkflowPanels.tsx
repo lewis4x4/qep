@@ -52,6 +52,7 @@ interface QuoteReviewWorkflowPanelsProps {
   quotePackageId: string;
   draft: QuoteWorkspaceDraft;
   financeScenarios: QuoteFinanceScenario[];
+  leaseQuotingEnabled: boolean;
   computed: {
     subtotal: number;
     discountTotal: number;
@@ -90,6 +91,7 @@ export function QuoteReviewWorkflowPanels({
   quotePackageId,
   draft,
   financeScenarios,
+  leaseQuotingEnabled,
   computed,
   sendReadiness,
   requiresManagerApproval,
@@ -228,6 +230,10 @@ export function QuoteReviewWorkflowPanels({
           financeScenarios,
           dealerMessage,
           revisionSummary,
+          {
+            includeLeaseScenarios: leaseQuotingEnabled,
+            showFinanceComparisonOnCustomerCopy: draft.showFinanceComparisonOnCustomerCopy !== false,
+          },
         ),
         dealer_message: dealerMessage || null,
         revision_summary: revisionSummary || null,

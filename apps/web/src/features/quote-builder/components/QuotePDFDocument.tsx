@@ -6,7 +6,8 @@
  */
 
 import { Document, Image, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
-import type { QuoteFinanceScenarioKind, QuoteLineItemKind } from "../../../../../../shared/qep-moonshot-contracts";
+import type { QuoteFinanceAprSource, QuoteFinanceScenarioKind, QuoteLineItemKind } from "../../../../../../shared/qep-moonshot-contracts";
+import { formatAprSourceAttribution } from "../lib/finance-apr-source";
 import { isDisplayableProposalFinanceScenario } from "../lib/quote-proposal-data";
 
 const ORANGE = "#F28A07";
@@ -97,6 +98,7 @@ export interface QuotePDFFinancingScenario {
   lender: string | null;
   downPayment?: number | null;
   residualAmount?: number | null;
+  aprSource?: QuoteFinanceAprSource | null;
   isDefault?: boolean;
 }
 
@@ -130,6 +132,7 @@ export interface QuotePDFData {
   amountFinanced: number;
   netTotal: number;
   financing: QuotePDFFinancingScenario[];
+  financeComparisonEnabled: boolean;
   selectedFinancingLabel?: string | null;
   primaryMachineTitle?: string | null;
   deliveryEta?: string | null;
@@ -209,11 +212,12 @@ const s = StyleSheet.create({
   grandLabel: { fontSize: 13, color: CHARCOAL, fontFamily: "Helvetica-Bold" },
   grandValue: { fontSize: 14, color: ORANGE, fontFamily: "Helvetica-Bold" },
   financeGrid: { flexDirection: "row", marginTop: 12 },
-  financeCard: { flex: 1, borderWidth: 1, borderColor: GEAR_GRAY, padding: 11, marginRight: 8, minHeight: 86 },
+  financeCard: { flex: 1, borderWidth: 1, borderColor: GEAR_GRAY, padding: 11, marginRight: 8, minHeight: 96 },
   financeCardSelected: { borderColor: ORANGE, borderWidth: 2, backgroundColor: "#FFF7EC" },
   financeTitle: { fontSize: 8, fontFamily: "Helvetica-Bold", color: ORANGE, textTransform: "uppercase" as const, letterSpacing: 0.8, marginBottom: 5 },
-  financePayment: { fontSize: 15, fontFamily: "Helvetica-Bold", color: CHARCOAL, marginBottom: 4 },
+  financePayment: { fontSize: 18, fontFamily: "Helvetica-Bold", color: CHARCOAL, marginBottom: 5 },
   financeLine: { fontSize: 8, color: SURFACE, marginBottom: 2, lineHeight: 1.35 },
+  financeSourceLine: { fontSize: 7.2, color: MUTED, marginTop: 2, lineHeight: 1.3 },
   disclaimer: { fontSize: 7.5, color: MUTED, lineHeight: 1.45, marginTop: 11 },
   supportCard: { backgroundColor: CHARCOAL, padding: 12, marginBottom: 9, borderLeftWidth: 4, borderLeftColor: ORANGE },
   supportTitle: { fontSize: 11, fontFamily: "Helvetica-Bold", color: WHITE, marginBottom: 4 },
@@ -234,6 +238,15 @@ function maybe(value: string | number | null | undefined): string {
 
 function selectedTotal(data: QuotePDFData): number {
   return data.compliance.primaryTotalLabel === "Amount financed" ? data.amountFinanced : data.customerTotal;
+}
+
+function hasVisibleLeaseScenario(options: QuotePDFData["financing"]): boolean {
+  return options.some((option) => option.type === "lease" || option.kind === "lease_fmv" || option.kind === "lease_fppo");
+}
+
+function financeSectionTitle(data: QuotePDFData, options: QuotePDFData["financing"]): string {
+  if (!data.financeComparisonEnabled) return "Selected payment scenario";
+  return hasVisibleLeaseScenario(options) ? "Cash / finance / lease comparison" : "Cash / finance comparison";
 }
 
 function PageFooter({ data }: { data: QuotePDFData }) {
@@ -372,12 +385,14 @@ function FinancingCard({ option, selected }: { option: QuotePDFData["financing"]
   const payment = option.type === "cash"
     ? (option.totalCost != null ? fmt(option.totalCost) : "Cash purchase")
     : option.monthlyPayment != null ? `${fmt(option.monthlyPayment)} / mo` : "Payment estimate pending";
+  const aprSource = formatAprSourceAttribution(option);
   return (
     <View style={selected ? [s.financeCard, s.financeCardSelected] : s.financeCard}>
       <Text style={s.financeTitle}>{option.label ?? option.type}{selected ? " · Selected" : ""}</Text>
       <Text style={s.financePayment}>{payment}</Text>
       <Text style={s.financeLine}>Term: {option.termMonths != null ? `${option.termMonths} months` : "TBD"}</Text>
       <Text style={s.financeLine}>Rate/APR: {option.rate != null ? `${option.rate.toFixed(2)}%` : "Subject to approval"}</Text>
+      {aprSource ? <Text style={s.financeSourceLine}>{aprSource}</Text> : null}
       {option.totalCost != null ? <Text style={s.financeLine}>Estimated total: {fmt(option.totalCost)}</Text> : null}
       {option.downPayment != null ? <Text style={s.financeLine}>Down payment: {fmt(option.downPayment)}</Text> : null}
       {option.lender ? <Text style={[s.financeLine, { color: MUTED }]}>via {option.lender}</Text> : null}
@@ -388,6 +403,7 @@ function FinancingCard({ option, selected }: { option: QuotePDFData["financing"]
 export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
   const b = data.branch;
   const financingOptions = data.financing.filter(isDisplayableProposalFinanceScenario).slice(0, 3);
+  const paymentSectionTitle = financeSectionTitle(data, financingOptions);
   const selectedFinancing = financingOptions.find((option) => data.selectedFinancingLabel && option.label === data.selectedFinancingLabel) ?? financingOptions[0] ?? null;
   const facts = data.narrative.facts.slice(0, 4);
   const highlights = data.narrative.highlights.slice(0, 2);
@@ -478,7 +494,7 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
 
         {financingOptions.length > 0 ? (
           <>
-            <Text style={s.sectionTitle}>Payment scenarios</Text>
+            <Text style={s.sectionTitle}>{paymentSectionTitle}</Text>
             <View style={s.financeGrid}>
               {financingOptions.map((option) => (
                 <FinancingCard key={option.label ?? option.type} option={option} selected={selectedFinancing === option} />

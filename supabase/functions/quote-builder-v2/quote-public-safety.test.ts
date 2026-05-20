@@ -34,6 +34,31 @@ Deno.test("public deal-room payload sanitizes line items and AI recommendation i
       price: 2500,
       quoted_dealer_cost: 1100,
     }],
+    selected_finance_scenario: "60 months",
+    financing_scenarios: [{
+      type: "cash",
+      label: "Cash",
+      total_cost: 125000,
+    }, {
+      type: "finance",
+      label: "60 months",
+      apr: 7.25,
+      monthly_payment: 2050,
+      show_finance_comparison_on_customer_copy: false,
+      apr_source: {
+        kind: "manufacturer_program",
+        label: "Yanmar Spring APR",
+        provider: "Yanmar",
+        effectiveFrom: "2026-04-01",
+        internal_rate_sheet_id: "secret-rate-sheet",
+      },
+    }, {
+      type: "lease",
+      kind: "lease_fmv",
+      label: "FMV lease",
+      apr: 6.9,
+      monthly_payment: 1850,
+    }],
     quote_package_line_items: [{
       id: "line-1",
       catalog_entry_id: "catalog-1",
@@ -102,6 +127,23 @@ Deno.test("public deal-room payload sanitizes line items and AI recommendation i
   assertEquals(equipment.dealer_cost, undefined);
   assertEquals(equipment.metadata, undefined);
 
+  const financeScenarios = payload.financing_scenarios as Array<Record<string, unknown>>;
+  assertEquals(financeScenarios.map((scenario) => scenario.label), ["60 months"]);
+  assertEquals(JSON.stringify(payload).includes("Cash"), false);
+  assertEquals(JSON.stringify(payload).includes("FMV lease"), false);
+  assertEquals(payload.selected_finance_scenario, "60 months");
+  const finance = financeScenarios[0];
+  assertEquals(finance.apr_source, {
+    kind: "manufacturer_program",
+    label: "Yanmar Spring APR",
+    provider: "Yanmar",
+    programId: null,
+    effectiveFrom: "2026-04-01",
+    effectiveTo: null,
+    disclosure: null,
+  });
+  assertEquals(JSON.stringify(finance).includes("secret-rate-sheet"), false);
+
   const recommendation = payload.ai_recommendation as Record<string, unknown>;
   assertEquals(recommendation.reasoning, "Good fit for the job.");
   assertEquals(
@@ -117,6 +159,36 @@ Deno.test("public deal-room payload sanitizes line items and AI recommendation i
     (recommendation.alternative as Record<string, unknown>).trigger,
     undefined,
   );
+});
+
+Deno.test("public deal-room payload honors quote-level comparison toggle from metadata", () => {
+  const payload = buildPublicDealRoomPayload({
+    status: "sent",
+    metadata: { show_finance_comparison_on_customer_copy: false },
+    selected_finance_scenario: "60 months",
+    financing_scenarios: [{
+      type: "cash",
+      label: "Cash",
+      total_cost: 100000,
+    }, {
+      type: "finance",
+      label: "60 months",
+      apr: 7.25,
+      monthly_payment: 2050,
+      lender: "Preferred lender",
+    }, {
+      type: "lease",
+      kind: "lease_fmv",
+      label: "FMV lease",
+      monthly_payment: 1850,
+    }],
+  });
+
+  const financeScenarios = payload.financing_scenarios as Array<Record<string, unknown>>;
+  assertEquals(financeScenarios.map((scenario) => scenario.label), ["60 months"]);
+  assertEquals(JSON.stringify(payload).includes("FMV lease"), false);
+  assertEquals(JSON.stringify(payload).includes("Cash"), false);
+  assertEquals(financeScenarios[0].apr_source, null);
 });
 
 Deno.test("customer content readiness blocks unconfirmed narrative and tax gaps", () => {

@@ -225,6 +225,7 @@ export function QuoteWizardStepRouter(props: QuoteWizardStepRouterProps) {
           marginAmount={props.marginAmount}
           activeQuotePackageId={props.activeQuotePackageId}
           allFinanceScenarios={props.allFinanceScenarios}
+          leaseQuotingEnabled={props.leaseQuotingEnabled}
           sendReadiness={props.sendReadiness}
           requiresManagerApproval={props.requiresManagerApproval}
           userRole={props.userRole}

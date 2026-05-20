@@ -1,6 +1,7 @@
 import { quoteLineCostVisibility } from "./quote-workspace";
 import type {
   QuoteEntryMode,
+  QuoteFinanceAprSource,
   QuoteFinanceScenarioDraft,
   QuoteLineItemKind,
   QuoteLineItemDraft,
@@ -311,6 +312,42 @@ function isPricingLineKind(kind: QuoteLineItemKind): boolean {
   ].includes(kind);
 }
 
+function normalizeAprSourceKind(value: unknown): QuoteFinanceAprSource["kind"] {
+  const text = asString(value);
+  return text === "manufacturer_program"
+    || text === "dealer_program"
+    || text === "lender_estimate"
+    || text === "manual_rep_entry"
+    || text === "unknown"
+    ? text
+    : "unknown";
+}
+
+function normalizeFinanceAprSource(record: Record<string, unknown>): QuoteFinanceAprSource | null {
+  const metadata = asRecord(record.metadata);
+  const source = asRecord(record.aprSource) ?? asRecord(record.apr_source) ?? asRecord(metadata?.apr_source);
+  const label = asString(source?.label) || asString(record.apr_source_label) || asString(metadata?.apr_source_label) || asString(record.program_name);
+  const explicitProvider = asString(source?.provider) || asString(record.apr_source_provider) || asString(metadata?.apr_source_provider);
+  const programId = asString(source?.programId) || asString(source?.program_id) || asString(record.apr_source_program_id) || asString(metadata?.apr_source_program_id);
+  const effectiveFrom = asString(source?.effectiveFrom) || asString(source?.effective_from) || asString(record.apr_source_effective_from) || asString(metadata?.apr_source_effective_from) || asString(record.effective_from);
+  const effectiveTo = asString(source?.effectiveTo) || asString(source?.effective_to) || asString(record.apr_source_effective_to) || asString(metadata?.apr_source_effective_to) || asString(record.effective_to);
+  const disclosure = asString(source?.disclosure) || asString(record.apr_source_disclosure) || asString(metadata?.apr_source_disclosure);
+  const hasSource = Boolean(label || explicitProvider || programId || effectiveFrom || effectiveTo || disclosure || source?.kind || record.apr_source_kind || metadata?.apr_source_kind);
+  const provider = hasSource
+    ? explicitProvider || asString(record.oem_name) || asString(record.manufacturer)
+    : undefined;
+  if (!hasSource) return null;
+  return {
+    kind: normalizeAprSourceKind(source?.kind ?? record.apr_source_kind ?? metadata?.apr_source_kind),
+    label: label || provider || "APR program source provided by lender",
+    provider: provider || null,
+    programId: programId || null,
+    effectiveFrom: effectiveFrom || null,
+    effectiveTo: effectiveTo || null,
+    disclosure: disclosure || null,
+  };
+}
+
 function normalizeFinanceScenario(item: unknown): QuoteFinanceScenarioDraft[] {
   const record = asRecord(item);
   if (!record) return [];
@@ -339,6 +376,7 @@ function normalizeFinanceScenario(item: unknown): QuoteFinanceScenarioDraft[] {
     monthlyPayment: asNumber(record.monthly_payment) ?? asNumber(record.monthlyPayment),
     totalCost: asNumber(record.total_cost) ?? asNumber(record.totalCost),
     lender: asString(record.lender) || null,
+    aprSource: normalizeFinanceAprSource(record),
     isDefault: asBoolean(record.is_default) || asBoolean(record.isDefault),
   }];
 }
@@ -396,6 +434,17 @@ export function hydrateDraftFromSavedQuote(
       .map((item) => asString(item.label))
       .find(Boolean)
     || null;
+  const savedMetadata = asRecord(savedQuote.metadata);
+  const snapshot = asRecord(savedQuote.snapshot_json) ?? asRecord(savedQuote.snapshot);
+  const financeComparisonSource = financeScenarios
+    .map((item) => item.show_finance_comparison_on_customer_copy ?? item.showFinanceComparisonOnCustomerCopy ?? asRecord(item.metadata)?.show_finance_comparison_on_customer_copy)
+    .find((value) => value === true || value === false || value === "true" || value === "false");
+  const persistedFinanceComparison = savedQuote.show_finance_comparison_on_customer_copy
+    ?? savedQuote.showFinanceComparisonOnCustomerCopy
+    ?? savedMetadata?.show_finance_comparison_on_customer_copy
+    ?? savedMetadata?.showFinanceComparisonOnCustomerCopy
+    ?? snapshot?.showFinanceComparisonOnCustomerCopy
+    ?? snapshot?.show_finance_comparison_on_customer_copy;
 
   const entryModeRaw = asString(savedQuote.entry_mode);
   const taxProfileRaw = asString(savedQuote.tax_profile);
@@ -434,6 +483,11 @@ export function hydrateDraftFromSavedQuote(
     taxTotal: asNumber(savedQuote.tax_total) ?? 0,
     amountFinanced: asNumber(savedQuote.amount_financed) ?? 0,
     selectedFinanceScenario,
+    showFinanceComparisonOnCustomerCopy: persistedFinanceComparison == null
+      ? financeComparisonSource == null
+        ? undefined
+        : asBoolean(financeComparisonSource)
+      : asBoolean(persistedFinanceComparison),
     savedFinanceScenarios,
     wizardStep: asNumber(savedQuote.wizard_step),
     expiresAt: asString(savedQuote.expires_at) || null,

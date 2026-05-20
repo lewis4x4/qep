@@ -40,5 +40,11 @@ export function buildCustomFinanceScenario(input: CustomFinanceInput): QuoteFina
     termMonths,
     totalCost: roundCurrency(monthlyPayment * termMonths),
     lender: "Custom terms",
+    aprSource: {
+      kind: "manual_rep_entry",
+      label: "Manual APR entered by QEP representative",
+      provider: "QEP",
+      disclosure: "Payment estimate is subject to lender approval and final finance documents.",
+    },
   };
 }

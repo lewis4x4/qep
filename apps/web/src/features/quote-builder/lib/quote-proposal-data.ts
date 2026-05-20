@@ -376,7 +376,7 @@ function buildNarrative(draft: QuoteWorkspaceDraft): QuotePDFData["narrative"] {
   };
 }
 
-function scenarioKind(scenario: QuoteFinanceScenario | null | undefined): QuotePDFData["compliance"]["selectedPaymentKind"] {
+function scenarioKind(scenario: Pick<QuotePDFData["financing"][number], "type" | "kind"> | null | undefined): QuotePDFData["compliance"]["selectedPaymentKind"] {
   if (!scenario) return "unknown";
   if (scenario.kind === "cash" || scenario.type === "cash") return "cash";
   if (scenario.type === "lease" || scenario.kind === "lease_fmv" || scenario.kind === "lease_fppo") return "lease";
@@ -392,20 +392,34 @@ export function isDisplayableProposalFinanceScenario(scenario: QuotePDFData["fin
   return scenario.monthlyPayment != null || (scenario.termMonths ?? 0) > 0 || scenario.totalCost != null;
 }
 
+function isLeaseFinanceScenario(scenario: Pick<QuotePDFData["financing"][number], "type" | "kind">): boolean {
+  return scenario.type === "lease" || scenario.kind === "lease_fmv" || scenario.kind === "lease_fppo";
+}
+
+function financeSortRank(scenario: Pick<QuotePDFData["financing"][number], "type" | "kind">): number {
+  if (scenario.type === "cash" || scenario.kind === "cash") return 0;
+  if (scenario.type === "finance" || scenario.kind === "finance") return 1;
+  if (isLeaseFinanceScenario(scenario)) return 2;
+  return 3;
+}
+
 function buildFinancing(scenarios: QuoteFinanceScenario[]): QuotePDFData["financing"] {
-  return scenarios.map((scenario) => ({
-    type: scenario.type,
-    kind: scenario.kind ?? (scenario.type === "cash" ? "cash" : scenario.type === "lease" ? "lease_fmv" : "finance"),
-    label: scenario.label,
-    termMonths: scenario.termMonths ?? null,
-    rate: scenario.rate ?? scenario.apr ?? null,
-    monthlyPayment: scenario.monthlyPayment ?? null,
-    totalCost: scenario.totalCost ?? null,
-    lender: scenario.lender ?? null,
-    downPayment: scenario.downPayment ?? null,
-    residualAmount: scenario.residualAmount ?? null,
-    isDefault: scenario.isDefault ?? false,
-  }));
+  return scenarios
+    .map((scenario) => ({
+      type: scenario.type,
+      kind: scenario.kind ?? (scenario.type === "cash" ? "cash" : scenario.type === "lease" ? "lease_fmv" : "finance"),
+      label: scenario.label,
+      termMonths: scenario.termMonths ?? null,
+      rate: scenario.rate ?? scenario.apr ?? null,
+      monthlyPayment: scenario.monthlyPayment ?? null,
+      totalCost: scenario.totalCost ?? null,
+      lender: scenario.lender ?? null,
+      downPayment: scenario.downPayment ?? null,
+      residualAmount: scenario.residualAmount ?? null,
+      aprSource: scenario.aprSource ?? null,
+      isDefault: scenario.isDefault ?? false,
+    }))
+    .sort((a, b) => financeSortRank(a) - financeSortRank(b));
 }
 
 function buildTaxDetail(draft: QuoteWorkspaceDraft): Pick<QuotePDFData["compliance"], "taxLabel" | "taxDetail"> {
@@ -457,10 +471,20 @@ export function buildQuoteProposalData(input: {
   preparedDate: string;
   branch: QuotePDFData["branch"];
   tradeValuation?: TradeValuationProposalSnapshot | null;
+  includeLeaseScenarios?: boolean;
+  showFinanceComparisonOnCustomerCopy?: boolean;
 }): QuotePDFData {
   const { draft, computed } = input;
-  const financing = buildFinancing(input.financeScenarios);
-  const selectedScenario = input.financeScenarios.find((scenario) => scenario.label === draft.selectedFinanceScenario) ?? null;
+  const includeLeaseScenarios = input.includeLeaseScenarios !== false;
+  const financeComparisonEnabled = input.showFinanceComparisonOnCustomerCopy ?? draft.showFinanceComparisonOnCustomerCopy ?? true;
+  const customerVisibleFinancing = buildFinancing(input.financeScenarios)
+    .filter((scenario) => includeLeaseScenarios || !isLeaseFinanceScenario(scenario));
+  const selectedScenario = customerVisibleFinancing.find((scenario) => scenario.label === draft.selectedFinanceScenario) ?? null;
+  const financing = financeComparisonEnabled
+    ? customerVisibleFinancing
+    : selectedScenario && isDisplayableProposalFinanceScenario(selectedScenario)
+      ? [selectedScenario]
+      : [];
   const selectedPaymentKind = scenarioKind(selectedScenario);
   const hasDisplayedFinanceOrLease = financing.some((scenario) => isDisplayableProposalFinanceScenario(scenario) && scenario.type !== "cash");
   const tax = buildTaxDetail(draft);
@@ -505,7 +529,8 @@ export function buildQuoteProposalData(input: {
     amountFinanced: money(computed.amountFinanced),
     netTotal: money(computed.netTotal),
     financing,
-    selectedFinancingLabel: draft.selectedFinanceScenario,
+    financeComparisonEnabled,
+    selectedFinancingLabel: selectedScenario?.label ?? null,
     primaryMachineTitle: primaryEquipment ? lineDescription(primaryEquipment) : null,
     deliveryEta: formatDate(draft.deliveryEta),
     depositRequiredAmount: draft.depositRequiredAmount ?? null,

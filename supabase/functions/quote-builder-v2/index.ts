@@ -544,6 +544,48 @@ async function syncQuotePackageLineItems(input: {
   return { rows, error: null };
 }
 
+function normalizeQuoteFinanceScenarioMetadata(row: Record<string, unknown>): Record<string, unknown> {
+  const metadata = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+    ? { ...(row.metadata as Record<string, unknown>) }
+    : {};
+  const nestedAprSource = row.apr_source ?? row.aprSource;
+  if (nestedAprSource && typeof nestedAprSource === "object" && !Array.isArray(nestedAprSource)) {
+    metadata.apr_source = nestedAprSource;
+    if (row.show_finance_comparison_on_customer_copy === true || row.showFinanceComparisonOnCustomerCopy === true) {
+      metadata.show_finance_comparison_on_customer_copy = true;
+    } else if (row.show_finance_comparison_on_customer_copy === false || row.showFinanceComparisonOnCustomerCopy === false) {
+      metadata.show_finance_comparison_on_customer_copy = false;
+    }
+    return metadata;
+  }
+  const label = lineString(row.apr_source_label ?? row.program_name, 240);
+  const explicitProvider = lineString(row.apr_source_provider, 160);
+  const kind = lineString(row.apr_source_kind, 80);
+  const programId = lineString(row.apr_source_program_id, 160);
+  const effectiveFrom = lineString(row.apr_source_effective_from ?? row.effective_from, 80);
+  const effectiveTo = lineString(row.apr_source_effective_to ?? row.effective_to, 80);
+  const disclosure = lineString(row.apr_source_disclosure, 500);
+  const hasExplicitAprSource = Boolean(label || explicitProvider || kind || programId || effectiveFrom || effectiveTo || disclosure);
+  const provider = hasExplicitAprSource ? explicitProvider ?? lineString(row.oem_name ?? row.manufacturer, 160) : null;
+  if (row.show_finance_comparison_on_customer_copy === true || row.showFinanceComparisonOnCustomerCopy === true) {
+    metadata.show_finance_comparison_on_customer_copy = true;
+  } else if (row.show_finance_comparison_on_customer_copy === false || row.showFinanceComparisonOnCustomerCopy === false) {
+    metadata.show_finance_comparison_on_customer_copy = false;
+  }
+  if (hasExplicitAprSource) {
+    metadata.apr_source = {
+      kind: kind ?? "unknown",
+      label: label ?? provider ?? "APR program source provided by lender",
+      provider,
+      programId,
+      effectiveFrom,
+      effectiveTo,
+      disclosure,
+    };
+  }
+  return metadata;
+}
+
 function normalizeQuoteFinancingScenarios(body: Record<string, unknown>): Array<Record<string, unknown>> {
   const source = Array.isArray(body.financing_scenarios) ? body.financing_scenarios : [];
   const hasExplicitDefault = source.some((item) =>
@@ -583,9 +625,7 @@ function normalizeQuoteFinancingScenarios(body: Record<string, unknown>): Array<
       total_cost: clampCurrency(row.total_cost ?? row.totalCost),
       lender: lineString(row.lender, 160),
       is_default: isDefault,
-      metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
-        ? row.metadata
-        : {},
+      metadata: normalizeQuoteFinanceScenarioMetadata(row),
     }];
   });
 }
@@ -1979,7 +2019,7 @@ async function handlePublicChatTurn(
   const admin = createAdminClient();
   const { data: quote, error: quoteErr } = await admin
     .from("quote_packages")
-    .select("id, status, expires_at, equipment, customer_name, customer_company, customer_total, amount_financed, financing_scenarios, branch_slug, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
+    .select("id, status, expires_at, equipment, customer_name, customer_company, customer_total, amount_financed, financing_scenarios, branch_slug, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason, metadata")
     .eq("share_token", token)
     .maybeSingle();
   if (quoteErr) return safeJsonError("Failed to load quote", 500, origin);
@@ -2011,7 +2051,8 @@ async function handlePublicChatTurn(
   const confirmedWhyThisMachine = quote.why_this_machine_confirmed === true && typeof quote.why_this_machine === "string"
     ? quote.why_this_machine.trim().slice(0, 500)
     : null;
-  const scenarios = Array.isArray(quote.financing_scenarios) ? quote.financing_scenarios : [];
+  const publicQuote = buildPublicDealRoomPayload(quote as Record<string, unknown>);
+  const scenarios = Array.isArray(publicQuote.financing_scenarios) ? publicQuote.financing_scenarios : [];
   const scenarioSummary = scenarios.slice(0, 3).map((s: Record<string, unknown>) => {
     const label = typeof s.label === "string" ? s.label : (typeof s.type === "string" ? s.type : "option");
     const monthly = typeof s.monthly_payment === "number" ? `$${Math.round(s.monthly_payment)}/mo` : "—";
@@ -3326,6 +3367,7 @@ function buildQuoteVersionArtifacts(input: {
     tradeAllowance: Number(input.body.trade_allowance ?? input.body.trade_credit ?? 0) || 0,
     cashDown: Number(input.body.cash_down ?? 0) || 0,
     selectedFinanceScenario: typeof input.body.selected_finance_scenario === "string" ? input.body.selected_finance_scenario : null,
+    showFinanceComparisonOnCustomerCopy: input.body.show_finance_comparison_on_customer_copy !== false && input.body.showFinanceComparisonOnCustomerCopy !== false,
     taxProfile: typeof input.body.tax_profile === "string"
       ? input.body.tax_profile as QuoteVersionSnapshot["taxProfile"]
       : "standard",
@@ -5697,6 +5739,11 @@ Deno.serve(async (req) => {
         ...(existingRowMeta ?? {}),
         ...(bodyMetadata ?? {}),
       };
+      if (body.show_finance_comparison_on_customer_copy === true || body.showFinanceComparisonOnCustomerCopy === true) {
+        mergedMetadata.show_finance_comparison_on_customer_copy = true;
+      } else if (body.show_finance_comparison_on_customer_copy === false || body.showFinanceComparisonOnCustomerCopy === false) {
+        mergedMetadata.show_finance_comparison_on_customer_copy = false;
+      }
       if ("prospect_conversion_source" in body && body.prospect_conversion_source === null) {
         delete mergedMetadata.prospect_conversion_source;
       }

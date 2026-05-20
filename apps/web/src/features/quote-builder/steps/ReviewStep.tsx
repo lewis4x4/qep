@@ -47,6 +47,7 @@ export interface ReviewStepProps {
   marginAmount: number;
   activeQuotePackageId: string | null;
   allFinanceScenarios: QuoteFinanceScenario[];
+  leaseQuotingEnabled: boolean;
   sendReadiness: { ready: boolean; missing: string[] };
   requiresManagerApproval: boolean;
   userRole: string | null;
@@ -105,6 +106,7 @@ export function ReviewStep({
   marginAmount,
   activeQuotePackageId,
   allFinanceScenarios,
+  leaseQuotingEnabled,
   sendReadiness,
   requiresManagerApproval,
   userRole,
@@ -516,6 +518,7 @@ export function ReviewStep({
           quotePackageId={activeQuotePackageId}
           draft={draft}
           financeScenarios={allFinanceScenarios}
+          leaseQuotingEnabled={leaseQuotingEnabled}
           computed={{ subtotal, discountTotal, netTotal, taxTotal, customerTotal, cashDown, amountFinanced }}
           sendReadiness={sendReadiness}
           requiresManagerApproval={requiresManagerApproval}

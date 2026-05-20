@@ -451,7 +451,17 @@ describe("buildQuoteProposalData", () => {
       specialTerms: "Subject to final freight confirmation.",
       expiresAt: "2026-06-06",
     }, [
-      { type: "finance", kind: "finance", label: "60 months", monthlyPayment: 2_050, termMonths: 60, rate: 7.25, totalCost: 123_000, lender: "Preferred lender" },
+      {
+        type: "finance",
+        kind: "finance",
+        label: "60 months",
+        monthlyPayment: 2_050,
+        termMonths: 60,
+        rate: 7.25,
+        totalCost: 123_000,
+        lender: "Preferred lender",
+        aprSource: { kind: "manufacturer_program", label: "Yanmar Spring APR", provider: "Yanmar", effectiveFrom: "2026-04-01" },
+      },
       { type: "lease", kind: "lease_fmv", label: "FMV lease", monthlyPayment: 1_850, termMonths: 48, rate: 6.9, totalCost: 118_000, lender: "Lease partner" },
     ]);
 
@@ -462,6 +472,35 @@ describe("buildQuoteProposalData", () => {
     expect(data.compliance.taxDetail).toContain("County cap confirmed by manager");
     expect(data.specialTerms).toBe("Subject to final freight confirmation.");
     expect(data.validUntil).toMatch(/2026|6/);
+    expect(data.financing.find((scenario) => scenario.label === "60 months")?.aprSource?.label).toBe("Yanmar Spring APR");
+  });
+
+  test("filters disabled lease scenarios from customer proposal output", () => {
+    const data = build({
+      selectedFinanceScenario: "FMV lease",
+    }, [
+      { type: "cash", kind: "cash", label: "Cash", totalCost: 116_000 },
+      { type: "finance", kind: "finance", label: "60 months", monthlyPayment: 2_050, termMonths: 60, rate: 7.25, totalCost: 123_000 },
+      { type: "lease", kind: "lease_fmv", label: "FMV lease", monthlyPayment: 1_850, termMonths: 48, rate: 6.9, totalCost: 118_000 },
+    ], { includeLeaseScenarios: false });
+
+    expect(data.financing.map((scenario) => scenario.label)).toEqual(["Cash", "60 months"]);
+    expect(data.selectedFinancingLabel).toBeNull();
+    expect(data.compliance.selectedPaymentKind).toBe("unknown");
+  });
+
+  test("customer comparison toggle off renders only the selected scenario", () => {
+    const data = build({
+      selectedFinanceScenario: "60 months",
+      showFinanceComparisonOnCustomerCopy: false,
+    }, [
+      { type: "cash", kind: "cash", label: "Cash", totalCost: 116_000 },
+      { type: "finance", kind: "finance", label: "60 months", monthlyPayment: 2_050, termMonths: 60, rate: 7.25, totalCost: 123_000 },
+      { type: "lease", kind: "lease_fmv", label: "FMV lease", monthlyPayment: 1_850, termMonths: 48, rate: 6.9, totalCost: 118_000 },
+    ], { includeLeaseScenarios: true });
+
+    expect(data.financeComparisonEnabled).toBe(false);
+    expect(data.financing.map((scenario) => scenario.label)).toEqual(["60 months"]);
   });
 
   test("printable HTML renders the same safe proposal elements", () => {
@@ -471,7 +510,17 @@ describe("buildQuoteProposalData", () => {
       recommendation: { machine: "Bobcat T770", attachments: [], reasoning: "Unsafe AI reasoning." },
       selectedFinanceScenario: "60 months",
     }, [
-      { type: "finance", kind: "finance", label: "60 months", monthlyPayment: 2_050, termMonths: 60, rate: 7.25, totalCost: 123_000, lender: "Preferred lender" },
+      {
+        type: "finance",
+        kind: "finance",
+        label: "60 months",
+        monthlyPayment: 2_050,
+        termMonths: 60,
+        rate: 7.25,
+        totalCost: 123_000,
+        lender: "Preferred lender",
+        aprSource: { kind: "manufacturer_program", label: "Yanmar Spring APR", provider: "Yanmar", effectiveFrom: "2026-04-01" },
+      },
       { type: "lease", kind: "lease_fmv", label: "FMV lease", monthlyPayment: 1_850, termMonths: 48, rate: 6.9, totalCost: 118_000, lender: "Lease partner" },
     ]);
     const html = buildPrintableQuoteHtml(data);
@@ -489,6 +538,8 @@ describe("buildQuoteProposalData", () => {
     expect(html).not.toContain("Scan for quote feedback");
     expect(html).not.toContain("Scan for proposal feedback");
     expect(html).toContain("Truth in Lending Act");
+    expect(html).toContain("APR source: Yanmar Spring APR");
+    expect(html).toContain("Cash / finance / lease comparison");
     expect(html).toContain("#F28A07");
     expect(html).toContain("QEP-2026-0001");
     expect(html).toContain("FMV lease");
@@ -572,6 +623,7 @@ describe("buildQuoteProposalData", () => {
     const data = build({
       whyThisMachine: "Confirmed story.",
       whyThisMachineConfirmed: true,
+      selectedFinanceScenario: "60 months",
       equipment: [{
         kind: "equipment",
         title: "ASV RT-135F",
@@ -588,7 +640,19 @@ describe("buildQuoteProposalData", () => {
           media_kind: "actual",
         },
       }],
-    });
+    }, [
+      {
+        type: "finance",
+        kind: "finance",
+        label: "60 months",
+        monthlyPayment: 2_050,
+        termMonths: 60,
+        rate: 7.25,
+        totalCost: 123_000,
+        lender: "Preferred lender",
+        aprSource: { kind: "manufacturer_program", label: "Yanmar Spring APR", provider: "Yanmar", effectiveFrom: "2026-04-01" },
+      },
+    ]);
     const document = QuotePDFDocument({ data });
     const rendered = JSON.stringify(document);
 
@@ -597,6 +661,8 @@ describe("buildQuoteProposalData", () => {
     expect(rendered).toContain("https://cdn.qep.example/asv-side.jpg");
     expect(rendered).toContain("coverGalleryUnits");
     expect(rendered).toContain("Q003403");
+    expect(rendered).toContain("Yanmar Spring APR");
+    expect(rendered).toContain("financeComparisonEnabled");
     expect(rendered).toContain("/brand/qep/quote/qep-qr.png");
     expect(QEP_WEBSITE_QR_LABEL).toBe("Scan to visit QEP online");
     expect(rendered).not.toContain("Scan to review this proposal");

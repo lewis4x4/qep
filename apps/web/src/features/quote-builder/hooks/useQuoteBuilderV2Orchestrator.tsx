@@ -143,6 +143,7 @@ export function useQuoteBuilderV2Orchestrator() {
     taxTotal: 0,
     amountFinanced: 0,
     selectedFinanceScenario: null,
+    showFinanceComparisonOnCustomerCopy: true,
     pricingLines: [],
     postApprovalAction: "return_to_rep",
     wizardStep: 1,
@@ -446,6 +447,7 @@ export function useQuoteBuilderV2Orchestrator() {
       ? activeQuoteRecord.created_at
       : null;
   const currentWizardStepNumber = wizardIndexForStep(step);
+  const leaseQuotingEnabled = import.meta.env.VITE_FEATURE_LEASE_QUOTING === "true";
 
   useQuoteBuilderWizardPersist({
     activeQuotePackageId,
@@ -512,6 +514,7 @@ export function useQuoteBuilderV2Orchestrator() {
     amountFinanced,
     marginPct,
     allFinanceScenarios,
+    leaseQuotingEnabled,
     activeQuotePackageId,
     activeQuoteNumber,
     activeApprovalCaseLoading,
@@ -725,7 +728,6 @@ export function useQuoteBuilderV2Orchestrator() {
   });
 
   const discountLine = pricingLine("discount");
-  const leaseQuotingEnabled = import.meta.env.VITE_FEATURE_LEASE_QUOTING === "true";
 
   const documentReady = Boolean(documentFallbackGeneratedAt);
   const documentPersistenceLabel = documentArtifact
