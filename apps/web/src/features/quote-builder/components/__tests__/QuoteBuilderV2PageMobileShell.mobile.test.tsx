@@ -189,4 +189,29 @@ describe("QuoteBuilderV2PageMobileShell mobile section framing", () => {
     expect(frame.className).toContain("bg-qep-orange/[0.06]");
     expect(screen.getByTestId("wizard-content").textContent).toContain("pricing-content");
   });
+
+  test("delegates vertical scroll ownership to SalesShell and clears bottom chrome", () => {
+    const { container } = renderShell("pricing");
+
+    const root = container.firstElementChild as HTMLElement;
+    const rootClasses = root.className.split(/\s+/);
+    expect(rootClasses).toContain("min-h-full");
+    expect(rootClasses).not.toContain("h-full");
+    expect(rootClasses).not.toContain("min-h-0");
+
+    const scrollSurface = screen.getByTestId("quote-mobile-scroll-root") as HTMLElement;
+    expect(scrollSurface.className).not.toContain("overflow-y-auto");
+    expect(scrollSurface.getAttribute("data-scroll-owner")).toBe("sales-shell");
+    expect(scrollSurface.getAttribute("data-bottom-spacing-contract")).toBe(
+      "mobile-action-bar-only",
+    );
+    expect(scrollSurface.style.paddingBottom).toBe("5rem");
+
+    const actionBar = screen.getByTestId("quote-mobile-action-bar") as HTMLElement;
+    expect(actionBar.className).not.toContain("bottom-16");
+    expect(actionBar.getAttribute("data-bottom-offset-contract")).toBe(
+      "sales-shell-bottom-offset",
+    );
+    expect(actionBar.style.bottom).toBe("var(--sales-shell-bottom-offset)");
+  });
 });

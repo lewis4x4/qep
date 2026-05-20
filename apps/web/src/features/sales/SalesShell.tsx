@@ -20,8 +20,10 @@ export function SalesShell() {
       <SalesTopHeader />
 
       <main
-        className="min-h-0 flex-1 overflow-y-auto pt-14 pb-[calc(var(--sales-shell-bottom-offset)+0.75rem)]"
+        className="min-h-0 flex-1 overflow-y-auto pt-14"
         data-testid="sales-shell-scroll-root"
+        data-scroll-owner="sales-shell"
+        style={{ paddingBottom: "var(--sales-shell-bottom-scroll-padding)" }}
       >
         <Outlet />
       </main>

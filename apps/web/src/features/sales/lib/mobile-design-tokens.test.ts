@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 import { MOBILE } from "./mobile-design-tokens";
 
@@ -6,6 +7,13 @@ describe("MOBILE design tokens", () => {
     expect(MOBILE.topHeaderHeight).toBe(56);
     expect(MOBILE.bottomTabBarHeight).toBe(64);
     expect(MOBILE.stickyActionBarHeight).toBe(64);
+  });
+
+  test("matches the SalesShell CSS bottom-tab height custom property", () => {
+    const css = readFileSync(new URL("../../../index.css", import.meta.url), "utf8");
+    expect(css).toContain(`--sales-shell-bottom-tab-height: ${MOBILE.bottomTabBarHeight}px;`);
+    expect(css).toContain("--sales-shell-bottom-offset: calc(");
+    expect(css).toContain("--sales-shell-bottom-scroll-padding: calc(");
   });
 
   test("locks 44pt minimum touch target", () => {

@@ -266,10 +266,17 @@
   }
 
   :root {
+    /* SalesShell owns vertical scrolling. BottomTabBar reserves exactly
+       one safe-area inset: the fixed nav height is tab height + inset,
+       and the nav applies that inset once as padding-bottom. */
     --sales-shell-bottom-tab-height: 64px;
+    --sales-shell-bottom-gutter: 0.75rem;
     --sales-shell-safe-area-bottom: env(safe-area-inset-bottom, 0px);
     --sales-shell-bottom-offset: calc(
       var(--sales-shell-bottom-tab-height) + var(--sales-shell-safe-area-bottom)
+    );
+    --sales-shell-bottom-scroll-padding: calc(
+      var(--sales-shell-bottom-offset) + var(--sales-shell-bottom-gutter)
     );
   }
 }

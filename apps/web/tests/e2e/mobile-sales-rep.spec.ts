@@ -34,6 +34,11 @@ async function assertBottomTabPersistsAfterShellScroll(
 ): Promise<void> {
   const bottomTab = page.getByTestId("sales-bottom-tab-bar");
   await expect(bottomTab).toBeVisible();
+  await expect(bottomTab).toHaveAttribute("data-bottom-tab-height", "64");
+  await expect(bottomTab).toHaveAttribute(
+    "data-safe-area-contract",
+    "height-includes-padding-bottom-once",
+  );
 
   await page.getByTestId(scrollRootTestId).evaluate((node) => {
     node.scrollTo({ top: node.scrollHeight, behavior: "auto" });
@@ -112,7 +117,7 @@ test.describe("mobile sales rep surface", () => {
       await page.goto("/sales/quotes/new");
       await expect(page).toHaveURL(/\/sales\/quotes\/new/);
       await assertNoHorizontalOverflow(page);
-      await assertBottomTabPersistsAfterShellScroll(page, "quote-mobile-scroll-root");
+      await assertBottomTabPersistsAfterShellScroll(page, "sales-shell-scroll-root");
 
       // /sales/field-note mounts the voice cockpit.
       await page.goto("/sales/field-note");

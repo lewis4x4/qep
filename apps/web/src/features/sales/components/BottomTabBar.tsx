@@ -2,6 +2,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Sun, BarChart3, Mic, FileText, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MOBILE } from "../lib/mobile-design-tokens";
+
+export const SALES_BOTTOM_TAB_BAR_HEIGHT = MOBILE.bottomTabBarHeight;
 
 type Tab = {
   path: string;
@@ -56,14 +59,18 @@ export function BottomTabBar() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-lg border-t border-slate-200/80 safe-area-bottom"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200/80"
       role="tablist"
       aria-label="Sales navigation"
       data-testid="sales-bottom-tab-bar"
-      data-bottom-tab-height="64"
-      style={{ height: "var(--sales-shell-bottom-offset)" }}
+      data-bottom-tab-height={String(SALES_BOTTOM_TAB_BAR_HEIGHT)}
+      data-safe-area-contract="height-includes-padding-bottom-once"
+      style={{
+        height: "var(--sales-shell-bottom-offset)",
+        paddingBottom: "var(--sales-shell-safe-area-bottom)",
+      }}
     >
-      <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-2">
+      <div className="flex h-[var(--sales-shell-bottom-tab-height)] items-center justify-around max-w-lg mx-auto px-2">
         {TABS.map((tab) => (
           <TabButton
             key={tab.path}

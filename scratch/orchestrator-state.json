@@ -298,6 +298,36 @@
       "gate_report": "test-results/agent-gates/20260520T231012Z-B5.3-hf-2-voice-note-dropdown-contrast.json",
       "notes": "Roadmap names VoiceNoteCapture, but shipped HF-1 extracted the relevant picker to CustomerPickerInline. Main working tree has unrelated OEM/admin WIP and duplicate untracked migration numbers, so full gate ran in a clean detached worktree with only HF-2 scoped files applied.",
       "updated_at": "2026-05-20T23:10:12Z"
+    },
+    {
+      "task_id": "B5.4/QEP-60",
+      "status": "complete",
+      "title": "HF-3 \u2014 Bottom nav stability",
+      "stream": "B",
+      "wave": "B5",
+      "goal": "SalesShell owns mobile sales-route vertical scrolling with a stable BottomTabBar height/safe-area contract and Quote Builder mobile clears bottom chrome without nested vertical scroll.",
+      "changed_files": [
+        "apps/web/src/features/sales/SalesShell.tsx",
+        "apps/web/src/features/sales/SalesShell.test.tsx",
+        "apps/web/src/features/sales/components/BottomTabBar.tsx",
+        "apps/web/src/features/sales/components/BottomTabBar.test.tsx",
+        "apps/web/src/features/quote-builder/components/QuoteBuilderV2PageMobileShell.tsx",
+        "apps/web/src/features/quote-builder/components/__tests__/QuoteBuilderV2PageMobileShell.mobile.test.tsx",
+        "apps/web/src/features/sales/lib/mobile-design-tokens.test.ts",
+        "apps/web/src/index.css",
+        "apps/web/tests/e2e/mobile-sales-rep.spec.ts"
+      ],
+      "verification": [
+        "bun test --timeout=30000 src/features/sales/SalesShell.test.tsx src/features/sales/components/BottomTabBar.test.tsx src/features/sales/lib/mobile-design-tokens.test.ts src/features/quote-builder/components/__tests__/QuoteBuilderV2PageMobileShell.mobile.test.tsx",
+        "bun run typecheck",
+        "bun run test:e2e -- tests/e2e/mobile-sales-rep.spec.ts --project=chromium (4 passed, 2 credential-gated skipped)",
+        "git diff --check -- scoped HF-3 files",
+        "Oracle review: no blocking findings",
+        "bun run segment:gates --segment B5.4-hf-3-bottom-nav-stability --ui (clean temp worktree)"
+      ],
+      "gate_report": "test-results/agent-gates/20260520T232610Z-B5.4-hf-3-bottom-nav-stability.json",
+      "notes": "Main working tree has unrelated OEM/admin WIP and duplicate untracked migration numbers, so full gate ran in a clean detached worktree with only HF-3 scoped files applied. Temporary gate worktree used env from .env.local and temporary dev deps for existing gate prerequisites; those dependency repairs were not copied into the repo.",
+      "updated_at": "2026-05-20T23:26:10Z"
     }
   ],
   "agents": [
@@ -627,27 +657,34 @@
     }
   },
   "current_task": {
-    "task_id": "B5.3/QEP-59",
+    "task_id": "B5.4/QEP-60",
     "status": "complete",
-    "title": "HF-2 \u2014 Voice-note dropdown contrast",
+    "title": "HF-3 \u2014 Bottom nav stability",
     "stream": "B",
     "wave": "B5",
-    "goal": "Customer picker input and option rows use token-based classes so dropdown text, hover, and focus states are readable in light and dark themes.",
+    "goal": "SalesShell owns mobile sales-route vertical scrolling with a stable BottomTabBar height/safe-area contract and Quote Builder mobile clears bottom chrome without nested vertical scroll.",
     "changed_files": [
-      "apps/web/src/features/sales/components/CustomerPickerInline.tsx",
-      "apps/web/src/features/sales/components/SmartVoiceCapture.customer-picker.test.tsx"
+      "apps/web/src/features/sales/SalesShell.tsx",
+      "apps/web/src/features/sales/SalesShell.test.tsx",
+      "apps/web/src/features/sales/components/BottomTabBar.tsx",
+      "apps/web/src/features/sales/components/BottomTabBar.test.tsx",
+      "apps/web/src/features/quote-builder/components/QuoteBuilderV2PageMobileShell.tsx",
+      "apps/web/src/features/quote-builder/components/__tests__/QuoteBuilderV2PageMobileShell.mobile.test.tsx",
+      "apps/web/src/features/sales/lib/mobile-design-tokens.test.ts",
+      "apps/web/src/index.css",
+      "apps/web/tests/e2e/mobile-sales-rep.spec.ts"
     ],
     "verification": [
-      "bun test apps/web/src/features/sales/components/SmartVoiceCapture.customer-picker.test.tsx",
-      "bun run --filter @qep/web typecheck",
-      "bun run migrations:check (clean temp worktree)",
-      "git diff --check -- scoped HF-2 files",
-      "Oracle review: no P0/P1 findings",
-      "bun run segment:gates --segment B5.3-hf-2-voice-note-dropdown-contrast --ui (clean temp worktree)"
+      "bun test --timeout=30000 src/features/sales/SalesShell.test.tsx src/features/sales/components/BottomTabBar.test.tsx src/features/sales/lib/mobile-design-tokens.test.ts src/features/quote-builder/components/__tests__/QuoteBuilderV2PageMobileShell.mobile.test.tsx",
+      "bun run typecheck",
+      "bun run test:e2e -- tests/e2e/mobile-sales-rep.spec.ts --project=chromium (4 passed, 2 credential-gated skipped)",
+      "git diff --check -- scoped HF-3 files",
+      "Oracle review: no blocking findings",
+      "bun run segment:gates --segment B5.4-hf-3-bottom-nav-stability --ui (clean temp worktree)"
     ],
-    "gate_report": "test-results/agent-gates/20260520T231012Z-B5.3-hf-2-voice-note-dropdown-contrast.json",
-    "notes": "Roadmap names VoiceNoteCapture, but shipped HF-1 extracted the relevant picker to CustomerPickerInline. Main working tree has unrelated OEM/admin WIP and duplicate untracked migration numbers, so full gate ran in a clean detached worktree with only HF-2 scoped files applied.",
-    "updated_at": "2026-05-20T23:10:12Z"
+    "gate_report": "test-results/agent-gates/20260520T232610Z-B5.4-hf-3-bottom-nav-stability.json",
+    "notes": "Main working tree has unrelated OEM/admin WIP and duplicate untracked migration numbers, so full gate ran in a clean detached worktree with only HF-3 scoped files applied. Temporary gate worktree used env from .env.local and temporary dev deps for existing gate prerequisites; those dependency repairs were not copied into the repo.",
+    "updated_at": "2026-05-20T23:26:10Z"
   },
-  "updated_at": "2026-05-20T23:10:12Z"
+  "updated_at": "2026-05-20T23:26:10Z"
 }

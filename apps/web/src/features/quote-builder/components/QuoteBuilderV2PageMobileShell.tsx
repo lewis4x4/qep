@@ -195,7 +195,7 @@ export function QuoteBuilderV2PageMobileShell({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[hsl(var(--background))]">
+    <div className="flex min-h-full flex-col bg-[hsl(var(--background))]">
       <div className="px-4 pt-3 pb-2">
         <div className="flex items-center justify-between gap-2 mb-2">
           <button
@@ -263,8 +263,11 @@ export function QuoteBuilderV2PageMobileShell({
       )}
 
       <main
-        className="min-h-0 flex-1 overflow-y-auto pb-[calc(var(--sales-shell-bottom-offset)+5rem)]"
+        className="flex-1"
         data-testid="quote-mobile-scroll-root"
+        data-scroll-owner="sales-shell"
+        data-bottom-spacing-contract="mobile-action-bar-only"
+        style={{ paddingBottom: "5rem" }}
       >
         <div className="px-4 pt-3">
           <section
@@ -320,8 +323,10 @@ export function QuoteBuilderV2PageMobileShell({
       </main>
 
       <div
-        className="fixed inset-x-0 bottom-16 z-40 border-t border-white/[0.06] bg-[hsl(var(--background))]/95 backdrop-blur-lg"
-        style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}
+        className="fixed inset-x-0 z-40 border-t border-white/[0.06] bg-[hsl(var(--background))]/95 backdrop-blur-lg"
+        data-testid="quote-mobile-action-bar"
+        data-bottom-offset-contract="sales-shell-bottom-offset"
+        style={{ bottom: "var(--sales-shell-bottom-offset)" }}
       >
         <div className="flex items-center gap-2 p-3">
           {!hasCustomer && step === "customer" ? (
