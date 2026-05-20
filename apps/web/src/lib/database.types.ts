@@ -40089,6 +40089,7 @@ export type Database = {
           linked_deal_id: string | null
           manager_attention: boolean
           sentiment: string | null
+          summary_bullets: string[] | null
           sync_error: string | null
           sync_status: Database["public"]["Enums"]["voice_capture_status"]
           transcript: string | null
@@ -40114,6 +40115,7 @@ export type Database = {
           linked_deal_id?: string | null
           manager_attention?: boolean
           sentiment?: string | null
+          summary_bullets?: string[] | null
           sync_error?: string | null
           sync_status?: Database["public"]["Enums"]["voice_capture_status"]
           transcript?: string | null
@@ -40139,6 +40141,7 @@ export type Database = {
           linked_deal_id?: string | null
           manager_attention?: boolean
           sentiment?: string | null
+          summary_bullets?: string[] | null
           sync_error?: string | null
           sync_status?: Database["public"]["Enums"]["voice_capture_status"]
           transcript?: string | null

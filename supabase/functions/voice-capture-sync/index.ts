@@ -4,6 +4,11 @@ import { decryptToken, encryptToken } from "../_shared/hubspot-crypto.ts";
 import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { safeCorsHeaders } from "../_shared/safe-cors.ts";
+import { resolveVoiceCaptureModelConfig } from "../_shared/voice-model-config.ts";
+import {
+  generateVoiceCaptureSummaryBullets,
+  normalizeVoiceCaptureSummaryBullets,
+} from "../_shared/voice-capture-summary.ts";
 import {
   buildVoiceCaptureNoteBody,
   getVoiceCaptureContactName,
@@ -28,6 +33,7 @@ interface CaptureRow {
   linked_deal_id: string | null;
   linked_company_id: string | null;
   linked_contact_id: string | null;
+  summary_bullets?: string[] | null;
 }
 
 function jsonError(message: string, status: number, headers: Record<string, string>): Response {
@@ -35,6 +41,92 @@ function jsonError(message: string, status: number, headers: Record<string, stri
     status,
     headers: { ...headers, "Content-Type": "application/json" },
   });
+}
+
+function isMissingSummaryBulletsColumnError(error: unknown): boolean {
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? String((error as { code?: unknown }).code ?? "")
+    : "";
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === "object" && error !== null && "message" in error
+      ? String((error as { message?: unknown }).message ?? "")
+      : String(error ?? "");
+  return message.includes("summary_bullets") && (
+    code === "PGRST204" ||
+    code === "42703" ||
+    /schema cache|column|does not exist/i.test(message)
+  );
+}
+
+const CAPTURE_SELECT_BASE =
+  "id, user_id, workspace_id, transcript, extracted_data, hubspot_deal_id, hubspot_contact_id, hubspot_note_id, hubspot_task_id, linked_deal_id, linked_company_id, linked_contact_id";
+const CAPTURE_SELECT_WITH_SUMMARY = `${CAPTURE_SELECT_BASE}, summary_bullets`;
+
+async function loadCaptureRow(
+  supabase: SupabaseClient,
+  captureId: string,
+): Promise<{ data: CaptureRow | null; error: unknown | null }> {
+  const withSummary = await supabase
+    .from("voice_captures")
+    .select(CAPTURE_SELECT_WITH_SUMMARY)
+    .eq("id", captureId)
+    .single();
+
+  if (!withSummary.error || !isMissingSummaryBulletsColumnError(withSummary.error)) {
+    return { data: withSummary.data as CaptureRow | null, error: withSummary.error };
+  }
+
+  console.warn("voice-capture-sync: summary_bullets column unavailable; retrying capture load without it");
+  const withoutSummary = await supabase
+    .from("voice_captures")
+    .select(CAPTURE_SELECT_BASE)
+    .eq("id", captureId)
+    .single();
+  return { data: withoutSummary.data as CaptureRow | null, error: withoutSummary.error };
+}
+
+async function persistVoiceCaptureSyncSummaryBestEffort(
+  supabaseAdmin: SupabaseClient,
+  input: {
+    captureId: string;
+    transcript: string;
+    extracted: ExtractedDealData;
+    existingSummaryBullets: unknown;
+  },
+): Promise<string[] | null> {
+  const existing = normalizeVoiceCaptureSummaryBullets(input.existingSummaryBullets);
+  if (existing) return existing;
+
+  const summaryResult = await generateVoiceCaptureSummaryBullets({
+    transcript: input.transcript,
+    extracted: input.extracted,
+    openAiKey: Deno.env.get("OPENAI_API_KEY"),
+    model: resolveVoiceCaptureModelConfig().extractionModel,
+    timeoutMs: 20_000,
+  });
+
+  if (summaryResult.error) {
+    console.warn("voice-capture-sync: summary generation skipped", summaryResult.error);
+    return null;
+  }
+
+  if (!summaryResult.bullets) return null;
+
+  const { error } = await supabaseAdmin
+    .from("voice_captures")
+    .update({ summary_bullets: summaryResult.bullets })
+    .eq("id", input.captureId);
+
+  if (error) {
+    if (isMissingSummaryBulletsColumnError(error)) {
+      console.warn("voice-capture-sync: summary_bullets column unavailable; skipped summary persistence");
+    } else {
+      console.error("voice-capture-sync: failed to persist summary bullets", error.message);
+    }
+  }
+
+  return summaryResult.bullets;
 }
 
 async function resolveCaptureWorkspaceId(
@@ -192,13 +284,7 @@ Deno.serve(async (req) => {
       return jsonError("capture_id is required", 400, headers);
     }
 
-    const { data: captureData, error: captureError } = await supabaseAdmin
-      .from("voice_captures")
-      .select("id, user_id, workspace_id, transcript, extracted_data, hubspot_deal_id, hubspot_contact_id, hubspot_note_id, hubspot_task_id, linked_deal_id, linked_company_id, linked_contact_id")
-      .eq("id", captureId)
-      .single();
-
-    const capture = captureData as CaptureRow | null;
+    const { data: capture, error: captureError } = await loadCaptureRow(supabaseAdmin, captureId);
 
     if (captureError || !capture) {
       return jsonError("Voice capture not found", 404, headers);
@@ -228,6 +314,7 @@ Deno.serve(async (req) => {
     }
 
     const extracted = normalizeVoiceCaptureExtractedDealData(capture.extracted_data);
+
     const localCrmSync = await writeVoiceCaptureToLocalCrm(supabaseAdmin, {
       workspaceId: captureWorkspaceId,
       actorUserId: user.id,
@@ -264,12 +351,20 @@ Deno.serve(async (req) => {
         })
         .eq("id", captureId);
 
+      const summaryBullets = await persistVoiceCaptureSyncSummaryBestEffort(supabaseAdmin, {
+        captureId,
+        transcript: capture.transcript,
+        extracted,
+        existingSummaryBullets: capture.summary_bullets,
+      });
+
       return new Response(
         JSON.stringify({
           id: captureId,
           hubspot_synced: false,
           hubspot_skipped_reason: "No HubSpot deal target; local QRM activity saved.",
           hubspot_deal_id: localCrmSync.dealId,
+          summary_bullets: summaryBullets,
           qrm_activity_id: localCrmSync.noteActivityId,
           qrm_synced_at: new Date().toISOString(),
           local_crm_saved: true,
@@ -310,11 +405,19 @@ Deno.serve(async (req) => {
           })
           .eq("id", captureId);
 
+        const summaryBullets = await persistVoiceCaptureSyncSummaryBestEffort(supabaseAdmin, {
+          captureId,
+          transcript: capture.transcript,
+          extracted,
+          existingSummaryBullets: capture.summary_bullets,
+        });
+
         return new Response(
           JSON.stringify({
             id: captureId,
             hubspot_synced: false,
             hubspot_deal_id: localCrmSync.dealId,
+            summary_bullets: summaryBullets,
             qrm_activity_id: localCrmSync.noteActivityId,
             qrm_synced_at: new Date().toISOString(),
             local_crm_saved: true,
@@ -379,6 +482,12 @@ Deno.serve(async (req) => {
           sync_error: "No HubSpot deal id provided and no associated deal was resolved.",
         })
         .eq("id", captureId);
+      void persistVoiceCaptureSyncSummaryBestEffort(supabaseAdmin, {
+        captureId,
+        transcript: capture.transcript,
+        extracted,
+        existingSummaryBullets: capture.summary_bullets,
+      });
       return jsonError("Could not resolve a HubSpot deal for this capture.", 409, headers);
     }
 
@@ -396,11 +505,19 @@ Deno.serve(async (req) => {
           })
           .eq("id", captureId);
 
+        const summaryBullets = await persistVoiceCaptureSyncSummaryBestEffort(supabaseAdmin, {
+          captureId,
+          transcript: capture.transcript,
+          extracted,
+          existingSummaryBullets: capture.summary_bullets,
+        });
+
         return new Response(
           JSON.stringify({
             id: captureId,
             hubspot_synced: false,
             hubspot_deal_id: localCrmSync.dealId,
+            summary_bullets: summaryBullets,
             qrm_activity_id: localCrmSync.noteActivityId,
             qrm_synced_at: new Date().toISOString(),
             local_crm_saved: true,
@@ -500,6 +617,13 @@ Deno.serve(async (req) => {
       })
       .eq("id", captureId);
 
+    const summaryBullets = await persistVoiceCaptureSyncSummaryBestEffort(supabaseAdmin, {
+      captureId,
+      transcript: capture.transcript,
+      extracted,
+      existingSummaryBullets: capture.summary_bullets,
+    });
+
     return new Response(
       JSON.stringify({
         id: captureId,
@@ -507,6 +631,7 @@ Deno.serve(async (req) => {
         hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
         hubspot_note_id: noteId,
         hubspot_task_id: taskId,
+        summary_bullets: summaryBullets,
         qrm_activity_id: localCrmSync.noteActivityId,
         qrm_synced_at: localCrmSync.saved ? new Date().toISOString() : null,
         local_crm_saved: localCrmSync.saved,

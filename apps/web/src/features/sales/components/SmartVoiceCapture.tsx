@@ -33,6 +33,7 @@ import {
 } from "../lib/voice-customer-matcher";
 import type { RepCustomer } from "../lib/types";
 import { supabase } from "@/lib/supabase";
+import { VoiceSummaryBullets } from "@/components/voice/VoiceSummaryBullets";
 import { ironTranscribe } from "@/lib/iron/voice/api";
 import { getWorkspaceId, searchCompaniesForPicker } from "../lib/sales-api";
 import {
@@ -73,6 +74,7 @@ interface VoiceCaptureSyncResponse {
   target_type?: SyncTargetType;
   target_id?: string | null;
   target_display_name?: string | null;
+  summary_bullets?: string[] | null;
 }
 
 const MAX_DURATION_SECONDS = 60;
@@ -142,6 +144,7 @@ export function SmartVoiceCapture({
   const [saveTargetName, setSaveTargetName] = useState<string | null>(null);
   const [saveTargetType, setSaveTargetType] = useState<SyncTargetType>(null);
   const [savedActivityId, setSavedActivityId] = useState<string | null>(null);
+  const [summaryBullets, setSummaryBullets] = useState<string[] | null>(null);
   const navigate = useNavigate();
 
   // Refs we manage outside React state to avoid re-render churn.
@@ -502,6 +505,7 @@ export function SmartVoiceCapture({
   async function handleSave() {
     if (!audioBlob) return;
     setState("saving");
+    setSummaryBullets(null);
     try {
       const {
         data: { user },
@@ -559,6 +563,7 @@ export function SmartVoiceCapture({
       setSaveTargetType(syncTargetType);
       setSaveTargetName(syncTargetName);
       setSavedActivityId(syncData?.qrm_activity_id ?? null);
+      setSummaryBullets(syncData?.summary_bullets ?? null);
       if (syncTargetType === "inbox") {
         setSaveResolution("inbox_fallback");
       } else if (!saveResolution) {
@@ -649,6 +654,8 @@ export function SmartVoiceCapture({
             </div>
           </div>
         </section>
+
+        <VoiceSummaryBullets bullets={summaryBullets} compact />
 
         <div className="grid grid-cols-2 gap-2">
           <Link

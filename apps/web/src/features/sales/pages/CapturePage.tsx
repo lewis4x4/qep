@@ -470,6 +470,7 @@ function RecentCaptureRow({
   showDivider: boolean;
 }) {
   const preview =
+    capture.summary_bullets?.find((bullet) => bullet.trim())?.trim().slice(0, 72) ||
     capture.transcript?.trim().slice(0, 72) ||
     (capture.duration_seconds
       ? `Voice capture · ${capture.duration_seconds}s`

@@ -34,6 +34,7 @@ import {
   resolveVoiceCaptureModelConfig,
   WHISPER_TRANSCRIPTION_MODEL,
 } from "../_shared/voice-model-config.ts";
+import { generateVoiceCaptureSummaryBullets } from "../_shared/voice-capture-summary.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 import {
@@ -496,6 +497,13 @@ Return ONLY valid JSON matching this exact structure:
           sync_error: `Local QRM save failed: ${errMsg}`,
         })
         .eq("id", captureId);
+      void persistVoiceCaptureSummaryBulletsBestEffort(supabaseAdmin, {
+        captureId,
+        transcript,
+        extracted,
+        openAiKey,
+        model: modelConfig.extractionModel,
+      });
       return jsonError(
         "Could not attach this note to the QRM deal. If this keeps happening, contact support.",
         500,
@@ -729,6 +737,14 @@ Return ONLY valid JSON matching this exact structure:
       }
     }
 
+    const summaryBullets = await persistVoiceCaptureSummaryBulletsBestEffort(supabaseAdmin, {
+      captureId,
+      transcript,
+      extracted,
+      openAiKey,
+      model: modelConfig.extractionModel,
+    });
+
     // ── Return result ─────────────────────────────────────────────────────────
     const payload = {
       id: captureId,
@@ -739,6 +755,7 @@ Return ONLY valid JSON matching this exact structure:
       hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
       hubspot_note_id: noteId,
       hubspot_task_id: taskId,
+      summary_bullets: summaryBullets,
       qrm_activity_id: localCrmSync.noteActivityId,
       qrm_synced_at: localCrmSync.saved ? new Date().toISOString() : null,
       local_crm_saved: localCrmSync.saved,
@@ -761,6 +778,7 @@ Return ONLY valid JSON matching this exact structure:
         hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
         hubspot_note_id: noteId,
         hubspot_task_id: taskId,
+        summary_bullets: summaryBullets,
         qrm_activity_id: localCrmSync.noteActivityId,
         qrm_synced_at: localCrmSync.saved ? new Date().toISOString() : null,
         local_crm_saved: localCrmSync.saved,
@@ -825,6 +843,64 @@ function jsonError(
     status,
     headers: { ...headers, "Content-Type": "application/json" },
   });
+}
+
+function isMissingSummaryBulletsColumnError(error: unknown): boolean {
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? String((error as { code?: unknown }).code ?? "")
+    : "";
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === "object" && error !== null && "message" in error
+      ? String((error as { message?: unknown }).message ?? "")
+      : String(error ?? "");
+  return message.includes("summary_bullets") && (
+    code === "PGRST204" ||
+    code === "42703" ||
+    /schema cache|column|does not exist/i.test(message)
+  );
+}
+
+async function persistVoiceCaptureSummaryBulletsBestEffort(
+  supabaseAdmin: SupabaseClient,
+  input: {
+    captureId: string;
+    transcript: string;
+    extracted: ExtractedDealData;
+    openAiKey: string | null | undefined;
+    model: string;
+  },
+): Promise<string[] | null> {
+  const summaryResult = await generateVoiceCaptureSummaryBullets({
+    transcript: input.transcript,
+    extracted: input.extracted,
+    openAiKey: input.openAiKey,
+    model: input.model,
+    timeoutMs: 20_000,
+  });
+
+  if (summaryResult.error) {
+    console.warn("voice-capture: summary generation skipped", summaryResult.error);
+    return null;
+  }
+
+  if (!summaryResult.bullets) return null;
+
+  const { error } = await supabaseAdmin
+    .from("voice_captures")
+    .update({ summary_bullets: summaryResult.bullets })
+    .eq("id", input.captureId);
+
+  if (error) {
+    if (isMissingSummaryBulletsColumnError(error)) {
+      console.warn("voice-capture: summary_bullets column unavailable; skipped summary persistence");
+    } else {
+      console.error("voice-capture: failed to persist summary bullets", error.message);
+    }
+    return null;
+  }
+
+  return summaryResult.bullets;
 }
 
 async function checkVoiceCaptureRateLimit(

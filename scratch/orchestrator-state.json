@@ -492,39 +492,49 @@
     }
   },
   "current_task": {
-    "task_id": "B2.1",
-    "linear": "QEP-49",
+    "task_id": "B2.2",
+    "linear": "QEP-50",
     "stream": "B",
     "wave": "B2",
-    "goal": "VC-1 \u2014 Record from inside customer record: VoiceQRM accepts linked_company_id and skips fuzzy/create company resolution for known customers.",
-    "status": "verified_preexisting_pending_roadmap_ship",
+    "goal": "VC-2 \u2014 Bullet summarization in voice-capture: persist best-effort 5-8 bullet summaries without blocking transcript/QRM sync, and render bullets above expandable transcripts.",
+    "status": "verified_pending_commit",
     "expected_files": [
-      "apps/web/src/features/qrm/pages/QrmCompanyDetailPage.tsx",
-      "apps/web/src/features/qrm/lib/account-detail-menu.ts",
-      "apps/web/src/features/voice-qrm/pages/VoiceQrmPage.tsx",
-      "apps/web/src/features/voice-qrm/lib/voice-qrm-api.ts",
-      "supabase/functions/voice-to-qrm/index.ts",
-      "supabase/functions/voice-to-qrm/company-resolution.ts",
-      "supabase/functions/voice-to-qrm/vc1-company-linking.ts"
+      "supabase/migrations/604_voice_captures_summary_bullets.sql",
+      "supabase/functions/_shared/voice-capture-summary.ts",
+      "supabase/functions/_shared/voice-capture-summary.test.ts",
+      "supabase/functions/voice-capture/index.ts",
+      "supabase/functions/voice-capture-sync/index.ts",
+      "apps/web/src/lib/voice-summary-column.ts",
+      "apps/web/src/lib/database.types.ts",
+      "apps/web/src/components/voice/VoiceSummaryBullets.tsx",
+      "apps/web/src/components/VoiceCapturePage.tsx",
+      "apps/web/src/components/VoiceHistoryPage.tsx",
+      "apps/web/src/features/sales/components/SmartVoiceCapture.tsx",
+      "apps/web/src/features/sales/hooks/useRecentCaptures.ts",
+      "apps/web/src/features/sales/pages/CapturePage.tsx",
+      "apps/web/src/components/__tests__/VoiceCapturePage.integration.test.tsx"
     ],
     "acceptance": [
-      "Customer record entry points link to /voice-qrm?linked_company_id=<company> via detail page and account menu.",
-      "VoiceQRM form data forwards linked_company_id to the voice-to-qrm Edge Function.",
-      "voice-to-qrm authorizes linked company access, forces deterministic company attachment, and disables fuzzy/create company resolution for that request.",
-      "voice capture and activity helper tests prove linked_company_id persistence and company timeline activity behavior."
+      "voice_captures has nullable summary_bullets persistence via migration 604.",
+      "Canonical voice-capture and pending-row voice-capture-sync generate summaries best-effort after critical transcript/QRM/sync persistence.",
+      "Summary failure or missing summary_bullets column does not block transcript persistence, QRM sync, sync status, sync error, or frontend history/recent capture loading.",
+      "Sales voice review/history/saved-confirmation surfaces render bullets above expandable transcript when summaries exist."
     ],
     "verification": [
-      "bun test apps/web/src/features/voice-qrm/lib/__tests__/voice-qrm-api.test.ts apps/web/src/features/qrm/lib/account-detail-menu.test.ts",
-      "deno test supabase/functions/voice-to-qrm/company-resolution.test.ts supabase/functions/voice-to-qrm/vc1-company-linking.test.ts --allow-env --allow-read",
-      "deno check supabase/functions/voice-to-qrm/index.ts",
-      "bun run segment:gates --segment B2.1-vc-1-record-from-inside-customer-record --ui"
+      "bun run migrations:check",
+      "deno test supabase/functions/_shared/voice-capture-summary.test.ts --allow-net=api.openai.com",
+      "bun test apps/web/src/components/__tests__/VoiceCapturePage.integration.test.tsx",
+      "deno check supabase/functions/_shared/voice-capture-summary.ts supabase/functions/voice-capture/index.ts supabase/functions/voice-capture-sync/index.ts",
+      "bun run --filter @qep/web typecheck",
+      "bun run build:web",
+      "bun run audit:edges",
+      "git diff --check",
+      "Oracle review P1 fixes applied: post-persistence summary update and missing-column fallbacks",
+      "bun run segment:gates --segment B2.2-vc-2-bullet-summarization --ui"
     ],
-    "gate_report": "test-results/agent-gates/20260520T201426Z-B2.1-vc-1-record-from-inside-customer-record.json",
-    "implementation_commits_observed": [
-      "c6333f5 [wave-omi/vc-1] Attach voice notes from customer records",
-      "840205db Attach voice capture records to QRM safely"
-    ],
-    "deployment_needs": "No new deploy from this verification pass. Existing implementation is already on main; roadmap needed verification/ship state update.",
-    "updated_at": "2026-05-20T20:14:26.918Z"
+    "gate_report": "test-results/agent-gates/20260520T205201Z-B2.2-vc-2-bullet-summarization.json",
+    "oracle_review": "P1 blockers fixed: summary no longer blocks critical persistence; missing-column fallback added for deploy-order tolerance.",
+    "deployment_needs": "Apply migration 604 before relying on persisted summaries. Edge/frontend include fallback for missing column, but production summaries persist only after migration is applied; deploy voice-capture and voice-capture-sync after migration for full behavior.",
+    "updated_at": "2026-05-20T20:52:01.175Z"
   }
 }

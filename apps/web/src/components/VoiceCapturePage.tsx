@@ -63,6 +63,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { VoiceSummaryBullets } from "@/components/voice/VoiceSummaryBullets";
 import { crmSupabase } from "@/features/qrm/lib/qrm-supabase";
 import {
   getEvidenceSnippet,
@@ -92,6 +93,7 @@ import {
   startRealtimeTranscript,
   type RealtimeTranscriptSession,
 } from "@/lib/voice-realtime-client";
+import { isMissingSummaryBulletsColumnError } from "@/lib/voice-summary-column";
 
 interface VoiceCapturePageProps {
   userRole: UserRole;
@@ -119,6 +121,7 @@ interface CaptureResult {
   hubspot_task_id: string | null;
   local_crm_note_id?: string | null;
   local_crm_task_id?: string | null;
+  summary_bullets?: string[] | null;
 }
 
 
@@ -161,6 +164,7 @@ type RecentCapture = Pick<
   | "user_id"
   | "audio_storage_path"
   | "linked_deal_id"
+  | "summary_bullets"
 > & {
   recorderName: string | null;
   recorderEmail: string | null;
@@ -823,20 +827,36 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       return;
     }
     const isElevated = ["manager", "owner"].includes(_userRole);
-    let query = supabase
-      .from("voice_captures")
-      .select(
-        "id, created_at, duration_seconds, sync_status, hubspot_deal_id, linked_deal_id, transcript, sync_error, updated_at, user_id, audio_storage_path",
-      )
-      .order("created_at", { ascending: false })
-      .limit(7);
-    // Defense-in-depth: scope to own rows for non-elevated roles (RLS also enforces this)
-    if (!isElevated) {
-      query = query.eq("user_id", user.id);
+    const recentSelectBase =
+      "id, created_at, duration_seconds, sync_status, hubspot_deal_id, linked_deal_id, transcript, sync_error, updated_at, user_id, audio_storage_path";
+    const buildRecentQuery = (selectColumns: string) => {
+      let query = supabase
+        .from("voice_captures")
+        .select(selectColumns)
+        .order("created_at", { ascending: false })
+        .limit(7);
+      // Defense-in-depth: scope to own rows for non-elevated roles (RLS also enforces this)
+      if (!isElevated) {
+        query = query.eq("user_id", user.id);
+      }
+      return query;
+    };
+
+    let { data, error } = await buildRecentQuery(
+      `${recentSelectBase}, summary_bullets`,
+    );
+    if (error && isMissingSummaryBulletsColumnError(error)) {
+      console.warn("VoiceCapturePage: summary_bullets unavailable; loading recent captures without summaries");
+      const fallback = await buildRecentQuery(recentSelectBase);
+      data = fallback.data;
+      error = fallback.error;
     }
-    const { data } = await query;
+    if (error) {
+      console.error("Failed to load recent captures:", error);
+    }
     if (data) {
-      const userIds = Array.from(new Set(data.map((capture) => capture.user_id).filter(Boolean)));
+      const captureRows = data as unknown as RecentCapture[];
+      const userIds = Array.from(new Set(captureRows.map((capture) => capture.user_id).filter(Boolean)));
       let profileMap = new Map<string, { full_name: string | null; email: string | null }>();
 
       if (userIds.length > 0) {
@@ -859,7 +879,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       }
 
       setRecentCaptures(
-        data.map((capture) => {
+        captureRows.map((capture) => {
           const recorder = profileMap.get(capture.user_id);
           return {
             ...capture,
@@ -1749,9 +1769,10 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       Boolean(cap.audio_storage_path) && (cap.sync_error?.startsWith("Low-confidence transcript") ?? false);
     const lowSignalTranscript =
       retainedLowSignalCapture || isLowSignalFieldNoteTranscript(rawTranscript, cap.duration_seconds);
+    const summaryPreview = !lowSignalTranscript ? cap.summary_bullets?.find((bullet) => bullet.trim())?.trim() ?? null : null;
     const transcript = retainedLowSignalCapture && !rawTranscript
       ? "No reliable transcript was produced. Replay audio or re-record the field note."
-      : fieldNoteTranscriptPreview(rawTranscript, cap.duration_seconds);
+      : summaryPreview ?? fieldNoteTranscriptPreview(rawTranscript, cap.duration_seconds);
     let syncStatus: RecentRecordingRow["syncStatus"] = "review_sync";
     let statusLabel = "Review & Sync";
     let statusDetail = "Needs review before QRM timeline sync";
@@ -1794,7 +1815,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       source: "remote",
       title: lowSignalTranscript
         ? "Transcript needs re-record"
-        : rawTranscript?.split(/[.!?\n]/)[0]?.slice(0, 54) || "Untitled field note",
+        : (summaryPreview?.slice(0, 54) ?? rawTranscript?.split(/[.!?\n]/)[0]?.slice(0, 54)) || "Untitled field note",
       transcript,
       createdAt: cap.created_at,
       durationSeconds: cap.duration_seconds,
@@ -2009,6 +2030,8 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       transcriptDisplayText !== "Transcript preview appears here after recording." &&
       transcriptDisplayText !== "Listening for customer, equipment, stage, budget, and next steps...",
   );
+  const finalSummaryBullets = result?.summary_bullets ?? null;
+  const hasFinalSummaryBullets = Boolean(finalSummaryBullets?.length);
   const transcriptSourceLabel = shouldShowFinalTranscript
     ? "Final server transcript"
     : transcriptPreviewMode === "realtime"
@@ -2193,14 +2216,24 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                         {transcriptSourceLabel}
                       </span>
                     </div>
-                    <div
-                      className={cn(
-                        "min-h-[132px] rounded-lg border border-border bg-background/50 p-4 text-base leading-7 text-foreground",
-                        !hasTranscriptContent && "text-muted-foreground/70 italic",
-                      )}
-                    >
-                      {transcriptDisplayText}
-                    </div>
+                    {shouldShowFinalTranscript && hasFinalSummaryBullets ? (
+                      <div className="space-y-3">
+                        <VoiceSummaryBullets bullets={finalSummaryBullets} />
+                        <details className="rounded-lg border border-border bg-background/50 p-4 text-sm text-foreground">
+                          <summary className="cursor-pointer font-medium text-muted-foreground">Full transcript</summary>
+                          <p className="mt-3 whitespace-pre-wrap text-base leading-7">{transcriptDisplayText}</p>
+                        </details>
+                      </div>
+                    ) : (
+                      <div
+                        className={cn(
+                          "min-h-[132px] rounded-lg border border-border bg-background/50 p-4 text-base leading-7 text-foreground",
+                          !hasTranscriptContent && "text-muted-foreground/70 italic",
+                        )}
+                      >
+                        {transcriptDisplayText}
+                      </div>
+                    )}
                     <div className="flex h-16 items-center gap-1 overflow-hidden rounded-lg border border-border bg-background/40 px-3" aria-label="Recording waveform">
                       {Array.from({ length: 52 }).map((_, i) => (
                         <span
@@ -2657,6 +2690,12 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                   const extracted = normalizeExtractedDealData(
                     selectedRecentCapture.extracted_data,
                   );
+                  const summaryBullets = selectedRecentCapture.summary_bullets;
+                  const hasSummaryBullets = Boolean(summaryBullets?.length);
+                  const transcriptPreview = fieldNoteTranscriptPreview(
+                    selectedRecentCapture.transcript,
+                    selectedRecentCapture.duration_seconds,
+                  ) || "No transcript captured yet.";
 
                   return (
                     <>
@@ -2753,12 +2792,15 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                           <CardTitle className="text-sm font-medium">Transcript</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-3">
-                          <p className="text-sm leading-6 text-foreground whitespace-pre-wrap">
-                            {fieldNoteTranscriptPreview(
-                              selectedRecentCapture.transcript,
-                              selectedRecentCapture.duration_seconds,
-                            ) || "No transcript captured yet."}
-                          </p>
+                          <VoiceSummaryBullets bullets={summaryBullets} />
+                          <details open={!hasSummaryBullets} className="rounded-lg border border-border bg-background/50 p-3">
+                            <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
+                              Full transcript
+                            </summary>
+                            <p className="mt-3 text-sm leading-6 text-foreground whitespace-pre-wrap">
+                              {transcriptPreview}
+                            </p>
+                          </details>
                           <div className="flex flex-wrap gap-2">
                             {selectedRecentCapture.transcript?.trim() &&
                               !isLowSignalFieldNoteTranscript(

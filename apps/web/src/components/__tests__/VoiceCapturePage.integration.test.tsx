@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 mock.module("@/hooks/use-toast", () => ({
@@ -16,6 +16,13 @@ const recentCaptures = [
     hubspot_deal_id: "11111111-1111-4111-8111-111111111111",
     linked_deal_id: "11111111-1111-4111-8111-111111111111",
     transcript: "DFW site visit recap. Met with John onsite about skid steer upgrade.",
+    summary_bullets: [
+      "John wants a skid steer upgrade after the DFW site visit.",
+      "Customer is evaluating availability before committing.",
+      "Rep should send model options and pricing.",
+      "Budget still needs confirmation from the buyer.",
+      "Next step is a follow-up quote review.",
+    ],
     sync_error: null,
     updated_at: "2026-04-23T13:25:00.000Z",
     user_id: "user-1",
@@ -29,6 +36,7 @@ const recentCaptures = [
     hubspot_deal_id: "22222222-2222-4222-8222-222222222222",
     linked_deal_id: "22222222-2222-4222-8222-222222222222",
     transcript: "North Star Construction follow-up. Interested in a 210P excavator.",
+    summary_bullets: null,
     sync_error: null,
     updated_at: "2026-04-22T19:43:00.000Z",
     user_id: "user-1",
@@ -42,6 +50,7 @@ const recentCaptures = [
     hubspot_deal_id: null,
     linked_deal_id: null,
     transcript: "Greenfield Materials check-in. They are waiting on budget approval.",
+    summary_bullets: null,
     sync_error: null,
     updated_at: "2026-04-22T14:19:00.000Z",
     user_id: "user-1",
@@ -55,6 +64,7 @@ const recentCaptures = [
     hubspot_deal_id: "33333333-3333-4333-8333-333333333333",
     linked_deal_id: "33333333-3333-4333-8333-333333333333",
     transcript: "Pine Ridge Landscaping proposal. Discussed adding a mulcher.",
+    summary_bullets: null,
     sync_error: null,
     updated_at: "2026-04-21T20:07:00.000Z",
     user_id: "user-1",
@@ -68,6 +78,7 @@ const recentCaptures = [
     hubspot_deal_id: "44444444-4444-4444-8444-444444444444",
     linked_deal_id: "44444444-4444-4444-8444-444444444444",
     transcript: "City bid review. Reviewing bid specs for the retention pond project.",
+    summary_bullets: null,
     sync_error: null,
     updated_at: "2026-04-20T18:35:00.000Z",
     user_id: "user-1",
@@ -81,6 +92,7 @@ const recentCaptures = [
     hubspot_deal_id: null,
     linked_deal_id: null,
     transcript: "You",
+    summary_bullets: null,
     sync_error: null,
     updated_at: "2026-04-19T18:35:00.000Z",
     user_id: "user-1",
@@ -89,8 +101,11 @@ const recentCaptures = [
 ];
 
 function makeQuery(data: unknown) {
-  return {
-    data,
+  let rows = Array.isArray(data) ? [...data] : data;
+  const query = {
+    get data() {
+      return rows;
+    },
     error: null,
     select() {
       return this;
@@ -98,25 +113,33 @@ function makeQuery(data: unknown) {
     order() {
       return this;
     },
-    limit() {
+    limit(count?: number) {
+      if (typeof count === "number" && Array.isArray(rows)) rows = rows.slice(0, count);
       return this;
     },
-    eq() {
+    eq(column: string, value: unknown) {
+      if (Array.isArray(rows)) {
+        rows = rows.filter((row) => (row as Record<string, unknown>)[column] === value);
+      }
       return this;
     },
-    in() {
+    in(column: string, values: unknown[]) {
+      if (Array.isArray(rows)) {
+        rows = rows.filter((row) => values.includes((row as Record<string, unknown>)[column]));
+      }
       return this;
     },
     is() {
       return this;
     },
     maybeSingle() {
-      return Promise.resolve({ data: null, error: null });
+      return Promise.resolve({ data: Array.isArray(rows) ? rows[0] ?? null : rows, error: null });
     },
     single() {
-      return Promise.resolve({ data: null, error: null });
+      return Promise.resolve({ data: Array.isArray(rows) ? rows[0] ?? null : rows, error: null });
     },
   };
+  return query;
 }
 
 mock.module("@/lib/supabase", () => ({
@@ -224,7 +247,7 @@ describe("VoiceCapturePage redesign", () => {
     expect(screen.getByDisplayValue("All time")).toBeTruthy();
 
     await waitFor(() => {
-      expect(screen.getByText("DFW site visit recap")).toBeTruthy();
+      expect(screen.getByText(/John wants a skid steer upgrade after the DFW site visit/i)).toBeTruthy();
     });
 
     expect(screen.getByText("City bid review")).toBeTruthy();
@@ -240,5 +263,13 @@ describe("VoiceCapturePage redesign", () => {
     expect(screen.getAllByText(/Rate limited\. Try again in a minute\./).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/1 need retry/).length).toBeGreaterThan(0);
     expect(screen.getAllByLabelText(/^Play /).length).toBeGreaterThanOrEqual(5);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Open note" })[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText("Key takeaways")).toBeTruthy();
+      expect(screen.getAllByText(/Rep should send model options and pricing/i).length).toBeGreaterThan(0);
+      expect(screen.getByText("Full transcript")).toBeTruthy();
+    });
   });
 });

@@ -19,7 +19,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { VoiceSummaryBullets } from "@/components/voice/VoiceSummaryBullets";
 import { cn } from "@/lib/utils";
+import { isMissingSummaryBulletsColumnError } from "@/lib/voice-summary-column";
 
 interface VoiceHistoryPageProps {
   userRole: UserRole;
@@ -30,6 +32,7 @@ interface VoiceNote {
   created_at: string;
   duration_seconds: number | null;
   transcript: string | null;
+  summary_bullets: string[] | null;
   sync_status: string;
   sync_error: string | null;
   hubspot_deal_id: string | null;
@@ -68,35 +71,46 @@ export function VoiceHistoryPage({ userRole }: VoiceHistoryPageProps) {
       if (!user) return;
 
       const db = supabase;
-      let query = db
-        .from("voice_captures")
-        .select("id, created_at, duration_seconds, transcript, sync_status, sync_error, hubspot_deal_id, user_id, sentiment, manager_attention, competitor_mentions")
-        .order("created_at", { ascending: false })
-        .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1);
+      const selectBase = "id, created_at, duration_seconds, transcript, sync_status, sync_error, hubspot_deal_id, user_id, sentiment, manager_attention, competitor_mentions";
+      const buildQuery = (selectColumns: string) => {
+        let query = db
+          .from("voice_captures")
+          .select(selectColumns)
+          .order("created_at", { ascending: false })
+          .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1);
 
-      if (!isElevated) {
-        query = query.eq("user_id", user.id);
+        if (!isElevated) {
+          query = query.eq("user_id", user.id);
+        }
+
+        if (searchQuery.trim()) {
+          query = query.ilike("transcript", `%${searchQuery.trim()}%`);
+        }
+
+        if (sentimentFilter) {
+          query = query.eq("sentiment", sentimentFilter);
+        }
+
+        if (managerFilter) {
+          query = query.eq("manager_attention", true);
+        }
+
+        return query;
+      };
+
+      let { data, error } = await buildQuery(`${selectBase}, summary_bullets`);
+      if (error && isMissingSummaryBulletsColumnError(error)) {
+        console.warn("VoiceHistoryPage: summary_bullets unavailable; loading notes without summaries");
+        const fallback = await buildQuery(selectBase);
+        data = fallback.data;
+        error = fallback.error;
       }
-
-      if (searchQuery.trim()) {
-        query = query.ilike("transcript", `%${searchQuery.trim()}%`);
-      }
-
-      if (sentimentFilter) {
-        query = query.eq("sentiment", sentimentFilter);
-      }
-
-      if (managerFilter) {
-        query = query.eq("manager_attention", true);
-      }
-
-      const { data, error } = await query;
       if (error) {
         console.error("Failed to load voice notes:", error);
         return;
       }
 
-      const rows = (data ?? []) as VoiceNote[];
+      const rows = (data ?? []) as unknown as VoiceNote[];
       setHasMore(rows.length === PAGE_SIZE);
       setNotes(append ? prev => [...prev, ...rows] : rows);
     } finally {
@@ -226,10 +240,24 @@ export function VoiceHistoryPage({ userRole }: VoiceHistoryPageProps) {
               <CardContent className="py-4 px-5">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1 space-y-2">
-                    {/* Transcript snippet */}
-                    <p className="text-sm text-foreground line-clamp-2">
-                      {note.transcript?.trim() || "No transcript"}
-                    </p>
+                    {/* Summary / transcript */}
+                    {note.summary_bullets?.length ? (
+                      <div className="space-y-2">
+                        <VoiceSummaryBullets bullets={note.summary_bullets} compact />
+                        <details className="rounded-lg border border-border bg-background/50 p-3">
+                          <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
+                            Transcript
+                          </summary>
+                          <p className="mt-2 text-sm leading-6 text-foreground whitespace-pre-wrap">
+                            {note.transcript?.trim() || "No transcript"}
+                          </p>
+                        </details>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-foreground line-clamp-2">
+                        {note.transcript?.trim() || "No transcript"}
+                      </p>
+                    )}
 
                     {/* Meta row */}
                     <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
