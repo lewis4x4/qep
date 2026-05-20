@@ -460,6 +460,8 @@
           "git diff --check"
         ],
         "roadmap_shipped": false,
+        "roadmap_blocked": true,
+        "roadmap_block_reason": "R2 runtime prerequisites missing; Supabase edge secrets and Cloudflare R2 CORS must be configured before shipping.",
         "manual_task_logged": true
       }
     ],
