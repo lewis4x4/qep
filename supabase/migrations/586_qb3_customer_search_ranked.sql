@@ -136,7 +136,7 @@ contact_candidates as (
     co.state as company_state,
     co.classification as company_classification,
     (
-      st.q_digits <> ''
+      length(st.q_digits) >= 3
       and regexp_replace(coalesce(ct.phone, ''), '\\D', '', 'g') like ('%' || st.q_digits || '%')
     ) as phone_match,
     greatest(
@@ -163,7 +163,7 @@ contact_candidates as (
     or coalesce(co.search_1, '') ilike st.q_pattern
     or coalesce(co.search_2, '') ilike st.q_pattern
     or (
-      st.q_digits <> ''
+      length(st.q_digits) >= 3
       and regexp_replace(coalesce(ct.phone, ''), '\\D', '', 'g') like ('%' || st.q_digits || '%')
     )
 ),
@@ -183,7 +183,7 @@ company_candidates as (
     co.state as company_state,
     co.classification as company_classification,
     (
-      st.q_digits <> ''
+      length(st.q_digits) >= 3
       and regexp_replace(coalesce(co.phone, ''), '\\D', '', 'g') like ('%' || st.q_digits || '%')
     ) as phone_match,
     greatest(
@@ -207,7 +207,7 @@ company_candidates as (
     or coalesce(co.search_1, '') ilike st.q_pattern
     or coalesce(co.search_2, '') ilike st.q_pattern
     or (
-      st.q_digits <> ''
+      length(st.q_digits) >= 3
       and regexp_replace(coalesce(co.phone, ''), '\\D', '', 'g') like ('%' || st.q_digits || '%')
     )
 ),
@@ -293,7 +293,7 @@ company_candidates as (
     co.state,
     co.phone,
     (
-      st.q_digits <> ''
+      length(st.q_digits) >= 3
       and regexp_replace(coalesce(co.phone, ''), '\\D', '', 'g') like ('%' || st.q_digits || '%')
     ) as phone_match,
     greatest(
@@ -317,7 +317,7 @@ company_candidates as (
     or coalesce(co.search_1, '') ilike st.q_pattern
     or coalesce(co.search_2, '') ilike st.q_pattern
     or (
-      st.q_digits <> ''
+      length(st.q_digits) >= 3
       and regexp_replace(coalesce(co.phone, ''), '\\D', '', 'g') like ('%' || st.q_digits || '%')
     )
 )

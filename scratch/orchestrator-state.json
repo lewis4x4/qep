@@ -249,6 +249,32 @@
       "gate_report": "test-results/agent-gates/20260520T224556Z-B5.2-hf-1-customer-attach-dropdown-search.json",
       "notes": "Main working tree had unrelated OEM/admin WIP, so full gate was verified in a clean detached worktree with only HF-1 scoped files applied. Temporary worktree dependency repairs were not copied into this repo.",
       "updated_at": "2026-05-20T22:45:56Z"
+    },
+    {
+      "task_id": "A5.1/QEP-33",
+      "status": "complete",
+      "title": "QB-3 \u2014 Fuzzy phone customer search",
+      "stream": "A",
+      "wave": "A5",
+      "goal": "Quote Builder customer picker shares HF-1 ranked search semantics with phone-digit matching, phone-first ranking, and protected v_rep_customers one-row-per-company behavior.",
+      "changed_files": [
+        "apps/web/src/features/quote-builder/components/CustomerPicker.tsx",
+        "apps/web/src/features/quote-builder/lib/__tests__/customer-search-api.test.ts",
+        "apps/web/src/features/quote-builder/lib/__tests__/customer-search-api.rpc.test.ts",
+        "supabase/migrations/586_qb3_customer_search_ranked.sql",
+        "supabase/migrations/586_qb3_customer_search_ranked.test.ts"
+      ],
+      "verification": [
+        "bun test apps/web/src/features/quote-builder/lib/__tests__/customer-search-api.test.ts apps/web/src/features/quote-builder/lib/__tests__/customer-search-api.rpc.test.ts apps/web/src/features/sales/lib/customer-search.test.ts apps/web/src/features/sales/lib/sales-api.search-companies-for-picker.test.ts ./supabase/migrations/586_qb3_customer_search_ranked.test.ts",
+        "bun run --filter @qep/web typecheck",
+        "bun run migrations:check (clean temp worktree)",
+        "git diff --check -- scoped A5.1 files",
+        "Oracle review: no P0/P1 findings",
+        "bun run segment:gates --segment A5.1-qb-3-fuzzy-phone-customer-search --ui (clean temp worktree)"
+      ],
+      "gate_report": "test-results/agent-gates/20260520T230316Z-A5.1-qb-3-fuzzy-phone-customer-search.json",
+      "notes": "Main working tree has unrelated OEM/admin WIP and duplicate untracked migration numbers, so migration/order and full segment gates were verified in a clean detached worktree with only A5.1 scoped files applied.",
+      "updated_at": "2026-05-20T23:03:16Z"
     }
   ],
   "agents": [
@@ -578,29 +604,30 @@
     }
   },
   "current_task": {
-    "task_id": "B5.2/QEP-58",
+    "task_id": "A5.1/QEP-33",
     "status": "complete",
-    "title": "HF-1 \u2014 Customer attach dropdown search",
-    "stream": "B",
-    "wave": "B5",
-    "goal": "Customer attach dropdown search uses shared rep-book matching plus debounced workspace-wide fallback for companies outside the first local customer page.",
+    "title": "QB-3 \u2014 Fuzzy phone customer search",
+    "stream": "A",
+    "wave": "A5",
+    "goal": "Quote Builder customer picker shares HF-1 ranked search semantics with phone-digit matching, phone-first ranking, and protected v_rep_customers one-row-per-company behavior.",
     "changed_files": [
-      "apps/web/src/features/sales/components/SmartVoiceCapture.tsx",
-      "apps/web/src/features/sales/components/CustomerPickerInline.tsx",
-      "apps/web/src/features/sales/components/SmartVoiceCapture.customer-picker.test.tsx",
+      "apps/web/src/features/quote-builder/components/CustomerPicker.tsx",
+      "apps/web/src/features/quote-builder/lib/__tests__/customer-search-api.test.ts",
+      "apps/web/src/features/quote-builder/lib/__tests__/customer-search-api.rpc.test.ts",
+      "supabase/migrations/586_qb3_customer_search_ranked.sql",
       "supabase/migrations/586_qb3_customer_search_ranked.test.ts"
     ],
     "verification": [
-      "bun test apps/web/src/features/sales/lib/customer-search.test.ts apps/web/src/features/sales/components/SmartVoiceCapture.customer-picker.test.tsx apps/web/src/features/sales/lib/sales-api.search-companies-for-picker.test.ts ./supabase/migrations/586_qb3_customer_search_ranked.test.ts",
+      "bun test apps/web/src/features/quote-builder/lib/__tests__/customer-search-api.test.ts apps/web/src/features/quote-builder/lib/__tests__/customer-search-api.rpc.test.ts apps/web/src/features/sales/lib/customer-search.test.ts apps/web/src/features/sales/lib/sales-api.search-companies-for-picker.test.ts ./supabase/migrations/586_qb3_customer_search_ranked.test.ts",
       "bun run --filter @qep/web typecheck",
-      "bun run migrations:check",
-      "git diff --check -- apps/web/src/features/sales/components/SmartVoiceCapture.tsx apps/web/src/features/sales/components/CustomerPickerInline.tsx apps/web/src/features/sales/components/SmartVoiceCapture.customer-picker.test.tsx supabase/migrations/586_qb3_customer_search_ranked.test.ts",
+      "bun run migrations:check (clean temp worktree)",
+      "git diff --check -- scoped A5.1 files",
       "Oracle review: no P0/P1 findings",
-      "bun run segment:gates --segment B5.2-hf-1-customer-attach-dropdown-search --ui (clean temp worktree)"
+      "bun run segment:gates --segment A5.1-qb-3-fuzzy-phone-customer-search --ui (clean temp worktree)"
     ],
-    "gate_report": "test-results/agent-gates/20260520T224556Z-B5.2-hf-1-customer-attach-dropdown-search.json",
-    "notes": "Main working tree had unrelated OEM/admin WIP, so full gate was verified in a clean detached worktree with only HF-1 scoped files applied. Temporary worktree dependency repairs were not copied into this repo.",
-    "updated_at": "2026-05-20T22:45:56Z"
+    "gate_report": "test-results/agent-gates/20260520T230316Z-A5.1-qb-3-fuzzy-phone-customer-search.json",
+    "notes": "Main working tree has unrelated OEM/admin WIP and duplicate untracked migration numbers, so migration/order and full segment gates were verified in a clean detached worktree with only A5.1 scoped files applied.",
+    "updated_at": "2026-05-20T23:03:16Z"
   },
-  "updated_at": "2026-05-20T22:45:56Z"
+  "updated_at": "2026-05-20T23:03:16Z"
 }

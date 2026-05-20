@@ -387,4 +387,24 @@ describe("assembleResults", () => {
     expect(out[0].phoneMatch).toBe(true);
     expect(out[1].phoneMatch).toBe(false);
   });
+
+  test("keeps phone matches ahead of fuzzy text matches under limit pressure", () => {
+    const out = assembleResults({
+      contacts: [{
+        id: "ct-fuzzy", first_name: "352", last_name: "Earthworks", title: null,
+        email: null, phone: "(999) 111-2222", primary_company_id: null,
+      }],
+      companies: [{
+        id: "c-phone", name: "Phone Co", dba: null, phone: "(352) 555-0100",
+        city: null, state: null, classification: null,
+      }],
+      signalsByCompany: new Map(),
+      contactCountByCompany: new Map(),
+      companyById: new Map(),
+      phoneQueryDigits: "352555",
+      limit: 1,
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ kind: "company", companyId: "c-phone", phoneMatch: true });
+  });
 });

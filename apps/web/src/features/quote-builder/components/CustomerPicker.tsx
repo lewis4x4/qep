@@ -338,6 +338,9 @@ function CompanyRow({ row }: { row: CustomerSearchCompany }) {
         </div>
         <div className="mt-0.5 flex items-center gap-3 text-[11px] text-muted-foreground flex-wrap">
           {row.contactCount > 0 && <span>{row.contactCount} contact{row.contactCount === 1 ? "" : "s"}</span>}
+          {row.companyPhone && (
+            <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" />{row.companyPhone}</span>
+          )}
           {(row.companyCity || row.companyState) && (
             <span>{[row.companyCity, row.companyState].filter(Boolean).join(", ")}</span>
           )}
