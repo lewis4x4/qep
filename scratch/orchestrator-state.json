@@ -492,29 +492,39 @@
     }
   },
   "current_task": {
-    "task_id": "B1.4",
-    "linear": "QEP-48",
+    "task_id": "B2.1",
+    "linear": "QEP-49",
     "stream": "B",
-    "wave": "B1",
-    "goal": "Clarify ActionItemsWidget vs AdvisorActionCards naming boundaries from IRON_FLOOR_AUDIT \u00a73.4.",
-    "status": "verified_pending_commit",
+    "wave": "B2",
+    "goal": "VC-1 \u2014 Record from inside customer record: VoiceQRM accepts linked_company_id and skips fuzzy/create company resolution for known customers.",
+    "status": "verified_preexisting_pending_roadmap_ship",
     "expected_files": [
-      "apps/web/src/features/floor/components/AdvisorActionCards.tsx",
-      "apps/web/src/features/floor/widgets/ActionItemsWidget.tsx",
-      "apps/web/src/features/floor/lib/floor-widget-registry.tsx"
+      "apps/web/src/features/qrm/pages/QrmCompanyDetailPage.tsx",
+      "apps/web/src/features/qrm/lib/account-detail-menu.ts",
+      "apps/web/src/features/voice-qrm/pages/VoiceQrmPage.tsx",
+      "apps/web/src/features/voice-qrm/lib/voice-qrm-api.ts",
+      "supabase/functions/voice-to-qrm/index.ts",
+      "supabase/functions/voice-to-qrm/company-resolution.ts",
+      "supabase/functions/voice-to-qrm/vc1-company-linking.ts"
     ],
     "acceptance": [
-      "Code comments clearly distinguish AdvisorActionCards as the advisor CTA / quick-tool launch surface.",
-      "Code comments clearly distinguish ActionItemsWidget / sales.action-items as the task and follow-up queue widget.",
-      "No behavior, routing, styling, data, database, or dependency changes are introduced."
+      "Customer record entry points link to /voice-qrm?linked_company_id=<company> via detail page and account menu.",
+      "VoiceQRM form data forwards linked_company_id to the voice-to-qrm Edge Function.",
+      "voice-to-qrm authorizes linked company access, forces deterministic company attachment, and disables fuzzy/create company resolution for that request.",
+      "voice capture and activity helper tests prove linked_company_id persistence and company timeline activity behavior."
     ],
     "verification": [
-      "git diff --check",
-      "bun run build:web",
-      "bun run segment:gates --segment B1.4-actionitemswidget-vs-advisoractioncards-naming --ui"
+      "bun test apps/web/src/features/voice-qrm/lib/__tests__/voice-qrm-api.test.ts apps/web/src/features/qrm/lib/account-detail-menu.test.ts",
+      "deno test supabase/functions/voice-to-qrm/company-resolution.test.ts supabase/functions/voice-to-qrm/vc1-company-linking.test.ts --allow-env --allow-read",
+      "deno check supabase/functions/voice-to-qrm/index.ts",
+      "bun run segment:gates --segment B2.1-vc-1-record-from-inside-customer-record --ui"
     ],
-    "gate_report": "test-results/agent-gates/20260520T200947Z-B1.4-actionitemswidget-vs-advisoractioncards-naming.json",
-    "deployment_needs": "None. Code comments only; no app behavior, database, edge function, or CI deployment changes.",
-    "updated_at": "2026-05-20T20:09:47.482Z"
+    "gate_report": "test-results/agent-gates/20260520T201426Z-B2.1-vc-1-record-from-inside-customer-record.json",
+    "implementation_commits_observed": [
+      "c6333f5 [wave-omi/vc-1] Attach voice notes from customer records",
+      "840205db Attach voice capture records to QRM safely"
+    ],
+    "deployment_needs": "No new deploy from this verification pass. Existing implementation is already on main; roadmap needed verification/ship state update.",
+    "updated_at": "2026-05-20T20:14:26.918Z"
   }
 }
