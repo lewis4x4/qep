@@ -4,6 +4,7 @@ import {
   canAccessAccountModuleForIronRole,
   canAccessNavHrefForIronRole,
   canAccessPrimaryHeaderForIronRole,
+  isUtilityRoute,
   NAV_ITEMS,
   resolveActivePrimaryHeader,
   resolvePrimaryNavGroups,
@@ -30,6 +31,28 @@ describe("nav-config", () => {
       .flatMap((section) => section.items)
       .map((item) => item.href);
     expect(utility).toEqual(["/os"]);
+  });
+
+  test("exposes owner margin exceptions only in owner utility nav", () => {
+    const ownerUtility = resolveUtilityNavSections(false, false, "owner")
+      .flatMap((section) => section.items)
+      .map((item) => item.href);
+    const adminUtility = resolveUtilityNavSections(false, false, "admin")
+      .flatMap((section) => section.items)
+      .map((item) => item.href);
+    const managerUtility = resolveUtilityNavSections(false, false, "manager")
+      .flatMap((section) => section.items)
+      .map((item) => item.href);
+    const repUtility = resolveUtilityNavSections(false, false, "rep")
+      .flatMap((section) => section.items)
+      .map((item) => item.href);
+
+    expect(ownerUtility).toContain("/owner");
+    expect(ownerUtility).toContain("/owner/margin-exceptions");
+    expect(adminUtility).not.toContain("/owner/margin-exceptions");
+    expect(managerUtility).not.toContain("/owner/margin-exceptions");
+    expect(repUtility).not.toContain("/owner/margin-exceptions");
+    expect(isUtilityRoute("/owner/margin-exceptions")).toBe(true);
   });
 
   test("applies centralized persona policy to route/header checks", () => {

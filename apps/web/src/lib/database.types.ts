@@ -46964,6 +46964,40 @@ export type Database = {
           },
         ]
       }
+      v_margin_exceptions: {
+        Row: {
+          approval_case_id: string | null
+          approval_margin_pct: number | null
+          approval_status: string | null
+          assigned_role: string | null
+          assigned_to: string | null
+          assigned_to_name: string | null
+          branch_name: string | null
+          brand_code: string | null
+          brand_id: string | null
+          brand_name: string | null
+          customer_company: string | null
+          customer_name: string | null
+          decided_at: string | null
+          decided_by: string | null
+          decided_by_name: string | null
+          decision_note: string | null
+          delta_pts: number | null
+          estimated_gap_cents: number | null
+          exception_created_at: string | null
+          exception_id: string | null
+          net_total: number | null
+          quote_number: string | null
+          quote_package_id: string | null
+          quoted_margin_pct: number | null
+          reason: string | null
+          rep_id: string | null
+          rep_name: string | null
+          threshold_margin_pct: number | null
+          workspace_id: string | null
+        }
+        Relationships: []
+      }
       v_machine_parts_connections: {
         Row: {
           association_strength: number | null

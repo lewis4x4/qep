@@ -593,6 +593,14 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     sectionLabel: "System",
   },
   {
+    label: "Margin Exceptions",
+    href: "/owner/margin-exceptions",
+    icon: ShieldAlert,
+    roles: ["owner"],
+    utility: true,
+    sectionLabel: "System",
+  },
+  {
     label: "Executive",
     href: "/executive",
     icon: Gauge,
@@ -853,6 +861,8 @@ export function resolveActivePrimaryHeader(pathname: string): PrimaryHeaderId | 
 export function isUtilityRoute(pathname: string): boolean {
   return (
     pathname === "/os" ||
+    pathname === "/owner" ||
+    pathname.startsWith("/owner/") ||
     pathname.startsWith("/executive") ||
     pathname === "/admin" ||
     pathname.startsWith("/admin/")

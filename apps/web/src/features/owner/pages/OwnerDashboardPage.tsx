@@ -103,6 +103,14 @@ export function OwnerDashboardPage() {
               <LineChart className="h-3.5 w-3.5" />
               Data Miner Equivalents
             </button>
+            <button
+              type="button"
+              onClick={() => navigate("/owner/margin-exceptions")}
+              className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-amber-300/20 bg-amber-300/[0.08] px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-amber-200 transition hover:border-amber-300/35 hover:bg-amber-300/[0.12]"
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Margin Exceptions
+            </button>
             {summaryQuery.data?.generated_at && (
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-slate-300">
                 <Activity className="mr-1 inline h-3 w-3 text-qep-orange" />

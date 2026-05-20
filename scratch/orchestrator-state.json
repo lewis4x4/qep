@@ -492,43 +492,42 @@
     }
   },
   "current_task": {
-    "task_id": "A5.6",
-    "linear": "QEP-38",
+    "task_id": "A5.7",
+    "linear": "QEP-39",
     "stream": "A",
     "wave": "A5",
-    "goal": "Make the quote Review screen the visible final margin-gated customer-send checkpoint, using configured margin floor policy consistently across client and quote-builder-v2 edge sends.",
+    "goal": "Build owner-facing margin exception report from existing qb_margin_exceptions enriched with latest quote_approval_cases context.",
     "status": "verified_pending_commit",
     "expected_files": [
-      "shared/qep-moonshot-contracts.ts",
-      "apps/web/src/features/admin/lib/pricing-discipline-api.ts",
-      "apps/web/src/features/quote-builder/lib/quote-workspace.ts",
-      "apps/web/src/features/quote-builder/lib/review-gates.ts",
-      "apps/web/src/features/quote-builder/steps/ReviewStep.tsx",
-      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderPrimaryAction.ts",
-      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderSave.ts",
-      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderV2Orchestrator.tsx",
-      "supabase/functions/quote-builder-v2/index.ts"
+      "supabase/migrations/602_v_margin_exceptions.sql",
+      "apps/web/src/lib/database.types.ts",
+      "apps/web/src/features/owner/lib/owner-api-normalizers.ts",
+      "apps/web/src/features/owner/lib/owner-api.ts",
+      "apps/web/src/features/owner/pages/MarginExceptionsPage.tsx",
+      "apps/web/src/App.tsx",
+      "apps/web/src/lib/nav-config.ts",
+      "apps/web/src/components/TopBar.tsx",
+      "apps/web/src/features/owner/pages/OwnerDashboardPage.tsx"
     ],
     "acceptance": [
-      "Client workspace/readiness and edge send/share paths use the configured/default margin floor instead of a hidden 10% bypass.",
-      "Review exposes locked/unlocked customer-send state and requires clean approval plus packet readiness before send navigation.",
-      "Below-floor approval submission fails closed until margin policy is resolved and requires a rep justification note.",
-      "Approved-with-conditions share-token and send-package paths enforce the same conditional approval readiness checks."
+      "Owner-only report view exposes rep/customer/quote/margin/status/approver context.",
+      "Report data is derived from qb_margin_exceptions plus latest quote_approval_cases context, not a disconnected store.",
+      "Owner route/nav/dashboard discoverability exists and non-owner nav visibility is tested.",
+      "Existing admin margin discipline tests remain green."
     ],
     "verification": [
-      "bun test quote-workspace/useQuoteBuilderPrimaryAction/review-gates/router/shell tests",
-      "deno check supabase/functions/quote-builder-v2/index.ts",
-      "deno test supabase/functions/quote-builder-v2/quote-financial-integrity-regression.test.ts --allow-read --allow-env",
-      "cd apps/web && bun run typecheck",
+      "bun test owner normalizer/API/page/nav/admin margin focused tests",
       "bun run migrations:check",
+      "cd apps/web && bun run typecheck",
+      "Oracle review: no P0/P1 blockers",
       "bun run audit:secrets",
       "git diff --check",
       "cd apps/web && bun run build",
-      "bun run segment:gates --segment A5.6-qb-10-margin-gated-send --ui"
+      "bun run segment:gates --segment A5.7-qb-11-margin-exception-report --ui"
     ],
-    "deployment_needs": "none; no migration added and no edge deploy performed in this local cycle",
-    "gate_report": "test-results/agent-gates/20260520T180118Z-A5.6-qb-10-margin-gated-send.json",
-    "deslop": "scoped pass completed; no cleanup edits needed after focused tests and segment gates remained green",
-    "updated_at": "2026-05-20T18:02:24.454886+00:00"
+    "deployment_needs": "Supabase migration 602 must be applied before frontend deploy in hosted environments; no edge function deploy required.",
+    "gate_report": "test-results/agent-gates/20260520T182710Z-A5.7-qb-11-margin-exception-report.json",
+    "oracle_review": "no P0/P1 blockers",
+    "updated_at": "2026-05-20T18:27:29.599972+00:00"
   }
 }

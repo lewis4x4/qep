@@ -410,6 +410,9 @@ const OwnerDashboardPage = lazy(() =>
 const DataMinerEquivalentsPage = lazy(() =>
   import("./features/owner/pages/DataMinerEquivalentsPage").then((m) => ({ default: m.DataMinerEquivalentsPage }))
 );
+const MarginExceptionsPage = lazy(() =>
+  import("./features/owner/pages/MarginExceptionsPage").then((m) => ({ default: m.MarginExceptionsPage }))
+);
 const BriefRoutes = lazy(() =>
   import("./features/brief/BriefRoutes").then((m) => ({ default: m.BriefRoutes }))
 );
@@ -1894,6 +1897,16 @@ function App() {
                 element={
                   profile.role === "owner" ? (
                     <OwnerDashboardPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/owner/margin-exceptions"
+                element={
+                  profile.role === "owner" ? (
+                    <MarginExceptionsPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

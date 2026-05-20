@@ -123,6 +123,61 @@ export interface TeamSignalsResponse {
   reps: TeamSignalRep[];
 }
 
+export type OwnerMarginApprovalStatus =
+  | "pending"
+  | "approved"
+  | "approved_with_conditions"
+  | "changes_requested"
+  | "rejected"
+  | "escalated"
+  | "cancelled"
+  | "superseded"
+  | "expired";
+
+export interface OwnerMarginExceptionRow {
+  exception_id: string;
+  workspace_id: string;
+  exception_created_at: string;
+  quote_package_id: string;
+  brand_id: string | null;
+  brand_code: string | null;
+  brand_name: string | null;
+  rep_id: string | null;
+  rep_name: string | null;
+  quoted_margin_pct: number;
+  threshold_margin_pct: number;
+  delta_pts: number;
+  estimated_gap_cents: number | null;
+  reason: string;
+  approval_case_id: string | null;
+  quote_number: string | null;
+  customer_name: string | null;
+  customer_company: string | null;
+  branch_name: string | null;
+  net_total: number | null;
+  approval_margin_pct: number | null;
+  approval_status: OwnerMarginApprovalStatus | null;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
+  assigned_role: string | null;
+  decided_by: string | null;
+  decided_by_name: string | null;
+  decided_at: string | null;
+  decision_note: string | null;
+}
+
+const OWNER_MARGIN_APPROVAL_STATUSES = new Set<OwnerMarginApprovalStatus>([
+  "pending",
+  "approved",
+  "approved_with_conditions",
+  "changes_requested",
+  "rejected",
+  "escalated",
+  "cancelled",
+  "superseded",
+  "expired",
+]);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -169,6 +224,12 @@ function validHealthTier(value: unknown): OwnershipHealthScore["tier"] {
 
 function validSeverity(value: unknown): PredictiveIntervention["severity"] {
   return value === "high" || value === "medium" || value === "low" ? value : "medium";
+}
+
+function validOwnerMarginApprovalStatus(value: unknown): OwnerMarginApprovalStatus | null {
+  return typeof value === "string" && OWNER_MARGIN_APPROVAL_STATUSES.has(value as OwnerMarginApprovalStatus)
+    ? (value as OwnerMarginApprovalStatus)
+    : null;
 }
 
 function normalizeToolTraceRows(value: unknown): OwnerAskAnythingResponse["tool_trace"] {
@@ -268,6 +329,69 @@ function normalizeOwnerEvent(value: unknown): OwnerEvent | null {
 export function normalizeBranchStackRows(rows: unknown): BranchStackRow[] {
   if (!Array.isArray(rows)) return [];
   return rows.map(normalizeBranchStackRow).filter((row): row is BranchStackRow => row !== null);
+}
+
+export function normalizeOwnerMarginExceptionRows(rows: unknown): OwnerMarginExceptionRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map(normalizeOwnerMarginExceptionRow)
+    .filter((row): row is OwnerMarginExceptionRow => row !== null);
+}
+
+function normalizeOwnerMarginExceptionRow(row: unknown): OwnerMarginExceptionRow | null {
+  if (!isRecord(row)) return null;
+  const exceptionId = nullableString(row.exception_id);
+  const workspaceId = nullableString(row.workspace_id);
+  const exceptionCreatedAt = nullableString(row.exception_created_at);
+  const quotePackageId = nullableString(row.quote_package_id);
+  const quotedMarginPct = numberValue(row.quoted_margin_pct);
+  const thresholdMarginPct = numberValue(row.threshold_margin_pct);
+  const reason = nullableString(row.reason);
+
+  if (
+    !exceptionId ||
+    !workspaceId ||
+    !exceptionCreatedAt ||
+    !quotePackageId ||
+    quotedMarginPct === null ||
+    thresholdMarginPct === null ||
+    !reason
+  ) {
+    return null;
+  }
+
+  const deltaPts = numberValue(row.delta_pts) ?? quotedMarginPct - thresholdMarginPct;
+  return {
+    exception_id: exceptionId,
+    workspace_id: workspaceId,
+    exception_created_at: exceptionCreatedAt,
+    quote_package_id: quotePackageId,
+    brand_id: nullableString(row.brand_id),
+    brand_code: nullableString(row.brand_code),
+    brand_name: nullableString(row.brand_name),
+    rep_id: nullableString(row.rep_id),
+    rep_name: nullableString(row.rep_name),
+    quoted_margin_pct: quotedMarginPct,
+    threshold_margin_pct: thresholdMarginPct,
+    delta_pts: deltaPts,
+    estimated_gap_cents: numberValue(row.estimated_gap_cents),
+    reason,
+    approval_case_id: nullableString(row.approval_case_id),
+    quote_number: nullableString(row.quote_number),
+    customer_name: nullableString(row.customer_name),
+    customer_company: nullableString(row.customer_company),
+    branch_name: nullableString(row.branch_name),
+    net_total: numberValue(row.net_total),
+    approval_margin_pct: numberValue(row.approval_margin_pct),
+    approval_status: validOwnerMarginApprovalStatus(row.approval_status),
+    assigned_to: nullableString(row.assigned_to),
+    assigned_to_name: nullableString(row.assigned_to_name),
+    assigned_role: nullableString(row.assigned_role),
+    decided_by: nullableString(row.decided_by),
+    decided_by_name: nullableString(row.decided_by_name),
+    decided_at: nullableString(row.decided_at),
+    decision_note: nullableString(row.decision_note),
+  };
 }
 
 function normalizeBranchStackRow(row: unknown): BranchStackRow | null {
