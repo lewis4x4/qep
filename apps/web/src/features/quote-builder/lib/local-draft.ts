@@ -285,7 +285,14 @@ function normalizeLocalDraft(value: unknown): Partial<QuoteWorkspaceDraft> | nul
   if (commercialDiscountType) draft.commercialDiscountType = commercialDiscountType;
   const commercialDiscountValue = asNumber(record.commercialDiscountValue);
   if (commercialDiscountValue !== null) draft.commercialDiscountValue = commercialDiscountValue;
-  const cashDown = asNumber(record.cashDown);
+  const cashDown = asNumber(
+    record.cashDown
+    ?? record.cashDownAmount
+    ?? record.cash_down_amount
+    ?? record.downPaymentAmount
+    ?? record.down_payment_amount
+    ?? record.cash_down,
+  );
   if (cashDown !== null) draft.cashDown = cashDown;
   const taxProfile = normalizeTaxProfile(record.taxProfile);
   if (taxProfile) draft.taxProfile = taxProfile;
@@ -312,10 +319,14 @@ function normalizeLocalDraft(value: unknown): Partial<QuoteWorkspaceDraft> | nul
   if ("whyThisMachineConfirmed" in record) {
     draft.whyThisMachineConfirmed = record.whyThisMachineConfirmed === true;
   }
-  if ("depositRequiredAmount" in record) {
-    const dep = asNumber(record.depositRequiredAmount);
-    if (dep !== null) draft.depositRequiredAmount = dep;
-  }
+  const depositRequiredAmount = asNumber(
+    record.depositRequiredAmount
+    ?? record.depositAmount
+    ?? record.deposit_amount
+    ?? record.goodFaithDepositAmount
+    ?? record.good_faith_deposit_amount,
+  );
+  if (depositRequiredAmount !== null) draft.depositRequiredAmount = depositRequiredAmount;
   if ("taxJurisdictionId" in record) draft.taxJurisdictionId = asNullableString(record.taxJurisdictionId);
   if ("taxOverrideAmount" in record) {
     const taxOv = asNumber(record.taxOverrideAmount);

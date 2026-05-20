@@ -14,3 +14,4 @@
 - 2026-05-20T10:15:00-04:00 — A3.8-1 snapshot/diff foundation passed independent review. Dispatching A3.8-2 for migration/R2 edge upload/version/list/diff/latest resolver foundation, no client send orchestration yet.
 - 2026-05-20T10:40:00-04:00 — A3.8-2 R2/migration/edge foundation passed independent review. Dispatching A3.8-3 for client API, PDF blob generation, immutable artifact upload, and email send orchestration wiring.
 - 2026-05-20T11:05:00-04:00 — A3.8-3 client immutable send wiring passed independent review. Dispatching A3.8-4 to remove direct send bypass and add rep PDF version history/diff UI.
+- 2026-05-20T12:45:00-04:00 — A1.1 remains manual/sign-off work already logged. Selected Engineer-buildable A5.2/QEP-34 (QB-6 cash down vs deposit semantics); implemented label/copy separation, legacy alias hydration, and proposal tests. Verification passed: targeted bun tests, web typecheck/build, migrations:check, audit:secrets, scoped diff check.

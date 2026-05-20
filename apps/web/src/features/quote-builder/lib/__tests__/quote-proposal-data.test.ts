@@ -675,6 +675,8 @@ describe("buildQuoteProposalData", () => {
       whyThisMachineConfirmed: true,
       recommendation: { machine: "Bobcat T770", attachments: [], reasoning: "Unsafe AI reasoning." },
       selectedFinanceScenario: "60 months",
+      cashDown: 10_000,
+      depositRequiredAmount: 2_500,
     }, [
       {
         type: "finance",
@@ -695,7 +697,9 @@ describe("buildQuoteProposalData", () => {
     expect(html).toContain("Confirmed customer-safe story.");
     expect(html).not.toContain("Unsafe AI reasoning.");
     expect(html).not.toContain("Deposit placeholder");
-    expect(html).toContain("Deposit required");
+    expect(html).not.toContain("Cash down / deposit credit");
+    expect(html).toContain("Cash down applied");
+    expect(html).toContain("Good-faith deposit required");
     expect(html).toContain("Configuration waterfall");
     expect(html).toContain("EQUIPMENT ESTIMATE - NOT AN INVOICE");
     expect(html).toContain("/brand/qep/quote/qep-its-in-the-name-logo.png");

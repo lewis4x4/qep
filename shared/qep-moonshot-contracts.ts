@@ -208,6 +208,7 @@ export interface QuoteWorkspaceDraft {
   tradeValuationId: string | null;
   commercialDiscountType: QuoteCommercialDiscountType;
   commercialDiscountValue: number;
+  /** Customer cash applied to reduce the financed balance. Not the good-faith deposit. */
   cashDown: number;
   taxProfile: QuoteTaxProfile;
   taxTotal: number;
@@ -219,6 +220,7 @@ export interface QuoteWorkspaceDraft {
   expiresAt?: string | null;
   followUpAt?: string | null;
   postApprovalAction?: QuotePostApprovalAction | null;
+  /** Good-faith deposit requested to hold the unit. Does not reduce amount financed. */
   depositRequiredAmount?: number | null;
   deliveryEta?: string | null;
   deliveryState?: string | null;

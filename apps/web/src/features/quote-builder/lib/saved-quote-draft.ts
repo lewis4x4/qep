@@ -478,7 +478,12 @@ export function hydrateDraftFromSavedQuote(
     tradeValuationId: asString(savedQuote.trade_in_valuation_id) || null,
     commercialDiscountType,
     commercialDiscountValue: asNumber(savedQuote.commercial_discount_value) ?? 0,
-    cashDown: asNumber(savedQuote.cash_down) ?? 0,
+    cashDown: asNumber(
+      savedQuote.cash_down
+      ?? savedQuote.cash_down_amount
+      ?? savedQuote.down_payment_amount
+      ?? savedQuote.downPaymentAmount,
+    ) ?? 0,
     taxProfile: isTaxProfile(taxProfileRaw) ? taxProfileRaw : "standard",
     taxTotal: asNumber(savedQuote.tax_total) ?? 0,
     amountFinanced: asNumber(savedQuote.amount_financed) ?? 0,
@@ -493,7 +498,11 @@ export function hydrateDraftFromSavedQuote(
     expiresAt: asString(savedQuote.expires_at) || null,
     followUpAt: asString(savedQuote.follow_up_at) || null,
     postApprovalAction: normalizePostApprovalAction(savedQuote.post_approval_action) ?? "return_to_rep",
-    depositRequiredAmount: asNumber(savedQuote.deposit_required_amount),
+    depositRequiredAmount: asNumber(
+      savedQuote.deposit_required_amount
+      ?? savedQuote.deposit_amount
+      ?? savedQuote.good_faith_deposit_amount,
+    ),
     deliveryEta: asString(savedQuote.delivery_eta) || null,
     deliveryState: asString(savedQuote.delivery_state) || null,
     deliveryCounty: asString(savedQuote.delivery_county) || null,

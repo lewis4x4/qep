@@ -490,5 +490,42 @@
       "project_ref": "iciddijgonywtxoelous",
       "runtime_prerequisites": "blocked: R2 secrets missing for immutable PDF send path; APP_URL public HTTPS origin must be verified for QR validation"
     }
+  },
+  "current_task": {
+    "task_id": "A5.2",
+    "linear": "QEP-34",
+    "stream": "A",
+    "wave": "A5",
+    "goal": "Separate cash down from good-faith deposit semantics in Iron Quote UI, local/saved draft hydration, and customer proposal copy.",
+    "status": "verified_pending_commit",
+    "expected_files": [
+      "shared/qep-moonshot-contracts.ts",
+      "apps/web/src/features/quote-builder/steps/FinancingStep.tsx",
+      "apps/web/src/features/quote-builder/steps/DetailsStep.tsx",
+      "apps/web/src/features/quote-builder/components/QuotePDFDocument.tsx",
+      "apps/web/src/features/quote-builder/lib/quote-print-html.ts",
+      "apps/web/src/features/quote-builder/lib/local-draft.ts",
+      "apps/web/src/features/quote-builder/lib/saved-quote-draft.ts"
+    ],
+    "acceptance": [
+      "Cash down copy identifies money applied to financed balance.",
+      "Good-faith deposit copy identifies unit-hold deposit and does not reduce financed balance.",
+      "Legacy draft aliases hydrate into current fields.",
+      "Customer proposal HTML no longer says cash down / deposit credit."
+    ],
+    "verification": [
+      "bun test local-draft/saved-quote-draft/quote-proposal-data tests",
+      "cd apps/web && bun run typecheck",
+      "bun run migrations:check",
+      "bun run audit:secrets",
+      "cd apps/web && bun run build",
+      "git diff --check scoped files"
+    ],
+    "deployment_needs": "none; no migration or edge function changed",
+    "moonshot_moves": [
+      "A5/QB-6",
+      "customer copy clarity",
+      "TILA-adjacent payment semantics preserved"
+    ]
   }
 }

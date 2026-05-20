@@ -89,16 +89,17 @@ export function DetailsStep() {
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-xs font-medium text-muted-foreground">Deposit placeholder</span>
+            <span className="text-xs font-medium text-muted-foreground">Good-faith deposit (holds unit)</span>
             <input
               type="number"
               min={0}
               step={250}
               value={draft.depositRequiredAmount ?? ""}
               onChange={(event) => setDraft((current) => ({ ...current, depositRequiredAmount: event.target.value === "" ? null : Number(event.target.value) || 0 }))}
-              placeholder="Awaiting deposit SOP"
+              placeholder="Optional deposit requested"
               className="w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm min-h-[44px]"
             />
+            <span className="text-[11px] text-muted-foreground">Separate from cash down; does not reduce amount financed.</span>
           </label>
         </div>
 

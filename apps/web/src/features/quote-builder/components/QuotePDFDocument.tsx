@@ -423,7 +423,7 @@ function FinancingCard({ option, selected }: { option: QuotePDFData["financing"]
       <Text style={s.financeLine}>Rate/APR: {option.rate != null ? `${option.rate.toFixed(2)}%` : "Subject to approval"}</Text>
       {aprSource ? <Text style={s.financeSourceLine}>{aprSource}</Text> : null}
       {option.totalCost != null ? <Text style={s.financeLine}>Estimated total: {fmt(option.totalCost)}</Text> : null}
-      {option.downPayment != null ? <Text style={s.financeLine}>Down payment: {fmt(option.downPayment)}</Text> : null}
+      {option.downPayment != null ? <Text style={s.financeLine}>Cash down in scenario: {fmt(option.downPayment)}</Text> : null}
       {option.lender ? <Text style={[s.financeLine, { color: MUTED }]}>via {option.lender}</Text> : null}
     </View>
   );
@@ -517,7 +517,7 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
           <View style={s.totalRow}><Text style={s.totalLabel}>{data.compliance.taxLabel}</Text><Text style={s.totalValue}>{fmt(data.taxTotal)}</Text></View>
           {data.compliance.taxDetail ? <Text style={s.disclaimer}>{data.compliance.taxDetail}</Text> : null}
           <View style={s.totalRow}><Text style={s.totalLabel}>Customer total</Text><Text style={s.totalValue}>{fmt(data.customerTotal)}</Text></View>
-          {data.cashDown > 0 ? <View style={s.totalRow}><Text style={s.totalLabel}>Cash down / deposit credit</Text><Text style={[s.totalValue, s.creditText]}>-{fmt(data.cashDown)}</Text></View> : null}
+          {data.cashDown > 0 ? <View style={s.totalRow}><Text style={s.totalLabel}>Cash down applied</Text><Text style={[s.totalValue, s.creditText]}>-{fmt(data.cashDown)}</Text></View> : null}
           <View style={s.grandRow}><Text style={s.grandLabel}>{data.compliance.primaryTotalLabel}</Text><Text style={s.grandValue}>{fmt(selectedTotal(data))}</Text></View>
         </View>
 
@@ -556,7 +556,7 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
           <Text style={s.termsLine}>Prepared by: {data.preparedBy}</Text>
           <Text style={s.termsLine}>Valid until: {maybe(data.validUntil ?? data.compliance.validUntil)}</Text>
           <Text style={s.termsLine}>Delivery ETA: {maybe(data.deliveryEta)}</Text>
-          <Text style={s.termsLine}>Deposit required: {data.depositRequiredAmount != null ? fmt(data.depositRequiredAmount) : "Not required unless specified by your QEP representative."}</Text>
+          <Text style={s.termsLine}>Good-faith deposit required: {data.depositRequiredAmount != null ? fmt(data.depositRequiredAmount) : "Not required unless specified by your QEP representative."}</Text>
           <Text style={s.termsLine}>Special terms: {data.specialTerms || "Standard QEP proposal terms apply; final terms confirmed at signature."}</Text>
           <Text style={s.termsLine}>{data.compliance.taxDetail || "Tax subject to final jurisdiction confirmation."}</Text>
           {b.phone ? <Text style={s.termsLine}>Phone: {b.phone}</Text> : null}

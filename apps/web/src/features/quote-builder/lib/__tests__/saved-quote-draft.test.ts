@@ -123,6 +123,20 @@ describe("hydrateDraftFromSavedQuote", () => {
     });
   });
 
+  test("hydrates legacy cash down and good-faith deposit aliases", () => {
+    const draft = hydrateDraftFromSavedQuote({
+      id: "pkg-legacy-cash-deposit",
+      deal_id: "deal-legacy-cash-deposit",
+      equipment: [{ make: "ASV", model: "RT-135", amount: 102000 }],
+      down_payment_amount: 7500,
+      deposit_amount: 1250,
+    });
+
+    expect(draft.cashDown).toBe(7500);
+    expect(draft.depositRequiredAmount).toBe(1250);
+    expect(draft.amountFinanced).toBe(0);
+  });
+
   test("hydrates customer comparison toggle from quote metadata when no scenario carries it", () => {
     const draft = hydrateDraftFromSavedQuote({
       deal_id: "deal-meta-toggle",

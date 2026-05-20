@@ -227,7 +227,7 @@ function buildTotals(data: QuotePDFData): string {
       <div><span>${escapeHtml(data.compliance.taxLabel)}</span><strong>${escapeHtml(formatCurrency(data.taxTotal))}</strong></div>
       ${data.compliance.taxDetail ? `<small>${escapeHtml(data.compliance.taxDetail)}</small>` : ""}
       <div><span>Customer total</span><strong>${escapeHtml(formatCurrency(data.customerTotal))}</strong></div>
-      ${data.cashDown > 0 ? `<div><span>Cash down / deposit credit</span><strong class="credit">-${escapeHtml(formatCurrency(data.cashDown))}</strong></div>` : ""}
+      ${data.cashDown > 0 ? `<div><span>Cash down applied</span><strong class="credit">-${escapeHtml(formatCurrency(data.cashDown))}</strong></div>` : ""}
       <div class="grand-total"><span>Authorization: _________________________</span><strong>${escapeHtml(data.compliance.primaryTotalLabel)}: ${escapeHtml(formatCurrency(selectedTotal(data)))}</strong></div>
     </section>
   `;
@@ -385,7 +385,7 @@ export function buildPrintableQuoteHtml(data: QuotePDFData): string {
               <div class="section-label">Comments and terms</div>
               <p><strong>Special terms:</strong> ${escapeHtml(data.specialTerms || data.compliance.specialTerms || "Standard QEP proposal terms apply; final terms confirmed at signature.")}</p>
               <p><strong>Delivery ETA:</strong> ${escapeHtml(data.deliveryEta ?? "TBD")}</p>
-              <p><strong>Deposit required:</strong> ${escapeHtml(data.depositRequiredAmount != null ? formatCurrency(data.depositRequiredAmount) : "Not required unless specified by QEP.")}</p>
+              <p><strong>Good-faith deposit required:</strong> ${escapeHtml(data.depositRequiredAmount != null ? formatCurrency(data.depositRequiredAmount) : "Not required unless specified by QEP.")}</p>
               <p class="disclaimer">${escapeHtml(data.compliance.proposalDisclaimer)}</p>
             </section>
           </div>

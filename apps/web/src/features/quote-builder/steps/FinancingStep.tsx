@@ -240,10 +240,10 @@ export function FinancingStep({
         {financeStepTab === "cash" && (
           <div className="mt-4 rounded-lg border border-border/70 bg-card/50 p-4">
             <p className="text-sm font-semibold text-foreground">Cash quote</p>
-            <p className="mt-1 text-xs text-muted-foreground">Customer total due at delivery: {money(customerTotal)}. Down payment remains optional for internal tracking.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Customer total due at delivery: {money(customerTotal)}. Good-faith deposits are tracked separately in Quote details.</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <SummaryRow label="Customer total" value={money(customerTotal)} emphasize />
-              <SummaryRow label="Deposit / cash down" value={money(cashDown)} />
+              <SummaryRow label="Cash down applied" value={money(cashDown)} />
             </div>
           </div>
         )}
@@ -256,7 +256,7 @@ export function FinancingStep({
               const inputs = (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="space-y-1 text-sm">
-                    <span className="text-xs font-medium text-muted-foreground">Cash down</span>
+                    <span className="text-xs font-medium text-muted-foreground">Cash down (reduces financed balance)</span>
                     <input
                       type="number"
                       inputMode="decimal"
@@ -277,7 +277,7 @@ export function FinancingStep({
                 <MobileSectionAccordion
                   index={1}
                   title="Loan inputs"
-                  caption={`Cash down ${money(draft.cashDown || 0)}`}
+                  caption={`Cash down applied ${money(draft.cashDown || 0)}`}
                   defaultOpen
                 >
                   {inputs}
@@ -450,7 +450,7 @@ export function FinancingStep({
                 value={money(amountFinanced)}
               />
               <SummaryRow
-                label="Cash down"
+                label="Cash down applied"
                 value={money(cashDown)}
               />
             </div>

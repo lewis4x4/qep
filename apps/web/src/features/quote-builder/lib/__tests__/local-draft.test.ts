@@ -176,6 +176,30 @@ describe("save/load/clear round-trip", () => {
     expect(loaded?.selectedPromotionIds).toEqual(["promo-a", "promo-b"]);
   });
 
+  test("hydrates legacy cash down and deposit aliases from stored JSON", () => {
+    const key = buildLocalDraftKey({ userId: "u1", dealId: "legacy-cash-deposit" });
+    (globalThis as unknown as { window: { localStorage: MemoryStorage } })
+      .window.localStorage.setItem(
+        `qep.quote-builder.local-draft.${key}`,
+        JSON.stringify({
+          savedAt: "2026-05-20T12:00:00.000Z",
+          draft: {
+            entryMode: "manual",
+            branchSlug: "lake-city",
+            equipment: [],
+            attachments: [],
+            down_payment_amount: 7500,
+            deposit_amount: 1250,
+          },
+        }),
+      );
+
+    const loaded = loadLocalDraft(key);
+
+    expect(loaded?.cashDown).toBe(7500);
+    expect(loaded?.depositRequiredAmount).toBe(1250);
+  });
+
   test("accepts post_approval_action snake_case from stored JSON", () => {
     const key = buildLocalDraftKey({ userId: "u1", dealId: "snake-post-approval" });
     (globalThis as unknown as { window: { localStorage: MemoryStorage } })
