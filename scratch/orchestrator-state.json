@@ -492,42 +492,42 @@
     }
   },
   "current_task": {
-    "task_id": "A5.8",
-    "linear": "QEP-40",
+    "task_id": "A5.9",
+    "linear": "QEP-41",
     "stream": "A",
     "wave": "A5",
-    "goal": "Build QB-12 Save Draft reason logging: manual low-margin draft saves require a reason while autosave never opens an interrupting modal.",
+    "goal": "Build QB-13 auto-send-aware rep notification copy for approval decisions using public.qb_notifications.",
     "status": "verified_pending_commit",
     "expected_files": [
-      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderSave.ts",
-      "apps/web/src/features/quote-builder/hooks/useDraftAutosave.ts",
-      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderV2Orchestrator.tsx",
-      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderDocumentActions.ts",
-      "apps/web/src/features/quote-builder/components/QuoteBuilderStatusBanners.tsx",
-      "apps/web/src/features/quote-builder/components/QuoteBuilderV2PageShell.tsx",
-      "apps/web/src/features/quote-builder/components/QuoteBuilderV2PageMobileShell.tsx",
-      "apps/web/src/features/quote-builder/hooks/__tests__/useQuoteBuilderSave.test.ts",
-      "apps/web/src/features/quote-builder/hooks/__tests__/useDraftAutosave.test.ts"
+      "shared/qep-moonshot-contracts.ts",
+      "supabase/functions/quote-builder-v2/index.ts",
+      "supabase/functions/quote-builder-v2/quote-approval-notifications.ts",
+      "supabase/functions/quote-builder-v2/quote-approval-notifications.test.ts",
+      "apps/web/src/features/sales/hooks/useQbNotifications.ts",
+      "apps/web/src/components/QbNotificationBell.tsx",
+      "apps/web/src/components/QbNotificationBell.test.tsx"
     ],
     "acceptance": [
-      "Manual low-margin Save Draft requires a rep reason before saving.",
-      "Successful manual reason capture writes qb_margin_exceptions atomically enough to avoid silent uncaptured drafts; failures surface a hard warning.",
-      "Autosave pauses/flags low-margin drafts without opening a modal or logging a fake exception.",
-      "No quote_approval_cases draft_low_margin migration was added for this slice; qb_margin_exceptions remains canonical audit storage."
+      "Rep notifications distinguish approved+auto-sent, approved+auto-send failed/incomplete, and approved+return-to-rep.",
+      "qb_notifications metadata includes auto_send status and delivery fields when available.",
+      "Bell UI surfaces Auto-sent / Send needs attention / Ready to send and preserves internal deep-link navigation.",
+      "No crm_notifications or quote-send function path was added; consolidated roadmap qb_notifications path remains authoritative."
     ],
     "verification": [
-      "bun test quote-builder save/autosave hook tests",
-      "cd apps/web && bun run typecheck",
-      "cd apps/web && bun run build",
-      "Oracle review: no P0/P1 blockers",
+      "deno test supabase/functions/quote-builder-v2/quote-approval-notifications.test.ts --allow-read",
+      "bun test apps/web/src/components/QbNotificationBell.test.tsx",
+      "deno check supabase/functions/quote-builder-v2/index.ts supabase/functions/quote-builder-v2/quote-approval-notifications.ts",
+      "Oracle review P1 fixed: return_to_rep no longer emits failure_code",
       "bun run migrations:check",
       "bun run audit:secrets",
       "git diff --check",
-      "bun run segment:gates --segment A5.8-qb-12-save-draft-reason-logging --ui"
+      "cd apps/web && bun run typecheck",
+      "cd apps/web && bun run build",
+      "bun run segment:gates --segment A5.9-qb-13-auto-send-rep-notification-copy --ui"
     ],
-    "deployment_needs": "Frontend deploy only; no database migration or edge deploy required for this slice.",
-    "gate_report": "test-results/agent-gates/20260520T184753Z-A5.8-qb-12-save-draft-reason-logging.json",
-    "oracle_review": "no P0/P1 blockers",
-    "updated_at": "2026-05-20T18:49:44.418686+00:00"
+    "deployment_needs": "Deploy quote-builder-v2 edge function and frontend bundle in hosted environments; no database migration required.",
+    "gate_report": "test-results/agent-gates/20260520T191427Z-A5.9-qb-13-auto-send-rep-notification-copy.json",
+    "oracle_review": "one P1 fixed; no remaining blockers after targeted verification",
+    "updated_at": "2026-05-20T19:14:59.024306+00:00"
   }
 }

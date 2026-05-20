@@ -19,13 +19,31 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 
+export interface QbNotificationAutoSendMetadata {
+  status?: "sent" | "failed" | "return_to_rep" | "not_applicable";
+  attempted?: boolean;
+  sent?: boolean;
+  reason?: string | null;
+  failure_code?: string | null;
+  delivery_event_id?: string | null;
+  public_url?: string | null;
+  pdf_version_number?: number | null;
+  document_artifact_id?: string | null;
+}
+
+export interface QbNotificationMetadata {
+  deep_link?: string;
+  auto_send?: QbNotificationAutoSendMetadata;
+  [key: string]: unknown;
+}
+
 export interface QbNotification {
   id: string;
   user_id: string | null;
   type: string;
   title: string;
   body: string;
-  metadata: Record<string, unknown> | null;
+  metadata: QbNotificationMetadata | null;
   read_at: string | null;
   created_at: string;
 }

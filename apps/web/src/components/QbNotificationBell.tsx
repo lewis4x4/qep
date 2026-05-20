@@ -41,6 +41,7 @@ import { useIsHandheldViewport } from "@/features/sales/hooks/useIsHandheldViewp
 import {
   useQbNotifications,
   type QbNotification,
+  type QbNotificationAutoSendMetadata,
 } from "@/features/sales/hooks/useQbNotifications";
 
 export type QbNotificationBellTone = "light" | "dark";
@@ -277,8 +278,14 @@ function NotificationList({
         </div>
       )}
       <ul role="list" className="divide-y divide-border">
-        {notifications.map((notification) => (
-          <li key={notification.id}>
+        {notifications.map((notification) => {
+          const autoSendLabel = getAutoSendStatusLabel(notification);
+          const bodyClampClass = notification.type === "quote_approval_decision"
+            ? "line-clamp-2"
+            : "line-clamp-1";
+
+          return (
+            <li key={notification.id}>
             <button
               type="button"
               onClick={() => onSelect(notification)}
@@ -304,8 +311,13 @@ function NotificationList({
                 </span>
               </div>
               {notification.body ? (
-                <span className="line-clamp-1 text-xs text-muted-foreground">
+                <span className={cn(bodyClampClass, "text-xs text-muted-foreground")}>
                   {notification.body}
+                </span>
+              ) : null}
+              {autoSendLabel ? (
+                <span className="inline-flex rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-qep-orange">
+                  {autoSendLabel}
                 </span>
               ) : null}
               {!notification.read_at && (
@@ -315,14 +327,30 @@ function NotificationList({
                 />
               )}
             </button>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
       {onViewAllApprovals && (
         <ApprovalsFooterLink onClick={onViewAllApprovals} />
       )}
     </div>
   );
+}
+
+function getAutoSendStatusLabel(notification: QbNotification): string | null {
+  if (notification.type !== "quote_approval_decision") return null;
+  const autoSend: QbNotificationAutoSendMetadata | undefined = notification.metadata?.auto_send;
+  switch (autoSend?.status) {
+    case "sent":
+      return "Auto-sent";
+    case "failed":
+      return "Send needs attention";
+    case "return_to_rep":
+      return "Ready to send";
+    default:
+      return null;
+  }
 }
 
 function ApprovalsFooterLink({ onClick }: { onClick: () => void }) {

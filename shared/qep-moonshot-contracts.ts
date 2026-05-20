@@ -574,12 +574,7 @@ export interface QuoteApprovalSubmitResult {
   alreadyPending?: boolean;
   bypassRuleId?: string | null;
   bypassRuleName?: string | null;
-  autoSend?: {
-    attempted: boolean;
-    sent: boolean;
-    reason?: string | null;
-    error?: string | null;
-  } | null;
+  autoSend?: QuoteAutoSendResult | null;
 }
 
 export interface QuoteAutoSendResult {
@@ -587,6 +582,10 @@ export interface QuoteAutoSendResult {
   sent: boolean;
   reason?: string | null;
   error?: string | null;
+  deliveryEventId?: string | null;
+  publicUrl?: string | null;
+  pdfVersionNumber?: number | null;
+  documentArtifactId?: string | null;
 }
 
 export interface QuoteApprovalDecisionResult {
