@@ -78,7 +78,13 @@ async function fetchAppliedMigrations(projectRef, token) {
 }
 
 async function applyOne(projectRef, token, migration) {
-  const query = readFileSync(migration.path, "utf8");
+  // The Management API executes raw SQL but does not automatically populate
+  // Supabase's JWT role setting. Several migration-time triggers intentionally
+  // allow service_role writes, so establish that request context for this
+  // migration transaction without weakening app/user paths.
+  const query =
+    "select set_config('request.jwt.claim.role', 'service_role', true);\n" +
+    readFileSync(migration.path, "utf8");
   const res = await fetch(
     `https://api.supabase.com/v1/projects/${projectRef}/database/migrations`,
     {
