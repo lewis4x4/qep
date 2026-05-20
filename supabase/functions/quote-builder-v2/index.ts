@@ -2754,16 +2754,94 @@ async function handlePublicQuoteFeedback(
   if (isUniqueConstraintError(feedbackErr)) {
     const { data: existing } = await admin
       .from("quote_customer_feedback")
-      .select("id, lifecycle_event_id, rep_notified_at")
+      .select("id, lifecycle_event_id, rep_notified_at, rep_user_id, workspace_id")
       .eq("quote_package_id", quote.id)
       .eq("client_submission_id", clientSubmissionId)
       .maybeSingle();
+
+    if (!existing?.id) {
+      return safeJsonError("Failed to recover existing feedback submission", 500, origin);
+    }
+
+    let lifecycleEventId = existing.lifecycle_event_id ?? null;
+    if (!lifecycleEventId) {
+      const { data: lifecycleRow, error: lifecycleErr } = await admin
+        .from("customer_lifecycle_events")
+        .insert({
+          workspace_id: existing.workspace_id,
+          company_id: quote.company_id ?? null,
+          event_type: "nps_response",
+          source_table: "quote_customer_feedback",
+          source_id: existing.id,
+          metadata: {
+            quote_package_id: quote.id,
+            quote_number: quote.quote_number ?? null,
+            feedback_id: existing.id,
+            nps_score: npsScore,
+            fit_score: fitScore,
+            contact_requested: contactRequested,
+            has_missing_or_unclear_text: Boolean(missingOrUnclear),
+            source,
+          },
+        })
+        .select("id")
+        .single();
+      if (lifecycleErr || !lifecycleRow?.id) {
+        console.error("public feedback dedupe lifecycle repair failed:", lifecycleErr);
+        return safeJsonError("Failed to repair lifecycle event", 500, origin);
+      }
+      lifecycleEventId = lifecycleRow.id;
+      await admin
+        .from("quote_customer_feedback")
+        .update({ lifecycle_event_id: lifecycleEventId })
+        .eq("id", existing.id);
+    }
+
+    let repNotifiedAt = existing.rep_notified_at ?? null;
+    if (!repNotifiedAt && typeof existing.rep_user_id === "string" && UUID_RE.test(existing.rep_user_id)) {
+      const { error: notifyErr } = await admin
+        .from("crm_in_app_notifications")
+        .insert({
+          workspace_id: existing.workspace_id,
+          user_id: existing.rep_user_id,
+          kind: "quote_feedback_submitted",
+          title: "Customer feedback on quote",
+          body: quoteFeedbackBodyLabel({
+            quoteNumber: typeof quote.quote_number === "string" ? quote.quote_number : null,
+            npsScore,
+            fitScore,
+            contactRequested,
+          }),
+          deal_id: quote.deal_id ?? null,
+          metadata: {
+            type: "quote_feedback_submitted",
+            link: `/sales/quotes/new?packageId=${quote.id}`,
+            quote_package_id: quote.id,
+            quote_number: quote.quote_number ?? null,
+            feedback_id: existing.id,
+            nps_score: npsScore,
+            fit_score: fitScore,
+            contact_requested: contactRequested,
+            source,
+          },
+        });
+      if (notifyErr) {
+        console.error("public feedback dedupe rep notification repair failed:", notifyErr);
+        return safeJsonError("Failed to repair rep notification", 500, origin);
+      }
+      repNotifiedAt = new Date().toISOString();
+      await admin
+        .from("quote_customer_feedback")
+        .update({ rep_notified_at: repNotifiedAt })
+        .eq("id", existing.id);
+    }
+
     return safeJsonOk({
       ok: true,
-      feedback_id: existing?.id ?? null,
+      feedback_id: existing.id,
       deduped: true,
-      rep_notified: Boolean(existing?.rep_notified_at),
-      lifecycle_event_id: existing?.lifecycle_event_id ?? null,
+      rep_notified: Boolean(repNotifiedAt),
+      lifecycle_event_id: lifecycleEventId,
     }, origin);
   }
   if (feedbackErr || !feedbackRow?.id) {

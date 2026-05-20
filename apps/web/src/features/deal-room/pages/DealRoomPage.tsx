@@ -80,7 +80,22 @@ function generateClientSubmissionId(): string {
   if (typeof randomUuid === "function") {
     return randomUuid();
   }
-  return `fallback-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+  const bytes = new Uint8Array(16);
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+
+  // UUID v4 shape bits.
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
 }
 
 export function DealRoomPage() {
@@ -1448,6 +1463,8 @@ function ApprovalStatusBanner({ status }: { status: string }) {
 function SignaturePad({ onChange }: { onChange: (dataUrl: string | null) => void }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const movementDistanceRef = useRef(0);
 
   const point = (e: { clientX: number; clientY: number }) => {
     const canvas = canvasRef.current;
@@ -1472,7 +1489,9 @@ function SignaturePad({ onChange }: { onChange: (dataUrl: string | null) => void
     const ctx = ensureContext();
     if (!ctx) return;
     drawingRef.current = true;
+    movementDistanceRef.current = 0;
     const p = point(e);
+    lastPointRef.current = p;
     ctx.beginPath();
     ctx.moveTo(p.x, p.y);
   };
@@ -1482,6 +1501,11 @@ function SignaturePad({ onChange }: { onChange: (dataUrl: string | null) => void
     const ctx = ensureContext();
     if (!ctx) return;
     const p = point(e);
+    const last = lastPointRef.current;
+    if (last) {
+      movementDistanceRef.current += Math.hypot(p.x - last.x, p.y - last.y);
+    }
+    lastPointRef.current = p;
     ctx.lineTo(p.x, p.y);
     ctx.stroke();
   };
@@ -1489,8 +1513,13 @@ function SignaturePad({ onChange }: { onChange: (dataUrl: string | null) => void
   const end = () => {
     if (!drawingRef.current) return;
     drawingRef.current = false;
+    lastPointRef.current = null;
     const canvas = canvasRef.current;
     if (!canvas) return;
+    if (movementDistanceRef.current < 4) {
+      onChange(null);
+      return;
+    }
     const pngDataUrl = canvas.toDataURL("image/png");
     onChange(pngDataUrl);
   };
@@ -1500,6 +1529,8 @@ function SignaturePad({ onChange }: { onChange: (dataUrl: string | null) => void
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    movementDistanceRef.current = 0;
+    lastPointRef.current = null;
     onChange(null);
   };
 
