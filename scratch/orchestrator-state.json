@@ -388,8 +388,8 @@
     "wave": "A3",
     "linear_issue_identifier": "QEP-23",
     "linear_url": "https://linear.app/jarvislewis/issue/QEP-23/a310-m10-qr-landing-page-with-nps-feedback",
-    "status": "items_2_3_review_passed_final_gates_pending",
-    "plan_export": "/Users/brianlewis/Projects/qep-knowledge-assistant/prompt-exports/oracle-plan-2026-05-20-112906-a3-10-qr-nps-plan-ef-842a.md",
+    "status": "blocked_deploy_runtime_prerequisites",
+    "plan_export": null,
     "work_items": [
       {
         "id": "A3.10-1",
@@ -403,7 +403,7 @@
         "done_when": "Migration applies cleanly; token-gated public feedback endpoint validates/dedupes/persists feedback, writes nps_response lifecycle event, pings rep when resolvable; ensure-share-token returns stable public URL without rotating existing token; focused Deno checks/tests pass.",
         "builder_session_id": "37338360-4979-427C-8C64-B6147254FC93",
         "reviewer_session_id": "EB9BBC0B-8ABE-4305-8B9A-17E5905EE72A",
-        "review_summary": "PASS after reviewer fixes: migration FK targets use qrm tables; public feedback uses centralized readable-status/readiness gate; migrations:check, deno check, quote-public-safety test, audit:edges passed."
+        "review_summary": "PASS after reviewer/Oracle fixes: migration FK targets corrected to crm tables; public feedback uses centralized readable-status/readiness gate; duplicate feedback retries repair missing lifecycle/rep notification side effects; migrations:check, deno check, quote-public-safety test, audit:edges passed."
       },
       {
         "id": "A3.10-2",
@@ -446,15 +446,49 @@
       {
         "id": "A3.10-4",
         "goal": "Integrated review, release gates, deploy, and roadmap update",
-        "status": "pending",
+        "status": "blocked_deploy_runtime_prerequisites",
         "depends_on": [
           "A3.10-1",
           "A3.10-2",
           "A3.10-3"
         ],
-        "done_when": "Oracle/reviewer passes integrated flow; required gates pass; migration/edge/client deployed if prerequisites allow; roadmap task shipped or blocked with manual task logged."
+        "done_when": "Oracle/reviewer passes integrated flow; required gates pass; migration/edge/client deployed if prerequisites allow; roadmap task shipped or blocked with manual task logged.",
+        "release_agent_session_id": "09281A3B-CDFD-496B-9E22-89F17781BC68",
+        "oracle_review_export": "deleted_after_consumed",
+        "verification": [
+          "quote-qr test",
+          "migrations:check",
+          "audit:edges",
+          "audit:secrets",
+          "apps/web typecheck",
+          "apps/web build",
+          "deno check quote-builder-v2",
+          "quote-public-safety test",
+          "quote financial integrity regression",
+          "git diff --check"
+        ],
+        "edge_deployed": true,
+        "migration_deployed": false,
+        "roadmap_shipped": false,
+        "roadmap_blocked": true,
+        "manual_task_logged": true,
+        "blockers": [
+          "Remote migration history mismatch: missing local version 20260520154601 blocks supabase db push for migration 600",
+          "R2 secrets/CORS still required for immutable customer-send PDF path",
+          "APP_URL public HTTPS origin must be verified for QR validation"
+        ]
       }
     ],
-    "updated_at": "2026-05-20T12:15:00-04:00"
+    "updated_at": "2026-05-20T12:25:00-04:00",
+    "release_commit": "46e55c925a24ee5d7eec933c2f7799258bb164c7",
+    "release_pushed": true,
+    "deployment": {
+      "migration_deployed": false,
+      "migration_blocker": "supabase db push failed: remote migration history contains version 20260520154601 not present locally; repair/reconcile migration history before migration 600 rollout",
+      "edge_function": "quote-builder-v2",
+      "edge_version": 82,
+      "project_ref": "iciddijgonywtxoelous",
+      "runtime_prerequisites": "blocked: R2 secrets missing for immutable PDF send path; APP_URL public HTTPS origin must be verified for QR validation"
+    }
   }
 }
