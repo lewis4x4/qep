@@ -91,6 +91,8 @@ export function useQuoteBuilderOrchestratorStepRouterGroups(
       taxTotal: deps.taxTotal,
       customerTotal: deps.customerTotal,
       marginPct: deps.marginPct,
+      marginFloorPct: deps.marginFloorPct,
+      marginFloorResolved: deps.marginFloorResolved,
       dealerCost: deps.dealerCost,
       netTotal: deps.netTotal,
       marginAmount: deps.marginAmount,

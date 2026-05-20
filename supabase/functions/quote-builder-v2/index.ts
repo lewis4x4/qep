@@ -37,6 +37,7 @@ import {
   validatePublicSignatureDataUrl,
 } from "./quote-public-safety.ts";
 import {
+  DEFAULT_QUOTE_MARGIN_FLOOR_PCT,
   allowedQuoteVersionScopesForConditions,
   buildQuoteVersionSnapshot,
   diffQuotePdfVersionSnapshots,
@@ -1883,6 +1884,65 @@ async function assertQuoteAvailabilitySendable(input: {
   };
 }
 
+async function loadConfiguredMarginFloorPct(input: {
+  admin: ReturnType<typeof createAdminClient>;
+  workspaceId: string;
+}): Promise<number> {
+  const { data } = await input.admin
+    .from("qb_margin_thresholds")
+    .select("min_margin_pct")
+    .eq("workspace_id", input.workspaceId)
+    .is("brand_id", null)
+    .maybeSingle();
+  const thresholdFloor = Number(data?.min_margin_pct ?? NaN);
+  if (Number.isFinite(thresholdFloor) && thresholdFloor >= 0) return thresholdFloor;
+
+  try {
+    const policy = await loadQuoteApprovalPolicy(input);
+    const policyFloor = Number(policy.standardMarginFloorPct);
+    return Number.isFinite(policyFloor) && policyFloor >= 0
+      ? policyFloor
+      : DEFAULT_QUOTE_MARGIN_FLOOR_PCT;
+  } catch (error) {
+    console.warn("quote share margin floor lookup failed; using default floor", error);
+    return DEFAULT_QUOTE_MARGIN_FLOOR_PCT;
+  }
+}
+
+async function assertApprovedWithConditionsSendReady(input: {
+  admin: ReturnType<typeof createAdminClient>;
+  quotePackageId: string;
+}): Promise<{ ok: true } | { ok: false; message: string }> {
+  const latestCase = await getLatestQuoteApprovalCase({
+    admin: input.admin,
+    quotePackageId: input.quotePackageId,
+  });
+  if (!latestCase) {
+    return { ok: false, message: "Conditional approval metadata is missing. Re-submit the quote for approval." };
+  }
+  const activeQuoteVersion = await getLatestQuotePackageVersion({
+    admin: input.admin,
+    quotePackageId: input.quotePackageId,
+  });
+  if (!activeQuoteVersion) {
+    return { ok: false, message: "Quote version snapshot missing. Save the quote before sending it." };
+  }
+  const conditions = await getQuoteApprovalConditions({
+    admin: input.admin,
+    approvalCaseId: String(latestCase.id),
+  });
+  const evaluationResult = evaluateQuoteApprovalConditions({
+    snapshot: activeQuoteVersion.snapshot,
+    conditions,
+    decidedAt: typeof latestCase.decided_at === "string" ? latestCase.decided_at : null,
+    now: new Date().toISOString(),
+  });
+  if (!evaluationResult.allSatisfied) {
+    return { ok: false, message: "This quote still has unmet approval conditions and cannot be sent." };
+  }
+  return { ok: true };
+}
+
 async function assertQuoteCustomerShareable(input: {
   admin: ReturnType<typeof createAdminClient>;
   workspaceId: string;
@@ -1894,7 +1954,19 @@ async function assertQuoteCustomerShareable(input: {
   if (["draft", "pending_approval", "changes_requested", "rejected"].includes(input.status)) {
     return { ok: false, message: `This quote cannot be shared while status is ${input.status}.` };
   }
-  if (typeof input.marginPct === "number" && input.marginPct < 10 && input.status !== "approved") {
+  if (input.status === "approved_with_conditions") {
+    const conditionalGate = await assertApprovedWithConditionsSendReady({
+      admin: input.admin,
+      quotePackageId: input.quotePackageId,
+    });
+    if (!conditionalGate.ok) return conditionalGate;
+  }
+  const marginFloorPct = await loadConfiguredMarginFloorPct({
+    admin: input.admin,
+    workspaceId: input.workspaceId,
+  });
+  const marginApprovedForCustomer = input.status === "approved" || input.status === "approved_with_conditions";
+  if (typeof input.marginPct === "number" && input.marginPct < marginFloorPct && !marginApprovedForCustomer) {
     return { ok: false, message: "Submit this quote for manager approval before sharing it with the customer." };
   }
   const contentGate = assertQuoteCustomerContentReady(input.quote);
@@ -6161,8 +6233,15 @@ Deno.serve(async (req) => {
 
       // Margin check
       const marginPct = body.margin_pct ?? null;
-      const marginStatus = marginPct !== null && marginPct < 10
-        ? { flagged: true, message: "Margin below 10% — requires Iron Manager approval" }
+      const configuredMarginFloorPct = await loadConfiguredMarginFloorPct({
+        admin: createAdminClient(),
+        workspaceId: userWorkspaceId,
+      });
+      const floorLabel = Number.isInteger(configuredMarginFloorPct)
+        ? `${configuredMarginFloorPct}%`
+        : `${configuredMarginFloorPct.toFixed(1)}%`;
+      const marginStatus = marginPct !== null && marginPct < configuredMarginFloorPct
+        ? { flagged: true, message: `Margin below ${floorLabel} — requires Iron Manager approval` }
         : { flagged: false, message: null };
 
       return safeJsonOk({
@@ -7938,10 +8017,6 @@ Deno.serve(async (req) => {
       }
 
       const admin = createAdminClient();
-      const latestCase = await getLatestQuoteApprovalCase({
-        admin,
-        quotePackageId: String(pkg.id),
-      });
       const activeQuoteVersion = await getLatestQuotePackageVersion({
         admin,
         quotePackageId: String(pkg.id),
@@ -7949,24 +8024,20 @@ Deno.serve(async (req) => {
       if (!activeQuoteVersion) {
         return safeJsonError("Quote version snapshot missing. Save the quote before sending it.", 409, origin);
       }
+      const workspaceIdForSend = typeof pkg.workspace_id === "string" ? pkg.workspace_id : userWorkspaceId;
+      const sendMarginFloorPct = await loadConfiguredMarginFloorPct({
+        admin,
+        workspaceId: workspaceIdForSend,
+      });
       if (quoteStatus === "approved_with_conditions") {
-        if (!latestCase) {
-          return safeJsonError("Conditional approval metadata is missing. Re-submit the quote for approval.", 409, origin);
-        }
-        const conditions = await getQuoteApprovalConditions({
+        const conditionalGate = await assertApprovedWithConditionsSendReady({
           admin,
-          approvalCaseId: String(latestCase.id),
+          quotePackageId: String(pkg.id),
         });
-        const evaluationResult = evaluateQuoteApprovalConditions({
-          snapshot: activeQuoteVersion.snapshot,
-          conditions,
-          decidedAt: typeof latestCase.decided_at === "string" ? latestCase.decided_at : null,
-          now: new Date().toISOString(),
-        });
-        if (!evaluationResult.allSatisfied) {
-          return safeJsonError("This quote still has unmet approval conditions and cannot be sent.", 409, origin);
+        if (!conditionalGate.ok) {
+          return safeJsonError(conditionalGate.message, 409, origin);
         }
-      } else if (typeof pkg.margin_pct === "number" && pkg.margin_pct < 10 && quoteStatus !== "approved") {
+      } else if (typeof pkg.margin_pct === "number" && pkg.margin_pct < sendMarginFloorPct && quoteStatus !== "approved") {
         return safeJsonError("Submit this quote for manager approval before sending it.", 409, origin);
       }
 
@@ -7984,7 +8055,6 @@ Deno.serve(async (req) => {
         return safeJsonErrorWithFields(availabilityGate.message, 409, origin, { blockers: availabilityGate.blockers });
       }
 
-      const workspaceIdForSend = typeof pkg.workspace_id === "string" ? pkg.workspace_id : userWorkspaceId;
       const documentArtifactId = typeof body.document_artifact_id === "string" && UUID_RE.test(body.document_artifact_id)
         ? body.document_artifact_id
         : null;

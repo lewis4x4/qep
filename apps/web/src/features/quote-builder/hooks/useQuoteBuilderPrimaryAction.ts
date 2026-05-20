@@ -10,9 +10,11 @@ import type { Step } from "../wizard/wizard-types";
 
 export interface UseQuoteBuilderPrimaryActionInput {
   quoteStatus: QuoteWorkspaceDraft["quoteStatus"];
+  currentStep: Step;
   approvalCaseCanSend: boolean;
   sendReady: boolean;
   canSubmitForApproval: boolean;
+  requiresApprovalJustification: boolean;
   onSave: () => void | Promise<void>;
   onSubmitApproval: () => void;
   setStep: (step: Step) => void;
@@ -20,9 +22,11 @@ export interface UseQuoteBuilderPrimaryActionInput {
 
 export function useQuoteBuilderPrimaryAction({
   quoteStatus,
+  currentStep,
   approvalCaseCanSend,
   sendReady,
   canSubmitForApproval,
+  requiresApprovalJustification,
   onSave,
   onSubmitApproval,
   setStep,
@@ -33,10 +37,14 @@ export function useQuoteBuilderPrimaryAction({
       return;
     }
     if (approvalCaseCanSend && sendReady) {
-      setStep("document");
+      setStep("review");
       return;
     }
     if (canSubmitForApproval) {
+      if (requiresApprovalJustification || currentStep !== "review") {
+        setStep("review");
+        return;
+      }
       onSubmitApproval();
       return;
     }
@@ -44,9 +52,11 @@ export function useQuoteBuilderPrimaryAction({
   }, [
     approvalCaseCanSend,
     canSubmitForApproval,
+    currentStep,
     onSave,
     onSubmitApproval,
     quoteStatus,
+    requiresApprovalJustification,
     sendReady,
     setStep,
   ]);

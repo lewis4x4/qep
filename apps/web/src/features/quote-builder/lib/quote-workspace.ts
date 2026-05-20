@@ -1,13 +1,18 @@
-import type {
-  QuoteCommercialDiscountType,
-  QuoteApprovalState,
-  QuoteLineItemDraft,
-  QuotePacketReadiness,
-  QuoteReadinessState,
-  QuoteTaxProfile,
-  QuoteWorkspaceDraft,
+import {
+  DEFAULT_QUOTE_MARGIN_FLOOR_PCT,
+  type QuoteCommercialDiscountType,
+  type QuoteApprovalState,
+  type QuoteLineItemDraft,
+  type QuotePacketReadiness,
+  type QuoteReadinessState,
+  type QuoteTaxProfile,
+  type QuoteWorkspaceDraft,
 } from "../../../../../../shared/qep-moonshot-contracts";
 import { isQuoteFollowUpAfterExpiration } from "./quote-lifecycle-policy";
+
+export interface QuoteWorkspaceComputeOptions {
+  marginFloorPct?: number | null;
+}
 
 export interface QuoteWorkspaceComputed {
   equipmentTotal: number;
@@ -212,7 +217,20 @@ export function computeQuoteSendActionReadiness(input: QuoteSendActionReadinessI
   };
 }
 
-export function computeQuoteWorkspace(draft: QuoteWorkspaceDraft): QuoteWorkspaceComputed {
+export function resolveQuoteMarginFloorPct(value: number | null | undefined): number | null {
+  if (value === null) return null;
+  const parsed = Number(value ?? DEFAULT_QUOTE_MARGIN_FLOOR_PCT);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_QUOTE_MARGIN_FLOOR_PCT;
+}
+
+export function formatMarginFloorPct(value: number | null): string {
+  return value == null ? "configured" : `${value.toFixed(1).replace(/\.0$/, "")}%`;
+}
+
+export function computeQuoteWorkspace(
+  draft: QuoteWorkspaceDraft,
+  options: QuoteWorkspaceComputeOptions = {},
+): QuoteWorkspaceComputed {
   const pricingLines = draft.pricingLines ?? [];
   const customerPricingLines = pricingLines.filter((line) => quoteLineCostVisibility(line) === "customer");
   const legacyCustomerAttachmentPricing = draft.attachments.filter((line) =>
@@ -271,10 +289,16 @@ export function computeQuoteWorkspace(draft: QuoteWorkspaceDraft): QuoteWorkspac
   if (!draft.branchSlug) sendMissing.push("quoting branch");
   if (!draft.customerEmail) sendMissing.push("customer email");
 
+  const marginFloorPct = resolveQuoteMarginFloorPct(options.marginFloorPct);
+  const requiresManagerApproval = marginFloorPct != null && marginPct < marginFloorPct;
+  const marginFloorLabel = formatMarginFloorPct(marginFloorPct);
   const approvalState: QuoteApprovalState = {
-    requiresManagerApproval: marginPct < 10,
+    requiresManagerApproval,
     marginPct,
-    reason: marginPct < 10 ? "Margin is below the 10% approval threshold." : null,
+    marginFloorPct,
+    reason: requiresManagerApproval
+      ? `Margin is below the ${marginFloorLabel} approval threshold.`
+      : null,
   };
   const approvalSatisfied = !approvalState.requiresManagerApproval
     ? true
@@ -282,7 +306,7 @@ export function computeQuoteWorkspace(draft: QuoteWorkspaceDraft): QuoteWorkspac
       || draft.quoteStatus === "approved_with_conditions"
       || draft.quoteStatus === "sent"
       || draft.quoteStatus === "accepted";
-  let approvalMissingLabel = "manager approval (margin below 10%)";
+  let approvalMissingLabel = `manager approval (margin below ${marginFloorLabel})`;
   if (draft.quoteStatus === "pending_approval") {
     approvalMissingLabel = "manager approval pending";
   } else if (draft.quoteStatus === "changes_requested") {

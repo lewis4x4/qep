@@ -11,9 +11,11 @@ function runPrimaryAction(overrides: Partial<Parameters<typeof useQuoteBuilderPr
   const { result } = renderHook(() =>
     useQuoteBuilderPrimaryAction({
       quoteStatus: "draft",
+      currentStep: "review",
       approvalCaseCanSend: false,
       sendReady: false,
       canSubmitForApproval: false,
+      requiresApprovalJustification: false,
       onSave,
       onSubmitApproval,
       setStep,
@@ -33,18 +35,50 @@ describe("useQuoteBuilderPrimaryAction", () => {
     expect(setStep).not.toHaveBeenCalled();
   });
 
-  test("opens document when approval case can send and packet is ready", () => {
+  test("routes to Review when approval case can send and packet is ready", () => {
     const { onSave, setStep } = runPrimaryAction({
       approvalCaseCanSend: true,
       sendReady: true,
     });
-    expect(setStep).toHaveBeenCalledWith("document");
+    expect(setStep).toHaveBeenCalledWith("review");
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  test("submits approval when eligible", () => {
-    const { onSave, onSubmitApproval } = runPrimaryAction({ canSubmitForApproval: true });
+  test("submits approval when eligible from Review without a required low-margin reason", () => {
+    const { onSave, onSubmitApproval } = runPrimaryAction({ canSubmitForApproval: true, currentStep: "review" });
     expect(onSubmitApproval).toHaveBeenCalledTimes(1);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  test("routes approval submission to Review when not already on Review", () => {
+    const { onSave, onSubmitApproval, setStep } = runPrimaryAction({
+      canSubmitForApproval: true,
+      currentStep: "pricing",
+    });
+    expect(setStep).toHaveBeenCalledWith("review");
+    expect(onSubmitApproval).not.toHaveBeenCalled();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  test("does not bypass required low-margin justification from the global CTA", () => {
+    const { onSave, onSubmitApproval, setStep } = runPrimaryAction({
+      canSubmitForApproval: true,
+      currentStep: "review",
+      requiresApprovalJustification: true,
+    });
+    expect(setStep).toHaveBeenCalledWith("review");
+    expect(onSubmitApproval).not.toHaveBeenCalled();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  test("routes to Review instead of submitting while margin floor policy is unresolved", () => {
+    const { onSave, onSubmitApproval, setStep } = runPrimaryAction({
+      canSubmitForApproval: true,
+      currentStep: "pricing",
+      requiresApprovalJustification: true,
+    });
+    expect(setStep).toHaveBeenCalledWith("review");
+    expect(onSubmitApproval).not.toHaveBeenCalled();
     expect(onSave).not.toHaveBeenCalled();
   });
 

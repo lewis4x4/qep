@@ -8,9 +8,16 @@
 
 import { supabase } from "@/lib/supabase";
 import type { Database } from "@/lib/database.types";
+import { DEFAULT_QUOTE_MARGIN_FLOOR_PCT } from "../../../../../../shared/qep-moonshot-contracts";
 
 export type MarginThresholdRow =
   Database["public"]["Tables"]["qb_margin_thresholds"]["Row"];
+export type MarginFloorSource = "brand" | "default" | "fallback_default" | "none";
+export interface ApplicableMarginFloor {
+  threshold: MarginThresholdRow | null;
+  source: MarginFloorSource;
+  floorPct: number | null;
+}
 export type MarginThresholdInsert =
   Database["public"]["Tables"]["qb_margin_thresholds"]["Insert"];
 export type MarginExceptionRow =
@@ -152,6 +159,33 @@ export async function getApplicableThreshold(
   const threshold = normalizeMarginThresholdRows(data ? [data] : [])[0] ?? null;
   if (threshold) return { threshold, source: "default" };
   return { threshold: null, source: "none" };
+}
+
+export function marginFloorPctFromThreshold(threshold: MarginThresholdRow | null): number | null {
+  if (!threshold) return DEFAULT_QUOTE_MARGIN_FLOOR_PCT;
+  const parsed = Number(threshold.min_margin_pct);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_QUOTE_MARGIN_FLOOR_PCT;
+}
+
+/**
+ * Single client resolver for quote-builder margin governance.
+ * Uses configured qb_margin_thresholds when present; otherwise falls back to
+ * the shared default floor so save, Review, and workspace readiness agree.
+ */
+export async function getApplicableMarginFloor(brandId: string | null): Promise<ApplicableMarginFloor> {
+  const { threshold, source } = await getApplicableThreshold(brandId);
+  if (threshold) {
+    return {
+      threshold,
+      source,
+      floorPct: marginFloorPctFromThreshold(threshold),
+    };
+  }
+  return {
+    threshold: null,
+    source: "fallback_default",
+    floorPct: DEFAULT_QUOTE_MARGIN_FLOOR_PCT,
+  };
 }
 
 // ── Admin CRUD ──────────────────────────────────────────────────────────

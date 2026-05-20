@@ -6,7 +6,7 @@
  * totals, and workflow panels stay page-owned and pass in as props.
  */
 
-import { Loader2, ArrowLeft, ArrowRight } from "lucide-react";
+import { Loader2, ArrowLeft, ArrowRight, Lock, Unlock } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import type {
   QuoteAutoSendResult,
@@ -25,7 +25,9 @@ import {
   equipmentSystemBasePrice,
 } from "../lib/equipment-override-price";
 import { money } from "../lib/money";
+import { formatMarginFloorPct } from "../lib/quote-workspace";
 import { dateInputValue } from "../lib/quote-date-input";
+import { computeReviewApprovalSubmissionState, computeReviewSendGate } from "../lib/review-gates";
 import { useWizard } from "../wizard/useWizard";
 // WAVE quote-builder deep reflow (B5)
 import { MobileSectionAccordion } from "@/features/sales/components/MobileSectionAccordion";
@@ -44,12 +46,15 @@ export interface ReviewStepProps {
   amountFinanced: number;
   netTotal: number;
   marginPct: number;
+  marginFloorPct: number | null;
+  marginFloorResolved: boolean;
   dealerCost: number;
   marginAmount: number;
   activeQuotePackageId: string | null;
   allFinanceScenarios: QuoteFinanceScenario[];
   leaseQuotingEnabled: boolean;
   sendReadiness: { ready: boolean; missing: string[] };
+  approvalCaseCanSend: boolean;
   requiresManagerApproval: boolean;
   userRole: string | null;
   canSubmitForApproval: boolean;
@@ -104,12 +109,15 @@ export function ReviewStep({
   amountFinanced,
   netTotal,
   marginPct,
+  marginFloorPct,
+  marginFloorResolved,
   dealerCost,
   marginAmount,
   activeQuotePackageId,
   allFinanceScenarios,
   leaseQuotingEnabled,
   sendReadiness,
+  approvalCaseCanSend,
   requiresManagerApproval,
   userRole,
   canSubmitForApproval,
@@ -136,21 +144,32 @@ export function ReviewStep({
   const statusLabel = (draft.quoteStatus ?? "draft").replace(/_/g, " ");
 
   // Phase 1 quote-approval feedback loop: rep justification capture.
-  // Below the 10% margin floor (the same threshold MarginCheckBanner
+  // Below the configured margin floor (the same threshold MarginCheckBanner
   // flags red) the textarea is required and the Submit button is
   // disabled until non-empty. Above the floor the field becomes an
   // optional disclosure so reps can still attach context.
   const [submissionNote, setSubmissionNote] = useState("");
   const [optionalNoteOpen, setOptionalNoteOpen] = useState(false);
   const SUBMISSION_NOTE_MAX = 280;
-  const requiresJustification = marginPct < 10;
+  const marginFloorLabel = marginFloorResolved ? formatMarginFloorPct(marginFloorPct) : "checking policy…";
   const trimmedNoteLength = submissionNote.trim().length;
-  const justificationMissing = requiresJustification && trimmedNoteLength === 0;
+  const reviewSendGate = computeReviewSendGate({ approvalCaseCanSend, sendReadiness });
+  const reviewSubmissionState = computeReviewApprovalSubmissionState({
+    canSubmitForApproval,
+    submitApprovalPending,
+    marginFloorResolved,
+    requiresManagerApproval,
+    approvalGranted,
+    trimmedNoteLength,
+  });
+  const { ready: reviewSendReady, missing: reviewSendMissing } = reviewSendGate;
+  const {
+    requiresJustification,
+    marginFloorPolicyBlocked,
+    justificationMissing,
+    submitDisabled,
+  } = reviewSubmissionState;
   const showSubmissionField = canSubmitForApproval && !approvalPending && !approvalGranted;
-  const submitDisabled =
-    !canSubmitForApproval
-    || submitApprovalPending
-    || justificationMissing;
 
   return (
     <div className="space-y-4">
@@ -354,6 +373,7 @@ export function ReviewStep({
 
       <MarginCheckBanner
         marginPct={marginPct}
+        marginFloorPct={marginFloorPct}
         waterfall={{
           equipmentTotal: subtotal,
           dealerCost,
@@ -361,6 +381,40 @@ export function ReviewStep({
           marginAmount,
         }}
       />
+
+      <Card className={`p-4 ${reviewSendReady ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"}`} data-testid="review-send-gate">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            {reviewSendReady ? (
+              <Unlock className="mt-0.5 h-5 w-5 text-emerald-300" />
+            ) : (
+              <Lock className="mt-0.5 h-5 w-5 text-amber-300" />
+            )}
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Customer send {reviewSendReady ? "unlocked by Review" : "locked by Review"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Review is the final send gate. Margin floor: {marginFloorLabel}; current margin: {marginPct.toFixed(1)}%.
+              </p>
+              {reviewSendMissing.length > 0 && (
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                  {[...new Set(reviewSendMissing)].map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              )}
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant={reviewSendReady ? "default" : "outline"}
+            disabled={!reviewSendReady}
+            onClick={() => setStep("send")}
+            data-testid="review-send-gate-action"
+          >
+            {reviewSendReady ? "Continue to send" : "Resolve Review blockers"}
+          </Button>
+        </div>
+      </Card>
 
       <Card className="p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -390,6 +444,11 @@ export function ReviewStep({
             {approvalPending ? "Approval pending" : approvalGranted ? "Approved" : "Submit for approval"}
           </Button>
         </div>
+        {marginFloorPolicyBlocked && (
+          <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-200" data-testid="margin-floor-policy-pending">
+            Checking configured margin policy before approval submission unlocks.
+          </p>
+        )}
         {showSubmissionField && (
           requiresJustification ? (
             <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/5 p-3" data-testid="submission-note-required">
@@ -397,7 +456,7 @@ export function ReviewStep({
                 Why does this need approval?
               </label>
               <p className="mt-1 text-[11px] text-red-200">
-                Margin below 10% — give your approver one line of context so they can decide fast.
+                Margin below {marginFloorLabel} — give your approver one line of context so they can decide fast.
               </p>
               <textarea
                 value={submissionNote}

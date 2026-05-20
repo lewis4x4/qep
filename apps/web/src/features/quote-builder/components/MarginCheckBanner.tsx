@@ -1,9 +1,12 @@
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, CheckCircle } from "lucide-react";
+import { DEFAULT_QUOTE_MARGIN_FLOOR_PCT } from "../../../../../../shared/qep-moonshot-contracts";
+import { formatMarginFloorPct } from "../lib/quote-workspace";
 
 interface MarginCheckBannerProps {
   marginPct: number | null;
+  marginFloorPct?: number | null;
   /** Pass waterfall data to show the margin cascade visualization. */
   waterfall?: {
     equipmentTotal: number;
@@ -37,11 +40,16 @@ function WaterfallBar({ label, value, maxValue, isPositive }: { label: string; v
   );
 }
 
-export function MarginCheckBanner({ marginPct, waterfall }: MarginCheckBannerProps) {
+export function MarginCheckBanner({
+  marginPct,
+  marginFloorPct = DEFAULT_QUOTE_MARGIN_FLOOR_PCT,
+  waterfall,
+}: MarginCheckBannerProps) {
   if (marginPct === null) return null;
 
-  const isFlagged = marginPct < 10;
-  const isHealthy = marginPct >= 20;
+  const isFlagged = marginFloorPct != null && marginPct < marginFloorPct;
+  const isHealthy = marginFloorPct != null ? marginPct >= Math.max(20, marginFloorPct + 10) : marginPct >= 20;
+  const floorLabel = formatMarginFloorPct(marginFloorPct);
 
   return (
     <div className="space-y-3">
@@ -54,7 +62,7 @@ export function MarginCheckBanner({ marginPct, waterfall }: MarginCheckBannerPro
               Margin {marginPct.toFixed(1)}% — Requires Iron Manager Approval
             </p>
             <p className="mt-1 text-xs text-red-300">
-              Deals under 10% margin cannot proceed without explicit manager approval per SOP.
+              Deals under {floorLabel} margin cannot proceed without explicit manager approval per SOP.
               This quote will be flagged in the approval queue.
             </p>
           </div>
@@ -64,7 +72,7 @@ export function MarginCheckBanner({ marginPct, waterfall }: MarginCheckBannerPro
           <CheckCircle className={cn("h-3.5 w-3.5", isHealthy ? "text-emerald-400" : "text-amber-400")} />
           <span className={isHealthy ? "text-emerald-400" : "text-amber-400"}>
             Margin: {marginPct.toFixed(1)}%
-            {isHealthy ? " (healthy)" : marginPct >= 10 ? " (acceptable)" : ""}
+            {isHealthy ? " (healthy)" : !isFlagged ? " (acceptable)" : ""}
           </span>
         </div>
       )}

@@ -48,6 +48,10 @@ export interface MarginFloorGateProps {
   marginPct: number;
   /** Current draft net total in cents — used to estimate dollar gap. */
   netTotalCents: number;
+  /** Resolved floor from the quote-builder margin resolver. Omit to let this component fetch. */
+  marginFloorPct?: number | null;
+  /** Human-readable source for copy/debugging (brand/default/fallback). */
+  marginFloorSource?: "brand" | "default" | "fallback_default" | "none";
   /** Controlled open state for the reason modal. */
   reasonModalOpen: boolean;
   onReasonModalOpenChange: (next: boolean) => void;
@@ -63,6 +67,8 @@ export function MarginFloorGate({
   brandId,
   marginPct,
   netTotalCents,
+  marginFloorPct,
+  marginFloorSource,
   reasonModalOpen,
   onReasonModalOpenChange,
   onReasonConfirm,
@@ -76,6 +82,10 @@ export function MarginFloorGate({
   const [reasonIntel, setReasonIntel] = useState<ReasonIntelligence>({ stats: [], totalSamples: 0 });
 
   useEffect(() => {
+    if (marginFloorPct !== undefined) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     getApplicableThreshold(brandId)
@@ -90,7 +100,7 @@ export function MarginFloorGate({
         setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [brandId]);
+  }, [brandId, marginFloorPct]);
 
   // Reset reason on modal open + lazy-load reason intelligence
   useEffect(() => {
@@ -108,9 +118,14 @@ export function MarginFloorGate({
   // chrome instead of a desktop Radix Dialog overlay.
   const isMobile = useIsMobileViewport();
 
-  if (loading || !threshold) return null;
+  if (loading) return null;
 
-  const thresholdPct = Number(threshold.min_margin_pct);
+  const thresholdPct = marginFloorPct !== undefined
+    ? marginFloorPct
+    : threshold
+      ? Number(threshold.min_margin_pct)
+      : null;
+  if (thresholdPct == null) return null;
   const isUnder = isUnderThreshold(marginPct, thresholdPct);
   if (!isUnder) return null;
 
@@ -134,7 +149,12 @@ export function MarginFloorGate({
     </div>
   );
 
-  const subtitle = `This quote is ${(thresholdPct - marginPct).toFixed(1)} pts below the ${threshold.brand_id ? "brand" : "workspace"} floor. A short reason is logged to the margin-exceptions report for management review.`;
+  const floorSourceLabel = marginFloorSource === "brand" || threshold?.brand_id
+    ? "brand"
+    : marginFloorSource === "fallback_default"
+      ? "default workspace"
+      : "workspace";
+  const subtitle = `This quote is ${(thresholdPct - marginPct).toFixed(1)} pts below the ${floorSourceLabel} floor. A short reason is logged to the margin-exceptions report for management review.`;
 
   return (
     <>

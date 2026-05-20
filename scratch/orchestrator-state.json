@@ -492,38 +492,43 @@
     }
   },
   "current_task": {
-    "task_id": "A5.5",
-    "linear": "QEP-37",
+    "task_id": "A5.6",
+    "linear": "QEP-38",
     "stream": "A",
     "wave": "A5",
-    "goal": "Centralize quote lifecycle defaults for 30-day expiration and 3-day follow-up, preserve user edits, and guard customer-facing sends when follow-up exceeds expiration.",
+    "goal": "Make the quote Review screen the visible final margin-gated customer-send checkpoint, using configured margin floor policy consistently across client and quote-builder-v2 edge sends.",
     "status": "verified_pending_commit",
     "expected_files": [
-      "apps/web/src/features/quote-builder/lib/quote-lifecycle-policy.ts",
-      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderDetailsDefaults.ts",
-      "apps/web/src/features/quote-builder/steps/DetailsStep.tsx",
-      "apps/web/src/features/quote-builder/steps/SendStep.tsx",
+      "shared/qep-moonshot-contracts.ts",
+      "apps/web/src/features/admin/lib/pricing-discipline-api.ts",
       "apps/web/src/features/quote-builder/lib/quote-workspace.ts",
-      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderWizardChrome.ts",
-      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderDocumentActions.ts"
+      "apps/web/src/features/quote-builder/lib/review-gates.ts",
+      "apps/web/src/features/quote-builder/steps/ReviewStep.tsx",
+      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderPrimaryAction.ts",
+      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderSave.ts",
+      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderV2Orchestrator.tsx",
+      "supabase/functions/quote-builder-v2/index.ts"
     ],
     "acceptance": [
-      "New quotes seed 30-day expiration and 3-day follow-up defaults at details/send lifecycle point.",
-      "Existing user-edited lifecycle dates are preserved.",
-      "Details and Send steps warn when follow-up is after expiration.",
-      "Email/text send readiness blocks follow-up dates after expiration."
+      "Client workspace/readiness and edge send/share paths use the configured/default margin floor instead of a hidden 10% bypass.",
+      "Review exposes locked/unlocked customer-send state and requires clean approval plus packet readiness before send navigation.",
+      "Below-floor approval submission fails closed until margin policy is resolved and requires a rep justification note.",
+      "Approved-with-conditions share-token and send-package paths enforce the same conditional approval readiness checks."
     ],
     "verification": [
-      "bun test quote-lifecycle-policy/useQuoteBuilderDetailsDefaults/quote-workspace/SendStep mobile tests",
+      "bun test quote-workspace/useQuoteBuilderPrimaryAction/review-gates/router/shell tests",
+      "deno check supabase/functions/quote-builder-v2/index.ts",
+      "deno test supabase/functions/quote-builder-v2/quote-financial-integrity-regression.test.ts --allow-read --allow-env",
       "cd apps/web && bun run typecheck",
       "bun run migrations:check",
       "bun run audit:secrets",
-      "cd apps/web && bun run build",
       "git diff --check",
-      "bun run segment:gates --segment A5.5-qb-9-expiration-followup --ui"
+      "cd apps/web && bun run build",
+      "bun run segment:gates --segment A5.6-qb-10-margin-gated-send --ui"
     ],
-    "deployment_needs": "none; no migration or edge function changed; follow_up_at already exists from migration 542",
-    "gate_report": "test-results/agent-gates/20260520T171737Z-A5.5-qb-9-expiration-followup.json",
-    "updated_at": "2026-05-20T17:18:09.807723+00:00"
+    "deployment_needs": "none; no migration added and no edge deploy performed in this local cycle",
+    "gate_report": "test-results/agent-gates/20260520T180118Z-A5.6-qb-10-margin-gated-send.json",
+    "deslop": "scoped pass completed; no cleanup edits needed after focused tests and segment gates remained green",
+    "updated_at": "2026-05-20T18:02:24.454886+00:00"
   }
 }

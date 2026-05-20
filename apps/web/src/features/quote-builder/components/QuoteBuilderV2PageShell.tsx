@@ -51,6 +51,8 @@ export interface QuoteBuilderV2PageShellProps {
   signalsReady: boolean;
   marginPct: number;
   marginAmount: number;
+  marginFloorPct: number | null;
+  marginFloorSource: "brand" | "default" | "fallback_default" | "none";
   wizardPricingJumpAllowed: boolean;
   branches: QuotingBranchOption[];
   wizardNextHelp: string;
@@ -113,6 +115,8 @@ export function QuoteBuilderV2PageShell({
   signalsReady,
   marginPct,
   marginAmount,
+  marginFloorPct,
+  marginFloorSource,
   wizardPricingJumpAllowed,
   branches,
   wizardNextHelp,
@@ -305,6 +309,8 @@ export function QuoteBuilderV2PageShell({
             brandId={null}
             marginPct={marginPct}
             netTotalCents={Math.round(netTotal * 100)}
+            marginFloorPct={marginFloorPct}
+            marginFloorSource={marginFloorSource}
             reasonModalOpen={marginGateOpen}
             onReasonModalOpenChange={onMarginGateOpenChange}
             onReasonConfirm={(payload) => { onMarginReasonConfirm(payload); }}

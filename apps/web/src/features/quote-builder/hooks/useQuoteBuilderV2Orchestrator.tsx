@@ -5,7 +5,11 @@ import type { QuoteFinancingRequest, QuotePackageCatalogKind } from "../lib/quot
 import { performQuoteListAction } from "../lib/quote-api";
 import { translateQuoteError } from "../lib/quote-error-messages";
 import { toast } from "@/hooks/use-toast";
-import type { QuoteFinanceScenario, QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
+import {
+  DEFAULT_QUOTE_MARGIN_FLOOR_PCT,
+  type QuoteFinanceScenario,
+  type QuoteWorkspaceDraft,
+} from "../../../../../../shared/qep-moonshot-contracts";
 import type { QuoteSendActionChannel } from "../lib/quote-workspace";
 import { useAuth } from "@/hooks/useAuth";
 import { useApprovalBypass } from "../hooks/useApprovalBypass";
@@ -62,6 +66,7 @@ import {
 import { wizardIndexForStep, type AutoSaveState, type Step } from "../wizard/wizard-types";
 import { useQuoteBuilderOrchestratorStepRouterGroups } from "../hooks/useQuoteBuilderOrchestratorStepRouterGroups";
 import { PRICING_ADDER_FIELDS } from "../lib/pricing-adder-fields";
+import { getApplicableMarginFloor } from "@/features/admin/lib/pricing-discipline-api";
 import {
   EMPTY_TRADE_CAPTURE,
   TRADE_CHECKLIST_ITEMS,
@@ -209,6 +214,14 @@ export function useQuoteBuilderV2Orchestrator() {
   const selectedBranch = branches.find((branch) => branch.slug === draft.branchSlug)
     ?? selectedBranchQuery.data
     ?? undefined;
+  const marginFloorQuery = useQuery({
+    queryKey: ["quote-builder", "margin-floor", null],
+    queryFn: () => getApplicableMarginFloor(null),
+    staleTime: 60_000,
+  });
+  const marginFloorResolved = marginFloorQuery.isSuccess && marginFloorQuery.data?.floorPct != null;
+  const marginFloorPct = marginFloorResolved ? marginFloorQuery.data!.floorPct : DEFAULT_QUOTE_MARGIN_FLOOR_PCT;
+  const marginFloorSource = marginFloorResolved ? marginFloorQuery.data!.source : "fallback_default";
   const {
     equipmentTotal,
     attachmentTotal,
@@ -228,7 +241,7 @@ export function useQuoteBuilderV2Orchestrator() {
     marginPct,
     approvalState,
     packetReadiness,
-  } = useLiveMargin(draft);
+  } = useLiveMargin(draft, { marginFloorPct });
 
   const { pricingLine, upsertPricingLine } = useQuoteBuilderPricingLines({
     pricingLines: draft.pricingLines,
@@ -425,6 +438,7 @@ export function useQuoteBuilderV2Orchestrator() {
     },
     allFinanceScenarios,
     winProbContext,
+    marginFloorPct,
     persistedQuotePackageIdRef,
     existingQuote,
     urlPackageId: packageId || null,
@@ -631,9 +645,11 @@ export function useQuoteBuilderV2Orchestrator() {
 
   const handlePrimaryAction = useQuoteBuilderPrimaryAction({
     quoteStatus,
+    currentStep: step,
     approvalCaseCanSend,
     sendReady: packetReadiness.send.ready,
     canSubmitForApproval,
+    requiresApprovalJustification: !marginFloorResolved || approvalState.requiresManagerApproval,
     onSave: handleSaveClick,
     onSubmitApproval: () => submitApprovalMutation.mutate(),
     setStep,
@@ -931,6 +947,8 @@ export function useQuoteBuilderV2Orchestrator() {
     tradeCapture,
     taxableBasis,
     marginAmount,
+    marginFloorPct,
+    marginFloorResolved,
     discountLine,
     saveMutation,
     setAiPrompt,
@@ -983,6 +1001,8 @@ export function useQuoteBuilderV2Orchestrator() {
         signalsReady,
         marginPct,
         marginAmount,
+        marginFloorPct,
+        marginFloorSource,
         wizardPricingJumpAllowed,
         branches,
         wizardNextHelp,

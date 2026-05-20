@@ -23,7 +23,6 @@ import {
 } from "react";
 
 import {
-  getApplicableThreshold,
   isUnderThreshold,
   logMarginException,
 } from "@/features/admin/lib/pricing-discipline-api";
@@ -73,6 +72,7 @@ export interface UseQuoteBuilderSaveInput {
   totals: QuoteBuilderSaveTotals;
   allFinanceScenarios: QuoteFinanceScenario[];
   winProbContext: QuoteBuilderWinProbContext;
+  marginFloorPct: number | null;
   persistedQuotePackageIdRef: MutableRefObject<string | null>;
   existingQuote: Record<string, unknown> | null;
   urlPackageId?: string | null;
@@ -156,6 +156,7 @@ export function useQuoteBuilderSave({
   totals,
   allFinanceScenarios,
   winProbContext,
+  marginFloorPct,
   persistedQuotePackageIdRef,
   existingQuote,
   urlPackageId,
@@ -365,21 +366,15 @@ export function useQuoteBuilderSave({
   }, [existingQuote?.id]);
 
   const handleSaveClick = useCallback(async () => {
-    let thresholdPct: number | null = null;
-    try {
-      const { threshold } = await getApplicableThreshold(null);
-      thresholdPct = threshold ? Number(threshold.min_margin_pct) : null;
-    } catch (error) {
-      console.warn("quote-builder threshold lookup failed; saving without margin gate", error);
-    }
     const key = marginKeyFor(activeQuotePackageId, marginPct);
-    if (isUnderThreshold(marginPct, thresholdPct) && marginReasonCaptured !== key) {
+    if (isUnderThreshold(marginPct, marginFloorPct) && marginReasonCaptured !== key) {
       setMarginGateOpen(true);
       return;
     }
     saveMutation.mutate();
   }, [
     activeQuotePackageId,
+    marginFloorPct,
     marginPct,
     marginReasonCaptured,
     saveMutation.mutate,

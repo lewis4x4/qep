@@ -169,9 +169,12 @@ export interface QuoteFinancingPreview {
   } | null;
 }
 
+export const DEFAULT_QUOTE_MARGIN_FLOOR_PCT = 10;
+
 export interface QuoteApprovalState {
   requiresManagerApproval: boolean;
   marginPct: number;
+  marginFloorPct: number | null;
   reason: string | null;
 }
 

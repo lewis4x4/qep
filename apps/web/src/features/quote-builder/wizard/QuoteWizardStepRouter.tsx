@@ -221,12 +221,15 @@ export function QuoteWizardStepRouter(props: QuoteWizardStepRouterProps) {
           amountFinanced={props.amountFinanced}
           netTotal={props.netTotal}
           marginPct={props.marginPct}
+          marginFloorPct={props.marginFloorPct}
+          marginFloorResolved={props.marginFloorResolved}
           dealerCost={props.dealerCost}
           marginAmount={props.marginAmount}
           activeQuotePackageId={props.activeQuotePackageId}
           allFinanceScenarios={props.allFinanceScenarios}
           leaseQuotingEnabled={props.leaseQuotingEnabled}
           sendReadiness={props.sendReadiness}
+          approvalCaseCanSend={props.approvalCaseCanSend}
           requiresManagerApproval={props.requiresManagerApproval}
           userRole={props.userRole}
           canSubmitForApproval={props.canSubmitForApproval}

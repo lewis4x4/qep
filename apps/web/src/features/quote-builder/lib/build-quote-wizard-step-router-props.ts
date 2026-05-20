@@ -14,7 +14,7 @@ export type QuoteBuilderStepRouterAvailabilityProps = Pick<QuoteWizardStepRouter
 
 export type QuoteBuilderStepRouterTradeProps = Pick<QuoteWizardStepRouterProps, "appliedValuationSnapshot" | "onPointShootApply" | "tradeChecklist" | "tradeCapture" | "tradeManagerApprovalRequired" | "onOpenTradeCapture">;
 
-export type QuoteBuilderStepRouterTotalsProps = Pick<QuoteWizardStepRouterProps, "equipmentTotal" | "attachmentTotal" | "internalCostLoadTotal" | "pricingLineTotal" | "subtotal" | "discountTotal" | "taxableBasis" | "taxTotal" | "customerTotal" | "marginPct" | "dealerCost" | "netTotal" | "marginAmount" | "inboundFreightEligible">;
+export type QuoteBuilderStepRouterTotalsProps = Pick<QuoteWizardStepRouterProps, "equipmentTotal" | "attachmentTotal" | "internalCostLoadTotal" | "pricingLineTotal" | "subtotal" | "discountTotal" | "taxableBasis" | "taxTotal" | "customerTotal" | "marginPct" | "marginFloorPct" | "marginFloorResolved" | "dealerCost" | "netTotal" | "marginAmount" | "inboundFreightEligible">;
 
 export type QuoteBuilderStepRouterPricingProps = Pick<QuoteWizardStepRouterProps, "pricingLine" | "upsertPricingLine" | "discountLine" | "miscChargeTitle" | "setMiscChargeTitle" | "miscChargeAmount" | "setMiscChargeAmount" | "miscCreditTitle" | "setMiscCreditTitle" | "miscCreditAmount" | "setMiscCreditAmount" | "onAddMiscPricingLine" | "taxProfiles">;
 

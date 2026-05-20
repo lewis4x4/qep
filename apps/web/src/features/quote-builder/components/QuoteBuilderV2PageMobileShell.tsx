@@ -153,6 +153,8 @@ export function QuoteBuilderV2PageMobileShell({
   currentWizardStepNumber,
   marginPct,
   marginAmount,
+  marginFloorPct,
+  marginFloorSource,
   hasCustomer,
   onQuoteForProspect,
   wizardStepRouter,
@@ -295,6 +297,8 @@ export function QuoteBuilderV2PageMobileShell({
           brandId={null}
           marginPct={marginPct}
           netTotalCents={Math.round(netTotal * 100)}
+          marginFloorPct={marginFloorPct}
+          marginFloorSource={marginFloorSource}
           reasonModalOpen={marginGateOpen}
           onReasonModalOpenChange={onMarginGateOpenChange}
           onReasonConfirm={(payload) => {

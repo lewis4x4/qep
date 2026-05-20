@@ -105,6 +105,8 @@ export interface QuoteBuilderOrchestratorStepRouterInput {
   tradeCapture: unknown;
   taxableBasis: unknown;
   marginAmount: unknown;
+  marginFloorPct: unknown;
+  marginFloorResolved: unknown;
   discountLine: unknown;
   saveMutation: unknown;
   setAiPrompt: unknown;

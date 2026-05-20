@@ -161,6 +161,41 @@ Deno.test("approval bypass stamps quote status from sanitized bypass_to_status",
   );
 });
 
+Deno.test("customer share gate uses configured/default margin floor instead of a hardcoded 10", async () => {
+  const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
+  assert(source.includes("async function loadConfiguredMarginFloorPct("));
+  assert(source.includes('.from("qb_margin_thresholds")'));
+  assert(source.includes("policy.standardMarginFloorPct"));
+  assert(source.includes("DEFAULT_QUOTE_MARGIN_FLOOR_PCT"));
+  assert(source.includes("input.marginPct < marginFloorPct"));
+  assert(source.includes("pkg.margin_pct < sendMarginFloorPct"));
+  assertEquals(source.includes("input.marginPct < 10"), false);
+  assertEquals(source.includes("pkg.margin_pct < 10"), false);
+});
+
+Deno.test("customer share gate aligns conditionally approved quotes with send-package", async () => {
+  const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
+  assert(source.includes("async function assertApprovedWithConditionsSendReady("));
+
+  const shareGateIndex = source.indexOf("async function assertQuoteCustomerShareable(");
+  const shareConditionalIndex = source.indexOf('input.status === "approved_with_conditions"', shareGateIndex);
+  const shareHelperIndex = source.indexOf("assertApprovedWithConditionsSendReady({", shareConditionalIndex);
+  const shareApprovedIndex = source.indexOf(
+    'input.status === "approved" || input.status === "approved_with_conditions"',
+    shareHelperIndex,
+  );
+  assert(shareGateIndex > -1, "share gate function must exist");
+  assert(shareConditionalIndex > shareGateIndex, "share gate must branch on conditionally approved quotes");
+  assert(shareHelperIndex > shareConditionalIndex, "share gate must evaluate conditional approval readiness");
+  assert(shareApprovedIndex > shareHelperIndex, "share margin gate must allow conditionally approved quotes only after readiness passes");
+
+  const sendPackageIndex = source.indexOf('if (action === "send-package")');
+  const sendConditionalIndex = source.indexOf('quoteStatus === "approved_with_conditions"', sendPackageIndex);
+  const sendHelperIndex = source.indexOf("assertApprovedWithConditionsSendReady({", sendConditionalIndex);
+  assert(sendPackageIndex > -1, "send-package branch must exist");
+  assert(sendHelperIndex > sendConditionalIndex, "send-package must use the same conditional approval readiness helper");
+});
+
 Deno.test("send-package requires a fresh generated R2 customer PDF artifact", async () => {
   const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
   assert(source.includes('return safeJsonError("Generate a versioned PDF before sending.", 409, origin);'));

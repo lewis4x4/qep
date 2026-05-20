@@ -76,6 +76,8 @@ describe("buildQuoteWizardStepRouterProps", () => {
         taxTotal: 0,
         customerTotal: 0,
         marginPct: 0,
+        marginFloorPct: 10,
+        marginFloorResolved: true,
         dealerCost: 0,
         netTotal: 0,
         marginAmount: 0,

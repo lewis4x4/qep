@@ -405,6 +405,56 @@ describe("computeQuoteWorkspace", () => {
     expect(result.customerTotal).toBe(108_750);
   });
 
+  test("above-floor quote remains send-ready once other send gates are satisfied", () => {
+    const result = computeQuoteWorkspace(makeDraft({
+      branchSlug: "lake-city",
+      customerName: "Anderson",
+      customerEmail: "buyer@example.com",
+      equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 100_000, dealerCost: 80_000 }],
+      taxTotal: 0,
+    }));
+
+    expect(result.marginPct).toBe(20);
+    expect(result.approvalState.marginFloorPct).toBe(10);
+    expect(result.approvalState.requiresManagerApproval).toBe(false);
+    expect(result.packetReadiness.send.ready).toBe(true);
+    expect(result.packetReadiness.canSend).toBe(true);
+  });
+
+  test("configured margin floor determines approval state and missing labels", () => {
+    const result = computeQuoteWorkspace(makeDraft({
+      branchSlug: "lake-city",
+      customerName: "Anderson",
+      customerEmail: "buyer@example.com",
+      equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 100_000, dealerCost: 85_000 }],
+      taxTotal: 0,
+    }), { marginFloorPct: 18 });
+
+    expect(result.marginPct).toBe(15);
+    expect(result.approvalState.marginFloorPct).toBe(18);
+    expect(result.approvalState.requiresManagerApproval).toBe(true);
+    expect(result.approvalState.reason).toBe("Margin is below the 18% approval threshold.");
+    expect(result.packetReadiness.send.missing).toContain("manager approval (margin below 18%)");
+  });
+
+  test("below configured floor cannot send until approval status satisfies the gate", () => {
+    const draft = makeDraft({
+      branchSlug: "lake-city",
+      customerName: "Anderson",
+      customerEmail: "buyer@example.com",
+      equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 100_000, dealerCost: 88_000 }],
+      taxTotal: 0,
+    });
+    const blocked = computeQuoteWorkspace(draft, { marginFloorPct: 15 });
+    const approved = computeQuoteWorkspace({ ...draft, quoteStatus: "approved" }, { marginFloorPct: 15 });
+
+    expect(blocked.marginPct).toBe(12);
+    expect(blocked.packetReadiness.canSend).toBe(false);
+    expect(blocked.packetReadiness.send.missing).toContain("manager approval (margin below 15%)");
+    expect(approved.packetReadiness.canSend).toBe(true);
+    expect(approved.packetReadiness.send.missing).not.toContain("manager approval (margin below 15%)");
+  });
+
   test("approved low-margin quotes become send-ready", () => {
     const result = computeQuoteWorkspace(makeDraft({
       branchSlug: "lake-city",

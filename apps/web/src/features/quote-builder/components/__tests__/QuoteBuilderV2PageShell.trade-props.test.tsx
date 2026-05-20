@@ -80,6 +80,8 @@ function buildProps(): QuoteBuilderV2PageShellProps {
     signalsReady: true,
     marginPct: 12,
     marginAmount: 1000,
+    marginFloorPct: 10,
+    marginFloorSource: "fallback_default",
     wizardPricingJumpAllowed: true,
     branches: [],
     wizardNextHelp: "",

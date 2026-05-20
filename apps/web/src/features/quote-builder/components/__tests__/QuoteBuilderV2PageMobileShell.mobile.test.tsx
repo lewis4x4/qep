@@ -94,6 +94,8 @@ function buildProps(step: WizardStateValue["step"]): QuoteBuilderV2PageShellProp
     signalsReady: true,
     marginPct: 12,
     marginAmount: 1000,
+    marginFloorPct: 10,
+    marginFloorSource: "fallback_default",
     wizardPricingJumpAllowed: true,
     branches: [],
     wizardNextHelp: "",

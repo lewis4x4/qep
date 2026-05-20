@@ -27,6 +27,7 @@ import type { QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-
 import {
   computeQuoteWorkspace,
   type QuoteWorkspaceComputed,
+  type QuoteWorkspaceComputeOptions,
 } from "../lib/quote-workspace";
 
 /**
@@ -34,8 +35,11 @@ import {
  * margin-focused name (`computeLiveMargin`) can be the single import for
  * tests and step-level callers that don't need a hook.
  */
-export function computeLiveMargin(draft: QuoteWorkspaceDraft): QuoteWorkspaceComputed {
-  return computeQuoteWorkspace(draft);
+export function computeLiveMargin(
+  draft: QuoteWorkspaceDraft,
+  options: QuoteWorkspaceComputeOptions = {},
+): QuoteWorkspaceComputed {
+  return computeQuoteWorkspace(draft, options);
 }
 
 /**
@@ -50,8 +54,14 @@ export function computeLiveMargin(draft: QuoteWorkspaceDraft): QuoteWorkspaceCom
  * which keeps downstream `useMemo` blocks (win-probability scorer,
  * win-probability factor inputs) from invalidating unnecessarily.
  */
-export function useLiveMargin(draft: QuoteWorkspaceDraft): QuoteWorkspaceComputed {
-  return useMemo(() => computeLiveMargin(draft), [draft]);
+export function useLiveMargin(
+  draft: QuoteWorkspaceDraft,
+  options: QuoteWorkspaceComputeOptions = {},
+): QuoteWorkspaceComputed {
+  return useMemo(
+    () => computeLiveMargin(draft, options),
+    [draft, options.marginFloorPct],
+  );
 }
 
 export type { QuoteWorkspaceComputed } from "../lib/quote-workspace";
