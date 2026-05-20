@@ -9,7 +9,9 @@
     "@supabase/supabase-js": "^2.49.1"
   },
   "overrides": {
-    "postcss": "^8.5.14"
+    "postcss": "^8.5.14",
+    "ws": "^8.20.1",
+    "brace-expansion": "^5.0.6"
   },
   "scripts": {
     "dev": "bun run --filter @qep/web dev",
@@ -52,7 +54,7 @@
     "stress:test": "bun ./.agents/stress-test/run.ts",
     "segment:gates": "bun ./scripts/agent-gates/run-segment-gates.mjs",
     "supabase:start": "supabase start",
-    "supabase:push": "supabase db push",
+    "supabase:push": "bun run db:push:apply",
     "supabase:types": "bun ./scripts/generate-supabase-types.mjs --local",
     "supabase:types:remote": "bun ./scripts/generate-supabase-types.mjs",
     "smoke:edge": "bun ./scripts/smoke-edge-functions.mjs",

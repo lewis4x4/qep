@@ -1996,6 +1996,8 @@ async function handlePublicLatestQuotePdfRead(url: URL, origin: string | null): 
     .maybeSingle();
   if (quoteErr) return safeJsonError("Failed to validate token", 500, origin);
   if (!quote) return safeJsonError("Quote not found", 404, origin);
+  const statusGate = assertPublicQuoteReadableStatus(quote as Record<string, unknown>);
+  if (!statusGate.ok) return safeJsonError(statusGate.message, statusGate.status, origin);
 
   const readGate = assertPublicQuoteReadReady(quote as Record<string, unknown>);
   if (!readGate.ok) {
@@ -2075,11 +2077,13 @@ async function handlePublicTradeEstimate(
   // valuation tables. Costs one indexed SELECT.
   const { data: quote, error: quoteErr } = await admin
     .from("quote_packages")
-    .select("id, status, expires_at, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
+    .select("id, status, expires_at, workspace_id, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
     .eq("share_token", token)
     .maybeSingle();
   if (quoteErr) return safeJsonError("Failed to validate token", 500, origin);
   if (!quote) return safeJsonError("Quote not found", 404, origin);
+  const statusGate = assertPublicQuoteReadableStatus(quote as Record<string, unknown>);
+  if (!statusGate.ok) return safeJsonError(statusGate.message, statusGate.status, origin);
   const readGate = assertPublicQuoteReadReady(quote as Record<string, unknown>);
   if (!readGate.ok) {
     return safeJsonErrorWithFields(readGate.message, readGate.status, origin, { blockers: readGate.blockers ?? [] });
@@ -2235,11 +2239,13 @@ async function handlePublicChatTurn(
   const admin = createAdminClient();
   const { data: quote, error: quoteErr } = await admin
     .from("quote_packages")
-    .select("id, status, expires_at, equipment, customer_name, customer_company, customer_total, amount_financed, financing_scenarios, branch_slug, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason, metadata")
+    .select("id, status, expires_at, workspace_id, equipment, customer_name, customer_company, customer_total, amount_financed, financing_scenarios, branch_slug, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason, metadata")
     .eq("share_token", token)
     .maybeSingle();
   if (quoteErr) return safeJsonError("Failed to load quote", 500, origin);
   if (!quote) return safeJsonError("Quote not found", 404, origin);
+  const statusGate = assertPublicQuoteReadableStatus(quote as Record<string, unknown>);
+  if (!statusGate.ok) return safeJsonError(statusGate.message, statusGate.status, origin);
   const readGate = assertPublicQuoteReadReady(quote as Record<string, unknown>);
   if (!readGate.ok) {
     return safeJsonErrorWithFields(readGate.message, readGate.status, origin, { blockers: readGate.blockers ?? [] });
@@ -2480,11 +2486,13 @@ async function handlePublicSocialProof(url: URL, origin: string | null): Promise
   const admin = createAdminClient();
   const { data: quote, error: quoteErr } = await admin
     .from("quote_packages")
-    .select("id, status, expires_at, equipment, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
+    .select("id, status, expires_at, workspace_id, equipment, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
     .eq("share_token", token)
     .maybeSingle();
   if (quoteErr) return safeJsonError("Failed to load quote", 500, origin);
   if (!quote) return safeJsonError("Quote not found", 404, origin);
+  const statusGate = assertPublicQuoteReadableStatus(quote as Record<string, unknown>);
+  if (!statusGate.ok) return safeJsonError(statusGate.message, statusGate.status, origin);
   const readGate = assertPublicQuoteReadReady(quote as Record<string, unknown>);
   if (!readGate.ok) {
     return safeJsonErrorWithFields(readGate.message, readGate.status, origin, { blockers: readGate.blockers ?? [] });
@@ -2506,6 +2514,7 @@ async function handlePublicSocialProof(url: URL, origin: string | null): Promise
   const { data: historical } = await admin
     .from("quote_packages")
     .select("id, equipment, customer_total, status, created_at")
+    .eq("workspace_id", typeof quote.workspace_id === "string" ? quote.workspace_id : "default")
     .in("status", ["accepted", "converted_to_deal", "sent", "viewed"])
     .gte("created_at", cutoff)
     .limit(200);
@@ -2962,6 +2971,8 @@ async function handlePublicAttachmentsRead(url: URL, origin: string | null): Pro
     return safeJsonError("Failed to load quote", 500, origin);
   }
   if (!quote) return safeJsonError("Quote not found", 404, origin);
+  const statusGate = assertPublicQuoteReadableStatus(quote as Record<string, unknown>);
+  if (!statusGate.ok) return safeJsonError(statusGate.message, statusGate.status, origin);
   const readGate = assertPublicQuoteReadReady(quote as Record<string, unknown>);
   if (!readGate.ok) {
     return safeJsonErrorWithFields(readGate.message, readGate.status, origin, { blockers: readGate.blockers ?? [] });

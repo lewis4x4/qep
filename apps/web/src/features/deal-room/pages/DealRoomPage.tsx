@@ -98,6 +98,29 @@ function generateClientSubmissionId(): string {
   return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
 }
 
+function createTypedSignatureDataUrl(value: string): string | null {
+  const text = value.trim();
+  if (text.length < 2 || typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = 520;
+  canvas.height = 140;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = "#cbd5e1";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "42px serif";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text.slice(0, 80), 24, canvas.height / 2);
+  ctx.fillStyle = "#64748b";
+  ctx.font = "12px sans-serif";
+  ctx.fillText("Typed customer signature", 24, canvas.height - 18);
+  return canvas.toDataURL("image/png");
+}
+
 export function DealRoomPage() {
   const { token = "" } = useParams<{ token: string }>();
   const { data, isLoading, isError, error } = useQuery<DealRoomPayload>({
@@ -225,11 +248,11 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
   );
   const [selectedAttachments, setSelectedAttachments] = useState<Set<string>>(defaultSelected);
   const [configuratorTouched, setConfiguratorTouched] = useState(false);
+  const attachmentSeedKey = useMemo(() => Array.from(defaultSelected).sort().join("|"), [defaultSelected]);
   useEffect(() => {
-    setSelectedAttachments(defaultSelected);
-    setConfiguratorTouched(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quote.id, attachmentsQuery.dataUpdatedAt]);
+    if (configuratorTouched) return;
+    setSelectedAttachments(new Set(defaultSelected));
+  }, [quote.id, quote.updated_at, attachmentsQuery.dataUpdatedAt, attachmentSeedKey, configuratorTouched, defaultSelected]);
 
   const toggleAttachment = (key: string) => {
     setConfiguratorTouched(true);
@@ -267,16 +290,28 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
   const [termMonths, setTermMonths] = useState<number>(
     initialScenario?.term_months ?? displayableScenarios[0]?.term_months ?? 60,
   );
+  const [financeTouched, setFinanceTouched] = useState(false);
+  const financeSeedKey = useMemo(() => JSON.stringify({
+    quoteId: quote.id,
+    updatedAt: quote.updated_at,
+    cashDown: quote.cash_down ?? 0,
+    selected: quote.selected_finance_scenario ?? null,
+    scenarios: displayableScenarios.map((scenario) => ({
+      label: scenario.label,
+      type: scenario.type,
+      termMonths: scenario.term_months ?? null,
+      monthlyPayment: scenario.monthly_payment ?? null,
+    })),
+  }), [quote.id, quote.updated_at, quote.cash_down, quote.selected_finance_scenario, displayableScenarios]);
 
-  // If the fetched quote changes (e.g. react-query refetch), resync so
-  // we don't strand stale state against a newer payload.
+  // If the fetched quote changes (e.g. react-query refetch), resync untouched
+  // financing controls so customers cannot accept stale rep-approved terms.
   useEffect(() => {
-    if (!initialScenario) return;
+    if (financeTouched || !initialScenario) return;
     setSelectedKey(scenarioKey(initialScenario));
     setTermMonths(initialScenario.term_months ?? 60);
     setCashDown(quote.cash_down ?? 0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quote.id]);
+  }, [financeSeedKey, financeTouched, initialScenario, quote.cash_down]);
 
   const activeScenario = displayableScenarios.find((s) => scenarioKey(s) === selectedKey)
     ?? initialScenario
@@ -286,10 +321,11 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
   // Customer-applied trade credit. Seeds from whatever the rep included,
   // overrides on "Apply" from the trade estimator.
   const [tradeCredit, setTradeCredit] = useState<number>(quote.trade_credit ?? 0);
+  const [tradeTouched, setTradeTouched] = useState(false);
   useEffect(() => {
+    if (tradeTouched) return;
     setTradeCredit(quote.trade_credit ?? 0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quote.id]);
+  }, [quote.id, quote.updated_at, quote.trade_credit, tradeTouched]);
 
   // Adjusted quote reflects the customer's live choices: attachment
   // configurator flips attachment_total + the trade estimator flips
@@ -379,7 +415,10 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
         <TradeEstimatorPanel
           token={token}
           currentCredit={tradeCredit}
-          onApply={setTradeCredit}
+          onApply={(nextCredit) => {
+            setTradeTouched(true);
+            setTradeCredit(nextCredit);
+          }}
         />
         <ApprovalStatusBanner status={quote.status} />
         <AcceptPanel
@@ -402,11 +441,20 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
           <FinancingPanel
             scenarios={displayableScenarios}
             selectedKey={selectedKey}
-            onSelect={setSelectedKey}
+            onSelect={(nextKey) => {
+              setFinanceTouched(true);
+              setSelectedKey(nextKey);
+            }}
             termMonths={termMonths}
-            onTermChange={setTermMonths}
+            onTermChange={(nextTerm) => {
+              setFinanceTouched(true);
+              setTermMonths(nextTerm);
+            }}
             cashDown={cashDown}
-            onCashDownChange={setCashDown}
+            onCashDownChange={(nextCashDown) => {
+              setFinanceTouched(true);
+              setCashDown(nextCashDown);
+            }}
             customerTotal={customerTotal}
             computed={computed}
           />
@@ -1578,6 +1626,9 @@ function AcceptPanel({
 }) {
   const [signerName, setSignerName] = useState(customerHint === "Customer" ? "" : customerHint);
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
+  const [typedSignature, setTypedSignature] = useState("");
+  const typedSignatureDataUrl = useMemo(() => createTypedSignatureDataUrl(typedSignature), [typedSignature]);
+  const effectiveSignatureDataUrl = signatureDataUrl ?? typedSignatureDataUrl;
   const queryClient = useQueryClient();
 
   // Quote-status-based affordance: already-accepted quotes render the
@@ -1612,7 +1663,7 @@ function AcceptPanel({
       return acceptPublicQuote(token, {
         signerName: signerName.trim() || (customerHint === "Customer" ? "Customer" : customerHint),
         signerEmail: null,
-        signatureDataUrl: signatureDataUrl ?? "",
+        signatureDataUrl: effectiveSignatureDataUrl ?? "",
         customerConfiguration: configuration,
       });
     },
@@ -1673,12 +1724,27 @@ function AcceptPanel({
           <div className="mt-4">
             <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Signature</div>
             <SignaturePad onChange={setSignatureDataUrl} />
+            <label htmlFor="typed-signature" className="mt-3 block text-xs font-semibold text-slate-600">
+              Keyboard accessible signature
+            </label>
+            <input
+              id="typed-signature"
+              type="text"
+              value={typedSignature}
+              onChange={(event) => setTypedSignature(event.target.value)}
+              placeholder="Type your full name to sign"
+              aria-describedby="typed-signature-help"
+              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm sm:max-w-md"
+            />
+            <p id="typed-signature-help" className="mt-1 text-xs text-slate-500">
+              Use this field if drawing a signature is not accessible on your device.
+            </p>
           </div>
         </div>
         <button
           type="button"
           onClick={() => acceptMutation.mutate()}
-          disabled={!signerName.trim() || !signatureDataUrl || acceptMutation.isPending}
+          disabled={!signerName.trim() || !effectiveSignatureDataUrl || acceptMutation.isPending}
           className="rounded-lg bg-[#F28A07] px-6 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#d06a1e] disabled:opacity-40"
         >
           {acceptMutation.isPending ? "Recording…" : "Accept this proposal"}

@@ -10,9 +10,9 @@ create table if not exists public.quote_customer_feedback (
   quote_package_version_id uuid references public.quote_package_versions(id) on delete set null,
   quote_document_artifact_id uuid references public.quote_document_artifacts(id) on delete set null,
 
-  deal_id uuid references public.crm_deals(id) on delete set null,
-  contact_id uuid references public.crm_contacts(id) on delete set null,
-  company_id uuid references public.crm_companies(id) on delete set null,
+  deal_id uuid references public.qrm_deals(id) on delete set null,
+  contact_id uuid references public.qrm_contacts(id) on delete set null,
+  company_id uuid references public.qrm_companies(id) on delete set null,
 
   source text not null default 'qr_landing'
     check (source in ('qr_landing', 'deal_room', 'email_link')),
