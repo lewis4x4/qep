@@ -492,40 +492,38 @@
     }
   },
   "current_task": {
-    "task_id": "A5.2",
-    "linear": "QEP-34",
+    "task_id": "A5.5",
+    "linear": "QEP-37",
     "stream": "A",
     "wave": "A5",
-    "goal": "Separate cash down from good-faith deposit semantics in Iron Quote UI, local/saved draft hydration, and customer proposal copy.",
+    "goal": "Centralize quote lifecycle defaults for 30-day expiration and 3-day follow-up, preserve user edits, and guard customer-facing sends when follow-up exceeds expiration.",
     "status": "verified_pending_commit",
     "expected_files": [
-      "shared/qep-moonshot-contracts.ts",
-      "apps/web/src/features/quote-builder/steps/FinancingStep.tsx",
+      "apps/web/src/features/quote-builder/lib/quote-lifecycle-policy.ts",
+      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderDetailsDefaults.ts",
       "apps/web/src/features/quote-builder/steps/DetailsStep.tsx",
-      "apps/web/src/features/quote-builder/components/QuotePDFDocument.tsx",
-      "apps/web/src/features/quote-builder/lib/quote-print-html.ts",
-      "apps/web/src/features/quote-builder/lib/local-draft.ts",
-      "apps/web/src/features/quote-builder/lib/saved-quote-draft.ts"
+      "apps/web/src/features/quote-builder/steps/SendStep.tsx",
+      "apps/web/src/features/quote-builder/lib/quote-workspace.ts",
+      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderWizardChrome.ts",
+      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderDocumentActions.ts"
     ],
     "acceptance": [
-      "Cash down copy identifies money applied to financed balance.",
-      "Good-faith deposit copy identifies unit-hold deposit and does not reduce financed balance.",
-      "Legacy draft aliases hydrate into current fields.",
-      "Customer proposal HTML no longer says cash down / deposit credit."
+      "New quotes seed 30-day expiration and 3-day follow-up defaults at details/send lifecycle point.",
+      "Existing user-edited lifecycle dates are preserved.",
+      "Details and Send steps warn when follow-up is after expiration.",
+      "Email/text send readiness blocks follow-up dates after expiration."
     ],
     "verification": [
-      "bun test local-draft/saved-quote-draft/quote-proposal-data tests",
+      "bun test quote-lifecycle-policy/useQuoteBuilderDetailsDefaults/quote-workspace/SendStep mobile tests",
       "cd apps/web && bun run typecheck",
       "bun run migrations:check",
       "bun run audit:secrets",
       "cd apps/web && bun run build",
-      "git diff --check scoped files"
+      "git diff --check",
+      "bun run segment:gates --segment A5.5-qb-9-expiration-followup --ui"
     ],
-    "deployment_needs": "none; no migration or edge function changed",
-    "moonshot_moves": [
-      "A5/QB-6",
-      "customer copy clarity",
-      "TILA-adjacent payment semantics preserved"
-    ]
+    "deployment_needs": "none; no migration or edge function changed; follow_up_at already exists from migration 542",
+    "gate_report": "test-results/agent-gates/20260520T171737Z-A5.5-qb-9-expiration-followup.json",
+    "updated_at": "2026-05-20T17:18:09.807723+00:00"
   }
 }

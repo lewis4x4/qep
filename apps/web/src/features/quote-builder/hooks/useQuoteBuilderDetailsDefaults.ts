@@ -5,7 +5,7 @@
 
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 
-import { addDaysIso } from "../lib/quote-builder-page-helpers";
+import { buildQuoteLifecycleDefaultDates } from "../lib/quote-lifecycle-policy";
 import type { Step } from "../wizard/wizard-types";
 import type { QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
 
@@ -20,10 +20,11 @@ export function useQuoteBuilderDetailsDefaults({
 }: UseQuoteBuilderDetailsDefaultsInput): void {
   useEffect(() => {
     if (step !== "details" && step !== "send") return;
+    const defaults = buildQuoteLifecycleDefaultDates();
     setDraft((current) => ({
       ...current,
-      expiresAt: current.expiresAt ?? addDaysIso(30),
-      followUpAt: current.followUpAt ?? addDaysIso(3),
+      expiresAt: current.expiresAt ?? defaults.expiresAt,
+      followUpAt: current.followUpAt ?? defaults.followUpAt,
       whyThisMachine: current.whyThisMachine
         ?? current.recommendation?.reasoning
         ?? current.voiceSummary

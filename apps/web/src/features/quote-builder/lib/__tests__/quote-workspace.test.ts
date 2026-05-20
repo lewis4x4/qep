@@ -166,6 +166,21 @@ describe("computeQuoteSendActionReadiness", () => {
     expect(result.ready).toBe(false);
     expect(result.missing).toEqual(["follow-up date", "customer phone"]);
   });
+
+  test("blocks customer-facing send when follow-up is after expiration", () => {
+    const result = computeQuoteSendActionReadiness({
+      channel: "email",
+      quotePackageId: "quote-1",
+      approvalCaseCanSend: true,
+      documentReady: true,
+      followUpAt: "2026-06-20T09:00:00.000Z",
+      expiresAt: "2026-06-19T12:00:00.000Z",
+      customerEmail: "buyer@example.com",
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.missing).toEqual(["follow-up before expiration"]);
+  });
 });
 
 describe("isQuoteWhyThisMachineConfirmationRequired", () => {

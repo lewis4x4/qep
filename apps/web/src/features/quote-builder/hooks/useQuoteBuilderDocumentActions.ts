@@ -239,6 +239,7 @@ export function useQuoteBuilderDocumentActions({
       quotePackageId: activeQuotePackageId,
       approvalCaseCanSend,
       followUpAt: draft.followUpAt ?? null,
+      expiresAt: draft.expiresAt ?? null,
       customerEmail: draft.customerEmail ?? null,
       customerPhone: draft.customerPhone ?? null,
       documentReady: channel === "email" ? true : Boolean(documentFallbackGeneratedAt),

@@ -15,6 +15,7 @@ import { useIsMobileViewport } from "@/features/sales/hooks/useIsMobileViewport"
 import { QuoteSendActionCard } from "../components/QuoteSendActionCard";
 import { ReadinessRow } from "../components/ReadinessRow";
 import { dateTimeInputValue, isoFromDateTimeInput, shortDateTime } from "../lib/quote-date-input";
+import { QUOTE_FOLLOW_UP_DEFAULT_DAYS, quoteLifecycleWarning } from "../lib/quote-lifecycle-policy";
 import type { QuoteReadinessState } from "../../../../../../shared/qep-moonshot-contracts";
 import type { QuoteSendActionChannel } from "../lib/quote-workspace";
 import { useWizard } from "../wizard/useWizard";
@@ -70,10 +71,12 @@ export function SendStep({
 }: SendStepProps) {
   const { draft, setDraft, setStep } = useWizard();
   const isMobile = useIsMobileViewport();
+  const followUpWarning = quoteLifecycleWarning({ followUpAt: draft.followUpAt, expiresAt: draft.expiresAt });
+  const followUpReady = Boolean(draft.followUpAt) && !followUpWarning;
   const readinessAllReady =
     approvalCaseCanSend &&
     documentReady &&
-    Boolean(draft.followUpAt) &&
+    followUpReady &&
     taxResolved &&
     (!whyThisMachineRequired || draft.whyThisMachineConfirmed === true);
   const readinessSummary = readinessAllReady ? "All gates clear" : "Action needed";
@@ -82,7 +85,7 @@ export function SendStep({
     <div className="grid gap-3 sm:grid-cols-3" data-testid="send-step-readiness-rows">
       <ReadinessRow label="Approval case" ready={approvalCaseCanSend} detail={approvalBlocker ?? "canSend is true"} />
       <ReadinessRow label="Document" ready={documentReady} detail={documentReady ? documentPersistenceLabel : "Generate Step 10 preview first"} />
-      <ReadinessRow label="Follow-up" ready={Boolean(draft.followUpAt)} detail={draft.followUpAt ? (shortDateTime(draft.followUpAt) ?? "Scheduled") : "Required before email/text"} />
+      <ReadinessRow label="Follow-up" ready={followUpReady} detail={followUpWarning ?? (draft.followUpAt ? (shortDateTime(draft.followUpAt) ?? "Scheduled") : "Required before email/text")} />
       <ReadinessRow label="Tax" ready={taxResolved} detail={taxResolutionBlocker ?? "Tax preview resolved"} />
       <ReadinessRow label="Why this machine" ready={!whyThisMachineRequired || draft.whyThisMachineConfirmed === true} detail={whyThisMachineBlocker ?? "Rep confirmed or not required"} />
     </div>
@@ -109,7 +112,8 @@ export function SendStep({
         className="min-h-[44px] w-full rounded border border-input bg-card px-3 py-2 text-base sm:max-w-xs sm:text-sm"
         data-testid="send-step-followup-input"
       />
-      <span className="block text-xs text-muted-foreground">Defaults to +3 days when absent. Email/text send/log remains blocked without a scheduled follow-up.</span>
+      <span className="block text-xs text-muted-foreground">Defaults to +{QUOTE_FOLLOW_UP_DEFAULT_DAYS} days when absent. Email/text send/log remains blocked without a scheduled follow-up before expiration.</span>
+      {followUpWarning ? <span className="block text-xs font-medium text-amber-300">{followUpWarning}</span> : null}
     </label>
   );
 

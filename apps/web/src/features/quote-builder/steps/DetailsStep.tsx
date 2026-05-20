@@ -18,10 +18,15 @@ import {
   isoFromDateInput,
   isoFromDateTimeInput,
 } from "../lib/quote-date-input";
+import { QUOTE_EXPIRATION_DEFAULT_DAYS, QUOTE_FOLLOW_UP_DEFAULT_DAYS, quoteLifecycleWarning } from "../lib/quote-lifecycle-policy";
 import { useWizard } from "../wizard/useWizard";
 
 export function DetailsStep() {
   const { draft, setDraft, setStep } = useWizard();
+  const followUpWarning = quoteLifecycleWarning({
+    followUpAt: draft.followUpAt,
+    expiresAt: draft.expiresAt,
+  });
 
   return (
     <div className="space-y-4">
@@ -67,7 +72,7 @@ export function DetailsStep() {
               onChange={(event) => setDraft((current) => ({ ...current, expiresAt: isoFromDateInput(event.target.value) }))}
               className="w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm min-h-[44px]"
             />
-            <span className="text-[11px] text-muted-foreground">Defaults to 30 days when this step opens.</span>
+            <span className="text-[11px] text-muted-foreground">Defaults to {QUOTE_EXPIRATION_DEFAULT_DAYS} days when this step opens.</span>
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-xs font-medium text-muted-foreground">Follow-up reminder</span>
@@ -77,7 +82,8 @@ export function DetailsStep() {
               onChange={(event) => setDraft((current) => ({ ...current, followUpAt: isoFromDateTimeInput(event.target.value) }))}
               className="w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm min-h-[44px]"
             />
-            <span className="text-[11px] text-muted-foreground">Defaults to 3 days. Final send/log will require it.</span>
+            <span className="text-[11px] text-muted-foreground">Defaults to {QUOTE_FOLLOW_UP_DEFAULT_DAYS} days. Final send/log will require it before expiration.</span>
+            {followUpWarning ? <span className="block text-[11px] font-medium text-amber-300">{followUpWarning}</span> : null}
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-xs font-medium text-muted-foreground">Delivery ETA</span>

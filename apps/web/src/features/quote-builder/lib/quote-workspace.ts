@@ -7,6 +7,7 @@ import type {
   QuoteTaxProfile,
   QuoteWorkspaceDraft,
 } from "../../../../../../shared/qep-moonshot-contracts";
+import { isQuoteFollowUpAfterExpiration } from "./quote-lifecycle-policy";
 
 export interface QuoteWorkspaceComputed {
   equipmentTotal: number;
@@ -168,6 +169,7 @@ export interface QuoteSendActionReadinessInput {
   quotePackageId: string | null;
   approvalCaseCanSend: boolean;
   followUpAt?: string | null;
+  expiresAt?: string | null;
   customerEmail?: string | null;
   customerPhone?: string | null;
   documentReady?: boolean;
@@ -195,8 +197,12 @@ export function computeQuoteSendActionReadiness(input: QuoteSendActionReadinessI
     missing.push("rep-confirmed Why this machine narrative");
   }
   if (!input.documentReady) missing.push("document preview/generation");
-  if ((input.channel === "email" || input.channel === "text") && !input.followUpAt) {
-    missing.push("follow-up date");
+  if (input.channel === "email" || input.channel === "text") {
+    if (!input.followUpAt) {
+      missing.push("follow-up date");
+    } else if (isQuoteFollowUpAfterExpiration({ followUpAt: input.followUpAt, expiresAt: input.expiresAt })) {
+      missing.push("follow-up before expiration");
+    }
   }
   if (input.channel === "email" && !input.customerEmail?.trim()) missing.push("customer email");
   if (input.channel === "text" && !input.customerPhone?.trim()) missing.push("customer phone");
