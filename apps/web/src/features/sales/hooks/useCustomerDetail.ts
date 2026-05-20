@@ -8,7 +8,12 @@ import {
   fetchCustomerByCompanyId,
 } from "../lib/sales-api";
 
+export function customerDetailQueryKey(companyId: string) {
+  return ["sales", "customer-detail", companyId] as const;
+}
+
 export function useCustomerDetail(companyId: string) {
+  const detailKey = customerDetailQueryKey(companyId);
   // Primary lookup: the rep's book of business. Fast (cached list query),
   // hits when the rep has previously engaged with this customer.
   const bookCustomerQuery = useQuery({
@@ -22,7 +27,7 @@ export function useCustomerDetail(companyId: string) {
   // book lookup misses. This is what makes dealer-directory search results
   // openable for customers the rep has never touched.
   const directCustomerQuery = useQuery({
-    queryKey: ["sales", "customer-by-id", companyId],
+    queryKey: [...detailKey, "customer"],
     queryFn: () => fetchCustomerByCompanyId(companyId),
     enabled:
       !!companyId &&
@@ -34,28 +39,28 @@ export function useCustomerDetail(companyId: string) {
   const customer = bookCustomerQuery.data ?? directCustomerQuery.data ?? null;
 
   const equipmentQuery = useQuery({
-    queryKey: ["sales", "customer-equipment", companyId],
+    queryKey: [...detailKey, "equipment"],
     queryFn: () => fetchCustomerEquipment(companyId),
     enabled: !!companyId,
     staleTime: 5 * 60 * 1000,
   });
 
   const dealsQuery = useQuery({
-    queryKey: ["sales", "customer-deals", companyId],
+    queryKey: [...detailKey, "deals"],
     queryFn: () => fetchCustomerDeals(companyId),
     enabled: !!companyId,
     staleTime: 5 * 60 * 1000,
   });
 
   const activitiesQuery = useQuery({
-    queryKey: ["sales", "customer-activities", companyId],
+    queryKey: [...detailKey, "activities"],
     queryFn: () => fetchCustomerActivities(companyId),
     enabled: !!companyId,
     staleTime: 2 * 60 * 1000,
   });
 
   const quotesQuery = useQuery({
-    queryKey: ["sales", "customer-quotes", companyId],
+    queryKey: [...detailKey, "quotes"],
     queryFn: () => fetchCustomerQuotes(companyId),
     enabled: !!companyId,
     staleTime: 5 * 60 * 1000,

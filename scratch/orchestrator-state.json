@@ -163,6 +163,27 @@
       "verification_summary": "PASS: typecheck, lint, build, design:review with explicit env.",
       "deployment_commit": "f4eb70e9",
       "pushed_branch": "origin/vcqrm-07-health-monitor"
+    },
+    {
+      "task_id": "B2.3/QEP-51",
+      "assigned_agent_id": "775C9F3B-8AA4-4752-9099-4BE63E5DD908",
+      "status": "complete",
+      "git_branch": "main",
+      "attempts": 1,
+      "dependencies": [
+        "B2.2/QEP-50"
+      ],
+      "key_files": [
+        "apps/web/src/features/sales/components/LiveCallCapture.tsx",
+        "apps/web/src/features/sales/pages/CustomerDetailPage.tsx",
+        "supabase/functions/voice-capture-stream/index.ts",
+        "supabase/migrations/605_voice_capture_stream_sessions.sql",
+        "supabase/functions/_shared/voice-capture-crm.ts"
+      ],
+      "updated_at": "2026-05-20T21:26:52.040355Z",
+      "builder_output_summary": "Implemented customer-detail live call capture with 10s idempotent chunks, stream sessions/chunks schema, voice-capture-stream start/chunk/finalize/cancel API, and CRM call receipt finalization.",
+      "verification_summary": "PASS: focused Bun/Deno checks, migrations:check, db lint, audit:edges, web typecheck/build, git diff --check, and full segment gates.",
+      "gate_report": "test-results/agent-gates/20260520T212613Z-B2.3-vc-3-live-call-capture.json"
     }
   ],
   "agents": [

@@ -171,6 +171,9 @@ export interface LocalVoiceCaptureCrmSyncResult {
   taskActivityId: string | null;
 }
 
+type VoiceCapturePrimaryActivityType = "note" | "call" | "meeting";
+type VoiceCaptureActivityLookupType = VoiceCapturePrimaryActivityType | "task";
+
 interface LocalCrmTarget {
   dealId: string | null;
   contactId: string | null;
@@ -783,8 +786,9 @@ async function findExistingVoiceCaptureActivityId(
   supabaseAdmin: SupabaseClient,
   workspaceId: string,
   target: LocalCrmTarget,
-  activityType: "note" | "task",
+  activityType: VoiceCaptureActivityLookupType,
   captureId: string,
+  activityKind: string = activityType,
 ): Promise<string | null> {
   const query = supabaseAdmin
     .from("crm_activities")
@@ -795,7 +799,7 @@ async function findExistingVoiceCaptureActivityId(
     .contains("metadata", {
       source: "voice_capture",
       voiceCaptureId: captureId,
-      activityKind: activityType,
+      activityKind,
     });
 
   const { data } = await (
@@ -1093,7 +1097,7 @@ async function resolveLocalTarget(
   );
 }
 
-async function ensureNoteActivity(
+async function ensurePrimaryActivity(
   supabaseAdmin: SupabaseClient,
   workspaceId: string,
   actorUserId: string,
@@ -1102,6 +1106,11 @@ async function ensureNoteActivity(
   target: LocalCrmTarget,
   transcript: string,
   extracted: VoiceCaptureExtractedDealData,
+  options: {
+    activityType: VoiceCapturePrimaryActivityType;
+    activityKind: string;
+    metadata: Record<string, unknown>;
+  },
 ): Promise<string | null> {
   const extractedSummary = buildCrmSummary(extracted);
   const voiceClusterKey = buildVoiceClusterKey(target, occurredAtIso);
@@ -1109,12 +1118,12 @@ async function ensureNoteActivity(
     .from("crm_activities")
     .select("id")
     .eq("workspace_id", workspaceId)
-    .eq("activity_type", "note")
+    .eq("activity_type", options.activityType)
     .is("deleted_at", null)
     .contains("metadata", {
       source: "voice_capture",
       voiceCaptureId: captureId,
-      activityKind: "note",
+      activityKind: options.activityKind,
     });
 
   const { data: existing } = await (
@@ -1137,32 +1146,35 @@ async function ensureNoteActivity(
 
   if (existing?.id) return existing.id;
 
-  const clusteredExistingId = await findVoiceClusterDuplicateActivityId(
-    supabaseAdmin,
-    workspaceId,
-    target,
-    "note",
-    occurredAtIso,
-    transcript,
-    buildVoiceClusterSummary(extracted),
-  );
-  if (clusteredExistingId) return clusteredExistingId;
+  if (options.activityType === "note" && options.activityKind === "note") {
+    const clusteredExistingId = await findVoiceClusterDuplicateActivityId(
+      supabaseAdmin,
+      workspaceId,
+      target,
+      "note",
+      occurredAtIso,
+      transcript,
+      buildVoiceClusterSummary(extracted),
+    );
+    if (clusteredExistingId) return clusteredExistingId;
+  }
 
   const subject = buildActivitySubject(target);
   const { data, error } = await supabaseAdmin
     .from("crm_activities")
     .insert({
       workspace_id: workspaceId,
-      activity_type: "note",
+      activity_type: options.activityType,
       body: buildVoiceCaptureNoteBody(transcript, extracted),
       occurred_at: occurredAtIso,
       // Exactly one of contact_id / deal_id / company_id (see crm_activities check constraint).
       ...subject,
       created_by: actorUserId,
       metadata: {
+        ...options.metadata,
         source: "voice_capture",
         voiceCaptureId: captureId,
-        activityKind: "note",
+        activityKind: options.activityKind,
         voiceClusterKey,
         voiceClusterDate: getClusterDateKey(occurredAtIso),
         voiceClusterTargetType: target.source,
@@ -1185,8 +1197,9 @@ async function ensureNoteActivity(
         supabaseAdmin,
         workspaceId,
         target,
-        "note",
+        options.activityType,
         captureId,
+        options.activityKind,
       );
     }
     throw error;
@@ -1320,6 +1333,10 @@ export async function writeVoiceCaptureToLocalCrm(
     occurredAtIso: string;
     transcript: string;
     extracted: VoiceCaptureExtractedDealData;
+    primaryActivityType?: VoiceCapturePrimaryActivityType;
+    primaryActivityKind?: string;
+    createFollowUpTask?: boolean;
+    primaryActivityMetadata?: Record<string, unknown>;
   },
 ): Promise<LocalVoiceCaptureCrmSyncResult> {
   const target = await resolveLocalTarget(
@@ -1343,8 +1360,12 @@ export async function writeVoiceCaptureToLocalCrm(
     };
   }
 
+  const primaryActivityType = input.primaryActivityType ?? "note";
+  const primaryActivityKind = input.primaryActivityKind ?? primaryActivityType;
+  const createFollowUpTask = input.createFollowUpTask ?? true;
+
   const [noteActivityId, taskActivityId] = await Promise.all([
-    ensureNoteActivity(
+    ensurePrimaryActivity(
       supabaseAdmin,
       input.workspaceId,
       input.actorUserId,
@@ -1353,16 +1374,23 @@ export async function writeVoiceCaptureToLocalCrm(
       target,
       input.transcript,
       input.extracted,
+      {
+        activityType: primaryActivityType,
+        activityKind: primaryActivityKind,
+        metadata: input.primaryActivityMetadata ?? {},
+      },
     ),
-    ensureTaskActivity(
-      supabaseAdmin,
-      input.workspaceId,
-      input.actorUserId,
-      input.captureId,
-      input.occurredAtIso,
-      target,
-      input.extracted,
-    ),
+    createFollowUpTask
+      ? ensureTaskActivity(
+        supabaseAdmin,
+        input.workspaceId,
+        input.actorUserId,
+        input.captureId,
+        input.occurredAtIso,
+        target,
+        input.extracted,
+      )
+      : Promise.resolve(null),
   ]);
 
   return {

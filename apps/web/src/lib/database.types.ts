@@ -40072,6 +40072,7 @@ export type Database = {
       }
       voice_captures: {
         Row: {
+          activity_type: Database["public"]["Enums"]["crm_activity_type"]
           audio_storage_path: string | null
           competitor_mentions: string[] | null
           created_at: string
@@ -40098,6 +40099,7 @@ export type Database = {
           workspace_id: string | null
         }
         Insert: {
+          activity_type?: Database["public"]["Enums"]["crm_activity_type"]
           audio_storage_path?: string | null
           competitor_mentions?: string[] | null
           created_at?: string
@@ -40124,6 +40126,7 @@ export type Database = {
           workspace_id?: string | null
         }
         Update: {
+          activity_type?: Database["public"]["Enums"]["crm_activity_type"]
           audio_storage_path?: string | null
           competitor_mentions?: string[] | null
           created_at?: string
@@ -40246,6 +40249,190 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voice_capture_stream_chunks: {
+        Row: {
+          audio_storage_path: string | null
+          byte_size: number | null
+          chunk_index: number
+          client_chunk_id: string | null
+          duration_ms: number | null
+          error: string | null
+          id: string
+          metadata: Json
+          mime_type: string | null
+          received_at: string
+          session_id: string
+          status: string
+          transcript: string | null
+          transcribed_at: string | null
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          audio_storage_path?: string | null
+          byte_size?: number | null
+          chunk_index: number
+          client_chunk_id?: string | null
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          metadata?: Json
+          mime_type?: string | null
+          received_at?: string
+          session_id: string
+          status?: string
+          transcript?: string | null
+          transcribed_at?: string | null
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          audio_storage_path?: string | null
+          byte_size?: number | null
+          chunk_index?: number
+          client_chunk_id?: string | null
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          metadata?: Json
+          mime_type?: string | null
+          received_at?: string
+          session_id?: string
+          status?: string
+          transcript?: string | null
+          transcribed_at?: string | null
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_capture_stream_chunks_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "voice_capture_stream_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voice_capture_stream_chunks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voice_capture_stream_sessions: {
+        Row: {
+          client_session_id: string
+          company_id: string | null
+          contact_id: string | null
+          created_at: string
+          crm_activity_id: string | null
+          deal_id: string | null
+          duration_seconds: number | null
+          expected_chunk_count: number | null
+          finalized_at: string | null
+          id: string
+          metadata: Json
+          started_at: string
+          status: string
+          stopped_at: string | null
+          sync_error: string | null
+          transcript: string | null
+          updated_at: string
+          user_id: string
+          voice_capture_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          client_session_id: string
+          company_id?: string | null
+          contact_id?: string | null
+          created_at?: string
+          crm_activity_id?: string | null
+          deal_id?: string | null
+          duration_seconds?: number | null
+          expected_chunk_count?: number | null
+          finalized_at?: string | null
+          id?: string
+          metadata?: Json
+          started_at?: string
+          status?: string
+          stopped_at?: string | null
+          sync_error?: string | null
+          transcript?: string | null
+          updated_at?: string
+          user_id: string
+          voice_capture_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          client_session_id?: string
+          company_id?: string | null
+          contact_id?: string | null
+          created_at?: string
+          crm_activity_id?: string | null
+          deal_id?: string | null
+          duration_seconds?: number | null
+          expected_chunk_count?: number | null
+          finalized_at?: string | null
+          id?: string
+          metadata?: Json
+          started_at?: string
+          status?: string
+          stopped_at?: string | null
+          sync_error?: string | null
+          transcript?: string | null
+          updated_at?: string
+          user_id?: string
+          voice_capture_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_capture_stream_sessions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voice_capture_stream_sessions_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voice_capture_stream_sessions_crm_activity_id_fkey"
+            columns: ["crm_activity_id"]
+            isOneToOne: false
+            referencedRelation: "crm_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voice_capture_stream_sessions_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voice_capture_stream_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voice_capture_stream_sessions_voice_capture_id_fkey"
+            columns: ["voice_capture_id"]
+            isOneToOne: false
+            referencedRelation: "voice_captures"
             referencedColumns: ["id"]
           },
         ]

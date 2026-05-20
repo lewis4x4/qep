@@ -1,5 +1,6 @@
 import { useParams, useNavigate, Navigate } from "react-router-dom";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
   PhoneCall,
@@ -11,8 +12,9 @@ import {
   Target,
   MapPin,
   ExternalLink,
+  Radio,
 } from "lucide-react";
-import { useCustomerDetail } from "../hooks/useCustomerDetail";
+import { customerDetailQueryKey, useCustomerDetail } from "../hooks/useCustomerDetail";
 import { EquipmentFleet } from "../components/EquipmentFleet";
 import { InteractionTimeline } from "../components/InteractionTimeline";
 import { CustomerDetailSkeleton } from "../components/CustomerDetailSkeleton";
@@ -20,6 +22,7 @@ import type { RepPipelineDeal } from "../lib/types";
 import { accountCommandUrl } from "@/features/qrm/lib/account-links";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { QuickLogSheet } from "../components/QuickLogSheet";
+import { LiveCallCapture } from "../components/LiveCallCapture";
 import { logSalesActivity } from "../lib/sales-api";
 import { useToast } from "@/hooks/use-toast";
 
@@ -108,7 +111,9 @@ export function CustomerDetailPage() {
   const { customer, equipment, deals, activities, quotes, isLoading } =
     useCustomerDetail(safeId);
   const [quickLogOpen, setQuickLogOpen] = useState(false);
+  const [liveCaptureOpen, setLiveCaptureOpen] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   if (!companyId) {
     return <Navigate to="/sales/customers" replace />;
@@ -281,6 +286,27 @@ export function CustomerDetailPage() {
             );
           })()}
         </div>
+
+        <div className="mt-3 rounded-[14px] border border-qep-orange/20 bg-qep-orange/[0.07] p-3">
+          <div className="flex items-start gap-3">
+            <div className="rounded-full bg-qep-orange/15 p-2 text-qep-orange">
+              <Radio className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-extrabold text-foreground">Live call capture</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                Record this customer call in 10-second chunks and save it as a QRM call receipt.
+              </p>
+              <button
+                type="button"
+                onClick={() => setLiveCaptureOpen(true)}
+                className="mt-2 rounded-lg bg-qep-orange px-3 py-1.5 text-xs font-bold text-white"
+              >
+                Start live capture
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Body */}
@@ -393,6 +419,35 @@ export function CustomerDetailPage() {
           <QuickLogSheet
             {...getCustomerQuickLogSubject(companyId)}
             onLogged={() => setQuickLogOpen(false)}
+          />
+        </SheetContent>
+      </Sheet>
+      <Sheet
+        open={liveCaptureOpen}
+        onOpenChange={(open) => {
+          if (open) setLiveCaptureOpen(true);
+        }}
+      >
+        <SheetContent side="bottom" className="max-h-[92vh] overflow-y-auto">
+          <LiveCallCapture
+            companyId={companyId}
+            companyName={selectedCustomer.company_name}
+            onCancel={() => setLiveCaptureOpen(false)}
+            onSaved={() => {
+              setLiveCaptureOpen(false);
+              toast({
+                title: "Live call saved",
+                description: "Transcript and QRM call receipt were attached to this customer.",
+              });
+              void queryClient.invalidateQueries({
+                queryKey: customerDetailQueryKey(companyId),
+                refetchType: "active",
+              });
+              void queryClient.invalidateQueries({
+                queryKey: ["sales", "customers"],
+                refetchType: "active",
+              });
+            }}
           />
         </SheetContent>
       </Sheet>
