@@ -21,6 +21,14 @@ import { sendResendEmail } from "../_shared/resend-email.ts";
 import { computeQuoteDocumentHash } from "../_shared/quote-document-hash.ts";
 import { quoteManagerApproval } from "../_shared/flow-workflows/quote-manager-approval.ts";
 import {
+  createR2GetUrl,
+  createR2PutUrl,
+  headR2Object,
+  readR2ObjectBytes,
+  readR2StorageConfig,
+  R2StorageConfigurationError,
+} from "../_shared/r2-storage.ts";
+import {
   assertPublicQuoteAcceptReady,
   assertPublicQuoteReadReady,
   assertQuoteCustomerContentReady,
@@ -31,6 +39,7 @@ import {
 import {
   allowedQuoteVersionScopesForConditions,
   buildQuoteVersionSnapshot,
+  diffQuotePdfVersionSnapshots,
   diffQuoteVersionScopes,
   evaluateQuoteApprovalConditions,
   isQuoteApprovalConditionType,
@@ -40,6 +49,7 @@ import {
   type QuoteApprovalConditionType,
   type QuoteApprovalPolicy,
   type QuoteApprovalRouteMode,
+  type QuotePdfVersionSnapshot,
   type QuoteVersionSnapshot,
 } from "../../../shared/qep-moonshot-contracts.ts";
 import {
@@ -202,6 +212,7 @@ const QUOTE_LINE_COST_VISIBILITY = new Set(["internal", "customer"]);
 const INTERNAL_COST_LINE_TYPES = new Set(["pdi", "good_faith"]);
 const FINANCE_SCENARIO_KINDS = new Set(["cash", "finance", "lease_fmv", "lease_fppo"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_QUOTE_PDF_BYTES = 25 * 1024 * 1024;
 
 const PROSPECT_CONVERSION_ALLOWED_KEYS = new Set([
   "original_customer_name",
@@ -1284,6 +1295,148 @@ function createAdminClient() {
   });
 }
 
+function normalizeSha256Hex(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return /^[a-f0-9]{64}$/.test(normalized) ? normalized : null;
+}
+
+function normalizePositiveInteger(value: unknown): number | null {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return Math.floor(numeric);
+}
+
+function normalizePdfFilename(value: unknown): string {
+  const raw = typeof value === "string" && value.trim() ? value.trim() : "quote.pdf";
+  const safe = raw.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 160);
+  if (!safe) return "quote.pdf";
+  return safe.endsWith(".pdf") ? safe : `${safe}.pdf`;
+}
+
+function isQuotePdfVersionSnapshot(value: unknown): value is QuotePdfVersionSnapshot {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return Array.isArray(record.lineItems)
+    && record.totals != null
+    && typeof record.totals === "object"
+    && !Array.isArray(record.totals)
+    && Array.isArray(record.financing)
+    && record.terms != null
+    && typeof record.terms === "object"
+    && !Array.isArray(record.terms);
+}
+
+function snapshotString(value: unknown, max = 500): string | null {
+  return lineString(value, max);
+}
+
+function snapshotNumber(value: unknown): number {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) ? Math.round(numeric * 100) / 100 : 0;
+}
+
+function snapshotNullableNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.round(numeric * 100) / 100 : null;
+}
+
+function sanitizeQuotePdfVersionSnapshot(value: unknown): QuotePdfVersionSnapshot | null {
+  if (!isQuotePdfVersionSnapshot(value)) return null;
+  const record = value as unknown as Record<string, unknown>;
+  if (JSON.stringify(record).length > 200_000) return null;
+  const totals = record.totals as Record<string, unknown>;
+  const terms = record.terms as Record<string, unknown>;
+  const lineItems = (record.lineItems as unknown[]).slice(0, 200).flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const row = item as Record<string, unknown>;
+    const diffKey = snapshotString(row.diffKey, 240);
+    if (!diffKey) return [];
+    const lineTypeRaw = snapshotString(row.lineType, 40) ?? "custom";
+    return [{
+      diffKey,
+      lineType: QUOTE_PACKAGE_LINE_TYPES.has(lineTypeRaw) ? lineTypeRaw : "custom",
+      description: snapshotString(row.description, 500) ?? "Line item",
+      quantity: snapshotNumber(row.quantity),
+      unitPrice: snapshotNumber(row.unitPrice),
+      extendedPrice: snapshotNumber(row.extendedPrice),
+      displayAmount: snapshotNumber(row.displayAmount),
+      tone: row.tone === "credit" ? "credit" : "charge",
+    }];
+  });
+  if (lineItems.length === 0) return null;
+
+  return {
+    quotePackageId: snapshotString(record.quotePackageId, 80),
+    quotePackageVersionId: snapshotString(record.quotePackageVersionId, 80),
+    quoteNumber: snapshotString(record.quoteNumber, 120),
+    customerName: snapshotString(record.customerName, 240),
+    preparedDate: snapshotString(record.preparedDate, 80),
+    lineItems,
+    totals: {
+      equipmentTotal: snapshotNumber(totals.equipmentTotal),
+      attachmentTotal: snapshotNumber(totals.attachmentTotal),
+      pricingLineTotal: snapshotNumber(totals.pricingLineTotal),
+      subtotal: snapshotNumber(totals.subtotal),
+      discountTotal: snapshotNumber(totals.discountTotal),
+      tradeAllowance: snapshotNumber(totals.tradeAllowance),
+      taxTotal: snapshotNumber(totals.taxTotal),
+      customerTotal: snapshotNumber(totals.customerTotal),
+      cashDown: snapshotNumber(totals.cashDown),
+      amountFinanced: snapshotNumber(totals.amountFinanced),
+      netTotal: snapshotNumber(totals.netTotal),
+    },
+    financing: (record.financing as unknown[]).slice(0, 12).flatMap((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const row = item as Record<string, unknown>;
+      return [{
+        type: snapshotString(row.type, 40) ?? "cash",
+        kind: snapshotString(row.kind, 40),
+        label: snapshotString(row.label, 160) ?? "Payment option",
+        termMonths: snapshotNullableNumber(row.termMonths),
+        rate: snapshotNullableNumber(row.rate),
+        monthlyPayment: snapshotNullableNumber(row.monthlyPayment),
+        totalCost: snapshotNullableNumber(row.totalCost),
+        lender: snapshotString(row.lender, 160),
+        downPayment: snapshotNullableNumber(row.downPayment),
+        residualAmount: snapshotNullableNumber(row.residualAmount),
+        isDefault: row.isDefault === true,
+      }];
+    }),
+    terms: {
+      validUntil: snapshotString(terms.validUntil, 80),
+      deliveryEta: snapshotString(terms.deliveryEta, 240),
+      depositRequiredAmount: snapshotNullableNumber(terms.depositRequiredAmount),
+      specialTerms: snapshotString(terms.specialTerms, 4000),
+      taxLabel: snapshotString(terms.taxLabel, 160),
+      taxDetail: snapshotString(terms.taxDetail, 500),
+    },
+    narrativeText: snapshotString(record.narrativeText, 4000),
+  } as QuotePdfVersionSnapshot;
+}
+
+function bytesToHex(bytes: ArrayBuffer): string {
+  return Array.from(new Uint8Array(bytes)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function sha256HexBytes(bytes: Uint8Array): Promise<string> {
+  const body = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  return bytesToHex(await crypto.subtle.digest("SHA-256", body));
+}
+
+function buildLatestQuotePdfResolverUrl(token: string | null, requestOrigin: string | null): string | null {
+  if (!token) return null;
+  const functionBase = SUPABASE_URL
+    ? `${SUPABASE_URL}/functions/v1/quote-builder-v2`
+    : `${requestOrigin ?? "https://qep.blackrockai.co"}/functions/v1/quote-builder-v2`;
+  return `${functionBase}/public/latest-quote-pdf?token=${encodeURIComponent(token)}`;
+}
+
+function r2ConfigurationResponse(origin: string | null): Response {
+  return safeJsonError("R2 quote PDF storage is not configured. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET_QUOTE_PDFS.", 503, origin);
+}
+
 function normalizeAvailabilityUrgency(value: unknown): "low" | "normal" | "rush" | "customer_waiting" {
   return value === "low" || value === "rush" || value === "customer_waiting" ? value : "normal";
 }
@@ -1821,10 +1974,86 @@ async function handlePublicDealRoomRead(url: URL, origin: string | null): Promis
     branch = branchRow ?? null;
   }
 
+  const { data: latestPdfArtifact } = await admin
+    .from("quote_document_artifacts")
+    .select("version_number")
+    .eq("quote_package_id", String(quote.id))
+    .eq("artifact_type", "customer_quote_pdf")
+    .eq("storage_provider", "r2")
+    .eq("status", "generated")
+    .not("customer_visible_at", "is", null)
+    .order("version_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   return safeJsonOk({
-    quote: buildPublicDealRoomPayload(quote as Record<string, unknown>),
+    quote: {
+      ...buildPublicDealRoomPayload(quote as Record<string, unknown>),
+      latest_pdf_url: buildLatestQuotePdfResolverUrl(token, origin),
+      latest_pdf_version_number: latestPdfArtifact?.version_number ?? null,
+    },
     branch,
   }, origin);
+}
+
+async function handlePublicLatestQuotePdfRead(url: URL, origin: string | null): Promise<Response> {
+  const token = url.searchParams.get("token")?.trim();
+  if (!token) return safeJsonError("token required", 400, origin);
+  if (token.length < 16 || token.length > 128) return safeJsonError("invalid token", 400, origin);
+
+  const admin = createAdminClient();
+  const { data: quote, error: quoteErr } = await admin
+    .from("quote_packages")
+    .select("id, status, expires_at, workspace_id, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
+    .eq("share_token", token)
+    .maybeSingle();
+  if (quoteErr) return safeJsonError("Failed to validate token", 500, origin);
+  if (!quote) return safeJsonError("Quote not found", 404, origin);
+
+  const readGate = assertPublicQuoteReadReady(quote as Record<string, unknown>);
+  if (!readGate.ok) {
+    return safeJsonErrorWithFields(readGate.message, readGate.status, origin, { blockers: readGate.blockers ?? [] });
+  }
+  const availabilityGate = await assertQuoteAvailabilitySendable({
+    admin,
+    workspaceId: typeof quote.workspace_id === "string" ? quote.workspace_id : "default",
+    quotePackageId: String(quote.id),
+  });
+  if (!availabilityGate.ok) {
+    return safeJsonErrorWithFields(availabilityGate.message, 403, origin, { blockers: availabilityGate.blockers });
+  }
+
+  const { data: artifact, error: artifactErr } = await admin
+    .from("quote_document_artifacts")
+    .select("id, storage_key, version_number")
+    .eq("quote_package_id", String(quote.id))
+    .eq("artifact_type", "customer_quote_pdf")
+    .eq("storage_provider", "r2")
+    .eq("status", "generated")
+    .not("customer_visible_at", "is", null)
+    .order("version_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (artifactErr) return safeJsonError("Failed to resolve latest PDF", 500, origin);
+  if (!artifact?.storage_key || typeof artifact.storage_key !== "string") {
+    return safeJsonError("No sent PDF version is available yet.", 404, origin);
+  }
+
+  try {
+    const signed = await createR2GetUrl(String(artifact.storage_key));
+    return new Response(null, {
+      status: 302,
+      headers: {
+        ...safeCorsHeaders(origin),
+        Location: signed.url,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error) {
+    if (error instanceof R2StorageConfigurationError) return r2ConfigurationResponse(origin);
+    console.error("latest quote PDF R2 signing error:", error);
+    return safeJsonError("Failed to resolve latest PDF", 502, origin);
+  }
 }
 
 // Public trade-estimate handler. Token-gated like the rest of the public
@@ -3738,6 +3967,9 @@ Deno.serve(async (req) => {
     if (req.method === "GET" && publicAction === "public-social-proof") {
       return await handlePublicSocialProof(publicUrl, origin);
     }
+    if (req.method === "GET" && publicAction === "latest-quote-pdf") {
+      return await handlePublicLatestQuotePdfRead(publicUrl, origin);
+    }
   } catch (err) {
     console.error("public-route dispatch error:", err);
     return safeJsonError("Failed to load public quote", 500, origin);
@@ -3812,7 +4044,6 @@ Deno.serve(async (req) => {
 
     const url = new URL(req.url);
     const action = url.pathname.split("/").pop() || "";
-    const functionBaseUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/quote-builder-v2`;
 
     async function tryAutoSendApprovedQuote(input: { quotePackageId: string }): Promise<{
       attempted: boolean;
@@ -3833,36 +4064,11 @@ Deno.serve(async (req) => {
         return { attempted: false, sent: false, reason: "post_approval_action_return_to_rep" };
       }
 
-      try {
-        const sendResp = await fetch(`${functionBaseUrl}/send-package`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-            apikey: Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-          },
-          body: JSON.stringify({ quote_package_id: input.quotePackageId }),
-        });
-        const payload = await sendResp.json().catch(() => ({}));
-        if (!sendResp.ok) {
-          return {
-            attempted: true,
-            sent: false,
-            error: typeof payload?.error === "string" ? payload.error : `HTTP ${sendResp.status}`,
-          };
-        }
-        return {
-          attempted: true,
-          sent: payload?.sent === true,
-          reason: payload?.sent === true ? "auto_send_succeeded" : "auto_send_not_sent",
-        };
-      } catch (error) {
-        return {
-          attempted: true,
-          sent: false,
-          error: error instanceof Error ? error.message : "auto-send request failed",
-        };
-      }
+      return {
+        attempted: false,
+        sent: false,
+        reason: "auto_send_requires_versioned_pdf_generation",
+      };
     }
 
     async function getPortalReviewContext(dealId: string) {
@@ -4005,6 +4211,106 @@ Deno.serve(async (req) => {
         });
 
         return safeJsonOk({ items }, origin);
+      }
+
+      if (action === "document-versions") {
+        if (!canRevise) return safeJsonError("Quote PDF versions require rep, manager, or owner role", 403, origin);
+        const quotePackageId = url.searchParams.get("quote_package_id");
+        if (!quotePackageId || !UUID_RE.test(quotePackageId)) return safeJsonError("quote_package_id required", 400, origin);
+        const { data: accessibleQuote, error: accessibleErr } = await supabase
+          .from("quote_packages")
+          .select("id")
+          .eq("id", quotePackageId)
+          .maybeSingle();
+        if (accessibleErr) return safeJsonError(accessibleErr.message, 500, origin);
+        if (!accessibleQuote) return safeJsonError("Quote package not found or not accessible", 404, origin);
+
+        const admin = createAdminClient();
+        const { data: artifacts, error: artifactErr } = await admin
+          .from("quote_document_artifacts")
+          .select("id, version_number, quote_package_version_id, generated_at, customer_visible_at, sent_delivery_event_id, size_bytes, content_sha256, proposal_snapshot_json")
+          .eq("quote_package_id", quotePackageId)
+          .eq("artifact_type", "customer_quote_pdf")
+          .eq("storage_provider", "r2")
+          .eq("status", "generated")
+          .not("customer_visible_at", "is", null)
+          .order("version_number", { ascending: false });
+        if (artifactErr) return safeJsonError(artifactErr.message, 500, origin);
+
+        const deliveryIds = (artifacts ?? [])
+          .flatMap((row: Record<string, unknown>) => typeof row.sent_delivery_event_id === "string" ? [row.sent_delivery_event_id] : []);
+        const { data: deliveries, error: deliveryErr } = deliveryIds.length > 0
+          ? await admin
+              .from("quote_delivery_events")
+              .select("id, recipient, created_at")
+              .in("id", deliveryIds)
+          : { data: [], error: null };
+        if (deliveryErr) return safeJsonError(deliveryErr.message, 500, origin);
+        const deliveriesById = new Map((deliveries ?? []).map((row: Record<string, unknown>) => [String(row.id), row]));
+
+        return safeJsonOk({
+          versions: (artifacts ?? []).map((row: Record<string, unknown>) => {
+            const delivery = typeof row.sent_delivery_event_id === "string" ? deliveriesById.get(row.sent_delivery_event_id) : null;
+            const snapshot = isQuotePdfVersionSnapshot(row.proposal_snapshot_json) ? row.proposal_snapshot_json : null;
+            return {
+              artifact_id: row.id,
+              version_number: row.version_number,
+              quote_package_version_id: row.quote_package_version_id ?? null,
+              generated_at: row.generated_at ?? null,
+              customer_visible_at: row.customer_visible_at ?? null,
+              sent_delivery_event_id: row.sent_delivery_event_id ?? null,
+              recipient: delivery?.recipient ?? null,
+              size_bytes: row.size_bytes ?? null,
+              content_sha256: row.content_sha256 ?? null,
+              totals_summary: snapshot?.totals ?? null,
+            };
+          }),
+        }, origin);
+      }
+
+      if (action === "diff" && url.pathname.includes("/document-versions/")) {
+        if (!canRevise) return safeJsonError("Quote PDF version diffs require rep, manager, or owner role", 403, origin);
+        const quotePackageId = url.searchParams.get("quote_package_id");
+        const fromVersion = Number(url.searchParams.get("from"));
+        const toVersion = Number(url.searchParams.get("to"));
+        if (!quotePackageId || !UUID_RE.test(quotePackageId)) return safeJsonError("quote_package_id required", 400, origin);
+        if (!Number.isInteger(fromVersion) || !Number.isInteger(toVersion) || fromVersion <= 0 || toVersion <= 0) {
+          return safeJsonError("from and to version numbers are required", 400, origin);
+        }
+        const { data: accessibleQuote, error: accessibleErr } = await supabase
+          .from("quote_packages")
+          .select("id")
+          .eq("id", quotePackageId)
+          .maybeSingle();
+        if (accessibleErr) return safeJsonError(accessibleErr.message, 500, origin);
+        if (!accessibleQuote) return safeJsonError("Quote package not found or not accessible", 404, origin);
+
+        const admin = createAdminClient();
+        const { data: artifacts, error: artifactErr } = await admin
+          .from("quote_document_artifacts")
+          .select("version_number, proposal_snapshot_json, customer_visible_at")
+          .eq("quote_package_id", quotePackageId)
+          .eq("artifact_type", "customer_quote_pdf")
+          .eq("storage_provider", "r2")
+          .eq("status", "generated")
+          .in("version_number", [fromVersion, toVersion]);
+        if (artifactErr) return safeJsonError(artifactErr.message, 500, origin);
+        const fromArtifact = (artifacts ?? []).find((row: Record<string, unknown>) => Number(row.version_number) === fromVersion) as Record<string, unknown> | undefined;
+        const toArtifact = (artifacts ?? []).find((row: Record<string, unknown>) => Number(row.version_number) === toVersion) as Record<string, unknown> | undefined;
+        if (!fromArtifact || !toArtifact || !fromArtifact.customer_visible_at || !toArtifact.customer_visible_at) {
+          return safeJsonError("Both PDF versions must be customer-visible sent versions", 404, origin);
+        }
+        if (!isQuotePdfVersionSnapshot(fromArtifact.proposal_snapshot_json) || !isQuotePdfVersionSnapshot(toArtifact.proposal_snapshot_json)) {
+          return safeJsonError("PDF version snapshots are unavailable for diffing", 409, origin);
+        }
+
+        return safeJsonOk({
+          diff: diffQuotePdfVersionSnapshots(
+            fromArtifact.proposal_snapshot_json,
+            toArtifact.proposal_snapshot_json,
+            { fromVersionNumber: fromVersion, toVersionNumber: toVersion },
+          ),
+        }, origin);
       }
 
       if (action === "portal-revision") {
@@ -4647,6 +4953,170 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
+
+    if (action === "begin-upload" && url.pathname.includes("/document-artifacts/")) {
+      if (!canRevise) return safeJsonError("Quote PDF upload requires rep, manager, or owner role", 403, origin);
+      const quotePackageId = lineString(body.quote_package_id, 80);
+      const contentType = lineString(body.content_type, 120);
+      const sizeBytes = normalizePositiveInteger(body.size_bytes);
+      const contentSha256 = normalizeSha256Hex(body.content_sha256);
+      const proposalSnapshot = sanitizeQuotePdfVersionSnapshot(body.proposal_snapshot);
+      if (!quotePackageId || !UUID_RE.test(quotePackageId)) return safeJsonError("quote_package_id required", 400, origin);
+      if (contentType !== "application/pdf") return safeJsonError("content_type must be application/pdf", 400, origin);
+      if (sizeBytes == null) return safeJsonError("size_bytes must be positive", 400, origin);
+      if (sizeBytes > MAX_QUOTE_PDF_BYTES) return safeJsonError("PDF exceeds the 25 MB upload limit", 413, origin);
+      if (!contentSha256) return safeJsonError("content_sha256 must be lowercase sha256 hex", 400, origin);
+      if (!proposalSnapshot) return safeJsonError("proposal_snapshot must be a customer-safe PDF version snapshot", 400, origin);
+      if (proposalSnapshot.quotePackageId && proposalSnapshot.quotePackageId !== quotePackageId) {
+        return safeJsonError("proposal_snapshot quotePackageId does not match quote_package_id", 400, origin);
+      }
+
+      const { data: quote, error: quoteErr } = await supabase
+        .from("quote_packages")
+        .select("id, workspace_id, status")
+        .eq("id", quotePackageId)
+        .maybeSingle();
+      if (quoteErr) return safeJsonError(quoteErr.message, 500, origin);
+      if (!quote) return safeJsonError("Quote package not found or not accessible", 404, origin);
+      const status = String(quote.status ?? "draft");
+      if (["draft", "pending_approval", "changes_requested", "rejected"].includes(status)) {
+        return safeJsonError(`Cannot begin customer PDF upload while quote status is ${status}.`, 409, origin);
+      }
+
+      let r2Config;
+      try {
+        r2Config = readR2StorageConfig();
+      } catch (error) {
+        if (error instanceof R2StorageConfigurationError) return r2ConfigurationResponse(origin);
+        throw error;
+      }
+
+      const admin = createAdminClient();
+      const latestVersion = await getLatestQuotePackageVersion({ admin, quotePackageId });
+      if (!latestVersion) return safeJsonError("Quote version snapshot missing. Save the quote before generating a send PDF.", 409, origin);
+      const uploadExpiresAt = new Date(Date.now() + r2Config.uploadUrlTtlSeconds * 1000).toISOString();
+      const { data: begun, error: beginErr } = await admin.rpc("quote_begin_customer_pdf_version", {
+        p_workspace_id: typeof quote.workspace_id === "string" ? quote.workspace_id : userWorkspaceId,
+        p_quote_package_id: quotePackageId,
+        p_quote_package_version_id: latestVersion.id,
+        p_generated_by: user.id,
+        p_filename: normalizePdfFilename(body.filename),
+        p_content_type: contentType,
+        p_size_bytes: sizeBytes,
+        p_content_sha256: contentSha256,
+        p_proposal_snapshot_json: proposalSnapshot,
+        p_storage_bucket: r2Config.bucket,
+        p_upload_expires_at: uploadExpiresAt,
+      });
+      if (beginErr) return safeJsonError(beginErr.message, 500, origin);
+      const row = Array.isArray(begun) ? begun[0] : begun;
+      if (!row?.artifact_id || !row.storage_key) return safeJsonError("Failed to allocate PDF artifact version", 500, origin);
+      const signed = await createR2PutUrl(String(row.storage_key), r2Config);
+      return safeJsonOk({
+        artifact_id: row.artifact_id,
+        version_number: row.version_number,
+        storage_bucket: row.storage_bucket,
+        storage_key: row.storage_key,
+        upload_url: signed.url,
+        upload_expires_at: row.upload_expires_at ?? signed.expiresAt,
+      }, origin, 201);
+    }
+
+    if (action === "complete-upload" && url.pathname.includes("/document-artifacts/")) {
+      if (!canRevise) return safeJsonError("Quote PDF upload requires rep, manager, or owner role", 403, origin);
+      const artifactId = lineString(body.artifact_id, 80);
+      const sizeBytes = normalizePositiveInteger(body.size_bytes);
+      const contentSha256 = normalizeSha256Hex(body.content_sha256);
+      if (!artifactId || !UUID_RE.test(artifactId)) return safeJsonError("artifact_id required", 400, origin);
+      if (sizeBytes == null) return safeJsonError("size_bytes must be positive", 400, origin);
+      if (sizeBytes > MAX_QUOTE_PDF_BYTES) return safeJsonError("PDF exceeds the 25 MB upload limit", 413, origin);
+      if (!contentSha256) return safeJsonError("content_sha256 must be lowercase sha256 hex", 400, origin);
+
+      let r2Config;
+      try {
+        r2Config = readR2StorageConfig();
+      } catch (error) {
+        if (error instanceof R2StorageConfigurationError) return r2ConfigurationResponse(origin);
+        throw error;
+      }
+
+      const admin = createAdminClient();
+      const { data: artifact, error: artifactErr } = await admin
+        .from("quote_document_artifacts")
+        .select("id, workspace_id, quote_package_id, status, storage_provider, storage_key, upload_expires_at, size_bytes, content_sha256, version_number")
+        .eq("id", artifactId)
+        .maybeSingle();
+      if (artifactErr) return safeJsonError(artifactErr.message, 500, origin);
+      if (!artifact) return safeJsonError("PDF artifact not found", 404, origin);
+      const { data: accessibleQuote, error: accessibleErr } = await supabase
+        .from("quote_packages")
+        .select("id")
+        .eq("id", String(artifact.quote_package_id))
+        .maybeSingle();
+      if (accessibleErr) return safeJsonError(accessibleErr.message, 500, origin);
+      if (!accessibleQuote) return safeJsonError("Quote package not found or not accessible", 404, origin);
+      if (artifact.status !== "pending" || artifact.storage_provider !== "r2" || typeof artifact.storage_key !== "string") {
+        return safeJsonError("PDF artifact is not a pending R2 upload", 409, origin);
+      }
+      if (artifact.upload_expires_at && Date.parse(String(artifact.upload_expires_at)) <= Date.now()) {
+        return safeJsonError("PDF upload intent expired. Regenerate the send PDF and try again.", 409, origin);
+      }
+      if (Number(artifact.size_bytes ?? 0) !== sizeBytes || String(artifact.content_sha256 ?? "").toLowerCase() !== contentSha256) {
+        return safeJsonError("Uploaded PDF metadata does not match begin-upload intent", 409, origin);
+      }
+
+      const head = await headR2Object(String(artifact.storage_key), r2Config);
+      if (!head.ok) return safeJsonError(head.error ?? "Uploaded PDF object was not found in R2", 409, origin);
+      if (head.contentLength != null && head.contentLength !== sizeBytes) {
+        return safeJsonError("Uploaded PDF size does not match begin-upload intent", 409, origin);
+      }
+      if (head.contentType && !head.contentType.toLowerCase().includes("application/pdf")) {
+        return safeJsonError("Uploaded object content type is not application/pdf", 409, origin);
+      }
+      let objectBytes: Uint8Array;
+      try {
+        objectBytes = await readR2ObjectBytes(String(artifact.storage_key), r2Config);
+      } catch (error) {
+        console.warn("quote PDF R2 readback failed:", error);
+        return safeJsonError("Uploaded PDF object could not be verified in R2", 409, origin);
+      }
+      if (objectBytes.byteLength !== sizeBytes) {
+        return safeJsonError("Uploaded PDF size does not match begin-upload intent", 409, origin);
+      }
+      const actualSha256 = await sha256HexBytes(objectBytes);
+      if (actualSha256 !== contentSha256) {
+        return safeJsonError("Uploaded PDF checksum does not match begin-upload intent", 409, origin);
+      }
+
+      const generatedAt = new Date().toISOString();
+      const { data: updated, error: updateErr } = await admin
+        .from("quote_document_artifacts")
+        .update({
+          status: "generated",
+          generated_at: generatedAt,
+          size_bytes: sizeBytes,
+          content_sha256: contentSha256,
+          metadata: {
+            completed_at: generatedAt,
+            r2_head_status: head.status,
+            r2_content_type: head.contentType,
+            r2_etag: head.etag,
+          },
+        })
+        .eq("id", artifactId)
+        .eq("status", "pending")
+        .select("id, version_number, generated_at, size_bytes, content_sha256")
+        .maybeSingle();
+      if (updateErr) return safeJsonError(updateErr.message, 500, origin);
+      if (!updated) return safeJsonError("PDF artifact could not be finalized", 409, origin);
+      return safeJsonOk({
+        artifact_id: updated.id,
+        version_number: updated.version_number,
+        generated_at: updated.generated_at,
+        size_bytes: updated.size_bytes,
+        content_sha256: updated.content_sha256,
+      }, origin);
+    }
 
     // ── POST /availability/request: durable equipment sourcing workflow ─
     if (action === "request" && url.pathname.includes("/availability/")) {
@@ -7062,23 +7532,23 @@ Deno.serve(async (req) => {
         admin,
         quotePackageId: String(pkg.id),
       });
+      const activeQuoteVersion = await getLatestQuotePackageVersion({
+        admin,
+        quotePackageId: String(pkg.id),
+      });
+      if (!activeQuoteVersion) {
+        return safeJsonError("Quote version snapshot missing. Save the quote before sending it.", 409, origin);
+      }
       if (quoteStatus === "approved_with_conditions") {
         if (!latestCase) {
           return safeJsonError("Conditional approval metadata is missing. Re-submit the quote for approval.", 409, origin);
-        }
-        const latestVersion = await getLatestQuotePackageVersion({
-          admin,
-          quotePackageId: String(pkg.id),
-        });
-        if (!latestVersion) {
-          return safeJsonError("Quote version snapshot missing for conditional approval.", 409, origin);
         }
         const conditions = await getQuoteApprovalConditions({
           admin,
           approvalCaseId: String(latestCase.id),
         });
         const evaluationResult = evaluateQuoteApprovalConditions({
-          snapshot: latestVersion.snapshot,
+          snapshot: activeQuoteVersion.snapshot,
           conditions,
           decidedAt: typeof latestCase.decided_at === "string" ? latestCase.decided_at : null,
           now: new Date().toISOString(),
@@ -7102,6 +7572,50 @@ Deno.serve(async (req) => {
       });
       if (!availabilityGate.ok) {
         return safeJsonErrorWithFields(availabilityGate.message, 409, origin, { blockers: availabilityGate.blockers });
+      }
+
+      const workspaceIdForSend = typeof pkg.workspace_id === "string" ? pkg.workspace_id : userWorkspaceId;
+      const documentArtifactId = typeof body.document_artifact_id === "string" && UUID_RE.test(body.document_artifact_id)
+        ? body.document_artifact_id
+        : null;
+      if (!documentArtifactId) {
+        return safeJsonError("Generate a versioned PDF before sending.", 409, origin);
+      }
+      const { data: artifactRow, error: artifactErr } = await admin
+        .from("quote_document_artifacts")
+        .select("id, workspace_id, quote_package_id, quote_package_version_id, artifact_type, storage_provider, status, version_number, proposal_snapshot_json, customer_visible_at, content_sha256, size_bytes, storage_key")
+        .eq("id", documentArtifactId)
+        .eq("quote_package_id", body.quote_package_id)
+        .eq("workspace_id", workspaceIdForSend)
+        .maybeSingle();
+      if (artifactErr) return safeJsonError("Failed to validate generated PDF artifact", 500, origin);
+      if (!artifactRow) return safeJsonError("Generate a versioned PDF before sending.", 409, origin);
+      if (artifactRow.quote_package_version_id !== activeQuoteVersion.id) {
+        return safeJsonError("Quote changed after PDF generation. Regenerate the send PDF and try again.", 409, origin);
+      }
+      if (
+        artifactRow.artifact_type !== "customer_quote_pdf"
+        || artifactRow.storage_provider !== "r2"
+        || artifactRow.status !== "generated"
+        || artifactRow.version_number == null
+        || !artifactRow.proposal_snapshot_json
+        || artifactRow.customer_visible_at != null
+        || !artifactRow.storage_key
+      ) {
+        return safeJsonError("Generated PDF artifact is not a fresh immutable R2 customer PDF. Regenerate the send PDF and try again.", 409, origin);
+      }
+      const { data: newerVisibleArtifact, error: newerVisibleErr } = await admin
+        .from("quote_document_artifacts")
+        .select("id")
+        .eq("quote_package_id", body.quote_package_id)
+        .eq("artifact_type", "customer_quote_pdf")
+        .not("customer_visible_at", "is", null)
+        .gt("version_number", Number(artifactRow.version_number))
+        .limit(1)
+        .maybeSingle();
+      if (newerVisibleErr) return safeJsonError("Failed to validate PDF version ordering", 500, origin);
+      if (newerVisibleArtifact) {
+        return safeJsonError("A newer PDF version has already been sent. Regenerate the send PDF and try again.", 409, origin);
       }
 
       let shareToken = typeof pkg.share_token === "string" && pkg.share_token.length >= 16 ? pkg.share_token : null;
@@ -7165,33 +7679,18 @@ Deno.serve(async (req) => {
       }
 
       const sentAt = new Date().toISOString();
-      let documentArtifactId = typeof body.document_artifact_id === "string" && UUID_RE.test(body.document_artifact_id)
-        ? body.document_artifact_id
-        : null;
       const followUpAt = typeof body.follow_up_at === "string" && body.follow_up_at.trim()
         ? body.follow_up_at.trim()
         : null;
-      if (documentArtifactId) {
-        const { data: artifactRow, error: artifactErr } = await admin
-          .from("quote_document_artifacts")
-          .select("id")
-          .eq("id", documentArtifactId)
-          .eq("quote_package_id", body.quote_package_id)
-          .eq("workspace_id", typeof pkg.workspace_id === "string" ? pkg.workspace_id : userWorkspaceId)
-          .maybeSingle();
-        if (artifactErr) {
-          console.warn("quote document artifact validation failed:", artifactErr);
-        }
-        documentArtifactId = artifactRow?.id ?? null;
-      }
 
-      const workspaceIdForSend = typeof pkg.workspace_id === "string" ? pkg.workspace_id : userWorkspaceId;
       const deliveryMetadata = {
         sent_at: sentAt,
         share_token: shareToken,
         public_url: publicUrl,
         route: "quote-builder-v2/send-package",
         provider_mode: "resend_email_fallback",
+        pdf_version_number: artifactRow.version_number,
+        document_artifact_id: documentArtifactId,
       };
       const { data: commitDeliveryId, error: commitErr } = await admin.rpc("quote_send_package_commit", {
         p_workspace_id: workspaceIdForSend,
@@ -7237,6 +7736,8 @@ Deno.serve(async (req) => {
         share_token: shareToken,
         public_url: publicUrl,
         delivery_event_id: deliveryEventId,
+        pdf_version_number: artifactRow.version_number,
+        document_artifact_id: documentArtifactId,
       }, origin);
     }
 

@@ -3,7 +3,7 @@
  * Mechanical move from `QuoteBuilderV2Page.tsx`.
  */
 
-import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type { UseMutationResult } from "@tanstack/react-query";
 
 import type { QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
@@ -13,12 +13,14 @@ import {
 } from "../lib/quote-workspace";
 import {
   logQuoteDeliveryEvent,
+  persistImmutableQuotePdfVersion,
   persistQuoteDocumentArtifact,
   sendQuotePackage,
   type QuotePackageSaveResponse,
 } from "../lib/quote-api";
 import type { QuotePDFData } from "../components/QuotePDFDocument";
-import type { QuotePdfGenerationResult } from "./useQuotePDF";
+import { buildQuotePdfVersionSnapshot } from "../lib/quote-pdf-version-snapshot";
+import type { QuotePdfBlobResult, QuotePdfGenerationResult } from "./useQuotePDF";
 import type { DocumentArtifactState } from "./useQuoteBuilderDocumentInvalidation";
 
 export interface UseQuoteBuilderDocumentActionsInput {
@@ -26,6 +28,7 @@ export interface UseQuoteBuilderDocumentActionsInput {
   quoteMediaSnapshotLoading: boolean;
   quotePdfData: QuotePDFData;
   downloadPDF: (data: QuotePDFData) => Promise<QuotePdfGenerationResult>;
+  generatePdfBlob: (data: QuotePDFData) => Promise<QuotePdfBlobResult>;
   activeQuotePackageId: string | null;
   draft: QuoteWorkspaceDraft;
   setDraft: Dispatch<SetStateAction<QuoteWorkspaceDraft>>;
@@ -52,10 +55,20 @@ export interface UseQuoteBuilderDocumentActionsInput {
   whyThisMachineRequired: boolean;
 }
 
+export interface QuoteSendActionResult {
+  ok: boolean;
+  channel: QuoteSendActionChannel;
+  toEmail?: string | null;
+  versionNumber?: number | null;
+  documentArtifactId?: string | null;
+  message?: string | null;
+  error?: string | null;
+}
+
 export interface UseQuoteBuilderDocumentActionsResult {
   handleDownloadPdf: () => void;
   handleGenerateFallbackDocument: () => Promise<void>;
-  handleQuoteSendAction: (channel: QuoteSendActionChannel) => Promise<void>;
+  handleQuoteSendAction: (channel: QuoteSendActionChannel) => Promise<QuoteSendActionResult>;
 }
 
 export function useQuoteBuilderDocumentActions({
@@ -63,6 +76,7 @@ export function useQuoteBuilderDocumentActions({
   quoteMediaSnapshotLoading,
   quotePdfData,
   downloadPDF,
+  generatePdfBlob,
   activeQuotePackageId,
   draft,
   setDraft,
@@ -85,11 +99,15 @@ export function useQuoteBuilderDocumentActions({
   taxResolved,
   whyThisMachineRequired,
 }: UseQuoteBuilderDocumentActionsInput): UseQuoteBuilderDocumentActionsResult {
+  const latestCustomerFacingSaveResponseRef = useRef<QuotePackageSaveResponse | null>(null);
+
   const ensureCleanApprovalForCustomerFacing = useCallback(async (): Promise<string | null> => {
     if (!packetReadinessDraftReady) return "Save the quote package before customer-facing actions.";
     if (draftSaveSignature !== lastAutoSaveSignatureRef.current) {
-      await saveMutation.mutateAsync();
+      latestCustomerFacingSaveResponseRef.current = await saveMutation.mutateAsync();
       lastAutoSaveSignatureRef.current = draftSaveSignature;
+    } else {
+      latestCustomerFacingSaveResponseRef.current = saveMutation.data ?? latestCustomerFacingSaveResponseRef.current;
     }
     const refreshed = await refetchActiveApprovalCase();
     if (refreshed.error) {
@@ -106,6 +124,7 @@ export function useQuoteBuilderDocumentActions({
     packetReadinessDraftReady,
     refetchActiveApprovalCase,
     saveMutation,
+    saveMutation.data,
   ]);
 
   const handleDownloadPdf = useCallback(() => {
@@ -220,27 +239,39 @@ export function useQuoteBuilderDocumentActions({
       followUpAt: draft.followUpAt ?? null,
       customerEmail: draft.customerEmail ?? null,
       customerPhone: draft.customerPhone ?? null,
-      documentReady: Boolean(documentFallbackGeneratedAt),
+      documentReady: channel === "email" ? true : Boolean(documentFallbackGeneratedAt),
       taxResolved,
       whyThisMachineRequired,
       whyThisMachineConfirmed: draft.whyThisMachineConfirmed === true,
     });
     if (!readiness.ready) {
-      setDeliveryActionError(`Blocked: ${readiness.missing.join(", ")}.`);
-      return;
+      const error = `Blocked: ${readiness.missing.join(", ")}.`;
+      setDeliveryActionError(error);
+      return { ok: false, channel, error };
+    }
+    if (channel === "email" && quoteMediaSnapshotLoading) {
+      const error = "Blocked: trade-in photos are still loading. Try again in a moment so the sent PDF includes the stored trade media.";
+      setDeliveryActionError(error);
+      return { ok: false, channel, error };
     }
     const approvalRefreshBlocker = await ensureCleanApprovalForCustomerFacing();
     if (approvalRefreshBlocker) {
-      setDeliveryActionError(`Blocked: ${approvalRefreshBlocker}`);
-      return;
+      const error = `Blocked: ${approvalRefreshBlocker}`;
+      setDeliveryActionError(error);
+      return { ok: false, channel, error };
     }
-    if (!activeQuotePackageId) return;
+    if (!activeQuotePackageId) {
+      const error = "Blocked: save the quote package before customer-facing actions.";
+      setDeliveryActionError(error);
+      return { ok: false, channel, error };
+    }
     setDeliveryActionBusy(channel);
     try {
       if (channel === "preview") {
         if (quoteMediaSnapshotLoading) {
-          setDeliveryActionError("Blocked: trade-in photos are still loading. Try again in a moment.");
-          return;
+          const error = "Blocked: trade-in photos are still loading. Try again in a moment.";
+          setDeliveryActionError(error);
+          return { ok: false, channel, error };
         }
         const pdfResult = await downloadPDF(quotePdfData);
         const generatedAt = new Date().toISOString();
@@ -286,46 +317,82 @@ export function useQuoteBuilderDocumentActions({
               : "Printable fallback opened; no stored PDF artifact was created.",
           },
         });
-        setDeliveryActionMessage("Preview opened and logged. This does not mark the quote sent.");
-        return;
+        const message = "Preview opened and logged. This does not mark the quote sent.";
+        setDeliveryActionMessage(message);
+        return { ok: true, channel, message };
       }
 
       const textEnabled = import.meta.env.VITE_FEATURE_QRM_TEXT_QUOTE === "true";
       if (channel === "email") {
+        const pdfResult = await generatePdfBlob(quotePdfData);
+        const quotePackageVersionId = latestCustomerFacingSaveResponseRef.current?.quote_package_version_id
+          ?? saveMutation.data?.quote_package_version_id
+          ?? null;
+        const proposalSnapshot = buildQuotePdfVersionSnapshot(quotePdfData, {
+          quotePackageId: activeQuotePackageId,
+          quotePackageVersionId,
+        });
+        const artifact = await persistImmutableQuotePdfVersion({
+          quotePackageId: activeQuotePackageId,
+          quotePackageVersionId,
+          blob: pdfResult.blob,
+          filename: pdfResult.filename,
+          proposalSnapshot,
+        });
         const result = await sendQuotePackage(activeQuotePackageId, {
-          documentArtifactId: documentArtifact?.id ?? null,
+          documentArtifactId: artifact.id,
           followUpAt: draft.followUpAt ?? null,
         });
+        const generatedArtifact: DocumentArtifactState = {
+          id: artifact.id,
+          storageBucket: artifact.storageBucket,
+          storageKey: artifact.storageKey,
+          generatedAt: artifact.generatedAt,
+        };
+        setDocumentArtifact(generatedArtifact);
+        documentDraftSignatureRef.current = draftSaveSignature;
+        setDocumentFallbackGeneratedAt(artifact.generatedAt);
         setDraft((current) => ({ ...current, quoteStatus: "sent" }));
-        setDeliveryActionMessage(
-          `Quote emailed to ${result.to_email}. Delivery event ${result.delivery_event_id ? "logged" : "recorded by quote status"} and follow-up preserved.`,
-        );
-        return;
+        const versionNumber = result.pdf_version_number ?? artifact.versionNumber ?? null;
+        const documentArtifactId = result.document_artifact_id ?? artifact.id;
+        const message = `Quote emailed to ${result.to_email}. Version ${versionNumber ?? "latest"} PDF artifact ${documentArtifactId} was generated fresh and delivery ${result.delivery_event_id ? "logged" : "recorded by quote status"}.`;
+        setDeliveryActionMessage(message);
+        return {
+          ok: true,
+          channel,
+          toEmail: result.to_email,
+          versionNumber,
+          documentArtifactId,
+          message,
+        };
       }
 
       if (!textEnabled) {
-        setDeliveryActionMessage("Text delivery is not connected yet. Email the proposal or use the approved proposal link for now.");
-        return;
+        const message = "Text delivery is not connected yet. Email the proposal or use the approved proposal link for now.";
+        setDeliveryActionMessage(message);
+        return { ok: true, channel, message };
       }
 
-      setDeliveryActionError(
-        "Text delivery is not connected yet. Email the proposal or use the approved proposal link for now.",
-      );
+      const error = "Text delivery is not connected yet. Email the proposal or use the approved proposal link for now.";
+      setDeliveryActionError(error);
+      return { ok: false, channel, error };
     } catch (error) {
-      setDeliveryActionError(error instanceof Error ? error.message : "Quote delivery action failed.");
+      const message = error instanceof Error ? error.message : "Quote delivery action failed.";
+      setDeliveryActionError(message);
+      return { ok: false, channel, error: message };
     } finally {
       setDeliveryActionBusy(null);
     }
   }, [
     activeQuotePackageId,
     approvalCaseCanSend,
-    documentArtifact?.id,
     documentDraftSignatureRef,
     documentFallbackGeneratedAt,
     draft,
     draftSaveSignature,
     downloadPDF,
     ensureCleanApprovalForCustomerFacing,
+    generatePdfBlob,
     quoteMediaSnapshotLoading,
     quotePdfData,
     saveMutation.data?.quote_package_version_id,

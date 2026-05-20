@@ -160,3 +160,46 @@ Deno.test("approval bypass stamps quote status from sanitized bypass_to_status",
     "submit-approval bypass path must write sanitized status to quote_packages",
   );
 });
+
+Deno.test("send-package requires a fresh generated R2 customer PDF artifact", async () => {
+  const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
+  assert(source.includes('return safeJsonError("Generate a versioned PDF before sending.", 409, origin);'));
+  assert(source.includes('artifactRow.storage_provider !== "r2"'));
+  assert(source.includes('artifactRow.status !== "generated"'));
+  assert(source.includes("artifactRow.customer_visible_at != null"));
+  assert(source.includes("artifactRow.quote_package_version_id !== activeQuoteVersion.id"));
+  assert(source.includes("Quote changed after PDF generation. Regenerate the send PDF and try again."));
+});
+
+Deno.test("PDF artifact upload and version endpoints are R2-backed and diff snapshots server-side", async () => {
+  const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
+  assert(source.includes('action === "begin-upload" && url.pathname.includes("/document-artifacts/")'));
+  assert(source.includes('action === "complete-upload" && url.pathname.includes("/document-artifacts/")'));
+  assert(source.includes('action === "document-versions"'));
+  assert(source.includes('action === "diff" && url.pathname.includes("/document-versions/")'));
+  assert(source.includes("quote_begin_customer_pdf_version"));
+  assert(source.includes("createR2PutUrl"));
+  assert(source.includes("headR2Object"));
+  assert(source.includes("diffQuotePdfVersionSnapshots"));
+});
+
+Deno.test("public latest PDF resolver redirects to latest sent immutable R2 version", async () => {
+  const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
+  assert(source.includes('publicAction === "latest-quote-pdf"'));
+  assert(source.includes("handlePublicLatestQuotePdfRead"));
+  assert(source.includes('return safeJsonError("No sent PDF version is available yet.", 404, origin);'));
+  assert(source.includes('.order("version_number", { ascending: false })'));
+  assert(source.includes("createR2GetUrl"));
+  assert(source.includes("status: 302"));
+});
+
+Deno.test("migration exposes immutable PDF version metadata and commit visibility update", async () => {
+  const migration = await Deno.readTextFile(new URL("../../migrations/599_quote_pdf_r2_versions.sql", import.meta.url));
+  assert(migration.includes("add column if not exists storage_provider text not null default 'supabase'"));
+  assert(migration.includes("add column if not exists version_number integer"));
+  assert(migration.includes("add column if not exists proposal_snapshot_json jsonb"));
+  assert(migration.includes("create or replace function public.quote_begin_customer_pdf_version"));
+  assert(migration.includes("customer_visible_at = p_sent_at"));
+  assert(migration.includes("sent_delivery_event_id = v_id"));
+  assert(migration.includes("p_document_artifact_id is null"));
+});

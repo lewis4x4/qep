@@ -18,7 +18,8 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 
 import { IncentiveStack } from "./IncentiveStack";
-import { SendQuoteSection } from "./SendQuoteSection";
+import { SendQuoteSection, type SendQuoteSectionResult } from "./SendQuoteSection";
+import { QuotePdfVersionHistoryPanel } from "./QuotePdfVersionHistoryPanel";
 import { ApprovalActivityLog } from "./ApprovalActivityLog";
 // Phase 3A: inline manager decision dialog. Mounted only when the
 // current viewer is a manager/owner/admin AND the case is still pending
@@ -76,6 +77,7 @@ interface QuoteReviewWorkflowPanelsProps {
   quoteStatus: QuoteWorkspaceDraft["quoteStatus"];
   onQuoteStatusChange: (status: QuoteWorkspaceDraft["quoteStatus"]) => void;
   showSendSection?: boolean;
+  onSendQuote?: () => Promise<SendQuoteSectionResult>;
   /**
    * Phase 3B quote-approval feedback loop — viewer id passed by the
    * orchestrator. Used for the submitter-only "Withdraw submission"
@@ -100,6 +102,7 @@ export function QuoteReviewWorkflowPanels({
   quoteStatus,
   onQuoteStatusChange,
   showSendSection = true,
+  onSendQuote,
   currentUserId,
   onWithdrawApproval,
   withdrawApprovalPending,
@@ -600,8 +603,10 @@ export function QuoteReviewWorkflowPanels({
         <SendQuoteSection
           quotePackageId={quotePackageId}
           contactName={draft.customerName || draft.customerCompany || "customer"}
+          onSendQuote={onSendQuote}
           onSent={() => {
             onQuoteStatusChange("sent");
+            void queryClient.invalidateQueries({ queryKey: ["quote-builder", "quote-pdf-versions", quotePackageId] });
           }}
         />
       ) : resolvedQuoteStatus === "sent" || resolvedQuoteStatus === "accepted" ? (
@@ -650,6 +655,10 @@ export function QuoteReviewWorkflowPanels({
           </p>
         </Card>
       ) : null)}
+
+      {quotePackageId && (
+        <QuotePdfVersionHistoryPanel quotePackageId={quotePackageId} />
+      )}
 
       {portalRevision?.review && (
         <Card className="border-border/60 bg-card/60 p-4 space-y-3">

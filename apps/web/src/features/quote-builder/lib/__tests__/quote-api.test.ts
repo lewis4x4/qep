@@ -847,12 +847,16 @@ describe("quote recommendation and send normalizers", () => {
       shareToken: "share-1",
       publicUrl: "https://example.com/q/share-1",
       deliveryEventId: "event-1",
+      pdfVersionNumber: "3",
+      documentArtifactId: "artifact-1",
     })).toEqual({
       sent: true,
       to_email: "buyer@example.com",
       share_token: "share-1",
       public_url: "https://example.com/q/share-1",
       delivery_event_id: "event-1",
+      pdf_version_number: 3,
+      document_artifact_id: "artifact-1",
     });
     expect(normalizeSendQuotePackageResponse({ sent: "yes", to_email: 42 })).toEqual({
       sent: false,
@@ -860,6 +864,8 @@ describe("quote recommendation and send normalizers", () => {
       share_token: null,
       public_url: null,
       delivery_event_id: null,
+      pdf_version_number: null,
+      document_artifact_id: null,
     });
   });
 });

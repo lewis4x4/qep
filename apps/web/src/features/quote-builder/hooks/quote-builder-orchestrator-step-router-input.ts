@@ -35,6 +35,7 @@ export interface QuoteBuilderOrchestratorStepRouterInput {
   whyThisMachineBlocker: unknown;
   deliveryActionMessage: unknown;
   handleQuoteSendAction: unknown;
+  handleVersionedEmailSend: unknown;
   equipmentCanContinue: unknown;
   activeQuotePackageId: unknown;
   canSubmitForApproval: unknown;

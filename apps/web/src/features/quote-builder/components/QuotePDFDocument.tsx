@@ -35,6 +35,8 @@ export interface QuoteProposalLineMedia {
 }
 
 export interface QuoteProposalLine {
+  /** Stable semantic diff handle for version comparisons; intentionally not rendered. */
+  diffKey?: string | null;
   lineType: QuoteLineItemKind;
   description: string;
   make?: string | null;

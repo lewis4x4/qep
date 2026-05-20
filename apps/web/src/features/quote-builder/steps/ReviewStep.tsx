@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { MarginCheckBanner } from "../components/MarginCheckBanner";
 import { QuoteReviewWorkflowPanels } from "../components/QuoteReviewWorkflowPanels";
+import type { SendQuoteSectionResult } from "../components/SendQuoteSection";
 import { ReviewSummaryBlock } from "../components/ReviewSummaryBlock";
 import {
   applyEquipmentOverridePrice,
@@ -72,6 +73,7 @@ export interface ReviewStepProps {
   };
   quoteStatus: QuoteWorkspaceDraft["quoteStatus"];
   onQuoteStatusChange: (status: QuoteWorkspaceDraft["quoteStatus"]) => void;
+  onSendQuote?: () => Promise<SendQuoteSectionResult>;
   /**
    * Phase 3B quote-approval feedback loop — current viewer's user id.
    * The QuoteReviewWorkflowPanels card uses this to decide whether to
@@ -119,6 +121,7 @@ export function ReviewStep({
   submitApprovalData,
   quoteStatus,
   onQuoteStatusChange,
+  onSendQuote,
   currentUserId,
   onWithdrawApproval,
   withdrawApprovalPending,
@@ -531,6 +534,7 @@ export function ReviewStep({
           quoteStatus={quoteStatus}
           onQuoteStatusChange={onQuoteStatusChange}
           showSendSection={false}
+          onSendQuote={onSendQuote}
           currentUserId={currentUserId ?? null}
           onWithdrawApproval={onWithdrawApproval}
           withdrawApprovalPending={withdrawApprovalPending === true}

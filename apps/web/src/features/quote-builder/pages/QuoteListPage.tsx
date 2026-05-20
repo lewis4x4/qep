@@ -37,7 +37,6 @@ import {
   getScorerCalibrationObservations,
   listQuotePackages,
   performQuoteListAction,
-  sendQuotePackage,
   type QuoteListAction,
 } from "../lib/quote-api";
 import {
@@ -214,8 +213,7 @@ export function QuoteListPage() {
   const actionMutation = useMutation({
     mutationFn: async ({ quoteId, action }: { quoteId: string; action: QuoteListAction }) => {
       if (action === "resend") {
-        await sendQuotePackage(quoteId);
-        return;
+        throw new Error("Open the quote and use the Send step to resend. Quick resend is disabled because every customer email must generate a fresh immutable PDF version first.");
       }
       if (action === "resume") return;
       await performQuoteListAction({ quotePackageId: quoteId, action });
@@ -581,13 +579,14 @@ function QuoteRow({
               <button
                 key={action.action}
                 type="button"
-                disabled={actionPending}
+                disabled={actionPending || Boolean(action.disabledReason)}
+                aria-label={action.disabledReason ? `${action.label}: ${action.disabledReason}` : action.label}
                 onClick={(event) => {
                   event.stopPropagation();
                   onAction(action.action);
                 }}
                 className="inline-flex h-10 min-w-16 flex-col items-center justify-center gap-0.5 rounded-md border border-border/50 bg-muted/30 px-2 text-[10px] text-muted-foreground transition hover:border-qep-orange/50 hover:bg-qep-orange/10 hover:text-qep-orange disabled:cursor-not-allowed disabled:opacity-50"
-                title={action.label}
+                title={action.disabledReason ?? action.label}
               >
                 <action.icon className={`h-4 w-4 ${actionPending ? "animate-pulse" : ""}`} />
                 <span>{action.label}</span>
@@ -812,7 +811,7 @@ function NoMatches({ onClear }: { onClear: () => void }) {
   );
 }
 
-function quickActionsForStatus(status: string): Array<{ action: QuoteListAction; label: string; icon: typeof Mail }> {
+function quickActionsForStatus(status: string): Array<{ action: QuoteListAction; label: string; icon: typeof Mail; disabledReason?: string }> {
   if (status === "draft") {
     return [
       { action: "resume", label: "Resume", icon: Pencil },
@@ -820,9 +819,26 @@ function quickActionsForStatus(status: string): Array<{ action: QuoteListAction;
       { action: "discard", label: "Discard", icon: Trash2 },
     ];
   }
-  if (status === "sent" || status === "pending_approval") {
+  if (status === "pending_approval") {
     return [
-      { action: "resend", label: "Resend", icon: Send },
+      {
+        action: "resend",
+        label: "Send locked",
+        icon: Send,
+        disabledReason: "Approval is still pending; customer email cannot bypass approval or fresh immutable PDF generation.",
+      },
+      { action: "duplicate", label: "Duplicate", icon: Copy },
+      { action: "archive", label: "Archive", icon: Archive },
+    ];
+  }
+  if (status === "sent") {
+    return [
+      {
+        action: "resend",
+        label: "Resend disabled",
+        icon: Send,
+        disabledReason: "Open the quote and use the Send step; quick resend cannot bypass fresh immutable PDF generation.",
+      },
       { action: "duplicate", label: "Duplicate", icon: Copy },
       { action: "mark_sent", label: "Mark Sent", icon: Check },
       { action: "archive", label: "Archive", icon: Archive },

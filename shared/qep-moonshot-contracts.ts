@@ -393,6 +393,113 @@ export interface QuoteVersionSnapshot {
   savedAt: string | null;
 }
 
+export interface QuotePdfVersionLineSnapshot {
+  diffKey: string;
+  lineType: QuoteLineItemKind;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  extendedPrice: number;
+  displayAmount: number;
+  tone: "charge" | "credit";
+}
+
+export interface QuotePdfVersionTotalsSnapshot {
+  equipmentTotal: number;
+  attachmentTotal: number;
+  pricingLineTotal: number;
+  subtotal: number;
+  discountTotal: number;
+  tradeAllowance: number;
+  taxTotal: number;
+  customerTotal: number;
+  cashDown: number;
+  amountFinanced: number;
+  netTotal: number;
+}
+
+export interface QuotePdfVersionFinanceSnapshot {
+  type: "cash" | "finance" | "lease";
+  kind?: QuoteFinanceScenarioKind | null;
+  label: string;
+  termMonths: number | null;
+  rate: number | null;
+  monthlyPayment: number | null;
+  totalCost: number | null;
+  lender: string | null;
+  downPayment: number | null;
+  residualAmount: number | null;
+  isDefault: boolean;
+}
+
+export interface QuotePdfVersionTermsSnapshot {
+  validUntil: string | null;
+  deliveryEta: string | null;
+  depositRequiredAmount: number | null;
+  specialTerms: string | null;
+  taxLabel: string | null;
+  taxDetail: string | null;
+}
+
+/**
+ * Customer-safe semantic snapshot of the rendered quote PDF. This deliberately
+ * excludes dealer cost, margin, approval internals, source catalog IDs, media
+ * URLs, storage buckets/keys, and raw renderer metadata.
+ */
+export interface QuotePdfVersionSnapshot {
+  quotePackageId: string | null;
+  quotePackageVersionId: string | null;
+  quoteNumber: string | null;
+  customerName: string | null;
+  preparedDate: string | null;
+  lineItems: QuotePdfVersionLineSnapshot[];
+  totals: QuotePdfVersionTotalsSnapshot;
+  financing: QuotePdfVersionFinanceSnapshot[];
+  terms: QuotePdfVersionTermsSnapshot;
+  narrativeText: string | null;
+}
+
+export type QuotePdfVersionLineDiffStatus = "added" | "removed" | "changed" | "unchanged";
+export type QuotePdfVersionSemanticDiffStatus = "added" | "removed" | "changed";
+
+export interface QuotePdfVersionLineDiff {
+  status: QuotePdfVersionLineDiffStatus;
+  diffKey: string;
+  before: QuotePdfVersionLineSnapshot | null;
+  after: QuotePdfVersionLineSnapshot | null;
+  changedFields: string[];
+}
+
+export interface QuotePdfVersionTotalDiff {
+  field: keyof QuotePdfVersionTotalsSnapshot;
+  before: number;
+  after: number;
+}
+
+export interface QuotePdfVersionFinancingDiff {
+  label: string;
+  status: QuotePdfVersionSemanticDiffStatus;
+  before: QuotePdfVersionFinanceSnapshot | null;
+  after: QuotePdfVersionFinanceSnapshot | null;
+  changedFields: string[];
+}
+
+export interface QuotePdfVersionTermDiff {
+  field: keyof QuotePdfVersionTermsSnapshot;
+  before: string | number | null;
+  after: string | number | null;
+}
+
+export interface QuotePdfVersionDiff {
+  fromVersionNumber: number;
+  toVersionNumber: number;
+  lineDiffs: QuotePdfVersionLineDiff[];
+  totalDiffs: QuotePdfVersionTotalDiff[];
+  financingDiffs: QuotePdfVersionFinancingDiff[];
+  termDiffs: QuotePdfVersionTermDiff[];
+  narrativeChanged: boolean;
+}
+
 export interface QuoteApprovalCondition {
   id: string;
   approvalCaseId: string | null;
@@ -635,6 +742,181 @@ export function diffQuoteVersionScopes(
   if (!shallowEqualLineArrays(previous.equipment, next.equipment)) changed.add("equipment");
 
   return VERSION_COMPARISON_SCOPES.filter((scope) => changed.has(scope));
+}
+
+function roundCurrencyForDiff(value: number | null | undefined): number {
+  const normalized = Number(value ?? 0);
+  return Number.isFinite(normalized) ? Math.round(normalized * 100) / 100 : 0;
+}
+
+function normalizedScalarForDiff(value: string | number | boolean | null | undefined): string | number | boolean | null {
+  if (typeof value === "number") return roundCurrencyForDiff(value);
+  if (typeof value === "string") {
+    const trimmed = value.trim().replace(/\s+/g, " ");
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof value === "boolean") return value;
+  return value ?? null;
+}
+
+function lineChangedFields(
+  previous: QuotePdfVersionLineSnapshot,
+  next: QuotePdfVersionLineSnapshot,
+): string[] {
+  const fields: Array<keyof QuotePdfVersionLineSnapshot> = [
+    "lineType",
+    "description",
+    "quantity",
+    "unitPrice",
+    "extendedPrice",
+    "displayAmount",
+    "tone",
+  ];
+  return fields.filter((field) => normalizedScalarForDiff(previous[field]) !== normalizedScalarForDiff(next[field]));
+}
+
+function totalDiffs(
+  previous: QuotePdfVersionTotalsSnapshot,
+  next: QuotePdfVersionTotalsSnapshot,
+): QuotePdfVersionTotalDiff[] {
+  const fields: Array<keyof QuotePdfVersionTotalsSnapshot> = [
+    "equipmentTotal",
+    "attachmentTotal",
+    "pricingLineTotal",
+    "subtotal",
+    "discountTotal",
+    "tradeAllowance",
+    "taxTotal",
+    "customerTotal",
+    "cashDown",
+    "amountFinanced",
+    "netTotal",
+  ];
+  return fields.flatMap((field) => {
+    const before = roundCurrencyForDiff(previous[field]);
+    const after = roundCurrencyForDiff(next[field]);
+    return before === after ? [] : [{ field, before, after }];
+  });
+}
+
+function keyedFinanceScenarios(scenarios: QuotePdfVersionFinanceSnapshot[]): Map<string, QuotePdfVersionFinanceSnapshot> {
+  const occurrences = new Map<string, number>();
+  const keyed = new Map<string, QuotePdfVersionFinanceSnapshot>();
+  scenarios.forEach((scenario) => {
+    const base = [
+      scenario.type,
+      scenario.kind ?? "",
+      scenario.label.trim().toLowerCase().replace(/\s+/g, " "),
+    ].join("|");
+    const occurrence = occurrences.get(base) ?? 0;
+    occurrences.set(base, occurrence + 1);
+    keyed.set(`${base}|${occurrence}`, scenario);
+  });
+  return keyed;
+}
+
+function financeChangedFields(
+  previous: QuotePdfVersionFinanceSnapshot,
+  next: QuotePdfVersionFinanceSnapshot,
+): string[] {
+  const fields: Array<keyof QuotePdfVersionFinanceSnapshot> = [
+    "type",
+    "kind",
+    "label",
+    "termMonths",
+    "rate",
+    "monthlyPayment",
+    "totalCost",
+    "lender",
+    "downPayment",
+    "residualAmount",
+    "isDefault",
+  ];
+  return fields.filter((field) => normalizedScalarForDiff(previous[field]) !== normalizedScalarForDiff(next[field]));
+}
+
+function termDiffs(
+  previous: QuotePdfVersionTermsSnapshot,
+  next: QuotePdfVersionTermsSnapshot,
+): QuotePdfVersionTermDiff[] {
+  const fields: Array<keyof QuotePdfVersionTermsSnapshot> = [
+    "validUntil",
+    "deliveryEta",
+    "depositRequiredAmount",
+    "specialTerms",
+    "taxLabel",
+    "taxDetail",
+  ];
+  return fields.flatMap((field) => {
+    const before = normalizedScalarForDiff(previous[field]) as string | number | null;
+    const after = normalizedScalarForDiff(next[field]) as string | number | null;
+    return before === after ? [] : [{ field, before, after }];
+  });
+}
+
+export function diffQuotePdfVersionSnapshots(
+  previous: QuotePdfVersionSnapshot,
+  next: QuotePdfVersionSnapshot,
+  options: {
+    fromVersionNumber: number;
+    toVersionNumber: number;
+    includeUnchangedLines?: boolean;
+  },
+): QuotePdfVersionDiff {
+  const previousLines = new Map(previous.lineItems.map((line) => [line.diffKey, line]));
+  const nextLines = new Map(next.lineItems.map((line) => [line.diffKey, line]));
+  const lineDiffs: QuotePdfVersionLineDiff[] = [];
+
+  for (const line of previous.lineItems) {
+    const after = nextLines.get(line.diffKey) ?? null;
+    if (!after) {
+      lineDiffs.push({ status: "removed", diffKey: line.diffKey, before: line, after: null, changedFields: [] });
+      continue;
+    }
+
+    const changedFields = lineChangedFields(line, after);
+    if (changedFields.length > 0) {
+      lineDiffs.push({ status: "changed", diffKey: line.diffKey, before: line, after, changedFields });
+    } else if (options.includeUnchangedLines === true) {
+      lineDiffs.push({ status: "unchanged", diffKey: line.diffKey, before: line, after, changedFields: [] });
+    }
+  }
+
+  for (const line of next.lineItems) {
+    if (!previousLines.has(line.diffKey)) {
+      lineDiffs.push({ status: "added", diffKey: line.diffKey, before: null, after: line, changedFields: [] });
+    }
+  }
+
+  const previousFinance = keyedFinanceScenarios(previous.financing);
+  const nextFinance = keyedFinanceScenarios(next.financing);
+  const financingDiffs: QuotePdfVersionFinancingDiff[] = [];
+  for (const [key, before] of previousFinance) {
+    const after = nextFinance.get(key) ?? null;
+    if (!after) {
+      financingDiffs.push({ label: before.label, status: "removed", before, after: null, changedFields: [] });
+      continue;
+    }
+    const changedFields = financeChangedFields(before, after);
+    if (changedFields.length > 0) {
+      financingDiffs.push({ label: after.label || before.label, status: "changed", before, after, changedFields });
+    }
+  }
+  for (const [key, after] of nextFinance) {
+    if (!previousFinance.has(key)) {
+      financingDiffs.push({ label: after.label, status: "added", before: null, after, changedFields: [] });
+    }
+  }
+
+  return {
+    fromVersionNumber: options.fromVersionNumber,
+    toVersionNumber: options.toVersionNumber,
+    lineDiffs,
+    totalDiffs: totalDiffs(previous.totals, next.totals),
+    financingDiffs,
+    termDiffs: termDiffs(previous.terms, next.terms),
+    narrativeChanged: normalizedScalarForDiff(previous.narrativeText) !== normalizedScalarForDiff(next.narrativeText),
+  };
 }
 
 export function allowedQuoteVersionScopesForConditions(

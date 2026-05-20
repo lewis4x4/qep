@@ -14,7 +14,7 @@ import {
 import { money } from "../lib/money";
 import type { QuotePacketReadiness, QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
 import { ReadinessRow } from "./ReadinessRow";
-import { SendQuoteSection } from "./SendQuoteSection";
+import { SendQuoteSection, type SendQuoteSectionResult } from "./SendQuoteSection";
 // WAVE polish:
 //   Slice 2 — voice dictation on the internal-notes textarea.
 //   Slice 6 — Dialog → MobileBottomSheet at <640px.
@@ -43,6 +43,7 @@ export interface ReviewSendDialogProps {
   approvalGranted: boolean;
   requiresManagerApproval: boolean;
   approvalDetail: string;
+  onSendQuote?: () => Promise<SendQuoteSectionResult>;
   onSent: () => void;
 }
 
@@ -99,6 +100,7 @@ export function ReviewSendDialog({
   approvalGranted,
   requiresManagerApproval,
   approvalDetail,
+  onSendQuote,
   onSent,
 }: ReviewSendDialogProps) {
   // WAVE polish (Slice 6): Dialog → MobileBottomSheet at <640px.
@@ -223,6 +225,7 @@ export function ReviewSendDialog({
                 <SendQuoteSection
                   quotePackageId={activeQuotePackageId}
                   contactName={draft.customerName || draft.customerCompany || "customer"}
+                  onSendQuote={onSendQuote}
                   onSent={onSent}
                 />
               </div>

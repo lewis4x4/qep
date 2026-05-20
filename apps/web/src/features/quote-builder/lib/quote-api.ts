@@ -22,6 +22,9 @@ import type {
   QuoteListItem,
   QuoteRecommendation,
   QuoteWorkspaceDraft,
+  QuotePdfVersionDiff,
+  QuotePdfVersionSnapshot,
+  QuotePdfVersionTotalsSnapshot,
 } from "../../../../../../shared/qep-moonshot-contracts";
 import type { ClosedDealAuditRow } from "./closed-deals-audit";
 import type { DealFactorObservation } from "./factor-attribution";
@@ -89,6 +92,15 @@ async function readJsonRecord(res: Response): Promise<Record<string, unknown>> {
 
 function errorDetail(body: Record<string, unknown>): string {
   return firstString(body.error, body.message) ?? "";
+}
+
+
+function quoteApiErrorMessage(status: number, body: Record<string, unknown>, fallback: string): string {
+  const detail = errorDetail(body).trim();
+  if (status === 503 && /\bR2\b|quote PDF storage|storage is not configured/i.test(detail)) {
+    return "Versioned quote PDF storage is not configured. Ask an admin to set R2 quote PDF storage credentials, then try again.";
+  }
+  return detail || fallback;
 }
 
 function nullableString(value: unknown): string | null {
@@ -382,6 +394,8 @@ export interface SendQuotePackageResponse {
   share_token: string | null;
   public_url: string | null;
   delivery_event_id: string | null;
+  pdf_version_number: number | null;
+  document_artifact_id: string | null;
 }
 
 export function normalizeSendQuotePackageResponse(value: unknown): SendQuotePackageResponse {
@@ -392,6 +406,8 @@ export function normalizeSendQuotePackageResponse(value: unknown): SendQuotePack
     share_token: nullableString(record.share_token ?? record.shareToken),
     public_url: nullableString(record.public_url ?? record.publicUrl),
     delivery_event_id: nullableString(record.delivery_event_id ?? record.deliveryEventId),
+    pdf_version_number: numOrNull(record.pdf_version_number ?? record.pdfVersionNumber),
+    document_artifact_id: nullableString(record.document_artifact_id ?? record.documentArtifactId),
   };
 }
 
@@ -1551,9 +1567,270 @@ export async function sendQuotePackage(quotePackageId: string, options?: { docum
   });
   if (!res.ok) {
     const err = await readJsonRecord(res);
-    throw new Error(errorDetail(err) || "Failed to send quote");
+    throw new Error(quoteApiErrorMessage(res.status, err, "Failed to send quote"));
   }
   return normalizeSendQuotePackageResponse(await res.json().catch(() => ({})));
+}
+
+
+export interface BeginQuotePdfUploadInput {
+  quotePackageId: string;
+  filename: string;
+  contentType?: string;
+  sizeBytes: number;
+  contentSha256: string;
+  proposalSnapshot: QuotePdfVersionSnapshot;
+}
+
+export interface BeginQuotePdfUploadResponse {
+  artifactId: string;
+  versionNumber: number | null;
+  storageBucket: string;
+  storageKey: string;
+  uploadUrl: string;
+  uploadExpiresAt: string | null;
+}
+
+export interface CompleteQuotePdfUploadInput {
+  artifactId: string;
+  sizeBytes: number;
+  contentSha256: string;
+}
+
+export interface CompleteQuotePdfUploadResponse {
+  artifactId: string;
+  versionNumber: number | null;
+  generatedAt: string | null;
+  sizeBytes: number | null;
+  contentSha256: string | null;
+}
+
+export interface PersistImmutableQuotePdfVersionInput {
+  quotePackageId: string;
+  quotePackageVersionId?: string | null;
+  blob: Blob;
+  filename: string;
+  proposalSnapshot: QuotePdfVersionSnapshot;
+}
+
+export interface PersistImmutableQuotePdfVersionResult {
+  id: string;
+  versionNumber: number | null;
+  storageBucket: string;
+  storageKey: string;
+  generatedAt: string;
+  sizeBytes: number;
+  contentSha256: string;
+}
+
+export interface QuotePdfVersionListItem {
+  artifactId: string;
+  versionNumber: number | null;
+  quotePackageVersionId: string | null;
+  generatedAt: string | null;
+  customerVisibleAt: string | null;
+  sentDeliveryEventId: string | null;
+  recipient: string | null;
+  sizeBytes: number | null;
+  contentSha256: string | null;
+  totalsSummary: QuotePdfVersionTotalsSnapshot | null;
+}
+
+export interface QuotePdfVersionListResponse {
+  versions: QuotePdfVersionListItem[];
+}
+
+export interface QuotePdfVersionDiffResponse {
+  diff: QuotePdfVersionDiff | null;
+}
+
+function normalizeBeginQuotePdfUploadResponse(value: unknown): BeginQuotePdfUploadResponse {
+  const record = recordOrEmpty(value);
+  const artifactId = firstString(record.artifact_id, record.artifactId);
+  const storageKey = firstString(record.storage_key, record.storageKey);
+  const uploadUrl = firstString(record.upload_url, record.uploadUrl);
+  if (!artifactId || !storageKey || !uploadUrl) {
+    throw new Error("Quote PDF upload response was malformed. Regenerate the send PDF and try again.");
+  }
+  return {
+    artifactId,
+    versionNumber: numOrNull(record.version_number ?? record.versionNumber),
+    storageBucket: firstString(record.storage_bucket, record.storageBucket) ?? "",
+    storageKey,
+    uploadUrl,
+    uploadExpiresAt: nullableString(record.upload_expires_at ?? record.uploadExpiresAt),
+  };
+}
+
+function normalizeCompleteQuotePdfUploadResponse(value: unknown): CompleteQuotePdfUploadResponse {
+  const record = recordOrEmpty(value);
+  const artifactId = firstString(record.artifact_id, record.artifactId);
+  if (!artifactId) {
+    throw new Error("Quote PDF upload finalization response was malformed. Regenerate the send PDF and try again.");
+  }
+  return {
+    artifactId,
+    versionNumber: numOrNull(record.version_number ?? record.versionNumber),
+    generatedAt: nullableString(record.generated_at ?? record.generatedAt),
+    sizeBytes: numOrNull(record.size_bytes ?? record.sizeBytes),
+    contentSha256: nullableString(record.content_sha256 ?? record.contentSha256),
+  };
+}
+
+function normalizeQuotePdfVersionListItem(value: unknown): QuotePdfVersionListItem | null {
+  const record = recordOrEmpty(value);
+  const artifactId = firstString(record.artifact_id, record.artifactId);
+  if (!artifactId) return null;
+  return {
+    artifactId,
+    versionNumber: numOrNull(record.version_number ?? record.versionNumber),
+    quotePackageVersionId: nullableString(record.quote_package_version_id ?? record.quotePackageVersionId),
+    generatedAt: nullableString(record.generated_at ?? record.generatedAt),
+    customerVisibleAt: nullableString(record.customer_visible_at ?? record.customerVisibleAt),
+    sentDeliveryEventId: nullableString(record.sent_delivery_event_id ?? record.sentDeliveryEventId),
+    recipient: nullableString(record.recipient),
+    sizeBytes: numOrNull(record.size_bytes ?? record.sizeBytes),
+    contentSha256: nullableString(record.content_sha256 ?? record.contentSha256),
+    totalsSummary: isRecord(record.totals_summary ?? record.totalsSummary)
+      ? (record.totals_summary ?? record.totalsSummary) as QuotePdfVersionTotalsSnapshot
+      : null,
+  };
+}
+
+function normalizeQuotePdfVersionListResponse(value: unknown): QuotePdfVersionListResponse {
+  const record = recordOrEmpty(value);
+  const versions = Array.isArray(record.versions) ? record.versions : [];
+  return { versions: versions.flatMap((item) => {
+    const normalized = normalizeQuotePdfVersionListItem(item);
+    return normalized ? [normalized] : [];
+  }) };
+}
+
+function normalizeQuotePdfVersionDiffResponse(value: unknown): QuotePdfVersionDiffResponse {
+  const record = recordOrEmpty(value);
+  return { diff: isRecord(record.diff) ? record.diff as unknown as QuotePdfVersionDiff : null };
+}
+
+async function sha256Hex(blob: Blob): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export async function beginQuotePdfUpload(input: BeginQuotePdfUploadInput): Promise<BeginQuotePdfUploadResponse> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/document-artifacts/begin-upload`, {
+    method: "POST",
+    body: JSON.stringify({
+      quote_package_id: input.quotePackageId,
+      filename: input.filename,
+      content_type: input.contentType ?? "application/pdf",
+      size_bytes: input.sizeBytes,
+      content_sha256: input.contentSha256,
+      proposal_snapshot: input.proposalSnapshot,
+    }),
+  });
+  if (!res.ok) {
+    const body = await readJsonRecord(res);
+    throw new Error(quoteApiErrorMessage(res.status, body, "Failed to begin versioned quote PDF upload."));
+  }
+  return normalizeBeginQuotePdfUploadResponse(await res.json().catch(() => ({})));
+}
+
+export async function completeQuotePdfUpload(input: CompleteQuotePdfUploadInput): Promise<CompleteQuotePdfUploadResponse> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/document-artifacts/complete-upload`, {
+    method: "POST",
+    body: JSON.stringify({
+      artifact_id: input.artifactId,
+      size_bytes: input.sizeBytes,
+      content_sha256: input.contentSha256,
+    }),
+  });
+  if (!res.ok) {
+    const body = await readJsonRecord(res);
+    throw new Error(quoteApiErrorMessage(res.status, body, "Failed to finalize versioned quote PDF upload."));
+  }
+  return normalizeCompleteQuotePdfUploadResponse(await res.json().catch(() => ({})));
+}
+
+export async function persistImmutableQuotePdfVersion(
+  input: PersistImmutableQuotePdfVersionInput,
+): Promise<PersistImmutableQuotePdfVersionResult> {
+  if (!input.blob || input.blob.size <= 0) {
+    throw new Error("PDF generation returned an empty file. Regenerate the send PDF and try again.");
+  }
+  const contentSha256 = await sha256Hex(input.blob);
+  const sizeBytes = input.blob.size;
+  const begun = await beginQuotePdfUpload({
+    quotePackageId: input.quotePackageId,
+    filename: input.filename,
+    contentType: "application/pdf",
+    sizeBytes,
+    contentSha256,
+    proposalSnapshot: {
+      ...input.proposalSnapshot,
+      quotePackageId: input.proposalSnapshot.quotePackageId ?? input.quotePackageId,
+      quotePackageVersionId: input.proposalSnapshot.quotePackageVersionId ?? input.quotePackageVersionId ?? null,
+    },
+  });
+
+  let upload: Response;
+  try {
+    upload = await fetch(begun.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/pdf" },
+      body: input.blob,
+    });
+  } catch (error) {
+    console.error("[quote-api] R2 quote PDF upload failed:", error);
+    throw new Error("Versioned quote PDF upload failed. Check R2 CORS/storage configuration and try again.");
+  }
+  if (!upload.ok) {
+    throw new Error(`Versioned quote PDF upload failed (HTTP ${upload.status}). Check R2 CORS/storage configuration and try again.`);
+  }
+
+  const completed = await completeQuotePdfUpload({
+    artifactId: begun.artifactId,
+    sizeBytes,
+    contentSha256,
+  });
+  return {
+    id: completed.artifactId,
+    versionNumber: completed.versionNumber ?? begun.versionNumber,
+    storageBucket: begun.storageBucket,
+    storageKey: begun.storageKey,
+    generatedAt: completed.generatedAt ?? new Date().toISOString(),
+    sizeBytes: completed.sizeBytes ?? sizeBytes,
+    contentSha256: completed.contentSha256 ?? contentSha256,
+  };
+}
+
+export async function listQuotePdfVersions(quotePackageId: string): Promise<QuotePdfVersionListResponse> {
+  const qs = new URLSearchParams({ quote_package_id: quotePackageId });
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/document-versions?${qs.toString()}`);
+  if (!res.ok) {
+    const body = await readJsonRecord(res);
+    throw new Error(quoteApiErrorMessage(res.status, body, "Failed to list quote PDF versions."));
+  }
+  return normalizeQuotePdfVersionListResponse(await res.json().catch(() => ({})));
+}
+
+export async function diffQuotePdfVersions(input: {
+  quotePackageId: string;
+  fromVersionNumber: number;
+  toVersionNumber: number;
+}): Promise<QuotePdfVersionDiffResponse> {
+  const qs = new URLSearchParams({
+    quote_package_id: input.quotePackageId,
+    from: String(input.fromVersionNumber),
+    to: String(input.toVersionNumber),
+  });
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/document-versions/diff?${qs.toString()}`);
+  if (!res.ok) {
+    const body = await readJsonRecord(res);
+    throw new Error(quoteApiErrorMessage(res.status, body, "Failed to diff quote PDF versions."));
+  }
+  return normalizeQuotePdfVersionDiffResponse(await res.json().catch(() => ({})));
 }
 
 export type QuoteDeliveryEventChannel = "preview" | "email" | "text" | "link" | "print";

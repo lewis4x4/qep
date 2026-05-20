@@ -10,3 +10,7 @@
 - 2026-05-20T01:25:00-04:00 — A3.4 builder completed; scoped review passed after excluding pre-existing baseline noise; Oracle found Deal Coach wiring blocker; fixer threaded actual shell paths and added desktop/mobile regression coverage; re-review and Oracle follow-up passed. Dispatching release agent.
 - 2026-05-20T09:35:00-04:00 — Selected A3.6 (QEP-19), exported Deal IQ plan, and dispatching builder. Scope is rep-facing Deal IQ metrics/risks with customer-output non-leak tests.
 - 2026-05-20T09:50:00-04:00 — A3.6 builder completed; independent review passed; Oracle review passed. Dispatching release agent for final gates, scoped Lore commit/push, and roadmap/Linear update.
+- 2026-05-20T10:00:00-04:00 — Selected A3.8 (QEP-21), exported PDF versioning plan, decomposed into 5 work items. Dispatching item A3.8-1 foundation: shared/customer-safe PDF version snapshot and diff model, no R2/migration/send behavior yet.
+- 2026-05-20T10:15:00-04:00 — A3.8-1 snapshot/diff foundation passed independent review. Dispatching A3.8-2 for migration/R2 edge upload/version/list/diff/latest resolver foundation, no client send orchestration yet.
+- 2026-05-20T10:40:00-04:00 — A3.8-2 R2/migration/edge foundation passed independent review. Dispatching A3.8-3 for client API, PDF blob generation, immutable artifact upload, and email send orchestration wiring.
+- 2026-05-20T11:05:00-04:00 — A3.8-3 client immutable send wiring passed independent review. Dispatching A3.8-4 to remove direct send bypass and add rep PDF version history/diff UI.

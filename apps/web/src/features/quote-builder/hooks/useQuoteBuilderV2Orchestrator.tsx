@@ -251,7 +251,7 @@ export function useQuoteBuilderV2Orchestrator() {
     setAvailableOptionsLabel,
   });
 
-  const { generateAndDownload: downloadPDF, generating: pdfGenerating, error: pdfError } = useQuotePDF();
+  const { generateAndDownload: downloadPDF, generatePdfBlob, generating: pdfGenerating, error: pdfError } = useQuotePDF();
   const { profile } = useAuth();
   const { existingQuoteQuery, existingQuote } = useExistingQuoteLoad({
     packageId,
@@ -590,6 +590,7 @@ export function useQuoteBuilderV2Orchestrator() {
     quoteMediaSnapshotLoading,
     quotePdfData,
     downloadPDF,
+    generatePdfBlob,
     activeQuotePackageId,
     draft,
     setDraft,
@@ -612,6 +613,14 @@ export function useQuoteBuilderV2Orchestrator() {
     taxResolved,
     whyThisMachineRequired,
   });
+
+  const handleVersionedEmailSend = useCallback(async () => {
+    const result = await handleQuoteSendAction("email");
+    if (result.ok && activeQuotePackageId) {
+      await queryClient.invalidateQueries({ queryKey: ["quote-builder", "quote-pdf-versions", activeQuotePackageId] });
+    }
+    return result;
+  }, [activeQuotePackageId, handleQuoteSendAction, queryClient]);
 
   const { handleIssueShareLink } = useQuoteBuilderShareLink({
     activeQuotePackageId,
@@ -852,6 +861,7 @@ export function useQuoteBuilderV2Orchestrator() {
     whyThisMachineBlocker,
     deliveryActionMessage,
     handleQuoteSendAction,
+    handleVersionedEmailSend,
     equipmentCanContinue,
     activeQuotePackageId,
     canSubmitForApproval,
@@ -1084,6 +1094,7 @@ export function useQuoteBuilderV2Orchestrator() {
           approvalGranted,
           requiresManagerApproval: approvalState.requiresManagerApproval,
           approvalDetail: approvalState.reason ?? "",
+          onSendQuote: handleVersionedEmailSend,
         },
       })}
       stepRouterProps={stepRouterProps}

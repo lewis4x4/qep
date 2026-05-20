@@ -9,6 +9,7 @@ import { CatalogBrowserDialog } from "./CatalogBrowserDialog";
 import { ConversationalDealEngine } from "./ConversationalDealEngine";
 import { PackageItemSearchDialog } from "./PackageItemSearchDialog";
 import { ReviewSendDialog } from "./ReviewSendDialog";
+import type { SendQuoteSectionResult } from "./SendQuoteSection";
 import { TradeCaptureDialog } from "./TradeCaptureDialog";
 import type { ScenarioSelection } from "./ConversationalDealEngine";
 import type { CatalogAttachmentMatch, CatalogEntryMatch } from "../lib/quote-builder-page-helpers";
@@ -63,6 +64,7 @@ export interface QuoteBuilderOverlaysProps {
   approvalGranted: boolean;
   requiresManagerApproval: boolean;
   approvalDetail: string;
+  onSendQuote?: () => Promise<SendQuoteSectionResult>;
 }
 
 export function QuoteBuilderOverlays({
@@ -104,6 +106,7 @@ export function QuoteBuilderOverlays({
   approvalGranted,
   requiresManagerApproval,
   approvalDetail,
+  onSendQuote,
 }: QuoteBuilderOverlaysProps) {
   const { draft, setDraft, setStep } = useWizard();
 
@@ -215,6 +218,7 @@ export function QuoteBuilderOverlays({
         approvalGranted={approvalGranted}
         requiresManagerApproval={requiresManagerApproval}
         approvalDetail={approvalDetail}
+        onSendQuote={onSendQuote}
         onSent={() => {
           setDraft((current) => ({ ...current, quoteStatus: "sent" }));
           onReviewSendOpenChange(false);
