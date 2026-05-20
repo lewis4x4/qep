@@ -6,7 +6,9 @@
  * call on a $8K deal, every day. This widget resorts the same underlying
  * touchpoint feed by DEAL AMOUNT (descending), then date as tiebreaker,
  * then renders each row as a one-tap row with Call / Email / Mark-done
- * affordances.
+ * affordances. Do not merge this with `AdvisorActionCards`: that component owns
+ * advisor CTAs / quick-tool shortcuts, while this widget owns the live
+ * `sales.action-items` task/follow-up queue.
  *
  * Moonshot:
  *   • Join-level ordering by deal.amount DESC — biggest stake first.

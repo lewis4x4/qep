@@ -317,8 +317,10 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     allowedRoles: ["iron_advisor"],
     size: "normal",
     // P1 moonshot wiring — joins follow_up_touchpoints → cadences →
-    // qrm_deals and sorts DESC by deal amount. Per-row tel:/mailto:
-    // and one-tap Mark Done on the touchpoint status column.
+    // qrm_deals and sorts DESC by deal amount. This is the task/follow-up
+    // queue widget; advisor "log actions" / launch shortcuts live separately
+    // in AdvisorActionCards. Per-row tel:/mailto: and one-tap Mark Done on
+    // the touchpoint status column.
     component: ActionItemsWidget,
   },
   "sales.my-quotes-by-status": {

@@ -2,8 +2,10 @@
  * AdvisorActionCards — quote-first action surface for the iron_advisor home.
  *
  * The advisor home must make quote launch unmistakably primary while keeping
- * follow-ups and pipeline visible as secondary selling signals. Stats come from
- * the shared QRM-backed advisor-home-stats module so future briefing surfaces
+ * follow-ups and pipeline visible as secondary selling signals. This is the
+ * CTA / quick-tool surface (quote, voice quote, voice note, service request,
+ * add customer), not the `sales.action-items` widget. Stats come from the
+ * shared QRM-backed advisor-home-stats module so future briefing surfaces
  * can reuse the same source of truth without duplicating Supabase logic.
  */
 import type { ReactNode } from "react";
