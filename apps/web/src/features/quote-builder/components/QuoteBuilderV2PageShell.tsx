@@ -21,6 +21,7 @@ import { WizardShell, type QuotingBranchOption } from "../wizard/WizardShell";
 import { STEP_LABELS, type AutoSaveState, type Step } from "../wizard/wizard-types";
 import type { QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
 import type { QuotePacketReadiness } from "../../../../../../shared/qep-moonshot-contracts";
+import type { TradeMarketContext } from "@/features/qrm/lib/trade-market-context";
 
 export type QuoteBuilderOverlaysProps = ComponentProps<typeof QuoteBuilderOverlays>;
 
@@ -80,6 +81,9 @@ export interface QuoteBuilderV2PageShellProps {
     kind: "goto_customer_step" | "discard_and_restart",
   ) => void;
   intelligencePanel: ReactNode;
+  tradeMarketContext: TradeMarketContext | null;
+  tradeMarketContextLoading: boolean;
+  tradeWalkaroundHref: string | null;
   overlays: QuoteBuilderOverlaysProps;
 }
 
@@ -133,6 +137,9 @@ export function QuoteBuilderV2PageShell({
   submitApprovalErrorMessage,
   onRecoveryAction,
   intelligencePanel,
+  tradeMarketContext,
+  tradeMarketContextLoading,
+  tradeWalkaroundHref,
   overlays,
 }: QuoteBuilderV2PageShellProps) {
   return (
@@ -267,6 +274,9 @@ export function QuoteBuilderV2PageShell({
                   draft={draft}
                   computed={{ equipmentTotal, attachmentTotal, subtotal, netTotal, marginAmount, marginPct }}
                   quotePackageId={activeQuotePackageId}
+                  tradeMarketContext={tradeMarketContext}
+                  tradeMarketContextLoading={tradeMarketContextLoading}
+                  tradeWalkaroundHref={tradeWalkaroundHref}
                 />
               ) : null
             }
@@ -317,6 +327,9 @@ export function QuoteBuilderV2PageShell({
                 draft={draft}
                 computed={{ equipmentTotal, attachmentTotal, subtotal, netTotal, marginAmount, marginPct }}
                 quotePackageId={activeQuotePackageId}
+                tradeMarketContext={tradeMarketContext}
+                tradeMarketContextLoading={tradeMarketContextLoading}
+                tradeWalkaroundHref={tradeWalkaroundHref}
               />
             )}
           </div>

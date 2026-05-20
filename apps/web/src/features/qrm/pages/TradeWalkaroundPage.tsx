@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Camera, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { AskIronAdvisorButton } from "@/components/primitives";
+import { TradeMarketContextCard } from "../components/TradeMarketContextCard";
 import { buildQuoteBuilderHref } from "@/features/quote-builder/lib/quote-route";
 import { fetchDealComposite } from "../lib/deal-composite-api";
 import {
@@ -21,6 +22,7 @@ import {
   uploadTradeWalkaroundPhoto,
   type TradeValuationResponse,
 } from "../lib/trade-walkaround-api";
+import { buildTradeMarketContext } from "../lib/trade-market-context";
 
 const CONDITION_PROMPTS = [
   "Hydraulic leaks visible",
@@ -32,6 +34,7 @@ const CONDITION_PROMPTS = [
 
 export function TradeWalkaroundPage() {
   const { dealId } = useParams<{ dealId: string }>();
+  const queryClient = useQueryClient();
   const [form, setForm] = useState({
     make: "",
     model: "",
@@ -99,8 +102,30 @@ export function TradeWalkaroundPage() {
       }),
     onSuccess: (result) => {
       setValuationResult(result);
+      queryClient.setQueryData(["trade-walkaround", "valuation", dealId], result.valuation);
     },
   });
+
+  const latestTradeMarketContext = useMemo(() => buildTradeMarketContext({
+    make: valuationQuery.data?.make,
+    model: valuationQuery.data?.model,
+    year: valuationQuery.data?.year,
+    hours: valuationQuery.data?.hours,
+    marketComps: valuationQuery.data?.market_comps,
+    auctionValue: valuationQuery.data?.auction_value,
+    preliminaryValue: valuationQuery.data?.preliminary_value,
+    finalValue: valuationQuery.data?.final_value,
+  }), [valuationQuery.data]);
+  const valuationResultMarketContext = useMemo(() => buildTradeMarketContext({
+    make: valuationResult?.valuation.make,
+    model: valuationResult?.valuation.model,
+    year: valuationResult?.valuation.year,
+    hours: valuationResult?.valuation.hours,
+    marketComps: valuationResult?.valuation.market_comps,
+    auctionValue: valuationResult?.valuation.auction_value,
+    preliminaryValue: valuationResult?.valuation.preliminary_value,
+    finalValue: valuationResult?.valuation.final_value,
+  }), [valuationResult]);
 
   const missingPhotos = useMemo(() => missingRequiredTradePhotos(photos), [photos]);
   const canSubmit = canSubmitTradeWalkaround({
@@ -133,19 +158,12 @@ export function TradeWalkaroundPage() {
       />
 
       {valuationQuery.data && (
-        <Card className="border-qep-orange/20 bg-qep-orange/5 p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-qep-orange">Latest valuation on file</p>
-          <p className="mt-2 text-sm text-foreground">
-            {valuationQuery.data.make} {valuationQuery.data.model}
-            {valuationQuery.data.year ? ` (${valuationQuery.data.year})` : ""} ·
-            {" "}
-            {valuationQuery.data.final_value != null
-              ? `$${Math.round(valuationQuery.data.final_value).toLocaleString()} final`
-              : valuationQuery.data.preliminary_value != null
-              ? `$${Math.round(valuationQuery.data.preliminary_value).toLocaleString()} preliminary`
-              : "No value yet"}
-          </p>
-        </Card>
+        <TradeMarketContextCard
+          context={latestTradeMarketContext}
+          loading={valuationQuery.isLoading || valuationQuery.isFetching}
+          variant="detail"
+          title="Latest valuation on file"
+        />
       )}
 
       <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
@@ -313,6 +331,12 @@ export function TradeWalkaroundPage() {
                   AI condition score: {valuationResult.ai_assessment.score}/100
                 </p>
                 <p className="text-sm text-foreground">{valuationResult.ai_assessment.notes}</p>
+                <TradeMarketContextCard
+                  context={valuationResultMarketContext}
+                  variant="detail"
+                  title="Internal comparable market context"
+                  className="bg-background/60"
+                />
                 {valuationResult.ai_assessment.detected_damage.length > 0 && (
                   <p className="text-xs text-muted-foreground">
                     Detected: {valuationResult.ai_assessment.detected_damage.join(", ")}

@@ -52,6 +52,8 @@ import { useQuoteFinancingPreview } from "../hooks/useQuoteFinancingPreview";
 import { useQuoteTaxPreview } from "../hooks/useQuoteTaxPreview";
 import { buildCustomFinanceScenario } from "../lib/custom-finance";
 import { getTradeValuationProposalSnapshot } from "../lib/point-shoot-trade-api";
+import { buildTradeMarketContext } from "@/features/qrm/lib/trade-market-context";
+import { buildTradeWalkaroundHref } from "@/features/qrm/lib/trade-walkaround";
 import type { ScenarioSelection } from "../components/ConversationalDealEngine";
 import {
   buildScenarioSelectionDraftPatch,
@@ -441,6 +443,17 @@ export function useQuoteBuilderV2Orchestrator() {
     enabled: Boolean(draft.tradeValuationId),
     staleTime: 60_000,
   });
+  const tradeMarketContext = useMemo(() => buildTradeMarketContext({
+    make: tradeValuationProposalQuery.data?.make,
+    model: tradeValuationProposalQuery.data?.model,
+    year: tradeValuationProposalQuery.data?.year,
+    hours: tradeValuationProposalQuery.data?.hours,
+    marketComps: tradeValuationProposalQuery.data?.marketComps,
+    auctionValue: tradeValuationProposalQuery.data?.auctionValue,
+    preliminaryValue: tradeValuationProposalQuery.data?.preliminaryValue,
+    finalValue: tradeValuationProposalQuery.data?.finalValue,
+  }), [tradeValuationProposalQuery.data]);
+  const tradeWalkaroundHref = draft.dealId ? buildTradeWalkaroundHref(draft.dealId) : null;
   const activeQuoteUpdatedAt = typeof activeQuoteRecord?.updated_at === "string"
     ? activeQuoteRecord.updated_at
     : typeof activeQuoteRecord?.created_at === "string"
@@ -1029,6 +1042,9 @@ export function useQuoteBuilderV2Orchestrator() {
           }
         },
         intelligencePanel,
+        tradeMarketContext,
+        tradeMarketContextLoading: tradeValuationProposalQuery.isLoading || tradeValuationProposalQuery.isFetching,
+        tradeWalkaroundHref,
         overlays: {
           dealAssistantOpen,
           onDealAssistantOpenChange: setDealAssistantOpen,

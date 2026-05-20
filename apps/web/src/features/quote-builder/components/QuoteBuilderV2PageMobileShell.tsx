@@ -169,6 +169,9 @@ export function QuoteBuilderV2PageMobileShell({
   submitApprovalErrorMessage,
   onRecoveryAction,
   intelligencePanel,
+  tradeMarketContext,
+  tradeMarketContextLoading,
+  tradeWalkaroundHref,
   overlays,
   quoteStatus,
 }: QuoteBuilderV2PageShellProps) {
@@ -430,6 +433,9 @@ export function QuoteBuilderV2PageMobileShell({
                   marginPct,
                 }}
                 quotePackageId={activeQuotePackageId}
+                tradeMarketContext={tradeMarketContext}
+                tradeMarketContextLoading={tradeMarketContextLoading}
+                tradeWalkaroundHref={tradeWalkaroundHref}
               />
             ) : (
               <p className="text-xs text-muted-foreground">

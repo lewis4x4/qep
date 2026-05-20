@@ -14,6 +14,7 @@
  */
 
 import { supabase } from "@/lib/supabase";
+import { buildTradeMarketCompsFromBookValueRange } from "@/features/qrm/lib/trade-market-context";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const EQUIPMENT_VISION_URL      = `${SUPABASE_URL}/functions/v1/equipment-vision`;
@@ -484,28 +485,7 @@ export async function applyPointShootTrade(input: ApplyTradeInput): Promise<Appl
     await res.json().catch(() => ({})),
     Math.round(auctionDollars * 0.92 * 100),
   );
-  const compsArray = [
-    ...input.bookValue.sources.map((s) => ({
-      source: s.name,
-      price: Math.round(s.value_cents / 100),
-      low:   s.low_cents  != null ? Math.round(s.low_cents  / 100) : null,
-      high:  s.high_cents != null ? Math.round(s.high_cents / 100) : null,
-      confidence: s.confidence,
-      kind: s.kind,
-      sample_size: s.sample_size ?? null,
-      as_of: s.as_of ?? null,
-      detail: s.detail ?? null,
-    })),
-    {
-      source: "_aggregate",
-      price: Math.round(input.bookValue.midCents / 100),
-      low:   Math.round(input.bookValue.lowCents / 100),
-      high:  Math.round(input.bookValue.highCents / 100),
-      confidence: input.bookValue.confidence,
-      kind: "aggregate",
-      is_synthetic: input.bookValue.isSynthetic,
-    },
-  ];
+  const compsArray = buildTradeMarketCompsFromBookValueRange(input.bookValue);
   await supabase
     .from("trade_valuations")
     .update({

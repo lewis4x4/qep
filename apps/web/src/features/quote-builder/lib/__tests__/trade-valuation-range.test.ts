@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { BookValueRange } from "../point-shoot-trade-api";
 import {
+  buildTradeMarketCompsFromBookValueRange,
+  buildTradeMarketContext,
   describePointShootApplyCreditLine,
   describeTradeCreditBasis,
   inferTradeRangeSummary,
@@ -102,6 +104,29 @@ describe("point-shoot book value → range summary", () => {
         { kind: "market_valuation", name: "IronPlanet", value_cents: 43_000_00, low_cents: 40_000_00, high_cents: 46_000_00, confidence: "medium", sample_size: 3, as_of: null, detail: null },
       ],
     };
+    const comps = buildTradeMarketCompsFromBookValueRange(range);
+    expect(comps).toEqual([
+      {
+        source: "IronPlanet",
+        price: 43_000,
+        low: 40_000,
+        high: 46_000,
+        confidence: "medium",
+        kind: "market_valuation",
+        sample_size: 3,
+        as_of: null,
+        detail: null,
+      },
+      {
+        source: "_aggregate",
+        price: 43_000,
+        low: 40_000,
+        high: 46_000,
+        confidence: "medium",
+        kind: "aggregate",
+        is_synthetic: false,
+      },
+    ]);
     const summary = tradeRangeSummaryFromBookValueRange(range);
     expect(summary?.low).toBe(40_000);
     expect(summary?.high).toBe(46_000);
@@ -127,5 +152,43 @@ describe("point-shoot book value → range summary", () => {
     expect(describePointShootApplyCreditLine(range)).toBe(
       "Apply uses the displayed book-value midpoint until a desk value is on file.",
     );
+  });
+});
+
+describe("buildTradeMarketContext", () => {
+  test("builds internal context with aggregate range and source detail", () => {
+    const context = buildTradeMarketContext({
+      make: "Cat",
+      model: "299D3",
+      year: 2019,
+      hours: 1800,
+      marketComps: [
+        { source: "IronPlanet", price: 43_000, low: 40_000, high: 46_000, confidence: "medium", sample_size: 3, as_of: "2026-05-01" },
+        { source: "_aggregate", price: 45_000, low: 38_000, high: 52_000, confidence: "medium", kind: "aggregate", is_synthetic: true },
+      ],
+      auctionValue: 45_000,
+      preliminaryValue: 40_200,
+      finalValue: null,
+    });
+
+    expect(context?.equipmentLabel).toBe("2019 Cat 299D3");
+    expect(context?.range).toMatchObject({ low: 38_000, high: 52_000, isSynthetic: true });
+    expect(context?.appliedValue).toBe(40_200);
+    expect(context?.creditBasis.basis).toBe("preliminary");
+    expect(context?.sources[0]).toMatchObject({ name: "IronPlanet", sampleSize: 3, isAggregate: false });
+    expect(context?.isSynthetic).toBe(true);
+  });
+
+  test("returns no-range degraded state without comparable rows", () => {
+    const context = buildTradeMarketContext({
+      make: "Deere",
+      model: "333G",
+      preliminaryValue: 39_000,
+      marketComps: [],
+    });
+
+    expect(context?.range).toBeNull();
+    expect(context?.appliedValue).toBe(39_000);
+    expect(context?.noRangeReason).toBe("Comparable range is not on file for this valuation yet.");
   });
 });

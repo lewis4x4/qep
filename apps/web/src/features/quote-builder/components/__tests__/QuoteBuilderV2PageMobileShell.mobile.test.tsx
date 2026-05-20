@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 
@@ -11,8 +11,10 @@ mock.module("../ConversationalDealEngine", () => ({
   DealAssistantTrigger: () => <div data-testid="deal-assistant-trigger" />,
 }));
 
+const dealCoachSidebarMock = mock((props: unknown) => <div data-testid="deal-coach-sidebar" data-props={JSON.stringify(props)} />);
+
 mock.module("../DealCoachSidebar", () => ({
-  DealCoachSidebar: () => <div data-testid="deal-coach-sidebar" />,
+  DealCoachSidebar: dealCoachSidebarMock,
 }));
 
 mock.module("../MarginFloorGate", () => ({
@@ -71,7 +73,7 @@ function buildProps(step: WizardStateValue["step"]): QuoteBuilderV2PageShellProp
     primaryActionShowsSendIcon: false,
     onPrimaryAction: () => undefined,
     draft: {
-      equipment: [],
+      equipment: [{ id: "eq-1" }],
       attachments: [],
       voiceSummary: null,
       entryMode: "manual",
@@ -116,6 +118,9 @@ function buildProps(step: WizardStateValue["step"]): QuoteBuilderV2PageShellProp
     submitApprovalErrorMessage: null,
     onRecoveryAction: undefined,
     intelligencePanel: null,
+    tradeMarketContext: null,
+    tradeMarketContextLoading: false,
+    tradeWalkaroundHref: null,
     overlays: {} as never,
   };
 }
@@ -134,6 +139,35 @@ function renderShell(step: WizardStateValue["step"]) {
 }
 
 describe("QuoteBuilderV2PageMobileShell mobile section framing", () => {
+  test("threads trade market context props into Deal Coach sidebar", () => {
+    const props = buildProps("pricing");
+    props.tradeMarketContext = {
+      valuationBand: { low: 100000, high: 120000, midpoint: 110000 },
+      marketCompRange: { low: 98000, high: 122000 },
+      confidence: "medium",
+      creditBasis: { basis: "retail", amount: 110000 },
+      sources: [],
+    } as never;
+    props.tradeMarketContextLoading = true;
+    props.tradeWalkaroundHref = "/qrm/deals/deal-123/trade-walkaround";
+
+    const wizardValue = buildWizardValue("pricing");
+    render(
+      <MemoryRouter>
+        <WizardStateProvider value={wizardValue}>
+          <QuoteBuilderV2PageMobileShell {...props} />
+        </WizardStateProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Deal Coach" }));
+    expect(screen.getByTestId("deal-coach-sidebar")).toBeTruthy();
+    const call = dealCoachSidebarMock.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(call.tradeMarketContextLoading).toBe(true);
+    expect(call.tradeWalkaroundHref).toBe("/qrm/deals/deal-123/trade-walkaround");
+    expect(call.tradeMarketContext).toBeTruthy();
+  });
+
   test("renders neutral frame around active who/what section content", () => {
     renderShell("customer");
 

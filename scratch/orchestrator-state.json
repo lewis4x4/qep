@@ -382,45 +382,28 @@
     ]
   },
   "current_cycle": {
-    "task_id": "A3.3",
-    "title": "M3 \u2014 Cash/finance/lease comparison (payment hero)",
+    "task_id": "A3.4",
+    "title": "M4 \u2014 Trade-in market context (rep-facing only)",
     "stream": "A",
     "wave": "A3",
-    "linear_issue_identifier": "QEP-16",
-    "linear_url": "https://linear.app/jarvislewis/issue/QEP-16/a33-m3-cashfinancelease-comparison-payment-hero",
+    "linear_issue_identifier": "QEP-17",
+    "linear_url": "https://linear.app/jarvislewis/issue/QEP-17/a34-m4-trade-in-market-context-rep-facing-only",
     "status": "oracle_passed_dispatching_release",
-    "plan_export": "/Users/brianlewis/Projects/qep-knowledge-assistant/prompt-exports/oracle-plan-2026-05-19-224943-a3-3-finance-hero-55-708d.md",
-    "explore_session_id": "4D987898-9265-4D42-B1ED-59B37092C608",
-    "expected_files": [
-      "shared/qep-moonshot-contracts.ts",
-      "apps/web/src/features/quote-builder/lib/quote-api.ts",
-      "apps/web/src/features/quote-builder/lib/saved-quote-draft.ts",
-      "apps/web/src/features/quote-builder/hooks/useExistingQuoteLoad.ts",
-      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderV2Orchestrator.tsx",
-      "apps/web/src/features/quote-builder/hooks/useQuoteBuilderReadiness.ts",
-      "apps/web/src/features/quote-builder/steps/FinancingStep.tsx",
-      "apps/web/src/features/quote-builder/components/FinancingCalculator.tsx",
-      "apps/web/src/features/quote-builder/lib/quote-proposal-data.ts",
-      "apps/web/src/features/quote-builder/components/QuotePDFDocument.tsx",
-      "apps/web/src/features/quote-builder/lib/quote-print-html.ts",
-      "tests as needed"
-    ],
+    "plan_export": "/Users/brianlewis/Projects/qep-knowledge-assistant/prompt-exports/oracle-plan-2026-05-19-233733-a3-4-trade-context-d-e46c.md",
     "acceptance_criteria": [
-      "Payment comparison surfaces are customer-safe, payment-first, and include APR source attribution or legal fallback.",
-      "Lease scenarios do not leak into customer output when lease flag is disabled.",
-      "Comparison toggle is implemented/persisted if safely possible without migration conflict; otherwise blocker is logged precisely.",
-      "ADR-006 gates/disclaimers are preserved and no unflagged risky payment-math expansion ships.",
-      "No unrelated migration/baseline files are touched."
+      "Trade comparable market context renders only in rep/internal Deal IQ and QRM trade detail surfaces.",
+      "Customer PDF, printable HTML, public/customer copy, and acceptance surfaces do not expose comp ranges, source names, valuation IDs, auction/final/prelim internals, or internal-only language.",
+      "Synthetic/model-derived ranges are clearly labeled internal/rep-facing if shown.",
+      "No approval/tax/why-this-machine/send gating changes.",
+      "Focused tests and typecheck pass."
     ],
-    "migration_constraint": "Untracked local migrations 593-598 exist; do not create 595-598. If a new migration is required, use 599 only if safe and explain, or report blocker instead of creating a gap.",
-    "updated_at": "2026-05-20T00:50:00-04:00",
-    "builder_session_id": "AAB57BA3-CB26-45E7-AF6C-B181A606ABFC",
-    "fixer_session_id": "B2F25EC5-049B-426F-B5C7-CCA4D25C79F0",
-    "reviewer_session_id": "C4B0D5FC-F02D-4C71-AC67-F3D914EC5270",
-    "oracle_review": "pass_after_p0_fix",
     "deployment_needs": {
       "migrations": false,
-      "edge_functions": "quote-builder-v2"
-    }
+      "edge_functions": false
+    },
+    "updated_at": "2026-05-20T01:25:00-04:00",
+    "builder_session_id": "2C9DE4FC-FB3E-4323-AD52-34C3F773D03C",
+    "reviewer_session_id": "4C818C51-6FCC-44DC-BABB-D06C0CB9427E",
+    "oracle_review": "pass_after_deal_coach_wiring_fix"
   }
 }

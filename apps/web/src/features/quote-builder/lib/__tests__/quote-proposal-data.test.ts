@@ -57,6 +57,26 @@ function branch() {
   };
 }
 
+const FORBIDDEN_CUSTOMER_TRADE_INTERNALS = [
+  "IronPlanet",
+  "Ritchie Bros",
+  "_aggregate",
+  "COMPARABLE MARKET RANGE",
+  "NOT A GUARANTEED OFFER",
+  "Trade Range",
+  "auctionValue",
+  "discountedValue",
+  "preliminaryValue",
+  "finalValue",
+  "marketComps",
+];
+
+function expectNoCustomerTradeInternals(rendered: string, valuationId = "trade-123") {
+  for (const term of [...FORBIDDEN_CUSTOMER_TRADE_INTERNALS, valuationId]) {
+    expect(rendered).not.toContain(term);
+  }
+}
+
 function build(
   overrides: Partial<QuoteWorkspaceDraft> = {},
   financeScenarios: QuoteFinanceScenario[] = [],
@@ -389,7 +409,11 @@ describe("buildQuoteProposalData", () => {
           { type: "hour_meter", url: "javascript:alert(1)" },
           { type: "right", url: "https://cdn.qep.example/trade-right.jpg" },
         ],
-        marketComps: [{ source: "IronPlanet", price: 43000 }, { source: "_aggregate", price: 45000 }],
+        marketComps: [
+          { source: "IronPlanet", price: 43000, low: 40000, high: 46000 },
+          { source: "Ritchie Bros", price: 44500, detail: "COMPARABLE MARKET RANGE" },
+          { source: "_aggregate", price: 45000, low: 38000, high: 52000, is_synthetic: true },
+        ],
         auctionValue: 45_000,
         discountedValue: 41_400,
         reconditioningEstimate: 1_200,
@@ -415,9 +439,43 @@ describe("buildQuoteProposalData", () => {
     ]));
     expect(JSON.stringify(tradeLine)).not.toContain("Preliminary value");
     expect(JSON.stringify(tradeLine)).not.toContain("Market midpoint");
-    expect(JSON.stringify(tradeLine)).not.toContain("IronPlanet");
-    expect(JSON.stringify(tradeLine)).not.toContain("trade-123");
     expect(JSON.stringify(tradeLine)).not.toContain("javascript:");
+    expectNoCustomerTradeInternals(JSON.stringify(tradeLine));
+    expectNoCustomerTradeInternals(JSON.stringify(data));
+    expectNoCustomerTradeInternals(buildPrintableQuoteHtml(data));
+  });
+
+  test("filters internal trade valuation prose from customer copy", () => {
+    const data = build({
+      tradeAllowance: 40_200,
+      tradeValuationId: "trade-789",
+    }, [], {
+      tradeValuation: {
+        id: "trade-789",
+        make: "Deere",
+        model: "333G",
+        year: 2021,
+        serialNumber: "SN789",
+        hours: 2400,
+        photos: [{ type: "point_shoot", url: "https://cdn.qep.example/trade-front.jpg" }],
+        marketComps: [{ source: "IronPlanet", price: 43000 }, { source: "_aggregate", price: 45000 }],
+        auctionValue: 45_000,
+        discountedValue: 41_400,
+        reconditioningEstimate: null,
+        preliminaryValue: 40_200,
+        finalValue: null,
+        conditionalLanguage: "NOT A GUARANTEED OFFER - Trade Range uses IronPlanet comps.",
+        aiConditionNotes: "COMPARABLE MARKET RANGE from Ritchie Bros auction data.",
+        operationalStatus: "daily_use",
+      },
+    });
+    const tradeLine = data.lineItems.find((line) => line.lineType === "trade_allowance");
+    const html = buildPrintableQuoteHtml(data);
+
+    expect(tradeLine?.specBullets).toEqual(["Hours: 2,400"]);
+    expect(tradeLine?.longDescription).toBe("Trade evidence captured for 2021 Deere 333G");
+    expectNoCustomerTradeInternals(JSON.stringify(data), "trade-789");
+    expectNoCustomerTradeInternals(html, "trade-789");
   });
 
   test("manual trade allowance remains safe with no trade valuation media", () => {
@@ -600,6 +658,8 @@ describe("buildQuoteProposalData", () => {
     expect(html).toContain("2019 Cat 299D3");
     expect(html).toContain("Scan to visit QEP online");
     expect(html).not.toContain("Scan to review this proposal");
+    expectNoCustomerTradeInternals(JSON.stringify(data), "trade-456");
+    expectNoCustomerTradeInternals(html, "trade-456");
   });
 
 

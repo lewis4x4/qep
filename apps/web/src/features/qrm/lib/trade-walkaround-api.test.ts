@@ -17,6 +17,12 @@ describe("trade walkaround API response normalizers", () => {
         ai_condition_score: 82,
         ai_condition_notes: "Clean trade",
         ai_detected_damage: ["scratched panel", null],
+        market_comps: [
+          { source: "IronPlanet", price: 43000, low: 40000, high: 46000 },
+          "bad-row",
+          { source: "_aggregate", price: 45000, low: 38000, high: 52000, confidence: "medium" },
+        ],
+        auction_value: 45000,
         preliminary_value: 42000,
         final_value: Number.NaN,
         created_at: "2026-05-01T00:00:00.000Z",
@@ -36,6 +42,11 @@ describe("trade walkaround API response normalizers", () => {
         year: 2022,
         attachments_included: ["bucket"],
         ai_detected_damage: ["scratched panel"],
+        market_comps: [
+          { source: "IronPlanet", price: 43000, low: 40000, high: 46000 },
+          { source: "_aggregate", price: 45000, low: 38000, high: 52000, confidence: "medium" },
+        ],
+        auction_value: 45000,
         final_value: null,
       },
       ai_assessment: {

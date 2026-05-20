@@ -7,6 +7,7 @@ import {
   normalizeTradeValuationPhotos,
   normalizeTradeValuationProposalSnapshot,
 } from "../point-shoot-trade-api";
+import { buildTradeMarketCompsFromBookValueRange } from "../trade-valuation-range";
 
 describe("point-shoot trade API normalizers", () => {
   test("normalizes equipment vision payloads", () => {
@@ -121,6 +122,28 @@ describe("point-shoot trade API normalizers", () => {
         detail: null,
       }],
     });
+    expect(buildTradeMarketCompsFromBookValueRange(range)).toEqual([
+      {
+        source: "Fallback",
+        price: 10_000,
+        low: null,
+        high: null,
+        confidence: "low",
+        kind: "market_valuation",
+        sample_size: null,
+        as_of: null,
+        detail: null,
+      },
+      {
+        source: "_aggregate",
+        price: 10_000,
+        low: 9_000,
+        high: 11_000,
+        confidence: "medium",
+        kind: "aggregate",
+        is_synthetic: true,
+      },
+    ]);
   });
 
   test("normalizes trade valuation apply responses with echoed photos", () => {

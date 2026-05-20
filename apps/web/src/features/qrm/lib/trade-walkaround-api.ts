@@ -1,7 +1,10 @@
 import { supabase } from "@/lib/supabase";
+import { buildTradeMarketCompsFromBookValueRange } from "./trade-market-context";
 import { normalizeTradePhotos, type TradeWalkaroundPhoto } from "./trade-walkaround";
+import type { BookValueRange, BookValueSourceKind } from "@/features/quote-builder/lib/point-shoot-trade-api";
 
 const TRADE_VALUATION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trade-valuation`;
+const BOOK_VALUE_RANGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trade-book-value-range`;
 const PHOTO_BUCKET = "equipment-photos";
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
@@ -64,6 +67,38 @@ function nullableNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function numberOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return null;
+}
+
+function normalizeConfidence(value: unknown): "high" | "medium" | "low" {
+  const normalized = typeof value === "string" ? value.toLowerCase() : "";
+  return normalized === "high" ? "high" : normalized === "medium" ? "medium" : "low";
+}
+
+function normalizeBookValueSourceKind(value: unknown): BookValueSourceKind {
+  return value === "market_valuation"
+    || value === "auction_comps"
+    || value === "competitor_listings"
+    || value === "synthetic_iron_planet"
+    || value === "synthetic_ritchie_bros"
+    || value === "synthetic_internal_history"
+    ? value
+    : "market_valuation";
+}
+
 function stringArrayOrNull(value: unknown): string[] | null {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
@@ -115,6 +150,76 @@ function mapAiAssessment(value: unknown): TradeValuationResponse["ai_assessment"
     notes: nullableString(value.notes) ?? "",
     detected_damage: stringArrayOrNull(value.detected_damage) ?? [],
   };
+}
+
+function normalizeBookValueRangePayload(payload: unknown): BookValueRange {
+  const record = isRecord(payload) ? payload : {};
+  const sources = Array.isArray(record.sources)
+    ? record.sources.flatMap((row) => {
+      if (!isRecord(row)) return [];
+      const name = firstString(row.name);
+      const valueCents = numberOrNull(row.value_cents);
+      if (!name || valueCents == null) return [];
+      return [{
+        kind: normalizeBookValueSourceKind(row.kind),
+        name,
+        value_cents: valueCents,
+        low_cents: numberOrNull(row.low_cents),
+        high_cents: numberOrNull(row.high_cents),
+        confidence: normalizeConfidence(row.confidence),
+        sample_size: numberOrNull(row.sample_size),
+        as_of: nullableString(row.as_of),
+        detail: nullableString(row.detail),
+      }];
+    })
+    : [];
+
+  return {
+    make: firstString(record.make) ?? "",
+    model: firstString(record.model) ?? "",
+    year: numberOrNull(record.year),
+    hours: numberOrNull(record.hours),
+    lowCents: numberOrNull(record.low_cents) ?? 0,
+    midCents: numberOrNull(record.mid_cents) ?? 0,
+    highCents: numberOrNull(record.high_cents) ?? 0,
+    confidence: normalizeConfidence(record.confidence),
+    sources,
+    isSynthetic: record.is_synthetic === true,
+  };
+}
+
+async function bestEffortEnrichTradeMarketContext(result: TradeValuationResponse): Promise<TradeValuationResponse> {
+  const { valuation } = result;
+  if (!valuation.make || !valuation.model) return result;
+  try {
+    const response = await fetch(BOOK_VALUE_RANGE_URL, {
+      method: "POST",
+      headers: await getAuthHeaders(),
+      body: JSON.stringify({
+        make: valuation.make,
+        model: valuation.model,
+        year: valuation.year ?? undefined,
+        hours: valuation.hours ?? undefined,
+      }),
+    });
+    if (!response.ok) return result;
+    const range = normalizeBookValueRangePayload(await response.json().catch(() => ({})));
+    if (range.midCents <= 0 && range.sources.length === 0) return result;
+
+    const { data, error } = await supabase
+      .from("trade_valuations")
+      .update({
+        auction_value: range.midCents / 100,
+        market_comps: buildTradeMarketCompsFromBookValueRange(range),
+      })
+      .eq("id", valuation.id)
+      .select("*")
+      .maybeSingle();
+    if (error || !data) return result;
+    return { ...result, valuation: mapTradeValuation(data) };
+  } catch {
+    return result;
+  }
 }
 
 export function normalizeTradeValuationResponse(payload: unknown): TradeValuationResponse {
@@ -185,5 +290,5 @@ export async function createTradeValuation(input: {
   if (!isRecord(payload)) {
     throw new Error("Trade valuation response was malformed.");
   }
-  return normalizeTradeValuationResponse(payload);
+  return bestEffortEnrichTradeMarketContext(normalizeTradeValuationResponse(payload));
 }

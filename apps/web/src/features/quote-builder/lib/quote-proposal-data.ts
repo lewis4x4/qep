@@ -29,6 +29,20 @@ const TAX_PROFILE_LABELS: Record<QuoteTaxProfile, string> = {
 
 const FINANCING_DISCLOSURE = "Financing and lease payments shown are estimates for proposal discussion only. They are not a credit approval, commitment to lend, or final Truth in Lending Act disclosure. Final APR, payment, term, fees, taxes, and finance charges are subject to lender approval, signed finance documents, and applicable law.";
 const PROPOSAL_DISCLOSURE = "This proposal is prepared for the named customer only. Prices, incentives, freight, tax, delivery timing, financing, and availability are subject to final confirmation and prior sale. Dealer cost, margin, and internal approval details are intentionally excluded from customer-facing proposal output.";
+const FORBIDDEN_CUSTOMER_TRADE_PROSE = [
+  "ironplanet",
+  "iron planet",
+  "ritchie bros",
+  "_aggregate",
+  "comparable market range",
+  "not a guaranteed offer",
+  "trade range",
+  "market comp",
+  "auction",
+  "preliminary value",
+  "final value",
+  "valuation id",
+];
 
 /**
  * Customer-safe quote media metadata contract.
@@ -60,6 +74,13 @@ function money(value: number | null | undefined): number {
 function optionalText(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function customerSafeTradeProse(value: string | null | undefined): string | null {
+  const text = optionalText(value);
+  if (!text) return null;
+  const normalized = text.toLowerCase();
+  return FORBIDDEN_CUSTOMER_TRADE_PROSE.some((term) => normalized.includes(term)) ? null : text;
 }
 
 function metadataRecord(value: QuoteLineItemDraft["metadata"]): Record<string, unknown> {
@@ -247,9 +268,11 @@ function buildTradeAllowanceLine(
     media_kind: "trade_in",
   };
   const condition = tradeConditionLabel(tradeValuation?.operationalStatus ?? null);
+  const safeConditionalLanguage = customerSafeTradeProse(tradeValuation?.conditionalLanguage ?? null);
+  const safeAiConditionNotes = customerSafeTradeProse(tradeValuation?.aiConditionNotes ?? null);
   const specs = [
     tradeValuation?.hours != null ? `Hours: ${formatInteger(tradeValuation.hours)}` : null,
-    tradeValuation?.conditionalLanguage ? `Condition note: ${tradeValuation.conditionalLanguage}` : null,
+    safeConditionalLanguage ? `Condition note: ${safeConditionalLanguage}` : null,
   ].flatMap((item) => {
     const text = optionalText(item ?? null);
     return text ? [text] : [];
@@ -270,8 +293,8 @@ function buildTradeAllowanceLine(
     serialNumber: tradeValuation?.serialNumber ?? null,
     condition,
     longDescription: tradeTitle
-      ? `Trade evidence captured for ${tradeTitle}${tradeValuation?.aiConditionNotes ? ` — ${tradeValuation.aiConditionNotes}` : ""}`
-      : tradeValuation?.aiConditionNotes ?? null,
+      ? `Trade evidence captured for ${tradeTitle}${safeAiConditionNotes ? ` — ${safeAiConditionNotes}` : ""}`
+      : safeAiConditionNotes,
     specBullets: specs.slice(0, 8),
     media: buildLineMedia(metadata, tradeTitle || "Trade-in equipment"),
     vendorLogo: null,

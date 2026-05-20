@@ -30,6 +30,8 @@ import {
 } from "../lib/deal-intelligence-api";
 import type { AcceptanceSnapshot } from "../lib/coach-rules/adaptive";
 import { hasQuoteCustomerIdentity } from "../lib/quote-workspace";
+import { TradeMarketContextCard } from "@/features/qrm/components/TradeMarketContextCard";
+import type { TradeMarketContext } from "@/features/qrm/lib/trade-market-context";
 
 /**
  * Slice 13 — Deal Coach Sidebar v1.
@@ -59,6 +61,10 @@ export interface DealCoachSidebarProps {
   quotePackageId: string | null;
   /** Optional handler for rule actions that scroll/focus specific fields. */
   onAction?: (actionId: string) => void;
+  /** Internal-only trade comparable context prepared by the quote orchestrator. */
+  tradeMarketContext?: TradeMarketContext | null;
+  tradeMarketContextLoading?: boolean;
+  tradeWalkaroundHref?: string | null;
 }
 
 const DEBOUNCE_MS = 300;
@@ -84,6 +90,9 @@ export function DealCoachSidebar({
   computed,
   quotePackageId,
   onAction,
+  tradeMarketContext = null,
+  tradeMarketContextLoading = false,
+  tradeWalkaroundHref = null,
 }: DealCoachSidebarProps) {
   const { profile } = useAuth();
   const [expanded, setExpanded] = useState(true);
@@ -340,6 +349,16 @@ export function DealCoachSidebar({
 
       {expanded && (
         <div className="space-y-2">
+          {(tradeMarketContextLoading || tradeMarketContext) && (
+            <TradeMarketContextCard
+              context={tradeMarketContext}
+              loading={tradeMarketContextLoading}
+              variant="compact"
+              title="Trade market context"
+              href={tradeWalkaroundHref}
+            />
+          )}
+
           {loading && coachReady && (
             <Card className="border-dashed">
               <CardContent className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
