@@ -41,6 +41,15 @@ import { requireServiceUser } from "../_shared/service-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { resolveProfileActiveWorkspaceId } from "../_shared/workspace.ts";
 import { sendResendEmail } from "../_shared/resend-email.ts";
+import {
+  buildRequiredVoiceGate,
+  isVoiceGateSatisfied,
+  markHumanEdited,
+  mergeVoiceGate,
+  readVoiceGate,
+  VOICE_GATE_BLOCK_MESSAGE,
+  type VoiceComplianceGate,
+} from "../_shared/voice-compliance.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") || Deno.env.get("OPENAI_KEY");
 
 type Scenario =
@@ -156,6 +165,7 @@ async function persistDraft(
   createdBy: string | null,
   payload: DraftRequest,
   generated: { subject: string; body: string; preview: string; urgency_score: number },
+  voiceCompliance: VoiceComplianceGate,
 ): Promise<{ id: string } | null> {
   const { data, error } = await supabase
     .from("email_drafts")
@@ -171,7 +181,7 @@ async function persistDraft(
       preview: generated.preview,
       urgency_score: generated.urgency_score,
       tone: payload.tone || "consultative",
-      context: payload.context || {},
+      context: mergeVoiceGate(payload.context || {}, voiceCompliance),
       status: "pending",
       created_by: createdBy,
     })
@@ -265,6 +275,7 @@ Deno.serve(async (req) => {
         return safeJsonError("Email draft generation failed", 502, origin);
       }
 
+      const voiceCompliance = buildRequiredVoiceGate("draft-email");
       let draftId: string | null = null;
       if (payload.persist !== false) {
         const persisted = await persistDraft(
@@ -273,6 +284,7 @@ Deno.serve(async (req) => {
           userId,
           payload,
           generated,
+          voiceCompliance,
         );
         draftId = persisted?.id || null;
       }
@@ -285,6 +297,7 @@ Deno.serve(async (req) => {
           body: generated.body,
           preview: generated.preview,
           urgency_score: generated.urgency_score,
+          voice_compliance: voiceCompliance,
         },
         origin,
         201,
@@ -304,7 +317,12 @@ Deno.serve(async (req) => {
       const tone = payload.tone || "consultative";
       const signature = payload.rep_signature || "Your QEP team";
 
-      const results: Array<{ deal_id?: string; draft_id: string | null; error?: string }> = [];
+      const results: Array<{
+        deal_id?: string;
+        draft_id: string | null;
+        voice_compliance?: VoiceComplianceGate;
+        error?: string;
+      }> = [];
 
       for (const recipient of payload.recipients) {
         try {
@@ -315,15 +333,21 @@ Deno.serve(async (req) => {
             signature,
           );
 
+          const voiceCompliance = buildRequiredVoiceGate("draft-email");
           const persisted = await persistDraft(
             supabaseAdmin,
             workspace,
             userId,
             { scenario: payload.scenario, ...recipient, tone },
             generated,
+            voiceCompliance,
           );
 
-          results.push({ deal_id: recipient.deal_id, draft_id: persisted?.id || null });
+          results.push({
+            deal_id: recipient.deal_id,
+            draft_id: persisted?.id || null,
+            voice_compliance: voiceCompliance,
+          });
         } catch (err) {
           results.push({
             deal_id: recipient.deal_id,
@@ -352,13 +376,16 @@ Deno.serve(async (req) => {
       // Fetch the draft
       const { data: draft, error: fetchErr } = await supabaseAdmin
         .from("email_drafts")
-        .select("id, to_email, subject, body, status, workspace_id")
+        .select("id, to_email, subject, body, status, workspace_id, context")
         .eq("id", body.draft_id)
         .eq("workspace_id", workspace)
         .single();
 
       if (fetchErr || !draft) return safeJsonError("Draft not found", 404, origin);
       if (draft.status === "sent") return safeJsonError("Draft already sent", 409, origin);
+      if (!isVoiceGateSatisfied(draft.context, draft.status)) {
+        return safeJsonError(VOICE_GATE_BLOCK_MESSAGE, 409, origin);
+      }
       if (!draft.to_email) return safeJsonError("No recipient email on this draft. Add a to_email before sending.", 422, origin);
 
       // Send via Resend
@@ -380,6 +407,10 @@ Deno.serve(async (req) => {
         return safeJsonError("Email delivery failed", 502, origin);
       }
 
+      const sentContext = draft.status === "edited" && readVoiceGate(draft.context)
+        ? markHumanEdited(draft.context, userId)
+        : draft.context;
+
       // Mark as sent
       await supabaseAdmin
         .from("email_drafts")
@@ -387,6 +418,7 @@ Deno.serve(async (req) => {
           status: "sent",
           sent_at: new Date().toISOString(),
           sent_via: "resend",
+          context: sentContext,
         })
         .eq("id", body.draft_id);
 
@@ -398,12 +430,30 @@ Deno.serve(async (req) => {
     if (action === "mark-sent") {
       if (!body.draft_id) return safeJsonError("draft_id required", 400, origin);
 
+      const { data: draft, error: fetchErr } = await supabaseAdmin
+        .from("email_drafts")
+        .select("id, status, workspace_id, context")
+        .eq("id", body.draft_id)
+        .eq("workspace_id", workspace)
+        .single();
+
+      if (fetchErr || !draft) return safeJsonError("Draft not found", 404, origin);
+      if (draft.status === "sent") return safeJsonError("Draft already sent", 409, origin);
+      if (!isVoiceGateSatisfied(draft.context, draft.status)) {
+        return safeJsonError(VOICE_GATE_BLOCK_MESSAGE, 409, origin);
+      }
+
+      const sentContext = draft.status === "edited" && readVoiceGate(draft.context)
+        ? markHumanEdited(draft.context, userId)
+        : draft.context;
+
       const { error } = await supabaseAdmin
         .from("email_drafts")
         .update({
           status: "sent",
           sent_at: body.sent_at || new Date().toISOString(),
           sent_via: body.sent_via || "manual",
+          context: sentContext,
         })
         .eq("id", body.draft_id)
         .eq("workspace_id", workspace);

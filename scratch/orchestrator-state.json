@@ -417,6 +417,40 @@
       "gate_report": "test-results/agent-gates/20260521T002558Z-C4.1-native-invoice-rental-esign.json",
       "notes": "The local main tree has unrelated OEM/admin WIP and untracked migration numbers 607/608. This task uses committed-next migration 607 and full gates were verified in a clean detached worktree containing only C4.1 scoped files. Temporary gate worktree used env from .env.local and temporary dev deps for existing gate prerequisites; those dependency repairs were not copied into the repo.",
       "updated_at": "2026-05-21T00:25:58Z"
+    },
+    {
+      "task_id": "E2.2/QEP-125",
+      "status": "complete",
+      "title": "LLM strings through email-voice skill or human edit",
+      "stream": "E",
+      "wave": "E2",
+      "goal": "Generated user-facing email drafts carry a machine-checkable E2.2 voice gate and cannot be sent or marked sent until human edited or email-voice passed, with Decision Room drafts gated before copy/mailto.",
+      "changed_files": [
+        "supabase/functions/_shared/voice-compliance.ts",
+        "supabase/functions/_shared/voice-compliance.test.ts",
+        "supabase/functions/draft-email/index.ts",
+        "supabase/functions/_shared/draft-email.ts",
+        "supabase/functions/requote-drafts/index.ts",
+        "supabase/functions/decision-room-draft-email/index.ts",
+        "supabase/functions/_shared/chat-tools.ts",
+        "apps/web/src/features/email-drafts/lib/email-drafts-api.ts",
+        "apps/web/src/features/email-drafts/lib/email-drafts-api.test.ts",
+        "apps/web/src/features/qrm/components/DecisionRoomEmailDraft.tsx",
+        "apps/web/src/features/qrm/components/DecisionRoomEmailDraft.test.tsx"
+      ],
+      "verification": [
+        "deno test supabase/functions/_shared/voice-compliance.test.ts",
+        "deno check supabase/functions/draft-email/index.ts supabase/functions/requote-drafts/index.ts supabase/functions/decision-room-draft-email/index.ts supabase/functions/_shared/draft-email.ts supabase/functions/_shared/chat-tools.ts",
+        "bun test apps/web/src/features/email-drafts/lib/email-drafts-api.test.ts apps/web/src/features/qrm/components/DecisionRoomEmailDraft.test.tsx",
+        "bun --filter @qep/web typecheck",
+        "git diff --check -- scoped E2.2 files",
+        "Oracle review found one P1 fake-edited bypass; targeted fix applied",
+        "bun run migrations:check (clean temp worktree, sequence 001..607)",
+        "bun run segment:gates --segment E2.2-core-voice-gate --ui (clean temp worktree)"
+      ],
+      "gate_report": "test-results/agent-gates/20260521T005413Z-E2.2-core-voice-gate.json",
+      "notes": "No skills/email-voice implementation exists in-repo, so E2.2 is enforced as a persisted context.voice_gate contract with human-edit default and email_voice_passed future status. Main working tree has unrelated OEM/admin/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only E2.2 scoped files applied. Price-intelligence/OEM draft wiring remains excluded because those files are currently unrelated WIP.",
+      "updated_at": "2026-05-21T00:54:13Z"
     }
   ],
   "agents": [
@@ -746,41 +780,38 @@
     }
   },
   "current_task": {
-    "task_id": "C4.1/QEP-76",
+    "task_id": "E2.2/QEP-125",
     "status": "complete",
-    "title": "Extend native e-signature to invoices + rental contracts",
-    "stream": "C",
-    "wave": "C4",
-    "goal": "Native QEP portal e-signing extends beyond Quote Builder to customer invoices and rental contracts, replacing VESign dependency on these surfaces with signature proof tables, portal capture UI, API endpoints, and rental finalization gates.",
+    "title": "LLM strings through email-voice skill or human edit",
+    "stream": "E",
+    "wave": "E2",
+    "goal": "Generated user-facing email drafts carry a machine-checkable E2.2 voice gate and cannot be sent or marked sent until human edited or email-voice passed, with Decision Room drafts gated before copy/mailto.",
     "changed_files": [
-      "supabase/migrations/607_native_invoice_rental_signatures.sql",
-      "supabase/functions/portal-api/index.ts",
-      "shared/qep-moonshot-contracts.ts",
-      "apps/web/src/features/portal/components/PortalNativeSignatureCard.tsx",
-      "apps/web/src/features/portal/components/PortalSignaturePad.tsx",
-      "apps/web/src/features/portal/components/RentalPaymentStatusCard.tsx",
-      "apps/web/src/features/portal/lib/portal-api.ts",
-      "apps/web/src/features/portal/lib/portal-row-normalizers.ts",
-      "apps/web/src/features/portal/lib/signing-readiness.ts",
-      "apps/web/src/features/portal/lib/signing-readiness.test.ts",
-      "apps/web/src/features/portal/lib/portal-rentals.ts",
-      "apps/web/src/features/portal/lib/portal-rentals.test.ts",
-      "apps/web/src/features/portal/pages/PortalInvoiceDetailPage.tsx",
-      "apps/web/src/features/portal/pages/PortalInvoicesPage.tsx",
-      "apps/web/src/features/portal/pages/PortalRentalsPage.tsx"
+      "supabase/functions/_shared/voice-compliance.ts",
+      "supabase/functions/_shared/voice-compliance.test.ts",
+      "supabase/functions/draft-email/index.ts",
+      "supabase/functions/_shared/draft-email.ts",
+      "supabase/functions/requote-drafts/index.ts",
+      "supabase/functions/decision-room-draft-email/index.ts",
+      "supabase/functions/_shared/chat-tools.ts",
+      "apps/web/src/features/email-drafts/lib/email-drafts-api.ts",
+      "apps/web/src/features/email-drafts/lib/email-drafts-api.test.ts",
+      "apps/web/src/features/qrm/components/DecisionRoomEmailDraft.tsx",
+      "apps/web/src/features/qrm/components/DecisionRoomEmailDraft.test.tsx"
     ],
     "verification": [
-      "bun test apps/web/src/features/portal/lib/portal-rentals.test.ts apps/web/src/features/portal/lib/signing-readiness.test.ts",
-      "deno check supabase/functions/portal-api/index.ts",
-      "bun run --cwd apps/web typecheck",
-      "git diff --check -- scoped C4.1 files",
-      "Oracle review found one P1 no-deposit rental blocker; targeted fix applied; Oracle follow-up: no blocking findings",
+      "deno test supabase/functions/_shared/voice-compliance.test.ts",
+      "deno check supabase/functions/draft-email/index.ts supabase/functions/requote-drafts/index.ts supabase/functions/decision-room-draft-email/index.ts supabase/functions/_shared/draft-email.ts supabase/functions/_shared/chat-tools.ts",
+      "bun test apps/web/src/features/email-drafts/lib/email-drafts-api.test.ts apps/web/src/features/qrm/components/DecisionRoomEmailDraft.test.tsx",
+      "bun --filter @qep/web typecheck",
+      "git diff --check -- scoped E2.2 files",
+      "Oracle review found one P1 fake-edited bypass; targeted fix applied",
       "bun run migrations:check (clean temp worktree, sequence 001..607)",
-      "bun run segment:gates --segment C4.1-native-invoice-rental-esign --ui (clean temp worktree)"
+      "bun run segment:gates --segment E2.2-core-voice-gate --ui (clean temp worktree)"
     ],
-    "gate_report": "test-results/agent-gates/20260521T002558Z-C4.1-native-invoice-rental-esign.json",
-    "notes": "The local main tree has unrelated OEM/admin WIP and untracked migration numbers 607/608. This task uses committed-next migration 607 and full gates were verified in a clean detached worktree containing only C4.1 scoped files. Temporary gate worktree used env from .env.local and temporary dev deps for existing gate prerequisites; those dependency repairs were not copied into the repo.",
-    "updated_at": "2026-05-21T00:25:58Z"
+    "gate_report": "test-results/agent-gates/20260521T005413Z-E2.2-core-voice-gate.json",
+    "notes": "No skills/email-voice implementation exists in-repo, so E2.2 is enforced as a persisted context.voice_gate contract with human-edit default and email_voice_passed future status. Main working tree has unrelated OEM/admin/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only E2.2 scoped files applied. Price-intelligence/OEM draft wiring remains excluded because those files are currently unrelated WIP.",
+    "updated_at": "2026-05-21T00:54:13Z"
   },
-  "updated_at": "2026-05-21T00:25:58Z"
+  "updated_at": "2026-05-21T00:54:13Z"
 }

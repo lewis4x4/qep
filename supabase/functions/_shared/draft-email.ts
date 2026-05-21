@@ -11,6 +11,12 @@
  * - escalation-router (customer escalations)
  */
 
+import {
+  buildNotRequiredVoiceGate,
+  buildRequiredVoiceGate,
+  type VoiceComplianceGate,
+} from "./voice-compliance.ts";
+
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 
 export interface DraftEmailContext {
@@ -39,6 +45,8 @@ export interface EmailDraft {
   tone: "urgent" | "professional" | "friendly";
   /** Whether OpenAI was used (vs fallback template) */
   ai_generated: boolean;
+  /** E2.2/QEP-125 user-facing draft compliance metadata */
+  voice_compliance?: VoiceComplianceGate;
 }
 
 const FALLBACK_TEMPLATES: Record<string, (ctx: DraftEmailContext) => EmailDraft> = {
@@ -76,7 +84,10 @@ const FALLBACK_TEMPLATES: Record<string, (ctx: DraftEmailContext) => EmailDraft>
 
 function fallbackDraft(ctx: DraftEmailContext): EmailDraft {
   const template = FALLBACK_TEMPLATES[ctx.purpose] || FALLBACK_TEMPLATES.generic;
-  return template(ctx);
+  return {
+    ...template(ctx),
+    voice_compliance: buildNotRequiredVoiceGate("shared-draft-email"),
+  };
 }
 
 /**
@@ -130,11 +141,13 @@ Rules:
     if (!content) return fallbackDraft(ctx);
 
     const parsed = JSON.parse(content);
+    const fallback = fallbackDraft(ctx);
     return {
-      subject: parsed.subject || fallbackDraft(ctx).subject,
-      body: parsed.body || fallbackDraft(ctx).body,
+      subject: parsed.subject || fallback.subject,
+      body: parsed.body || fallback.body,
       tone: (parsed.tone as "urgent" | "professional" | "friendly") || "professional",
       ai_generated: true,
+      voice_compliance: buildRequiredVoiceGate("shared-draft-email"),
     };
   } catch (err) {
     console.error("draft-email error:", err);

@@ -16,6 +16,7 @@ import { createCallerClient, createAdminClient, resolveCallerContext } from "../
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts";
+import { buildRequiredVoiceGate } from "../_shared/voice-compliance.ts";
 
 const MODEL = "gpt-5.4-mini";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -258,13 +259,15 @@ Deno.serve(async (req) => {
       return safeJsonError("model returned an unparseable draft", 502, origin);
     }
 
+    const generatedAt = new Date().toISOString();
     return safeJsonOk(
       {
         subject: draft.subject,
         body: draft.body,
         seatId: body.seatId,
         recipientEmail: body.seatEmail,
-        generatedAt: new Date().toISOString(),
+        generatedAt,
+        voice_compliance: buildRequiredVoiceGate("decision-room-draft-email", new Date(generatedAt)),
       },
       origin,
     );

@@ -4,6 +4,7 @@
  * instead of relying solely on pre-fetched keyword/semantic evidence.
  */
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { buildRequiredVoiceGate } from "./voice-compliance.ts";
 
 // ── Tool definitions (OpenAI format) ───────────────────────────────────
 
@@ -1420,7 +1421,8 @@ async function execDraftEmail(
         date: a.occurred_at,
       })),
     },
-    instruction: `Generate a ${args.tone ?? "professional"} email draft to ${contact.first_name} ${contact.last_name}${contact.title ? ` (${contact.title})` : ""}${companyName ? ` at ${companyName}` : ""}. Purpose: ${args.purpose}.${args.subject ? ` Subject: ${args.subject}.` : ""} Use the recent interaction context to personalize. Format as: Subject: ...\n\n[email body]. Do NOT send — present it as a draft for the user to review and edit.`,
+    voice_compliance: buildRequiredVoiceGate("chat-tool"),
+    instruction: `Generate a ${args.tone ?? "professional"} email draft to ${contact.first_name} ${contact.last_name}${contact.title ? ` (${contact.title})` : ""}${companyName ? ` at ${companyName}` : ""}. Purpose: ${args.purpose}.${args.subject ? ` Subject: ${args.subject}.` : ""} Use the recent interaction context to personalize. Format as: Subject: ...\n\n[email body]. Do NOT send or imply it is ready to send — present it as a draft that requires a human edit or email-voice pass before use under E2.2/QEP-125.`,
   };
 }
 

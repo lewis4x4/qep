@@ -20,6 +20,11 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { draftEmail } from "../_shared/draft-email.ts";
+import {
+  buildRequiredVoiceGate,
+  mergeVoiceGate,
+  type VoiceComplianceGate,
+} from "../_shared/voice-compliance.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
@@ -154,6 +159,16 @@ Deno.serve(async (req) => {
         },
       });
 
+      const voiceCompliance = emailDraft.ai_generated ? buildRequiredVoiceGate("requote-drafts") : null;
+      const draftContext = {
+        quote_package_id: body.quote_package_id,
+        manufacturers,
+        effective_date: effectiveDate,
+        price_delta_total: totalDelta,
+        impact_items: impactRowsArr.length,
+        ai_generated: emailDraft.ai_generated,
+      };
+
       // Persist the draft to email_drafts table
       const { data: draftRow, error: draftErr } = await supabaseAdmin
         .from("email_drafts")
@@ -167,14 +182,7 @@ Deno.serve(async (req) => {
           body: emailDraft.body,
           preview: emailDraft.body.substring(0, 140),
           urgency_score: totalDelta > 0 ? Math.min(1.0, totalDelta / 10000) : 0.3,
-          context: {
-            quote_package_id: body.quote_package_id,
-            manufacturers,
-            effective_date: effectiveDate,
-            price_delta_total: totalDelta,
-            impact_items: impactRowsArr.length,
-            ai_generated: emailDraft.ai_generated,
-          },
+          context: voiceCompliance?.required === true ? mergeVoiceGate(draftContext, voiceCompliance) : draftContext,
           status: "pending",
           created_by: user.id,
         })
@@ -205,6 +213,7 @@ Deno.serve(async (req) => {
           body: emailDraft.body,
           tone: emailDraft.tone,
           ai_generated: emailDraft.ai_generated,
+          voice_compliance: voiceCompliance,
         },
         impact: {
           line_items_affected: impactRowsArr.length,
@@ -226,7 +235,12 @@ Deno.serve(async (req) => {
         return safeJsonError("Max 50 quotes per batch", 400, origin);
       }
 
-      const results: Array<{ quote_package_id: string; draft_id: string | null; error?: string }> = [];
+      const results: Array<{
+        quote_package_id: string;
+        draft_id: string | null;
+        voice_compliance?: VoiceComplianceGate | null;
+        error?: string;
+      }> = [];
 
       for (const quoteId of ids) {
         try {
@@ -289,6 +303,16 @@ Deno.serve(async (req) => {
             },
           });
 
+          const voiceCompliance = emailDraft.ai_generated ? buildRequiredVoiceGate("requote-drafts") : null;
+          const draftContext = {
+            quote_package_id: quoteId,
+            manufacturers,
+            effective_date: effectiveDate,
+            price_delta_total: totalDelta,
+            batch: true,
+            ai_generated: emailDraft.ai_generated,
+          };
+
           const { data: draftRow, error: draftErr } = await supabaseAdmin
             .from("email_drafts")
             .insert({
@@ -301,13 +325,7 @@ Deno.serve(async (req) => {
               body: emailDraft.body,
               preview: emailDraft.body.substring(0, 140),
               urgency_score: totalDelta > 0 ? Math.min(1.0, totalDelta / 10000) : 0.3,
-              context: {
-                quote_package_id: quoteId,
-                manufacturers,
-                effective_date: effectiveDate,
-                price_delta_total: totalDelta,
-                batch: true,
-              },
+              context: voiceCompliance?.required === true ? mergeVoiceGate(draftContext, voiceCompliance) : draftContext,
               status: "pending",
               created_by: user.id,
             })
@@ -328,7 +346,7 @@ Deno.serve(async (req) => {
             })
             .eq("id", quoteId);
 
-          results.push({ quote_package_id: quoteId, draft_id: draftRow.id });
+          results.push({ quote_package_id: quoteId, draft_id: draftRow.id, voice_compliance: voiceCompliance });
         } catch (err) {
           results.push({
             quote_package_id: quoteId,

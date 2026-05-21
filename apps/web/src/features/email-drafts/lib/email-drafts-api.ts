@@ -11,6 +11,25 @@ export type DraftScenario =
   | "custom";
 
 export type DraftStatus = "pending" | "edited" | "sent" | "dismissed" | "failed";
+export type EditableDraftStatus = Exclude<DraftStatus, "sent" | "edited">;
+
+export type VoiceComplianceStatus =
+  | "not_required"
+  | "requires_human_edit"
+  | "human_edited"
+  | "email_voice_passed";
+
+export interface VoiceComplianceGate {
+  policy: "E2.2/QEP-125";
+  required: boolean;
+  status: VoiceComplianceStatus;
+  pass_type: "human_edit" | "email_voice" | null;
+  reason: string;
+  generated_by: string;
+  created_at: string;
+  passed_at: string | null;
+  passed_by: string | null;
+}
 
 export interface EmailDraft {
   id: string;
@@ -27,6 +46,7 @@ export interface EmailDraft {
   preview: string | null;
   urgency_score: number | null;
   context: Record<string, unknown>;
+  voice_compliance: VoiceComplianceGate | null;
   status: DraftStatus;
   sent_at: string | null;
   sent_via: string | null;
@@ -85,6 +105,29 @@ function validDateStringOrNull(value: unknown): string | null {
   return text && Number.isFinite(new Date(text).getTime()) ? text : null;
 }
 
+function normalizeVoiceComplianceGate(value: unknown): VoiceComplianceGate | null {
+  if (!isRecord(value)) return null;
+  const status = stringOrNull(value.status);
+  const validStatus: VoiceComplianceStatus = status === "not_required" ||
+      status === "requires_human_edit" ||
+      status === "human_edited" ||
+      status === "email_voice_passed"
+    ? status
+    : value.required === false ? "not_required" : "requires_human_edit";
+
+  return {
+    policy: "E2.2/QEP-125",
+    required: value.required === true,
+    status: validStatus,
+    pass_type: value.pass_type === "human_edit" || value.pass_type === "email_voice" ? value.pass_type : null,
+    reason: stringOrNull(value.reason) ?? "llm_generated_user_facing",
+    generated_by: stringOrNull(value.generated_by) ?? "unknown",
+    created_at: stringOrNull(value.created_at) ?? "",
+    passed_at: stringOrNull(value.passed_at),
+    passed_by: stringOrNull(value.passed_by),
+  };
+}
+
 function errorMessage(payload: unknown, fallback: string): string {
   return isRecord(payload) && typeof payload.error === "string" && payload.error.trim().length > 0
     ? payload.error
@@ -107,6 +150,7 @@ export function normalizeEmailDraftRows(rows: unknown): EmailDraft[] {
     const scenario = stringOrNull(row.scenario);
     const tone = stringOrNull(row.tone);
     const status = stringOrNull(row.status);
+    const context = isRecord(row.context) ? row.context : {};
 
     return [{
       id,
@@ -122,7 +166,8 @@ export function normalizeEmailDraftRows(rows: unknown): EmailDraft[] {
       to_email: stringOrNull(row.to_email),
       preview: stringOrNull(row.preview),
       urgency_score: finiteNumberOrNull(row.urgency_score),
-      context: isRecord(row.context) ? row.context : {},
+      context,
+      voice_compliance: normalizeVoiceComplianceGate(context.voice_gate),
       status: status && DRAFT_STATUSES.has(status as DraftStatus) ? status as DraftStatus : "pending",
       sent_at: validDateStringOrNull(row.sent_at),
       sent_via: stringOrNull(row.sent_via),
@@ -131,6 +176,14 @@ export function normalizeEmailDraftRows(rows: unknown): EmailDraft[] {
       updated_at: updatedAt,
     }];
   });
+}
+
+export function draftRequiresVoicePass(draft: EmailDraft): boolean {
+  return draft.voice_compliance?.required === true &&
+    draft.voice_compliance.status !== "human_edited" &&
+    draft.voice_compliance.status !== "email_voice_passed" &&
+    draft.status !== "edited" &&
+    draft.status !== "sent";
 }
 
 export function normalizeSendEmailDraftResult(payload: unknown): SendEmailDraftResult {
@@ -155,11 +208,15 @@ export async function listEmailDrafts(
 
 export async function updateEmailDraft(
   id: string,
-  patch: { subject?: string; body?: string; status?: DraftStatus },
+  patch: { subject?: string; body?: string; status?: EditableDraftStatus },
 ): Promise<void> {
+  const requestedStatus = (patch as { status?: DraftStatus }).status;
+  if (requestedStatus === "sent" || requestedStatus === "edited") {
+    throw new Error("Use subject/body edits or send helpers for gated status transitions");
+  }
   const payload: Record<string, unknown> = { ...patch };
-  // Track edited status automatically if body/subject changed without explicit status
-  if ((patch.subject || patch.body) && !patch.status) payload.status = "edited";
+  // Track edited status automatically only when body/subject changes.
+  if ("subject" in patch || "body" in patch) payload.status = "edited";
   const { error } = await supabase.from("email_drafts").update(payload).eq("id", id);
   if (error) throw new Error(String((error as { message?: string }).message ?? "Failed to update draft"));
 }
