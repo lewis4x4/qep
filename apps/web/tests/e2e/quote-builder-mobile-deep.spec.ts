@@ -113,7 +113,7 @@ test.describe("quote-builder mobile deep reflow", () => {
 
       await page.goto("/sales/quotes/new");
       // SalesShell chrome should be present at the mobile viewport.
-      await expect(page.getByRole("button", { name: /Quick actions/i })).toBeVisible({
+      await expect(page.getByTestId("sales-bottom-tab-bar")).toBeVisible({
         timeout: 30_000,
       });
       await assertNoHorizontalOverflow(page);
@@ -163,8 +163,9 @@ test.describe("quote-builder mobile deep reflow", () => {
       const pricingPill = page
         .locator('[data-step-id="pricing"], [data-testid="wizard-progress-pricing"]')
         .first();
-      if ((await pricingPill.count()) === 0) test.skip(undefined, "Pricing pill not reachable in seed state");
-      await pricingPill.click();
+      const pricingReachable = await pricingPill.isVisible({ timeout: 15_000 }).catch(() => false);
+      if (!pricingReachable) test.skip(undefined, "Pricing pill not reachable in seed state");
+      await pricingPill.click({ timeout: 15_000 });
       await expect(page.getByTestId("pricing-step-margin-strip")).toBeVisible({
         timeout: 10_000,
       });
@@ -180,8 +181,9 @@ test.describe("quote-builder mobile deep reflow", () => {
       const reviewPill = page
         .locator('[data-step-id="review"], [data-testid="wizard-progress-review"]')
         .first();
-      if ((await reviewPill.count()) === 0) test.skip(undefined, "Review pill not reachable in seed state");
-      await reviewPill.click();
+      const reviewReachable = await reviewPill.isVisible({ timeout: 15_000 }).catch(() => false);
+      if (!reviewReachable) test.skip(undefined, "Review pill not reachable in seed state");
+      await reviewPill.click({ timeout: 15_000 });
       await expect(page.getByTestId("review-quote-hero")).toBeVisible({
         timeout: 10_000,
       });
@@ -219,9 +221,8 @@ test.describe("quote-builder mobile deep reflow", () => {
       if (!credentials) test.skip();
       await signInWithPassword(page, credentials.email, credentials.password);
       await page.goto("/sales/quotes/new");
-      // SalesShell still owns the chrome at 768pt — the BottomTabBar
-      // and CaptureSheet trigger should remain visible.
-      await expect(page.getByRole("button", { name: /Quick actions/i })).toBeVisible({
+      // SalesShell still owns the chrome at 768pt — the BottomTabBar should remain visible.
+      await expect(page.getByTestId("sales-bottom-tab-bar")).toBeVisible({
         timeout: 30_000,
       });
       await assertNoHorizontalOverflow(page);

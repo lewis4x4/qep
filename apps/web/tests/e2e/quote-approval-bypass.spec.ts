@@ -38,7 +38,7 @@ test.describe("quote approval bypass", () => {
 
     await clickWizardProgressPill(page, "equipment");
     await expectWizardStep(page, 2);
-    await expect(page.getByRole("button", { name: /^Configure/i })).toBeEnabled({ timeout: 90_000 });
+    await expect(page.getByRole("button", { name: /^Configure/i }).last()).toBeEnabled({ timeout: 90_000 });
 
     await walkFromEquipmentToReview(page);
     await waitForQuoteAutosave(page);
