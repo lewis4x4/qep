@@ -4,6 +4,8 @@ import {
   assertPublicQuoteReadReady,
   assertQuoteCustomerContentReady,
   buildCustomerProposalEmailText,
+  buildCustomerProposalSmsText,
+  buildDeliveryTermsLine,
   buildPublicDealRoomPayload,
   validatePublicSignatureDataUrl,
 } from "./quote-public-safety.ts";
@@ -358,6 +360,9 @@ Deno.test("customer proposal email is a safe notification, not a raw proposal du
   assert(body.includes("Payment option reviewed: 60 month finance"));
   assert(body.includes("Why this setup fits your work:"));
   assert(body.includes("Review the proposal and next steps: https://qep.example/q/token"));
+  assert(body.includes("Delivery timing and destination are listed in your proposal terms."));
+  assert(!body.includes("{{"));
+  assert(!body.includes("}}"));
   assert(body.includes("Payment figures are estimates until lender approval, taxes, title, registration, documentation, and signed agreements are complete."));
   assert(!body.includes("dealer cost"));
   assert(!body.includes("margin"));
@@ -370,4 +375,38 @@ Deno.test("customer proposal email is a safe notification, not a raw proposal du
     selectedFinanceScenario: "Cash",
   });
   assert(!cashBody.includes("Estimated amount financed: $0"));
+});
+
+Deno.test("customer proposal email includes exact Q9 delivery wording when delivery data is present", () => {
+  const body = buildCustomerProposalEmailText({
+    contactName: "Taylor Buyer",
+    quoteNumber: "QEP-2026-0001",
+    customerTotal: 125000,
+    shippingAddress: "440 Yard Rd, Orlando, FL",
+    deliveryWindow: "June 5-7",
+  });
+
+  assert(body.includes("Delivered to 440 Yard Rd, Orlando, FL per quote terms. Delivery window: June 5-7. Weather and access permitting."));
+  assert(!body.includes("{{"));
+  assert(!body.includes("}}"));
+});
+
+Deno.test("delivery and sms templates keep QEP outbound wording deterministic", () => {
+  assertEquals(
+    buildDeliveryTermsLine("440 Yard Rd, Orlando, FL", "June 5-7"),
+    "Delivered to 440 Yard Rd, Orlando, FL per quote terms. Delivery window: June 5-7. Weather and access permitting.",
+  );
+  assertEquals(
+    buildDeliveryTermsLine(null, null),
+    "Delivered to {{shipping_address}} per quote terms. Delivery window: {{delivery_window}}. Weather and access permitting.",
+  );
+
+  assertEquals(
+    buildCustomerProposalSmsText("https://qep.example/q/token"),
+    "Quality Equipment & Parts: Your proposal is ready to review at https://qep.example/q/token. Reply to this text or call your QEP rep with questions.",
+  );
+  assertEquals(
+    buildCustomerProposalSmsText(null),
+    "Quality Equipment & Parts: Your proposal is ready to review at {{proposal_link}}. Reply to this text or call your QEP rep with questions.",
+  );
 });

@@ -196,6 +196,15 @@ Deno.test("customer share gate aligns conditionally approved quotes with send-pa
   assert(sendHelperIndex > sendConditionalIndex, "send-package must use the same conditional approval readiness helper");
 });
 
+Deno.test("send-package quote select includes existing delivery fields only", async () => {
+  const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
+  assert(source.includes("delivery_eta"));
+  assert(source.includes("delivery_state"));
+  assert(source.includes("delivery_county"));
+  assertEquals(source.includes("shipping_address"), false);
+  assertEquals(source.includes("delivery_window"), false);
+});
+
 Deno.test("send-package requires a fresh generated R2 customer PDF artifact", async () => {
   const source = await Deno.readTextFile(new URL("./index.ts", import.meta.url));
   assert(source.includes('return safeJsonError("Generate a versioned PDF before sending.", 409, origin);'));

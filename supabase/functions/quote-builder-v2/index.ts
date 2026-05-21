@@ -8471,7 +8471,7 @@ Deno.serve(async (req) => {
       // Fetch quote package with contact email
       const { data: pkg, error: pkgErr } = await supabase
         .from("quote_packages")
-        .select("id, workspace_id, deal_id, contact_id, quote_number, share_token, branch_slug, customer_total, amount_financed, selected_finance_scenario, equipment, equipment_total, net_total, trade_allowance, sent_at, status, margin_pct, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason, special_terms, expires_at, crm_contacts(first_name, last_name, email)")
+        .select("id, workspace_id, deal_id, contact_id, quote_number, share_token, branch_slug, customer_total, amount_financed, selected_finance_scenario, equipment, equipment_total, net_total, trade_allowance, sent_at, status, margin_pct, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason, special_terms, expires_at, delivery_eta, delivery_state, delivery_county, crm_contacts(first_name, last_name, email)")
         .eq("id", body.quote_package_id)
         .single();
 
@@ -8605,6 +8605,22 @@ Deno.serve(async (req) => {
       // items, dealer cost, margin, approval state, and unconfirmed AI output.
       const contactName = [contact?.first_name, contact?.last_name].filter(Boolean).join(" ") || "Valued Customer";
       const publicUrl = buildDealRoomUrl(shareToken, origin);
+      const pkgRecord = pkg as Record<string, unknown>;
+      const deliveryState = typeof pkgRecord.delivery_state === "string"
+        ? pkgRecord.delivery_state.trim()
+        : "";
+      const deliveryCounty = typeof pkgRecord.delivery_county === "string"
+        ? pkgRecord.delivery_county.trim()
+        : "";
+      const shippingAddress = deliveryCounty && deliveryState
+        ? `${deliveryCounty} County, ${deliveryState}`
+        : deliveryCounty
+        ? `${deliveryCounty} County`
+        : deliveryState || null;
+      const deliveryWindow = typeof pkgRecord.delivery_eta === "string"
+        ? pkgRecord.delivery_eta
+        : null;
+
       const emailBody = buildCustomerProposalEmailText({
         contactName,
         quoteNumber: typeof pkg.quote_number === "string" ? pkg.quote_number : null,
@@ -8616,6 +8632,8 @@ Deno.serve(async (req) => {
         specialTerms: typeof pkg.special_terms === "string" ? pkg.special_terms : null,
         expiresAt: typeof pkg.expires_at === "string" ? pkg.expires_at : null,
         publicUrl,
+        shippingAddress,
+        deliveryWindow,
         branch: branch as { name?: string | null; phone?: string | null; email?: string | null; website?: string | null } | null,
       });
 

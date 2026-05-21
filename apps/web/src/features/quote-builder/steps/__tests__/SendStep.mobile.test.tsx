@@ -166,6 +166,18 @@ describe("SendStep — mobile surface", () => {
     expect(back.className).toContain("min-h-[44px]");
   });
 
+  test("shows honest prepared-SMS copy without claiming transport is live", () => {
+    stubMatchMedia(true);
+    render(
+      <Harness>
+        <SendStep {...STEP_PROPS} />
+      </Harness>,
+    );
+    expect(screen.getByText(/SMS delivery is not connected yet/i)).toBeTruthy();
+    expect(screen.getByText(/prepared template/i)).toBeTruthy();
+    expect(screen.getByText(/\{\{proposal_link\}\}/i)).toBeTruthy();
+  });
+
   test("renders the full-bleed success state when a delivery action lands", () => {
     stubMatchMedia(true);
     render(

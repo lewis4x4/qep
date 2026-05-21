@@ -216,7 +216,7 @@ export function SendStep({
           <QuoteSendActionCard
             icon={<Smartphone className="h-4 w-4" />}
             title="Text proposal link"
-            detail={textQuoteEnabled ? "SMS delivery is not connected yet. Keep using email or the approved proposal link until the provider endpoint is wired." : "Text delivery is off for this workspace. Email the proposal or share the approved proposal link."}
+            detail={textQuoteEnabled ? "SMS delivery is not connected yet. Prepared template: ‘Quality Equipment & Parts: Your proposal is ready to review at {{proposal_link}}.’ Keep using email or the approved proposal link until the provider endpoint is wired." : "Text delivery is off for this workspace. Prepared SMS wording is ready, but reps should email the proposal or share the approved proposal link."}
             readiness={textReadiness}
             setupBlocked={!textQuoteEnabled}
             busy={deliveryActionBusy === "text"}

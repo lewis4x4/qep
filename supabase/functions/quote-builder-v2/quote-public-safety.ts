@@ -58,6 +58,8 @@ export interface CustomerProposalEmailInput {
   specialTerms?: string | null;
   expiresAt?: string | null;
   publicUrl?: string | null;
+  shippingAddress?: string | null;
+  deliveryWindow?: string | null;
   branch?: {
     name?: string | null;
     phone?: string | null;
@@ -490,6 +492,32 @@ function formatDate(value: string | null | undefined): string | null {
   });
 }
 
+export function buildDeliveryTermsLine(
+  shippingAddress?: string | null,
+  deliveryWindow?: string | null,
+): string {
+  const address = text(shippingAddress, 240) ?? "{{shipping_address}}";
+  const window = text(deliveryWindow, 120) ?? "{{delivery_window}}";
+  return `Delivered to ${address} per quote terms. Delivery window: ${window}. Weather and access permitting.`;
+}
+
+export function buildCustomerProposalSmsText(publicUrl?: string | null): string {
+  const safeUrl = text(publicUrl, 200) ?? "{{proposal_link}}";
+  return `Quality Equipment & Parts: Your proposal is ready to review at ${safeUrl}. Reply to this text or call your QEP rep with questions.`;
+}
+
+function buildCustomerEmailDeliveryLine(
+  shippingAddress?: string | null,
+  deliveryWindow?: string | null,
+): string {
+  const address = text(shippingAddress, 240);
+  const window = text(deliveryWindow, 120);
+  if (address && window) {
+    return buildDeliveryTermsLine(address, window);
+  }
+  return "Delivery timing and destination are listed in your proposal terms.";
+}
+
 export function buildCustomerProposalEmailText(
   input: CustomerProposalEmailInput,
 ): string {
@@ -530,6 +558,7 @@ export function buildCustomerProposalEmailText(
       ? `Proposal valid through: ${formatDate(input.expiresAt)}`
       : "Proposal validity and final terms are shown in the proposal.",
     input.publicUrl ? `Review the proposal and next steps: ${input.publicUrl}` : null,
+    buildCustomerEmailDeliveryLine(input.shippingAddress, input.deliveryWindow),
     "",
     "Payment figures are estimates until lender approval, taxes, title, registration, documentation, and signed agreements are complete.",
     "",
