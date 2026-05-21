@@ -988,11 +988,11 @@
       "runtime_prerequisites": "blocked: R2 secrets missing for immutable PDF send path; APP_URL public HTTPS origin must be verified for QR validation"
     }
   },
-  "current_task": "A1.3",
-  "updated_at": "2026-05-21T04:42:31Z",
-  "linear": "QEP-3",
-  "status": "blocked_deployed_document_preview_after_ci_secrets_wired",
+  "current_task": "A7.1",
+  "updated_at": "2026-05-21T04:45:00Z",
+  "linear": "QEP-167",
+  "status": "schema_migration_ready",
   "last_commit": null,
-  "last_gate": "test-results/agent-gates/20260521T044231Z-A1.3-playwright-ci-env-blocked.json",
-  "remaining_blocker": "Authenticated deployed e2e reaches Document but Generate Preview PDF remains disabled on qualityequipmentparts.netlify.app; fix quote/document readiness then rerun bun run test:e2e:staging."
+  "last_gate": "test-results/agent-gates/20260521T044504Z-A7.1-oem-price-sheet-schema.json",
+  "remaining_blocker": null
 }

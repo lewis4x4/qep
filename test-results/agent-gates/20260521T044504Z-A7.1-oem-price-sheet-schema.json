@@ -1,0 +1,17 @@
+{
+  "segment": "A7.1-oem-price-sheet-schema",
+  "linear": "QEP-167",
+  "status": "passed",
+  "mission_alignment": "pass",
+  "summary": "Added the OEM Price Feeds Phase 1 schema substrate as migration 610. The migration adds price-change event rows, item-level diff rows, quote impact rows, impact line detail, and rep-created reprice drafts with RLS policies for service, elevated users, assigned reps, and draft owners.",
+  "verification": [
+    "Renumbered the generated OEM schema migration from duplicate 607 to 610 after tracked migration 609.",
+    "Ran bun run migrations:check in a clean detached worktree containing the new migration; migration order passed with sequence 001..610."
+  ],
+  "changed_files": [
+    "supabase/migrations/610_oem_price_feeds_phase1.sql"
+  ],
+  "notes": [
+    "Existing uncommitted A7 UI/API work was intentionally left unstaged for later roadmap items."
+  ]
+}

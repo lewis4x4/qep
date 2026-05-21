@@ -85,3 +85,11 @@
 - Verification: YAML parse pass, diff-check pass, @qep/web typecheck pass, focused deployed quote happy path now signs in and executes instead of skipping.
 - Blocker: focused deployed quote happy path reaches Document but Generate Preview PDF remains disabled; A1.3 is blocked on downstream quote/document readiness, not missing CI env.
 - Gate artifact: test-results/agent-gates/20260521T044231Z-A1.3-playwright-ci-env-blocked.json
+
+## A7.1 / QEP-167 — OEM price-sheet schema — 2026-05-21
+
+- Isolated the already-generated OEM schema substrate from broader uncommitted A7 UI/API work.
+- Renumbered duplicate `607_oem_price_feeds_phase1.sql` to `610_oem_price_feeds_phase1.sql` after tracked migration 609.
+- Schema adds price-change events, event diff items, quote reprice impacts, impact lines, and rep-created reprice drafts with RLS.
+- Verification: clean detached worktree with migration 610 ran `bun run migrations:check` successfully (`sequence 001..610`).
+- Gate artifact: test-results/agent-gates/20260521T044504Z-A7.1-oem-price-sheet-schema.json
