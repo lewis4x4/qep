@@ -803,5 +803,8 @@ verify_jwt = false
 [functions.decision-voice-memo-answer]
 verify_jwt = false
 
+[functions.decision-audit-artifact]
+verify_jwt = false
+
 [functions.ratify-silence-runner]
 verify_jwt = false
