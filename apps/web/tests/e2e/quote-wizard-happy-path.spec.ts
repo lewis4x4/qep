@@ -5,13 +5,17 @@ import {
   ensureApprovalForCustomerFacing,
   expectWizardStep,
   generateDocumentPreview,
+  playwrightAgedEquipmentId,
   playwrightTestCredentials,
+  selectFirstQuotingBranch,
   signInWithPassword,
+  startProspectQuote,
   waitForQuoteAutosave,
-  walkProspectQuoteToReview,
+  walkFromEquipmentToReview,
 } from "./fixtures";
 
 const credentials = playwrightTestCredentials();
+const agedEquipmentId = playwrightAgedEquipmentId();
 
 test.describe("quote wizard happy path", () => {
   test("unauthenticated visit is gated behind login", async ({ page }) => {
@@ -25,20 +29,26 @@ test.describe("quote wizard happy path", () => {
     test.describe.configure({ timeout: 180_000 });
 
     test.skip(
-      !credentials,
-      "Set PLAYWRIGHT_TEST_EMAIL and PLAYWRIGHT_TEST_PASSWORD for authenticated e2e",
+      !credentials || !agedEquipmentId,
+      "Set PLAYWRIGHT_TEST_EMAIL, PLAYWRIGHT_TEST_PASSWORD, and PLAYWRIGHT_AGED_EQUIPMENT_ID for authenticated e2e",
     );
 
     test.beforeEach(async ({ page }) => {
       await signInWithPassword(page, credentials!.email, credentials!.password);
-      await page.goto("/quote-v2");
+      await page.goto(`/quote-v2?crm_equipment_id=${encodeURIComponent(agedEquipmentId!)}`);
       await expect(page.getByRole("heading", { name: "Quote Builder" })).toBeVisible();
     });
 
     test("prospect quote flows through configure, pricing, review, PDF preview, and send preview", async ({
       page,
     }) => {
-      await walkProspectQuoteToReview(page);
+      await expectWizardStep(page, 1);
+      await startProspectQuote(page);
+      await selectFirstQuotingBranch(page);
+      await clickStepFooterNext(page, /^Equipment/i);
+      await expectWizardStep(page, 2);
+      await expect(page.getByRole("button", { name: /^Configure/i })).toBeEnabled({ timeout: 90_000 });
+      await walkFromEquipmentToReview(page);
       await waitForQuoteAutosave(page);
       await ensureApprovalForCustomerFacing(page);
       await clickStepFooterNext(page, /^Document/i);

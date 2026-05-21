@@ -111,7 +111,7 @@ export async function ensureApprovalForCustomerFacing(page: Page): Promise<void>
       if (await pending.isVisible().catch(() => false)) return "pending";
       return "waiting";
     }, { timeout: 120_000 })
-    .not.toBe("waiting");
+    .toMatch(/^(auto|approved)$/);
 }
 
 export async function walkFromEquipmentToReview(page: Page): Promise<void> {
