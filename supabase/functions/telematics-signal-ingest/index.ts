@@ -33,7 +33,7 @@ import {
 import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import { ingestSignal, type SignalSeverity } from "../_shared/qrm-signals.ts";
 import type { RouterCtx } from "../_shared/crm-router-service.ts";
-import { genericTelematicsAdapter } from "../_shared/adapters/generic-telematics.ts";
+import { normalizeTelematicsSignal } from "../_shared/telematics-adapter-registry.ts";
 import {
   buildTelematicsDedupeKey,
   type NormalizedTelematicsSignal,
@@ -99,7 +99,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const rawBody = raw as Record<string, unknown>;
   let payload: NormalizedTelematicsSignal;
   try {
-    payload = genericTelematicsAdapter.normalizeSignal(rawBody);
+    payload = normalizeTelematicsSignal(rawBody);
   } catch (err) {
     return bad(
       400,

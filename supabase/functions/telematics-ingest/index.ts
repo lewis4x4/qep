@@ -20,7 +20,7 @@ import {
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import type { TelematicsUsageSnapshot } from "../../../shared/qep-moonshot-contracts.ts";
-import { genericTelematicsAdapter } from "../_shared/adapters/generic-telematics.ts";
+import { normalizeTelematicsReading } from "../_shared/telematics-adapter-registry.ts";
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
 
@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
     if (action === "reading") {
       let normalized;
       try {
-        normalized = genericTelematicsAdapter.normalizeReading(body);
+        normalized = normalizeTelematicsReading(body);
       } catch (error) {
         return safeJsonError(
           error instanceof Error ? error.message : "Invalid reading",

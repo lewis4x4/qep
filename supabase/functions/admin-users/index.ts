@@ -106,6 +106,11 @@ const INTEGRATION_DEFAULTS = {
     displayName: "Tethr Telematics",
     authType: "api_key",
     syncFrequency: "manual"
+  },
+  yanmar_smart_assist: {
+    displayName: "Yanmar / ASV Smart Assist Telematics",
+    authType: "api_key",
+    syncFrequency: "manual"
   }
 };
 const DEFERRED_PROVIDER_KEYS = new Set([
@@ -114,7 +119,8 @@ const DEFERRED_PROVIDER_KEYS = new Set([
   "ups_worldship",
   "jd_quote_ii",
   "oem_base_options_imports",
-  "tethr_telematics"
+  "tethr_telematics",
+  "yanmar_smart_assist"
 ]);
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

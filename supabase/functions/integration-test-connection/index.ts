@@ -41,7 +41,8 @@ type DeferredIntegrationKey =
   | "ups_worldship"
   | "jd_quote_ii"
   | "oem_base_options_imports"
-  | "tethr_telematics";
+  | "tethr_telematics"
+  | "yanmar_smart_assist";
 type SupportedIntegrationKey = IntegrationKey | "hubspot" | "onedrive" | CommunicationIntegrationKey | DeferredIntegrationKey;
 
 type TestConnectionResult = {
@@ -64,6 +65,7 @@ const DEFERRED_PROVIDER_KEYS = new Set<SupportedIntegrationKey>([
   "jd_quote_ii",
   "oem_base_options_imports",
   "tethr_telematics",
+  "yanmar_smart_assist",
 ]);
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -158,6 +160,7 @@ function resolveIntegrationKey(raw: string | undefined): SupportedIntegrationKey
     case "jd_quote_ii":
     case "oem_base_options_imports":
     case "tethr_telematics":
+    case "yanmar_smart_assist":
       return raw;
     default:
       return null;
