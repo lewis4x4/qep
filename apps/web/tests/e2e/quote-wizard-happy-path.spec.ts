@@ -47,7 +47,7 @@ test.describe("quote wizard happy path", () => {
       await selectFirstQuotingBranch(page);
       await clickStepFooterNext(page, /^Equipment/i);
       await expectWizardStep(page, 2);
-      await expect(page.getByRole("button", { name: /^Configure/i })).toBeEnabled({ timeout: 90_000 });
+      await expect(page.getByRole("button", { name: /^Configure/i }).last()).toBeEnabled({ timeout: 90_000 });
       await walkFromEquipmentToReview(page);
       await waitForQuoteAutosave(page);
       await ensureApprovalForCustomerFacing(page);
