@@ -356,6 +356,7 @@ export function buildPublicDealRoomPayload(
     special_terms: pickString(row.special_terms),
     delivery_eta: pickString(row.delivery_eta),
     deposit_required_amount: pickNumber(row.deposit_required_amount),
+    deposit_status: pickString(row.deposit_status),
     tax_profile: pickString(row.tax_profile),
     tax_override_reason: pickString(row.tax_override_reason),
     follow_up_at: pickString(row.follow_up_at),

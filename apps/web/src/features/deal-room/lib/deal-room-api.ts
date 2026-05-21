@@ -83,6 +83,7 @@ export interface DealRoomQuote {
   special_terms: string | null;
   delivery_eta: string | null;
   deposit_required_amount: number | null;
+  deposit_status?: string | null;
   tax_profile: string | null;
   tax_override_reason: string | null;
   follow_up_at: string | null;
@@ -150,7 +151,7 @@ export interface ConciergeMessage {
   content: string;
 }
 
-export const PUBLIC_ACCEPT_TERMS_VERSION = "a3.5-payment-handoff-v1";
+export const PUBLIC_ACCEPT_TERMS_VERSION = "a3.5-deposit-checkout-v1";
 
 export interface PublicAcceptRequest {
   signerName: string;
@@ -166,6 +167,17 @@ export interface PublicAcceptResponse {
   signed_at: string | null;
   status: string;
   document_hash: string;
+}
+
+export interface PublicDepositCheckoutResponse {
+  url?: string;
+  fallback?: string;
+  stripe_configured: boolean;
+  stripe_error?: boolean;
+  message?: string;
+  deposit_id?: string | null;
+  amount_cents?: number;
+  already_paid?: boolean;
 }
 
 export interface PublicQuoteFeedbackRequest {
@@ -227,6 +239,26 @@ export interface SocialProofPayload {
     retention_pct_vs_primary: number | null;
     timespan_days: number;
   } | null;
+}
+
+export async function createPublicQuoteDepositCheckout(
+  token: string,
+): Promise<PublicDepositCheckoutResponse> {
+  const res = await fetch(`${QUOTE_FN_URL}/public-deposit-checkout?token=${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${ANON_KEY}`,
+    },
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string }).error ?? `HTTP ${res.status}`;
+    throw new Error(detail);
+  }
+  return res.json();
 }
 
 export async function fetchPublicSocialProof(token: string): Promise<SocialProofPayload> {

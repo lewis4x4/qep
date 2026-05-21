@@ -4,6 +4,7 @@ import { reconcileSucceededPayment } from "./portal-stripe-reconcile.ts";
 function createMockSupabase(options: {
   paymentIntent?: Record<string, unknown> | null;
   invoice?: Record<string, unknown> | null;
+  deposit?: Record<string, unknown> | null;
   customerProfile?: Record<string, unknown> | null;
   recomputeError?: { message: string } | null;
 }) {
@@ -38,6 +39,9 @@ function createMockSupabase(options: {
                   }
                   if (table === "customer_invoices") {
                     return { data: options.invoice ?? null, error: null };
+                  }
+                  if (table === "deposits") {
+                    return { data: options.deposit ?? null, error: null };
                   }
                   return { data: null, error: null };
                 },
@@ -189,4 +193,204 @@ Deno.test("reconcileSucceededPayment blocks underpaid invoice application", asyn
     (paymentIntentUpdate?.args?.metadata as Record<string, unknown>)?.invoice_payment_blocked_reason,
     "amount_below_invoice_balance",
   );
+});
+
+Deno.test("reconcileSucceededPayment verifies quote deposit payments and updates the deal gate", async () => {
+  const supabase = createMockSupabase({
+    paymentIntent: {
+      id: "intent-row-1",
+      workspace_id: "workspace-1",
+      company_id: "company-1",
+      invoice_id: null,
+      amount_cents: 50000,
+      stripe_payment_intent_id: "cs_test_1",
+      metadata: {
+        payment_kind: "quote_deposit",
+        deposit_id: "deposit-1",
+        checkout_session_id: "cs_test_1",
+      },
+    },
+    deposit: {
+      id: "deposit-1",
+      workspace_id: "workspace-1",
+      deal_id: "deal-1",
+      required_amount: 500,
+      status: "requested",
+    },
+  });
+
+  await reconcileSucceededPayment({
+    supabaseAdmin: supabase as never,
+    eventId: "evt_1",
+    stripePaymentIntentId: "pi_1",
+    checkoutSessionId: "cs_test_1",
+    fallbackAmountCents: null,
+  });
+
+  const depositUpdate = supabase.calls.find((call) => call.type === "update" && call.table === "deposits");
+  const dealUpdate = supabase.calls.find((call) => call.type === "update" && call.table === "crm_deals");
+  const paymentIntentUpdate = supabase.calls.find((call) => call.type === "update" && call.table === "portal_payment_intents");
+
+  assertEquals(depositUpdate?.args?.status, "verified");
+  assertEquals(depositUpdate?.args?.payment_method, "credit_card");
+  assertEquals(dealUpdate?.args?.deposit_status, "verified");
+  assertEquals((paymentIntentUpdate?.args?.metadata as Record<string, unknown>).deposit_payment_applied_at != null, true);
+});
+
+Deno.test("reconcileSucceededPayment does not reapply duplicate quote deposit webhooks", async () => {
+  const supabase = createMockSupabase({
+    paymentIntent: {
+      id: "intent-row-1",
+      workspace_id: "workspace-1",
+      company_id: "company-1",
+      invoice_id: null,
+      amount_cents: 50000,
+      stripe_payment_intent_id: "pi_1",
+      metadata: {
+        payment_kind: "quote_deposit",
+        deposit_id: "deposit-1",
+        deposit_payment_applied_at: "2026-05-20T20:00:00.000Z",
+      },
+    },
+    deposit: {
+      id: "deposit-1",
+      workspace_id: "workspace-1",
+      deal_id: "deal-1",
+      required_amount: 500,
+      status: "verified",
+    },
+  });
+
+  await reconcileSucceededPayment({
+    supabaseAdmin: supabase as never,
+    eventId: "evt_2",
+    stripePaymentIntentId: "pi_1",
+    checkoutSessionId: null,
+    fallbackAmountCents: null,
+  });
+
+  assertEquals(supabase.calls.some((call) => call.type === "update" && call.table === "deposits"), false);
+  assertEquals(supabase.calls.some((call) => call.type === "update" && call.table === "crm_deals"), false);
+  assertEquals(supabase.calls.some((call) => call.type === "update" && call.table === "portal_payment_intents"), true);
+});
+
+Deno.test("reconcileSucceededPayment blocks quote deposit when verified Stripe amount mismatches expected amount", async () => {
+  const supabase = createMockSupabase({
+    paymentIntent: {
+      id: "intent-row-1",
+      workspace_id: "workspace-1",
+      company_id: "company-1",
+      invoice_id: null,
+      amount_cents: 50000,
+      stripe_payment_intent_id: "pi_1",
+      metadata: {
+        payment_kind: "quote_deposit",
+        deposit_id: "deposit-1",
+      },
+    },
+    deposit: {
+      id: "deposit-1",
+      workspace_id: "workspace-1",
+      deal_id: "deal-1",
+      required_amount: 500,
+      status: "requested",
+    },
+  });
+
+  await reconcileSucceededPayment({
+    supabaseAdmin: supabase as never,
+    eventId: "evt_1",
+    stripePaymentIntentId: "pi_1",
+    checkoutSessionId: null,
+    fallbackAmountCents: 100,
+  });
+
+  const paymentIntentUpdate = supabase.calls.find((call) => call.type === "update" && call.table === "portal_payment_intents");
+  assertEquals(supabase.calls.some((call) => call.type === "update" && call.table === "deposits"), false);
+  assertEquals(
+    (paymentIntentUpdate?.args?.metadata as Record<string, unknown>)?.deposit_payment_blocked_reason,
+    "stripe_amount_mismatch",
+  );
+});
+
+Deno.test("reconcileSucceededPayment blocks a second quote deposit checkout after deposit is already verified", async () => {
+  const supabase = createMockSupabase({
+    paymentIntent: {
+      id: "intent-row-2",
+      workspace_id: "workspace-1",
+      company_id: "company-1",
+      invoice_id: null,
+      amount_cents: 50000,
+      stripe_payment_intent_id: "pi_2",
+      metadata: {
+        payment_kind: "quote_deposit",
+        deposit_id: "deposit-1",
+      },
+    },
+    deposit: {
+      id: "deposit-1",
+      workspace_id: "workspace-1",
+      deal_id: "deal-1",
+      required_amount: 500,
+      status: "verified",
+    },
+  });
+
+  await reconcileSucceededPayment({
+    supabaseAdmin: supabase as never,
+    eventId: "evt_3",
+    stripePaymentIntentId: "pi_2",
+    checkoutSessionId: null,
+    fallbackAmountCents: 50000,
+  });
+
+  const paymentIntentUpdate = supabase.calls.find((call) => call.type === "update" && call.table === "portal_payment_intents");
+  assertEquals(supabase.calls.some((call) => call.type === "update" && call.table === "deposits"), false);
+  assertEquals(supabase.calls.some((call) => call.type === "update" && call.table === "crm_deals"), false);
+  assertEquals(
+    (paymentIntentUpdate?.args?.metadata as Record<string, unknown>)?.deposit_payment_blocked_reason,
+    "deposit_already_verified",
+  );
+});
+
+Deno.test("reconcileSucceededPayment blocks quote deposit webhook when deposit status is no longer collectible", async () => {
+  for (const status of ["received", "applied", "refund_requested", "refunded"]) {
+    const supabase = createMockSupabase({
+      paymentIntent: {
+        id: `intent-row-${status}`,
+        workspace_id: "workspace-1",
+        company_id: "company-1",
+        invoice_id: null,
+        amount_cents: 50000,
+        stripe_payment_intent_id: `pi_${status}`,
+        metadata: {
+          payment_kind: "quote_deposit",
+          deposit_id: "deposit-1",
+        },
+      },
+      deposit: {
+        id: "deposit-1",
+        workspace_id: "workspace-1",
+        deal_id: "deal-1",
+        required_amount: 500,
+        status,
+      },
+    });
+
+    await reconcileSucceededPayment({
+      supabaseAdmin: supabase as never,
+      eventId: `evt_${status}`,
+      stripePaymentIntentId: `pi_${status}`,
+      checkoutSessionId: null,
+      fallbackAmountCents: 50000,
+    });
+
+    const paymentIntentUpdate = supabase.calls.find((call) => call.type === "update" && call.table === "portal_payment_intents");
+    assertEquals(supabase.calls.some((call) => call.type === "update" && call.table === "deposits"), false);
+    assertEquals(supabase.calls.some((call) => call.type === "update" && call.table === "crm_deals"), false);
+    assertEquals(
+      (paymentIntentUpdate?.args?.metadata as Record<string, unknown>)?.deposit_payment_blocked_reason,
+      status === "applied" ? "deposit_already_verified" : "deposit_status_not_collectible",
+    );
+  }
 });

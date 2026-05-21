@@ -510,35 +510,6 @@
       "updated_at": "2026-05-21T01:46:33Z"
     },
     {
-      "task_id": "A3.5/QEP-18",
-      "status": "partial_verified_acceptance_evidence",
-      "title": "M5 \u2014 Branded acceptance flow",
-      "stream": "A",
-      "wave": "A3",
-      "goal": "Public Deal Room acceptance now includes durable customer acceptance proof plus internal rep follow-up evidence while avoiding unfinished live Stripe/deposit collection claims.",
-      "changed_files": [
-        "supabase/functions/quote-builder-v2/index.ts",
-        "supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts"
-      ],
-      "verification": [
-        "deno check supabase/functions/quote-builder-v2/index.ts",
-        "deno test supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts --allow-read --allow-env",
-        "deno test supabase/functions/quote-builder-v2/quote-public-safety.test.ts --allow-read --allow-env",
-        "git diff --check -- supabase/functions/quote-builder-v2/index.ts supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts",
-        "Oracle initial review found two P1 blockers; targeted fixes applied for durable retry dedupe and latest sent-rep ownership; Oracle follow-up found no remaining P0/P1 blockers",
-        "bun run migrations:check (clean temp worktree, sequence 001..608)",
-        "bun run segment:gates --segment A3.5-public-acceptance-evidence --ui (clean temp worktree)"
-      ],
-      "gate_report": "test-results/agent-gates/20260521T022859Z-A3.5-public-acceptance-evidence.json",
-      "remaining_gaps": [
-        "Live Stripe/deposit collection remains gated by deposit SOP and Stripe readiness.",
-        "Production deployed customer acceptance against live Supabase has not been verified in this slice.",
-        "A3.5 should remain in_progress until live deposit/payment scope is implemented or formally descoped."
-      ],
-      "notes": "This is the second A3.5 partial slice, building on the prior public acceptance hardening commit. Public accept side effects are best-effort and durably deduped by quote/signature so share-token retries do not spam rep notifications or timeline events. Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only scoped quote-builder-v2 files applied.",
-      "updated_at": "2026-05-21T02:28:59Z"
-    },
-    {
       "task_id": "B2.4/QEP-52",
       "status": "complete",
       "title": "VC-4 \u2014 Workspace-scoped speaker labeling",
@@ -632,6 +603,39 @@
       "gate_report": "test-results/agent-gates/20260521T031730Z-B5.7-sc-2-role-scoped-home-route.json",
       "notes": "No code changes were required in this cycle; the feature existed on main but roadmap state was still not_started. Main working tree has unrelated WIP, so full gates ran in a clean detached worktree at HEAD.",
       "updated_at": "2026-05-21T03:17:30Z"
+    },
+    {
+      "task_id": "A3.5/QEP-18",
+      "status": "complete",
+      "title": "M5 \u2014 Branded acceptance flow",
+      "stream": "A",
+      "wave": "A3",
+      "goal": "Public Deal Room acceptance includes durable signature proof, rep follow-up evidence, and token-gated post-signature deposit checkout with Stripe reconciliation and safe fallback handoff.",
+      "changed_files": [
+        "supabase/functions/quote-builder-v2/index.ts",
+        "supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts",
+        "supabase/functions/quote-builder-v2/quote-public-safety.ts",
+        "supabase/functions/quote-builder-v2/quote-public-safety.test.ts",
+        "supabase/functions/_shared/portal-stripe-reconcile.ts",
+        "supabase/functions/_shared/portal-stripe-reconcile.test.ts",
+        "apps/web/src/features/deal-room/lib/deal-room-api.ts",
+        "apps/web/src/features/deal-room/lib/__tests__/deal-room-api.test.ts",
+        "apps/web/src/features/deal-room/pages/DealRoomPage.tsx",
+        "apps/web/src/features/deal-room/pages/__tests__/DealRoomPage.acceptance-source.test.ts"
+      ],
+      "verification": [
+        "bun test apps/web/src/features/deal-room/lib/__tests__/deal-room-api.test.ts apps/web/src/features/deal-room/pages/__tests__/DealRoomPage.acceptance-source.test.ts",
+        "deno test supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts supabase/functions/quote-builder-v2/quote-public-safety.test.ts supabase/functions/_shared/portal-stripe-reconcile.test.ts supabase/functions/portal-stripe/portal-stripe-integrity-regression.test.ts --allow-read --allow-env",
+        "deno check supabase/functions/quote-builder-v2/index.ts supabase/functions/_shared/portal-stripe-reconcile.ts",
+        "bun run --filter @qep/web typecheck (clean temp worktree)",
+        "git diff --check -- scoped A3.5 deposit files",
+        "Oracle review found one P1 duplicate-payment lifecycle issue; targeted fix applied for received/applied/refund statuses across backend reconciliation and Deal Room UI",
+        "bun run migrations:check (clean temp worktree, sequence 001..609)",
+        "bun run segment:gates --segment A3.5-public-deposit-checkout --ui (clean temp worktree; reran once after transient KB integration leak, final gate PASS)"
+      ],
+      "gate_report": "test-results/agent-gates/20260521T035412Z-A3.5-public-deposit-checkout.json",
+      "notes": "No migration required; reused existing quote_packages.deposit_required_amount, deposits, crm_deals, and portal_payment_intents schema. Stripe Checkout uses existing REST/fallback pattern and requires production STRIPE_SECRET_KEY/webhook configuration for live payments; without Stripe secrets the public flow returns a mailto handoff fallback. Public payment metadata intentionally excludes share tokens. Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so focused checks and full gates ran in a clean detached worktree with only scoped A3.5 files applied.",
+      "updated_at": "2026-05-21T03:54:12Z"
     }
   ],
   "agents": [
@@ -961,33 +965,37 @@
     }
   },
   "current_task": {
-    "task_id": "B5.7/QEP-63",
-    "status": "complete_verified_existing",
-    "title": "SC-2 \u2014 Role-scoped home route",
-    "stream": "B",
-    "wave": "B5",
-    "goal": "Role-scoped home routing sends reps to /sales/today and redirects guarded non-sales surfaces back to the role home while manager/admin/owner keep elevated homes.",
-    "changed_files": [],
-    "verified_existing_files": [
-      "apps/web/src/lib/home-route.ts",
-      "apps/web/src/lib/home-route.test.ts",
-      "apps/web/src/lib/home-route-app-routing.test.ts",
-      "apps/web/src/App.tsx",
-      "apps/web/src/lib/nav-config.ts",
-      "apps/web/src/lib/nav-config.test.ts",
-      "apps/web/src/features/sales/SalesShell.test.tsx",
-      "apps/web/src/features/sales/__tests__/SalesRoutes.routing.test.tsx"
+    "task_id": "A3.5/QEP-18",
+    "status": "complete",
+    "title": "M5 \u2014 Branded acceptance flow",
+    "stream": "A",
+    "wave": "A3",
+    "goal": "Public Deal Room acceptance includes durable signature proof, rep follow-up evidence, and token-gated post-signature deposit checkout with Stripe reconciliation and safe fallback handoff.",
+    "changed_files": [
+      "supabase/functions/quote-builder-v2/index.ts",
+      "supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts",
+      "supabase/functions/quote-builder-v2/quote-public-safety.ts",
+      "supabase/functions/quote-builder-v2/quote-public-safety.test.ts",
+      "supabase/functions/_shared/portal-stripe-reconcile.ts",
+      "supabase/functions/_shared/portal-stripe-reconcile.test.ts",
+      "apps/web/src/features/deal-room/lib/deal-room-api.ts",
+      "apps/web/src/features/deal-room/lib/__tests__/deal-room-api.test.ts",
+      "apps/web/src/features/deal-room/pages/DealRoomPage.tsx",
+      "apps/web/src/features/deal-room/pages/__tests__/DealRoomPage.acceptance-source.test.ts"
     ],
     "verification": [
-      "bun test apps/web/src/lib/home-route.test.ts apps/web/src/lib/home-route-app-routing.test.ts apps/web/src/lib/nav-config.test.ts",
-      "bun test apps/web/src/features/sales/__tests__/SalesRoutes.routing.test.tsx apps/web/src/features/sales/SalesShell.test.tsx",
-      "git diff --check -- scoped B5.7 route/nav files",
+      "bun test apps/web/src/features/deal-room/lib/__tests__/deal-room-api.test.ts apps/web/src/features/deal-room/pages/__tests__/DealRoomPage.acceptance-source.test.ts",
+      "deno test supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts supabase/functions/quote-builder-v2/quote-public-safety.test.ts supabase/functions/_shared/portal-stripe-reconcile.test.ts supabase/functions/portal-stripe/portal-stripe-integrity-regression.test.ts --allow-read --allow-env",
+      "deno check supabase/functions/quote-builder-v2/index.ts supabase/functions/_shared/portal-stripe-reconcile.ts",
+      "bun run --filter @qep/web typecheck (clean temp worktree)",
+      "git diff --check -- scoped A3.5 deposit files",
+      "Oracle review found one P1 duplicate-payment lifecycle issue; targeted fix applied for received/applied/refund statuses across backend reconciliation and Deal Room UI",
       "bun run migrations:check (clean temp worktree, sequence 001..609)",
-      "bun run segment:gates --segment B5.7-sc-2-role-scoped-home-route --ui (clean temp worktree)"
+      "bun run segment:gates --segment A3.5-public-deposit-checkout --ui (clean temp worktree; reran once after transient KB integration leak, final gate PASS)"
     ],
-    "gate_report": "test-results/agent-gates/20260521T031730Z-B5.7-sc-2-role-scoped-home-route.json",
-    "notes": "No code changes were required in this cycle; the feature existed on main but roadmap state was still not_started. Main working tree has unrelated WIP, so full gates ran in a clean detached worktree at HEAD.",
-    "updated_at": "2026-05-21T03:17:30Z"
+    "gate_report": "test-results/agent-gates/20260521T035412Z-A3.5-public-deposit-checkout.json",
+    "notes": "No migration required; reused existing quote_packages.deposit_required_amount, deposits, crm_deals, and portal_payment_intents schema. Stripe Checkout uses existing REST/fallback pattern and requires production STRIPE_SECRET_KEY/webhook configuration for live payments; without Stripe secrets the public flow returns a mailto handoff fallback. Public payment metadata intentionally excludes share tokens. Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so focused checks and full gates ran in a clean detached worktree with only scoped A3.5 files applied.",
+    "updated_at": "2026-05-21T03:54:12Z"
   },
-  "updated_at": "2026-05-21T03:17:30Z"
+  "updated_at": "2026-05-21T03:54:12Z"
 }

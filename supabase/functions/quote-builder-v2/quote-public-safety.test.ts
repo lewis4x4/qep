@@ -19,6 +19,7 @@ Deno.test("public deal-room payload sanitizes line items and AI recommendation i
     special_terms: "Subject to final lender approval.",
     delivery_eta: "2 weeks",
     deposit_required_amount: "5000",
+    deposit_status: "verified",
     tax_profile: "standard",
     tax_override_reason: "County surtax adjustment",
     follow_up_at: "2026-06-01T00:00:00Z",
@@ -109,6 +110,7 @@ Deno.test("public deal-room payload sanitizes line items and AI recommendation i
   assertEquals(payload.why_this_machine, "Confirmed narrative");
   assertEquals(payload.why_this_machine_confirmed, true);
   assertEquals(payload.deposit_required_amount, 5000);
+  assertEquals(payload.deposit_status, "verified");
 
   const line =
     (payload.quote_package_line_items as Array<Record<string, unknown>>)[0];

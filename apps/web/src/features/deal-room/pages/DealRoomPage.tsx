@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   PUBLIC_ACCEPT_TERMS_VERSION,
   acceptPublicQuote,
+  createPublicQuoteDepositCheckout,
   fetchPublicDealRoom,
   fetchPublicDealRoomAttachments,
   fetchPublicSocialProof,
@@ -1513,6 +1514,106 @@ function ApprovalStatusBanner({ status }: { status: string }) {
   );
 }
 
+function DepositCheckoutPanel({ token, quote }: { token: string; quote: DealRoomQuote }) {
+  const queryClient = useQueryClient();
+  const amount = quote.deposit_required_amount ?? 0;
+  const amountCents = Math.round(amount * 100);
+  const checkoutMutation = useMutation({
+    mutationFn: async (popup: Window | null) => {
+      try {
+        const data = await createPublicQuoteDepositCheckout(token);
+        const target = data.url ?? data.fallback;
+        if (target) {
+          if (popup && !popup.closed) {
+            popup.location.href = target;
+          } else {
+            window.location.href = target;
+          }
+        } else {
+          try { popup?.close(); } catch { /* noop */ }
+        }
+        if (data.already_paid) {
+          queryClient.invalidateQueries({ queryKey: ["deal-room", token] });
+        }
+        return data;
+      } catch (error) {
+        try { popup?.close(); } catch { /* noop */ }
+        throw error;
+      }
+    },
+  });
+
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  if (!["accepted", "converted_to_deal"].includes(quote.status)) {
+    return (
+      <div className="mt-4 rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-xs text-slate-600">
+        Deposit checkout opens after you accept the proposal.
+      </div>
+    );
+  }
+  if (["verified", "applied"].includes(String(quote.deposit_status ?? ""))) {
+    return (
+      <div className="mt-4 rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-800">
+        Deposit received. Thank you — QEP can continue preparing your order.
+      </div>
+    );
+  }
+  if (quote.deposit_status === "received") {
+    return (
+      <div className="mt-4 rounded-xl border border-amber-200 bg-white px-4 py-3 text-sm text-amber-800">
+        Deposit received and pending verification. Your QEP representative will confirm the next step.
+      </div>
+    );
+  }
+  if (["refund_requested", "refunded"].includes(String(quote.deposit_status ?? ""))) {
+    return (
+      <div className="mt-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+        Deposit checkout is paused. Contact your QEP representative for the current payment status.
+      </div>
+    );
+  }
+
+  function handleClick() {
+    if (checkoutMutation.isPending || amountCents <= 0) return;
+    const popup = window.open("about:blank", "_blank");
+    checkoutMutation.mutate(popup);
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-emerald-200 bg-white px-4 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-700">
+            Deposit due
+          </div>
+          <p className="mt-1 text-sm text-slate-800">
+            Secure your equipment with the required {formatCurrency(amount)} deposit.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={checkoutMutation.isPending || amountCents <= 0}
+          className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-40"
+        >
+          {checkoutMutation.isPending ? "Opening…" : "Pay deposit"}
+        </button>
+      </div>
+      {checkoutMutation.isSuccess && checkoutMutation.data?.fallback && !checkoutMutation.data?.url && (
+        <p className="mt-2 text-xs text-amber-700">Stripe checkout is unavailable, so a payment coordination email opened instead.</p>
+      )}
+      {checkoutMutation.isSuccess && checkoutMutation.data?.already_paid && (
+        <p className="mt-2 text-xs text-emerald-700">Deposit already received.</p>
+      )}
+      {checkoutMutation.isError && (
+        <p className="mt-2 text-xs text-rose-700">
+          {checkoutMutation.error instanceof Error ? checkoutMutation.error.message : "Checkout failed."}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function AcceptPanel({
   token,
   quote,
@@ -1605,6 +1706,7 @@ function AcceptPanel({
             <p className="mt-1 text-sm text-emerald-900">
               Your acceptance has been recorded. Your rep will follow up to confirm delivery, paperwork, and next steps.
             </p>
+            <DepositCheckoutPanel token={token} quote={quote} />
           </div>
           <div className="rounded-full bg-emerald-600 px-4 py-1 text-xs font-bold uppercase tracking-[0.08em] text-white">
             Accepted
@@ -1681,7 +1783,7 @@ function AcceptPanel({
                 className="mt-0.5"
               />
               <span>
-                I confirm this proposal and authorize QEP to contact me to finalize documents, delivery, and deposit/payment details. Deposit/payment instructions will be coordinated by my QEP representative.
+                I confirm this proposal and authorize QEP to contact me to finalize documents, delivery, and any required deposit. If a deposit is due, I can pay it through a secure checkout after signing.
               </span>
             </label>
           </div>

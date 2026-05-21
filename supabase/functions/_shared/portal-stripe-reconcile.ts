@@ -21,6 +21,17 @@ export interface PortalInvoiceRow {
   crm_company_id?: string | null;
 }
 
+export interface DepositRow {
+  id: string;
+  workspace_id: string | null;
+  deal_id: string | null;
+  required_amount: number;
+  status: string;
+}
+
+const COLLECTIBLE_DEPOSIT_STATUSES = new Set(["pending", "requested"]);
+const PAID_DEPOSIT_STATUSES = new Set(["verified", "applied"]);
+
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, unknown>;
@@ -101,6 +112,103 @@ export async function recomputeHealthScoreForInvoice(input: {
   return nextMetadata;
 }
 
+async function reconcileSucceededDepositPayment(input: {
+  supabaseAdmin: SupabaseClient;
+  paymentIntent: PortalPaymentIntentRow;
+  metadata: Record<string, unknown>;
+  eventId: string | null;
+  stripePaymentIntentId: string | null;
+  fallbackAmountCents: number | null;
+  now: string;
+}): Promise<void> {
+  const intentId = input.stripePaymentIntentId ?? input.paymentIntent.stripe_payment_intent_id;
+  const expectedAmountCents = input.paymentIntent.amount_cents > 0 ? input.paymentIntent.amount_cents : 0;
+  const webhookAmountCents = Math.max(0, input.fallbackAmountCents ?? 0);
+  const amountCents = webhookAmountCents > 0 ? webhookAmountCents : expectedAmountCents;
+  const alreadyAppliedAt = typeof input.metadata.deposit_payment_applied_at === "string"
+    ? input.metadata.deposit_payment_applied_at
+    : null;
+  let nextMetadata: Record<string, unknown> = {
+    ...input.metadata,
+    stripe_event_id: input.eventId,
+  };
+
+  const depositId = typeof input.metadata.deposit_id === "string" ? input.metadata.deposit_id : "";
+  if (!depositId) {
+    nextMetadata = { ...nextMetadata, deposit_payment_blocked_reason: "missing_deposit_id" };
+  } else if (!alreadyAppliedAt) {
+    const { data: depositRow } = await input.supabaseAdmin
+      .from("deposits")
+      .select("id, workspace_id, deal_id, required_amount, status")
+      .eq("id", depositId)
+      .maybeSingle();
+
+    if (!depositRow) {
+      nextMetadata = { ...nextMetadata, deposit_payment_blocked_reason: "deposit_not_found" };
+    } else {
+      const deposit = depositRow as DepositRow;
+      const requiredCents = Math.round(Number(deposit.required_amount ?? 0) * 100);
+      const depositStatus = String(deposit.status ?? "");
+      const workspaceMismatch = Boolean(input.paymentIntent.workspace_id && deposit.workspace_id && input.paymentIntent.workspace_id !== deposit.workspace_id);
+      const stripeAmountMismatch = Boolean(webhookAmountCents > 0 && expectedAmountCents > 0 && webhookAmountCents !== expectedAmountCents);
+      const underpaid = amountCents < requiredCents;
+      const statusNotCollectible = !COLLECTIBLE_DEPOSIT_STATUSES.has(depositStatus);
+      if (workspaceMismatch || stripeAmountMismatch || underpaid || statusNotCollectible) {
+        nextMetadata = {
+          ...nextMetadata,
+          deposit_payment_blocked_reason: workspaceMismatch
+            ? "workspace_mismatch"
+            : stripeAmountMismatch
+              ? "stripe_amount_mismatch"
+              : underpaid
+                ? "amount_below_deposit_required"
+                : PAID_DEPOSIT_STATUSES.has(depositStatus)
+                  ? "deposit_already_verified"
+                  : "deposit_status_not_collectible",
+        };
+      } else {
+        await input.supabaseAdmin
+          .from("deposits")
+          .update({
+            status: "verified",
+            payment_method: "credit_card",
+            received_at: input.now,
+            verified_at: input.now,
+            invoice_reference: `stripe:${intentId}`,
+          })
+          .eq("id", deposit.id);
+
+        if (deposit.deal_id) {
+          await input.supabaseAdmin
+            .from("crm_deals")
+            .update({
+              deposit_status: "verified",
+              deposit_amount: deposit.required_amount,
+            })
+            .eq("id", deposit.deal_id);
+        }
+
+        nextMetadata = {
+          ...nextMetadata,
+          deposit_payment_applied_at: input.now,
+        };
+        delete nextMetadata.deposit_payment_blocked_reason;
+      }
+    }
+  }
+
+  await input.supabaseAdmin
+    .from("portal_payment_intents")
+    .update({
+      stripe_payment_intent_id: intentId,
+      status: "succeeded",
+      succeeded_at: input.now,
+      webhook_signature_verified: true,
+      metadata: nextMetadata,
+    })
+    .eq("id", input.paymentIntent.id);
+}
+
 export async function reconcileSucceededPayment(input: {
   supabaseAdmin: SupabaseClient;
   eventId: string | null;
@@ -130,6 +238,19 @@ export async function reconcileSucceededPayment(input: {
   }
 
   const metadata = asRecord(paymentIntent.metadata);
+  if (metadata.payment_kind === "quote_deposit") {
+    await reconcileSucceededDepositPayment({
+      supabaseAdmin: input.supabaseAdmin,
+      paymentIntent,
+      metadata,
+      eventId: input.eventId,
+      stripePaymentIntentId: input.stripePaymentIntentId,
+      fallbackAmountCents: input.fallbackAmountCents,
+      now,
+    });
+    return;
+  }
+
   const alreadyAppliedAt = typeof metadata.invoice_payment_applied_at === "string"
     ? metadata.invoice_payment_applied_at
     : null;

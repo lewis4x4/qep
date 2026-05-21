@@ -69,7 +69,7 @@ const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const QUOTE_APPROVAL_WORKFLOW_SLUG = quoteManagerApproval.slug;
-const PUBLIC_ACCEPT_TERMS_VERSION = "a3.5-payment-handoff-v1";
+const PUBLIC_ACCEPT_TERMS_VERSION = "a3.5-deposit-checkout-v1";
 const PUBLIC_ACCEPT_READY_STATUSES = [
   "sent",
   "viewed",
@@ -227,6 +227,10 @@ const INTERNAL_COST_LINE_TYPES = new Set(["pdi", "good_faith"]);
 const FINANCE_SCENARIO_KINDS = new Set(["cash", "finance", "lease_fmv", "lease_fppo"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_QUOTE_PDF_BYTES = 25 * 1024 * 1024;
+const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
+const STRIPE_API_BASE = "https://api.stripe.com/v1";
+const COLLECTIBLE_DEPOSIT_STATUSES = new Set(["pending", "requested"]);
+const PAID_DEPOSIT_STATUSES = new Set(["verified", "applied"]);
 
 const PROSPECT_CONVERSION_ALLOWED_KEYS = new Set([
   "original_customer_name",
@@ -2058,9 +2062,21 @@ async function handlePublicDealRoomRead(url: URL, origin: string | null): Promis
     .limit(1)
     .maybeSingle();
 
+  let depositStatus: string | null = null;
+  if (typeof quote.deal_id === "string" && UUID_RE.test(quote.deal_id)) {
+    const { data: deposit } = await admin
+      .from("deposits")
+      .select("status")
+      .eq("deal_id", quote.deal_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    depositStatus = typeof deposit?.status === "string" ? deposit.status : null;
+  }
+
   return safeJsonOk({
     quote: {
-      ...buildPublicDealRoomPayload(quote as Record<string, unknown>),
+      ...buildPublicDealRoomPayload({ ...(quote as Record<string, unknown>), deposit_status: depositStatus }),
       latest_pdf_url: buildLatestQuotePdfResolverUrl(token, origin),
       latest_pdf_version_number: latestPdfArtifact?.version_number ?? null,
     },
@@ -2447,6 +2463,315 @@ async function canonicalizeAndHash(payload: Record<string, unknown>): Promise<st
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+function amountToCents(value: unknown): number | null {
+  const amount = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return Math.round(amount * 100);
+}
+
+function appendDealRoomParam(url: string | null, key: string, value: string): string {
+  const fallback = Deno.env.get("APP_URL") ?? "https://qep.blackrockai.co";
+  const target = new URL(url ?? "/", fallback);
+  target.searchParams.set(key, value);
+  return target.toString();
+}
+
+function buildQuoteDepositMailtoFallback(input: {
+  quoteNumber: string | null;
+  amountCents: number;
+}): string {
+  const dollars = (input.amountCents / 100).toFixed(2);
+  const subject = encodeURIComponent(`Deposit payment for quote ${input.quoteNumber ?? ""} — $${dollars}`);
+  const body = encodeURIComponent(
+    `Hi,\n\nI'd like to pay the required deposit for my QEP quote.\n\n` +
+    `Quote: ${input.quoteNumber ?? "(unspecified)"}\n` +
+    `Deposit amount: $${dollars}\n\n` +
+    `Please send a secure payment link or call me to take payment over the phone.\n`,
+  );
+  return `mailto:?subject=${subject}&body=${body}`;
+}
+
+async function resolvePublicQuoteDeposit(input: {
+  admin: ReturnType<typeof createAdminClient>;
+  workspaceId: string;
+  dealId: string;
+  equipmentValue: number;
+  requiredAmount: number;
+}): Promise<
+  | { ok: true; depositId: string; alreadyPaid: boolean }
+  | { ok: false; status: number; message: string }
+> {
+  const { data: existing, error: existingErr } = await input.admin
+    .from("deposits")
+    .select("id, workspace_id, deal_id, required_amount, status")
+    .eq("deal_id", input.dealId)
+    .eq("workspace_id", input.workspaceId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existingErr) {
+    console.error("public deposit checkout active deposit lookup error:", existingErr);
+    return { ok: false, status: 500, message: "Failed to verify deposit status" };
+  }
+
+  if (existing?.id) {
+    const existingStatus = String(existing.status ?? "");
+    const existingAmount = Number(existing.required_amount ?? 0);
+    const existingAmountCents = Math.round(existingAmount * 100);
+    const requiredAmountCents = Math.round(input.requiredAmount * 100);
+    if (PAID_DEPOSIT_STATUSES.has(existingStatus)) {
+      if (existingAmountCents >= requiredAmountCents) {
+        return { ok: true, depositId: String(existing.id), alreadyPaid: true };
+      }
+      return { ok: false, status: 409, message: "Received deposit is below this quote's required amount. Contact your QEP representative." };
+    }
+    if (existingStatus === "received") {
+      return { ok: false, status: 409, message: "Deposit has already been received and is pending verification." };
+    }
+    if (!COLLECTIBLE_DEPOSIT_STATUSES.has(existingStatus)) {
+      return { ok: false, status: 409, message: "Deposit status does not allow checkout. Contact your QEP representative." };
+    }
+    if (existingAmountCents !== requiredAmountCents) {
+      return { ok: false, status: 409, message: "Existing deposit amount does not match this quote. Contact your QEP representative." };
+    }
+    await input.admin
+      .from("crm_deals")
+      .update({ deposit_status: "pending", deposit_amount: input.requiredAmount })
+      .eq("id", input.dealId)
+      .eq("workspace_id", input.workspaceId);
+    return { ok: true, depositId: String(existing.id), alreadyPaid: false };
+  }
+
+  const { data: tier, error: tierErr } = await input.admin.rpc("calculate_deposit_tier", {
+    p_equipment_value: input.equipmentValue,
+  });
+  if (tierErr || !tier || typeof tier !== "object") {
+    console.error("public deposit checkout tier calculation error:", tierErr);
+    return { ok: false, status: 500, message: "Failed to calculate deposit tier" };
+  }
+  const tierRecord = tier as Record<string, unknown>;
+  const depositTier = typeof tierRecord.tier === "string" ? tierRecord.tier : "";
+  const refundPolicy = typeof tierRecord.refund_policy === "string" ? tierRecord.refund_policy : "non_refundable";
+  if (!depositTier) {
+    return { ok: false, status: 500, message: "Failed to calculate deposit tier" };
+  }
+
+  const { data: deposit, error: depositErr } = await input.admin
+    .from("deposits")
+    .insert({
+      workspace_id: input.workspaceId,
+      deal_id: input.dealId,
+      equipment_value: input.equipmentValue,
+      required_amount: input.requiredAmount,
+      deposit_tier: depositTier,
+      status: "requested",
+      refund_policy: refundPolicy,
+      created_by: null,
+    })
+    .select("id")
+    .single();
+  if (depositErr || !deposit?.id) {
+    console.error("public deposit checkout deposit insert error:", depositErr);
+    return { ok: false, status: 500, message: "Failed to request deposit" };
+  }
+
+  await input.admin
+    .from("crm_deals")
+    .update({ deposit_status: "pending", deposit_amount: input.requiredAmount })
+    .eq("id", input.dealId)
+    .eq("workspace_id", input.workspaceId);
+
+  return { ok: true, depositId: String(deposit.id), alreadyPaid: false };
+}
+
+async function handlePublicDepositCheckout(
+  req: Request,
+  url: URL,
+  origin: string | null,
+): Promise<Response> {
+  const token = url.searchParams.get("token")?.trim();
+  if (!token) return safeJsonError("token required", 400, origin);
+  if (token.length < 16 || token.length > 128) {
+    return safeJsonError("invalid token", 400, origin);
+  }
+  await req.json().catch(() => ({}));
+
+  const admin = createAdminClient();
+  const { data: quote, error: quoteErr } = await admin
+    .from("quote_packages")
+    .select("id, workspace_id, deal_id, contact_id, customer_email, quote_number, status, expires_at, deposit_required_amount, customer_total, equipment_total, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
+    .eq("share_token", token)
+    .maybeSingle();
+  if (quoteErr) {
+    console.error("public deposit checkout quote lookup error:", quoteErr);
+    return safeJsonError("Failed to load quote", 500, origin);
+  }
+  if (!quote) return safeJsonError("Quote not found", 404, origin);
+
+  const status = String(quote.status ?? "");
+  if (!["accepted", "converted_to_deal"].includes(status)) {
+    return safeJsonError("Deposit checkout is available after the proposal is accepted.", 409, origin);
+  }
+  const readGate = assertPublicQuoteReadReady(quote as Record<string, unknown>);
+  if (!readGate.ok) {
+    return safeJsonErrorWithFields(readGate.message, readGate.status, origin, { blockers: readGate.blockers ?? [] });
+  }
+
+  const workspaceId = typeof quote.workspace_id === "string" && quote.workspace_id.trim() ? quote.workspace_id.trim() : "default";
+  const dealId = typeof quote.deal_id === "string" && UUID_RE.test(quote.deal_id) ? quote.deal_id : null;
+  if (!dealId) return safeJsonError("This quote is not linked to a deal for deposit checkout.", 409, origin);
+
+  const { data: deal, error: dealErr } = await admin
+    .from("crm_deals")
+    .select("id, workspace_id, company_id")
+    .eq("id", dealId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (dealErr) {
+    console.error("public deposit checkout deal lookup error:", dealErr);
+    return safeJsonError("Failed to validate deal", 500, origin);
+  }
+  const companyId = typeof deal?.company_id === "string" && UUID_RE.test(deal.company_id) ? deal.company_id : null;
+  if (!companyId) return safeJsonError("This quote is missing a company for deposit checkout.", 409, origin);
+
+  const requiredAmount = typeof quote.deposit_required_amount === "number"
+    ? quote.deposit_required_amount
+    : typeof quote.deposit_required_amount === "string"
+      ? Number(quote.deposit_required_amount)
+      : NaN;
+  if (!Number.isFinite(requiredAmount) || requiredAmount <= 0) {
+    return safeJsonError("No deposit is required for this quote.", 409, origin);
+  }
+  const amountCents = amountToCents(requiredAmount);
+  if (!amountCents || amountCents < 50) {
+    return safeJsonError("Deposit amount is too small for checkout.", 409, origin);
+  }
+
+  const equipmentValueRaw = Number(quote.customer_total ?? quote.equipment_total ?? requiredAmount);
+  const equipmentValue = Number.isFinite(equipmentValueRaw) && equipmentValueRaw > 0 ? equipmentValueRaw : requiredAmount;
+  const depositResult = await resolvePublicQuoteDeposit({
+    admin,
+    workspaceId,
+    dealId,
+    equipmentValue,
+    requiredAmount,
+  });
+  if (!depositResult.ok) return safeJsonError(depositResult.message, depositResult.status, origin);
+  if (depositResult.alreadyPaid) {
+    return safeJsonOk({
+      stripe_configured: Boolean(STRIPE_SECRET_KEY),
+      already_paid: true,
+      deposit_id: depositResult.depositId,
+      amount_cents: amountCents,
+      message: "Deposit already received.",
+    }, origin);
+  }
+
+  const quoteNumber = typeof quote.quote_number === "string" ? quote.quote_number : null;
+  const fallback = buildQuoteDepositMailtoFallback({ quoteNumber, amountCents });
+  if (!STRIPE_SECRET_KEY) {
+    return safeJsonOk({
+      fallback,
+      stripe_configured: false,
+      deposit_id: depositResult.depositId,
+      amount_cents: amountCents,
+      message: "Stripe is not configured. Use the fallback to coordinate deposit payment.",
+    }, origin);
+  }
+
+  const dealRoomUrl = buildDealRoomUrl(token, origin);
+  const params = new URLSearchParams();
+  params.set("mode", "payment");
+  params.set("payment_method_types[]", "card");
+  params.set("success_url", appendDealRoomParam(dealRoomUrl, "deposit", "success"));
+  params.set("cancel_url", appendDealRoomParam(dealRoomUrl, "deposit", "cancelled"));
+  params.set("line_items[0][price_data][currency]", "usd");
+  params.set("line_items[0][price_data][product_data][name]", `QEP quote deposit${quoteNumber ? ` ${quoteNumber}` : ""}`);
+  params.set("line_items[0][price_data][unit_amount]", String(amountCents));
+  params.set("line_items[0][quantity]", "1");
+  if (typeof quote.customer_email === "string" && quote.customer_email.includes("@")) {
+    params.set("customer_email", quote.customer_email);
+  }
+  const metadata: Record<string, string> = {
+    payment_kind: "quote_deposit",
+    quote_package_id: String(quote.id),
+    quote_number: quoteNumber ?? "",
+    deal_id: dealId,
+    deposit_id: depositResult.depositId,
+    company_id: companyId,
+    workspace_id: workspaceId,
+    expected_deposit_cents: String(amountCents),
+  };
+  for (const [key, value] of Object.entries(metadata)) {
+    params.set(`metadata[${key}]`, value);
+    params.set(`payment_intent_data[metadata][${key}]`, value);
+  }
+
+  const stripeRes = await fetch(`${STRIPE_API_BASE}/checkout/sessions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: params.toString(),
+  });
+  if (!stripeRes.ok) {
+    const err = await stripeRes.text();
+    console.error("public deposit checkout Stripe create failed:", err);
+    return safeJsonOk({
+      fallback,
+      stripe_configured: true,
+      stripe_error: true,
+      deposit_id: depositResult.depositId,
+      amount_cents: amountCents,
+      message: "Stripe request failed. Fallback provided.",
+    }, origin);
+  }
+
+  const session = await stripeRes.json();
+  const sessionId = typeof session.id === "string" ? session.id : null;
+  const sessionUrl = typeof session.url === "string" ? session.url : null;
+  const stripePaymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : sessionId;
+  if (!sessionId || !sessionUrl || !stripePaymentIntentId) {
+    return safeJsonOk({
+      fallback,
+      stripe_configured: true,
+      stripe_error: true,
+      deposit_id: depositResult.depositId,
+      amount_cents: amountCents,
+      message: "Stripe did not return a checkout URL. Fallback provided.",
+    }, origin);
+  }
+
+  const { error: intentErr } = await admin.from("portal_payment_intents").insert({
+    workspace_id: workspaceId,
+    company_id: companyId,
+    invoice_id: null,
+    stripe_payment_intent_id: stripePaymentIntentId,
+    amount_cents: amountCents,
+    currency: "usd",
+    status: "requires_payment_method",
+    customer_email: typeof quote.customer_email === "string" ? quote.customer_email : null,
+    metadata: {
+      ...metadata,
+      checkout_session_id: sessionId,
+    },
+    created_by: null,
+  });
+  if (intentErr) {
+    console.error("public deposit checkout intent insert error:", intentErr);
+    return safeJsonError("Failed to record checkout session", 500, origin);
+  }
+
+  return safeJsonOk({
+    url: sessionUrl,
+    session_id: sessionId,
+    stripe_configured: true,
+    deposit_id: depositResult.depositId,
+    amount_cents: amountCents,
+  }, origin);
 }
 
 async function handlePublicAccept(
@@ -4540,6 +4865,9 @@ Deno.serve(async (req) => {
     }
     if (req.method === "POST" && publicAction === "public-accept") {
       return await handlePublicAccept(req, publicUrl, origin);
+    }
+    if (req.method === "POST" && publicAction === "public-deposit-checkout") {
+      return await handlePublicDepositCheckout(req, publicUrl, origin);
     }
     if (req.method === "POST" && publicAction === "public-feedback") {
       return await handlePublicQuoteFeedback(req, publicUrl, origin);

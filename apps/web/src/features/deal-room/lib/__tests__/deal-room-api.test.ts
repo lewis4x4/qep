@@ -50,7 +50,7 @@ describe("deal-room public acceptance API", () => {
       signer_email: "taylor@example.com",
       signature_data_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ",
       terms_accepted: true,
-      terms_version: "a3.5-payment-handoff-v1",
+      terms_version: "a3.5-deposit-checkout-v1",
       customer_configuration: {
         scenario_key: "finance-60",
         cash_down: 5000,
@@ -72,5 +72,36 @@ describe("deal-room public acceptance API", () => {
       termsVersion: PUBLIC_ACCEPT_TERMS_VERSION,
       customerConfiguration: { scenario_key: "finance-60" },
     })).rejects.toThrow("Signature is required.");
+  });
+
+  test("creates deposit checkout through the token-authorized public route", async () => {
+    const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ input, init });
+      return new Response(JSON.stringify({
+        url: "https://checkout.stripe.com/c/session",
+        stripe_configured: true,
+        deposit_id: "deposit-1",
+        amount_cents: 50000,
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    const { createPublicQuoteDepositCheckout } = await import("../deal-room-api");
+    const result = await createPublicQuoteDepositCheckout("share token/with space?");
+
+    expect(result.url).toBe("https://checkout.stripe.com/c/session");
+    expect(calls).toHaveLength(1);
+    const requestUrl = new URL(String(calls[0].input));
+    expect(requestUrl.pathname).toBe("/functions/v1/quote-builder-v2/public-deposit-checkout");
+    expect(requestUrl.searchParams.get("token")).toBe("share token/with space?");
+    expect(calls[0].init?.method).toBe("POST");
+    const headers = calls[0].init?.headers as Record<string, string>;
+    expect(headers["Content-Type"]).toBe("application/json");
+    expect(headers.apikey).toBeTruthy();
+    expect(headers.Authorization).toBe(`Bearer ${headers.apikey}`);
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({});
   });
 });
