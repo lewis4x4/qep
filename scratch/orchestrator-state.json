@@ -636,6 +636,30 @@
       "gate_report": "test-results/agent-gates/20260521T035412Z-A3.5-public-deposit-checkout.json",
       "notes": "No migration required; reused existing quote_packages.deposit_required_amount, deposits, crm_deals, and portal_payment_intents schema. Stripe Checkout uses existing REST/fallback pattern and requires production STRIPE_SECRET_KEY/webhook configuration for live payments; without Stripe secrets the public flow returns a mailto handoff fallback. Public payment metadata intentionally excludes share tokens. Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so focused checks and full gates ran in a clean detached worktree with only scoped A3.5 files applied.",
       "updated_at": "2026-05-21T03:54:12Z"
+    },
+    {
+      "task_id": "A1.1/QEP-1",
+      "status": "blocked_manual_staging_signoff_after_automated_regression",
+      "title": "Manual staging QA pass",
+      "stream": "A",
+      "wave": "A1",
+      "goal": "Turn the manual Quote Builder staging checklist into repeatable regression evidence for FL tax math, Columbia surtax cap, tax exemption badge, manager approval outcomes, and TILA copy.",
+      "changed_files": [
+        "supabase/functions/tax-calculator/tax-logic.test.ts",
+        "supabase/functions/quote-builder-v2/quote-approval-decisions-static.test.ts",
+        "apps/web/src/features/quote-builder/components/__tests__/TaxBreakdown.test.tsx"
+      ],
+      "verification": [
+        "bun test apps/web/src/features/quote-builder/components/__tests__/TaxBreakdown.test.tsx apps/web/src/features/quote-builder/lib/__tests__/quote-proposal-data.test.ts",
+        "deno test supabase/functions/tax-calculator/tax-logic.test.ts supabase/functions/quote-builder-v2/quote-approval-decisions-static.test.ts --allow-read --allow-env",
+        "bun run --filter @qep/web typecheck (clean temp worktree)",
+        "git diff --check -- scoped A1.1 files",
+        "bun run migrations:check (clean temp worktree, sequence 001..609)",
+        "bun run segment:gates --segment A1.1-manual-staging-qa-regression --ui (clean temp worktree)"
+      ],
+      "gate_report": "test-results/agent-gates/20260521T040155Z-A1.1-manual-staging-qa-regression.json",
+      "notes": "No runtime product code changed. This closes the code-testable portion of A1.1 and preserves explicit evidence for the exact checklist. A true manual staging walkthrough against live staging data/credentials and architect sign-off was not performed in this environment, so roadmap closure should remain blocked/manual-pending until Rylee + architect complete that external pass.",
+      "updated_at": "2026-05-21T04:01:55Z"
     }
   ],
   "agents": [
@@ -965,37 +989,28 @@
     }
   },
   "current_task": {
-    "task_id": "A3.5/QEP-18",
-    "status": "complete",
-    "title": "M5 \u2014 Branded acceptance flow",
+    "task_id": "A1.1/QEP-1",
+    "status": "blocked_manual_staging_signoff_after_automated_regression",
+    "title": "Manual staging QA pass",
     "stream": "A",
-    "wave": "A3",
-    "goal": "Public Deal Room acceptance includes durable signature proof, rep follow-up evidence, and token-gated post-signature deposit checkout with Stripe reconciliation and safe fallback handoff.",
+    "wave": "A1",
+    "goal": "Turn the manual Quote Builder staging checklist into repeatable regression evidence for FL tax math, Columbia surtax cap, tax exemption badge, manager approval outcomes, and TILA copy.",
     "changed_files": [
-      "supabase/functions/quote-builder-v2/index.ts",
-      "supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts",
-      "supabase/functions/quote-builder-v2/quote-public-safety.ts",
-      "supabase/functions/quote-builder-v2/quote-public-safety.test.ts",
-      "supabase/functions/_shared/portal-stripe-reconcile.ts",
-      "supabase/functions/_shared/portal-stripe-reconcile.test.ts",
-      "apps/web/src/features/deal-room/lib/deal-room-api.ts",
-      "apps/web/src/features/deal-room/lib/__tests__/deal-room-api.test.ts",
-      "apps/web/src/features/deal-room/pages/DealRoomPage.tsx",
-      "apps/web/src/features/deal-room/pages/__tests__/DealRoomPage.acceptance-source.test.ts"
+      "supabase/functions/tax-calculator/tax-logic.test.ts",
+      "supabase/functions/quote-builder-v2/quote-approval-decisions-static.test.ts",
+      "apps/web/src/features/quote-builder/components/__tests__/TaxBreakdown.test.tsx"
     ],
     "verification": [
-      "bun test apps/web/src/features/deal-room/lib/__tests__/deal-room-api.test.ts apps/web/src/features/deal-room/pages/__tests__/DealRoomPage.acceptance-source.test.ts",
-      "deno test supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts supabase/functions/quote-builder-v2/quote-public-safety.test.ts supabase/functions/_shared/portal-stripe-reconcile.test.ts supabase/functions/portal-stripe/portal-stripe-integrity-regression.test.ts --allow-read --allow-env",
-      "deno check supabase/functions/quote-builder-v2/index.ts supabase/functions/_shared/portal-stripe-reconcile.ts",
+      "bun test apps/web/src/features/quote-builder/components/__tests__/TaxBreakdown.test.tsx apps/web/src/features/quote-builder/lib/__tests__/quote-proposal-data.test.ts",
+      "deno test supabase/functions/tax-calculator/tax-logic.test.ts supabase/functions/quote-builder-v2/quote-approval-decisions-static.test.ts --allow-read --allow-env",
       "bun run --filter @qep/web typecheck (clean temp worktree)",
-      "git diff --check -- scoped A3.5 deposit files",
-      "Oracle review found one P1 duplicate-payment lifecycle issue; targeted fix applied for received/applied/refund statuses across backend reconciliation and Deal Room UI",
+      "git diff --check -- scoped A1.1 files",
       "bun run migrations:check (clean temp worktree, sequence 001..609)",
-      "bun run segment:gates --segment A3.5-public-deposit-checkout --ui (clean temp worktree; reran once after transient KB integration leak, final gate PASS)"
+      "bun run segment:gates --segment A1.1-manual-staging-qa-regression --ui (clean temp worktree)"
     ],
-    "gate_report": "test-results/agent-gates/20260521T035412Z-A3.5-public-deposit-checkout.json",
-    "notes": "No migration required; reused existing quote_packages.deposit_required_amount, deposits, crm_deals, and portal_payment_intents schema. Stripe Checkout uses existing REST/fallback pattern and requires production STRIPE_SECRET_KEY/webhook configuration for live payments; without Stripe secrets the public flow returns a mailto handoff fallback. Public payment metadata intentionally excludes share tokens. Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so focused checks and full gates ran in a clean detached worktree with only scoped A3.5 files applied.",
-    "updated_at": "2026-05-21T03:54:12Z"
+    "gate_report": "test-results/agent-gates/20260521T040155Z-A1.1-manual-staging-qa-regression.json",
+    "notes": "No runtime product code changed. This closes the code-testable portion of A1.1 and preserves explicit evidence for the exact checklist. A true manual staging walkthrough against live staging data/credentials and architect sign-off was not performed in this environment, so roadmap closure should remain blocked/manual-pending until Rylee + architect complete that external pass.",
+    "updated_at": "2026-05-21T04:01:55Z"
   },
-  "updated_at": "2026-05-21T03:54:12Z"
+  "updated_at": "2026-05-21T04:01:55Z"
 }

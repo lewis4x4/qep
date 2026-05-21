@@ -23,7 +23,7 @@ Deno.test("Florida tax applies 6% state tax after discount and trade", () => {
   assertEquals(result.total_tax, 2_250);
 });
 
-Deno.test("Florida county surtax applies county rate only to cap", () => {
+Deno.test("Florida county surtax applies Columbia 1.5% rate only to the $5K cap", () => {
   const result = computeQuoteTax({
     subtotal: 50_000,
     discountTotal: 0,
@@ -35,14 +35,14 @@ Deno.test("Florida county surtax applies county rate only to cap", () => {
       state_code: "FL",
       county_name: "Columbia",
       state_rate: 0.06,
-      county_surtax_rate: 0.01,
+      county_surtax_rate: 0.015,
       surtax_cap_amount: 5000,
     },
   });
 
   assertEquals(result.state_tax, 3_000);
-  assertEquals(result.county_tax, 50);
-  assertEquals(result.total_tax, 3_050);
+  assertEquals(result.county_tax, 75);
+  assertEquals(result.total_tax, 3_075);
   assertEquals(result.tax_lines[1]?.cap_applied, 5_000);
 });
 
