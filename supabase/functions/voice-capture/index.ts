@@ -35,6 +35,7 @@ import {
   WHISPER_TRANSCRIPTION_MODEL,
 } from "../_shared/voice-model-config.ts";
 import { generateVoiceCaptureSummaryBullets } from "../_shared/voice-capture-summary.ts";
+import { ensureVoiceCaptureSpeakerSuggestions } from "../_shared/voice-speaker-labels.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 import {
@@ -504,6 +505,15 @@ Return ONLY valid JSON matching this exact structure:
         openAiKey,
         model: modelConfig.extractionModel,
       });
+      await ensureVoiceCaptureSpeakerSuggestions(supabaseAdmin, {
+        workspaceId,
+        captureId,
+        actorUserId: user.id,
+        captureMode: "field_note",
+        linkedDealId: requestedCrmDealId,
+        extractedContactName: getVoiceCaptureContactName(extracted),
+        extractedCompanyName: extracted.record.companyName,
+      });
       return jsonError(
         "Could not attach this note to the QRM deal. If this keeps happening, contact support.",
         500,
@@ -536,6 +546,18 @@ Return ONLY valid JSON matching this exact structure:
         );
       }
     }
+
+    await ensureVoiceCaptureSpeakerSuggestions(supabaseAdmin, {
+      workspaceId,
+      captureId,
+      actorUserId: user.id,
+      captureMode: "field_note",
+      linkedCompanyId: localCrmSync.companyId,
+      linkedContactId: localCrmSync.contactId,
+      linkedDealId: localCrmSync.dealId ?? requestedCrmDealId,
+      extractedContactName: getVoiceCaptureContactName(extracted),
+      extractedCompanyName: extracted.record.companyName,
+    });
 
     // ── Voice note intelligence (best-effort — non-fatal) ──────────────────────
     try {

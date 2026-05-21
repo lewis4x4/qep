@@ -64,6 +64,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { VoiceSummaryBullets } from "@/components/voice/VoiceSummaryBullets";
+import { VoiceSpeakerLabelPanel } from "@/components/voice/VoiceSpeakerLabelPanel";
 import { crmSupabase } from "@/features/qrm/lib/qrm-supabase";
 import {
   getEvidenceSnippet,
@@ -2234,6 +2235,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                         {transcriptDisplayText}
                       </div>
                     )}
+                    {recordingState === "done" && result && (
+                      <VoiceSpeakerLabelPanel captureId={result.id} compact />
+                    )}
                     <div className="flex h-16 items-center gap-1 overflow-hidden rounded-lg border border-border bg-background/40 px-3" aria-label="Recording waveform">
                       {Array.from({ length: 52 }).map((_, i) => (
                         <span
@@ -2833,6 +2837,8 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                           </div>
                         </CardContent>
                       </Card>
+
+                      <VoiceSpeakerLabelPanel captureId={selectedRecentCapture.id} compact />
 
                       <ExtractedSignalSummary extracted={extracted} compact />
                     </>

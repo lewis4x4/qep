@@ -25,6 +25,7 @@ import {
   normalizeVoiceCaptureExtractedDealData,
   writeVoiceCaptureToLocalCrm,
 } from "../_shared/voice-capture-crm.ts";
+import { ensureVoiceCaptureSpeakerSuggestions } from "../_shared/voice-speaker-labels.ts";
 import {
   buildFinalTranscript,
   buildStreamExtractedData,
@@ -653,6 +654,18 @@ async function handleFinalize(
         sync_error: crmResult.saved ? null : "local CRM activity was not saved",
       })
       .eq("id", capture.id);
+
+    await ensureVoiceCaptureSpeakerSuggestions(admin, {
+      workspaceId: auth.workspaceId,
+      captureId: capture.id as string,
+      actorUserId: auth.userId,
+      captureMode: "live_call",
+      linkedCompanyId: crmResult.companyId ?? session.company_id,
+      linkedContactId: crmResult.contactId ?? session.contact_id,
+      linkedDealId: crmResult.dealId ?? session.deal_id,
+      extractedContactName: normalizedExtracted.record.contactName,
+      extractedCompanyName: normalizedExtracted.record.companyName,
+    });
 
     await admin
       .from("voice_capture_stream_sessions")

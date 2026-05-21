@@ -40253,6 +40253,122 @@ export type Database = {
           },
         ]
       }
+      voice_capture_speaker_label_audit: {
+        Row: {
+          actor_user_id: string | null
+          event_type: string
+          id: string
+          label_id: string
+          new_value: Json
+          occurred_at: string
+          old_value: Json | null
+          voice_capture_id: string
+          workspace_id: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          event_type: string
+          id?: string
+          label_id: string
+          new_value: Json
+          occurred_at?: string
+          old_value?: Json | null
+          voice_capture_id: string
+          workspace_id: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          event_type?: string
+          id?: string
+          label_id?: string
+          new_value?: Json
+          occurred_at?: string
+          old_value?: Json | null
+          voice_capture_id?: string
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      voice_capture_speaker_labels: {
+        Row: {
+          assigned_at: string | null
+          assigned_by: string | null
+          assigned_display_name: string | null
+          assigned_entity_id: string | null
+          assigned_entity_type: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          metadata: Json
+          rejected_at: string | null
+          rejected_by: string | null
+          speaker_key: string
+          status: string
+          suggested_display_name: string | null
+          suggested_entity_id: string | null
+          suggested_entity_type: string | null
+          suggestion_confidence: number | null
+          suggestion_source: string
+          updated_at: string
+          voice_capture_id: string
+          workspace_id: string
+        }
+        Insert: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          assigned_display_name?: string | null
+          assigned_entity_id?: string | null
+          assigned_entity_type?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata?: Json
+          rejected_at?: string | null
+          rejected_by?: string | null
+          speaker_key: string
+          status?: string
+          suggested_display_name?: string | null
+          suggested_entity_id?: string | null
+          suggested_entity_type?: string | null
+          suggestion_confidence?: number | null
+          suggestion_source: string
+          updated_at?: string
+          voice_capture_id: string
+          workspace_id: string
+        }
+        Update: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          assigned_display_name?: string | null
+          assigned_entity_id?: string | null
+          assigned_entity_type?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata?: Json
+          rejected_at?: string | null
+          rejected_by?: string | null
+          speaker_key?: string
+          status?: string
+          suggested_display_name?: string | null
+          suggested_entity_id?: string | null
+          suggested_entity_type?: string | null
+          suggestion_confidence?: number | null
+          suggestion_source?: string
+          updated_at?: string
+          voice_capture_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_capture_speaker_labels_voice_capture_id_fkey"
+            columns: ["voice_capture_id"]
+            isOneToOne: false
+            referencedRelation: "voice_captures"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       voice_capture_stream_chunks: {
         Row: {
           audio_storage_path: string | null
@@ -48403,6 +48519,19 @@ export type Database = {
         }[]
       }
       analytics_quick_kpi: { Args: { p_metric_key: string }; Returns: number }
+      confirm_voice_capture_speaker_label: {
+        Args: {
+          p_display_name?: string
+          p_entity_id?: string
+          p_entity_type?: string
+          p_label_id: string
+        }
+        Returns: Database["public"]["Tables"]["voice_capture_speaker_labels"]["Row"]
+      }
+      reject_voice_capture_speaker_label: {
+        Args: { p_label_id: string }
+        Returns: Database["public"]["Tables"]["voice_capture_speaker_labels"]["Row"]
+      }
       apply_ar_override: {
         Args: {
           p_approver_id: string

@@ -9,6 +9,7 @@ import {
   generateVoiceCaptureSummaryBullets,
   normalizeVoiceCaptureSummaryBullets,
 } from "../_shared/voice-capture-summary.ts";
+import { ensureVoiceCaptureSpeakerSuggestions } from "../_shared/voice-speaker-labels.ts";
 import {
   buildVoiceCaptureNoteBody,
   getVoiceCaptureContactName,
@@ -315,20 +316,36 @@ Deno.serve(async (req) => {
 
     const extracted = normalizeVoiceCaptureExtractedDealData(capture.extracted_data);
 
+    const localCrmDealId = isUuid(capture.linked_deal_id ?? "")
+      ? capture.linked_deal_id
+      : isUuid(capture.hubspot_deal_id ?? "")
+        ? capture.hubspot_deal_id
+        : null;
+    const localCrmCompanyId = isUuid(capture.linked_company_id ?? "") ? capture.linked_company_id : null;
+    const localCrmContactId = isUuid(capture.linked_contact_id ?? "") ? capture.linked_contact_id : null;
+
     const localCrmSync = await writeVoiceCaptureToLocalCrm(supabaseAdmin, {
       workspaceId: captureWorkspaceId,
       actorUserId: user.id,
       captureId,
-      dealId: isUuid(capture.linked_deal_id ?? "")
-        ? capture.linked_deal_id
-        : isUuid(capture.hubspot_deal_id ?? "")
-          ? capture.hubspot_deal_id
-          : null,
-      companyId: isUuid(capture.linked_company_id ?? "") ? capture.linked_company_id : null,
-      contactId: isUuid(capture.linked_contact_id ?? "") ? capture.linked_contact_id : null,
+      dealId: localCrmDealId,
+      companyId: localCrmCompanyId,
+      contactId: localCrmContactId,
       occurredAtIso: new Date().toISOString(),
       transcript: capture.transcript,
       extracted,
+    });
+
+    await ensureVoiceCaptureSpeakerSuggestions(supabaseAdmin, {
+      workspaceId: captureWorkspaceId,
+      captureId,
+      actorUserId: user.id,
+      captureMode: "field_note",
+      linkedCompanyId: localCrmSync.companyId ?? localCrmCompanyId,
+      linkedContactId: localCrmSync.contactId ?? localCrmContactId,
+      linkedDealId: localCrmSync.dealId ?? localCrmDealId,
+      extractedContactName: getVoiceCaptureContactName(extracted),
+      extractedCompanyName: extracted.record.companyName,
     });
 
     let resolvedDealId = capture.hubspot_deal_id;
