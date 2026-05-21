@@ -4,6 +4,7 @@ import {
   marginKeyFor,
   requiresLowMarginDraftReason,
   resolveActiveQuotePackageId,
+  resolveSavedQuoteStatus,
 } from "../useQuoteBuilderSave";
 
 describe("marginKeyFor", () => {
@@ -60,6 +61,20 @@ describe("requiresLowMarginDraftReason", () => {
       marginFloorPct: null,
       capturedKey: null,
     })).toBe(false);
+  });
+});
+
+describe("resolveSavedQuoteStatus", () => {
+  test("preserves approved status when a save response omits status", () => {
+    expect(resolveSavedQuoteStatus("approved", null)).toBe("approved");
+  });
+
+  test("uses explicit saved status when the server returns one", () => {
+    expect(resolveSavedQuoteStatus("approved", "sent")).toBe("sent");
+  });
+
+  test("defaults new unsaved quotes to draft", () => {
+    expect(resolveSavedQuoteStatus(undefined, undefined)).toBe("draft");
   });
 });
 

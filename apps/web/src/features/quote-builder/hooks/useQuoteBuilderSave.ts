@@ -172,6 +172,13 @@ export function resolveActiveQuotePackageId(input: {
   return persisted || null;
 }
 
+export function resolveSavedQuoteStatus(
+  currentStatus: QuoteWorkspaceDraft["quoteStatus"] | null | undefined,
+  savedStatus: QuoteWorkspaceDraft["quoteStatus"] | null | undefined,
+): QuoteWorkspaceDraft["quoteStatus"] {
+  return savedStatus ?? currentStatus ?? "draft";
+}
+
 export function useQuoteBuilderSave({
   draft,
   setDraft,
@@ -236,13 +243,11 @@ export function useQuoteBuilderSave({
         ?? (result as { deal_id?: string }).deal_id
         ?? draft.dealId
         ?? undefined;
-      const nextStatus =
-        (result.quote as { status?: string } | undefined)?.status
-        ?? "draft";
+      const nextStatus = (result.quote as { status?: QuoteWorkspaceDraft["quoteStatus"] } | undefined)?.status;
       setDraft((current) => ({
         ...current,
         dealId: resolvedDealId ?? current.dealId,
-        quoteStatus: nextStatus as QuoteWorkspaceDraft["quoteStatus"],
+        quoteStatus: resolveSavedQuoteStatus(current.quoteStatus, nextStatus),
       }));
       setLastSavedAt(new Date().toISOString());
       setAutoSaveState("saved");
