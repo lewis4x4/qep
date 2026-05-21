@@ -403,6 +403,7 @@ export function CapturePage() {
               <button
                 key={d.key}
                 onClick={() => navigate(d.href)}
+                data-capture-action={d.key}
                 className={cn(
                   "w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-white/[0.03] transition-colors active:bg-white/[0.05]",
                   i !== QUICK_DESTINATIONS.length - 1 &&

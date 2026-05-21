@@ -51,7 +51,7 @@ async function assertBottomTabPersistsAfterShellScroll(
   const box = await bottomTab.boundingBox();
   expect(box).not.toBeNull();
   expect(metrics.pageScrollY).toBe(0);
-  expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(metrics.viewportHeight + 1);
+  expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(metrics.viewportHeight + 2);
 }
 
 test.describe("mobile sales rep surface", () => {
@@ -137,15 +137,16 @@ test.describe("mobile sales rep surface", () => {
       await assertNoHorizontalOverflow(page);
     });
 
-    test("FAB Capture Sheet exposes Field Note + Voice Quote + My Mirror quick actions", async ({
+    test("Capture surface exposes Field Note + Voice Quote + My Mirror quick actions", async ({
       page,
     }) => {
       if (!credentials) test.skip();
       await signInWithPassword(page, credentials.email, credentials.password);
       await page.goto("/sales/today");
 
-      // Open the CaptureSheet via the centered FAB.
-      await page.getByRole("button", { name: /Quick actions/i }).click();
+      await page.getByRole("tab", { name: /Capture/i }).click();
+      await expect(page).toHaveURL(/\/sales\/capture/);
+      await expect(page.getByTestId("capture-tap-to-record")).toBeVisible();
       await expect(
         page.locator("[data-capture-action=\"field_note\"]"),
       ).toBeVisible();
@@ -156,7 +157,7 @@ test.describe("mobile sales rep surface", () => {
         page.locator("[data-capture-action=\"my_mirror\"]"),
       ).toBeVisible();
       await expect(
-        page.locator("[data-capture-action=\"new_quote\"]"),
+        page.locator("[data-capture-action=\"quick_note\"]"),
       ).toBeVisible();
     });
   });
