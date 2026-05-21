@@ -1,6 +1,15 @@
-import { classifyDecisionLane, type DecisionLane } from "../lane-classifier/logic.ts";
+import {
+  classifyDecisionLane,
+  type DecisionLane,
+} from "../lane-classifier/logic.ts";
 
-export type DecisionOwnerRole = "brian" | "rylee" | "ryan" | "angela" | "norman" | "tina";
+export type DecisionOwnerRole =
+  | "brian"
+  | "rylee"
+  | "ryan"
+  | "angela"
+  | "norman"
+  | "tina";
 
 export interface PendingDecisionPayload {
   code?: string | null;
@@ -31,6 +40,19 @@ export interface TriageRecommendation {
   silence_threshold_days: number | null;
 }
 
+export interface PrecedentCandidate {
+  id: string;
+  source_decision_id: string;
+  pattern_summary: string;
+  applied_answer: string;
+  applied_rationale: string | null;
+  owner_role: string | null;
+}
+
+export interface PrecedentMatch extends PrecedentCandidate {
+  score: number;
+}
+
 export interface AutoTriageResult {
   code: string;
   question_plain: string;
@@ -48,6 +70,15 @@ export interface AutoTriageResult {
     classifier_keywords: string[];
     context: string;
     owner_routing_reason: string;
+    precedent_match?: {
+      precedent_id: string;
+      source_decision_id: string;
+      pattern_summary: string;
+      applied_answer: string;
+      applied_rationale: string | null;
+      similarity_score: number;
+      similarity_threshold: number;
+    };
   };
   status: "open";
 }
@@ -68,13 +99,17 @@ export function resolveDecisionCode(input: PendingDecisionPayload): string {
 export function rewriteQuestionPlain(input: PendingDecisionPayload): string {
   const explicitQuestion = cleanText(input.question);
   if (explicitQuestion) {
-    return /[?.!]$/.test(explicitQuestion) ? explicitQuestion : `${explicitQuestion}?`;
+    return /[?.!]$/.test(explicitQuestion)
+      ? explicitQuestion
+      : `${explicitQuestion}?`;
   }
 
   const title = cleanText(input.title);
   const description = cleanText(input.description);
 
-  if (title && description) return `Should we ${title.toLowerCase()} considering ${description}?`;
+  if (title && description) {
+    return `Should we ${title.toLowerCase()} considering ${description}?`;
+  }
   if (title) return `Should we ${title.toLowerCase()}?`;
   if (description) return `Should we proceed given ${description}?`;
 
@@ -84,8 +119,93 @@ export function rewriteQuestionPlain(input: PendingDecisionPayload): string {
   return "Should we proceed with this pending decision?";
 }
 
+export const PRECEDENT_SIMILARITY_THRESHOLD = 0.85;
+
 function containsAny(text: string, keywords: string[]): boolean {
   return keywords.some((keyword) => text.includes(keyword));
+}
+
+function normalizedTokens(text: string): string[] {
+  return cleanText(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length >= 3);
+}
+
+function jaccardSimilarity(left: Set<string>, right: Set<string>): number {
+  if (left.size === 0 || right.size === 0) return 0;
+  let intersection = 0;
+  for (const value of left) {
+    if (right.has(value)) intersection += 1;
+  }
+  const union = left.size + right.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+function lexicalSimilarity(leftText: string, rightText: string): number {
+  const leftClean = cleanText(leftText).toLowerCase();
+  const rightClean = cleanText(rightText).toLowerCase();
+  if (!leftClean || !rightClean) return 0;
+  if (leftClean === rightClean) return 1;
+
+  const leftSet = new Set(normalizedTokens(leftClean));
+  const rightSet = new Set(normalizedTokens(rightClean));
+  return Number(jaccardSimilarity(leftSet, rightSet).toFixed(4));
+}
+
+export function findBestPrecedentMatch(input: {
+  decisionQuestion: string;
+  ownerRole: DecisionOwnerRole;
+  precedents: PrecedentCandidate[];
+  threshold?: number;
+}): PrecedentMatch | null {
+  const threshold = input.threshold ?? PRECEDENT_SIMILARITY_THRESHOLD;
+  let best: PrecedentMatch | null = null;
+
+  for (const precedent of input.precedents) {
+    const score = lexicalSimilarity(
+      input.decisionQuestion,
+      precedent.pattern_summary,
+    );
+    const ownerBonus =
+      precedent.owner_role && precedent.owner_role === input.ownerRole
+        ? 0.03
+        : 0;
+    const adjustedScore = Number(Math.min(1, score + ownerBonus).toFixed(4));
+
+    if (adjustedScore < threshold) continue;
+    if (!best || adjustedScore > best.score) {
+      best = { ...precedent, score: adjustedScore };
+    }
+  }
+
+  return best;
+}
+
+export function applyPrecedentRecommendation(
+  draft: AutoTriageResult,
+  match: PrecedentMatch,
+  threshold = PRECEDENT_SIMILARITY_THRESHOLD,
+): AutoTriageResult {
+  return {
+    ...draft,
+    recommended_option: match.applied_answer,
+    recommended_rationale: cleanText(match.applied_rationale) ||
+      `Matched precedent ${match.source_decision_id}.`,
+    ai_prep_packet: {
+      ...draft.ai_prep_packet,
+      precedent_match: {
+        precedent_id: match.id,
+        source_decision_id: match.source_decision_id,
+        pattern_summary: match.pattern_summary,
+        applied_answer: match.applied_answer,
+        applied_rationale: match.applied_rationale,
+        similarity_score: match.score,
+        similarity_threshold: threshold,
+      },
+    },
+  };
 }
 
 export function routeOwnerRole(input: PendingDecisionPayload): {
@@ -103,22 +223,46 @@ export function routeOwnerRole(input: PendingDecisionPayload): {
   ].join(" ").toLowerCase();
 
   if (containsAny(haystack, ["rylee", "sales", "marketing"])) {
-    return { owner_role: "rylee", reason: "Matched sales/marketing routing keywords." };
+    return {
+      owner_role: "rylee",
+      reason: "Matched sales/marketing routing keywords.",
+    };
   }
   if (containsAny(haystack, ["ryan", "owner", "visual", "brand", "scope"])) {
-    return { owner_role: "ryan", reason: "Matched owner/visual/brand routing keywords." };
+    return {
+      owner_role: "ryan",
+      reason: "Matched owner/visual/brand routing keywords.",
+    };
   }
   if (containsAny(haystack, ["angela", "tila", "compliance", "lending"])) {
-    return { owner_role: "angela", reason: "Matched compliance/lending routing keywords." };
+    return {
+      owner_role: "angela",
+      reason: "Matched compliance/lending routing keywords.",
+    };
   }
   if (containsAny(haystack, ["norman", "parts"])) {
     return { owner_role: "norman", reason: "Matched parts routing keywords." };
   }
-  if (containsAny(haystack, ["tina", "finance", "ap", "accounting", "closed-period", "closed period"])) {
-    return { owner_role: "tina", reason: "Matched finance/accounting routing keywords." };
+  if (
+    containsAny(haystack, [
+      "tina",
+      "finance",
+      "ap",
+      "accounting",
+      "closed-period",
+      "closed period",
+    ])
+  ) {
+    return {
+      owner_role: "tina",
+      reason: "Matched finance/accounting routing keywords.",
+    };
   }
 
-  return { owner_role: "brian", reason: "No explicit owner signal; default owner is brian." };
+  return {
+    owner_role: "brian",
+    reason: "No explicit owner signal; default owner is brian.",
+  };
 }
 
 function normalizeExistingCitations(citations: unknown): TriageCitation[] {
@@ -128,16 +272,24 @@ function normalizeExistingCitations(citations: unknown): TriageCitation[] {
   for (const citation of citations) {
     if (!citation || typeof citation !== "object") continue;
     const record = citation as Record<string, unknown>;
-    const source = cleanText(typeof record.source === "string" ? record.source : "provided");
-    const ref = cleanText(typeof record.ref === "string" ? record.ref : "payload.citations");
-    const excerpt = cleanText(typeof record.excerpt === "string" ? record.excerpt : "Provided citation");
+    const source = cleanText(
+      typeof record.source === "string" ? record.source : "provided",
+    );
+    const ref = cleanText(
+      typeof record.ref === "string" ? record.ref : "payload.citations",
+    );
+    const excerpt = cleanText(
+      typeof record.excerpt === "string" ? record.excerpt : "Provided citation",
+    );
     rows.push({ source, ref, excerpt });
   }
 
   return rows;
 }
 
-export function buildDeterministicCitations(input: PendingDecisionPayload): TriageCitation[] {
+export function buildDeterministicCitations(
+  input: PendingDecisionPayload,
+): TriageCitation[] {
   const citations: TriageCitation[] = [];
 
   const evidenceLink = cleanText(input.evidence_link);
@@ -149,7 +301,9 @@ export function buildDeterministicCitations(input: PendingDecisionPayload): Tria
     });
   }
 
-  const taskIds = (input.task_ids ?? []).filter((id) => typeof id === "string" && cleanText(id).length > 0);
+  const taskIds = (input.task_ids ?? []).filter((id) =>
+    typeof id === "string" && cleanText(id).length > 0
+  );
   for (const taskId of taskIds) {
     citations.push({
       source: "task",
@@ -200,7 +354,8 @@ export function draftRecommendation(lane: DecisionLane): TriageRecommendation {
   if (lane === "authorize") {
     return {
       recommended_option: "escalate_for_authorization",
-      recommended_rationale: "High-impact or low-reversibility signal detected; require explicit authorization.",
+      recommended_rationale:
+        "High-impact or low-reversibility signal detected; require explicit authorization.",
       reversal_cost: "high",
       silence_threshold_days: null,
     };
@@ -209,7 +364,8 @@ export function draftRecommendation(lane: DecisionLane): TriageRecommendation {
   if (lane === "auto") {
     return {
       recommended_option: "auto_safe_default",
-      recommended_rationale: "Low-risk/reversible signal detected; propose conservative default execution.",
+      recommended_rationale:
+        "Low-risk/reversible signal detected; propose conservative default execution.",
       reversal_cost: "low",
       silence_threshold_days: 1,
     };
@@ -217,19 +373,26 @@ export function draftRecommendation(lane: DecisionLane): TriageRecommendation {
 
   return {
     recommended_option: "ratify_with_owner",
-    recommended_rationale: "Moderate-impact signal detected; route for owner ratification before execution.",
+    recommended_rationale:
+      "Moderate-impact signal detected; route for owner ratification before execution.",
     reversal_cost: "medium",
     silence_threshold_days: 7,
   };
 }
 
-export function buildAutoTriageDraft(input: PendingDecisionPayload): AutoTriageResult {
+export function buildAutoTriageDraft(
+  input: PendingDecisionPayload,
+): AutoTriageResult {
   const code = resolveDecisionCode(input);
   const question_plain = rewriteQuestionPlain(input);
   const classification = classifyDecisionLane({
     code,
     question_plain,
-    text: [cleanText(input.title), cleanText(input.description), cleanText(input.context)].join(" "),
+    text: [
+      cleanText(input.title),
+      cleanText(input.description),
+      cleanText(input.context),
+    ].join(" "),
     options: input.options,
     citations: input.citations,
   });
