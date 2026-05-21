@@ -85,7 +85,8 @@
     "parity:decision-queue:verify": "bun ./scripts/verify/parity-decision-queue-verify.mjs",
     "parity:closeout:preflight": "bun ./scripts/verify/parity-closeout-preflight.mjs",
     "parity:closeout:status": "bun ./scripts/verify/parity-closeout-status.mjs",
-    "parity:field-uat:evidence": "bun ./scripts/verify/parity-field-uat-evidence.mjs"
+    "parity:field-uat:evidence": "bun ./scripts/verify/parity-field-uat-evidence.mjs",
+    "parity:source-fixtures:verify": "bun ./scripts/verify/parity-source-fixture-contracts.mjs"
   },
   "devDependencies": {
     "playwright": "^1.52.0",
