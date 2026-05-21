@@ -784,3 +784,6 @@ verify_jwt = false
 
 [functions.voice-to-parts-order]
 verify_jwt = false
+
+[functions.lane-classifier]
+verify_jwt = false
