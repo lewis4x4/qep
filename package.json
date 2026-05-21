@@ -88,7 +88,8 @@
     "parity:field-uat:evidence": "bun ./scripts/verify/parity-field-uat-evidence.mjs",
     "parity:source-fixtures:verify": "bun ./scripts/verify/parity-source-fixture-contracts.mjs",
     "agent-service-accounts:provision": "node scripts/provision-agent-service-accounts.mjs",
-    "agent-service-accounts:verify": "bun ./scripts/verify/agent-service-accounts-readiness.mjs"
+    "agent-service-accounts:verify": "bun ./scripts/verify/agent-service-accounts-readiness.mjs",
+    "agent-service-accounts:env-check": "node scripts/provision-agent-service-accounts.mjs --require-env"
   },
   "devDependencies": {
     "playwright": "^1.52.0",

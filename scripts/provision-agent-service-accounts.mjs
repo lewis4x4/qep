@@ -203,6 +203,7 @@ function parseArgs(argv) {
   const parsed = { apply: false };
   for (const arg of argv) {
     if (arg === "--apply") parsed.apply = true;
+    if (arg === "--require-env") parsed.requireEnv = true;
     const match = arg.match(/^--([^=]+)=(.*)$/);
     if (match) {
       const key = match[1].replace(/-([a-z])/g, (_, char) => char.toUpperCase());
