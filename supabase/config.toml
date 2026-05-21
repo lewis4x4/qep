@@ -787,3 +787,6 @@ verify_jwt = false
 
 [functions.lane-classifier]
 verify_jwt = false
+
+[functions.auto-triage-pipeline]
+verify_jwt = false
