@@ -451,6 +451,28 @@
       "gate_report": "test-results/agent-gates/20260521T005413Z-E2.2-core-voice-gate.json",
       "notes": "No skills/email-voice implementation exists in-repo, so E2.2 is enforced as a persisted context.voice_gate contract with human-edit default and email_voice_passed future status. Main working tree has unrelated OEM/admin/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only E2.2 scoped files applied. Price-intelligence/OEM draft wiring remains excluded because those files are currently unrelated WIP.",
       "updated_at": "2026-05-21T00:54:13Z"
+    },
+    {
+      "task_id": "F4.4/QEP-156",
+      "status": "complete",
+      "title": "Supersession detection",
+      "stream": "F",
+      "wave": "F4",
+      "goal": "Scope-change watcher marks decisions as superseded when their gated tasks are descoped, completed, or rescoped, while preserving historical decision scope.",
+      "changed_files": [
+        "supabase/migrations/608_qep_decision_supersession_watcher.sql",
+        "supabase/migrations/608_qep_decision_supersession_watcher.test.ts"
+      ],
+      "verification": [
+        "bun test ./supabase/migrations/608_qep_decision_supersession_watcher.test.ts",
+        "git diff --check -- supabase/migrations/608_qep_decision_supersession_watcher.sql supabase/migrations/608_qep_decision_supersession_watcher.test.ts",
+        "Oracle review: no P0/P1 blocking findings",
+        "bun run migrations:check (clean temp worktree, sequence 001..608)",
+        "bun run segment:gates --segment F4.4-decision-supersession-watcher --ui (clean temp worktree)"
+      ],
+      "gate_report": "test-results/agent-gates/20260521T011634Z-F4.4-decision-supersession-watcher.json",
+      "notes": "Implemented DB-native watcher only. roadmap-linear-sync is currently untracked local tooling, so supersession enforcement lives in Supabase migration code. Main working tree has unrelated OEM/admin/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only F4.4 scoped files applied.",
+      "updated_at": "2026-05-21T01:16:34Z"
     }
   ],
   "agents": [
@@ -780,38 +802,26 @@
     }
   },
   "current_task": {
-    "task_id": "E2.2/QEP-125",
+    "task_id": "F4.4/QEP-156",
     "status": "complete",
-    "title": "LLM strings through email-voice skill or human edit",
-    "stream": "E",
-    "wave": "E2",
-    "goal": "Generated user-facing email drafts carry a machine-checkable E2.2 voice gate and cannot be sent or marked sent until human edited or email-voice passed, with Decision Room drafts gated before copy/mailto.",
+    "title": "Supersession detection",
+    "stream": "F",
+    "wave": "F4",
+    "goal": "Scope-change watcher marks decisions as superseded when their gated tasks are descoped, completed, or rescoped, while preserving historical decision scope.",
     "changed_files": [
-      "supabase/functions/_shared/voice-compliance.ts",
-      "supabase/functions/_shared/voice-compliance.test.ts",
-      "supabase/functions/draft-email/index.ts",
-      "supabase/functions/_shared/draft-email.ts",
-      "supabase/functions/requote-drafts/index.ts",
-      "supabase/functions/decision-room-draft-email/index.ts",
-      "supabase/functions/_shared/chat-tools.ts",
-      "apps/web/src/features/email-drafts/lib/email-drafts-api.ts",
-      "apps/web/src/features/email-drafts/lib/email-drafts-api.test.ts",
-      "apps/web/src/features/qrm/components/DecisionRoomEmailDraft.tsx",
-      "apps/web/src/features/qrm/components/DecisionRoomEmailDraft.test.tsx"
+      "supabase/migrations/608_qep_decision_supersession_watcher.sql",
+      "supabase/migrations/608_qep_decision_supersession_watcher.test.ts"
     ],
     "verification": [
-      "deno test supabase/functions/_shared/voice-compliance.test.ts",
-      "deno check supabase/functions/draft-email/index.ts supabase/functions/requote-drafts/index.ts supabase/functions/decision-room-draft-email/index.ts supabase/functions/_shared/draft-email.ts supabase/functions/_shared/chat-tools.ts",
-      "bun test apps/web/src/features/email-drafts/lib/email-drafts-api.test.ts apps/web/src/features/qrm/components/DecisionRoomEmailDraft.test.tsx",
-      "bun --filter @qep/web typecheck",
-      "git diff --check -- scoped E2.2 files",
-      "Oracle review found one P1 fake-edited bypass; targeted fix applied",
-      "bun run migrations:check (clean temp worktree, sequence 001..607)",
-      "bun run segment:gates --segment E2.2-core-voice-gate --ui (clean temp worktree)"
+      "bun test ./supabase/migrations/608_qep_decision_supersession_watcher.test.ts",
+      "git diff --check -- supabase/migrations/608_qep_decision_supersession_watcher.sql supabase/migrations/608_qep_decision_supersession_watcher.test.ts",
+      "Oracle review: no P0/P1 blocking findings",
+      "bun run migrations:check (clean temp worktree, sequence 001..608)",
+      "bun run segment:gates --segment F4.4-decision-supersession-watcher --ui (clean temp worktree)"
     ],
-    "gate_report": "test-results/agent-gates/20260521T005413Z-E2.2-core-voice-gate.json",
-    "notes": "No skills/email-voice implementation exists in-repo, so E2.2 is enforced as a persisted context.voice_gate contract with human-edit default and email_voice_passed future status. Main working tree has unrelated OEM/admin/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only E2.2 scoped files applied. Price-intelligence/OEM draft wiring remains excluded because those files are currently unrelated WIP.",
-    "updated_at": "2026-05-21T00:54:13Z"
+    "gate_report": "test-results/agent-gates/20260521T011634Z-F4.4-decision-supersession-watcher.json",
+    "notes": "Implemented DB-native watcher only. roadmap-linear-sync is currently untracked local tooling, so supersession enforcement lives in Supabase migration code. Main working tree has unrelated OEM/admin/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only F4.4 scoped files applied.",
+    "updated_at": "2026-05-21T01:16:34Z"
   },
-  "updated_at": "2026-05-21T00:54:13Z"
+  "updated_at": "2026-05-21T01:16:34Z"
 }
