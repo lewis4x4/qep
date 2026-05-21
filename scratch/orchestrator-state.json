@@ -573,6 +573,36 @@
       "gate_report": "test-results/agent-gates/20260521T030512Z-B2.4-vc-4-speaker-labels.json",
       "notes": "Roadmap originally referenced migration 586, but committed migrations already used 586 for QB customer search and reached 608. This slice uses migration 609 and corrects the roadmap description. Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only B2.4 scoped files applied.",
       "updated_at": "2026-05-21T03:05:12Z"
+    },
+    {
+      "task_id": "B5.6/QEP-62",
+      "status": "complete_verified_existing",
+      "title": "SC-1 \u2014 Remove fake view_as, real rep test session",
+      "stream": "B",
+      "wave": "B5",
+      "goal": "Manager/owner test access uses a real Supabase rep magic-link session instead of fake view_as query behavior.",
+      "changed_files": [],
+      "verified_existing_files": [
+        "apps/web/src/components/TopBar.tsx",
+        "apps/web/src/features/floor/pages/FloorPage.tsx",
+        "apps/web/src/features/floor/pages/__tests__/view-as-removal.test.ts",
+        "apps/web/src/features/floor/pages/__tests__/floor-view-as-noop.test.tsx",
+        "supabase/functions/rep-test-session/index.ts",
+        "supabase/functions/rep-test-session/logic.ts",
+        "supabase/functions/rep-test-session/logic.test.ts",
+        "supabase/config.toml"
+      ],
+      "verification": [
+        "bun test apps/web/src/features/floor/pages/__tests__/view-as-removal.test.ts apps/web/src/features/floor/pages/__tests__/floor-view-as-noop.test.tsx",
+        "deno test supabase/functions/rep-test-session/logic.test.ts --allow-env",
+        "deno check supabase/functions/rep-test-session/index.ts",
+        "git diff --check -- scoped B5.6 files",
+        "bun run migrations:check (clean temp worktree, sequence 001..609)",
+        "bun run segment:gates --segment B5.6-sc-1-real-rep-test-session --ui (clean temp worktree)"
+      ],
+      "gate_report": "test-results/agent-gates/20260521T031045Z-B5.6-sc-1-real-rep-test-session.json",
+      "notes": "No code changes were required in this cycle; the feature existed on main but roadmap state was still not_started. Main working tree has unrelated WIP, so full gates ran in a clean detached worktree at HEAD.",
+      "updated_at": "2026-05-21T03:10:45Z"
     }
   ],
   "agents": [
@@ -902,40 +932,34 @@
     }
   },
   "current_task": {
-    "task_id": "B2.4/QEP-52",
-    "status": "complete",
-    "title": "VC-4 \u2014 Workspace-scoped speaker labeling",
+    "task_id": "B5.6/QEP-62",
+    "status": "complete_verified_existing",
+    "title": "SC-1 \u2014 Remove fake view_as, real rep test session",
     "stream": "B",
-    "wave": "B2",
-    "goal": "Voice capture speaker labels are workspace-scoped suggestions only until a user explicitly confirms or rejects them, with audit evidence and no biometric/fingerprint persistence.",
-    "changed_files": [
-      "supabase/migrations/609_voice_capture_speaker_labels.sql",
-      "supabase/functions/_shared/voice-speaker-labels.ts",
-      "supabase/functions/_shared/voice-speaker-labels.test.ts",
-      "supabase/functions/voice-capture/index.ts",
-      "supabase/functions/voice-capture-sync/index.ts",
-      "supabase/functions/voice-capture-stream/index.ts",
-      "apps/web/src/components/voice/VoiceSpeakerLabelPanel.tsx",
-      "apps/web/src/components/voice/VoiceSpeakerLabelPanel.test.tsx",
-      "apps/web/src/components/VoiceCapturePage.tsx",
-      "apps/web/src/lib/database.types.ts",
-      "scripts/verify/vc4-speaker-labels-static.test.ts"
+    "wave": "B5",
+    "goal": "Manager/owner test access uses a real Supabase rep magic-link session instead of fake view_as query behavior.",
+    "changed_files": [],
+    "verified_existing_files": [
+      "apps/web/src/components/TopBar.tsx",
+      "apps/web/src/features/floor/pages/FloorPage.tsx",
+      "apps/web/src/features/floor/pages/__tests__/view-as-removal.test.ts",
+      "apps/web/src/features/floor/pages/__tests__/floor-view-as-noop.test.tsx",
+      "supabase/functions/rep-test-session/index.ts",
+      "supabase/functions/rep-test-session/logic.ts",
+      "supabase/functions/rep-test-session/logic.test.ts",
+      "supabase/config.toml"
     ],
     "verification": [
-      "deno test supabase/functions/_shared/voice-speaker-labels.test.ts --allow-env",
-      "bun test apps/web/src/components/voice/VoiceSpeakerLabelPanel.test.tsx",
-      "bun test ./scripts/verify/vc4-speaker-labels-static.test.ts",
-      "deno check supabase/functions/_shared/voice-speaker-labels.ts supabase/functions/voice-capture/index.ts supabase/functions/voice-capture-sync/index.ts supabase/functions/voice-capture-stream/index.ts",
-      "bun test apps/web/src/components/__tests__/VoiceCapturePage.integration.test.tsx",
-      "bun run --filter @qep/web typecheck",
-      "git diff --check -- scoped B2.4 files",
-      "Oracle review found two P1 blockers; fixed mandatory active-workspace checks and service-role no-silent-assignment guard",
+      "bun test apps/web/src/features/floor/pages/__tests__/view-as-removal.test.ts apps/web/src/features/floor/pages/__tests__/floor-view-as-noop.test.tsx",
+      "deno test supabase/functions/rep-test-session/logic.test.ts --allow-env",
+      "deno check supabase/functions/rep-test-session/index.ts",
+      "git diff --check -- scoped B5.6 files",
       "bun run migrations:check (clean temp worktree, sequence 001..609)",
-      "bun run segment:gates --segment B2.4-vc-4-speaker-labels --ui (clean temp worktree)"
+      "bun run segment:gates --segment B5.6-sc-1-real-rep-test-session --ui (clean temp worktree)"
     ],
-    "gate_report": "test-results/agent-gates/20260521T030512Z-B2.4-vc-4-speaker-labels.json",
-    "notes": "Roadmap originally referenced migration 586, but committed migrations already used 586 for QB customer search and reached 608. This slice uses migration 609 and corrects the roadmap description. Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only B2.4 scoped files applied.",
-    "updated_at": "2026-05-21T03:05:12Z"
+    "gate_report": "test-results/agent-gates/20260521T031045Z-B5.6-sc-1-real-rep-test-session.json",
+    "notes": "No code changes were required in this cycle; the feature existed on main but roadmap state was still not_started. Main working tree has unrelated WIP, so full gates ran in a clean detached worktree at HEAD.",
+    "updated_at": "2026-05-21T03:10:45Z"
   },
-  "updated_at": "2026-05-21T03:05:12Z"
+  "updated_at": "2026-05-21T03:10:45Z"
 }
