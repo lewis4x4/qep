@@ -988,12 +988,12 @@
       "runtime_prerequisites": "blocked: R2 secrets missing for immutable PDF send path; APP_URL public HTTPS origin must be verified for QR validation"
     }
   },
-  "current_task": "B1.3",
-  "updated_at": "2026-05-21T04:51:00Z",
-  "linear": "QEP-47",
-  "status": "blocked_manual_ai_briefing_depth_signoff",
+  "current_task": "C2.2",
+  "updated_at": "2026-05-21T05:09:07Z",
+  "linear": "QEP-70",
+  "status": "complete_pending_commit",
   "last_commit": null,
-  "last_gate": "test-results/agent-gates/20260521T044825Z-B1.3-ai-briefing-depth-check.json",
+  "last_gate": "test-results/agent-gates/20260521T050907Z-C2.2-admin-oems.json",
   "remaining_blocker": "Rylee/Brian must review /floor with real advisor data and decide if the top AI briefing needs named deals/blockers/next moves.",
   "roadmap_progress": [
     {
@@ -1009,6 +1009,28 @@
       "verification": [
         "clean detached worktree: bun run migrations:check -> sequence 001..612",
         "clean detached worktree: bun run segment:gates --segment C2.1-oem-master-schema --no-chaos -> PASS"
+      ]
+    },
+    {
+      "task_id": "C2.2/QEP-70",
+      "title": "Slice 5.2 \u2014 /admin/oems admin UI",
+      "status": "complete_pending_commit",
+      "updated_at": "2026-05-21T05:09:07Z",
+      "changed_files": [
+        "apps/web/src/App.tsx",
+        "apps/web/src/components/AdminPage.tsx",
+        "apps/web/src/features/admin/lib/oems-api.ts",
+        "apps/web/src/features/admin/lib/__tests__/oems-api.test.ts",
+        "apps/web/src/features/admin/pages/OemsPage.tsx",
+        "apps/web/src/features/admin/pages/__tests__/OemsPage.integration.test.tsx",
+        "test-results/agent-gates/20260521T050907Z-C2.2-admin-oems.json",
+        "scratch/orchestrator-log.md",
+        "scratch/orchestrator-state.json"
+      ],
+      "verification": [
+        "bun test apps/web/src/features/admin/lib/__tests__/oems-api.test.ts apps/web/src/features/admin/pages/__tests__/OemsPage.integration.test.tsx apps/web/src/components/__tests__/AdminPage.integration.test.tsx -> PASS",
+        "(cd apps/web && bun run typecheck) -> PASS",
+        "clean detached worktree: bun run segment:gates --segment C2.2-admin-oems --ui --strict-design -> PASS"
       ]
     }
   ]

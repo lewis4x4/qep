@@ -118,3 +118,11 @@
 - Linked existing `oem_dealer_cost_tiers` rows to canonical OEM records and added `public.resolve_oem_cost(oem_key, brand_key, list_price_cents, effective_on, workspace_id)`.
 - Verification: clean detached worktree ran `bun run migrations:check` successfully (`sequence 001..612`) and full `bun run segment:gates --segment C2.1-oem-master-schema --no-chaos` passed.
 - Gate artifact: test-results/agent-gates/20260521T045721Z-C2.1-oem-master-schema.json
+## C2.2 / QEP-70 — /admin/oems admin UI — 2026-05-21
+
+- Added `/admin/oems` as an admin/manager/owner-gated OEM cost resolver surface.
+- Added a narrow admin API wrapper for listing active OEMs and calling `resolve_oem_cost` with list price, OEM, brand, and effective date.
+- Added the Admin home launch card under CRM tools.
+- Added focused normalizer/parser tests plus an integration test proving ASV routes through parent YCENA cost tiers and renders dealer cost/tier evidence.
+- Verification: focused Bun tests passed, `apps/web` typecheck passed, and clean detached worktree full `bun run segment:gates --segment C2.2-admin-oems --ui --strict-design` passed after sourcing root env for authenticated CDO review.
+- Gate artifact: test-results/agent-gates/20260521T050907Z-C2.2-admin-oems.json

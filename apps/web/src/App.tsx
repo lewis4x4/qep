@@ -254,6 +254,9 @@ const CoachPerformancePage = lazy(() =>
 const PriceSheetsPage = lazy(() =>
   import("./features/admin/pages/PriceSheetsPage").then((m) => ({ default: m.PriceSheetsPage }))
 );
+const OemsPage = lazy(() =>
+  import("./features/admin/pages/OemsPage").then((m) => ({ default: m.OemsPage }))
+);
 const BaseOptionsPage = lazy(() =>
   import("./features/admin/pages/BaseOptionsPage").then((m) => ({ default: m.BaseOptionsPage }))
 );
@@ -2779,6 +2782,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <PriceSheetsPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/oems"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <OemsPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
