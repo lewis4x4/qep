@@ -25,12 +25,14 @@ export function RentalPaymentStatusCard({
   description,
   finalizeLabel,
   finalizePending,
+  finalizeDisabledReason,
   onFinalize,
 }: {
   payment: PortalRentalPaymentStatusView | null;
   description: string;
   finalizeLabel: string;
   finalizePending: boolean;
+  finalizeDisabledReason?: string | null;
   onFinalize: () => void;
 }) {
   if (!payment) return null;
@@ -59,9 +61,14 @@ export function RentalPaymentStatusCard({
             />
           ) : null}
           {payment.canFinalize ? (
-            <Button variant="outline" onClick={onFinalize} disabled={finalizePending}>
-              {finalizePending ? "Checking payment..." : finalizeLabel}
-            </Button>
+            <div className="flex flex-col items-start gap-1">
+              <Button variant="outline" onClick={onFinalize} disabled={finalizePending || Boolean(finalizeDisabledReason)}>
+                {finalizePending ? "Checking payment..." : finalizeLabel}
+              </Button>
+              {finalizeDisabledReason ? (
+                <p className="max-w-[220px] text-[11px] opacity-75">{finalizeDisabledReason}</p>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </div>

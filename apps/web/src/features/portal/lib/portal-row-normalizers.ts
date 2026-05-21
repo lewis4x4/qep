@@ -1,3 +1,5 @@
+import type { PortalNativeSignatureView } from "../../../../../../shared/qep-moonshot-contracts";
+
 export type PortalDocumentType =
   | "operator_manual"
   | "service_manual"
@@ -133,6 +135,7 @@ export type PortalInvoiceTimelineItem = {
 };
 
 export type PortalInvoiceRecord = Record<string, unknown> & {
+  native_signature?: PortalNativeSignatureView | null;
   customer_invoice_line_items?: PortalInvoiceLineItem[];
   portal_payment_history?: PortalInvoicePaymentHistoryItem[];
   portal_invoice_timeline?: PortalInvoiceTimelineItem[];
@@ -553,10 +556,23 @@ function normalizeInvoiceTimeline(value: unknown): PortalInvoiceTimelineItem[] {
   });
 }
 
+function normalizeNativeSignature(value: unknown): PortalNativeSignatureView | null {
+  const row = firstRecord(value);
+  const id = nullableString(row?.id);
+  const signerName = nullableString(row?.signerName);
+  const signedAt = validDateOrNull(row?.signedAt);
+  const documentHash = nullableString(row?.documentHash);
+  const signedVia = row?.signedVia === "portal" ? "portal" : null;
+  const source = row?.source === "native_qep" ? "native_qep" : null;
+  if (!id || !signerName || !signedAt || !documentHash || !signedVia || !source) return null;
+  return { id, signerName, signedAt, signedVia, documentHash, source };
+}
+
 export function normalizePortalInvoiceRecord(value: unknown): PortalInvoiceRecord | null {
   if (!isRecord(value)) return null;
   return {
     ...value,
+    native_signature: normalizeNativeSignature(value.native_signature),
     customer_invoice_line_items: normalizeInvoiceLineItems(value.customer_invoice_line_items),
     portal_payment_history: normalizePaymentHistory(value.portal_payment_history),
     portal_invoice_timeline: normalizeInvoiceTimeline(value.portal_invoice_timeline),

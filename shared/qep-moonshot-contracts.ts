@@ -1241,6 +1241,15 @@ export interface PortalRentalPaymentStatusView {
   canFinalize: boolean;
 }
 
+export interface PortalNativeSignatureView {
+  id: string;
+  signerName: string;
+  signedAt: string;
+  signedVia: "portal";
+  documentHash: string;
+  source: "native_qep";
+}
+
 export interface PortalRentalContractView {
   id: string;
   requestType: PortalRentalRequestType;
@@ -1264,6 +1273,7 @@ export interface PortalRentalContractView {
   dealerResponse: string | null;
   customerNotes: string | null;
   signedTermsUrl: string | null;
+  nativeSignature?: PortalNativeSignatureView | null;
   pricingEstimate: PortalRentalPricingEstimate | null;
   agreedRates: PortalRentalPricingEstimate | null;
   paymentStatusView: PortalRentalPaymentStatusView | null;

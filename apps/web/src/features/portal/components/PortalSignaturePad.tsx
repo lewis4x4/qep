@@ -6,30 +6,43 @@ type Props = {
   height?: number;
   className?: string;
   onClear?: () => void;
+  onInkChange?: (hasInk: boolean) => void;
 };
 
 export type PortalSignaturePadHandle = {
   toDataUrl: () => string | null;
   clear: () => void;
+  hasInk: () => boolean;
 };
 
 /** Canvas signature capture; use ref to call toDataUrl() for PNG data URL. */
 export const PortalSignaturePad = forwardRef<PortalSignaturePadHandle, Props>(
-  function PortalSignaturePad({ width = 320, height = 160, className, onClear }, ref) {
+  function PortalSignaturePad({ width = 320, height = 160, className, onClear, onInkChange }, ref) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const drawing = useRef(false);
+    const hasInkRef = useRef(false);
+
+    const setHasInk = useCallback((next: boolean) => {
+      if (hasInkRef.current === next) return;
+      hasInkRef.current = next;
+      onInkChange?.(next);
+    }, [onInkChange]);
+
+    const clearCanvas = useCallback(() => {
+      const c = canvasRef.current;
+      const ctx = c?.getContext("2d");
+      if (!ctx || !c) return;
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, width, height);
+      setHasInk(false);
+      onClear?.();
+    }, [onClear, setHasInk, width, height]);
 
     useImperativeHandle(ref, () => ({
       toDataUrl: () => canvasRef.current?.toDataURL("image/png") ?? null,
-      clear: () => {
-        const c = canvasRef.current;
-        const ctx = c?.getContext("2d");
-        if (!ctx || !c) return;
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(0, 0, width, height);
-        onClear?.();
-      },
-    }));
+      clear: clearCanvas,
+      hasInk: () => hasInkRef.current,
+    }), [clearCanvas]);
 
     const pos = useCallback((e: React.MouseEvent | React.TouchEvent) => {
       const c = canvasRef.current;
@@ -63,9 +76,14 @@ export const PortalSignaturePad = forwardRef<PortalSignaturePadHandle, Props>(
         if (!ctx) return;
         const { x, y } = pos(e);
         ctx.beginPath();
+        ctx.fillStyle = "#111";
+        ctx.arc(x, y, 1.25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
         ctx.moveTo(x, y);
+        setHasInk(true);
       },
-      [pos],
+      [pos, setHasInk],
     );
 
     const draw = useCallback(
@@ -105,14 +123,7 @@ export const PortalSignaturePad = forwardRef<PortalSignaturePadHandle, Props>(
           variant="outline"
           size="sm"
           className="mt-2"
-          onClick={() => {
-            const c = canvasRef.current;
-            const ctx = c?.getContext("2d");
-            if (!ctx || !c) return;
-            ctx.fillStyle = "#fff";
-            ctx.fillRect(0, 0, width, height);
-            onClear?.();
-          }}
+          onClick={clearCanvas}
         >
           Clear
         </Button>

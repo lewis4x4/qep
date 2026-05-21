@@ -9,6 +9,7 @@ import { PortalLayout } from "../components/PortalLayout";
 import { PayInvoiceButton } from "../components/PayInvoiceButton";
 import { downloadInvoiceStatement, type PortalInvoicePaymentHistoryItem } from "../lib/invoice-statement";
 import { matchesPortalInvoiceFilters, type PortalInvoiceFilterDateMode } from "../lib/portal-invoice-history-utils";
+import type { PortalNativeSignatureView } from "../../../../../../shared/qep-moonshot-contracts";
 import { AlertCircle, CheckCircle2, Download, Loader2, Search } from "lucide-react";
 
 function formatCurrency(v: number | null): string {
@@ -56,6 +57,7 @@ type InvoiceRecord = Record<string, unknown> & {
   portal_invoice_timeline?: PortalInvoiceTimelineItem[];
   portal_subscription_billing?: PortalSubscriptionBillingDetail | null;
   customer_invoice_line_items?: LineItem[];
+  native_signature?: PortalNativeSignatureView | null;
 };
 
 function paymentToneStyles(tone: PortalPaymentStatus["tone"]): string {
@@ -194,6 +196,7 @@ export function PortalInvoicesPage() {
           const paymentHistory = invoice.portal_payment_history ?? [];
           const billingTimeline = invoice.portal_invoice_timeline ?? [];
           const subscriptionBilling = invoice.portal_subscription_billing ?? null;
+          const nativeSignature = invoice.native_signature ?? null;
           const offlineOpen = showOfflineForm[invoiceId] === true;
           return (
             <Card key={invoiceId} className="p-4 space-y-3">
@@ -229,6 +232,16 @@ export function PortalInvoicesPage() {
                   </p>
                 </div>
               )}
+              <div className={`rounded-md border px-3 py-2 ${nativeSignature ? "border-emerald-500/20 bg-emerald-500/5" : "border-border/60 bg-muted/20"}`}>
+                <p className="text-xs font-semibold text-foreground">
+                  {nativeSignature ? "Signed in QEP portal" : "Signature not captured"}
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {nativeSignature
+                    ? `Signed by ${nativeSignature.signerName} on ${formatHistoryDate(nativeSignature.signedAt)}`
+                    : "Open invoice detail to capture a native QEP signature."}
+                </p>
+              </div>
               <div className="flex justify-end">
                 <Button
                   type="button"

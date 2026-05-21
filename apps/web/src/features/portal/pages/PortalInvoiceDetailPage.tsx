@@ -1,14 +1,14 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PortalLayout } from "../components/PortalLayout";
+import { PortalNativeSignatureCard } from "../components/PortalNativeSignatureCard";
 import { portalApi } from "../lib/portal-api";
 import { downloadInvoiceStatement } from "../lib/invoice-statement";
 import { normalizePortalInvoiceRecord } from "../lib/portal-row-normalizers";
-import { summarizeInvoiceSigningReadiness } from "../lib/signing-readiness";
 
 function money(value: number | null | undefined): string {
   if (value == null) return "—";
@@ -23,6 +23,7 @@ function niceDate(value: string | null | undefined): string {
 }
 
 export function PortalInvoiceDetailPage() {
+  const queryClient = useQueryClient();
   const { invoiceId = "" } = useParams<{ invoiceId: string }>();
   const { data, isLoading } = useQuery({
     queryKey: ["portal", "invoice", invoiceId],
@@ -31,17 +32,29 @@ export function PortalInvoiceDetailPage() {
     staleTime: 30_000,
   });
 
+  const signInvoiceMutation = useMutation({
+    mutationFn: (input: { signerName: string; signaturePngBase64: string }) =>
+      portalApi.signInvoice({
+        invoice_id: invoiceId,
+        signer_name: input.signerName,
+        signature_png_base64: input.signaturePngBase64,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["portal", "invoice", invoiceId] }),
+        queryClient.invalidateQueries({ queryKey: ["portal", "invoices"] }),
+      ]);
+    },
+  });
+
   const invoice = useMemo(() => normalizePortalInvoiceRecord(data?.invoice), [data?.invoice]);
   const lines = invoice?.customer_invoice_line_items ?? [];
   const history = invoice?.portal_payment_history ?? [];
   const timeline = invoice?.portal_invoice_timeline ?? [];
-  const hasSigningFields = Boolean(invoice?.esign_status || invoice?.esign_envelope_id || invoice?.esign_signed_at);
-  const signingReadiness = invoice && hasSigningFields
-    ? summarizeInvoiceSigningReadiness({
-      esignStatus: invoice.esign_status,
-      esignEnvelopeId: invoice.esign_envelope_id,
-      esignSignedAt: invoice.esign_signed_at,
-    })
+  const invoiceStatus = String(invoice?.status ?? "").toLowerCase();
+  const invoiceSignature = invoice?.native_signature ?? null;
+  const signatureDisabledReason = invoiceStatus === "void"
+    ? "Voided invoices cannot be signed in the portal."
     : null;
 
   return (
@@ -105,15 +118,18 @@ export function PortalInvoiceDetailPage() {
             </div>
           </Card>
 
-          {signingReadiness ? (
-            <Card className="border-amber-500/20 bg-amber-500/5 p-5">
-              <h2 className="text-sm font-semibold text-foreground">Signature status</h2>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <Metric label={signingReadiness.label} value={signingReadiness.value} />
-                <Metric label="External signing" value={signingReadiness.vesignReady ? "Ready" : "Pending setup"} />
-              </div>
-              <p className="mt-3 text-xs text-muted-foreground">{signingReadiness.detail}</p>
-            </Card>
+          <PortalNativeSignatureCard
+            title="Native QEP invoice signature"
+            description="Review this invoice and sign in the QEP portal. No VESign envelope is required."
+            nativeSignature={invoiceSignature}
+            disabledReason={signatureDisabledReason}
+            isSubmitting={signInvoiceMutation.isPending}
+            onSubmit={(input) => signInvoiceMutation.mutate(input)}
+          />
+          {signInvoiceMutation.isError ? (
+            <p className="text-sm text-destructive">
+              {signInvoiceMutation.error instanceof Error ? signInvoiceMutation.error.message : "Failed to record signature."}
+            </p>
           ) : null}
 
           <Card className="p-5">

@@ -25,12 +25,19 @@ export function canEditPortalRentalExtension(extension: Pick<PortalRentalExtensi
   return ["submitted", "reviewing"].includes(extension.status);
 }
 
-export function getPortalRentalContractStage(contract: Pick<PortalRentalContractView, "status" | "assignmentStatus" | "paymentStatusView">):
-  "pending_assignment" | "awaiting_payment" | "ready_to_finalize" | "active" | "inactive" {
+function isRentalPaymentSettled(status: PortalRentalContractView["paymentStatusView"] extends infer View
+  ? View extends { status: infer Status } ? Status : never
+  : never): boolean {
+  return status === "paid" || status === "not_required";
+}
+
+export function getPortalRentalContractStage(contract: Pick<PortalRentalContractView, "status" | "assignmentStatus" | "paymentStatusView" | "nativeSignature">):
+  "pending_assignment" | "awaiting_payment" | "awaiting_signature" | "ready_to_finalize" | "active" | "inactive" {
   if (contract.assignmentStatus === "pending_assignment") return "pending_assignment";
   if (contract.status === "active") return "active";
   if (contract.status === "awaiting_payment") {
-    return contract.paymentStatusView?.status === "paid" ? "ready_to_finalize" : "awaiting_payment";
+    if (!isRentalPaymentSettled(contract.paymentStatusView?.status ?? "not_required")) return "awaiting_payment";
+    return contract.nativeSignature ? "ready_to_finalize" : "awaiting_signature";
   }
   return "inactive";
 }

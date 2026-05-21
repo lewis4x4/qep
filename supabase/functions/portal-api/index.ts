@@ -140,6 +140,14 @@ interface PortalPaymentHistoryItem {
   reference: string | null;
 }
 
+interface NativeSignatureRow {
+  id: string;
+  signer_name: string;
+  signed_at: string;
+  signed_via: "portal";
+  document_hash: string;
+}
+
 interface RentalContractRow {
   id: string;
   portal_customer_id: string;
@@ -170,6 +178,9 @@ interface RentalContractRow {
   customer_notes: string | null;
   dealer_response: string | null;
   signed_terms_url: string | null;
+  native_signature_id?: string | null;
+  native_signed_at?: string | null;
+  native_signer_name?: string | null;
 }
 
 interface RentalExtensionRow {
@@ -527,6 +538,7 @@ function buildPortalInvoiceTimeline(input: {
   paidAt: string | null;
   updatedAt: string | null;
   paymentHistory: PortalPaymentHistoryItem[];
+  nativeSignature?: ReturnType<typeof nativeSignatureView> | null;
 }): Array<{ label: string; detail: string; at: string | null; tone: "blue" | "amber" | "emerald" | "red" }> {
   const timeline: Array<{ label: string; detail: string; at: string | null; tone: "blue" | "amber" | "emerald" | "red" }> = [
     {
@@ -547,6 +559,15 @@ function buildPortalInvoiceTimeline(input: {
     });
   }
 
+  if (input.nativeSignature) {
+    timeline.push({
+      label: "Native signature captured",
+      detail: `Signed by ${input.nativeSignature.signerName} in the QEP portal.`,
+      at: input.nativeSignature.signedAt,
+      tone: "emerald",
+    });
+  }
+
   if (input.status === "paid") {
     timeline.push({
       label: "Balance resolved",
@@ -557,6 +578,64 @@ function buildPortalInvoiceTimeline(input: {
   }
 
   return timeline;
+}
+
+function sanitizeNativeSignerName(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const clean = value.replace(/<[^>]*>/g, "").trim().slice(0, 100);
+  return clean.length > 0 ? clean : null;
+}
+
+function validateNativeSignatureBase64(value: unknown):
+  | { ok: true; raw: string; dataUrl: string }
+  | { ok: false; status: number; message: string } {
+  if (typeof value !== "string") {
+    return { ok: false, status: 400, message: "signature_png_base64 is required" };
+  }
+  const raw = value.replace(/\s/g, "");
+  if (raw.length < 500) return { ok: false, status: 400, message: "signature image is required" };
+  if (raw.length > 400_000) return { ok: false, status: 400, message: "signature image too large" };
+  if (!/^[A-Za-z0-9+/=]+$/.test(raw) || !raw.startsWith("iVBORw0KGgo")) {
+    return { ok: false, status: 400, message: "signature must be base64 PNG" };
+  }
+  return { ok: true, raw, dataUrl: `data:image/png;base64,${raw}` };
+}
+
+function stableJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableJson);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, entry]) => [key, stableJson(entry)]),
+    );
+  }
+  return value;
+}
+
+async function canonicalizeAndHash(value: unknown): Promise<string> {
+  const encoded = new TextEncoder().encode(JSON.stringify(stableJson(value)));
+  const digest = await crypto.subtle.digest("SHA-256", encoded);
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function nativeSignatureView(row: NativeSignatureRow | null | undefined) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    signerName: row.signer_name,
+    signedAt: row.signed_at,
+    signedVia: row.signed_via,
+    documentHash: row.document_hash,
+    source: "native_qep" as const,
+  };
+}
+
+function clientIp(req: Request): string | null {
+  return req.headers.get("cf-connecting-ip")
+    || req.headers.get("x-real-ip")
+    || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    || null;
 }
 
 function serviceWorkspaceSummaryLine(statusLabel: string, requestType: string): string {
@@ -1127,7 +1206,7 @@ Deno.serve(async (req) => {
     // Verify caller is a portal customer (not internal staff using wrong API)
     const { data: portalCustomer } = await supabase
       .from("portal_customers")
-      .select("id, is_active, workspace_id, crm_company_id, crm_contact_id")
+      .select("id, is_active, workspace_id, crm_company_id, crm_contact_id, email")
       .eq("auth_user_id", user.id)
       .maybeSingle();
 
@@ -1706,13 +1785,33 @@ Deno.serve(async (req) => {
           }
         }
 
+        const invoiceSignaturesById = new Map<string, ReturnType<typeof nativeSignatureView>>();
+        if (invoiceIds.length > 0 && admin) {
+          const { data: signatureRows, error: signatureError } = await admin
+            .from("customer_invoice_signatures")
+            .select("id, invoice_id, signer_name, signed_at, signed_via, document_hash")
+            .in("invoice_id", invoiceIds)
+            .eq("is_valid", true)
+            .order("signed_at", { ascending: false });
+          if (signatureError) {
+            console.warn("portal-api invoice signatures:", signatureError);
+          }
+          for (const row of ((signatureRows ?? []) as Array<NativeSignatureRow & { invoice_id: string }>)) {
+            if (!invoiceSignaturesById.has(row.invoice_id)) {
+              invoiceSignaturesById.set(row.invoice_id, nativeSignatureView(row));
+            }
+          }
+        }
+
         const invoices = invoiceRows.map((invoice) => {
           const invoiceId = typeof invoice.id === "string" ? invoice.id : null;
           const invoiceIntents = invoiceId ? intentsByInvoice.get(invoiceId) ?? [] : [];
           const latestIntent = invoiceIntents[0] ?? null;
           const portalPaymentHistory = buildPortalPaymentHistory(invoice, invoiceIntents);
+          const nativeSignature = invoiceId ? invoiceSignaturesById.get(invoiceId) ?? null : null;
           return {
             ...invoice,
+            native_signature: nativeSignature,
             portal_payment_status: normalizePortalPaymentStatus(latestIntent),
             portal_payment_history: portalPaymentHistory,
             portal_subscription_billing: invoiceId ? subscriptionBillingByInvoice.get(invoiceId) ?? null : null,
@@ -1722,6 +1821,7 @@ Deno.serve(async (req) => {
               paidAt: typeof invoice.paid_at === "string" ? invoice.paid_at : null,
               updatedAt: typeof invoice.updated_at === "string" ? invoice.updated_at : null,
               paymentHistory: portalPaymentHistory,
+              nativeSignature,
             }),
           };
         }).filter((invoice) => {
@@ -1806,6 +1906,131 @@ Deno.serve(async (req) => {
         };
 
         return safeJsonOk({ invoices, billing_summary: billingSummary }, origin);
+      }
+
+      if (req.method === "POST" && subRoute === "sign") {
+        if (!admin) return safeJsonError("Invoice signing is not configured on this environment.", 503, origin);
+        const parsed = await parseJsonBody(req, origin);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body as Record<string, unknown>;
+        const invoiceId = typeof body.invoice_id === "string" ? body.invoice_id : "";
+        const signerName = sanitizeNativeSignerName(body.signer_name);
+        const signature = validateNativeSignatureBase64(body.signature_png_base64);
+        if (!invoiceId) return safeJsonError("invoice_id required", 400, origin);
+        if (!signerName) return safeJsonError("signer_name required", 400, origin);
+        if (!signature.ok) return safeJsonError(signature.message, signature.status, origin);
+
+        const { data: invoice, error: invoiceError } = await admin
+          .from("customer_invoices")
+          .select("*, customer_invoice_line_items(*)")
+          .eq("id", invoiceId)
+          .eq("workspace_id", portalWorkspaceId)
+          .maybeSingle();
+        if (invoiceError) return safeJsonError("Failed to load invoice", 500, origin);
+        if (!invoice) return safeJsonError("Invoice not found", 404, origin);
+
+        const invoiceRow = invoice as Record<string, unknown>;
+        const invoiceCustomerId = typeof invoiceRow.portal_customer_id === "string" ? invoiceRow.portal_customer_id : null;
+        const portalCompanyId = typeof portalCustomer.crm_company_id === "string" ? portalCustomer.crm_company_id : null;
+        if (invoiceCustomerId !== portalCustomer.id) {
+          return safeJsonError("Invoice not found", 404, origin);
+        }
+        if (String(invoiceRow.status ?? "").toLowerCase() === "void") {
+          return safeJsonError("Voided invoices cannot be signed", 400, origin);
+        }
+
+        const { data: existing } = await admin
+          .from("customer_invoice_signatures")
+          .select("id, signer_name, signed_at, signed_via, document_hash")
+          .eq("invoice_id", invoiceId)
+          .eq("is_valid", true)
+          .order("signed_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (existing) return safeJsonOk({ ok: true, native_signature: nativeSignatureView(existing as NativeSignatureRow) }, origin);
+
+        const signedAt = new Date().toISOString();
+        const invoiceLineItems = Array.isArray(invoiceRow.customer_invoice_line_items)
+          ? [...invoiceRow.customer_invoice_line_items].sort((a, b) => {
+            const left = a && typeof a === "object" && "id" in a ? String(a.id ?? "") : "";
+            const right = b && typeof b === "object" && "id" in b ? String(b.id ?? "") : "";
+            return left.localeCompare(right);
+          })
+          : [];
+        const signedSnapshot = {
+          invoice: {
+            id: invoiceRow.id,
+            invoice_number: invoiceRow.invoice_number,
+            invoice_date: invoiceRow.invoice_date,
+            due_date: invoiceRow.due_date,
+            description: invoiceRow.description,
+            status: invoiceRow.status,
+            amount: invoiceRow.amount,
+            tax: invoiceRow.tax,
+            total: invoiceRow.total,
+            amount_paid: invoiceRow.amount_paid,
+            balance_due: invoiceRow.balance_due,
+            invoice_source_code: invoiceRow.invoice_source_code,
+            deal_id: invoiceRow.deal_id,
+            service_request_id: invoiceRow.service_request_id,
+            parts_order_id: invoiceRow.parts_order_id,
+          },
+          line_items: invoiceLineItems,
+          portal_customer: {
+            id: portalCustomer.id,
+            crm_company_id: portalCompanyId,
+            crm_contact_id: typeof portalCustomer.crm_contact_id === "string" ? portalCustomer.crm_contact_id : null,
+            email: typeof portalCustomer.email === "string" ? portalCustomer.email : null,
+          },
+          signer: { name: signerName },
+          signed_at_server: signedAt,
+        };
+        const documentHash = await canonicalizeAndHash({ invoice_id: invoiceId, signed_snapshot: signedSnapshot, signer_name: signerName });
+
+        const { data: inserted, error: insertError } = await admin
+          .from("customer_invoice_signatures")
+          .insert({
+            workspace_id: portalWorkspaceId,
+            invoice_id: invoiceId,
+            portal_customer_id: portalCustomer.id,
+            signer_name: signerName,
+            signer_email: typeof portalCustomer.email === "string" ? portalCustomer.email : null,
+            signer_ip: clientIp(req),
+            signer_user_agent: req.headers.get("user-agent"),
+            signature_image_url: signature.dataUrl,
+            signed_snapshot: signedSnapshot,
+            signed_via: "portal",
+            document_hash: documentHash,
+            is_valid: true,
+            signed_at: signedAt,
+          })
+          .select("id, signer_name, signed_at, signed_via, document_hash")
+          .single();
+        if (insertError) {
+          const { data: raced } = await admin
+            .from("customer_invoice_signatures")
+            .select("id, signer_name, signed_at, signed_via, document_hash")
+            .eq("invoice_id", invoiceId)
+            .eq("is_valid", true)
+            .order("signed_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (raced) return safeJsonOk({ ok: true, native_signature: nativeSignatureView(raced as NativeSignatureRow) }, origin);
+          console.error("invoice signature insert error:", insertError);
+          return safeJsonError("Failed to record invoice signature", 500, origin);
+        }
+
+        await admin
+          .from("customer_invoices")
+          .update({
+            native_signature_id: inserted.id,
+            esign_status: "signed",
+            esign_signed_at: inserted.signed_at,
+            esign_envelope_id: `native:${inserted.id}`,
+          })
+          .eq("id", invoiceId);
+
+        return safeJsonOk({ ok: true, native_signature: nativeSignatureView(inserted as NativeSignatureRow) }, origin, 201);
       }
 
       if (req.method === "POST" && subRoute === "pay") {
@@ -2342,6 +2567,23 @@ Deno.serve(async (req) => {
           String(row.id),
           typeof row.status === "string" ? row.status : null,
         ]));
+        const rentalSignaturesByContractId = new Map<string, ReturnType<typeof nativeSignatureView>>();
+        if (contractIds.length > 0) {
+          const { data: signatureRows, error: signatureError } = await admin
+            .from("rental_contract_signatures")
+            .select("id, rental_contract_id, signer_name, signed_at, signed_via, document_hash")
+            .in("rental_contract_id", contractIds)
+            .eq("is_valid", true)
+            .order("signed_at", { ascending: false });
+          if (signatureError) {
+            console.warn("portal-api rental signatures:", signatureError);
+          }
+          for (const row of ((signatureRows ?? []) as Array<NativeSignatureRow & { rental_contract_id: string }>)) {
+            if (!rentalSignaturesByContractId.has(row.rental_contract_id)) {
+              rentalSignaturesByContractId.set(row.rental_contract_id, nativeSignatureView(row));
+            }
+          }
+        }
         const equipmentIds = [
           ...new Set([
             ...customerFleet.map((row) => row.equipment_id).filter(Boolean),
@@ -2430,6 +2672,7 @@ Deno.serve(async (req) => {
               dealerResponse: contract.dealer_response,
               customerNotes: contract.customer_notes,
               signedTermsUrl: typeof contract.signed_terms_url === "string" ? contract.signed_terms_url : null,
+              nativeSignature: rentalSignaturesByContractId.get(contract.id) ?? null,
               pricingEstimate: {
                 dailyRate: contract.estimate_daily_rate ?? estimate.dailyRate,
                 weeklyRate: contract.estimate_weekly_rate ?? estimate.weeklyRate,
@@ -2488,6 +2731,7 @@ Deno.serve(async (req) => {
               dealerResponse: contract.dealer_response,
               customerNotes: contract.customer_notes,
               signedTermsUrl: typeof contract.signed_terms_url === "string" ? contract.signed_terms_url : null,
+              nativeSignature: rentalSignaturesByContractId.get(contract.id) ?? null,
               pricingEstimate: null,
               agreedRates: {
                 dailyRate: contract.agreed_daily_rate,
@@ -2573,6 +2817,141 @@ Deno.serve(async (req) => {
             categories: Array.from(new Set(Array.from(equipmentById.values()).map((equipment) => equipment.category).filter(Boolean))) as string[],
           },
         }, origin);
+      }
+
+      if (subRoute === "sign" && req.method === "POST") {
+        if (!admin) return safeJsonError("Rental signing is not configured on this environment.", 503, origin);
+        const parsed = await parseJsonBody(req, origin);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body as Record<string, unknown>;
+        const rentalContractId = typeof body.rental_contract_id === "string" ? body.rental_contract_id : "";
+        const signerName = sanitizeNativeSignerName(body.signer_name);
+        const signature = validateNativeSignatureBase64(body.signature_png_base64);
+        if (!rentalContractId) return safeJsonError("rental_contract_id required", 400, origin);
+        if (!signerName) return safeJsonError("signer_name required", 400, origin);
+        if (!signature.ok) return safeJsonError(signature.message, signature.status, origin);
+
+        const { data: contract, error: contractError } = await admin
+          .from("rental_contracts")
+          .select("*")
+          .eq("id", rentalContractId)
+          .eq("portal_customer_id", portalCustomer.id)
+          .eq("workspace_id", portalWorkspaceId)
+          .maybeSingle();
+        if (contractError) return safeJsonError("Failed to load rental contract", 500, origin);
+        if (!contract) return safeJsonError("Rental contract not found", 404, origin);
+
+        const contractRow = contract as Record<string, unknown>;
+        const assignmentStatus = String(contractRow.assignment_status ?? (contractRow.equipment_id ? "assigned" : "pending_assignment"));
+        const contractStatus = String(contractRow.status ?? "");
+        if (assignmentStatus !== "assigned") {
+          return safeJsonError("Rental unit must be assigned before signing terms", 400, origin);
+        }
+        if (!["approved", "awaiting_payment", "active"].includes(contractStatus)) {
+          return safeJsonError("Rental terms are not ready for signature", 400, origin);
+        }
+
+        const { data: existing } = await admin
+          .from("rental_contract_signatures")
+          .select("id, signer_name, signed_at, signed_via, document_hash")
+          .eq("rental_contract_id", rentalContractId)
+          .eq("is_valid", true)
+          .order("signed_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (existing) return safeJsonOk({ ok: true, native_signature: nativeSignatureView(existing as NativeSignatureRow) }, origin);
+
+        let equipment: Record<string, unknown> | null = null;
+        if (typeof contractRow.equipment_id === "string") {
+          const { data: equipmentRow } = await admin
+            .from("crm_equipment")
+            .select("id, make, model, year, serial_number, category")
+            .eq("workspace_id", portalWorkspaceId)
+            .eq("id", contractRow.equipment_id)
+            .maybeSingle();
+          equipment = (equipmentRow ?? null) as Record<string, unknown> | null;
+        }
+
+        const signedAt = new Date().toISOString();
+        const signedSnapshot = {
+          rental_contract: {
+            id: contractRow.id,
+            request_type: contractRow.request_type,
+            status: contractRow.status,
+            assignment_status: assignmentStatus,
+            requested_start_date: contractRow.requested_start_date,
+            requested_end_date: contractRow.requested_end_date,
+            approved_start_date: contractRow.approved_start_date,
+            approved_end_date: contractRow.approved_end_date,
+            delivery_mode: contractRow.delivery_mode,
+            delivery_location: contractRow.delivery_location,
+            branch_id: contractRow.branch_id,
+            requested_category: contractRow.requested_category,
+            requested_make: contractRow.requested_make,
+            requested_model: contractRow.requested_model,
+            agreed_daily_rate: contractRow.agreed_daily_rate,
+            agreed_weekly_rate: contractRow.agreed_weekly_rate,
+            agreed_monthly_rate: contractRow.agreed_monthly_rate,
+            deposit_required: contractRow.deposit_required,
+            deposit_amount: contractRow.deposit_amount,
+            deposit_status: contractRow.deposit_status,
+            deposit_invoice_id: contractRow.deposit_invoice_id,
+          },
+          equipment,
+          portal_customer: {
+            id: portalCustomer.id,
+            crm_company_id: typeof portalCustomer.crm_company_id === "string" ? portalCustomer.crm_company_id : null,
+            crm_contact_id: typeof portalCustomer.crm_contact_id === "string" ? portalCustomer.crm_contact_id : null,
+            email: typeof portalCustomer.email === "string" ? portalCustomer.email : null,
+          },
+          signer: { name: signerName },
+          signed_at_server: signedAt,
+        };
+        const documentHash = await canonicalizeAndHash({ rental_contract_id: rentalContractId, signed_snapshot: signedSnapshot, signer_name: signerName });
+
+        const { data: inserted, error: insertError } = await admin
+          .from("rental_contract_signatures")
+          .insert({
+            workspace_id: portalWorkspaceId,
+            rental_contract_id: rentalContractId,
+            portal_customer_id: portalCustomer.id,
+            signer_name: signerName,
+            signer_email: typeof portalCustomer.email === "string" ? portalCustomer.email : null,
+            signer_ip: clientIp(req),
+            signer_user_agent: req.headers.get("user-agent"),
+            signature_image_url: signature.dataUrl,
+            signed_snapshot: signedSnapshot,
+            signed_via: "portal",
+            document_hash: documentHash,
+            is_valid: true,
+            signed_at: signedAt,
+          })
+          .select("id, signer_name, signed_at, signed_via, document_hash")
+          .single();
+        if (insertError) {
+          const { data: raced } = await admin
+            .from("rental_contract_signatures")
+            .select("id, signer_name, signed_at, signed_via, document_hash")
+            .eq("rental_contract_id", rentalContractId)
+            .eq("is_valid", true)
+            .order("signed_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (raced) return safeJsonOk({ ok: true, native_signature: nativeSignatureView(raced as NativeSignatureRow) }, origin);
+          console.error("rental signature insert error:", insertError);
+          return safeJsonError("Failed to record rental signature", 500, origin);
+        }
+
+        await admin
+          .from("rental_contracts")
+          .update({
+            native_signature_id: inserted.id,
+            native_signed_at: inserted.signed_at,
+            native_signer_name: signerName,
+          })
+          .eq("id", rentalContractId);
+
+        return safeJsonOk({ ok: true, native_signature: nativeSignatureView(inserted as NativeSignatureRow) }, origin, 201);
       }
 
       if (subRoute === "book" && req.method === "POST") {
@@ -2846,6 +3225,18 @@ Deno.serve(async (req) => {
 
           if (contract.deposit_required && invoiceStatus !== "paid") {
             return safeJsonError("Rental deposit is not settled yet", 400, origin);
+          }
+
+          const { data: signatureRow, error: signatureError } = await admin
+            .from("rental_contract_signatures")
+            .select("id")
+            .eq("rental_contract_id", id)
+            .eq("is_valid", true)
+            .limit(1)
+            .maybeSingle();
+          if (signatureError) return safeJsonError("Failed to verify rental signature", 500, origin);
+          if (!signatureRow) {
+            return safeJsonError("Rental terms must be signed before finalizing.", 400, origin);
           }
 
           const { data: updated, error } = await admin

@@ -53,7 +53,22 @@ describe("signing readiness labels", () => {
     expect(summary.detail).toContain("no native acceptance timestamp is present");
   });
 
-  test("labels invoice esign columns as provider-neutral until VESign contract exists", () => {
+  test("labels native invoice signatures as QEP portal evidence", () => {
+    const summary = summarizeInvoiceSigningReadiness({
+      nativeSignature: { id: "sig-1" },
+    });
+
+    expect(summary).toMatchObject({
+      label: "Native QEP invoice signing",
+      value: "Signed in portal",
+      source: "native_qep",
+      vesignReady: false,
+      nativeReady: true,
+    });
+    expect(summary.detail).toContain("No VESign envelope is required");
+  });
+
+  test("labels invoice esign columns as legacy until native proof exists", () => {
     const summary = summarizeInvoiceSigningReadiness({
       esignStatus: "partially_signed",
       esignEnvelopeId: "env-123",
@@ -61,24 +76,39 @@ describe("signing readiness labels", () => {
     });
 
     expect(summary).toMatchObject({
-      label: "Provider-neutral e-sign fields",
+      label: "Legacy e-sign fields",
       value: "partially signed",
       source: "provider_neutral",
       vesignReady: false,
+      nativeReady: false,
     });
-    expect(summary.detail).toContain("no confirmed VESign adapter");
+    expect(summary.detail).toContain("native QEP signature proof has not been captured");
   });
 
-  test("labels rental signed terms URLs as native terms only", () => {
+  test("labels native rental signatures as QEP portal evidence", () => {
+    const summary = summarizeRentalSigningReadiness({ nativeSignature: { id: "sig-1" } });
+
+    expect(summary).toMatchObject({
+      label: "Native QEP rental signing",
+      value: "Signed in portal",
+      source: "native_qep",
+      vesignReady: false,
+      nativeReady: true,
+    });
+    expect(summary.detail).toContain("Native QEP rental terms signature proof");
+  });
+
+  test("labels rental signed terms URLs as legacy terms only", () => {
     const summary = summarizeRentalSigningReadiness({ signedTermsUrl: "https://example.test/terms.pdf" });
 
     expect(summary).toMatchObject({
-      label: "Native rental terms",
+      label: "Legacy rental terms",
       value: "Terms link present",
-      source: "native_qep",
+      source: "provider_neutral",
       vesignReady: false,
+      nativeReady: false,
     });
-    expect(summary.detail).toContain("not VESign provider status");
+    expect(summary.detail).toContain("native QEP signature proof has not been captured");
   });
 
   test("keeps exact external requirements explicit", () => {

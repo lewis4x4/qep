@@ -380,6 +380,43 @@
       "gate_report": "test-results/agent-gates/20260520T235155Z-C2.3-pdf-price-book-parser.json",
       "notes": "Main working tree has unrelated OEM/admin WIP and duplicate untracked migration numbers, so migration/order and full segment gates ran in a clean detached worktree with only C2.3 scoped parser files applied. Temporary gate worktree used env from .env.local and temporary dev deps for existing gate prerequisites; those dependency repairs were not copied into the repo. Real Bobcat/Vermeer sample imports remain later roadmap items pending samples.",
       "updated_at": "2026-05-20T23:51:55Z"
+    },
+    {
+      "task_id": "C4.1/QEP-76",
+      "status": "complete",
+      "title": "Extend native e-signature to invoices + rental contracts",
+      "stream": "C",
+      "wave": "C4",
+      "goal": "Native QEP portal e-signing extends beyond Quote Builder to customer invoices and rental contracts, replacing VESign dependency on these surfaces with signature proof tables, portal capture UI, API endpoints, and rental finalization gates.",
+      "changed_files": [
+        "supabase/migrations/607_native_invoice_rental_signatures.sql",
+        "supabase/functions/portal-api/index.ts",
+        "shared/qep-moonshot-contracts.ts",
+        "apps/web/src/features/portal/components/PortalNativeSignatureCard.tsx",
+        "apps/web/src/features/portal/components/PortalSignaturePad.tsx",
+        "apps/web/src/features/portal/components/RentalPaymentStatusCard.tsx",
+        "apps/web/src/features/portal/lib/portal-api.ts",
+        "apps/web/src/features/portal/lib/portal-row-normalizers.ts",
+        "apps/web/src/features/portal/lib/signing-readiness.ts",
+        "apps/web/src/features/portal/lib/signing-readiness.test.ts",
+        "apps/web/src/features/portal/lib/portal-rentals.ts",
+        "apps/web/src/features/portal/lib/portal-rentals.test.ts",
+        "apps/web/src/features/portal/pages/PortalInvoiceDetailPage.tsx",
+        "apps/web/src/features/portal/pages/PortalInvoicesPage.tsx",
+        "apps/web/src/features/portal/pages/PortalRentalsPage.tsx"
+      ],
+      "verification": [
+        "bun test apps/web/src/features/portal/lib/portal-rentals.test.ts apps/web/src/features/portal/lib/signing-readiness.test.ts",
+        "deno check supabase/functions/portal-api/index.ts",
+        "bun run --cwd apps/web typecheck",
+        "git diff --check -- scoped C4.1 files",
+        "Oracle review found one P1 no-deposit rental blocker; targeted fix applied; Oracle follow-up: no blocking findings",
+        "bun run migrations:check (clean temp worktree, sequence 001..607)",
+        "bun run segment:gates --segment C4.1-native-invoice-rental-esign --ui (clean temp worktree)"
+      ],
+      "gate_report": "test-results/agent-gates/20260521T002558Z-C4.1-native-invoice-rental-esign.json",
+      "notes": "The local main tree has unrelated OEM/admin WIP and untracked migration numbers 607/608. This task uses committed-next migration 607 and full gates were verified in a clean detached worktree containing only C4.1 scoped files. Temporary gate worktree used env from .env.local and temporary dev deps for existing gate prerequisites; those dependency repairs were not copied into the repo.",
+      "updated_at": "2026-05-21T00:25:58Z"
     }
   ],
   "agents": [
@@ -709,28 +746,41 @@
     }
   },
   "current_task": {
-    "task_id": "C2.3/QEP-71",
+    "task_id": "C4.1/QEP-76",
     "status": "complete",
-    "title": "Slice 5.3 \u2014 PDF price book parser",
+    "title": "Extend native e-signature to invoices + rental contracts",
     "stream": "C",
-    "wave": "C2",
-    "goal": "YCENA price book parser is shippable for PDF/text extraction with guarded source validation, dealer-cost tier output, skipped-row diagnostics, and parser regression coverage while Bobcat/Vermeer remain deferred pending samples.",
+    "wave": "C4",
+    "goal": "Native QEP portal e-signing extends beyond Quote Builder to customer invoices and rental contracts, replacing VESign dependency on these surfaces with signature proof tables, portal capture UI, API endpoints, and rental finalization gates.",
     "changed_files": [
-      "scripts/oem/ycena-price-book-parser.mjs",
-      "scripts/oem/__tests__/ycena-price-book-parser.test.ts"
+      "supabase/migrations/607_native_invoice_rental_signatures.sql",
+      "supabase/functions/portal-api/index.ts",
+      "shared/qep-moonshot-contracts.ts",
+      "apps/web/src/features/portal/components/PortalNativeSignatureCard.tsx",
+      "apps/web/src/features/portal/components/PortalSignaturePad.tsx",
+      "apps/web/src/features/portal/components/RentalPaymentStatusCard.tsx",
+      "apps/web/src/features/portal/lib/portal-api.ts",
+      "apps/web/src/features/portal/lib/portal-row-normalizers.ts",
+      "apps/web/src/features/portal/lib/signing-readiness.ts",
+      "apps/web/src/features/portal/lib/signing-readiness.test.ts",
+      "apps/web/src/features/portal/lib/portal-rentals.ts",
+      "apps/web/src/features/portal/lib/portal-rentals.test.ts",
+      "apps/web/src/features/portal/pages/PortalInvoiceDetailPage.tsx",
+      "apps/web/src/features/portal/pages/PortalInvoicesPage.tsx",
+      "apps/web/src/features/portal/pages/PortalRentalsPage.tsx"
     ],
     "verification": [
-      "bun test ./scripts/oem/__tests__/ycena-price-book-parser.test.ts",
-      "node scripts/oem/ycena-price-book-parser.mjs scripts/oem/__fixtures__/ycena-tl25rp-sample.txt --brand Yanmar",
-      "node scripts/oem/ycena-price-book-parser.mjs scripts/oem/__fixtures__/ycena-tl25rp-sample.txt --discount 101 (expected failure)",
-      "git diff --check -- scripts/oem/ycena-price-book-parser.mjs scripts/oem/__tests__/ycena-price-book-parser.test.ts",
-      "Oracle review: no blocking findings",
-      "bun run migrations:check (clean temp worktree)",
-      "bun run segment:gates --segment C2.3-pdf-price-book-parser --ui (clean temp worktree)"
+      "bun test apps/web/src/features/portal/lib/portal-rentals.test.ts apps/web/src/features/portal/lib/signing-readiness.test.ts",
+      "deno check supabase/functions/portal-api/index.ts",
+      "bun run --cwd apps/web typecheck",
+      "git diff --check -- scoped C4.1 files",
+      "Oracle review found one P1 no-deposit rental blocker; targeted fix applied; Oracle follow-up: no blocking findings",
+      "bun run migrations:check (clean temp worktree, sequence 001..607)",
+      "bun run segment:gates --segment C4.1-native-invoice-rental-esign --ui (clean temp worktree)"
     ],
-    "gate_report": "test-results/agent-gates/20260520T235155Z-C2.3-pdf-price-book-parser.json",
-    "notes": "Main working tree has unrelated OEM/admin WIP and duplicate untracked migration numbers, so migration/order and full segment gates ran in a clean detached worktree with only C2.3 scoped parser files applied. Temporary gate worktree used env from .env.local and temporary dev deps for existing gate prerequisites; those dependency repairs were not copied into the repo. Real Bobcat/Vermeer sample imports remain later roadmap items pending samples.",
-    "updated_at": "2026-05-20T23:51:55Z"
+    "gate_report": "test-results/agent-gates/20260521T002558Z-C4.1-native-invoice-rental-esign.json",
+    "notes": "The local main tree has unrelated OEM/admin WIP and untracked migration numbers 607/608. This task uses committed-next migration 607 and full gates were verified in a clean detached worktree containing only C4.1 scoped files. Temporary gate worktree used env from .env.local and temporary dev deps for existing gate prerequisites; those dependency repairs were not copied into the repo.",
+    "updated_at": "2026-05-21T00:25:58Z"
   },
-  "updated_at": "2026-05-20T23:51:55Z"
+  "updated_at": "2026-05-21T00:25:58Z"
 }

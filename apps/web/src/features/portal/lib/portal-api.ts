@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import type {
   CustomerMachineView,
+  PortalNativeSignatureView,
   PortalRentalBookingDraft,
   PortalRentalContractView,
   PortalRentalExtensionRequest,
@@ -141,10 +142,15 @@ export type PortalServiceRequestsResponse = {
 export type PortalPartsOrdersResponse = { orders?: PortalPartsOrderSummary[] };
 export type PortalInvoicesResponse = {
   invoices?: Array<Record<string, unknown> & {
+    native_signature?: PortalNativeSignatureView | null;
     portal_invoice_timeline?: PortalInvoiceTimelineItem[];
     portal_subscription_billing?: PortalSubscriptionBillingDetail | null;
   }>;
   billing_summary?: PortalBillingSummary;
+};
+export type PortalNativeSignatureResponse = {
+  ok?: true;
+  native_signature: PortalNativeSignatureView;
 };
 export type PortalInvoiceFilters = {
   invoiceId?: string;
@@ -299,6 +305,12 @@ export const portalApi = {
   },
   recordInvoicePayment: (data: Record<string, unknown>): Promise<Record<string, unknown>> =>
     portalFetch<Record<string, unknown>>("invoices/pay", { method: "POST", body: JSON.stringify(data) }),
+  signInvoice: (data: {
+    invoice_id: string;
+    signer_name: string;
+    signature_png_base64: string;
+  }): Promise<PortalNativeSignatureResponse> =>
+    portalFetch<PortalNativeSignatureResponse>("invoices/sign", { method: "POST", body: JSON.stringify(data) }),
   getQuotes: (): Promise<PortalQuotesResponse> => portalFetch<PortalQuotesResponse>("quotes"),
   updateQuote: (data: Record<string, unknown>): Promise<Record<string, unknown>> =>
     portalFetch<Record<string, unknown>>("quotes", { method: "PUT", body: JSON.stringify(data) }),
@@ -319,6 +331,12 @@ export const portalApi = {
     portalFetch<Record<string, unknown>>("rentals/extend", { method: "POST", body: JSON.stringify(data) }),
   updateRentalRequest: (data: Record<string, unknown>): Promise<Record<string, unknown>> =>
     portalFetch<Record<string, unknown>>("rentals/request", { method: "PUT", body: JSON.stringify(data) }),
+  signRentalContract: (data: {
+    rental_contract_id: string;
+    signer_name: string;
+    signature_png_base64: string;
+  }): Promise<PortalNativeSignatureResponse> =>
+    portalFetch<PortalNativeSignatureResponse>("rentals/sign", { method: "POST", body: JSON.stringify(data) }),
   finalizeRentalPayment: (data: { kind: "contract" | "extension"; id: string }): Promise<Record<string, unknown>> =>
     portalFetch<Record<string, unknown>>("rentals/approve-payment", { method: "POST", body: JSON.stringify(data) }),
   estimateRentalPricing: (data: {

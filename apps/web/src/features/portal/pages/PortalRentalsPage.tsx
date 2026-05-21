@@ -14,7 +14,8 @@ import {
 } from "../lib/portal-rentals";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { RentalPaymentStatusCard } from "../components/RentalPaymentStatusCard";
-import { summarizeRentalSigningReadiness, vesignRequirementsText } from "../lib/signing-readiness";
+import { PortalNativeSignatureCard } from "../components/PortalNativeSignatureCard";
+import { summarizeRentalSigningReadiness } from "../lib/signing-readiness";
 import type {
   PortalRentalBookingDraft,
   PortalRentalContractView,
@@ -40,6 +41,18 @@ function tone(status: string): string {
   if (status === "awaiting_payment" || status === "approved") return "bg-blue-500/10 text-blue-300";
   if (status === "declined" || status === "cancelled") return "bg-red-500/10 text-red-300";
   return "bg-amber-500/10 text-amber-300";
+}
+
+function isRentalPaymentSettled(status: string | null | undefined): boolean {
+  return status === "paid" || status === "not_required";
+}
+
+function rentalSignatureDisabledReason(contract: PortalRentalContractView): string | null {
+  if (contract.nativeSignature) return null;
+  if (contract.assignmentStatus === "pending_assignment") return "A rental unit must be assigned before terms can be signed.";
+  if (["completed", "declined", "cancelled"].includes(contract.status)) return "This rental is closed and cannot be signed in the portal.";
+  if (!["approved", "awaiting_payment", "active"].includes(contract.status)) return "The dealership must approve rental terms before signature capture is available.";
+  return null;
 }
 
 function emptyBookingDraft(): PortalRentalBookingDraft {
@@ -98,6 +111,18 @@ export function PortalRentalsPage() {
 
   const finalizePaymentMutation = useMutation({
     mutationFn: (payload: { kind: "contract" | "extension"; id: string }) => portalApi.finalizeRentalPayment(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["portal", "rentals"] });
+    },
+  });
+
+  const signRentalMutation = useMutation({
+    mutationFn: (payload: { rentalContractId: string; signerName: string; signaturePngBase64: string }) =>
+      portalApi.signRentalContract({
+        rental_contract_id: payload.rentalContractId,
+        signer_name: payload.signerName,
+        signature_png_base64: payload.signaturePngBase64,
+      }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["portal", "rentals"] });
     },
@@ -332,7 +357,15 @@ export function PortalRentalsPage() {
           items={bookings}
           renderItem={(contract) => {
             const contractStage = getPortalRentalContractStage(contract);
-            const signingReadiness = summarizeRentalSigningReadiness({ signedTermsUrl: contract.signedTermsUrl });
+            const signingReadiness = summarizeRentalSigningReadiness({ nativeSignature: contract.nativeSignature, signedTermsUrl: contract.signedTermsUrl });
+            const signatureDisabledReason = rentalSignatureDisabledReason(contract);
+            const finalizeDisabledReason = contract.paymentStatusView?.canFinalize
+              ? !isRentalPaymentSettled(contract.paymentStatusView.status)
+                ? "Complete deposit payment before finalizing."
+                : !contract.nativeSignature
+                  ? "Sign rental terms before finalizing."
+                  : null
+              : null;
             return (
               <Card key={contract.id} className="border-white/10 bg-white/[0.04] p-5 text-white">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -368,9 +401,14 @@ export function PortalRentalsPage() {
                       Your unit and terms are approved. The rental will activate after deposit checkout is completed and finalized here.
                     </p>
                   ) : null}
+                  {contractStage === "awaiting_signature" ? (
+                    <p className="mt-2 text-sm text-amber-200">
+                      Payment is settled. Sign rental terms before finalizing the rental.
+                    </p>
+                  ) : null}
                   {contractStage === "ready_to_finalize" ? (
                     <p className="mt-2 text-sm text-emerald-200">
-                      Payment is settled. Finalize the rental below to move this booking into the active rental lane.
+                      Payment is settled and terms are signed. Finalize the rental below to move this booking into the active rental lane.
                     </p>
                   ) : null}
                   {contract.dealerResponse ? (
@@ -401,15 +439,27 @@ export function PortalRentalsPage() {
                   <Metric label={signingReadiness.label} value={signingReadiness.value} detail={signingReadiness.detail} />
                 </div>
 
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  VESign provider status is still blocked pending {vesignRequirementsText()}.
-                </p>
+                <div className="mt-4">
+                  <PortalNativeSignatureCard
+                    title="Native QEP rental terms"
+                    description="Review the approved rental terms and sign directly in the QEP portal."
+                    nativeSignature={contract.nativeSignature ?? null}
+                    disabledReason={signatureDisabledReason}
+                    isSubmitting={signRentalMutation.isPending}
+                    onSubmit={(input) => signRentalMutation.mutate({
+                      rentalContractId: contract.id,
+                      signerName: input.signerName,
+                      signaturePngBase64: input.signaturePngBase64,
+                    })}
+                  />
+                </div>
 
                 <RentalPaymentStatusCard
                   payment={contract.paymentStatusView}
                   description={`Rental booking for ${contract.equipment?.label ?? contract.requestedCategory ?? "rental request"}`}
                   finalizeLabel="Finalize rental after payment"
                   finalizePending={finalizePaymentMutation.isPending}
+                  finalizeDisabledReason={finalizeDisabledReason}
                   onFinalize={() => finalizePaymentMutation.mutate({ kind: "contract", id: contract.id })}
                 />
 
@@ -469,7 +519,8 @@ export function PortalRentalsPage() {
           renderItem={(contract) => {
             const relatedExtensions = extensionRequests.filter((item) => item.rentalContractId === contract.id);
             const pendingExtension = relatedExtensions.find((item) => ["submitted", "reviewing"].includes(item.status));
-            const signingReadiness = summarizeRentalSigningReadiness({ signedTermsUrl: contract.signedTermsUrl });
+            const signingReadiness = summarizeRentalSigningReadiness({ nativeSignature: contract.nativeSignature, signedTermsUrl: contract.signedTermsUrl });
+            const signatureDisabledReason = rentalSignatureDisabledReason(contract);
             return (
               <Card key={contract.id} className="border-white/10 bg-white/[0.04] p-5 text-white">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -510,9 +561,20 @@ export function PortalRentalsPage() {
                   <Metric label={signingReadiness.label} value={signingReadiness.value} detail={signingReadiness.detail} />
                 </div>
 
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  VESign provider status is still blocked pending {vesignRequirementsText()}.
-                </p>
+                <div className="mt-4">
+                  <PortalNativeSignatureCard
+                    title="Native QEP rental terms"
+                    description="Rental terms can be repaired with a native portal signature for legacy active contracts."
+                    nativeSignature={contract.nativeSignature ?? null}
+                    disabledReason={signatureDisabledReason}
+                    isSubmitting={signRentalMutation.isPending}
+                    onSubmit={(input) => signRentalMutation.mutate({
+                      rentalContractId: contract.id,
+                      signerName: input.signerName,
+                      signaturePngBase64: input.signaturePngBase64,
+                    })}
+                  />
+                </div>
 
                 <div className="mt-4 rounded-lg border border-border/60 bg-background/60 p-3">
                   <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Request extension</p>

@@ -45,6 +45,7 @@ const baseContract: PortalRentalContractView = {
   dealerResponse: null,
   customerNotes: null,
   signedTermsUrl: null,
+  nativeSignature: null,
   pricingEstimate: null,
   agreedRates: null,
   paymentStatusView: null,
@@ -108,7 +109,7 @@ describe("portal rental helpers", () => {
     })).toBe("pending_assignment");
   });
 
-  test("keeps activation payment-gated until deposit is settled", () => {
+  test("keeps activation payment-gated until deposit is settled and terms are signed", () => {
     expect(getPortalRentalContractStage({
       ...baseContract,
       status: "awaiting_payment",
@@ -125,7 +126,7 @@ describe("portal rental helpers", () => {
       },
     })).toBe("awaiting_payment");
 
-    expect(getPortalRentalContractStage({
+    const paidContract: PortalRentalContractView = {
       ...baseContract,
       status: "awaiting_payment",
       paymentStatusView: {
@@ -138,6 +139,53 @@ describe("portal rental helpers", () => {
         detail: "Finalize the rental.",
         canPayNow: false,
         canFinalize: true,
+      },
+    };
+
+    expect(getPortalRentalContractStage(paidContract)).toBe("awaiting_signature");
+    expect(getPortalRentalContractStage({
+      ...paidContract,
+      nativeSignature: {
+        id: "sig-1",
+        signerName: "Jane Customer",
+        signedAt: "2026-04-13T12:00:00.000Z",
+        signedVia: "portal",
+        documentHash: "abc123",
+        source: "native_qep",
+      },
+    })).toBe("ready_to_finalize");
+  });
+
+  test("treats no-deposit rentals as settled before applying signature gate", () => {
+    const noDepositContract: PortalRentalContractView = {
+      ...baseContract,
+      status: "awaiting_payment",
+      depositRequired: false,
+      depositAmount: null,
+      depositStatus: "not_required",
+      paymentStatusView: {
+        kind: "deposit",
+        status: "not_required",
+        amount: null,
+        invoiceId: null,
+        companyId: "company-1",
+        headline: "No deposit required",
+        detail: "Terms can be finalized after signature.",
+        canPayNow: false,
+        canFinalize: true,
+      },
+    };
+
+    expect(getPortalRentalContractStage(noDepositContract)).toBe("awaiting_signature");
+    expect(getPortalRentalContractStage({
+      ...noDepositContract,
+      nativeSignature: {
+        id: "sig-no-deposit",
+        signerName: "Jane Customer",
+        signedAt: "2026-04-13T12:00:00.000Z",
+        signedVia: "portal",
+        documentHash: "def456",
+        source: "native_qep",
       },
     })).toBe("ready_to_finalize");
   });
