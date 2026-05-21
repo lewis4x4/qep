@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import type { CatalogStructuredSpec } from "@/lib/pricing/catalog-specs";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Search, Sparkles } from "lucide-react";
@@ -21,6 +22,10 @@ interface CatalogEntry {
   list_price: number | null;
   stock_number: string | null;
   condition: string | null;
+  spec_bullets?: string[] | null;
+  structured_specs?: CatalogStructuredSpec[] | null;
+  spec_search_text?: string | null;
+  spec_source?: "manufacturer_ingested" | string | null;
   availabilityStatus?: AvailabilityStatus;
   availability_status?: AvailabilityStatus;
   attachments: Array<{ id: string; name: string; price: number }>;
@@ -177,6 +182,16 @@ export function EquipmentSelector({
                   <div className="mt-1 text-xs text-muted-foreground">
                     {entry.attachments.length} compatible option{entry.attachments.length === 1 ? "" : "s"}
                   </div>
+                  {(entry.spec_bullets?.length ?? 0) > 0 && (
+                    <div className="mt-2 space-y-1 rounded-md border border-border/70 bg-muted/20 p-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                        Manufacturer specs
+                      </p>
+                      {entry.spec_bullets!.slice(0, 3).map((spec) => (
+                        <p key={spec} className="text-xs text-muted-foreground">{spec}</p>
+                      ))}
+                    </div>
+                  )}
                   {entry.list_price && (
                     <div className="mt-1 font-medium text-qep-orange">
                       ${entry.list_price.toLocaleString()}

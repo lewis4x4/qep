@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { projectCatalogSpecs } from "@/lib/pricing/catalog-specs";
 export { getTradeValuation } from "@/features/qrm/lib/trade-walkaround-api";
 import type {
   CompetitorListing,
@@ -2577,14 +2578,16 @@ export function buildPortalRevisionQuoteData(
 
 export async function searchCatalog(query: string) {
   // Sanitize query: strip PostgREST filter metacharacters to prevent injection
-  const sanitized = query.replace(/[%,().!]/g, "").trim().substring(0, 100);
+  const sanitized = sanitizeCatalogSearch(query);
+  const specTokens = sanitized.toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
+
+  const modelSelect = `id, model_code, family, series, name_display, model_year, list_price_cents,
+       specs,
+       brand:qb_brands!brand_id ( id, code, name, category )`;
 
   let catalogQuery = supabase
     .from("qb_equipment_models")
-    .select(
-      `id, model_code, family, series, name_display, model_year, list_price_cents,
-       brand:qb_brands!brand_id ( id, code, name, category )`,
-    )
+    .select(modelSelect)
     .eq("active", true)
     .is("deleted_at", null)
     .order("name_display", { ascending: true })
@@ -2597,7 +2600,29 @@ export async function searchCatalog(query: string) {
   const { data, error } = await catalogQuery;
   if (error) throw error;
 
-  const models = data ?? [];
+  const directModels = data ?? [];
+  let models = directModels;
+
+  if (specTokens.length > 0) {
+    const directIds = new Set(directModels.map((row) => row.id));
+    const { data: specData, error: specError } = await supabase
+      .from("qb_equipment_models")
+      .select(modelSelect)
+      .eq("active", true)
+      .is("deleted_at", null)
+      .not("specs", "is", null)
+      .order("name_display", { ascending: true })
+      .limit(500);
+    if (specError) throw specError;
+
+    const specMatches = (specData ?? []).filter((row) => {
+      if (directIds.has(row.id)) return false;
+      const specSearchText = projectCatalogSpecs(row.specs).searchText;
+      return Boolean(specSearchText) && specTokens.every((token) => specSearchText.includes(token));
+    });
+    models = [...directModels, ...specMatches].slice(0, 20);
+  }
+
   const brandIds = Array.from(
     new Set(
       models
@@ -2626,6 +2651,7 @@ export async function searchCatalog(query: string) {
   return models.map((row) => {
     const brand = Array.isArray(row.brand) ? row.brand[0] : row.brand;
     const make = brand?.name ?? row.name_display?.split(" ")[0] ?? "";
+    const specsProjection = projectCatalogSpecs(row.specs);
     const compatibleAttachments = attachments
       .filter((attachment) => {
         const compatibleIds = Array.isArray(attachment.compatible_model_ids)
@@ -2653,7 +2679,10 @@ export async function searchCatalog(query: string) {
       condition: "new" as const,
       warranty_text: null as string | null,
       long_description: null as string | null,
-      spec_bullets: [] as string[],
+      spec_bullets: specsProjection.specBullets,
+      structured_specs: specsProjection.structuredSpecs,
+      spec_search_text: specsProjection.searchText || null,
+      spec_source: specsProjection.structuredSpecs.length > 0 ? "manufacturer_ingested" as const : null,
       photo_url: null as string | null,
       photo_urls: [] as string[],
       vendor_logo_url: null as string | null,

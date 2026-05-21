@@ -169,6 +169,45 @@ describe("buildQuoteSavePayload", () => {
     expect(line.metadata.serial_number).toBe("B4CD12345");
   });
 
+  test("preserves structured manufacturer specs in saved quote-line metadata", () => {
+    const payload = buildQuoteSavePayload(
+      makeQuoteDraft({
+        equipment: [{
+          kind: "equipment",
+          id: "model-1",
+          sourceCatalog: "qb_equipment_models",
+          sourceId: "11111111-1111-4111-8111-111111111111",
+          title: "ASV RT-75",
+          make: "ASV",
+          model: "RT-75",
+          year: 2026,
+          quantity: 1,
+          unitPrice: 92_000,
+          metadata: {
+            spec_bullets: ["Horsepower: 74 HP"],
+            structured_specs: [{
+              key: "horsepower",
+              label: "Horsepower",
+              value: "74",
+              unit: "HP",
+              category: "Engine",
+              priority: 10,
+              source: "qb_equipment_models.specs",
+            }],
+            spec_source: "manufacturer_ingested",
+          },
+        }],
+      }),
+      computedQuoteTotals,
+      [],
+    );
+
+    const line = (payload.line_items as Array<{ metadata: Record<string, unknown> }>)[0]!;
+    expect(line.metadata.structured_specs).toEqual([expect.objectContaining({ key: "horsepower", value: "74" })]);
+    expect(line.metadata.spec_bullets).toEqual(["Horsepower: 74 HP"]);
+    expect(line.metadata.spec_source).toBe("manufacturer_ingested");
+  });
+
   test("does not persist placeholder promotion ids or promotion marker reason codes", () => {
     const realPromotionId = "11111111-1111-4111-8111-111111111111";
     const payload = buildQuoteSavePayload(

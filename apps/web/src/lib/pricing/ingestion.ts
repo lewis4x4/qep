@@ -12,6 +12,11 @@
  * Money: all monetary values are integer cents throughout.
  */
 
+import {
+  canonicalizeCatalogSpecsForDiff,
+  hasMeaningfulCatalogSpecs,
+} from "./catalog-specs.ts";
+
 // ── Duck-typed Supabase client (Deno-compatible) ──────────────────────────────
 
 interface SupabaseLike {
@@ -108,6 +113,13 @@ export async function detectModelAction(
   }
   if (extracted.name_display !== undefined && existing.name_display !== extracted.name_display) {
     changes.name_display = { old: existing.name_display, new: extracted.name_display };
+  }
+  if (hasMeaningfulCatalogSpecs(extracted.specs)) {
+    const oldSpecs = canonicalizeCatalogSpecsForDiff(existing.specs);
+    const newSpecs = canonicalizeCatalogSpecsForDiff(extracted.specs);
+    if (JSON.stringify(oldSpecs) !== JSON.stringify(newSpecs)) {
+      changes.specs = { old: existing.specs ?? null, new: extracted.specs };
+    }
   }
 
   if (Object.keys(changes).length === 0) {

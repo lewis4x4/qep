@@ -1,6 +1,7 @@
 // Pure helpers extracted from QuoteBuilderV2Page (IRON wizard orchestrator slimming).
 // Mechanical move — no behavior change.
 
+import type { CatalogStructuredSpec } from "@/lib/pricing/catalog-specs";
 import type { QuoteLineItemDraft, QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
 import type { IronQuoteHandoff } from "./iron-quote-handoff";
 import { isSafeProposalMediaUrl } from "./quote-proposal-data";
@@ -32,6 +33,9 @@ export interface CatalogEntryMatch {
   warranty_text?: string | null;
   long_description?: string | null;
   spec_bullets?: string[] | null;
+  structured_specs?: CatalogStructuredSpec[] | null;
+  spec_search_text?: string | null;
+  spec_source?: "manufacturer_ingested" | string | null;
   photo_url?: string | null;
   photo_urls?: string[] | null;
   vendor_logo_url?: string | null;
@@ -120,6 +124,10 @@ export function metadataForCatalogEntry(entry: CatalogEntryMatch): Record<string
   if (vendorLogoUrl) metadata.vendor_logo_url = vendorLogoUrl;
   if (entry.warranty_text) metadata.warranty_text = entry.warranty_text;
   if (entry.long_description) metadata.long_description = entry.long_description;
+  if (entry.structured_specs?.length) {
+    metadata.structured_specs = entry.structured_specs.slice(0, 16);
+    metadata.spec_source = entry.spec_source ?? "manufacturer_ingested";
+  }
   if (entry.spec_bullets?.length) metadata.spec_bullets = entry.spec_bullets.filter(Boolean).slice(0, 8);
   const mediaKind = mediaKindForEntry(entry);
   if (mediaKind) metadata.media_kind = mediaKind;

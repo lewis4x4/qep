@@ -106,6 +106,31 @@ function getContainsValue(value: unknown): string | Record<string, unknown> | re
   return [];
 }
 
+const SPEC_FREE_TEXT_KEYS = new Set(["ai_summary", "bullets", "comments", "description", "free_text", "notes", "raw_text", "summary"]);
+const SPEC_DESCRIPTOR_KEYS = new Set(["key", "label", "name", "title", "unit", "units", "uom", "category", "group"]);
+
+function hasMeaningfulCatalogSpecs(value: unknown, depth = 0): boolean {
+  if (value == null || depth > 3) return false;
+  if (Array.isArray(value)) {
+    return value.some((item) => isExtractedPayload(item) && hasMeaningfulCatalogSpecs(item, depth + 1));
+  }
+  if (isExtractedPayload(value)) {
+    return Object.entries(value).some(([key, child]) => {
+      const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+      return !SPEC_FREE_TEXT_KEYS.has(normalizedKey)
+        && !SPEC_DESCRIPTOR_KEYS.has(normalizedKey)
+        && hasMeaningfulCatalogSpecs(child, depth + 1);
+    });
+  }
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value === "boolean") return true;
+  if (typeof value === "string") {
+    const text = value.trim();
+    return text.length > 0 && text.length <= 120;
+  }
+  return false;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -134,6 +159,7 @@ async function applyModel(
   const extracted = getExtractedPayload(item.extracted, `Item ${item.id}`);
   if (!extracted.ok) return extracted;
   const ext = extracted.payload;
+  const meaningfulSpecs = hasMeaningfulCatalogSpecs(ext.specs);
 
   if (item.action === "create") {
     const { data, error } = await serviceClient
@@ -146,7 +172,7 @@ async function applyModel(
         name_display: ext.name_display ?? ext.model_code,
         standard_config: ext.standard_config ?? null,
         list_price_cents: ext.list_price_cents,
-        specs: ext.specs ?? null,
+        specs: meaningfulSpecs ? ext.specs : null,
         active: true,
       })
       .select("id")
@@ -161,7 +187,7 @@ async function applyModel(
     if (ext.family !== undefined) updates.family = ext.family;
     if (ext.name_display !== undefined) updates.name_display = ext.name_display;
     if (ext.standard_config !== undefined) updates.standard_config = ext.standard_config;
-    if (ext.specs !== undefined) updates.specs = ext.specs;
+    if (meaningfulSpecs) updates.specs = ext.specs;
 
     const { error } = await serviceClient
       .from("qb_equipment_models")

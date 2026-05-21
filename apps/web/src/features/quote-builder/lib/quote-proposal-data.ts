@@ -1,3 +1,4 @@
+import { formatCatalogStructuredSpec, type CatalogStructuredSpec } from "@/lib/pricing/catalog-specs";
 import type { QuotePDFData, QuoteProposalAsset } from "../components/QuotePDFDocument";
 import type { TradeValuationProposalSnapshot } from "./point-shoot-trade-api";
 import { buildQuoteLandingQrData } from "./quote-qr";
@@ -201,7 +202,34 @@ function proposalMediaKind(metadata: Record<string, unknown>): QuoteProposalAsse
   return kind ?? null;
 }
 
+function structuredSpecBullets(metadata: Record<string, unknown>): string[] {
+  const raw = metadata.structured_specs ?? metadata.structuredSpecs;
+  if (!Array.isArray(raw)) return [];
+  const metadataSource = metadata.spec_source ?? metadata.specSource;
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const record = item as Record<string, unknown>;
+    const hasManufacturerSource = metadataSource === "manufacturer_ingested"
+      || record.source === "qb_equipment_models.specs";
+    if (!hasManufacturerSource) return [];
+    if (typeof record.label !== "string" || typeof record.value !== "string") return [];
+    const spec: CatalogStructuredSpec = {
+      key: typeof record.key === "string" ? record.key : record.label,
+      label: record.label,
+      value: record.value,
+      unit: typeof record.unit === "string" ? record.unit : null,
+      category: typeof record.category === "string" ? record.category : null,
+      priority: typeof record.priority === "number" ? record.priority : 500,
+      source: "qb_equipment_models.specs",
+    };
+    const text = customerSafeProposalProse(formatCatalogStructuredSpec(spec));
+    return text ? [text] : [];
+  }).slice(0, 8);
+}
+
 function specBullets(metadata: Record<string, unknown>): string[] {
+  const structured = structuredSpecBullets(metadata);
+  if (structured.length > 0) return structured;
   const raw = metadata.spec_bullets ?? metadata.specBullets;
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((item) => {

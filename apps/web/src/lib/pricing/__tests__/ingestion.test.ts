@@ -118,6 +118,60 @@ describe("detectModelAction", () => {
     expect(result.skipReason).toMatch(/list_price_cents/i);
   });
 
+  it("returns no_change when canonical specs match", async () => {
+    const existing = {
+      id: EXISTING_MODEL_ID,
+      model_code: "RT-135",
+      list_price_cents: 6_214_900,
+      standard_config: "Open ROPS, standard hydraulics",
+      family: "Compact Track Loader",
+      name_display: "RT-135 Open ROPS Base",
+      specs: { operating_weight_lbs: 8420, horsepower: 74 },
+    };
+    const result = await detectModelAction(
+      { ...baseModel, specs: { horsepower: 74, operating_weight_lbs: 8420 } },
+      BRAND_ID,
+      stubSupabase(existing),
+    );
+    expect(result.action).toBe("no_change");
+  });
+
+  it("returns update when only structured specs changed", async () => {
+    const existing = {
+      id: EXISTING_MODEL_ID,
+      model_code: "RT-135",
+      list_price_cents: 6_214_900,
+      standard_config: "Open ROPS, standard hydraulics",
+      family: "Compact Track Loader",
+      name_display: "RT-135 Open ROPS Base",
+      specs: { horsepower: 74, operating_weight_lbs: 8420 },
+    };
+    const result = await detectModelAction(
+      { ...baseModel, specs: { horsepower: 80, operating_weight_lbs: 8420 } },
+      BRAND_ID,
+      stubSupabase(existing),
+    );
+    expect(result.action).toBe("update");
+    expect(result.changes?.specs).toEqual({
+      old: { horsepower: 74, operating_weight_lbs: 8420 },
+      new: { horsepower: 80, operating_weight_lbs: 8420 },
+    });
+  });
+
+  it("does not update when extracted specs are empty", async () => {
+    const existing = {
+      id: EXISTING_MODEL_ID,
+      model_code: "RT-135",
+      list_price_cents: 6_214_900,
+      standard_config: "Open ROPS, standard hydraulics",
+      family: "Compact Track Loader",
+      name_display: "RT-135 Open ROPS Base",
+      specs: { horsepower: 74 },
+    };
+    const result = await detectModelAction({ ...baseModel, specs: {} }, BRAND_ID, stubSupabase(existing));
+    expect(result.action).toBe("no_change");
+  });
+
   it("skips on DB error", async () => {
     const result = await detectModelAction(baseModel, BRAND_ID, stubSupabase(null, { message: "connection refused" }));
     expect(result.action).toBe("skip");

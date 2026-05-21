@@ -243,6 +243,62 @@ describe("buildQuoteProposalData", () => {
     expectNoDealIqInternals(pdfRendered);
   });
 
+  test("prefers structured manufacturer specs over legacy metadata bullets", () => {
+    const data = build({
+      equipment: [{
+        kind: "equipment",
+        title: "RT-75",
+        make: "ASV",
+        model: "RT-75",
+        year: 2026,
+        quantity: 1,
+        unitPrice: 100_000,
+        metadata: {
+          spec_source: "manufacturer_ingested",
+          spec_bullets: ["Legacy bullet should not win"],
+          structured_specs: [{
+            key: "horsepower",
+            label: "Horsepower",
+            value: "74",
+            unit: "HP",
+            category: "Engine",
+            priority: 10,
+            source: "qb_equipment_models.specs",
+          }],
+        },
+      }],
+    });
+
+    expect(data.lineItems[0]?.specBullets).toEqual(["Horsepower: 74 HP"]);
+  });
+
+  test("falls back to legacy spec bullets when structured specs lack manufacturer source proof", () => {
+    const data = build({
+      equipment: [{
+        kind: "equipment",
+        title: "RT-75",
+        make: "ASV",
+        model: "RT-75",
+        year: 2026,
+        quantity: 1,
+        unitPrice: 100_000,
+        metadata: {
+          spec_bullets: ["Legacy bullet should win"],
+          structured_specs: [{
+            key: "horsepower",
+            label: "Horsepower",
+            value: "74",
+            unit: "HP",
+            category: "Engine",
+            priority: 10,
+          }],
+        },
+      }],
+    });
+
+    expect(data.lineItems[0]?.specBullets).toEqual(["Legacy bullet should win"]);
+  });
+
   test("builds a customer-visible line-item waterfall with credits", () => {
     const data = build({
       pricingLines: [

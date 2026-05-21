@@ -473,6 +473,41 @@
       "gate_report": "test-results/agent-gates/20260521T011634Z-F4.4-decision-supersession-watcher.json",
       "notes": "Implemented DB-native watcher only. roadmap-linear-sync is currently untracked local tooling, so supersession enforcement lives in Supabase migration code. Main working tree has unrelated OEM/admin/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only F4.4 scoped files applied.",
       "updated_at": "2026-05-21T01:16:34Z"
+    },
+    {
+      "task_id": "A3.2/QEP-15",
+      "status": "complete",
+      "title": "M2 \u2014 Live spec sheet from structured source",
+      "stream": "A",
+      "wave": "A3",
+      "goal": "Quote Builder spec output uses structured manufacturer-ingested catalog specs instead of free-text bullets, with searchable catalog projection and consistent per-model quote/PDF metadata.",
+      "changed_files": [
+        "apps/web/src/lib/pricing/catalog-specs.ts",
+        "apps/web/src/lib/pricing/__tests__/catalog-specs.test.ts",
+        "apps/web/src/lib/pricing/ingestion.ts",
+        "apps/web/src/lib/pricing/__tests__/ingestion.test.ts",
+        "supabase/functions/publish-price-sheet/index.ts",
+        "apps/web/src/features/quote-builder/lib/quote-api.ts",
+        "apps/web/src/features/quote-builder/lib/quote-builder-page-helpers.ts",
+        "apps/web/src/features/quote-builder/lib/__tests__/quote-builder-page-helpers.test.ts",
+        "apps/web/src/features/quote-builder/lib/quote-proposal-data.ts",
+        "apps/web/src/features/quote-builder/lib/__tests__/quote-proposal-data.test.ts",
+        "apps/web/src/features/quote-builder/lib/__tests__/quote-api.test.ts",
+        "apps/web/src/features/quote-builder/components/EquipmentSelector.tsx"
+      ],
+      "verification": [
+        "bun test apps/web/src/lib/pricing/__tests__/catalog-specs.test.ts apps/web/src/lib/pricing/__tests__/ingestion.test.ts apps/web/src/features/quote-builder/lib/__tests__/quote-builder-page-helpers.test.ts apps/web/src/features/quote-builder/lib/__tests__/quote-proposal-data.test.ts apps/web/src/features/quote-builder/lib/__tests__/quote-api.test.ts",
+        "bun run --filter @qep/web typecheck",
+        "deno check supabase/functions/publish-price-sheet/index.ts",
+        "deno check supabase/functions/extract-price-sheet/index.ts",
+        "git diff --check -- scoped A3.2 files",
+        "Oracle review found two P1 blockers; targeted fixes applied for descriptor-only specs and manufacturer source proof",
+        "bun run migrations:check (clean temp worktree, sequence 001..608)",
+        "bun run segment:gates --segment A3.2-live-structured-specs --ui (clean temp worktree)"
+      ],
+      "gate_report": "test-results/agent-gates/20260521T014633Z-A3.2-live-structured-specs.json",
+      "notes": "No migration required; reused existing qb_equipment_models.specs and quote-line metadata/PDF renderer. Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only A3.2 scoped files applied. Spec fallback search is bounded/local for this slice; large catalogs may later need indexed DB search.",
+      "updated_at": "2026-05-21T01:46:33Z"
     }
   ],
   "agents": [
@@ -802,26 +837,39 @@
     }
   },
   "current_task": {
-    "task_id": "F4.4/QEP-156",
+    "task_id": "A3.2/QEP-15",
     "status": "complete",
-    "title": "Supersession detection",
-    "stream": "F",
-    "wave": "F4",
-    "goal": "Scope-change watcher marks decisions as superseded when their gated tasks are descoped, completed, or rescoped, while preserving historical decision scope.",
+    "title": "M2 \u2014 Live spec sheet from structured source",
+    "stream": "A",
+    "wave": "A3",
+    "goal": "Quote Builder spec output uses structured manufacturer-ingested catalog specs instead of free-text bullets, with searchable catalog projection and consistent per-model quote/PDF metadata.",
     "changed_files": [
-      "supabase/migrations/608_qep_decision_supersession_watcher.sql",
-      "supabase/migrations/608_qep_decision_supersession_watcher.test.ts"
+      "apps/web/src/lib/pricing/catalog-specs.ts",
+      "apps/web/src/lib/pricing/__tests__/catalog-specs.test.ts",
+      "apps/web/src/lib/pricing/ingestion.ts",
+      "apps/web/src/lib/pricing/__tests__/ingestion.test.ts",
+      "supabase/functions/publish-price-sheet/index.ts",
+      "apps/web/src/features/quote-builder/lib/quote-api.ts",
+      "apps/web/src/features/quote-builder/lib/quote-builder-page-helpers.ts",
+      "apps/web/src/features/quote-builder/lib/__tests__/quote-builder-page-helpers.test.ts",
+      "apps/web/src/features/quote-builder/lib/quote-proposal-data.ts",
+      "apps/web/src/features/quote-builder/lib/__tests__/quote-proposal-data.test.ts",
+      "apps/web/src/features/quote-builder/lib/__tests__/quote-api.test.ts",
+      "apps/web/src/features/quote-builder/components/EquipmentSelector.tsx"
     ],
     "verification": [
-      "bun test ./supabase/migrations/608_qep_decision_supersession_watcher.test.ts",
-      "git diff --check -- supabase/migrations/608_qep_decision_supersession_watcher.sql supabase/migrations/608_qep_decision_supersession_watcher.test.ts",
-      "Oracle review: no P0/P1 blocking findings",
+      "bun test apps/web/src/lib/pricing/__tests__/catalog-specs.test.ts apps/web/src/lib/pricing/__tests__/ingestion.test.ts apps/web/src/features/quote-builder/lib/__tests__/quote-builder-page-helpers.test.ts apps/web/src/features/quote-builder/lib/__tests__/quote-proposal-data.test.ts apps/web/src/features/quote-builder/lib/__tests__/quote-api.test.ts",
+      "bun run --filter @qep/web typecheck",
+      "deno check supabase/functions/publish-price-sheet/index.ts",
+      "deno check supabase/functions/extract-price-sheet/index.ts",
+      "git diff --check -- scoped A3.2 files",
+      "Oracle review found two P1 blockers; targeted fixes applied for descriptor-only specs and manufacturer source proof",
       "bun run migrations:check (clean temp worktree, sequence 001..608)",
-      "bun run segment:gates --segment F4.4-decision-supersession-watcher --ui (clean temp worktree)"
+      "bun run segment:gates --segment A3.2-live-structured-specs --ui (clean temp worktree)"
     ],
-    "gate_report": "test-results/agent-gates/20260521T011634Z-F4.4-decision-supersession-watcher.json",
-    "notes": "Implemented DB-native watcher only. roadmap-linear-sync is currently untracked local tooling, so supersession enforcement lives in Supabase migration code. Main working tree has unrelated OEM/admin/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only F4.4 scoped files applied.",
-    "updated_at": "2026-05-21T01:16:34Z"
+    "gate_report": "test-results/agent-gates/20260521T014633Z-A3.2-live-structured-specs.json",
+    "notes": "No migration required; reused existing qb_equipment_models.specs and quote-line metadata/PDF renderer. Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only A3.2 scoped files applied. Spec fallback search is bounded/local for this slice; large catalogs may later need indexed DB search.",
+    "updated_at": "2026-05-21T01:46:33Z"
   },
-  "updated_at": "2026-05-21T01:16:34Z"
+  "updated_at": "2026-05-21T01:46:33Z"
 }
