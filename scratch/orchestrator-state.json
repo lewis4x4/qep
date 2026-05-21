@@ -603,6 +603,35 @@
       "gate_report": "test-results/agent-gates/20260521T031045Z-B5.6-sc-1-real-rep-test-session.json",
       "notes": "No code changes were required in this cycle; the feature existed on main but roadmap state was still not_started. Main working tree has unrelated WIP, so full gates ran in a clean detached worktree at HEAD.",
       "updated_at": "2026-05-21T03:10:45Z"
+    },
+    {
+      "task_id": "B5.7/QEP-63",
+      "status": "complete_verified_existing",
+      "title": "SC-2 \u2014 Role-scoped home route",
+      "stream": "B",
+      "wave": "B5",
+      "goal": "Role-scoped home routing sends reps to /sales/today and redirects guarded non-sales surfaces back to the role home while manager/admin/owner keep elevated homes.",
+      "changed_files": [],
+      "verified_existing_files": [
+        "apps/web/src/lib/home-route.ts",
+        "apps/web/src/lib/home-route.test.ts",
+        "apps/web/src/lib/home-route-app-routing.test.ts",
+        "apps/web/src/App.tsx",
+        "apps/web/src/lib/nav-config.ts",
+        "apps/web/src/lib/nav-config.test.ts",
+        "apps/web/src/features/sales/SalesShell.test.tsx",
+        "apps/web/src/features/sales/__tests__/SalesRoutes.routing.test.tsx"
+      ],
+      "verification": [
+        "bun test apps/web/src/lib/home-route.test.ts apps/web/src/lib/home-route-app-routing.test.ts apps/web/src/lib/nav-config.test.ts",
+        "bun test apps/web/src/features/sales/__tests__/SalesRoutes.routing.test.tsx apps/web/src/features/sales/SalesShell.test.tsx",
+        "git diff --check -- scoped B5.7 route/nav files",
+        "bun run migrations:check (clean temp worktree, sequence 001..609)",
+        "bun run segment:gates --segment B5.7-sc-2-role-scoped-home-route --ui (clean temp worktree)"
+      ],
+      "gate_report": "test-results/agent-gates/20260521T031730Z-B5.7-sc-2-role-scoped-home-route.json",
+      "notes": "No code changes were required in this cycle; the feature existed on main but roadmap state was still not_started. Main working tree has unrelated WIP, so full gates ran in a clean detached worktree at HEAD.",
+      "updated_at": "2026-05-21T03:17:30Z"
     }
   ],
   "agents": [
@@ -932,34 +961,33 @@
     }
   },
   "current_task": {
-    "task_id": "B5.6/QEP-62",
+    "task_id": "B5.7/QEP-63",
     "status": "complete_verified_existing",
-    "title": "SC-1 \u2014 Remove fake view_as, real rep test session",
+    "title": "SC-2 \u2014 Role-scoped home route",
     "stream": "B",
     "wave": "B5",
-    "goal": "Manager/owner test access uses a real Supabase rep magic-link session instead of fake view_as query behavior.",
+    "goal": "Role-scoped home routing sends reps to /sales/today and redirects guarded non-sales surfaces back to the role home while manager/admin/owner keep elevated homes.",
     "changed_files": [],
     "verified_existing_files": [
-      "apps/web/src/components/TopBar.tsx",
-      "apps/web/src/features/floor/pages/FloorPage.tsx",
-      "apps/web/src/features/floor/pages/__tests__/view-as-removal.test.ts",
-      "apps/web/src/features/floor/pages/__tests__/floor-view-as-noop.test.tsx",
-      "supabase/functions/rep-test-session/index.ts",
-      "supabase/functions/rep-test-session/logic.ts",
-      "supabase/functions/rep-test-session/logic.test.ts",
-      "supabase/config.toml"
+      "apps/web/src/lib/home-route.ts",
+      "apps/web/src/lib/home-route.test.ts",
+      "apps/web/src/lib/home-route-app-routing.test.ts",
+      "apps/web/src/App.tsx",
+      "apps/web/src/lib/nav-config.ts",
+      "apps/web/src/lib/nav-config.test.ts",
+      "apps/web/src/features/sales/SalesShell.test.tsx",
+      "apps/web/src/features/sales/__tests__/SalesRoutes.routing.test.tsx"
     ],
     "verification": [
-      "bun test apps/web/src/features/floor/pages/__tests__/view-as-removal.test.ts apps/web/src/features/floor/pages/__tests__/floor-view-as-noop.test.tsx",
-      "deno test supabase/functions/rep-test-session/logic.test.ts --allow-env",
-      "deno check supabase/functions/rep-test-session/index.ts",
-      "git diff --check -- scoped B5.6 files",
+      "bun test apps/web/src/lib/home-route.test.ts apps/web/src/lib/home-route-app-routing.test.ts apps/web/src/lib/nav-config.test.ts",
+      "bun test apps/web/src/features/sales/__tests__/SalesRoutes.routing.test.tsx apps/web/src/features/sales/SalesShell.test.tsx",
+      "git diff --check -- scoped B5.7 route/nav files",
       "bun run migrations:check (clean temp worktree, sequence 001..609)",
-      "bun run segment:gates --segment B5.6-sc-1-real-rep-test-session --ui (clean temp worktree)"
+      "bun run segment:gates --segment B5.7-sc-2-role-scoped-home-route --ui (clean temp worktree)"
     ],
-    "gate_report": "test-results/agent-gates/20260521T031045Z-B5.6-sc-1-real-rep-test-session.json",
+    "gate_report": "test-results/agent-gates/20260521T031730Z-B5.7-sc-2-role-scoped-home-route.json",
     "notes": "No code changes were required in this cycle; the feature existed on main but roadmap state was still not_started. Main working tree has unrelated WIP, so full gates ran in a clean detached worktree at HEAD.",
-    "updated_at": "2026-05-21T03:10:45Z"
+    "updated_at": "2026-05-21T03:17:30Z"
   },
-  "updated_at": "2026-05-21T03:10:45Z"
+  "updated_at": "2026-05-21T03:17:30Z"
 }
