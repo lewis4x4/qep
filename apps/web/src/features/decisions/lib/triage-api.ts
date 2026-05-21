@@ -1,6 +1,23 @@
 import { supabase } from "@/lib/supabase";
 
 export type TriageDecisionStatus = "open" | "escalated" | "shadow_ship";
+export type OwnerDecisionAction = "approve" | "block" | "need_info";
+
+export interface OwnerDecisionActionInput {
+  action: OwnerDecisionAction;
+  ownerRole: string;
+  recommendedOption: string | null;
+  existingPacket: Record<string, unknown> | null;
+  actorName?: string | null;
+  nowIso?: string;
+}
+
+export interface OwnerDecisionActionResult {
+  action: OwnerDecisionAction;
+  status: "answered" | "escalated" | "open";
+  actionAt: string;
+  actor: string;
+}
 
 export interface TriageCitation {
   source: string;
@@ -128,6 +145,106 @@ export async function listDecisionTriageQueue(limit = 100): Promise<TriageDecisi
   }
 
   return normalizeTriageDecisionRows(data);
+}
+
+export function buildOwnerDecisionActionPatch(input: OwnerDecisionActionInput): Record<string, unknown> {
+  const nowIso = input.nowIso ?? new Date().toISOString();
+  const ownerRole = input.ownerRole.trim() || "owner";
+  const actorName = input.actorName?.trim() || ownerRole;
+  const actor = `owner-web:${actorName}`;
+  const actionStamp = {
+    action: input.action,
+    owner_role: ownerRole,
+    actor,
+    at: nowIso,
+    surface: "/decisions",
+  };
+  const packet = {
+    ...(input.existingPacket ?? {}),
+    owner_web_last_action: actionStamp,
+  };
+
+  if (input.action === "approve") {
+    const answeredOption = input.recommendedOption?.trim() || null;
+    if (!answeredOption) {
+      throw new Error("Approve requires a recommended option to answer the decision");
+    }
+
+    return {
+      status: "answered",
+      answered_by: actor,
+      answered_at: nowIso,
+      answered_option: answeredOption,
+      answered_rationale: `Approved on /decisions by ${actorName} at ${nowIso}.`,
+      ai_prep_packet: packet,
+    };
+  }
+
+  if (input.action === "block") {
+    return {
+      status: "escalated",
+      ai_prep_packet: packet,
+    };
+  }
+
+  return {
+    status: "open",
+    ai_prep_packet: packet,
+  };
+}
+
+export async function applyOwnerDecisionAction(input: {
+  decisionId: string;
+  action: OwnerDecisionAction;
+  actorName?: string | null;
+}): Promise<OwnerDecisionActionResult> {
+  const actionAt = new Date().toISOString();
+
+  const { data: current, error: readError } = await supabase
+    .from("qep_decisions")
+    .select("id, owner_role, recommended_option, ai_prep_packet")
+    .eq("id", input.decisionId)
+    .maybeSingle();
+
+  if (readError) {
+    throw new Error(readError.message || "Failed to load decision before action");
+  }
+  if (!current?.id) {
+    throw new Error("Decision not found");
+  }
+
+  const ownerRole = asString(current.owner_role) || "owner";
+  const actorName = input.actorName?.trim() || ownerRole;
+  const patch = buildOwnerDecisionActionPatch({
+    action: input.action,
+    ownerRole,
+    recommendedOption:
+      typeof current.recommended_option === "string" ? current.recommended_option : null,
+    existingPacket: asRecord(current.ai_prep_packet),
+    actorName,
+    nowIso: actionAt,
+  });
+
+  const { data: updated, error: updateError } = await supabase
+    .from("qep_decisions")
+    .update(patch)
+    .eq("id", input.decisionId)
+    .select("id, status")
+    .maybeSingle();
+
+  if (updateError) {
+    throw new Error(updateError.message || "Failed to save decision action");
+  }
+  if (!updated?.id) {
+    throw new Error("Decision action was not persisted");
+  }
+
+  return {
+    action: input.action,
+    status: patch.status as OwnerDecisionActionResult["status"],
+    actionAt,
+    actor: `owner-web:${actorName}`,
+  };
 }
 
 export async function approveDecisionTriage(input: { decisionId: string; approvedBy?: string }) {
