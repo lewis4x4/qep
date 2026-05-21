@@ -796,3 +796,6 @@ verify_jwt = false
 
 [functions.decision-magic-link]
 verify_jwt = false
+
+[functions.decision-linear-comment]
+verify_jwt = false
