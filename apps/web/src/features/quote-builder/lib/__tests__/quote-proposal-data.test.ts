@@ -748,6 +748,7 @@ describe("buildQuoteProposalData", () => {
       { type: "lease", kind: "lease_fmv", label: "FMV lease", monthlyPayment: 1_850, termMonths: 48, rate: 6.9, totalCost: 118_000, lender: "Lease partner" },
     ]);
     const html = buildPrintableQuoteHtml(data);
+    const pdfRendered = JSON.stringify(QuotePDFDocument({ data }));
 
     expect(html).toContain("Why this machine");
     expect(html).toContain("Confirmed customer-safe story.");
@@ -769,6 +770,10 @@ describe("buildQuoteProposalData", () => {
     expect(html).toContain("#F28A07");
     expect(html).toContain("QEP-2026-0001");
     expect(html).toContain("FMV lease");
+    expect(pdfRendered).toContain("EQUIPMENT ESTIMATE - NOT AN INVOICE");
+    expect(pdfRendered).toContain("Authorization: ______________________________");
+    expect(pdfRendered).toContain("Thank You For Your Business!");
+    expect(pdfRendered).toContain("Truth in Lending Act");
   });
 
   test("printable HTML renders the cover equipment gallery when media is available", () => {

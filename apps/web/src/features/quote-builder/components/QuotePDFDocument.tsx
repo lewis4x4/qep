@@ -173,6 +173,9 @@ const s = StyleSheet.create({
   footerQr: { width: 44, height: 44, objectFit: "contain" as const, borderWidth: 1, borderColor: "#E6E2DB", padding: 2 },
   footerQrVectorWrap: { width: 44, height: 44, borderWidth: 1, borderColor: "#E6E2DB", backgroundColor: WHITE, padding: 2 },
   footerQrLabel: { fontSize: 6, color: CHARCOAL, textAlign: "center" as TextAlign, marginTop: 2, fontFamily: "Helvetica-Bold" },
+  documentBanner: { marginTop: -12, marginBottom: 18, paddingVertical: 7, paddingHorizontal: 10, backgroundColor: CHARCOAL, borderLeftWidth: 5, borderLeftColor: ORANGE, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  documentBannerTitle: { fontSize: 10, color: WHITE, fontFamily: "Helvetica-Bold", letterSpacing: 0.7 },
+  documentBannerMeta: { fontSize: 7, color: GEAR_GRAY, textAlign: "right" as TextAlign, lineHeight: 1.3 },
   coverTitle: { fontSize: 32, fontFamily: "Helvetica-Bold", color: CHARCOAL, marginTop: 64, lineHeight: 1.05 },
   coverKicker: { fontSize: 9, color: ORANGE, fontFamily: "Helvetica-Bold", letterSpacing: 1.8, textTransform: "uppercase" as const },
   coverGrid: { flexDirection: "row", marginTop: 26 },
@@ -223,6 +226,9 @@ const s = StyleSheet.create({
   grandRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: GEAR_GRAY },
   grandLabel: { fontSize: 13, color: CHARCOAL, fontFamily: "Helvetica-Bold" },
   grandValue: { fontSize: 14, color: ORANGE, fontFamily: "Helvetica-Bold" },
+  authorizationCard: { marginTop: 10, padding: 12, borderWidth: 1, borderColor: GEAR_GRAY, backgroundColor: WHITE },
+  authorizationLabel: { fontSize: 9, color: CHARCOAL, fontFamily: "Helvetica-Bold", marginBottom: 8 },
+  authorizationLine: { fontSize: 9, color: SURFACE, marginBottom: 6 },
   financeGrid: { flexDirection: "row", marginTop: 12 },
   financeCard: { flex: 1, borderWidth: 1, borderColor: GEAR_GRAY, padding: 11, marginRight: 8, minHeight: 96 },
   financeCardSelected: { borderColor: ORANGE, borderWidth: 2, backgroundColor: "#FFF7EC" },
@@ -237,6 +243,7 @@ const s = StyleSheet.create({
   termsBox: { borderWidth: 1, borderColor: GEAR_GRAY, padding: 12, marginTop: 12 },
   termsTitle: { fontSize: 10, fontFamily: "Helvetica-Bold", color: CHARCOAL, marginBottom: 6 },
   termsLine: { fontSize: 8.2, color: SURFACE, lineHeight: 1.45, marginBottom: 4 },
+  closingLine: { marginTop: 14, fontSize: 12, color: CHARCOAL, fontFamily: "Helvetica-Bold", textAlign: "center" as TextAlign },
 });
 
 function fmt(amount: number | null | undefined): string {
@@ -326,6 +333,19 @@ function PageHeader({ data }: { data: QuotePDFData }) {
           {branch.email ? <Text style={s.branchMeta}>{branch.email}</Text> : null}
           {branch.website ? <Text style={s.branchMeta}>{branch.website}</Text> : null}
         </View>
+      </View>
+    </View>
+  );
+}
+
+function documentBanner(data: QuotePDFData) {
+  const reference = data.quoteNumber || data.dealName || "QEP Proposal";
+  return (
+    <View style={s.documentBanner}>
+      <Text style={s.documentBannerTitle}>EQUIPMENT ESTIMATE - NOT AN INVOICE</Text>
+      <View>
+        <Text style={s.documentBannerMeta}>{reference}</Text>
+        <Text style={s.documentBannerMeta}>Prepared {data.preparedDate}</Text>
       </View>
     </View>
   );
@@ -442,6 +462,7 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
     <Document>
       <Page size="LETTER" style={s.page}>
         <PageHeader data={data} />
+        {documentBanner(data)}
         <Text style={s.coverKicker}>Customer equipment proposal</Text>
         <Text style={hasCoverGallery ? [s.coverTitle, s.coverTitleCompact] : s.coverTitle}>Built for the job. Backed by QEP.</Text>
         <CoverGallery units={data.coverGalleryUnits} />
@@ -475,6 +496,7 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
 
       <Page size="LETTER" style={s.page}>
         <PageHeader data={data} />
+        {documentBanner(data)}
         <Text style={s.sectionTitle}>Configuration waterfall</Text>
         <Text style={s.sectionDeck}>Customer-visible charges and credits are shown from one proposal data model. Internal margin, cost, source IDs, and approval data are excluded.</Text>
         <LineItemsTable lines={data.lineItems} />
@@ -505,6 +527,7 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
 
       <Page size="LETTER" style={s.page}>
         <PageHeader data={data} />
+        {documentBanner(data)}
         <Text style={s.sectionTitle}>Commercial summary and payment scenarios</Text>
         <View style={s.totalsPanel}>
           <View style={s.totalRow}><Text style={s.totalLabel}>Equipment total</Text><Text style={s.totalValue}>{fmt(data.equipmentTotal)}</Text></View>
@@ -519,6 +542,11 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
           <View style={s.totalRow}><Text style={s.totalLabel}>Customer total</Text><Text style={s.totalValue}>{fmt(data.customerTotal)}</Text></View>
           {data.cashDown > 0 ? <View style={s.totalRow}><Text style={s.totalLabel}>Cash down applied</Text><Text style={[s.totalValue, s.creditText]}>-{fmt(data.cashDown)}</Text></View> : null}
           <View style={s.grandRow}><Text style={s.grandLabel}>{data.compliance.primaryTotalLabel}</Text><Text style={s.grandValue}>{fmt(selectedTotal(data))}</Text></View>
+        </View>
+        <View style={s.authorizationCard}>
+          <Text style={s.authorizationLabel}>Authorization</Text>
+          <Text style={s.authorizationLine}>Authorization: ______________________________</Text>
+          <Text style={s.authorizationLine}>Date: ____________________</Text>
         </View>
 
         {financingOptions.length > 0 ? (
@@ -537,6 +565,7 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
 
       <Page size="LETTER" style={s.page}>
         <PageHeader data={data} />
+        {documentBanner(data)}
         <Text style={s.sectionTitle}>QEP support, terms, and next steps</Text>
         <View style={s.supportCard}>
           <Text style={s.supportTitle}>Equipment, parts, rental, and service under one roof</Text>
@@ -562,6 +591,7 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
           {b.phone ? <Text style={s.termsLine}>Phone: {b.phone}</Text> : null}
           {b.email ? <Text style={s.termsLine}>Email: {b.email}</Text> : null}
         </View>
+        <Text style={s.closingLine}>Thank You For Your Business!</Text>
         <PageFooter data={data} />
       </Page>
     </Document>

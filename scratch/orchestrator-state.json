@@ -988,29 +988,11 @@
       "runtime_prerequisites": "blocked: R2 secrets missing for immutable PDF send path; APP_URL public HTTPS origin must be verified for QR validation"
     }
   },
-  "current_task": {
-    "task_id": "A1.1/QEP-1",
-    "status": "blocked_manual_staging_signoff_after_automated_regression",
-    "title": "Manual staging QA pass",
-    "stream": "A",
-    "wave": "A1",
-    "goal": "Turn the manual Quote Builder staging checklist into repeatable regression evidence for FL tax math, Columbia surtax cap, tax exemption badge, manager approval outcomes, and TILA copy.",
-    "changed_files": [
-      "supabase/functions/tax-calculator/tax-logic.test.ts",
-      "supabase/functions/quote-builder-v2/quote-approval-decisions-static.test.ts",
-      "apps/web/src/features/quote-builder/components/__tests__/TaxBreakdown.test.tsx"
-    ],
-    "verification": [
-      "bun test apps/web/src/features/quote-builder/components/__tests__/TaxBreakdown.test.tsx apps/web/src/features/quote-builder/lib/__tests__/quote-proposal-data.test.ts",
-      "deno test supabase/functions/tax-calculator/tax-logic.test.ts supabase/functions/quote-builder-v2/quote-approval-decisions-static.test.ts --allow-read --allow-env",
-      "bun run --filter @qep/web typecheck (clean temp worktree)",
-      "git diff --check -- scoped A1.1 files",
-      "bun run migrations:check (clean temp worktree, sequence 001..609)",
-      "bun run segment:gates --segment A1.1-manual-staging-qa-regression --ui (clean temp worktree)"
-    ],
-    "gate_report": "test-results/agent-gates/20260521T040155Z-A1.1-manual-staging-qa-regression.json",
-    "notes": "No runtime product code changed. This closes the code-testable portion of A1.1 and preserves explicit evidence for the exact checklist. A true manual staging walkthrough against live staging data/credentials and architect sign-off was not performed in this environment, so roadmap closure should remain blocked/manual-pending until Rylee + architect complete that external pass.",
-    "updated_at": "2026-05-21T04:01:55Z"
-  },
-  "updated_at": "2026-05-21T04:01:55Z"
+  "current_task": "A1.2",
+  "updated_at": "2026-05-21T04:11:44Z",
+  "linear": "QEP-2",
+  "status": "blocked_manual_pdf_parity_signoff_after_engineering_anchors",
+  "last_commit": null,
+  "last_gate": "test-results/agent-gates/20260521T041144Z-A1.2-q02699-pdf-parity-anchors.json",
+  "remaining_blocker": "Architect + Ryan must perform side-by-side staging PDF review against IntelliDealer Q02699 and record written sign-off."
 }
