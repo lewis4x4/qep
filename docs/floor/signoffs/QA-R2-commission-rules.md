@@ -1,5 +1,7 @@
 # QA-R2 Commission Rules Sign-Off
 
+Roadmap item: E5.2 / QEP-133
+Source evidence: `QEP (1)/CLAUDE_CODE_HANDOFF_2026-04-23.md` §9
 Status: unsigned. Final commission math is blocked until this document is completed and signed by Brian and Rylee.
 
 Owner: Rylee McKenzie and Brian Lewis.
