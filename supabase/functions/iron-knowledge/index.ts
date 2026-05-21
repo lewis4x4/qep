@@ -336,6 +336,9 @@ async function preRetrieveEvidence(
       // Continue with keyword-only retrieval
     }
 
+    // KL-2: role filtering must happen inside the retrieval RPC before ranking,
+    // not after the edge function receives matches. That prevents owner-only or
+    // stakeholder-only documents from leaking existence through low-rank hits.
     const { data, error } = await admin.rpc("retrieve_document_evidence", {
       query_embedding: embedding ? formatVectorLiteral(embedding) : null,
       keyword_query: message.slice(0, 200),

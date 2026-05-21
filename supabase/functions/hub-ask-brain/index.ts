@@ -90,11 +90,15 @@ Deno.serve(async (req) => {
     // 1. Embed query.
     const queryVec = await embedText(query);
 
-    // 2. RPC — workspace isolation is enforced inside the RPC.
+    // 2. RPC — workspace and role/audience isolation are enforced inside the RPC.
+    // Passing caller role/audience explicitly keeps service-style callers honest
+    // and ensures restricted sources are filtered before ranking.
     const { data: matches, error: rpcErr } = await auth.supabase.rpc("match_hub_knowledge", {
       p_query_embedding: `[${queryVec.join(",")}]`,
       p_match_count: matchCount,
       p_min_similarity: minSim,
+      p_caller_role: auth.role,
+      p_caller_audience: auth.audience,
     });
 
     if (rpcErr) {

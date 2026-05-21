@@ -566,6 +566,9 @@ verify_jwt = false
 [functions.iron-knowledge]
 verify_jwt = false
 
+[functions.iron-knowledge-ingest]
+verify_jwt = false
+
 [functions.iron-orchestrator]
 verify_jwt = false
 
