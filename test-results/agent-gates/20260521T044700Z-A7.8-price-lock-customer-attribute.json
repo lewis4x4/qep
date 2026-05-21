@@ -1,0 +1,17 @@
+{
+  "segment": "A7.8-price-lock-customer-attribute",
+  "linear": "QEP-168",
+  "status": "passed",
+  "mission_alignment": "pass",
+  "summary": "Added OEM-DP6 customer/account price-lock attributes to qrm_companies and exposed them through the crm_companies compatibility view. Defaults keep all existing customers unlocked.",
+  "verification": [
+    "bun run migrations:check passed in a clean detached worktree containing migration 611.",
+    "git diff --check passed for migration 611."
+  ],
+  "changed_files": [
+    "supabase/migrations/611_customer_price_lock_attribute.sql"
+  ],
+  "notes": [
+    "No customers are marked price-locked by default; this is a future hook for national accounts, government contracts, and annual price-lock agreements."
+  ]
+}

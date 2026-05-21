@@ -93,3 +93,11 @@
 - Schema adds price-change events, event diff items, quote reprice impacts, impact lines, and rep-created reprice drafts with RLS.
 - Verification: clean detached worktree with migration 610 ran `bun run migrations:check` successfully (`sequence 001..610`).
 - Gate artifact: test-results/agent-gates/20260521T044504Z-A7.1-oem-price-sheet-schema.json
+
+## A7.8 / QEP-168 — Price-lock customer attribute — 2026-05-21
+
+- Added migration 611 for OEM-DP6 customer/account price-lock attributes on `qrm_companies`.
+- Added `price_lock_active`, `price_lock_reason`, and `price_lock_expires_at`; default keeps every customer unlocked.
+- Exposed the fields through the `crm_companies` compatibility view and added an active-lock partial index.
+- Verification: clean detached worktree with migration 611 ran `bun run migrations:check` successfully (`sequence 001..611`); `git diff --check` passed.
+- Gate artifact: test-results/agent-gates/20260521T044700Z-A7.8-price-lock-customer-attribute.json
