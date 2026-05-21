@@ -109,3 +109,12 @@
 - Documented verdict in `docs/operations/B1.3_AI_BRIEFING_DEPTH_CHECK_2026-05-21.md`.
 - Roadmap should stay blocked/manual-pending until Rylee/Brian review `/floor` with real advisor data and decide whether named deals/blockers must appear in the top banner.
 - Gate artifact: test-results/agent-gates/20260521T044825Z-B1.3-ai-briefing-depth-check.json
+
+## C2.1 / QEP-69 — OEM master schema + resolver — 2026-05-21
+
+- Added migration 612 for the OEM master schema and resolver.
+- Created `public.oems` with workspace-scoped RLS, OEM parent/brand metadata, source-format and cadence fields, active/deleted lifecycle fields, and initial OEM seed rows.
+- Extended `public.qb_price_sheets` with OEM linkage/snapshot fields and resolver metadata.
+- Linked existing `oem_dealer_cost_tiers` rows to canonical OEM records and added `public.resolve_oem_cost(oem_key, brand_key, list_price_cents, effective_on, workspace_id)`.
+- Verification: clean detached worktree ran `bun run migrations:check` successfully (`sequence 001..612`) and full `bun run segment:gates --segment C2.1-oem-master-schema --no-chaos` passed.
+- Gate artifact: test-results/agent-gates/20260521T045721Z-C2.1-oem-master-schema.json

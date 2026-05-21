@@ -994,5 +994,22 @@
   "status": "blocked_manual_ai_briefing_depth_signoff",
   "last_commit": null,
   "last_gate": "test-results/agent-gates/20260521T044825Z-B1.3-ai-briefing-depth-check.json",
-  "remaining_blocker": "Rylee/Brian must review /floor with real advisor data and decide if the top AI briefing needs named deals/blockers/next moves."
+  "remaining_blocker": "Rylee/Brian must review /floor with real advisor data and decide if the top AI briefing needs named deals/blockers/next moves.",
+  "roadmap_progress": [
+    {
+      "task_id": "C2.1/QEP-69",
+      "title": "Slice 5.1 \u2014 OEM master schema + resolver",
+      "status": "complete_pending_commit",
+      "updated_at": "2026-05-21T04:57:21Z",
+      "changed_files": [
+        "supabase/migrations/612_oem_master_schema_resolver.sql",
+        "test-results/agent-gates/20260521T045721Z-C2.1-oem-master-schema.json",
+        "scratch/orchestrator-log.md"
+      ],
+      "verification": [
+        "clean detached worktree: bun run migrations:check -> sequence 001..612",
+        "clean detached worktree: bun run segment:gates --segment C2.1-oem-master-schema --no-chaos -> PASS"
+      ]
+    }
+  ]
 }
