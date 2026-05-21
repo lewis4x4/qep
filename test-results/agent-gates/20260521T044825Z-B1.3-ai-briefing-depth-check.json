@@ -1,0 +1,18 @@
+{
+  "segment": "B1.3-ai-briefing-depth-check",
+  "linear": "QEP-47",
+  "status": "blocked_manual_signoff",
+  "mission_alignment": "pass",
+  "summary": "Code inspection shows the advisor floor briefing uses live daily briefing, priority actions, QRM pipeline stats, closing-soon count, and explicit degraded/empty states. It is ready for operational review, but the transcript implication may require named deals/blockers in the top banner, which needs Rylee/Brian judgment against real data.",
+  "verification": [
+    "Read IRON_FLOOR_AUDIT_2026-05-17 §3.3.",
+    "Inspected AdvisorBriefingBanner, AiBriefingCard, useFloorNarrative, and static-narrative implementation.",
+    "Documented code evidence and remaining manual signoff criteria in docs/operations/B1.3_AI_BRIEFING_DEPTH_CHECK_2026-05-21.md."
+  ],
+  "blockers": [
+    "Rylee/Brian must open /floor with real advisor data and decide whether count/value/priority summaries are sufficient or whether top banner must name specific deals, blockers, and next moves."
+  ],
+  "changed_files": [
+    "docs/operations/B1.3_AI_BRIEFING_DEPTH_CHECK_2026-05-21.md"
+  ]
+}

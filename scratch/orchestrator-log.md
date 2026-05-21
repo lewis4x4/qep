@@ -101,3 +101,11 @@
 - Exposed the fields through the `crm_companies` compatibility view and added an active-lock partial index.
 - Verification: clean detached worktree with migration 611 ran `bun run migrations:check` successfully (`sequence 001..611`); `git diff --check` passed.
 - Gate artifact: test-results/agent-gates/20260521T044700Z-A7.8-price-lock-customer-attribute.json
+
+## B1.3 / QEP-47 — AI briefing depth check — 2026-05-21
+
+- Inspected the referenced audit section and current advisor briefing implementation.
+- Found the current banner uses live daily briefing data, priority actions, QRM pipeline stats, closing-soon count, and explicit degraded/empty states.
+- Documented verdict in `docs/operations/B1.3_AI_BRIEFING_DEPTH_CHECK_2026-05-21.md`.
+- Roadmap should stay blocked/manual-pending until Rylee/Brian review `/floor` with real advisor data and decide whether named deals/blockers must appear in the top banner.
+- Gate artifact: test-results/agent-gates/20260521T044825Z-B1.3-ai-briefing-depth-check.json

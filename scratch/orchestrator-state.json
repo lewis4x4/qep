@@ -988,11 +988,11 @@
       "runtime_prerequisites": "blocked: R2 secrets missing for immutable PDF send path; APP_URL public HTTPS origin must be verified for QR validation"
     }
   },
-  "current_task": "A7.8",
-  "updated_at": "2026-05-21T04:48:30Z",
-  "linear": "QEP-168",
-  "status": "price_lock_attribute_ready",
+  "current_task": "B1.3",
+  "updated_at": "2026-05-21T04:51:00Z",
+  "linear": "QEP-47",
+  "status": "blocked_manual_ai_briefing_depth_signoff",
   "last_commit": null,
-  "last_gate": "test-results/agent-gates/20260521T044700Z-A7.8-price-lock-customer-attribute.json",
-  "remaining_blocker": null
+  "last_gate": "test-results/agent-gates/20260521T044825Z-B1.3-ai-briefing-depth-check.json",
+  "remaining_blocker": "Rylee/Brian must review /floor with real advisor data and decide if the top AI briefing needs named deals/blockers/next moves."
 }
