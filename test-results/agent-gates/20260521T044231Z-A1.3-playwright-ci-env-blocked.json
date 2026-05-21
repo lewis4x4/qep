@@ -1,0 +1,28 @@
+{
+  "segment": "A1.3-playwright-ci-env-vars",
+  "linear": "QEP-3",
+  "status": "blocked",
+  "mission_alignment": "pass",
+  "summary": "GitHub Actions Playwright secrets are wired and the e2e-staging workflow now requires email, password, and aged equipment ID before running authenticated staging e2e. Staging default URL was corrected from dead qep.blackrockai.co DNS to the reachable Netlify production deployment. Authenticated specs no longer skip; they sign in and execute against staging, but full pass is blocked downstream because the deployed quote happy path reaches Document with Generate Preview PDF disabled.",
+  "verification": [
+    "ruby YAML parse passed for .github/workflows/e2e-staging.yml",
+    "git diff --check passed for A1.3 files",
+    "bun --filter @qep/web typecheck passed",
+    "gh secret list confirms PLAYWRIGHT_TEST_EMAIL, PLAYWRIGHT_TEST_PASSWORD, PLAYWRIGHT_AGED_EQUIPMENT_ID exist",
+    "Focused deployed Playwright run: tests/e2e/quote-wizard-happy-path.spec.ts ran 2 tests; unauthenticated gate passed; authenticated flow signed in, loaded catalog data, reached Document, then failed because Generate Preview PDF remained disabled"
+  ],
+  "blockers": [
+    {
+      "type": "deployed_app_readiness",
+      "detail": "Generate Preview PDF remains disabled on https://qualityequipmentparts.netlify.app during the authenticated quote happy path after approval/document navigation. This is no longer a missing-CI-secrets skip; it is a quote/document readiness blocker exposed by wired credentials."
+    }
+  ],
+  "changed_files": [
+    ".github/workflows/e2e-staging.yml",
+    "apps/web/package.json",
+    "apps/web/README.md",
+    "apps/web/tests/e2e/TODO_PLAYWRIGHT.md",
+    "apps/web/tests/e2e/helpers/auth.ts",
+    "apps/web/tests/e2e/helpers/quote-wizard.ts"
+  ]
+}

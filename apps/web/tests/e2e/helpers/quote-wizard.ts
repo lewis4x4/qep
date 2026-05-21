@@ -12,7 +12,7 @@ export async function expectWizardStep(page: Page, stepNumber: number): Promise<
 
 export async function startProspectQuote(page: Page): Promise<void> {
   await page.getByTestId("wizard-quote-for-prospect").first().click();
-  await expect(page.getByText(/Walk-in prospect/i).first()).toBeVisible({ timeout: 15_000 });
+  await expectWizardStep(page, 2);
 }
 
 export async function clickWizardProgressPill(page: Page, stepId: string): Promise<void> {
@@ -29,7 +29,7 @@ export async function advanceWizardNext(page: Page, label: string): Promise<void
 }
 
 export async function clickStepFooterNext(page: Page, name: string | RegExp): Promise<void> {
-  await page.getByRole("button", { name }).click();
+  await page.getByRole("button", { name }).last().click();
 }
 
 export async function waitForQuoteAutosave(page: Page): Promise<void> {
@@ -38,6 +38,10 @@ export async function waitForQuoteAutosave(page: Page): Promise<void> {
 
 export async function selectFirstCatalogEquipment(page: Page): Promise<void> {
   const catalogButtons = page.locator(".max-h-\\[420px\\] button");
+  const searchInput = page.getByPlaceholder(/Search make, model, category/i);
+  if (await searchInput.isVisible().catch(() => false)) {
+    await searchInput.press("Enter");
+  }
   await expect(catalogButtons.first()).toBeVisible({ timeout: 90_000 });
 
   const inStock = catalogButtons.filter({ hasText: "In stock" });
@@ -45,17 +49,17 @@ export async function selectFirstCatalogEquipment(page: Page): Promise<void> {
     await inStock.first().click();
   } else {
     await catalogButtons.first().click();
-    const availabilityCheck = page.getByRole("button", { name: "Request availability check" });
+    const availabilityCheck = page.getByRole("button", { name: "Request availability check" }).first();
     if (await availabilityCheck.isVisible().catch(() => false)) {
       await availabilityCheck.click();
     }
   }
 
-  await expect(page.getByRole("button", { name: /^Configure/i })).toBeEnabled({ timeout: 90_000 });
+  await expect(page.getByRole("button", { name: /^Configure/i }).last()).toBeEnabled({ timeout: 90_000 });
 }
 
 export async function fillWhyThisMachine(page: Page): Promise<void> {
-  await page.getByPlaceholder(/Explain why this unit fits/i).fill(
+  await page.getByRole("textbox", { name: /why this unit fits/i }).fill(
     "E2E: selected for job fit, terrain, and delivery timeline.",
   );
   await page.getByRole("checkbox", { name: /I reviewed this language/i }).check();
@@ -112,7 +116,7 @@ export async function ensureApprovalForCustomerFacing(page: Page): Promise<void>
 
 export async function walkFromEquipmentToReview(page: Page): Promise<void> {
   await expectWizardStep(page, 2);
-  await expect(page.getByRole("button", { name: /^Configure/i })).toBeEnabled({ timeout: 90_000 });
+  await expect(page.getByRole("button", { name: /^Configure/i }).last()).toBeEnabled({ timeout: 90_000 });
   await clickStepFooterNext(page, /^Configure/i);
 
   await expectWizardStep(page, 3);
@@ -128,7 +132,7 @@ export async function walkFromEquipmentToReview(page: Page): Promise<void> {
   await clickStepFooterNext(page, /^Financing/i);
 
   await expectWizardStep(page, 7);
-  await page.getByRole("button", { name: "Cash" }).click();
+  await page.getByTestId("financing-tabs").getByRole("button", { name: "Cash" }).click();
   await clickStepFooterNext(page, /^Quote details/i);
 
   await expectWizardStep(page, 8);

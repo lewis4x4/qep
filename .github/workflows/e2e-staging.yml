@@ -1,12 +1,11 @@
 # Quote Builder Playwright suite. Pull requests run against their Netlify
 # deploy preview; workflow_dispatch/default staging runs use
-# https://qep.blackrockai.co.
+# https://qualityequipmentparts.netlify.app.
 # IRON_WIZARD_DECOMPOSITION_PLAN_2026-05-15 §7 step 5.
 #
-# Required repo secrets (same-repo PRs):
+# Required repo secrets (same-repo PRs / staging dispatch):
 #   PLAYWRIGHT_TEST_EMAIL — staging rep/admin test user
 #   PLAYWRIGHT_TEST_PASSWORD
-# Optional:
 #   PLAYWRIGHT_AGED_EQUIPMENT_ID — CRM UUID for approval-bypass spec (365+ day received_at)
 name: E2E Staging
 
@@ -45,9 +44,10 @@ jobs:
         env:
           PLAYWRIGHT_TEST_EMAIL: ${{ secrets.PLAYWRIGHT_TEST_EMAIL }}
           PLAYWRIGHT_TEST_PASSWORD: ${{ secrets.PLAYWRIGHT_TEST_PASSWORD }}
+          PLAYWRIGHT_AGED_EQUIPMENT_ID: ${{ secrets.PLAYWRIGHT_AGED_EQUIPMENT_ID }}
         run: |
-          if [ -z "$PLAYWRIGHT_TEST_EMAIL" ] || [ -z "$PLAYWRIGHT_TEST_PASSWORD" ]; then
-            echo "::warning::PLAYWRIGHT_TEST_EMAIL / PLAYWRIGHT_TEST_PASSWORD not set — running guest route smoke only."
+          if [ -z "$PLAYWRIGHT_TEST_EMAIL" ] || [ -z "$PLAYWRIGHT_TEST_PASSWORD" ] || [ -z "$PLAYWRIGHT_AGED_EQUIPMENT_ID" ]; then
+            echo "::warning::PLAYWRIGHT_TEST_EMAIL / PLAYWRIGHT_TEST_PASSWORD / PLAYWRIGHT_AGED_EQUIPMENT_ID not all set — running guest route smoke only."
           fi
 
       - name: Install Playwright Chromium
@@ -71,14 +71,14 @@ jobs:
       - name: Run quote builder staging e2e
         env:
           CI: "true"
-          PLAYWRIGHT_BASE_URL: ${{ github.event_name == 'pull_request' && format('https://deploy-preview-{0}--qualityequipmentparts.netlify.app', github.event.pull_request.number) || 'https://qep.blackrockai.co' }}
+          PLAYWRIGHT_BASE_URL: ${{ github.event_name == 'pull_request' && format('https://deploy-preview-{0}--qualityequipmentparts.netlify.app', github.event.pull_request.number) || 'https://qualityequipmentparts.netlify.app' }}
           PLAYWRIGHT_SKIP_WEBSERVER: "1"
           PLAYWRIGHT_TEST_EMAIL: ${{ secrets.PLAYWRIGHT_TEST_EMAIL }}
           PLAYWRIGHT_TEST_PASSWORD: ${{ secrets.PLAYWRIGHT_TEST_PASSWORD }}
           PLAYWRIGHT_AGED_EQUIPMENT_ID: ${{ secrets.PLAYWRIGHT_AGED_EQUIPMENT_ID }}
         run: |
-          if [ -z "$PLAYWRIGHT_TEST_EMAIL" ] || [ -z "$PLAYWRIGHT_TEST_PASSWORD" ]; then
-            echo "Authenticated secrets unavailable (fork PR) — guest route smoke only."
+          if [ -z "$PLAYWRIGHT_TEST_EMAIL" ] || [ -z "$PLAYWRIGHT_TEST_PASSWORD" ] || [ -z "$PLAYWRIGHT_AGED_EQUIPMENT_ID" ]; then
+            echo "Full staging e2e secrets unavailable (fork PR or missing repo secret) — guest route smoke only."
             bunx playwright test tests/e2e/quote-wizard-happy-path.spec.ts -g "unauthenticated visit is gated"
           else
             bun run test:e2e:staging

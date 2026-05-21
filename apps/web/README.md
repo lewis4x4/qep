@@ -41,7 +41,7 @@ bun run test:e2e:ui
 | `PLAYWRIGHT_AGED_EQUIPMENT_ID` | CRM equipment UUID for approval-bypass spec |
 | `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | Loaded from `.env` for the dev server; Playwright falls back to test placeholders if unset |
 
-Staging CI uses `bun run test:e2e:staging` against `https://qep.blackrockai.co` with repo secrets.
+Staging CI uses `bun run test:e2e:staging` against `https://qualityequipmentparts.netlify.app` with repo secrets.
 
 Skipped specs and follow-ups: `tests/e2e/TODO_PLAYWRIGHT.md`.
 

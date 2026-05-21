@@ -74,3 +74,14 @@
 - 2026-05-21T04:01:55Z — Advanced A1.1/QEP-1 (manual staging QA pass) by converting the checklist into repeatable automated regression evidence. Added exact Columbia 1.5% county surtax-on-$5K-cap coverage, Tax Exempt badge/no-tax-total UI coverage, and static approval-decision routing coverage for approved, approved_with_conditions, changes_requested, and rejected outcomes; existing proposal tests continue to prove TILA-aware copy on payment-math surfaces. True manual staging/human sign-off remains external, so the roadmap should be blocked/manual-pending rather than falsely shipped. Verification passed: focused Bun/Deno tests, web typecheck in clean temp worktree, migrations:check, and full segment gates with UI/design review in clean temp worktree. Gate: test-results/agent-gates/20260521T040155Z-A1.1-manual-staging-qa-regression.json
 
 - 2026-05-21T04:11:44Z — Advanced A1.2/QEP-2 (Q02699 PDF parity sign-off) by adding actual React-PDF parity anchors for the legal estimate banner, authorization signature/date lines, and exact Thank You For Your Business closing, then locking those anchors alongside existing printable HTML/TILA/customer-safe proposal coverage. True side-by-side staging review against IntelliDealer Q02699 remains external and should stay blocked/manual-pending rather than falsely shipped. Verification passed: focused quote-proposal Bun tests, @qep/web typecheck, migrations:check, and full segment gates with UI/design review in a clean detached temp worktree. Gate: test-results/agent-gates/20260521T041144Z-A1.2-q02699-pdf-parity-anchors.json
+
+## A1.3 / QEP-3 — Playwright CI env vars wired — 2026-05-21
+
+- Wired/verified repo secrets: PLAYWRIGHT_TEST_EMAIL, PLAYWRIGHT_TEST_PASSWORD, PLAYWRIGHT_AGED_EQUIPMENT_ID.
+- Corrected staging e2e target from dead qep.blackrockai.co DNS to https://qualityequipmentparts.netlify.app.
+- Hardened e2e-staging workflow so authenticated suite only runs when all three secrets exist; otherwise guest smoke only.
+- Fixed Playwright auth helper to wait for Supabase password grant + local auth token before navigating to protected routes.
+- Updated quote wizard helpers for current deployed UI: explicit catalog search, source-required availability request, non-strict footer buttons, current financing tab, current Why-this-machine textbox name.
+- Verification: YAML parse pass, diff-check pass, @qep/web typecheck pass, focused deployed quote happy path now signs in and executes instead of skipping.
+- Blocker: focused deployed quote happy path reaches Document but Generate Preview PDF remains disabled; A1.3 is blocked on downstream quote/document readiness, not missing CI env.
+- Gate artifact: test-results/agent-gates/20260521T044231Z-A1.3-playwright-ci-env-blocked.json

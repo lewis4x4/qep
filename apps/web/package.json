@@ -14,7 +14,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:install": "playwright install --with-deps chromium",
-    "test:e2e:staging": "PLAYWRIGHT_BASE_URL=https://qep.blackrockai.co PLAYWRIGHT_SKIP_WEBSERVER=1 playwright test",
+    "test:e2e:staging": "PLAYWRIGHT_BASE_URL=https://qualityequipmentparts.netlify.app PLAYWRIGHT_SKIP_WEBSERVER=1 playwright test",
     "bundle:analyze": "ANALYZE=true bun run build",
     "bundle:check": "node ../../scripts/check-web-bundle-size.mjs",
     "lighthouse:mobile": "lhci autorun --config=.lighthouserc.cjs",
