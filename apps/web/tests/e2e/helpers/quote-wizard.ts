@@ -126,6 +126,7 @@ export async function walkFromEquipmentToReview(page: Page): Promise<void> {
   await clickStepFooterNext(page, /^Pricing/i);
 
   await expectWizardStep(page, 5);
+  await page.getByRole("button", { name: /Government exempt/i }).click();
   await clickStepFooterNext(page, /^Promotions/i);
 
   await expectWizardStep(page, 6);
