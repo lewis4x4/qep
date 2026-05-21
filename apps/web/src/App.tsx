@@ -419,6 +419,9 @@ const MarginExceptionsPage = lazy(() =>
 const BriefRoutes = lazy(() =>
   import("./features/brief/BriefRoutes").then((m) => ({ default: m.BriefRoutes }))
 );
+const DecisionsTriagePage = lazy(() =>
+  import("./features/decisions/pages/DecisionsTriagePage").then((m) => ({ default: m.DecisionsTriagePage }))
+);
 const OwnerBriefingPage = lazy(() =>
   import("./features/exec/pages/OwnerBriefingPage").then((m) => ({ default: m.OwnerBriefingPage }))
 );
@@ -1936,6 +1939,16 @@ function App() {
                       subrole={profile.stakeholder_subrole}
                       canAdminister={["admin", "owner"].includes(profile.role)}
                     />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/decisions/triage"
+                element={
+                  ["admin", "owner"].includes(profile.role) ? (
+                    <DecisionsTriagePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
