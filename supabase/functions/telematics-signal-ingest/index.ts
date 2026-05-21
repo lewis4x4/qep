@@ -26,13 +26,18 @@
  *   re-scans don't double-ingest the same fault.
  */
 
-import { createAdminClient, resolveCallerContext } from "../_shared/dge-auth.ts";
-import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import {
-  ingestSignal,
-  type SignalSeverity,
-} from "../_shared/qrm-signals.ts";
+  createAdminClient,
+  resolveCallerContext,
+} from "../_shared/dge-auth.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
+import { ingestSignal, type SignalSeverity } from "../_shared/qrm-signals.ts";
 import type { RouterCtx } from "../_shared/crm-router-service.ts";
+import { genericTelematicsAdapter } from "../_shared/adapters/generic-telematics.ts";
+import {
+  buildTelematicsDedupeKey,
+  type NormalizedTelematicsSignal,
+} from "../_shared/telematics-adapter.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -42,51 +47,25 @@ const ALLOWED_ORIGINS = [
 
 function corsHeaders(origin: string | null) {
   return {
-    "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin) ? origin : "",
+    "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin)
+      ? origin
+      : "",
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type, x-internal-service-secret",
     "Vary": "Origin",
   };
 }
 
-type TelematicsEventKind = "fault" | "idle";
-
-interface TelematicsEventPayload {
-  /** Provider-issued device id; maps to telematics_feeds.device_id. */
-  deviceId: string;
-  /** Fault or idle. */
-  kind: TelematicsEventKind;
-  /** For fault: DTC / SPN / FMI string. For idle: "idle". */
-  code?: string | null;
-  /** Human-readable summary from the provider. */
-  description?: string | null;
-  /** Provider severity: info | warning | critical, pre-normalized. */
-  severity?: SignalSeverity;
-  /** Provider event id — used as dedupe_key prefix when present. */
-  providerEventId?: string | null;
-  /** Event timestamp; falls back to now. */
-  occurredAt?: string | null;
-  /** Provider tag: "geotab" | "samsara" | "cat_link" | etc. */
-  source?: string | null;
-  /** Optional raw provider payload for later forensic inspection. */
-  raw?: Record<string, unknown>;
-}
-
-function bad(status: number, code: string, message: string, ch: Record<string, string>): Response {
+function bad(
+  status: number,
+  code: string,
+  message: string,
+  ch: Record<string, string>,
+): Response {
   return new Response(JSON.stringify({ ok: false, error: code, message }), {
     status,
     headers: { ...ch, "Content-Type": "application/json" },
   });
-}
-
-function validate(body: Partial<TelematicsEventPayload>): TelematicsEventPayload {
-  if (!body.deviceId || typeof body.deviceId !== "string") {
-    throw new Error("VALIDATION_ERROR:deviceId");
-  }
-  if (body.kind !== "fault" && body.kind !== "idle") {
-    throw new Error("VALIDATION_ERROR:kind");
-  }
-  return body as TelematicsEventPayload;
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -117,28 +96,46 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return bad(400, "INVALID_JSON", "Request body must be valid JSON.", ch);
   }
 
-  let payload: TelematicsEventPayload;
+  const rawBody = raw as Record<string, unknown>;
+  let payload: NormalizedTelematicsSignal;
   try {
-    payload = validate(raw as Partial<TelematicsEventPayload>);
+    payload = genericTelematicsAdapter.normalizeSignal(rawBody);
   } catch (err) {
-    return bad(400, "VALIDATION_ERROR", err instanceof Error ? err.message : "validation", ch);
+    return bad(
+      400,
+      "VALIDATION_ERROR",
+      err instanceof Error ? err.message : "validation",
+      ch,
+    );
   }
+  const providerFilter = typeof rawBody.provider === "string" ||
+      typeof rawBody.provider_key === "string" ||
+      typeof rawBody.source === "string"
+    ? payload.provider
+    : null;
 
   try {
     // Resolve device → equipment → workspace. If there is no active
     // telematics_feed for this device we 404 — the caller is expected to
     // fix the feed registration rather than blindly insert stray signals.
-    const { data: feed, error: feedErr } = await admin
+    let feedQuery = admin
       .from("telematics_feeds")
       .select("equipment_id, workspace_id, is_active")
       .eq("device_id", payload.deviceId)
-      .eq("is_active", true)
-      .limit(1)
-      .maybeSingle();
+      .eq("is_active", true);
+
+    if (providerFilter) {
+      feedQuery = feedQuery.eq("provider", providerFilter);
+    }
+    if (payload.workspaceId) {
+      feedQuery = feedQuery.eq("workspace_id", payload.workspaceId);
+    }
+
+    const { data: feeds, error: feedErr } = await feedQuery.limit(2);
 
     if (feedErr) throw feedErr;
 
-    if (!feed) {
+    if (!feeds || feeds.length === 0) {
       return bad(
         404,
         "UNKNOWN_DEVICE",
@@ -147,28 +144,40 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    const feedRow = feed as {
+    if (feeds.length > 1) {
+      return bad(
+        409,
+        "AMBIGUOUS_DEVICE",
+        "Provider or workspace required for this device_id.",
+        ch,
+      );
+    }
+
+    const feedRow = feeds[0] as {
       equipment_id: string;
       workspace_id: string;
     };
 
-    const occurredAt = payload.occurredAt ?? new Date().toISOString();
+    const occurredAt = payload.occurredAt;
 
     // Build a stable dedupe key. If the provider gave us an event id, use it
     // verbatim. Otherwise synthesize one from the event's intrinsic identity
     // so re-scans / retry storms collapse on our end.
-    const dedupeKey = payload.providerEventId
-      ? `telematics:${payload.source ?? "unknown"}:${payload.providerEventId}`
-      : `telematics:${payload.source ?? "unknown"}:${payload.deviceId}:${payload.kind}:${payload.code ?? "none"}:${occurredAt}`;
+    const dedupeKey = buildTelematicsDedupeKey(payload);
 
-    const signalKind = payload.kind === "fault" ? "telematics_fault" : "telematics_idle";
+    const signalKind = payload.kind === "fault"
+      ? "telematics_fault"
+      : "telematics_idle";
 
     // Severity default: faults escalate to "high" if not specified — idle
     // tops out at "medium" since operators triage it aggregationally.
-    const defaultSeverity: SignalSeverity = payload.kind === "fault" ? "high" : "medium";
+    const defaultSeverity: SignalSeverity = payload.kind === "fault"
+      ? "high"
+      : "medium";
 
     const title = payload.kind === "fault"
-      ? `Fault ${payload.code ?? ""} on equipment ${feedRow.equipment_id}`.trim()
+      ? `Fault ${payload.code ?? ""} on equipment ${feedRow.equipment_id}`
+        .trim()
       : `Idle event on equipment ${feedRow.equipment_id}`;
 
     const ctx = {
@@ -193,7 +202,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       workspaceId: feedRow.workspace_id,
       kind: signalKind,
       severity: payload.severity ?? defaultSeverity,
-      source: payload.source ?? "telematics",
+      source: payload.provider,
       title,
       description: payload.description ?? null,
       entityType: "equipment",

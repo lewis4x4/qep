@@ -11,11 +11,16 @@
  * Auth: service_role (device webhooks) or admin/owner (manual)
  */
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import {
+  optionsResponse,
+  safeJsonError,
+  safeJsonOk,
+} from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import type { TelematicsUsageSnapshot } from "../../../shared/qep-moonshot-contracts.ts";
+import { genericTelematicsAdapter } from "../_shared/adapters/generic-telematics.ts";
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
 
@@ -45,7 +50,11 @@ Deno.serve(async (req) => {
       const auth = await requireServiceUser(authHeader, origin);
       if (!auth.ok) return auth.response;
       if (!["admin", "owner"].includes(auth.role)) {
-        return safeJsonError("Telematics requires admin/owner role", 403, origin);
+        return safeJsonError(
+          "Telematics requires admin/owner role",
+          403,
+          origin,
+        );
       }
 
       supabaseAdmin = createClient(
@@ -76,38 +85,71 @@ Deno.serve(async (req) => {
       return safeJsonError("Method not allowed", 405, origin);
     }
 
-    const body = await req.json() as {
-      device_id?: string;
-      hours?: number | null;
-      lat?: number | null;
-      lng?: number | null;
-    };
+    const body = await req.json() as Record<string, unknown>;
 
-    // POST /reading: Ingest a single reading
+    // POST /reading: Ingest a single provider-normalized reading.
     if (action === "reading") {
-      if (!body.device_id) {
-        return safeJsonError("device_id required", 400, origin);
+      let normalized;
+      try {
+        normalized = genericTelematicsAdapter.normalizeReading(body);
+      } catch (error) {
+        return safeJsonError(
+          error instanceof Error ? error.message : "Invalid reading",
+          400,
+          origin,
+        );
       }
 
       const reading: TelematicsUsageSnapshot = {
-        deviceId: body.device_id,
-        hours: body.hours ?? null,
-        lat: body.lat ?? null,
-        lng: body.lng ?? null,
-        readingAt: new Date().toISOString(),
+        deviceId: normalized.deviceId,
+        hours: normalized.hours,
+        lat: normalized.lat,
+        lng: normalized.lng,
+        readingAt: normalized.readingAt,
       };
+      const providerFilter = typeof body.provider === "string" ||
+          typeof body.provider_key === "string" ||
+          typeof body.source === "string"
+        ? normalized.provider
+        : null;
 
-      // Find the feed for this device
-      const { data: feed } = await supabaseAdmin
+      // Find the feed for this provider/device. Workspace/provider fields are
+      // optional for legacy callers, but when present they prevent cross-tenant
+      // or cross-provider ambiguity under service-role ingestion.
+      let feedQuery = supabaseAdmin
         .from("telematics_feeds")
         .select("id, equipment_id, subscription_id")
         .eq("device_id", reading.deviceId)
-        .eq("is_active", true)
-        .maybeSingle();
+        .eq("is_active", true);
 
-      if (!feed) {
-        return safeJsonError("Unknown device — no active feed found", 404, origin);
+      if (providerFilter) {
+        feedQuery = feedQuery.eq("provider", providerFilter);
       }
+      if (normalized.workspaceId) {
+        feedQuery = feedQuery.eq("workspace_id", normalized.workspaceId);
+      }
+
+      const { data: feeds, error: feedError } = await feedQuery.limit(2);
+      if (feedError) {
+        return safeJsonError("Failed to resolve telematics feed", 500, origin);
+      }
+
+      if (!feeds || feeds.length === 0) {
+        return safeJsonError(
+          "Unknown device — no active feed found",
+          404,
+          origin,
+        );
+      }
+      if (feeds.length > 1) {
+        return safeJsonError(
+          "Ambiguous device — provider or workspace required",
+          409,
+          origin,
+        );
+      }
+
+      const feed = feeds[0];
 
       // Update feed with latest reading
       await supabaseAdmin
@@ -144,6 +186,10 @@ Deno.serve(async (req) => {
   } catch (err) {
     captureEdgeException(err, { fn: "telematics-ingest", req });
     console.error("telematics-ingest error:", err);
-    return safeJsonError("Internal server error", 500, req.headers.get("origin"));
+    return safeJsonError(
+      "Internal server error",
+      500,
+      req.headers.get("origin"),
+    );
   }
 });
