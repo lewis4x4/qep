@@ -1,0 +1,278 @@
+{
+  "mode": "apply",
+  "workspaceId": "default",
+  "generatedAt": "2026-05-21T05:16:55.113Z",
+  "sourceCount": 2,
+  "aggregate": {
+    "parsedRows": 829,
+    "baseUpserts": 69,
+    "optionAssociations": 2726,
+    "rowsSkipped": 44,
+    "baseInserted": 69,
+    "baseUpdated": 0,
+    "optionInserted": 2726,
+    "optionUpdated": 0
+  },
+  "sources": [
+    {
+      "brand": "ASV",
+      "manufacturer": "asv",
+      "parentOem": "YCENA",
+      "workspaceId": "default",
+      "sourceFilename": "ASV-Price-Book-NA-EFF-14APR2026.pdf",
+      "sourceSha256": "447b597ed66feb9ac0323003ff9c3de5ba69155c5af9c9762e5edcff05f173c1",
+      "sourceType": "ycena_price_book_pdf_text",
+      "effectiveDate": "2026-04-15",
+      "pricingUpdatedDate": "2026-04-15",
+      "publishedDate": "2026-03-31",
+      "dealerDiscountOffListPct": 30,
+      "parserSummary": {
+        "rowCount": 523,
+        "baseRowCount": 41,
+        "optionRowCount": 482,
+        "skippedRowCount": 0,
+        "modelCount": 12,
+        "models": [
+          "RS-75",
+          "RT-135",
+          "RT-40",
+          "RT-50",
+          "RT-65-1C",
+          "TL25RP",
+          "TL40RP",
+          "TL50RP",
+          "VS-75",
+          "VT-100",
+          "VT-75-1C",
+          "VT-80-1C"
+        ]
+      },
+      "importSummary": {
+        "parsedRows": 523,
+        "parsedBaseRows": 41,
+        "parsedOptionRows": 482,
+        "baseUpserts": 41,
+        "optionAssociations": 1648,
+        "rowsSkipped": 28,
+        "modelCount": 12,
+        "models": [
+          "RS-75",
+          "RT-135",
+          "RT-40",
+          "RT-50",
+          "RT-65-1C",
+          "TL25RP",
+          "TL40RP",
+          "TL50RP",
+          "VS-75",
+          "VT-100",
+          "VT-75-1C",
+          "VT-80-1C"
+        ]
+      },
+      "skippedPreview": {
+        "parser": [],
+        "transform": [
+          {
+            "baseNumber": "asv:4004-218",
+            "optionNumber": "asv:2015-598",
+            "model": "TL50RP",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "baseNumber": "asv:4004-219",
+            "optionNumber": "asv:2015-598",
+            "model": "TL50RP",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "baseNumber": "asv:4004-220",
+            "optionNumber": "asv:2015-598",
+            "model": "TL50RP",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "baseNumber": "asv:4004-221",
+            "optionNumber": "asv:2015-598",
+            "model": "TL50RP",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "baseNumber": "asv:4004-218",
+            "optionNumber": "asv:2015-215",
+            "model": "TL50RP",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "baseNumber": "asv:4004-219",
+            "optionNumber": "asv:2015-215",
+            "model": "TL50RP",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "baseNumber": "asv:4004-220",
+            "optionNumber": "asv:2015-215",
+            "model": "TL50RP",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "baseNumber": "asv:4004-221",
+            "optionNumber": "asv:2015-215",
+            "model": "TL50RP",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "baseNumber": "asv:4003-002",
+            "optionNumber": "asv:2015-598",
+            "model": "RT-40",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "baseNumber": "asv:4003-003",
+            "optionNumber": "asv:2015-598",
+            "model": "RT-40",
+            "reason": "duplicate_option_for_base"
+          }
+        ]
+      },
+      "applied": {
+        "baseInserted": 41,
+        "baseUpdated": 0,
+        "optionInserted": 1648,
+        "optionUpdated": 0,
+        "run": {
+          "id": "cd2d3e60-e097-43de-b1e0-a390a43ebf18",
+          "created_at": "2026-05-21T05:16:53.485742+00:00",
+          "ran_at": "2026-05-21T05:16:53.485742+00:00"
+        }
+      }
+    },
+    {
+      "brand": "Yanmar",
+      "manufacturer": "yanmar",
+      "parentOem": "YCENA",
+      "workspaceId": "default",
+      "sourceFilename": "Yanmar-CE-Price-Book-EFF-14APR2026_v2.pdf",
+      "sourceSha256": "81ca7f4baf92ce03ecb29c0be21d223a69ad3f09302547fec85e0e7c36257544",
+      "sourceType": "ycena_price_book_pdf_text",
+      "effectiveDate": "2026-04-15",
+      "pricingUpdatedDate": "2026-04-14",
+      "publishedDate": "2026-05-01",
+      "dealerDiscountOffListPct": 30,
+      "parserSummary": {
+        "rowCount": 306,
+        "baseRowCount": 28,
+        "optionRowCount": 278,
+        "skippedRowCount": 0,
+        "modelCount": 10,
+        "models": [
+          "SV100-7B",
+          "SV40",
+          "TL100VS",
+          "TL25RP",
+          "TL40RP",
+          "TL50RP",
+          "TL65RS-1C",
+          "TL75VS-1C",
+          "TL80VS-1C",
+          "V10"
+        ]
+      },
+      "importSummary": {
+        "parsedRows": 306,
+        "parsedBaseRows": 28,
+        "parsedOptionRows": 278,
+        "baseUpserts": 28,
+        "optionAssociations": 1078,
+        "rowsSkipped": 16,
+        "modelCount": 10,
+        "models": [
+          "SV100-7B",
+          "SV40",
+          "TL100VS",
+          "TL25RP",
+          "TL40RP",
+          "TL50RP",
+          "TL65RS-1C",
+          "TL75VS-1C",
+          "TL80VS-1C",
+          "V10"
+        ]
+      },
+      "skippedPreview": {
+        "parser": [],
+        "transform": [
+          {
+            "baseNumber": "yanmar:4004-218",
+            "optionNumber": "yanmar:2015-598",
+            "model": "TL50RP",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "baseNumber": "yanmar:4004-219",
+            "optionNumber": "yanmar:2015-598",
+            "model": "TL50RP",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "baseNumber": "yanmar:4004-220",
+            "optionNumber": "yanmar:2015-598",
+            "model": "TL50RP",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "baseNumber": "yanmar:4004-221",
+            "optionNumber": "yanmar:2015-598",
+            "model": "TL50RP",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "baseNumber": "yanmar:4004-218",
+            "optionNumber": "yanmar:2015-215",
+            "model": "TL50RP",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "baseNumber": "yanmar:4004-219",
+            "optionNumber": "yanmar:2015-215",
+            "model": "TL50RP",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "baseNumber": "yanmar:4004-220",
+            "optionNumber": "yanmar:2015-215",
+            "model": "TL50RP",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "baseNumber": "yanmar:4004-221",
+            "optionNumber": "yanmar:2015-215",
+            "model": "TL50RP",
+            "reason": "duplicate_option_for_base"
+          },
+          {
+            "partNumber": "0405-478",
+            "model": "SV40",
+            "reason": "no_matching_base_for_model"
+          },
+          {
+            "partNumber": "0405-478",
+            "model": "SV40",
+            "reason": "no_matching_base_for_model"
+          }
+        ]
+      },
+      "applied": {
+        "baseInserted": 28,
+        "baseUpdated": 0,
+        "optionInserted": 1078,
+        "optionUpdated": 0,
+        "run": {
+          "id": "6b3d2688-fe1d-4c91-beda-eeee9b92ac6a",
+          "created_at": "2026-05-21T05:16:55.061804+00:00",
+          "ran_at": "2026-05-21T05:16:55.061804+00:00"
+        }
+      }
+    }
+  ]
+}

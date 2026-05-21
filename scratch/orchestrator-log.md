@@ -126,3 +126,11 @@
 - Added focused normalizer/parser tests plus an integration test proving ASV routes through parent YCENA cost tiers and renders dealer cost/tier evidence.
 - Verification: focused Bun tests passed, `apps/web` typecheck passed, and clean detached worktree full `bun run segment:gates --segment C2.2-admin-oems --ui --strict-design` passed after sourcing root env for authenticated CDO review.
 - Gate artifact: test-results/agent-gates/20260521T050907Z-C2.2-admin-oems.json
+## C2.4 / QEP-72 — ASV/Yanmar YCENA sample import — 2026-05-21
+
+- Added `scripts/oem/ycena-sample-import.mjs` for dry-run/apply imports from supplied ASV/Yanmar YCENA PDF price books.
+- The importer parses C2.3 output, brand-prefixes base numbers to avoid the legacy `unique(workspace_id, base_number)` collision, upserts `equipment_base_codes`, associates model-level options to each matching imported base in `equipment_options`, and records `equipment_base_codes_import_runs`.
+- Applied the live sample import to workspace `default`: ASV run `cd2d3e60-e097-43de-b1e0-a390a43ebf18` inserted 41 base rows + 1,648 option associations; Yanmar run `6b3d2688-fe1d-4c91-beda-eeee9b92ac6a` inserted 28 base rows + 1,078 option associations.
+- Verification: focused parser/import tests passed, supplied PDF dry-run produced 69 base upserts + 2,726 option associations, remote post-import spot check confirmed completed import runs and sample base/option rows, and clean detached worktree segment gates passed.
+- Import artifacts: test-results/oem-imports/20260521T051500Z-C2.4-ycena-sample-import-dry-run.json and test-results/oem-imports/20260521T051500Z-C2.4-ycena-sample-import-apply.json
+- Gate artifact: test-results/agent-gates/20260521T052005Z-C2.4-ycena-sample-import.json
