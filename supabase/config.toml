@@ -790,3 +790,9 @@ verify_jwt = false
 
 [functions.auto-triage-pipeline]
 verify_jwt = false
+
+[functions.decision-email-card]
+verify_jwt = false
+
+[functions.decision-magic-link]
+verify_jwt = false
