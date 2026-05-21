@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildOwnerDecisionActionPatch, normalizeTriageDecisionRows } from "../triage-api";
+import {
+  buildBrianDecisionNudgePatch,
+  buildOwnerDecisionActionPatch,
+  buildOwnerDecisionOpenPatch,
+  normalizeTriageDecisionRows,
+} from "../triage-api";
 
 describe("normalizeTriageDecisionRows", () => {
   it("normalizes rows and filters invalid statuses", () => {
@@ -21,7 +26,10 @@ describe("normalizeTriageDecisionRows", () => {
         age_days: "1.5",
         gated_task_count: 3,
         gated_streams: ["crm", "ops"],
-        ai_prep_packet: { existing: true },
+        ai_prep_packet: {
+          existing: true,
+          owner_web_last_action: { action: "opened", at: "2026-05-21T00:10:00.000Z" },
+        },
       },
       {
         id: "d-2",
@@ -43,7 +51,12 @@ describe("normalizeTriageDecisionRows", () => {
       gatedTaskCount: 3,
       gatedStreams: ["crm", "ops"],
       ageDays: 1.5,
-      aiPrepPacket: { existing: true },
+      aiPrepPacket: {
+        existing: true,
+        owner_web_last_action: { action: "opened", at: "2026-05-21T00:10:00.000Z" },
+      },
+      ownerPresenceSignal: "opened",
+      ownerPresenceAt: "2026-05-21T00:10:00.000Z",
     });
     expect(rows[0].citations).toEqual([{ source: "spec", ref: "doc-1", excerpt: "excerpt" }]);
   });
@@ -68,6 +81,28 @@ describe("normalizeTriageDecisionRows", () => {
 
   it("returns [] for non-arrays", () => {
     expect(normalizeTriageDecisionRows(null)).toEqual([]);
+  });
+
+  it("falls back to legacy owner presence keys when owner_web stamp is absent", () => {
+    const rows = normalizeTriageDecisionRows([
+      {
+        id: "d-4",
+        code: "QEP-4",
+        question_plain: "Presence",
+        lane: "ratify",
+        owner_role: "rylee",
+        status: "open",
+        created_at: "2026-05-20T00:00:00.000Z",
+        updated_at: "2026-05-21T00:00:00.000Z",
+        ai_prep_packet: {
+          owner_last_presence: "reviewing",
+          owner_last_seen_at: "2026-05-21T01:00:00.000Z",
+        },
+      },
+    ]);
+
+    expect(rows[0]?.ownerPresenceSignal).toBe("reviewing");
+    expect(rows[0]?.ownerPresenceAt).toBe("2026-05-21T01:00:00.000Z");
   });
 });
 
@@ -144,5 +179,55 @@ describe("buildOwnerDecisionActionPatch", () => {
       voice_memo_candidate: { action: "need_info" },
       owner_web_last_action: { action: "need_info", surface: "/decisions" },
     });
+  });
+});
+
+describe("buildOwnerDecisionOpenPatch", () => {
+  it("writes owner_web_last_open and appends capped open events", () => {
+    const patch = buildOwnerDecisionOpenPatch({
+      existingPacket: {
+        owner_web_open_events: new Array(12).fill({ action: "opened", at: "2026-05-20T00:00:00.000Z" }),
+      },
+      ownerRole: "rylee",
+      actorName: "Rylee",
+      nowIso: "2026-05-21T12:15:00.000Z",
+    });
+
+    expect(patch).toMatchObject({
+      owner_web_last_open: {
+        action: "opened",
+        owner_role: "rylee",
+        actor: "owner-web:Rylee",
+        at: "2026-05-21T12:15:00.000Z",
+        surface: "/decisions",
+      },
+    });
+
+    expect(Array.isArray((patch as Record<string, unknown>).owner_web_open_events)).toBe(true);
+    expect(((patch as Record<string, unknown>).owner_web_open_events as unknown[])).toHaveLength(10);
+  });
+});
+
+describe("buildBrianDecisionNudgePatch", () => {
+  it("appends queued nudge audit entries in ai_prep_packet", () => {
+    const patch = buildBrianDecisionNudgePatch({
+      existingPacket: { brian_dm_nudges: [{ requested_at: "2026-05-20T00:00:00.000Z" }] },
+      nudgedBy: "brian",
+      note: "Ping while owner is active",
+      nowIso: "2026-05-21T12:30:00.000Z",
+    });
+
+    expect(patch).toMatchObject({
+      brian_dm_last_nudge: {
+        requested_at: "2026-05-21T12:30:00.000Z",
+        requested_by: "brian",
+        note: "Ping while owner is active",
+        state: "queued",
+        surface: "/decisions/triage",
+      },
+    });
+
+    expect(Array.isArray((patch as Record<string, unknown>).brian_dm_nudges)).toBe(true);
+    expect(((patch as Record<string, unknown>).brian_dm_nudges as unknown[])).toHaveLength(2);
   });
 });

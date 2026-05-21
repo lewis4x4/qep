@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   applyOwnerDecisionAction,
   listDecisionTriageQueue,
+  recordOwnerDecisionOpen,
   type OwnerDecisionAction,
   type TriageCitation,
   type TriageDecisionRow,
@@ -60,6 +61,20 @@ export function DecisionsPage({ actorName }: DecisionsPageProps) {
       setActiveIndex(Math.max(rows.length - 1, 0));
     }
   }, [activeIndex, rows.length]);
+
+  const openedDecisionIdsRef = useRef<Set<string>>(new Set());
+
+  const openStampMutation = useMutation({
+    mutationFn: ({ decisionId, ownerRole }: { decisionId: string; ownerRole: string }) =>
+      recordOwnerDecisionOpen({ decisionId, ownerRole, actorName }),
+  });
+
+  useEffect(() => {
+    if (!activeDecision?.id) return;
+    if (openedDecisionIdsRef.current.has(activeDecision.id)) return;
+    openedDecisionIdsRef.current.add(activeDecision.id);
+    openStampMutation.mutate({ decisionId: activeDecision.id, ownerRole: activeDecision.ownerRole });
+  }, [activeDecision?.id, activeDecision?.ownerRole]);
 
   const actionMutation = useMutation({
     mutationFn: ({ decisionId, action }: { decisionId: string; action: OwnerDecisionAction }) =>

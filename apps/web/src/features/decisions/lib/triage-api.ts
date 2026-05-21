@@ -43,6 +43,8 @@ export interface TriageDecisionRow {
   gatedTaskCount: number;
   gatedStreams: string[];
   aiPrepPacket: Record<string, unknown>;
+  ownerPresenceSignal: string | null;
+  ownerPresenceAt: string | null;
 }
 
 interface QueryError {
@@ -82,6 +84,85 @@ function normalizeCitation(value: unknown): TriageCitation | null {
   return { source, ref, excerpt };
 }
 
+function resolveOwnerPresence(packet: Record<string, unknown>): { signal: string | null; at: string | null } {
+  const ownerLastAction = asRecord(packet.owner_web_last_action);
+  const ownerLastOpen = asRecord(packet.owner_web_last_open);
+  const atCandidates = [
+    asString(ownerLastOpen.at),
+    asString(ownerLastAction.at),
+    asString(packet.owner_opened_at),
+    asString(packet.owner_last_seen_at),
+  ].map((value) => value.trim()).filter(Boolean);
+  const signalCandidates = [
+    asString(ownerLastOpen.summary),
+    asString(ownerLastOpen.action),
+    asString(ownerLastAction.action),
+    asString(packet.owner_last_presence),
+  ].map((value) => value.trim()).filter(Boolean);
+
+  return {
+    signal: signalCandidates[0] ?? null,
+    at: atCandidates[0] ?? null,
+  };
+}
+
+export function buildOwnerDecisionOpenPatch(input: {
+  existingPacket: Record<string, unknown> | null;
+  ownerRole: string;
+  actorName?: string | null;
+  nowIso?: string;
+}): Record<string, unknown> {
+  const nowIso = input.nowIso ?? new Date().toISOString();
+  const ownerRole = input.ownerRole.trim() || "owner";
+  const actorName = input.actorName?.trim() || ownerRole;
+  const actor = `owner-web:${actorName}`;
+  const existingPacket = input.existingPacket ?? {};
+  const existingEvents = Array.isArray(existingPacket.owner_web_open_events)
+    ? existingPacket.owner_web_open_events
+    : [];
+  const openEvent = {
+    action: "opened",
+    owner_role: ownerRole,
+    actor,
+    at: nowIso,
+    surface: "/decisions",
+  };
+
+  return {
+    ...existingPacket,
+    owner_web_last_open: openEvent,
+    owner_web_open_events: [...existingEvents.slice(-9), openEvent],
+  };
+}
+
+export function buildBrianDecisionNudgePatch(input: {
+  existingPacket: Record<string, unknown> | null;
+  nudgedBy?: string | null;
+  note?: string | null;
+  nowIso?: string;
+}): Record<string, unknown> {
+  const nowIso = input.nowIso ?? new Date().toISOString();
+  const nudgedBy = input.nudgedBy?.trim() || "brian";
+  const note = input.note?.trim() || null;
+  const existingPacket = input.existingPacket ?? {};
+  const existingNudges = Array.isArray(existingPacket.brian_dm_nudges)
+    ? existingPacket.brian_dm_nudges
+    : [];
+  const nudgeEvent = {
+    requested_at: nowIso,
+    requested_by: nudgedBy,
+    note,
+    state: "queued",
+    surface: "/decisions/triage",
+  };
+
+  return {
+    ...existingPacket,
+    brian_dm_last_nudge: nudgeEvent,
+    brian_dm_nudges: [...existingNudges, nudgeEvent],
+  };
+}
+
 export function normalizeTriageDecisionRows(rows: unknown): TriageDecisionRow[] {
   if (!Array.isArray(rows)) return [];
 
@@ -104,6 +185,9 @@ export function normalizeTriageDecisionRows(rows: unknown): TriageDecisionRow[] 
       return [];
     }
 
+    const aiPrepPacket = asRecord(record.ai_prep_packet);
+    const ownerPresence = resolveOwnerPresence(aiPrepPacket);
+
     return [{
       id,
       code,
@@ -125,7 +209,9 @@ export function normalizeTriageDecisionRows(rows: unknown): TriageDecisionRow[] 
       ageDays: asNumber(record.age_days),
       gatedTaskCount: asNumber(record.gated_task_count),
       gatedStreams: asStringArray(record.gated_streams),
-      aiPrepPacket: asRecord(record.ai_prep_packet),
+      aiPrepPacket,
+      ownerPresenceSignal: ownerPresence.signal,
+      ownerPresenceAt: ownerPresence.at,
     }];
   });
 }
@@ -244,6 +330,84 @@ export async function applyOwnerDecisionAction(input: {
     status: patch.status as OwnerDecisionActionResult["status"],
     actionAt,
     actor: `owner-web:${actorName}`,
+  };
+}
+
+export async function recordOwnerDecisionOpen(input: {
+  decisionId: string;
+  ownerRole: string;
+  actorName?: string | null;
+}) {
+  const { data: current, error: readError } = await supabase
+    .from("qep_decisions")
+    .select("id, ai_prep_packet")
+    .eq("id", input.decisionId)
+    .maybeSingle();
+
+  if (readError) {
+    throw new Error(readError.message || "Failed to load decision before open stamp");
+  }
+  if (!current?.id) {
+    throw new Error("Decision not found");
+  }
+
+  const updatedPacket = buildOwnerDecisionOpenPatch({
+    existingPacket: asRecord(current.ai_prep_packet),
+    ownerRole: input.ownerRole,
+    actorName: input.actorName,
+  });
+
+  const { error: updateError } = await supabase
+    .from("qep_decisions")
+    .update({ ai_prep_packet: updatedPacket })
+    .eq("id", input.decisionId);
+
+  if (updateError) {
+    throw new Error(updateError.message || "Failed to record owner open presence");
+  }
+
+  return {
+    actor: asString(asRecord(updatedPacket.owner_web_last_open).actor),
+    at: asString(asRecord(updatedPacket.owner_web_last_open).at),
+  };
+}
+
+export async function queueBrianDecisionNudge(input: {
+  decisionId: string;
+  nudgedBy?: string;
+  note?: string | null;
+}) {
+  const { data: current, error: readError } = await supabase
+    .from("qep_decisions")
+    .select("id, ai_prep_packet")
+    .eq("id", input.decisionId)
+    .maybeSingle();
+
+  if (readError) {
+    throw new Error(readError.message || "Failed to load decision before nudge");
+  }
+  if (!current?.id) {
+    throw new Error("Decision not found");
+  }
+
+  const updatedPacket = buildBrianDecisionNudgePatch({
+    existingPacket: asRecord(current.ai_prep_packet),
+    nudgedBy: input.nudgedBy,
+    note: input.note,
+  });
+
+  const { error: updateError } = await supabase
+    .from("qep_decisions")
+    .update({ ai_prep_packet: updatedPacket })
+    .eq("id", input.decisionId);
+
+  if (updateError) {
+    throw new Error(updateError.message || "Failed to record DM nudge request");
+  }
+
+  return {
+    requestedBy: input.nudgedBy?.trim() || "brian",
+    requestedAt: asString(asRecord(updatedPacket.brian_dm_last_nudge).requested_at),
   };
 }
 
