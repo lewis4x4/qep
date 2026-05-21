@@ -81,3 +81,55 @@ After this audit closes Fix F, the build verification doc has **no remaining cod
 | Voice-narrative depth check (§3.3 above) | Rylee | Manual QA |
 
 When all eight rows close, the build is verified to spec.
+
+---
+
+## 6. E3.2 real-device verification addendum (2026-05-21)
+
+Roadmap item: E3.2 / QEP-128
+Status: BLOCKED — repository readiness is verified, but real iOS + Android + iPad device evidence is not present in the repo.
+
+### Current repository-readiness verdict
+
+The `/floor` advisor home remains code-complete for the `iron_advisor` role based on the element map above. The E3.2 gate is not a net-new build lane; it is a real-device evidence lane.
+
+Automated repository checks can verify that the advisor home components still render and keep the expected advisor launch surface wired. They cannot substitute for real device evidence.
+
+### Required real-device matrix for closure
+
+E3.2 can be marked shipped only when all three rows below have dated evidence from a real device, not Playwright emulation alone.
+
+| Device class | Required browser | Required account/role | Required evidence |
+| --- | --- | --- | --- |
+| iPhone | Safari | `iron_advisor` / sales rep | Screenshot or video of `/floor` showing briefing banner, open deals, today's follow-ups, quote CTA, voice quote, voice note, service request, add customer; no horizontal overflow; touch targets usable. |
+| Android phone | Chrome | `iron_advisor` / sales rep | Same checks as iPhone plus route taps for `/voice-quote`, `/voice`, `/service/intake`, and `/qrm/companies?new=1`. |
+| iPad | Safari | `iron_advisor` / sales rep | Same checks plus tablet layout check for widget/action-card grid, top briefing behavior, and Back-to-Floor escape affordances. |
+
+### Evidence packet required
+
+A closing evidence packet must record:
+
+- tester name;
+- test date/time;
+- device model;
+- OS version;
+- browser/version;
+- environment URL;
+- account/role used;
+- pass/fail result for every row in the matrix;
+- attached screenshots or video paths;
+- any defects and linked remediation issue.
+
+### Automated checks run for readiness
+
+```bash
+bun test apps/web/src/features/floor/components/__tests__/AdvisorActionCards.test.tsx \
+  apps/web/src/features/floor/components/__tests__/AdvisorBriefingBanner.test.tsx \
+  apps/web/src/features/floor/pages/__tests__/floor-view-as-noop.test.tsx
+
+bun run floor:real-device:verify
+```
+
+### Blocker
+
+No real-device iPhone Safari, Android Chrome, or iPad Safari evidence packet is currently checked into `docs/operations/`, `docs/testing/`, or `test-results/`. The correct roadmap state is blocked until Brian/Rylee or QA records that packet.

@@ -91,7 +91,8 @@
     "agent-service-accounts:verify": "bun ./scripts/verify/agent-service-accounts-readiness.mjs",
     "agent-service-accounts:env-check": "node scripts/provision-agent-service-accounts.mjs --require-env",
     "adr:016:verify": "bun ./scripts/verify/adr-016-acceptance-flow.mjs",
-    "brand:guide:audit": "bun ./scripts/verify/brand-guide-compliance-audit.mjs"
+    "brand:guide:audit": "bun ./scripts/verify/brand-guide-compliance-audit.mjs",
+    "floor:real-device:verify": "bun ./scripts/verify/floor-real-device-evidence.mjs"
   },
   "devDependencies": {
     "playwright": "^1.52.0",
