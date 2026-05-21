@@ -7,7 +7,7 @@
 
 ## 0. Status banner — code-complete 2026-05-17 @ commit 20b3805e
 
-**Code lanes A–F are closed.** Fix F (`/floor` audit) verified in `IRON_FLOOR_AUDIT_2026-05-17.md`. Only operational gates remain (Playwright secrets, staging QA, PDF sign-off, product Q answers).
+**Code lanes A–F are closed.** Fix F (`/floor` audit) verified in `IRON_FLOOR_AUDIT_2026-05-17.md`. A1.3 Playwright CI is now closed: Check Supabase migrations run `26235877595` and E2E Staging run `26235886072` passed on commit `7a3a20c6`. Only human operational gates remain (staging QA, PDF sign-off, product Q answers).
 
 Overnight builder run shipped Fix A (override column), Fix B (PRs 13–21 wizard decomposition), Fix C (edge gateway 36 → 0), Fix D (Playwright bootstrap + 3 specs + CI workflow + bundle:check), and Fix F (floor audit). Status matrices in §3 and §4 below have been updated in place.
 
@@ -23,7 +23,7 @@ Overnight builder run shipped Fix A (override column), Fix B (PRs 13–21 wizard
 1. Manual/staging QA for §3.3 (FL 6% state tax math, county surtax $5K cap, tax-exempt badge, all four manager approval outcomes, TILA disclaimer surfaces).
 2. §3.4 IntelliDealer PDF parity sign-off — side-by-side vs Q02699, architect-level.
 3. ~~Fix F — `/floor` widget audit~~ ✓ Closed. See `IRON_FLOOR_AUDIT_2026-05-17.md` — all 7 transcript elements shipped for `iron_advisor`.
-4. E2E suite full green — set `PLAYWRIGHT_TEST_EMAIL`, `PLAYWRIGHT_TEST_PASSWORD`, `PLAYWRIGHT_AGED_EQUIPMENT_ID` per `apps/web/tests/e2e/TODO_PLAYWRIGHT.md`. Today: 1 pass / 3 skip.
+4. ~~E2E suite full green~~ ✓ Closed. A1.3 shipped after Check Supabase migrations run `26235877595` passed and E2E Staging run `26235886072` passed with **21 passed / 5 skipped** on commit `7a3a20c6`.
 5. Staging spot-checks for §3.2 #21 (inline override behavior in browser) and §3.2 #25 (inbound freight hidden when `in_stock=true`).
 6. Open product questions Q6, Q7, Q11–Q15 (not code blockers per §6) + a new product Q raised by the floor audit (three voice routes — consolidate or label?).
 
@@ -52,7 +52,7 @@ When 1/2 and 3 conflict, **3 wins** (it postdates and was driven by direct custo
 - Shared components: `QuoteWorkspaceLineRow.tsx`, `PricingAdderBuckets.tsx` (hosts the in-stock inbound-freight gate).
 - Migration head: `578_equipment_override_price_column.sql`. Wizard-foundation: `542_*`. Delta band: `560–578_*`. Override column applied + backfilled.
 - Edge functions: 186 total, **all 186 registered** in `supabase/config.toml`. `unregistered_in_config` is **empty**.
-- Test infra: vitest **1,154 quote-builder tests pass**. Playwright config + 3 specs (`apps/web/tests/e2e/`) + `e2e-staging.yml` CI workflow + `bundle:check` script. Today: 1 pass / 3 skip until `PLAYWRIGHT_TEST_*` env vars are set (see `apps/web/tests/e2e/TODO_PLAYWRIGHT.md`). Lighthouse not yet wired.
+- Test infra: vitest **1,154 quote-builder tests pass**. Playwright config + 3 specs (`apps/web/tests/e2e/`) + `e2e-staging.yml` CI workflow + `bundle:check` script. Latest authenticated staging evidence: E2E Staging run `26235886072` passed with **21 passed / 5 skipped** on commit `7a3a20c6`; Check Supabase migrations run `26235877595` also passed on that commit. Lighthouse hardening is still open and not blocking A1 sign-off.
 
 ---
 
@@ -162,9 +162,9 @@ All 11 step modules in `apps/web/src/features/quote-builder/steps/`. `wizard/Wiz
 
 `scripts/edge-auth-allowlist.json::unregistered_in_config` is empty. All 186 edge functions have `[functions.X]` blocks in `supabase/config.toml`. `bun run audit:edges` exits 0.
 
-### Fix D — Test infra ✓ MOSTLY SHIPPED
+### Fix D — Test infra ✓ SHIPPED
 
-Playwright config + 3 specs in `apps/web/tests/e2e/` (`quote-wizard-happy-path`, `quote-wizard-back-forward-nav`, `quote-approval-bypass`). `e2e-staging.yml` CI workflow + `bundle:check` script in `apps/web/package.json`. **Remaining:** set `PLAYWRIGHT_TEST_EMAIL`, `PLAYWRIGHT_TEST_PASSWORD`, `PLAYWRIGHT_AGED_EQUIPMENT_ID` env vars on CI per `apps/web/tests/e2e/TODO_PLAYWRIGHT.md` so all 3 specs go from skipped to pass. Lighthouse hardening still open (not blocking).
+Playwright config + 3 specs in `apps/web/tests/e2e/` (`quote-wizard-happy-path`, `quote-wizard-back-forward-nav`, `quote-approval-bypass`). `e2e-staging.yml` CI workflow + `bundle:check` script in `apps/web/package.json`. A1.3 closed after E2E Staging run `26235886072` passed with **21 passed / 5 skipped** on commit `7a3a20c6`. Lighthouse hardening remains open as non-blocking platform hardening.
 
 ### Fix E — Step 25 verification ✓ IN CODE, STAGING SPOT-CHECK PENDING
 
@@ -187,16 +187,13 @@ bun run audit:edges                                     # exit 0 — 186/186 reg
 bun run audit:secrets                                   # exit 0
 ( cd apps/web && bun run typecheck )                    # exit 0
 ( cd apps/web && bun test src/features/quote-builder )  # 1,154 pass / 0 fail
-( cd apps/web && bun run test:e2e )                     # exit 0 — 1 pass / 3 skip
+( cd apps/web && bun run test:e2e )                     # local run depends on staging env vars; latest authenticated GH staging run 26235886072 passed — 21 pass / 5 skip
 ( cd apps/web && bun run build )                        # exit 0
 ```
 
-To flip the 3 skipped Playwright specs to pass, set the env vars from `apps/web/tests/e2e/TODO_PLAYWRIGHT.md` on the `e2e-staging` CI job:
-- `PLAYWRIGHT_TEST_EMAIL`
-- `PLAYWRIGHT_TEST_PASSWORD`
-- `PLAYWRIGHT_AGED_EQUIPMENT_ID`
+A1.3 Playwright CI is closed: Check Supabase migrations run `26235877595` and E2E Staging run `26235886072` passed on commit `7a3a20c6`. The remaining A1 gates are manual staging QA (§3.3), PDF parity sign-off (§3.4), and product policy decisions.
 
-When all of §3.1, §3.2, §3.3, §3.4, §3.5 are ✓ **and** the Playwright suite is fully green (3 pass) **and** §3.4 PDF parity is signed off by architect: the build is verified to spec.
+When all of §3.1, §3.2, §3.3, §3.4, §3.5 are ✓ **and** §3.4 PDF parity is signed off by architect: the build is verified to spec.
 
 ---
 

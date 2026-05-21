@@ -2,7 +2,7 @@
 
 Roadmap item: A1.2 / QEP-2
 Source evidence: `QEP (1)/QRM_QUOTE_WIZARD_SPEC_2026-05-05.md` §10.15 + §11, `docs/operations/IRON_QUOTE_BUILD_VERIFICATION_HANDOFF_2026-05-16.md` §3.4, and gate `test-results/agent-gates/20260521T041144Z-A1.2-q02699-pdf-parity-anchors.json`
-Status: unsigned. Engineering parity anchors are shipped; final unblock requires side-by-side human review against IntelliDealer quote Q02699.
+Status: unsigned. Engineering parity anchors and staging E2E are shipped; final unblock requires side-by-side human review against IntelliDealer quote Q02699.
 
 Owner: Architect + Ryan.
 Required before: unblocking roadmap items that depend on A1.2 PDF/customer artifact acceptance.
@@ -20,6 +20,7 @@ Signed at:
 ## Preconditions
 
 - Regression gate artifact exists and passed: `test-results/agent-gates/20260521T041144Z-A1.2-q02699-pdf-parity-anchors.json`.
+- Latest automated staging E2E evidence exists and passed: GitHub Actions run `26235886072` on commit `7a3a20c6` (`21 passed / 5 skipped`).
 - The generated QEP artifact uses a realistic quote containing equipment, multi-unit detail where applicable, trade-in, parts/misc lines, taxes, financing/payment math, and signature/authorization surfaces.
 - Q02699 is opened side-by-side with the generated QEP customer PDF/proposal.
 

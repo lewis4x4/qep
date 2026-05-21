@@ -2,7 +2,7 @@
 
 Roadmap item: A1.1 / QEP-1
 Source evidence: `docs/operations/IRON_QUOTE_BUILD_VERIFICATION_HANDOFF_2026-05-16.md` §3.3 and gate `test-results/agent-gates/20260521T040155Z-A1.1-manual-staging-qa-regression.json`
-Status: unsigned. Engineering regression evidence is shipped; final unblock requires human staging browser walkthrough and sign-off.
+Status: unsigned. Engineering regression evidence and staging E2E are shipped; final unblock requires human staging browser walkthrough and sign-off.
 
 Owner: Rylee McKenzie + architect.
 Required before: unblocking roadmap items that depend on A1.1 staging acceptance, including quote-builder hardening and downstream quote launch gates.
@@ -20,6 +20,7 @@ Signed at:
 ## Preconditions
 
 - Regression gate artifact exists and passed: `test-results/agent-gates/20260521T040155Z-A1.1-manual-staging-qa-regression.json`.
+- Latest automated staging E2E evidence exists and passed: GitHub Actions run `26235886072` on commit `7a3a20c6` (`21 passed / 5 skipped`).
 - Quote builder is tested with staging data, not local-only fixtures.
 - The reviewer has permission to create/edit quote packages, trigger approval paths, and view generated proposal/PDF surfaces.
 

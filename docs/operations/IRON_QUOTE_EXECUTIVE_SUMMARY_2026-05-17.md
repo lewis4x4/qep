@@ -10,7 +10,7 @@
 
 The Iron Quote wizard build from the May 14 transcript delta is **done in code**. The 11-step wizard is decomposed, edge auth is registered, Playwright e2e is bootstrapped, equipment override has a typed DB column, and the sales-advisor `/floor` home passes the 7-element transcript audit (including real UCC CSV ingest on the prospecting map).
 
-**Nothing left for engineering to build** before you can call this verified — only secrets, staging QA, PDF parity review, and product policy answers.
+**Nothing left for engineering to build** before you can call this verified — A1.3 Playwright CI is green, so the remaining gates are staging QA, PDF parity review, and product policy answers.
 
 ---
 
@@ -29,10 +29,9 @@ The Iron Quote wizard build from the May 14 transcript delta is **done in code**
 
 ## What each person does to close sign-off
 
-### Brian / DevOps (≈30 min)
+### Brian / DevOps
 
-1. Add GitHub Actions secrets on `e2e-staging`: `PLAYWRIGHT_TEST_EMAIL`, `PLAYWRIGHT_TEST_PASSWORD`, `PLAYWRIGHT_AGED_EQUIPMENT_ID` (staging rep + aged equipment UUID).  
-   → E2E goes from **1 pass / 3 skip** to **full green**.
+1. ✅ A1.3 Playwright CI closed. Check Supabase migrations run `26235877595` and E2E Staging run `26235886072` passed on commit `7a3a20c6` with **21 passed / 5 skipped**.
 
 ### Rylee (half-day staging)
 
@@ -60,13 +59,13 @@ Answer open questions in handoff §6: **Q6** post-approval default, **Q7** prosp
 
 ---
 
-## Automated gates (already green @ 20b3805e)
+## Automated gates
 
 ```bash
 bun run migrations:check   # exit 0
 bun run audit:edges        # exit 0
 cd apps/web && bun run typecheck && bun test src/features/quote-builder  # exit 0, 1154 pass
-cd apps/web && bun run test:e2e   # exit 0, 1 pass / 3 skip (until secrets)
+cd apps/web && bun run test:e2e   # local run depends on staging env vars; GH E2E Staging run 26235886072 passed — 21 pass / 5 skip
 bun run build            # exit 0
 ```
 
@@ -78,11 +77,11 @@ bun run build            # exit 0
 |-----|------|
 | Full verification matrix | `docs/operations/IRON_QUOTE_BUILD_VERIFICATION_HANDOFF_2026-05-16.md` |
 | Floor audit (Fix F) | `docs/operations/IRON_FLOOR_AUDIT_2026-05-17.md` |
-| Playwright skip follow-up | `apps/web/tests/e2e/TODO_PLAYWRIGHT.md` |
+| Playwright staging evidence | GitHub Actions E2E Staging run `26235886072` on commit `7a3a20c6` |
 | Transcript delta (binding) | `QEP (1)/IRON_QUOTE_DELTA_2026-05-14.md` (local `QEP (1)/` folder) |
 
 ---
 
 ## One-liner for Ryan and Rylee
 
-> "The quote wizard Brian asked for from the May 14 call is built and tested in CI — we're waiting on your staging walkthrough, PDF sign-off against Q02699, and a few policy calls (prospect quotes, post-approval routing, voice buttons on the floor). Engineering is not holding anything."
+> "The quote wizard Brian asked for from the May 14 call is built and tested in CI. The Playwright lane is green now; we're waiting on your staging walkthrough, PDF sign-off against Q02699, and a few policy calls (prospect quotes, post-approval routing, voice buttons on the floor). Engineering is not holding anything."

@@ -1,7 +1,7 @@
 # QEP Roadmap Blocker Handoff — 2026-05-21
 
 Generated at: 2026-05-21T09:13:52Z
-Updated at: 2026-05-21T13:26:16Z
+Updated at: 2026-05-21T15:40:00Z
 
 ## Current Selector Result
 
@@ -93,6 +93,23 @@ Needed before C1.3 can resume:
 
 Do not run `--commit` or mark C1.3 shipped until the stage tables contain non-zero verified rows.
 
+
+### A1.3 Playwright CI env vars and staging e2e are now green
+
+`A1.3 — Playwright CI env vars wired` is shipped and synced. The stale staging blocker from run `26234063092` is closed.
+
+Evidence:
+
+- Fix commit: `7a3a20c6` — `Preserve approval status across quote autosaves`
+- Check Supabase migrations: run `26235877595` — success on `7a3a20c6`
+- E2E Staging: run `26235886072` — success on `7a3a20c6` (`21 passed / 5 skipped`)
+- Roadmap update: `A1.3` state is `shipped`, Linear QEP-3 synced at `2026-05-21T15:34:00Z`
+
+Impact:
+
+- Do not keep treating `PLAYWRIGHT_TEST_*` as a live blocker.
+- A1.1 and A1.2 remain blocked only on human sign-off evidence, not on automated staging e2e.
+
 ## Immediate Human Sign-Off Blockers
 
 ### A1.1 / QEP-1 — Manual staging QA pass
@@ -114,9 +131,10 @@ Linear escalation:
 
 Owner action:
 
-- Rylee + architect complete staging browser walkthrough.
-- Attach dated evidence.
+- Rylee + architect complete staging browser walkthrough using `docs/floor/signoffs/QA-A1.1-manual-staging-qa-pass.md`.
+- Attach dated screenshots/PDFs for the required rows.
 - Mark decision `pass`, `pass with exceptions`, or `fail` in the sign-off file.
+- If passed, run `npm --prefix roadmap-linear-sync run task A1.1 -- --ship` and then `npm --prefix roadmap-linear-sync run sync`.
 
 ### A1.2 / QEP-2 — Q02699 PDF parity sign-off
 
@@ -137,9 +155,10 @@ Linear escalation:
 
 Owner action:
 
-- Architect + Ryan compare generated QEP customer artifact against IntelliDealer Q02699.
-- Attach dated evidence and approved deltas.
+- Architect + Ryan compare generated QEP customer artifact against IntelliDealer Q02699 using `docs/floor/signoffs/QA-A1.2-q02699-pdf-parity-sign-off.md`.
+- Attach dated side-by-side PDF/screenshot evidence and approved deltas.
 - Mark decision `pass`, `pass with exceptions`, or `fail` in the sign-off file.
+- If passed, run `npm --prefix roadmap-linear-sync run task A1.2 -- --ship` and then `npm --prefix roadmap-linear-sync run sync`.
 
 ## External Input Blockers
 
