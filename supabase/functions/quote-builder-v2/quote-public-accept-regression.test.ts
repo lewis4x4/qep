@@ -31,6 +31,19 @@ Deno.test("public accept records existing quote signature and verifies accepted 
   assertStringIncludes(handler, 'status: verifiedPackageStatus');
   assertStringIncludes(handler, "Quote acceptance could not be completed. Please refresh and try again.");
   assertStringIncludes(handler, "QUOTE_PIPELINE_STAGE_TARGETS.salesOrderSigned");
+  assertStringIncludes(handler, "resolveLatestSentQuoteRepUserId");
+  assertStringIncludes(handler, "recordPublicAcceptRepEvidence");
+  assertStringIncludes(source, "quote_public_accept_signed");
+  assertStringIncludes(source, "const sentRepUserId = await resolveLatestSentQuoteRepUserId");
+  assertStringIncludes(source, "const resolvedRepUserId = sentRepUserId");
+  assertStringIncludes(source, '.from("qb_notifications")');
+  assertStringIncludes(source, '.eq("metadata->>quote_package_id", input.quotePackageId)');
+  assertStringIncludes(source, '.eq("metadata->>signature_id", input.signatureId)');
+  assertStringIncludes(source, '.from("quote_delivery_events")');
+  assertStringIncludes(source, '.eq("provider", "quote_public_accept")');
+  assertStringIncludes(source, '.eq("subject", "public_accept_signed")');
+  assertStringIncludes(source, "if (existingTimeline?.id) return;");
+  assertStringIncludes(source, "created_by: input.repUserId");
 });
 
 Deno.test("public accept handles idempotent already-accepted retries before inserting another signature", () => {
@@ -43,6 +56,10 @@ Deno.test("public accept handles idempotent already-accepted retries before inse
   assert(idempotentCheckIndex > 0, "already-accepted idempotency check should exist");
   assert(signatureInsertIndex > 0, "signature insert should exist");
   assert(idempotentCheckIndex < signatureInsertIndex, "idempotent retry should return before inserting a duplicate signature");
-  assertStringIncludes(handler.slice(idempotentCheckIndex, signatureInsertIndex), '.select("id, signed_at, document_hash")');
-  assertStringIncludes(handler.slice(idempotentCheckIndex, signatureInsertIndex), "status: String(quote.status)");
+  const idempotentBlock = handler.slice(idempotentCheckIndex, signatureInsertIndex);
+  assertStringIncludes(idempotentBlock, '.select("id, signed_at, document_hash")');
+  assertStringIncludes(idempotentBlock, "sentRepUserId");
+  assertStringIncludes(idempotentBlock, "recordPublicAcceptRepEvidence");
+  assertStringIncludes(idempotentBlock, "documentHash: typeof latestSig?.document_hash === \"string\"");
+  assertStringIncludes(idempotentBlock, "status: String(quote.status)");
 });

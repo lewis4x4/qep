@@ -2482,7 +2482,7 @@ async function handlePublicAccept(
   const admin = createAdminClient();
   const { data: quote, error: quoteErr } = await admin
     .from("quote_packages")
-    .select("id, workspace_id, deal_id, status, expires_at, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
+    .select("id, workspace_id, deal_id, status, expires_at, created_by, quote_number, why_this_machine, why_this_machine_confirmed, ai_recommendation, tax_profile, tax_total, tax_override_amount, tax_override_reason")
     .eq("share_token", token)
     .maybeSingle();
   if (quoteErr) return safeJsonError("Failed to load quote", 500, origin);
@@ -2501,6 +2501,20 @@ async function handlePublicAccept(
       .limit(1)
       .maybeSingle();
     if (latestSigErr) return safeJsonError("Failed to verify acceptance", 500, origin);
+    const sentRepUserId = await resolveLatestSentQuoteRepUserId({ admin, quotePackageId: quote.id });
+    const resolvedRepUserId = sentRepUserId
+      ?? (typeof quote.created_by === "string" && UUID_RE.test(quote.created_by) ? quote.created_by : null);
+    await recordPublicAcceptRepEvidence({
+      admin,
+      workspaceId: typeof quote.workspace_id === "string" ? quote.workspace_id : "default",
+      quotePackageId: quote.id,
+      quoteNumber: typeof quote.quote_number === "string" ? quote.quote_number : null,
+      dealId: typeof quote.deal_id === "string" ? quote.deal_id : null,
+      signatureId: latestSig?.id ?? null,
+      signedAt: latestSig?.signed_at ?? null,
+      documentHash: typeof latestSig?.document_hash === "string" ? latestSig.document_hash : null,
+      repUserId: resolvedRepUserId,
+    });
     return safeJsonOk({
       signature_id: latestSig?.id ?? null,
       signed_at: latestSig?.signed_at ?? null,
@@ -2589,6 +2603,21 @@ async function handlePublicAccept(
     dealId: typeof quote.deal_id === "string" ? quote.deal_id : null,
     target: QUOTE_PIPELINE_STAGE_TARGETS.salesOrderSigned,
     source: "quote_public_accept",
+  });
+
+  const sentRepUserId = await resolveLatestSentQuoteRepUserId({ admin, quotePackageId: quote.id });
+  const resolvedRepUserId = sentRepUserId
+    ?? (typeof quote.created_by === "string" && UUID_RE.test(quote.created_by) ? quote.created_by : null);
+  await recordPublicAcceptRepEvidence({
+    admin,
+    workspaceId: typeof quote.workspace_id === "string" ? quote.workspace_id : "default",
+    quotePackageId: quote.id,
+    quoteNumber: typeof quote.quote_number === "string" ? quote.quote_number : null,
+    dealId: typeof quote.deal_id === "string" ? quote.deal_id : null,
+    signatureId: sigRow?.id ?? null,
+    signedAt: sigRow?.signed_at ?? null,
+    documentHash,
+    repUserId: resolvedRepUserId,
   });
 
   return safeJsonOk({
@@ -2765,6 +2794,116 @@ async function resolveLatestSentQuoteRepUserId(input: {
     return null;
   }
   return typeof data?.created_by === "string" && UUID_RE.test(data.created_by) ? data.created_by : null;
+}
+
+async function recordPublicAcceptRepEvidence(input: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  workspaceId: string;
+  quotePackageId: string;
+  quoteNumber: string | null;
+  dealId: string | null;
+  signatureId: string | null;
+  signedAt: string | null;
+  documentHash: string | null;
+  repUserId: string | null;
+}): Promise<void> {
+  if (!input.repUserId || !UUID_RE.test(input.repUserId)) {
+    console.info("public accept rep evidence skipped: no rep owner resolved", {
+      quotePackageId: input.quotePackageId,
+    });
+    return;
+  }
+
+  const quoteLabel = input.quoteNumber ? `Quote ${input.quoteNumber}` : "Customer quote";
+  const deepLinkPath = `/sales/quotes/new?packageId=${input.quotePackageId}`;
+  const notificationMetadata = {
+    type: "quote_public_accept_signed",
+    quote_package_id: input.quotePackageId,
+    quote_number: input.quoteNumber,
+    deal_id: input.dealId,
+    signature_id: input.signatureId,
+    signed_at: input.signedAt,
+    document_hash: input.documentHash,
+    source: "quote_public_accept",
+    link: deepLinkPath,
+  };
+
+  const notificationInsert = (async () => {
+    try {
+      let existingQuery = input.admin
+        .from("qb_notifications")
+        .select("id")
+        .eq("user_id", input.repUserId)
+        .eq("type", "quote_public_accept_signed")
+        .eq("metadata->>quote_package_id", input.quotePackageId)
+        .limit(1);
+      if (input.signatureId) {
+        existingQuery = existingQuery.eq("metadata->>signature_id", input.signatureId);
+      }
+      const { data: existing } = await existingQuery.maybeSingle();
+      if (existing?.id) return;
+
+      const { error } = await input.admin
+        .from("qb_notifications")
+        .insert({
+          workspace_id: input.workspaceId,
+          user_id: input.repUserId,
+          type: "quote_public_accept_signed",
+          title: "Customer accepted quote",
+          body: `${quoteLabel} was signed in the public Deal Room. Follow up for deposit/payment handoff.`,
+          metadata: notificationMetadata,
+          read_at: null,
+        });
+      if (error) {
+        console.warn("public accept qb_notifications insert failed:", error);
+      }
+    } catch (error) {
+      console.warn("public accept qb_notifications insert threw:", error);
+    }
+  })();
+
+  const timelineInsert = (async () => {
+    try {
+      let existingTimelineQuery = input.admin
+        .from("quote_delivery_events")
+        .select("id")
+        .eq("quote_package_id", input.quotePackageId)
+        .eq("provider", "quote_public_accept")
+        .eq("subject", "public_accept_signed")
+        .limit(1);
+      if (input.signatureId) {
+        existingTimelineQuery = existingTimelineQuery.eq("metadata->>signature_id", input.signatureId);
+      }
+      const { data: existingTimeline } = await existingTimelineQuery.maybeSingle();
+      if (existingTimeline?.id) return;
+
+      const { error } = await input.admin
+        .from("quote_delivery_events")
+        .insert({
+          workspace_id: input.workspaceId,
+          quote_package_id: input.quotePackageId,
+          channel: "link",
+          status: "sent",
+          recipient: input.repUserId,
+          subject: "public_accept_signed",
+          message_body: `${quoteLabel} accepted via public Deal Room; rep follow-up required for deposit/payment handoff.`,
+          provider: "quote_public_accept",
+          created_by: input.repUserId,
+          metadata: {
+            ...notificationMetadata,
+            timeline_type: "rep_follow_up_required",
+          },
+        });
+      if (error) {
+        console.warn("public accept timeline evidence insert failed:", error);
+      }
+    } catch (error) {
+      console.warn("public accept timeline evidence insert threw:", error);
+    }
+  })();
+
+  await Promise.all([notificationInsert, timelineInsert]);
 }
 
 async function handlePublicQuoteFeedback(

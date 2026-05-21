@@ -511,38 +511,32 @@
     },
     {
       "task_id": "A3.5/QEP-18",
-      "status": "partial_verified",
+      "status": "partial_verified_acceptance_evidence",
       "title": "M5 \u2014 Branded acceptance flow",
       "stream": "A",
       "wave": "A3",
-      "goal": "Customer public Deal Room acceptance uses shared signature capture, explicit payment/deposit handoff terms, and durable token-authorized accepted-status proof without claiming unfinished Stripe/deposit or rep-notification behavior.",
+      "goal": "Public Deal Room acceptance now includes durable customer acceptance proof plus internal rep follow-up evidence while avoiding unfinished live Stripe/deposit collection claims.",
       "changed_files": [
-        "apps/web/src/features/deal-room/pages/DealRoomPage.tsx",
-        "apps/web/src/features/deal-room/lib/deal-room-api.ts",
-        "apps/web/src/features/deal-room/lib/__tests__/deal-room-api.test.ts",
-        "apps/web/src/features/deal-room/pages/__tests__/DealRoomPage.acceptance-source.test.ts",
         "supabase/functions/quote-builder-v2/index.ts",
         "supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts"
       ],
       "verification": [
-        "bun test apps/web/src/features/deal-room/lib/__tests__/deal-room-api.test.ts apps/web/src/features/deal-room/pages/__tests__/DealRoomPage.acceptance-source.test.ts",
+        "deno check supabase/functions/quote-builder-v2/index.ts",
         "deno test supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts --allow-read --allow-env",
         "deno test supabase/functions/quote-builder-v2/quote-public-safety.test.ts --allow-read --allow-env",
-        "bun run --filter @qep/web typecheck",
-        "deno check supabase/functions/quote-builder-v2/index.ts",
-        "git diff --check -- scoped A3.5 files",
-        "Oracle review found one P1 public-accept durability blocker; targeted fix applied",
+        "git diff --check -- supabase/functions/quote-builder-v2/index.ts supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts",
+        "Oracle initial review found two P1 blockers; targeted fixes applied for durable retry dedupe and latest sent-rep ownership; Oracle follow-up found no remaining P0/P1 blockers",
         "bun run migrations:check (clean temp worktree, sequence 001..608)",
-        "bun run segment:gates --segment A3.5-public-acceptance-hardening --ui (clean temp worktree)"
+        "bun run segment:gates --segment A3.5-public-acceptance-evidence --ui (clean temp worktree)"
       ],
-      "gate_report": "test-results/agent-gates/20260521T021534Z-A3.5-public-acceptance-hardening.json",
+      "gate_report": "test-results/agent-gates/20260521T022859Z-A3.5-public-acceptance-evidence.json",
       "remaining_gaps": [
-        "Live Stripe/deposit collection not implemented; still gated by deposit SOP and Stripe readiness.",
-        "Rep notification/timeline evidence not safely verified in this slice; customer copy avoids claiming notification.",
-        "A3.5 should remain in_progress until deposit/payment and notification scope is implemented or formally descoped."
+        "Live Stripe/deposit collection remains gated by deposit SOP and Stripe readiness.",
+        "Production deployed customer acceptance against live Supabase has not been verified in this slice.",
+        "A3.5 should remain in_progress until live deposit/payment scope is implemented or formally descoped."
       ],
-      "notes": "Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only A3.5 scoped files applied. CRM stage advancement through existing advanceQuoteDealStage(...salesOrderSigned) was preserved but not expanded.",
-      "updated_at": "2026-05-21T02:15:34Z"
+      "notes": "This is the second A3.5 partial slice, building on the prior public acceptance hardening commit. Public accept side effects are best-effort and durably deduped by quote/signature so share-token retries do not spam rep notifications or timeline events. Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only scoped quote-builder-v2 files applied.",
+      "updated_at": "2026-05-21T02:28:59Z"
     }
   ],
   "agents": [
@@ -873,38 +867,32 @@
   },
   "current_task": {
     "task_id": "A3.5/QEP-18",
-    "status": "partial_verified",
+    "status": "partial_verified_acceptance_evidence",
     "title": "M5 \u2014 Branded acceptance flow",
     "stream": "A",
     "wave": "A3",
-    "goal": "Customer public Deal Room acceptance uses shared signature capture, explicit payment/deposit handoff terms, and durable token-authorized accepted-status proof without claiming unfinished Stripe/deposit or rep-notification behavior.",
+    "goal": "Public Deal Room acceptance now includes durable customer acceptance proof plus internal rep follow-up evidence while avoiding unfinished live Stripe/deposit collection claims.",
     "changed_files": [
-      "apps/web/src/features/deal-room/pages/DealRoomPage.tsx",
-      "apps/web/src/features/deal-room/lib/deal-room-api.ts",
-      "apps/web/src/features/deal-room/lib/__tests__/deal-room-api.test.ts",
-      "apps/web/src/features/deal-room/pages/__tests__/DealRoomPage.acceptance-source.test.ts",
       "supabase/functions/quote-builder-v2/index.ts",
       "supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts"
     ],
     "verification": [
-      "bun test apps/web/src/features/deal-room/lib/__tests__/deal-room-api.test.ts apps/web/src/features/deal-room/pages/__tests__/DealRoomPage.acceptance-source.test.ts",
+      "deno check supabase/functions/quote-builder-v2/index.ts",
       "deno test supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts --allow-read --allow-env",
       "deno test supabase/functions/quote-builder-v2/quote-public-safety.test.ts --allow-read --allow-env",
-      "bun run --filter @qep/web typecheck",
-      "deno check supabase/functions/quote-builder-v2/index.ts",
-      "git diff --check -- scoped A3.5 files",
-      "Oracle review found one P1 public-accept durability blocker; targeted fix applied",
+      "git diff --check -- supabase/functions/quote-builder-v2/index.ts supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts",
+      "Oracle initial review found two P1 blockers; targeted fixes applied for durable retry dedupe and latest sent-rep ownership; Oracle follow-up found no remaining P0/P1 blockers",
       "bun run migrations:check (clean temp worktree, sequence 001..608)",
-      "bun run segment:gates --segment A3.5-public-acceptance-hardening --ui (clean temp worktree)"
+      "bun run segment:gates --segment A3.5-public-acceptance-evidence --ui (clean temp worktree)"
     ],
-    "gate_report": "test-results/agent-gates/20260521T021534Z-A3.5-public-acceptance-hardening.json",
+    "gate_report": "test-results/agent-gates/20260521T022859Z-A3.5-public-acceptance-evidence.json",
     "remaining_gaps": [
-      "Live Stripe/deposit collection not implemented; still gated by deposit SOP and Stripe readiness.",
-      "Rep notification/timeline evidence not safely verified in this slice; customer copy avoids claiming notification.",
-      "A3.5 should remain in_progress until deposit/payment and notification scope is implemented or formally descoped."
+      "Live Stripe/deposit collection remains gated by deposit SOP and Stripe readiness.",
+      "Production deployed customer acceptance against live Supabase has not been verified in this slice.",
+      "A3.5 should remain in_progress until live deposit/payment scope is implemented or formally descoped."
     ],
-    "notes": "Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only A3.5 scoped files applied. CRM stage advancement through existing advanceQuoteDealStage(...salesOrderSigned) was preserved but not expanded.",
-    "updated_at": "2026-05-21T02:15:34Z"
+    "notes": "This is the second A3.5 partial slice, building on the prior public acceptance hardening commit. Public accept side effects are best-effort and durably deduped by quote/signature so share-token retries do not spam rep notifications or timeline events. Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only scoped quote-builder-v2 files applied.",
+    "updated_at": "2026-05-21T02:28:59Z"
   },
-  "updated_at": "2026-05-21T02:15:34Z"
+  "updated_at": "2026-05-21T02:28:59Z"
 }
