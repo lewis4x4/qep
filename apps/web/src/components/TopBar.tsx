@@ -237,6 +237,7 @@ type QrmBellRow = {
   id: string;
   title: string;
   body: string | null;
+  kind: string | null;
   deal_id: string | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
@@ -287,7 +288,7 @@ function useTopBarBell(profileId: string) {
           .is("read_at", null),
         supabase
           .from("crm_in_app_notifications")
-          .select("id, title, body, deal_id, metadata, created_at, read_at")
+          .select("id, title, body, kind, deal_id, metadata, created_at, read_at")
           .eq("user_id", profileId)
           .order("created_at", { ascending: false })
           .limit(20),
@@ -882,6 +883,8 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
                 crmRows.map((row) => {
                   const metadataLink = row.metadata?.link;
                   const hasLink = typeof metadataLink === "string" && metadataLink.length > 0;
+                  const isKnowledgeDoc = row.kind === "kb_doc_added";
+                  const unreadTarget = isKnowledgeDoc ? "knowledge doc" : hasLink ? "link" : "deal";
                   const canNavigate = hasLink || !!row.deal_id;
 
                   return (
@@ -904,7 +907,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
                         <span className="line-clamp-2 text-xs text-muted-foreground">{row.body}</span>
                       ) : null}
                       <span className="text-[10px] text-muted-foreground">
-                        {row.read_at ? "Read" : (hasLink ? "Unread — opens link" : "Unread — opens deal")}
+                        {row.read_at ? "Read" : `Unread — opens ${unreadTarget}`}
                       </span>
                     </DropdownMenuItem>
                   );

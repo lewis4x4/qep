@@ -32,6 +32,7 @@ interface RequestBody {
   audience?: unknown;
   allowed_roles?: unknown;
   source_key?: unknown;
+  notify_eligible_users?: unknown;
 }
 
 interface CallerProfile {
@@ -87,6 +88,16 @@ Deno.serve(async (req) => {
       embeddingEnabled,
     });
 
+    const notificationCount = parsed.notifyEligibleUsers
+      ? await fanOutKnowledgeDocNotifications(env.admin, {
+        workspaceId: auth.workspaceId,
+        sourceId,
+        title: parsed.title,
+        audience: parsed.audience,
+        allowedRoles: parsed.allowedRoles,
+      })
+      : 0;
+
     return safeJsonOk(
       {
         source_id: sourceId,
@@ -95,6 +106,7 @@ Deno.serve(async (req) => {
         audience: parsed.audience,
         allowed_roles: parsed.allowedRoles,
         chunks: chunkCount,
+        notifications_created: notificationCount,
         embedding_model: OPENAI_EMBEDDING_MODEL,
         embedding_status: embeddingEnabled ? "embedded" : "skipped_missing_openai_key",
       },
@@ -171,6 +183,7 @@ function parseBody(body: RequestBody):
       audience: string;
       allowedRoles: string[];
       sourceKey: string | null;
+      notifyEligibleUsers: boolean;
     }
   | { ok: false; error: string } {
   const title = typeof body.title === "string" ? body.title.trim() : "";
@@ -203,8 +216,9 @@ function parseBody(body: RequestBody):
   const sourceKey = typeof body.source_key === "string" && body.source_key.trim()
     ? `iron-ingest:${body.source_key.trim().slice(0, 160)}`
     : null;
+  const notifyEligibleUsers = body.notify_eligible_users === true;
 
-  return { ok: true, title, bodyMarkdown, sourceType, audience, allowedRoles, sourceKey };
+  return { ok: true, title, bodyMarkdown, sourceType, audience, allowedRoles, sourceKey, notifyEligibleUsers };
 }
 
 async function upsertSource(
@@ -254,6 +268,49 @@ async function upsertSource(
     .single();
   if (error || !data?.id) throw new Error(`source insert failed: ${error?.message ?? "unknown"}`);
   return data.id as string;
+}
+
+async function fanOutKnowledgeDocNotifications(
+  admin: SupabaseClient,
+  input: {
+    workspaceId: string;
+    sourceId: string;
+    title: string;
+    audience: string;
+    allowedRoles: string[];
+  },
+): Promise<number> {
+  let query = admin
+    .from("profiles")
+    .select("id")
+    .eq("active_workspace_id", input.workspaceId)
+    .in("role", input.allowedRoles);
+  query = input.audience === "internal"
+    ? query.or("audience.eq.internal,audience.is.null")
+    : query.eq("audience", input.audience);
+  const { data: profiles, error: profileError } = await query;
+
+  if (profileError) throw new Error(`notification recipients failed: ${profileError.message}`);
+  const rows = (profiles ?? [])
+    .map((profile) => typeof profile.id === "string" ? profile.id : null)
+    .filter((id): id is string => Boolean(id))
+    .map((userId) => ({
+      workspace_id: input.workspaceId,
+      user_id: userId,
+      kind: "kb_doc_added",
+      title: "Knowledge doc added",
+      body: input.title,
+      metadata: {
+        source: "iron-knowledge-ingest",
+        source_id: input.sourceId,
+        link: `/chat?seed=${input.sourceId}`,
+      },
+    }));
+
+  if (rows.length === 0) return 0;
+  const { error } = await admin.from("crm_in_app_notifications").insert(rows);
+  if (error) throw new Error(`notification insert failed: ${error.message}`);
+  return rows.length;
 }
 
 async function replaceChunks(
