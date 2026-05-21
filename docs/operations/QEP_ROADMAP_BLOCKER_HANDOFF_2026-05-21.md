@@ -1,14 +1,15 @@
 # QEP Roadmap Blocker Handoff — 2026-05-21
 
 Generated at: 2026-05-21T09:13:52Z
+Updated at: 2026-05-21T13:26:16Z
 
 ## Current Selector Result
 
 ```json
-{"task":null,"reason":"all_actionable_have_blockers","total_actionable":12}
+{"task":null,"reason":"all_actionable_have_blockers","total_actionable":11}
 ```
 
-There is no currently safe engineering build item to start. The roadmap queue is blocked by human sign-offs, owner decisions, external documents/samples, DNS access, or legal/compliance inputs.
+There is no currently safe engineering build item to start. The roadmap queue is blocked by human sign-offs, owner decisions, external documents/samples, DNS access, legal/compliance inputs, or empty IntelliDealer production stage tables.
 
 ## Verified Completed Starting Point
 
@@ -26,6 +27,71 @@ Evidence:
   - `BottomTabBar` fixed 64px height + safe-area contract
   - mobile sales E2E bottom-tab persistence assertion
   - Quote Builder mobile shell scroll delegation
+
+
+## Updates Since Initial Handoff
+
+### GitHub Actions migration drift fixed
+
+The repeated `Check Supabase migrations` failures were caused by the live Supabase project being behind repo migrations. The guarded `Apply Supabase migrations` workflow was run after patching migration `617` so the owner inbox view appends `ai_prep_packet` instead of inserting it before `age_days`.
+
+Evidence:
+
+- Fix commit: `8e931d0f` — `Let owner inbox view migration append triage packet`
+- Apply workflow: `26228590964` — success
+- Check workflow: `26228579882` — success
+- Applied migrations: `607` through `622`
+- Final check log: `no drift — every migration in the repo is applied to prod`
+
+### Q11 resolved through audited delegation
+
+Q11 was resolved using the live policy introduced by migration `621`: Ryan-owned `non_visual` decisions may be delegated to Brian. The existing recommended option was applied through `apply_qep_delegated_recommendation`, not by manual row editing.
+
+Approved option:
+
+- `recommended`: 3 years of closed quotes + all open quotes + active inventory + active customers; cutover Monday `2026-06-15`.
+
+Evidence:
+
+- Decision: `Q11`
+- Policy id: `e4f38497-92c9-41f9-8546-d11138a010f8`
+- Audit id: `61590fb6-5850-4172-b397-7d98ad133380`
+- Applied by: `orchestrator:delegation-policy`
+- Roadmap tasks shipped: `A4.4`, `C1.2`
+
+### C1.3 now blocked by missing staged IntelliDealer rows
+
+After Q11 resolved, `C1.3 — Run snapshot in production` became next. The snapshot script self-test and dry-run passed, but all relevant production stage tables were empty, so no production commit/cutover was performed.
+
+Verification run:
+
+```bash
+bun ./scripts/commit-intellidealer-snapshot-import.mjs --self-test
+bun ./scripts/commit-intellidealer-snapshot-import.mjs --workspace default --source intellidealer_snapshot_2026-05-14
+```
+
+Result:
+
+- self-test: `PASS`
+- dry-run: `PASS`
+- staged equipment rows: `0`
+- staged parts rows: `0`
+- staged service/PDI rows: `0`
+- direct stage-table samples also returned `0` rows for equipment, parts, service history, and quote history
+
+Linear escalation:
+
+- QEP-68 comment: `a5732a32-0740-48a4-b6bd-6695f77a27c6`
+
+Needed before C1.3 can resume:
+
+- IntelliDealer equipment export file
+- IntelliDealer parts export file
+- IntelliDealer quotes/history export file
+- IntelliDealer service/PDI export file
+- Confirmation of workspace/source tag if not `default` / `intellidealer_snapshot_2026-05-14`
+
+Do not run `--commit` or mark C1.3 shipped until the stage tables contain non-zero verified rows.
 
 ## Immediate Human Sign-Off Blockers
 
@@ -181,13 +247,12 @@ Live `qep_decisions` rows still open:
 |---|---|---|---|
 | Q7 | Rylee | RATIFY | Prospect quote policy: allow/deny and conversion timing |
 | Q10 | Rylee | RATIFY | Rebate stack precedence policy |
-| Q11 | Ryan | AUTHORIZE | IntelliDealer history scope and cutover date |
 | Q12 | Rylee | AUTHORIZE | Microsoft 365 consent / mailbox access policy |
 | Q14 | Rylee | RATIFY | Source-required alert routing |
 | Q15 | Rylee | RATIFY | Sales home priority cut |
 | CYBER-INS | Rylee | AUTHORIZE | Cyber insurance coverage for AI-powered internal tools |
 
-Linear blocker comments with recommended answers were already posted for these decisions earlier in the orchestration loop.
+Linear blocker comments with recommended answers were already posted for these decisions earlier in the orchestration loop. Q11 has since been answered via audited delegation and is intentionally omitted from the open-decision table above.
 
 ## Resume Procedure
 
