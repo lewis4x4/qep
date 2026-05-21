@@ -69,6 +69,14 @@ const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const QUOTE_APPROVAL_WORKFLOW_SLUG = quoteManagerApproval.slug;
+const PUBLIC_ACCEPT_TERMS_VERSION = "a3.5-payment-handoff-v1";
+const PUBLIC_ACCEPT_READY_STATUSES = [
+  "sent",
+  "viewed",
+  "countered",
+  "approved",
+  "approved_with_conditions",
+];
 
 function extractQuoteText(value: Record<string, unknown> | null, keyA: string, keyB: string): string | null {
   const raw = (typeof value?.[keyA] === "string" ? value[keyA] : typeof value?.[keyB] === "string" ? value[keyB] : null) as string | null;
@@ -2456,11 +2464,16 @@ async function handlePublicAccept(
   const signerName = typeof body.signer_name === "string" ? body.signer_name.trim().slice(0, 200) : "";
   const signerEmail = typeof body.signer_email === "string" ? body.signer_email.trim().slice(0, 200) : "";
   const signatureDataUrl = validatePublicSignatureDataUrl(body.signature_data_url);
+  const termsAccepted = body.terms_accepted === true;
+  const termsVersion = typeof body.terms_version === "string" ? body.terms_version.trim().slice(0, 80) : "";
   const configRaw = body.customer_configuration;
 
   if (!signerName) return safeJsonError("Please enter your name to sign.", 400, origin);
   if (!signatureDataUrl.ok) {
     return safeJsonError(signatureDataUrl.message, signatureDataUrl.status, origin);
+  }
+  if (!termsAccepted || termsVersion !== PUBLIC_ACCEPT_TERMS_VERSION) {
+    return safeJsonError("Please confirm acceptance terms.", 400, origin);
   }
   if (!configRaw || typeof configRaw !== "object" || Array.isArray(configRaw)) {
     return safeJsonError("Missing configuration snapshot.", 400, origin);
@@ -2474,6 +2487,28 @@ async function handlePublicAccept(
     .maybeSingle();
   if (quoteErr) return safeJsonError("Failed to load quote", 500, origin);
   if (!quote) return safeJsonError("Quote not found", 404, origin);
+
+  // Idempotent retry: if a previous accept request already moved the
+  // package forward, return the durable package/signature state instead
+  // of inserting a duplicate signature or claiming a fresh transition.
+  if (["accepted", "converted_to_deal"].includes(String(quote.status))) {
+    const { data: latestSig, error: latestSigErr } = await admin
+      .from("quote_signatures")
+      .select("id, signed_at, document_hash")
+      .eq("quote_package_id", quote.id)
+      .eq("is_valid", true)
+      .order("signed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (latestSigErr) return safeJsonError("Failed to verify acceptance", 500, origin);
+    return safeJsonOk({
+      signature_id: latestSig?.id ?? null,
+      signed_at: latestSig?.signed_at ?? null,
+      status: String(quote.status),
+      document_hash: latestSig?.document_hash ?? null,
+    }, origin);
+  }
+
   const acceptGate = assertPublicQuoteAcceptReady(quote as Record<string, unknown>);
   if (!acceptGate.ok) {
     return safeJsonErrorWithFields(acceptGate.message, acceptGate.status, origin, { blockers: acceptGate.blockers ?? [] });
@@ -2481,6 +2516,8 @@ async function handlePublicAccept(
 
   const configuration = {
     ...(configRaw as Record<string, unknown>),
+    terms_accepted: true,
+    terms_version: termsVersion,
     accepted_at_client: new Date().toISOString(),
   };
   const documentHash = await canonicalizeAndHash({
@@ -2515,19 +2552,35 @@ async function handlePublicAccept(
     return safeJsonError(sigErr.message || "Failed to record signature", 500, origin);
   }
 
-  // Flip the package to accepted if it isn't already in a post-accept
-  // state. Rep-side approval flows may have moved it further along
-  // (e.g. converted_to_deal); we don't clobber those.
-  const preserveStatuses = new Set([
-    "accepted",
-    "converted_to_deal",
-    "archived",
-  ]);
-  if (!preserveStatuses.has(String(quote.status))) {
-    await admin
+  // Flip only from accept-ready statuses and verify the changed row before
+  // reporting accepted. If another request won the race, re-read the
+  // package and return accepted only when the durable status proves it.
+  const { data: updatedQuote, error: updateErr } = await admin
+    .from("quote_packages")
+    .update({ status: "accepted", accepted_at: sigRow?.signed_at ?? new Date().toISOString() })
+    .eq("id", quote.id)
+    .in("status", PUBLIC_ACCEPT_READY_STATUSES)
+    .select("id, status, accepted_at")
+    .maybeSingle();
+  if (updateErr) {
+    console.error("public accept quote status update error:", updateErr);
+    return safeJsonError("Failed to mark quote accepted", 500, origin);
+  }
+
+  let verifiedPackageStatus = String(updatedQuote?.status ?? "");
+  if (!updatedQuote) {
+    const { data: racedQuote, error: racedQuoteErr } = await admin
       .from("quote_packages")
-      .update({ status: "accepted", accepted_at: sigRow?.signed_at ?? new Date().toISOString() })
-      .eq("id", quote.id);
+      .select("id, status, accepted_at")
+      .eq("id", quote.id)
+      .maybeSingle();
+    if (racedQuoteErr || !racedQuote) {
+      return safeJsonError("Failed to verify quote acceptance", 500, origin);
+    }
+    if (!["accepted", "converted_to_deal"].includes(String(racedQuote.status))) {
+      return safeJsonError("Quote acceptance could not be completed. Please refresh and try again.", 409, origin);
+    }
+    verifiedPackageStatus = String(racedQuote.status);
   }
 
   await advanceQuoteDealStage({
@@ -2541,7 +2594,7 @@ async function handlePublicAccept(
   return safeJsonOk({
     signature_id: sigRow?.id ?? null,
     signed_at: sigRow?.signed_at ?? null,
-    status: "accepted",
+    status: verifiedPackageStatus,
     document_hash: documentHash,
   }, origin, 201);
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
+  PUBLIC_ACCEPT_TERMS_VERSION,
   acceptPublicQuote,
   fetchPublicDealRoom,
   fetchPublicDealRoomAttachments,
@@ -34,6 +35,10 @@ import {
   getTaxDetail,
   type DealRoomProposalLine,
 } from "../lib/deal-room-proposal";
+import {
+  PortalSignaturePad,
+  type PortalSignaturePadHandle,
+} from "@/features/portal/components/PortalSignaturePad";
 
 function formatCurrency(value: number | null | undefined, digits = 2): string {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -1508,99 +1513,6 @@ function ApprovalStatusBanner({ status }: { status: string }) {
   );
 }
 
-function SignaturePad({ onChange }: { onChange: (dataUrl: string | null) => void }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const drawingRef = useRef(false);
-  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
-  const movementDistanceRef = useRef(0);
-
-  const point = (e: { clientX: number; clientY: number }) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  };
-
-  const ensureContext = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "#0f172a";
-    ctx.lineWidth = 2;
-    return ctx;
-  };
-
-  const start = (e: { clientX: number; clientY: number }) => {
-    const ctx = ensureContext();
-    if (!ctx) return;
-    drawingRef.current = true;
-    movementDistanceRef.current = 0;
-    const p = point(e);
-    lastPointRef.current = p;
-    ctx.beginPath();
-    ctx.moveTo(p.x, p.y);
-  };
-
-  const move = (e: { clientX: number; clientY: number }) => {
-    if (!drawingRef.current) return;
-    const ctx = ensureContext();
-    if (!ctx) return;
-    const p = point(e);
-    const last = lastPointRef.current;
-    if (last) {
-      movementDistanceRef.current += Math.hypot(p.x - last.x, p.y - last.y);
-    }
-    lastPointRef.current = p;
-    ctx.lineTo(p.x, p.y);
-    ctx.stroke();
-  };
-
-  const end = () => {
-    if (!drawingRef.current) return;
-    drawingRef.current = false;
-    lastPointRef.current = null;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    if (movementDistanceRef.current < 4) {
-      onChange(null);
-      return;
-    }
-    const pngDataUrl = canvas.toDataURL("image/png");
-    onChange(pngDataUrl);
-  };
-
-  const clear = () => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    movementDistanceRef.current = 0;
-    lastPointRef.current = null;
-    onChange(null);
-  };
-
-  return (
-    <div>
-      <canvas
-        ref={canvasRef}
-        width={520}
-        height={140}
-        className="mt-1 w-full max-w-[520px] rounded-md border border-slate-300 bg-white"
-        onPointerDown={start}
-        onPointerMove={move}
-        onPointerUp={end}
-        onPointerLeave={end}
-      />
-      <div className="mt-2">
-        <button type="button" onClick={clear} className="text-xs font-semibold text-slate-600 underline">Clear signature</button>
-      </div>
-    </div>
-  );
-}
-
 function AcceptPanel({
   token,
   quote,
@@ -1625,10 +1537,13 @@ function AcceptPanel({
   configuratorSelections: Array<{ key: string; name: string; price: number }>;
 }) {
   const [signerName, setSignerName] = useState(customerHint === "Customer" ? "" : customerHint);
-  const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
+  const [signerEmail, setSignerEmail] = useState("");
   const [typedSignature, setTypedSignature] = useState("");
+  const [hasDrawnSignature, setHasDrawnSignature] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const signaturePadRef = useRef<PortalSignaturePadHandle>(null);
   const typedSignatureDataUrl = useMemo(() => createTypedSignatureDataUrl(typedSignature), [typedSignature]);
-  const effectiveSignatureDataUrl = signatureDataUrl ?? typedSignatureDataUrl;
+  const hasEffectiveSignature = hasDrawnSignature || Boolean(typedSignatureDataUrl);
   const queryClient = useQueryClient();
 
   // Quote-status-based affordance: already-accepted quotes render the
@@ -1660,10 +1575,15 @@ function AcceptPanel({
         trade_credit: tradeCredit,
         attachments: configuratorSelections,
       };
+      const drawnSignatureDataUrl = signaturePadRef.current?.hasInk()
+        ? signaturePadRef.current.toDataUrl()
+        : null;
       return acceptPublicQuote(token, {
         signerName: signerName.trim() || (customerHint === "Customer" ? "Customer" : customerHint),
-        signerEmail: null,
-        signatureDataUrl: effectiveSignatureDataUrl ?? "",
+        signerEmail: signerEmail.trim() || null,
+        signatureDataUrl: drawnSignatureDataUrl ?? typedSignatureDataUrl ?? "",
+        termsAccepted: true,
+        termsVersion: PUBLIC_ACCEPT_TERMS_VERSION,
         customerConfiguration: configuration,
       });
     },
@@ -1683,7 +1603,7 @@ function AcceptPanel({
               Proposal accepted
             </div>
             <p className="mt-1 text-sm text-emerald-900">
-              Your rep has been notified. They'll reach out to confirm delivery, paperwork, and next steps.
+              Your acceptance has been recorded. Your rep will follow up to confirm delivery, paperwork, and next steps.
             </p>
           </div>
           <div className="rounded-full bg-emerald-600 px-4 py-1 text-xs font-bold uppercase tracking-[0.08em] text-white">
@@ -1720,10 +1640,24 @@ function AcceptPanel({
               placeholder="Your name"
               className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm sm:max-w-xs"
             />
+            <input
+              type="email"
+              value={signerEmail}
+              onChange={(e) => setSignerEmail(e.target.value)}
+              placeholder="Email (optional)"
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm sm:max-w-xs"
+            />
           </div>
           <div className="mt-4">
             <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Signature</div>
-            <SignaturePad onChange={setSignatureDataUrl} />
+            <PortalSignaturePad
+              ref={signaturePadRef}
+              width={520}
+              height={140}
+              className="mt-1"
+              onInkChange={setHasDrawnSignature}
+              onClear={() => setHasDrawnSignature(false)}
+            />
             <label htmlFor="typed-signature" className="mt-3 block text-xs font-semibold text-slate-600">
               Keyboard accessible signature
             </label>
@@ -1739,12 +1673,23 @@ function AcceptPanel({
             <p id="typed-signature-help" className="mt-1 text-xs text-slate-500">
               Use this field if drawing a signature is not accessible on your device.
             </p>
+            <label className="mt-4 flex max-w-2xl items-start gap-2 text-xs leading-relaxed text-slate-600">
+              <input
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={(event) => setAcceptedTerms(event.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                I confirm this proposal and authorize QEP to contact me to finalize documents, delivery, and deposit/payment details. Deposit/payment instructions will be coordinated by my QEP representative.
+              </span>
+            </label>
           </div>
         </div>
         <button
           type="button"
           onClick={() => acceptMutation.mutate()}
-          disabled={!signerName.trim() || !effectiveSignatureDataUrl || acceptMutation.isPending}
+          disabled={!signerName.trim() || !acceptedTerms || !hasEffectiveSignature || acceptMutation.isPending}
           className="rounded-lg bg-[#F28A07] px-6 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#d06a1e] disabled:opacity-40"
         >
           {acceptMutation.isPending ? "Recording…" : "Accept this proposal"}

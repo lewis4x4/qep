@@ -508,6 +508,41 @@
       "gate_report": "test-results/agent-gates/20260521T014633Z-A3.2-live-structured-specs.json",
       "notes": "No migration required; reused existing qb_equipment_models.specs and quote-line metadata/PDF renderer. Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only A3.2 scoped files applied. Spec fallback search is bounded/local for this slice; large catalogs may later need indexed DB search.",
       "updated_at": "2026-05-21T01:46:33Z"
+    },
+    {
+      "task_id": "A3.5/QEP-18",
+      "status": "partial_verified",
+      "title": "M5 \u2014 Branded acceptance flow",
+      "stream": "A",
+      "wave": "A3",
+      "goal": "Customer public Deal Room acceptance uses shared signature capture, explicit payment/deposit handoff terms, and durable token-authorized accepted-status proof without claiming unfinished Stripe/deposit or rep-notification behavior.",
+      "changed_files": [
+        "apps/web/src/features/deal-room/pages/DealRoomPage.tsx",
+        "apps/web/src/features/deal-room/lib/deal-room-api.ts",
+        "apps/web/src/features/deal-room/lib/__tests__/deal-room-api.test.ts",
+        "apps/web/src/features/deal-room/pages/__tests__/DealRoomPage.acceptance-source.test.ts",
+        "supabase/functions/quote-builder-v2/index.ts",
+        "supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts"
+      ],
+      "verification": [
+        "bun test apps/web/src/features/deal-room/lib/__tests__/deal-room-api.test.ts apps/web/src/features/deal-room/pages/__tests__/DealRoomPage.acceptance-source.test.ts",
+        "deno test supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts --allow-read --allow-env",
+        "deno test supabase/functions/quote-builder-v2/quote-public-safety.test.ts --allow-read --allow-env",
+        "bun run --filter @qep/web typecheck",
+        "deno check supabase/functions/quote-builder-v2/index.ts",
+        "git diff --check -- scoped A3.5 files",
+        "Oracle review found one P1 public-accept durability blocker; targeted fix applied",
+        "bun run migrations:check (clean temp worktree, sequence 001..608)",
+        "bun run segment:gates --segment A3.5-public-acceptance-hardening --ui (clean temp worktree)"
+      ],
+      "gate_report": "test-results/agent-gates/20260521T021534Z-A3.5-public-acceptance-hardening.json",
+      "remaining_gaps": [
+        "Live Stripe/deposit collection not implemented; still gated by deposit SOP and Stripe readiness.",
+        "Rep notification/timeline evidence not safely verified in this slice; customer copy avoids claiming notification.",
+        "A3.5 should remain in_progress until deposit/payment and notification scope is implemented or formally descoped."
+      ],
+      "notes": "Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only A3.5 scoped files applied. CRM stage advancement through existing advanceQuoteDealStage(...salesOrderSigned) was preserved but not expanded.",
+      "updated_at": "2026-05-21T02:15:34Z"
     }
   ],
   "agents": [
@@ -837,39 +872,39 @@
     }
   },
   "current_task": {
-    "task_id": "A3.2/QEP-15",
-    "status": "complete",
-    "title": "M2 \u2014 Live spec sheet from structured source",
+    "task_id": "A3.5/QEP-18",
+    "status": "partial_verified",
+    "title": "M5 \u2014 Branded acceptance flow",
     "stream": "A",
     "wave": "A3",
-    "goal": "Quote Builder spec output uses structured manufacturer-ingested catalog specs instead of free-text bullets, with searchable catalog projection and consistent per-model quote/PDF metadata.",
+    "goal": "Customer public Deal Room acceptance uses shared signature capture, explicit payment/deposit handoff terms, and durable token-authorized accepted-status proof without claiming unfinished Stripe/deposit or rep-notification behavior.",
     "changed_files": [
-      "apps/web/src/lib/pricing/catalog-specs.ts",
-      "apps/web/src/lib/pricing/__tests__/catalog-specs.test.ts",
-      "apps/web/src/lib/pricing/ingestion.ts",
-      "apps/web/src/lib/pricing/__tests__/ingestion.test.ts",
-      "supabase/functions/publish-price-sheet/index.ts",
-      "apps/web/src/features/quote-builder/lib/quote-api.ts",
-      "apps/web/src/features/quote-builder/lib/quote-builder-page-helpers.ts",
-      "apps/web/src/features/quote-builder/lib/__tests__/quote-builder-page-helpers.test.ts",
-      "apps/web/src/features/quote-builder/lib/quote-proposal-data.ts",
-      "apps/web/src/features/quote-builder/lib/__tests__/quote-proposal-data.test.ts",
-      "apps/web/src/features/quote-builder/lib/__tests__/quote-api.test.ts",
-      "apps/web/src/features/quote-builder/components/EquipmentSelector.tsx"
+      "apps/web/src/features/deal-room/pages/DealRoomPage.tsx",
+      "apps/web/src/features/deal-room/lib/deal-room-api.ts",
+      "apps/web/src/features/deal-room/lib/__tests__/deal-room-api.test.ts",
+      "apps/web/src/features/deal-room/pages/__tests__/DealRoomPage.acceptance-source.test.ts",
+      "supabase/functions/quote-builder-v2/index.ts",
+      "supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts"
     ],
     "verification": [
-      "bun test apps/web/src/lib/pricing/__tests__/catalog-specs.test.ts apps/web/src/lib/pricing/__tests__/ingestion.test.ts apps/web/src/features/quote-builder/lib/__tests__/quote-builder-page-helpers.test.ts apps/web/src/features/quote-builder/lib/__tests__/quote-proposal-data.test.ts apps/web/src/features/quote-builder/lib/__tests__/quote-api.test.ts",
+      "bun test apps/web/src/features/deal-room/lib/__tests__/deal-room-api.test.ts apps/web/src/features/deal-room/pages/__tests__/DealRoomPage.acceptance-source.test.ts",
+      "deno test supabase/functions/quote-builder-v2/quote-public-accept-regression.test.ts --allow-read --allow-env",
+      "deno test supabase/functions/quote-builder-v2/quote-public-safety.test.ts --allow-read --allow-env",
       "bun run --filter @qep/web typecheck",
-      "deno check supabase/functions/publish-price-sheet/index.ts",
-      "deno check supabase/functions/extract-price-sheet/index.ts",
-      "git diff --check -- scoped A3.2 files",
-      "Oracle review found two P1 blockers; targeted fixes applied for descriptor-only specs and manufacturer source proof",
+      "deno check supabase/functions/quote-builder-v2/index.ts",
+      "git diff --check -- scoped A3.5 files",
+      "Oracle review found one P1 public-accept durability blocker; targeted fix applied",
       "bun run migrations:check (clean temp worktree, sequence 001..608)",
-      "bun run segment:gates --segment A3.2-live-structured-specs --ui (clean temp worktree)"
+      "bun run segment:gates --segment A3.5-public-acceptance-hardening --ui (clean temp worktree)"
     ],
-    "gate_report": "test-results/agent-gates/20260521T014633Z-A3.2-live-structured-specs.json",
-    "notes": "No migration required; reused existing qb_equipment_models.specs and quote-line metadata/PDF renderer. Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only A3.2 scoped files applied. Spec fallback search is bounded/local for this slice; large catalogs may later need indexed DB search.",
-    "updated_at": "2026-05-21T01:46:33Z"
+    "gate_report": "test-results/agent-gates/20260521T021534Z-A3.5-public-acceptance-hardening.json",
+    "remaining_gaps": [
+      "Live Stripe/deposit collection not implemented; still gated by deposit SOP and Stripe readiness.",
+      "Rep notification/timeline evidence not safely verified in this slice; customer copy avoids claiming notification.",
+      "A3.5 should remain in_progress until deposit/payment and notification scope is implemented or formally descoped."
+    ],
+    "notes": "Main working tree has unrelated admin/OEM/price/sales WIP and duplicate untracked migrations, so full gates ran in a clean detached worktree with only A3.5 scoped files applied. CRM stage advancement through existing advanceQuoteDealStage(...salesOrderSigned) was preserved but not expanded.",
+    "updated_at": "2026-05-21T02:15:34Z"
   },
-  "updated_at": "2026-05-21T01:46:33Z"
+  "updated_at": "2026-05-21T02:15:34Z"
 }

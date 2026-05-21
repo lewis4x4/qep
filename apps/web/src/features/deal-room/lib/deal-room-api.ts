@@ -150,10 +150,14 @@ export interface ConciergeMessage {
   content: string;
 }
 
+export const PUBLIC_ACCEPT_TERMS_VERSION = "a3.5-payment-handoff-v1";
+
 export interface PublicAcceptRequest {
   signerName: string;
   signerEmail?: string | null;
   signatureDataUrl: string;
+  termsAccepted: true;
+  termsVersion: typeof PUBLIC_ACCEPT_TERMS_VERSION;
   customerConfiguration: Record<string, unknown>;
 }
 
@@ -198,6 +202,8 @@ export async function acceptPublicQuote(
       signer_name: input.signerName,
       signer_email: input.signerEmail ?? null,
       signature_data_url: input.signatureDataUrl,
+      terms_accepted: input.termsAccepted,
+      terms_version: input.termsVersion,
       customer_configuration: input.customerConfiguration,
     }),
   });
