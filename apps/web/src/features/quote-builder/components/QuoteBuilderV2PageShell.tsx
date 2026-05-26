@@ -62,8 +62,6 @@ export interface QuoteBuilderV2PageShellProps {
   nextWizardStep: Step | null;
   wizardNextDisabled: boolean;
   nextWizardLabel: string | null;
-  hasCustomer: boolean;
-  onQuoteForProspect: () => void;
   wizardMaxStepIndex0: number;
   wizardStepRouter: ReactNode;
   equipmentTotal: number;
@@ -128,8 +126,6 @@ export function QuoteBuilderV2PageShell({
   nextWizardStep,
   wizardNextDisabled,
   nextWizardLabel,
-  hasCustomer,
-  onQuoteForProspect,
   wizardMaxStepIndex0,
   wizardStepRouter,
   equipmentTotal,
@@ -304,8 +300,6 @@ export function QuoteBuilderV2PageShell({
             nextWizardStep={nextWizardStep}
             wizardNextDisabled={wizardNextDisabled}
             nextWizardLabel={nextWizardLabel}
-            hasCustomer={hasCustomer}
-            onQuoteForProspect={onQuoteForProspect}
             wizardMaxStepIndex0={wizardMaxStepIndex0}
           >
             {wizardStepRouter}

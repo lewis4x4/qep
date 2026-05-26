@@ -4,11 +4,12 @@ import {
   clickWizardProgressPill,
   expectApprovalBypassApplied,
   expectWizardStep,
+  pickFirstCrmCustomerAndStart,
   playwrightAgedEquipmentId,
+  playwrightCrmCustomerQuery,
   playwrightTestCredentials,
   selectFirstQuotingBranch,
   signInWithPassword,
-  startProspectQuote,
   submitForApproval,
   waitForQuoteAutosave,
   walkFromEquipmentToReview,
@@ -16,13 +17,17 @@ import {
 
 const credentials = playwrightTestCredentials();
 const agedEquipmentId = playwrightAgedEquipmentId();
+const crmCustomerQuery = playwrightCrmCustomerQuery();
 
 test.describe("quote approval bypass", () => {
   test.describe.configure({ timeout: 180_000 });
 
+  // Decision Q7 (do_not_allow): the wizard now requires a CRM-linked
+  // customer, so PLAYWRIGHT_CRM_CUSTOMER_QUERY is mandatory alongside
+  // the existing equipment + auth env vars.
   test.skip(
-    !credentials || !agedEquipmentId,
-    "Set PLAYWRIGHT_TEST_EMAIL, PLAYWRIGHT_TEST_PASSWORD, and PLAYWRIGHT_AGED_EQUIPMENT_ID (CRM unit with received_at >= 365 days, in stock, margin >= 8%)",
+    !credentials || !agedEquipmentId || !crmCustomerQuery,
+    "Set PLAYWRIGHT_TEST_EMAIL, PLAYWRIGHT_TEST_PASSWORD, PLAYWRIGHT_AGED_EQUIPMENT_ID, and PLAYWRIGHT_CRM_CUSTOMER_QUERY",
   );
 
   test.beforeEach(async ({ page }) => {
@@ -33,7 +38,7 @@ test.describe("quote approval bypass", () => {
 
   test("aged stocked CRM unit auto-approves without creating an approval case", async ({ page }) => {
     await expectWizardStep(page, 1);
-    await startProspectQuote(page);
+    await pickFirstCrmCustomerAndStart(page);
     await selectFirstQuotingBranch(page);
 
     await clickWizardProgressPill(page, "equipment");

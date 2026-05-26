@@ -91,7 +91,7 @@ export function useQuoteBuilderWizardChrome({
     || (step === "document" && !documentReady);
 
   const wizardNextHelp = step === "customer" && !hasCustomer
-    ? "Pick a customer or use Quote for prospect first."
+    ? "Pick an existing CRM customer to continue — quotes require a real customer record."
     : step === "equipment" && !equipmentCanContinue
       ? "Select equipment and resolve source-required availability first."
       : step === "document" && !documentReady

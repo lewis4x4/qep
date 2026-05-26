@@ -9,6 +9,7 @@
 | `PLAYWRIGHT_TEST_EMAIL` | Staging/local rep test user |
 | `PLAYWRIGHT_TEST_PASSWORD` | Password for that user |
 | `PLAYWRIGHT_AGED_EQUIPMENT_ID` | CRM equipment UUID (365+ day `received_at`, in stock, margin ≥ 8%) |
+| `PLAYWRIGHT_CRM_CUSTOMER_QUERY` | Search string that matches at least one CRM contact or company in the staging fixture. Required after the Q7 (do_not_allow) decision removed prospect quotes. |
 | `PLAYWRIGHT_BASE_URL` | Override app URL (default `http://127.0.0.1:5173`) |
 | `PLAYWRIGHT_SKIP_WEBSERVER` | Set `1` for deployed targets |
 | `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | Real project keys in `.env` for authenticated flows |

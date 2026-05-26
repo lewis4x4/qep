@@ -351,7 +351,7 @@ export function CustomerStep({
 
       {!hasCustomer ? (
         <p className="text-[11px] text-muted-foreground">
-          Select or add a customer, or use "Quote for prospect" from the mobile step bar below for a walk-in.
+          Select an existing CRM customer (or add one to CRM first) — quotes require a real customer record.
         </p>
       ) : null}
     </div>

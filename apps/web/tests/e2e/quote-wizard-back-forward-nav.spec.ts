@@ -4,19 +4,24 @@ import {
   clickStepFooterNext,
   clickWizardProgressPill,
   expectWizardStep,
+  pickFirstCrmCustomerAndStart,
+  playwrightCrmCustomerQuery,
   playwrightTestCredentials,
   selectFirstCatalogEquipment,
   selectFirstQuotingBranch,
   signInWithPassword,
-  startProspectQuote,
 } from "./fixtures";
 
 const credentials = playwrightTestCredentials();
+const crmCustomerQuery = playwrightCrmCustomerQuery();
 
 test.describe("quote wizard step navigation", () => {
+  // Decision Q7 (do_not_allow): the wizard now requires a CRM-linked
+  // customer, so PLAYWRIGHT_CRM_CUSTOMER_QUERY is mandatory alongside
+  // the auth env vars.
   test.skip(
-    !credentials,
-    "Set PLAYWRIGHT_TEST_EMAIL and PLAYWRIGHT_TEST_PASSWORD for authenticated e2e",
+    !credentials || !crmCustomerQuery,
+    "Set PLAYWRIGHT_TEST_EMAIL, PLAYWRIGHT_TEST_PASSWORD, and PLAYWRIGHT_CRM_CUSTOMER_QUERY for authenticated e2e",
   );
 
   test.beforeEach(async ({ page }) => {
@@ -27,7 +32,7 @@ test.describe("quote wizard step navigation", () => {
 
   test("progress pills jump back from pricing to configure and forward again", async ({ page }) => {
     await expectWizardStep(page, 1);
-    await startProspectQuote(page);
+    await pickFirstCrmCustomerAndStart(page);
     await selectFirstQuotingBranch(page);
 
     await clickWizardProgressPill(page, "equipment");

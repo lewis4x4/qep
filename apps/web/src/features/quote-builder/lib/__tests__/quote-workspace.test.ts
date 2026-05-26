@@ -69,12 +69,19 @@ describe("computeCommercialDiscountTotal", () => {
 });
 
 describe("hasQuoteCustomerIdentity", () => {
-  test("accepts a typed prospect name", () => {
-    expect(hasQuoteCustomerIdentity(makeDraft({ customerName: "Walk-in prospect" }))).toBe(true);
+  // Decision Q7 (do_not_allow): a typed customer name alone no longer
+  // satisfies the identity check — a CRM contact_id or company_id is
+  // required before the quote can be saved or advanced past step 1.
+  test("rejects a typed-only name without CRM linkage", () => {
+    expect(hasQuoteCustomerIdentity(makeDraft({ customerName: "Walk-in prospect" }))).toBe(false);
   });
 
-  test("accepts CRM ids", () => {
+  test("accepts a CRM company id", () => {
     expect(hasQuoteCustomerIdentity(makeDraft({ companyId: "co-1" }))).toBe(true);
+  });
+
+  test("accepts a CRM contact id", () => {
+    expect(hasQuoteCustomerIdentity(makeDraft({ contactId: "ct-1" }))).toBe(true);
   });
 
   test("rejects empty identity", () => {
@@ -198,6 +205,7 @@ describe("computeQuoteWorkspace", () => {
     const result = computeQuoteWorkspace(makeDraft({
       branchSlug: "lake-city",
       customerName: "Anderson",
+      companyId: "co-anderson",
       customerEmail: "buyer@example.com",
       equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 105_000, dealerCost: 95_000 }],
       attachments: [{ kind: "attachment", title: "Mulcher", quantity: 1, unitPrice: 10_000 }],
@@ -409,6 +417,7 @@ describe("computeQuoteWorkspace", () => {
     const result = computeQuoteWorkspace(makeDraft({
       branchSlug: "lake-city",
       customerName: "Anderson",
+      companyId: "co-anderson",
       customerEmail: "buyer@example.com",
       equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 100_000, dealerCost: 80_000 }],
       taxTotal: 0,
@@ -441,6 +450,7 @@ describe("computeQuoteWorkspace", () => {
     const draft = makeDraft({
       branchSlug: "lake-city",
       customerName: "Anderson",
+      companyId: "co-anderson",
       customerEmail: "buyer@example.com",
       equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 100_000, dealerCost: 88_000 }],
       taxTotal: 0,
@@ -459,6 +469,7 @@ describe("computeQuoteWorkspace", () => {
     const result = computeQuoteWorkspace(makeDraft({
       branchSlug: "lake-city",
       customerName: "Anderson",
+      companyId: "co-anderson",
       customerEmail: "buyer@example.com",
       quoteStatus: "approved",
       equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 105_000, dealerCost: 95_000 }],
@@ -497,7 +508,8 @@ describe("computeQuoteWorkspace", () => {
 
   test("save readiness no longer requires branch or linked deal", () => {
     const result = computeQuoteWorkspace(makeDraft({
-      customerName: "Walk-in prospect",
+      customerName: "Acme Excavation",
+      companyId: "co-acme",
       equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 105_000 }],
     }));
 
