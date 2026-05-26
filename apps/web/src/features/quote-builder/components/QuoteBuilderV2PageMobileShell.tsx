@@ -157,8 +157,6 @@ export function QuoteBuilderV2PageMobileShell({
   marginAmount,
   marginFloorPct,
   marginFloorSource,
-  hasCustomer,
-  onQuoteForProspect,
   wizardStepRouter,
   equipmentTotal,
   attachmentTotal,
@@ -187,7 +185,6 @@ export function QuoteBuilderV2PageMobileShell({
   const activeSectionTone = mobileSectionToneForStep(step);
   const totalSteps = WIZARD_STEPS.length;
   const autosave = autosaveDisplay(autoSaveState, displayedSavedLabel);
-  const showProspectCta = !hasCustomer && step === "customer";
 
   function toggleSection(id: "iron" | "coach" | "talk") {
     setOpenSection((current) => (current === id ? null : id));
@@ -341,23 +338,10 @@ export function QuoteBuilderV2PageMobileShell({
           }
           primary={
             <div
-              className={cn(
-                "flex items-center gap-2",
-                showProspectCta && "flex-wrap",
-              )}
+              className="flex items-center gap-2"
               data-testid="quote-mobile-primary-actions"
-              data-layout={showProspectCta ? "wrapped" : "inline"}
+              data-layout="inline"
             >
-              {showProspectCta && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11 w-full border-qep-orange/40 text-qep-orange hover:bg-qep-orange/10 hover:text-qep-orange"
-                  onClick={onQuoteForProspect}
-                >
-                  Quote for prospect
-                </Button>
-              )}
               <button
                 type="button"
                 onClick={() => setAssistantOpen(true)}

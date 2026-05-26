@@ -104,8 +104,6 @@ function buildProps(step: WizardStateValue["step"]): QuoteBuilderV2PageShellProp
     nextWizardStep: null,
     wizardNextDisabled: false,
     nextWizardLabel: null,
-    hasCustomer: true,
-    onQuoteForProspect: () => undefined,
     wizardMaxStepIndex0: 0,
     wizardStepRouter: <div data-testid="wizard-content">{step}-content</div>,
     equipmentTotal: 0,
@@ -239,9 +237,11 @@ describe("QuoteBuilderV2PageMobileShell mobile section framing", () => {
     expect(onSaveDraft).toHaveBeenCalledTimes(1);
   });
 
-  test("wraps customer-step actions when prospect quote CTA is present", () => {
+  test("customer-step primary actions stay inline without the removed prospect CTA", () => {
+    // Decision Q7 (migration 623) disallowed prospect quotes — the "Quote
+    // for prospect" CTA is gone, so primary actions no longer need to wrap
+    // when the customer step is incomplete.
     const props = buildProps("customer");
-    props.hasCustomer = false;
 
     const wizardValue = buildWizardValue("customer");
     render(
@@ -253,13 +253,10 @@ describe("QuoteBuilderV2PageMobileShell mobile section framing", () => {
     );
 
     const actions = screen.getByTestId("quote-mobile-primary-actions");
-    expect(actions.getAttribute("data-layout")).toBe("wrapped");
-    expect(actions.className).toContain("flex-wrap");
-
-    const prospectButton = screen.getByRole("button", { name: "Quote for prospect" });
-    expect(prospectButton.className).toContain("w-full");
+    expect(actions.getAttribute("data-layout")).toBe("inline");
+    expect(actions.className).not.toContain("flex-wrap");
+    expect(screen.queryByRole("button", { name: "Quote for prospect" })).toBeNull();
     expect(screen.getByRole("button", { name: "Save Draft" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
   });
 
   test("disables Save Draft while primary action is pending", () => {

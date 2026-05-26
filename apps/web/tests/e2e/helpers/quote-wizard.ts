@@ -11,7 +11,16 @@ export async function expectWizardStep(page: Page, stepNumber: number): Promise<
 }
 
 export async function startProspectQuote(page: Page): Promise<void> {
-  await page.getByTestId("wizard-quote-for-prospect").first().click();
+  // Decision Q7 (migration 623) removed the "Quote for prospect" shortcut.
+  // Every quote now requires a real customer record, so the e2e starter
+  // drives the desktop CustomerPicker's manual-entry "Add new" affordance
+  // and fills the required identity fields before advancing.
+  await page.getByRole("button", { name: /^Add new$/i }).click();
+  await page.getByLabel("Contact name").fill("E2E New Customer");
+  await page.getByLabel("Company").fill("E2E Test Co");
+  await page.getByLabel("Phone").fill("5551234567");
+  await page.getByLabel("Email").fill("e2e@test.local");
+  await advanceWizardNext(page, "Equipment");
   await expectWizardStep(page, 2);
 }
 
