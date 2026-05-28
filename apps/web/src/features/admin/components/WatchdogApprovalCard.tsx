@@ -47,6 +47,7 @@ export function WatchdogApprovalCard({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +66,7 @@ export function WatchdogApprovalCard({
       }
     })();
     return () => { cancelled = true; };
-  }, [priceSheetId]);
+  }, [priceSheetId, reloadKey]);
 
   async function handlePublish() {
     setPublishing(true);
@@ -126,7 +127,24 @@ export function WatchdogApprovalCard({
         {loading ? (
           <p className="text-sm text-muted-foreground">Loading server preview…</p>
         ) : previewError ? (
-          <Message tone="error" title="Couldn't preview sheet" message={previewError} />
+          <div className="space-y-3">
+            <Message tone="error" title="Couldn't preview sheet" message={previewError} />
+            {actionError && <Message tone="error" title="Review action failed" message={actionError} />}
+            {actionMessage && <Message tone="success" title="Review action complete" message={actionMessage} />}
+            {/* A failed preview must not strand the admin with no actions: let
+                them retry the preview or reject the sheet outright. Publish is
+                intentionally withheld until a preview succeeds. */}
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => setReloadKey((k) => k + 1)} disabled={rejecting}>
+                <Loader2 className="mr-1.5 h-3.5 w-3.5" />
+                Retry preview
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleReject} disabled={rejecting}>
+                {rejecting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <XCircle className="mr-1.5 h-3.5 w-3.5" />}
+                Reject sheet
+              </Button>
+            </div>
+          </div>
         ) : diff ? (
           <>
             {actionError && <Message tone="error" title="Review action failed" message={actionError} />}
@@ -291,8 +309,17 @@ function PipelineImpactPanel({
       {impact.quotes.length > 5 && (
         <div className="p-2 border-t text-center">
           <button onClick={onToggle} className="text-xs text-primary hover:underline">
-            {expanded ? "Collapse" : `Show all ${impact.quotes.length}`}
+            {expanded
+              ? "Collapse"
+              : impact.affectedQuoteCount > impact.quotes.length
+              ? `Show ${impact.quotes.length} of ${impact.affectedQuoteCount}`
+              : `Show all ${impact.quotes.length}`}
           </button>
+        </div>
+      )}
+      {expanded && impact.affectedQuoteCount > impact.quotes.length && (
+        <div className="p-2 border-t text-center text-[11px] text-muted-foreground">
+          Showing the top {impact.quotes.length} of {impact.affectedQuoteCount} impacted quotes — open Review items for the rest.
         </div>
       )}
     </div>
