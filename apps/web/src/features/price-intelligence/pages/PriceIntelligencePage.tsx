@@ -4,198 +4,235 @@ import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  TrendingUp, AlertTriangle, FileText, Mail, ExternalLink, DollarSign, Layers, Users,
+  AlertTriangle,
+  CheckCircle2,
+  DollarSign,
+  ExternalLink,
+  FileText,
+  Layers,
+  Mail,
+  ShieldAlert,
+  TrendingUp,
+  Upload,
+  Users,
 } from "lucide-react";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import {
-  fetchImpactReport,
-  draftRequote,
-  batchRequote,
-  type ImpactItem,
-  type RequoteDraftResult,
+  createRepriceDraft,
+  fetchRepPriceImpacts,
+  type CreateRepriceDraftResponse,
+  type RepPriceImpact,
 } from "../lib/price-intelligence-api";
-import { PriceFileUpload } from "../components/PriceFileUpload";
 
-function formatCurrency(value: number | null | undefined): string {
-  if (value === null || value === undefined) return "—";
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
-  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
-  return `$${Math.round(value)}`;
+const PRICE_INTELLIGENCE_IMPACTS_QUERY_KEY = ["price-intelligence", "phase1-impacts"] as const;
+
+function formatCents(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  const dollars = Math.abs(value) / 100;
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  if (dollars >= 1_000_000) return `${sign}$${(dollars / 1_000_000).toFixed(2)}M`;
+  if (dollars >= 1_000) return `${sign}$${(dollars / 1_000).toFixed(1)}K`;
+  return `${sign}$${Math.round(dollars).toLocaleString()}`;
+}
+
+function formatPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  return `${value.toFixed(1)}%`;
+}
+
+function quoteLabel(impact: RepPriceImpact): string {
+  const compact = impact.quotePackageId.replace(/-/g, "").slice(0, 8).toUpperCase();
+  return compact ? `Quote ${compact}` : "Quote";
+}
+
+function approvalCopy(impact: RepPriceImpact): string {
+  if (!impact.requiresManagerReview) return "Rep draft allowed";
+  if (impact.approvalRequiredReasons.length === 0) return "Manager review required";
+  return impact.approvalRequiredReasons
+    .map((reason) => reason.replace(/_/g, " "))
+    .join(" · ");
 }
 
 export function PriceIntelligencePage() {
   const queryClient = useQueryClient();
-  const [selectedDraft, setSelectedDraft] = useState<RequoteDraftResult | null>(null);
+  const [selectedDraft, setSelectedDraft] = useState<CreateRepriceDraftResponse | null>(null);
 
-  const { data: impactReport, isLoading: reportLoading, isError: reportError } = useQuery({
-    queryKey: ["price-intelligence", "impact"],
-    queryFn: fetchImpactReport,
+  const impactsQuery = useQuery({
+    queryKey: PRICE_INTELLIGENCE_IMPACTS_QUERY_KEY,
+    queryFn: fetchRepPriceImpacts,
     staleTime: 60_000,
     refetchInterval: 2 * 60_000,
   });
 
-  const requoteMutation = useMutation({
-    mutationFn: draftRequote,
+  const draftMutation = useMutation({
+    mutationFn: (impact: RepPriceImpact) => createRepriceDraft(impact.id),
     onSuccess: (data) => {
       setSelectedDraft(data);
-      queryClient.invalidateQueries({ queryKey: ["price-intelligence", "impact"] });
+      void queryClient.invalidateQueries({ queryKey: PRICE_INTELLIGENCE_IMPACTS_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: ["sales", "price-impacts"] });
     },
   });
 
-  const batchMutation = useMutation({
-    mutationFn: batchRequote,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["price-intelligence", "impact"] });
-    },
-  });
-
-  const items: ImpactItem[] = impactReport?.impact_items ?? [];
-  const summary = impactReport?.summary;
+  const impacts = impactsQuery.data?.impacts ?? [];
+  const summary = impactsQuery.data?.summary;
+  const visibleCount = summary?.visibleImpactCount ?? impacts.length;
+  const totalLines = impacts.reduce((count, impact) => count + impact.lines.length, 0);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-      {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-qep-orange" aria-hidden />
             <h1 className="text-xl font-bold text-foreground">Price File Intelligence</h1>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Upload manufacturer price files. See which open quotes are affected. Draft requotes with one click.
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+            Phase 1 now reads persisted OEM price impacts from the staged admin upload workflow. Direct CSV/XLS imports are not part of the rep or manager path.
           </p>
         </div>
         <AskIronAdvisorButton contextType="price_intelligence" variant="inline" />
       </div>
 
-      {/* Impact summary tiles */}
+      <Card className="border-qep-orange/25 bg-qep-orange/5 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <Upload className="mt-0.5 h-5 w-5 shrink-0 text-qep-orange" aria-hidden />
+            <div>
+              <h2 className="text-sm font-bold text-foreground">Phase 1 upload lane is admin-staged</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Upload, diff review, publish, and impact persistence happen in Admin Price Sheets. This page only reviews published material impacts and creates rep-review drafts; customer emails are never auto-sent.
+              </p>
+            </div>
+          </div>
+          <Button asChild size="sm" className="shrink-0">
+            <Link to="/admin/price-sheets">Open admin price sheets</Link>
+          </Button>
+        </div>
+      </Card>
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <SummaryTile
-          label="Quotes affected"
-          value={summary?.total_quotes_affected ?? 0}
+          label="Visible impacts"
+          value={visibleCount}
           icon={<FileText className="h-4 w-4 text-amber-400" />}
           accent="text-amber-400"
-          loading={reportLoading}
+          loading={impactsQuery.isLoading}
         />
         <SummaryTile
-          label="Deals affected"
-          value={summary?.total_deals_affected ?? 0}
+          label="Quotes affected"
+          value={summary?.affectedQuoteCount ?? visibleCount}
           icon={<Users className="h-4 w-4 text-blue-400" />}
           accent="text-blue-400"
-          loading={reportLoading}
+          loading={impactsQuery.isLoading}
         />
         <SummaryTile
-          label="Line items"
-          value={items.length}
+          label="Impacted lines"
+          value={totalLines}
           icon={<Layers className="h-4 w-4 text-muted-foreground" />}
-          loading={reportLoading}
+          loading={impactsQuery.isLoading}
         />
         <SummaryTile
-          label="$ exposure"
-          value={formatCurrency(summary?.total_dollar_exposure ?? 0)}
+          label="Exposure"
+          value={formatCents(summary?.totalDeltaCents ?? 0)}
           icon={<DollarSign className="h-4 w-4 text-red-400" />}
           accent="text-red-400"
-          loading={reportLoading}
+          loading={impactsQuery.isLoading}
         />
       </div>
 
-      {/* Upload + Impact report two-column layout */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-1">
-          <PriceFileUpload
-            onUploadSuccess={() => queryClient.invalidateQueries({ queryKey: ["price-intelligence", "impact"] })}
-          />
-        </div>
-
-        {/* Impact report list */}
-        <div className="lg:col-span-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.9fr_2fr]">
+        <div className="space-y-4">
           <Card className="p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle className="h-4 w-4 text-amber-400" aria-hidden />
-              <h3 className="text-sm font-bold text-foreground">Affected Quotes</h3>
-              <span className="text-[10px] text-muted-foreground">(sorted by $ impact)</span>
-              {items.length > 0 && (
-                <Button
-                  size="sm"
-                  className="ml-auto h-7 text-[10px]"
-                  onClick={() => {
-                    const ids = Array.from(new Set(items.map((i) => i.quote_package_id))).slice(0, 50);
-                    batchMutation.mutate(ids);
-                  }}
-                  disabled={batchMutation.isPending}
-                >
-                  <Mail className="mr-1 h-3 w-3" />
-                  {batchMutation.isPending ? "Drafting…" : `Generate all drafts (${Math.min(50, new Set(items.map((i) => i.quote_package_id)).size)})`}
-                </Button>
-              )}
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-400" aria-hidden />
+              <h3 className="text-sm font-bold text-foreground">Legacy lane guardrail</h3>
             </div>
-            {batchMutation.isSuccess && batchMutation.data && (
-              <div className="mb-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2 text-[11px] text-emerald-400">
-                ✓ Generated {batchMutation.data.generated} drafts ({batchMutation.data.failed} failed) — review in Email Drafts inbox
-              </div>
-            )}
-            {batchMutation.isError && (
-              <div className="mb-2 rounded-md border border-red-500/30 bg-red-500/5 p-2 text-[11px] text-red-400">
-                Batch failed: {(batchMutation.error as Error)?.message ?? "unknown"}
-              </div>
-            )}
+            <p className="mt-2 text-xs text-muted-foreground">
+              The old direct upload importer is intentionally hidden here to avoid conflicting OEM catalog state. If legacy CSV/XLS import is needed, keep it as an admin-only compatibility tool outside Phase 1.
+            </p>
+          </Card>
 
-            {reportLoading && (
-              <div className="space-y-2">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="h-16 rounded-md bg-muted animate-pulse" />
-                ))}
-              </div>
-            )}
-
-            {reportError && (
-              <p className="text-xs text-red-400">Failed to load impact report.</p>
-            )}
-
-            {!reportLoading && !reportError && items.length === 0 && (
-              <div className="rounded-md border border-dashed border-border p-4 text-center">
-                <p className="text-xs text-muted-foreground">
-                  No quotes currently affected by price changes. Upload a new price file to trigger analysis.
-                </p>
-              </div>
-            )}
-
-            {!reportLoading && items.length > 0 && (
-              <div className="space-y-2 max-h-[600px] overflow-y-auto">
-                {items.map((item) => (
-                  <ImpactRow
-                    key={item.line_item_id}
-                    item={item}
-                    onRequote={() => requoteMutation.mutate(item.quote_package_id)}
-                    requotePending={requoteMutation.isPending}
-                  />
-                ))}
-              </div>
-            )}
+          <Card className="p-4">
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-qep-orange" aria-hidden />
+              <h3 className="text-sm font-bold text-foreground">Draft policy</h3>
+            </div>
+            <ul className="mt-2 space-y-1.5 text-xs text-muted-foreground">
+              <li>• Reprice drafts are created from persisted impact IDs.</li>
+              <li>• Manager review follows the Phase 1 approval policy.</li>
+              <li>• Email drafts are review-only; no customer auto-send.</li>
+            </ul>
           </Card>
         </div>
+
+        <Card className="p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-400" aria-hidden />
+            <h3 className="text-sm font-bold text-foreground">Published OEM impacts</h3>
+            <span className="text-[10px] text-muted-foreground">(persisted Phase 1 queue)</span>
+            <Button asChild size="sm" variant="outline" className="ml-auto h-7 text-[10px]">
+              <Link to="/sales/price-impacts">Open rep review page</Link>
+            </Button>
+          </div>
+
+          {draftMutation.isError && (
+            <div className="mb-2 rounded-md border border-red-500/30 bg-red-500/5 p-2 text-[11px] text-red-400">
+              Reprice draft failed: {(draftMutation.error as Error)?.message ?? "unknown"}
+            </div>
+          )}
+
+          {impactsQuery.isLoading && (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-20 rounded-md bg-muted animate-pulse" />
+              ))}
+            </div>
+          )}
+
+          {impactsQuery.isError && (
+            <div className="rounded-md border border-red-500/30 bg-red-500/5 p-4">
+              <p className="text-xs text-red-400">Failed to load persisted OEM price impacts.</p>
+              <Button size="sm" variant="outline" className="mt-3" onClick={() => void impactsQuery.refetch()}>
+                Retry
+              </Button>
+            </div>
+          )}
+
+          {!impactsQuery.isLoading && !impactsQuery.isError && impacts.length === 0 && (
+            <div className="rounded-md border border-dashed border-border p-4 text-center">
+              <p className="text-xs text-muted-foreground">
+                No material OEM impacts are currently visible. Publish a staged admin price sheet to create the Phase 1 impact queue.
+              </p>
+            </div>
+          )}
+
+          {!impactsQuery.isLoading && impacts.length > 0 && (
+            <div className="space-y-2 max-h-[640px] overflow-y-auto">
+              {impacts
+                .slice()
+                .sort((a, b) => Math.abs(b.totalDeltaCents) - Math.abs(a.totalDeltaCents))
+                .map((impact) => (
+                  <ImpactRow
+                    key={impact.id}
+                    impact={impact}
+                    onDraft={() => draftMutation.mutate(impact)}
+                    draftPending={draftMutation.isPending && draftMutation.variables?.id === impact.id}
+                  />
+                ))}
+            </div>
+          )}
+        </Card>
       </div>
 
-      {/* Draft modal */}
       {selectedDraft && (
-        <DraftReviewModal
+        <DraftResultModal
           draft={selectedDraft}
           onClose={() => setSelectedDraft(null)}
         />
       )}
-
-      {requoteMutation.isError && (
-        <Card className="border-red-500/20 bg-red-500/5 p-3">
-          <p className="text-xs text-red-400">
-            Requote failed: {(requoteMutation.error as Error)?.message ?? "unknown"}
-          </p>
-        </Card>
-      )}
     </div>
   );
 }
-
-/* ── Subcomponents ───────────────────────────────────────────────── */
 
 function SummaryTile({
   label, value, icon, accent, loading,
@@ -222,126 +259,109 @@ function SummaryTile({
 }
 
 function ImpactRow({
-  item,
-  onRequote,
-  requotePending,
+  impact,
+  onDraft,
+  draftPending,
 }: {
-  item: ImpactItem;
-  onRequote: () => void;
-  requotePending: boolean;
+  impact: RepPriceImpact;
+  onDraft: () => void;
+  draftPending: boolean;
 }) {
-  const delta = item.price_delta_total ?? 0;
-  const deltaPositive = delta > 0;
-  const changePct = item.price_change_pct ?? 0;
+  const canCreateDraft = impact.state === "visible";
+  const topLines = impact.lines.slice(0, 2).map((line) => line.modelCode).join(", ") || "Impacted equipment";
 
   return (
     <div className="rounded-md border border-border p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase text-muted-foreground">
-              {item.quote_status}
+              {impact.quoteStatus ?? "open quote"}
             </span>
-            {item.price_change_source && (
-              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                {item.price_change_source}
-              </span>
-            )}
-            {item.price_changed_at && (
-              <span className="text-[10px] text-muted-foreground">
-                changed {new Date(item.price_changed_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+            <span className="rounded-full bg-qep-orange/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-qep-orange">
+              {impact.state.replace(/_/g, " ")}
+            </span>
+            {impact.requiresManagerReview && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-amber-300">
+                <ShieldAlert className="h-3 w-3" aria-hidden /> approval
               </span>
             )}
           </div>
           <p className="mt-1 text-sm font-medium text-foreground truncate">
-            {item.make} {item.model}
+            {quoteLabel(impact)}
           </p>
-          <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
-            <span>was: {formatCurrency(item.quoted_list_price)}</span>
-            <span>→</span>
-            <span>now: {formatCurrency(item.current_list_price)}</span>
-          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground truncate">
+            {topLines} · margin {formatPercent(impact.oldMarginPct)} → {formatPercent(impact.projectedMarginPct)} · commission {formatCents(impact.commissionDeltaCents)}
+          </p>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            {approvalCopy(impact)}
+          </p>
         </div>
         <div className="text-right shrink-0">
-          <p className={`text-lg font-bold ${deltaPositive ? "text-red-400" : "text-emerald-400"}`}>
-            {deltaPositive ? "+" : ""}{formatCurrency(Math.abs(delta))}
+          <p className={`text-lg font-bold ${impact.totalDeltaCents > 0 ? "text-red-400" : "text-emerald-400"}`}>
+            {formatCents(impact.totalDeltaCents)}
           </p>
-          <p className={`text-[10px] ${deltaPositive ? "text-red-300" : "text-emerald-300"}`}>
-            {deltaPositive ? "+" : ""}{changePct.toFixed(1)}%
+          <p className="text-[10px] text-muted-foreground">
+            max line {formatPercent(impact.maxLineDeltaPct)}
           </p>
         </div>
       </div>
 
       <div className="mt-2 flex items-center justify-end gap-2">
-        {item.deal_id && (
-          <Link to={`/crm/deals/${item.deal_id}`} className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1">
+        {impact.dealId && (
+          <Link to={`/crm/deals/${impact.dealId}`} className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
             <ExternalLink className="h-3 w-3" aria-hidden /> Open deal
           </Link>
         )}
+        <Link to={`/sales/quotes/${impact.quotePackageId}`} className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
+          <ExternalLink className="h-3 w-3" aria-hidden /> Open quote
+        </Link>
         <Button
           size="sm"
           className="h-7 text-[11px]"
-          onClick={onRequote}
-          disabled={requotePending}
+          onClick={onDraft}
+          disabled={!canCreateDraft || draftPending}
         >
           <Mail className="mr-1 h-3 w-3" />
-          {requotePending ? "Drafting…" : "Draft requote"}
+          {draftPending ? "Drafting…" : impact.requiresManagerReview ? "Submit approval" : "Create draft"}
         </Button>
       </div>
     </div>
   );
 }
 
-function DraftReviewModal({ draft, onClose }: { draft: RequoteDraftResult; onClose: () => void }) {
+function DraftResultModal({ draft, onClose }: { draft: CreateRepriceDraftResponse; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <Card
-        className="w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5"
+        className="w-full max-w-lg p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-qep-orange" aria-hidden />
-              <h3 className="text-sm font-bold text-foreground">Requote email draft</h3>
-              <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
-                draft.email_draft.tone === "urgent" ? "bg-red-500/10 text-red-400" :
-                draft.email_draft.tone === "friendly" ? "bg-emerald-500/10 text-emerald-400" :
-                "bg-blue-500/10 text-blue-400"
-              }`}>
-                {draft.email_draft.tone}
-              </span>
-              {draft.email_draft.ai_generated && (
-                <span className="rounded-full bg-qep-orange/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-qep-orange">
-                  AI
-                </span>
-              )}
+              <h3 className="text-sm font-bold text-foreground">
+                {draft.approvalRequired ? "Approval submitted" : "Reprice draft created"}
+              </h3>
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              {draft.impact.line_items_affected} line item{draft.impact.line_items_affected === 1 ? "" : "s"} · {draft.impact.manufacturers} · effective {draft.impact.effective_date}
+              Status: {draft.status.replace(/_/g, " ")}
+              {draft.emailDraftId ? ` · Email draft ${draft.emailDraftId.slice(0, 8)}` : ""}
             </p>
           </div>
           <Button size="sm" variant="ghost" onClick={onClose}>×</Button>
         </div>
 
-        <div className="space-y-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Subject</p>
-            <p className="text-sm font-medium text-foreground border border-border rounded-md p-2 bg-card">
-              {draft.email_draft.subject}
+        <div className="mt-4 rounded-md border border-border/60 bg-muted/20 p-3">
+          <p className="text-xs text-muted-foreground">
+            The Phase 1 server created this from a persisted impact record. A rep or manager must review any generated email draft before customer communication.
+          </p>
+          {draft.approvalReasons.length > 0 && (
+            <p className="mt-2 text-[11px] text-amber-300">
+              Approval reasons: {draft.approvalReasons.join(", ")}
             </p>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Body</p>
-            <pre className="text-xs text-foreground border border-border rounded-md p-3 bg-card whitespace-pre-wrap font-sans leading-relaxed">
-{draft.email_draft.body}
-            </pre>
-          </div>
-          <div className="rounded-md border border-border/60 bg-muted/20 p-2">
-            <p className="text-[10px] text-muted-foreground">
-              This draft has been saved to <code>email_drafts</code>. The rep reviews, edits, and sends it from their inbox — nothing auto-sends.
-            </p>
-          </div>
+          )}
         </div>
 
         <div className="mt-4 flex justify-end">

@@ -53,6 +53,9 @@ const DealDetailPage = lazy(() =>
 const MyApprovalsPage = lazy(() =>
   import("./pages/MyApprovalsPage").then((m) => ({ default: m.MyApprovalsPage })),
 );
+const PriceImpactsPage = lazy(() =>
+  import("./pages/PriceImpactsPage").then((m) => ({ default: m.PriceImpactsPage })),
+);
 
 function SalesRouteFallback() {
   return (
@@ -108,6 +111,14 @@ export function SalesRoutes() {
           element={
             <Suspense fallback={<SalesRouteFallback />}>
               <MyApprovalsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="price-impacts"
+          element={
+            <Suspense fallback={<SalesRouteFallback />}>
+              <PriceImpactsPage />
             </Suspense>
           }
         />

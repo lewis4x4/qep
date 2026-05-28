@@ -11,9 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { AlertCircle, CheckCircle2, FileUp, Loader2, Upload } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  uploadAndExtractSheet,
+  uploadAndStageSheet,
   retryExtract,
-  retryPublish,
   type UploadSheetInput,
   type UploadSheetResult,
 } from "../lib/price-sheets-api";
@@ -25,22 +24,17 @@ type Phase =
   | { kind: "uploading" }
   | { kind: "creating_record" }
   | { kind: "extracting" }
-  | { kind: "publishing" }
   | {
       kind: "success";
+      priceSheetId: string;
       itemsWritten: number;
       programsWritten: number;
-      itemsApplied: number;
-      programsApplied: number;
     }
   | {
       kind: "failed";
       message: string;
       priceSheetId?: string;
-      failedPhase?: "extract" | "publish";
-      /** Extraction counts captured when publish fails (phase="publish") —
-       *  retryPublish() needs these to restore them to the success banner. */
-      extractedCounts?: { itemsWritten: number; programsWritten: number };
+      failedPhase?: "extract";
     };
 
 const SHEET_TYPE_OPTIONS: Array<{ value: SheetType; label: string; description: string }> = [
@@ -92,8 +86,9 @@ export function UploadDrawer({
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const openRef = useRef(open);
 
-  // H2: mount-safety. In-flight pipelines (uploadAndExtractSheet / retry*)
+  // H2: mount-safety. In-flight pipelines (uploadAndStageSheet / retry*)
   // keep running server-side after the drawer closes. When their promise
   // resolves, the resulting setPhase() + the setTimeout phase-flippers will
   // target an unmounted component — React swallows it silently in production
@@ -117,6 +112,10 @@ export function UploadDrawer({
     setPhase(next);
   }
 
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
   // Reset internal state whenever the drawer (re)opens for a new brand.
   useEffect(() => {
     if (open) {
@@ -130,17 +129,16 @@ export function UploadDrawer({
   const busy =
     phase.kind === "uploading" ||
     phase.kind === "creating_record" ||
-    phase.kind === "extracting" ||
-    phase.kind === "publishing";
+    phase.kind === "extracting";
 
   const canCloseNow =
     phase.kind === "idle" ||
     phase.kind === "success" ||
     phase.kind === "failed" ||
-    phase.kind === "extracting" || // extract continues server-side
-    phase.kind === "publishing";    // publish continues server-side
+    phase.kind === "extracting"; // extract continues server-side
 
   function handleOpenChange(next: boolean) {
+    openRef.current = next;
     if (!next && canCloseNow) {
       if (phase.kind === "success") onSuccess();
       onClose();
@@ -180,16 +178,14 @@ export function UploadDrawer({
         message: result.error,
         priceSheetId: result.priceSheetId,
         failedPhase: result.phase,
-        extractedCounts: result.extractCounts,
       });
       return;
     }
     safeSetPhase({
       kind: "success",
+      priceSheetId:    result.priceSheetId,
       itemsWritten:    result.itemsWritten,
       programsWritten: result.programsWritten,
-      itemsApplied:    result.itemsApplied,
-      programsApplied: result.programsApplied,
     });
   }
 
@@ -223,11 +219,6 @@ export function UploadDrawer({
         safeSetPhase((p) => (p.kind === "creating_record" ? { kind: "extracting" } : p));
       }, 900));
     }
-    // After 90s at extracting, assume extract done and publish is running.
-    timers.push(setTimeout(() => {
-      safeSetPhase((p) => (p.kind === "extracting" ? { kind: "publishing" } : p));
-    }, 90_000));
-
     return () => timers.forEach(clearTimeout);
   }
 
@@ -260,9 +251,11 @@ export function UploadDrawer({
     };
 
     try {
-      const result = await uploadAndExtractSheet(input);
+      const result = await uploadAndStageSheet(input);
       clear();
+      const wasClosedBeforeResult = !openRef.current;
       handleResult(result);
+      if (wasClosedBeforeResult && "ok" in result) onSuccess();
     } catch (e: unknown) {
       clear();
       const msg = e instanceof Error ? e.message : String(e);
@@ -282,15 +275,13 @@ export function UploadDrawer({
     const clear = startPhaseTimers("extracting");
     const priceSheetId = phase.priceSheetId;
     const failedPhase  = phase.failedPhase;
-    const extracted    = phase.extractedCounts;
 
     try {
-      const result =
-        failedPhase === "publish" && extracted
-          ? await retryPublish(priceSheetId, extracted)
-          : await retryExtract(priceSheetId);
+      const result = await retryExtract(priceSheetId);
       clear();
+      const wasClosedBeforeResult = !openRef.current;
       handleResult(result);
+      if (wasClosedBeforeResult && "ok" in result) onSuccess();
     } catch (e: unknown) {
       clear();
       const msg = e instanceof Error ? e.message : String(e);
@@ -299,7 +290,6 @@ export function UploadDrawer({
         message: `Unexpected error: ${msg}`,
         priceSheetId,
         failedPhase,
-        extractedCounts: extracted,
       });
     }
   }
@@ -331,7 +321,7 @@ export function UploadDrawer({
             {brandName ? (
               <>
                 New sheet for <span className="font-medium">{brandName}</span>. Extraction runs
-                automatically and publishes on success — no review step.
+                automatically, then the sheet is staged for review before publishing.
               </>
             ) : (
               "Select a brand first."
@@ -436,33 +426,19 @@ export function UploadDrawer({
             </div>
           </PhaseBanner>
         )}
-        {phase.kind === "publishing" && (
-          <PhaseBanner icon={<Loader2 className="w-4 h-4 animate-spin" />} tone="info">
-            <div>
-              <div className="font-medium">Publishing to catalog…</div>
-              <div className="text-xs mt-1 opacity-80">
-                Auto-approving extracted items and applying to the live catalog.
-              </div>
-            </div>
-          </PhaseBanner>
-        )}
         {phase.kind === "success" && (
           <PhaseBanner icon={<CheckCircle2 className="w-4 h-4" />} tone="success">
             <div>
-              <div className="font-medium">Published to catalog.</div>
+              <div className="font-medium">Extracted and staged for review.</div>
               <div className="text-xs mt-1 flex flex-wrap gap-2">
-                <Badge variant="success">{phase.itemsApplied} items applied</Badge>
-                {phase.programsApplied > 0 && (
-                  <Badge variant="success">{phase.programsApplied} programs applied</Badge>
-                )}
-                {phase.itemsWritten !== phase.itemsApplied && (
-                  <Badge variant="warning">
-                    {phase.itemsWritten - phase.itemsApplied} items skipped
-                  </Badge>
+                <Badge variant="success">{phase.itemsWritten} items staged</Badge>
+                {phase.programsWritten > 0 && (
+                  <Badge variant="success">{phase.programsWritten} programs staged</Badge>
                 )}
               </div>
               <div className="text-xs mt-2 opacity-80">
-                Reps can now quote against the new pricing.
+                Review the diff and impacted quotes before publishing to reps.
+                Sheet <code>{phase.priceSheetId.slice(0, 8)}…</code> is in the review queue.
               </div>
             </div>
           </PhaseBanner>
@@ -471,17 +447,13 @@ export function UploadDrawer({
           <PhaseBanner icon={<AlertCircle className="w-4 h-4" />} tone="error">
             <div className="flex-1">
               <div className="font-medium text-sm">
-                {phase.failedPhase === "publish"
-                  ? "Extracted but not published"
-                  : "Could not complete"}
+                Could not complete extraction
               </div>
               <div className="text-xs mt-1">{phase.message}</div>
               {phase.priceSheetId && (
                 <div className="text-xs mt-1 opacity-80">
                   Sheet record saved as <code>{phase.priceSheetId.slice(0, 8)}…</code> —{" "}
-                  {phase.failedPhase === "publish"
-                    ? "extraction is safe. Admin can retry publish from the sheet record."
-                    : "you can retry without re-uploading."}
+                  you can retry without re-uploading.
                 </div>
               )}
             </div>
@@ -520,7 +492,7 @@ export function UploadDrawer({
                     className="flex-1"
                   >
                     {busy ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                    {phase.kind === "failed" ? "Retry" : "Upload & extract"}
+                    {phase.kind === "failed" ? "Retry extraction" : "Upload & stage"}
                   </Button>
                 );
               })()}

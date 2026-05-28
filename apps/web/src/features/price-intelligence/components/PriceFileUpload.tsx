@@ -50,10 +50,18 @@ export function PriceFileUpload({ onUploadSuccess }: PriceFileUploadProps) {
     <Card className="p-4">
       <div className="flex items-center gap-2 mb-3">
         <Upload className="h-4 w-4 text-qep-orange" aria-hidden />
-        <h3 className="text-sm font-bold text-foreground">Upload Price File</h3>
+        <h3 className="text-sm font-bold text-foreground">Legacy direct importer (admin-only)</h3>
+      </div>
+      <div className="mb-3 rounded-md border border-amber-500/25 bg-amber-500/5 p-2">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden />
+          <p className="text-[11px] text-amber-100/85">
+            Outside Phase 1 OEM price feeds. Use Admin Price Sheets for staged upload, review, publish, and persisted quote impacts.
+          </p>
+        </div>
       </div>
       <p className="text-[11px] text-muted-foreground mb-3">
-        Upload a manufacturer CSV or Excel workbook. Catalog prices update, history is captured, and affected quotes are flagged for requote. PDF/OCR stays in a separate release lane.
+        Compatibility-only CSV/Excel importer for legacy catalog maintenance. Do not use for the Phase 1 rep or manager OEM price-impact path.
       </p>
 
       {/* Dropzone */}
@@ -95,7 +103,7 @@ export function PriceFileUpload({ onUploadSuccess }: PriceFileUploadProps) {
           onClick={() => selectedFile && uploadMutation.mutate(selectedFile)}
           disabled={!selectedFile || uploadMutation.isPending}
         >
-          {uploadMutation.isPending ? "Importing…" : "Import & flag impacts"}
+          {uploadMutation.isPending ? "Importing…" : "Legacy import outside Phase 1"}
         </Button>
       </div>
 
@@ -105,7 +113,7 @@ export function PriceFileUpload({ onUploadSuccess }: PriceFileUploadProps) {
           <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-3">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-400" aria-hidden />
-              <p className="text-sm font-semibold text-emerald-400">Import complete</p>
+              <p className="text-sm font-semibold text-emerald-400">Legacy import complete</p>
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
               <div>Rows parsed: <strong className="text-foreground">{uploadMutation.data.results.rows_parsed}</strong></div>

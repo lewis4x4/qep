@@ -1,37 +1,25 @@
 /**
- * WatchdogApprovalCard — Slice 16 moonshot surface.
+ * WatchdogApprovalCard — staged OEM price-sheet review surface.
  *
- * Appears on the Price Sheets admin page when there's a pending-review
- * sheet that was auto-detected by the watchdog. Leads with the
- * differentiating insight: in-flight quote impact.
- *
- * Layout (top to bottom):
- *   - Header: "Auto-detected: <brand> — <source label>" with pill.
- *   - Headline strip: 4 numbers — total changes, avg Δ%, net Δ$,
- *     affected quotes.
- *   - Pipeline impact card (only if impact.affectedQuoteCount > 0):
- *     expandable list of quotes with per-quote Δ$.
- *   - Catalog changes list: model-by-model price changes, sorted by
- *     |Δ| desc; top 10 by default with "show all" expander.
- *   - Actions row: "Review in extract table" (deep link) / Dismiss.
- *
- * Data fetched lazily — sheet list pages may render many card
- * placeholders, so we only hit the diff + impact APIs when the card
- * actually mounts. On error we still render the card with a failure
- * note so the admin isn't silently left without the banner.
+ * Despite the legacy component name, this now handles both watchdog and manual
+ * admin uploads. Preview/publish authority lives in the oem-price-feeds server
+ * API so upload no longer auto-publishes or computes quote impact client-side.
  */
 
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, ExternalLink, Sparkles } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, Send, Sparkles, XCircle } from "lucide-react";
+import { rejectStagedSheet } from "../lib/price-sheets-api";
 import {
-  generateSheetDiff,
-  getInFlightImpact,
+  getSheetDiffPreview,
+  publishSheetAndCreateImpacts,
   type InFlightImpact,
   type ModelPriceChange,
   type SheetDiff,
+  type SheetDiffPreview,
 } from "../lib/sheet-diff-api";
 
 export interface WatchdogApprovalCardProps {
@@ -39,6 +27,7 @@ export interface WatchdogApprovalCardProps {
   brandName: string | null;
   sourceLabel: string | null;
   onReview?: () => void;
+  onMutated?: () => void;
 }
 
 export function WatchdogApprovalCard({
@@ -46,29 +35,31 @@ export function WatchdogApprovalCard({
   brandName,
   sourceLabel,
   onReview,
+  onMutated,
 }: WatchdogApprovalCardProps) {
-  const [diff, setDiff] = useState<SheetDiff | null>(null);
-  const [impact, setImpact] = useState<InFlightImpact | null>(null);
+  const { profile } = useAuth();
+  const [preview, setPreview] = useState<SheetDiffPreview | null>(null);
   const [loading, setLoading] = useState(true);
+  const [publishing, setPublishing] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
   const [showAllChanges, setShowAllChanges] = useState(false);
   const [showAffected, setShowAffected] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    setError(null);
+    setPreviewError(null);
+    setActionError(null);
+    setActionMessage(null);
     (async () => {
       try {
-        const d = await generateSheetDiff(priceSheetId);
-        if (cancelled) return;
-        setDiff(d);
-        if (d) {
-          const imp = await getInFlightImpact(d);
-          if (!cancelled) setImpact(imp);
-        }
+        const next = await getSheetDiffPreview(priceSheetId);
+        if (!cancelled) setPreview(next);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Diff computation failed");
+        if (!cancelled) setPreviewError(e instanceof Error ? e.message : "Preview failed");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -76,38 +67,72 @@ export function WatchdogApprovalCard({
     return () => { cancelled = true; };
   }, [priceSheetId]);
 
+  async function handlePublish() {
+    setPublishing(true);
+    setActionError(null);
+    setActionMessage(null);
+    try {
+      const result = await publishSheetAndCreateImpacts(priceSheetId);
+      if ("error" in result) {
+        setActionError(result.error);
+        return;
+      }
+      setActionMessage(
+        `Published. ${result.itemsApplied} items applied; ${result.materialQuotesAffected} material quote impacts are ready for reps.`,
+      );
+      onMutated?.();
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  async function handleReject() {
+    setRejecting(true);
+    setActionError(null);
+    setActionMessage(null);
+    try {
+      const result = await rejectStagedSheet(priceSheetId, profile?.id);
+      if ("error" in result) {
+        setActionError(result.error);
+        return;
+      }
+      setActionMessage("Rejected staged sheet. It will not publish to reps.");
+      onMutated?.();
+    } finally {
+      setRejecting(false);
+    }
+  }
+
+  const diff = preview?.diff ?? null;
+  const impact = preview?.impact ?? null;
+  const source = sourceLabel ?? "manual upload";
+
   return (
     <Card className="border-primary/40 bg-primary/5">
       <CardHeader className="pb-2">
         <div className="flex items-center gap-2 flex-wrap">
           <Sparkles className="h-4 w-4 text-primary" />
-          <span className="font-semibold">Auto-detected price book</span>
+          <span className="font-semibold">Staged price book review</span>
           {brandName && <Badge variant="outline">{brandName}</Badge>}
-          {sourceLabel && (
-            <span className="text-xs text-muted-foreground">via {sourceLabel}</span>
-          )}
+          <span className="text-xs text-muted-foreground">via {source}</span>
         </div>
         <p className="text-xs text-muted-foreground">
-          Our watchdog spotted a change at the source and queued this sheet for your review.
-          Below is the diff against the previously-published book, plus the impact on your
-          in-flight quotes.
+          This sheet is staged for review. Server preview compares it to current OEM prices,
+          estimates quote impact, and publish will notify reps through persisted price impacts.
         </p>
       </CardHeader>
 
       <CardContent className="space-y-4">
         {loading ? (
-          <p className="text-sm text-muted-foreground">Computing diff + pipeline impact…</p>
-        ) : error ? (
-          <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
-            <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />
-            <div>
-              <div className="font-medium">Couldn't compute diff</div>
-              <div className="text-xs text-muted-foreground">{error}</div>
-            </div>
-          </div>
+          <p className="text-sm text-muted-foreground">Loading server preview…</p>
+        ) : previewError ? (
+          <Message tone="error" title="Couldn't preview sheet" message={previewError} />
         ) : diff ? (
           <>
+            {actionError && <Message tone="error" title="Review action failed" message={actionError} />}
+            {actionMessage && <Message tone="success" title="Review action complete" message={actionMessage} />}
             <HeadlineStrip diff={diff} impact={impact} />
+            {preview && <ServerPreviewBadges preview={preview} />}
 
             {impact && impact.affectedQuoteCount > 0 && (
               <PipelineImpactPanel
@@ -123,17 +148,25 @@ export function WatchdogApprovalCard({
               onToggle={() => setShowAllChanges((v) => !v)}
             />
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-wrap gap-2 pt-2">
               {onReview && (
-                <Button size="sm" onClick={onReview}>
+                <Button size="sm" variant="outline" onClick={onReview}>
                   <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
                   Review items
                 </Button>
               )}
+              <Button size="sm" onClick={handlePublish} disabled={publishing || rejecting}>
+                {publishing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
+                Publish &amp; notify reps
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleReject} disabled={publishing || rejecting}>
+                {rejecting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <XCircle className="mr-1.5 h-3.5 w-3.5" />}
+                Reject sheet
+              </Button>
             </div>
           </>
         ) : (
-          <p className="text-sm text-muted-foreground">No diff data available yet.</p>
+          <p className="text-sm text-muted-foreground">No preview data available yet.</p>
         )}
       </CardContent>
     </Card>
@@ -141,6 +174,34 @@ export function WatchdogApprovalCard({
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────
+
+function Message({ tone, title, message }: { tone: "success" | "error"; title: string; message: string }) {
+  const error = tone === "error";
+  return (
+    <div className={`flex items-start gap-2 rounded-md border p-3 text-sm ${error ? "border-destructive/40 bg-destructive/5" : "border-success/30 bg-success/10"}`}>
+      {error ? <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 text-success" />}
+      <div>
+        <div className="font-medium">{title}</div>
+        <div className="text-xs text-muted-foreground">{message}</div>
+      </div>
+    </div>
+  );
+}
+
+function ServerPreviewBadges({ preview }: { preview: SheetDiffPreview }) {
+  return (
+    <div className="flex flex-wrap gap-2 text-xs">
+      <Badge variant="outline">{preview.impactPreview.materialQuotesAffected} material quote impacts</Badge>
+      <Badge variant="secondary">{preview.impactPreview.quietQuotesAffected} quiet impacts</Badge>
+      {preview.impactPreview.needsApprovalCount > 0 && (
+        <Badge variant="warning">{preview.impactPreview.needsApprovalCount} need manager review</Badge>
+      )}
+      {preview.impactPreview.stockLockedLineCount > 0 && (
+        <Badge variant="warning">{preview.impactPreview.stockLockedLineCount} stock-locked lines</Badge>
+      )}
+    </div>
+  );
+}
 
 function HeadlineStrip({ diff, impact }: { diff: SheetDiff; impact: InFlightImpact | null }) {
   const s = diff.summary;
@@ -161,9 +222,9 @@ function HeadlineStrip({ diff, impact }: { diff: SheetDiff; impact: InFlightImpa
         hint="sum over changed models"
       />
       <Stat
-        label="Open quotes affected"
+        label="Material quotes"
         value={impact ? impact.affectedQuoteCount.toString() : "—"}
-        hint={`Δ ${impactFmt} across pipeline`}
+        hint={`Δ ${impactFmt} across preview`}
         emphasis
       />
     </div>
@@ -203,23 +264,20 @@ function PipelineImpactPanel({
   return (
     <div className="rounded-md border border-primary/40 bg-card">
       <div className="p-3 border-b border-border">
-        <div className="font-medium text-sm">Pipeline impact</div>
+        <div className="font-medium text-sm">Server impact preview</div>
         <div className="text-xs text-muted-foreground">
-          Approving this sheet would reprice {impact.affectedQuoteCount} open{" "}
-          {impact.affectedQuoteCount === 1 ? "quote" : "quotes"} by{" "}
+          Publishing this sheet will make {impact.affectedQuoteCount} material{" "}
+          {impact.affectedQuoteCount === 1 ? "quote impact" : "quote impacts"} visible to reps, totaling{" "}
           <span className={impact.totalDeltaCents >= 0 ? "text-destructive" : "text-primary"}>
             {formatCents(impact.totalDeltaCents, { showSign: true })}
-          </span>{" "}
-          total.
+          </span>.
         </div>
       </div>
       <div className="divide-y">
         {visible.map((q) => (
           <div key={q.quotePackageId} className="p-3 text-sm flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="font-medium truncate">
-                {q.quoteNumber ?? "(no number)"} · {q.customerName ?? "—"}
-              </div>
+              <div className="font-medium truncate">Quote {q.quotePackageId.slice(0, 8)}…</div>
               <div className="text-xs text-muted-foreground">
                 {q.status} · {q.affectedLines.length} line{q.affectedLines.length === 1 ? "" : "s"} affected
               </div>
@@ -251,7 +309,7 @@ function ChangeList({
   onToggle: () => void;
 }) {
   if (changes.length === 0) {
-    return <p className="text-sm text-muted-foreground">No changes vs. prior sheet.</p>;
+    return <p className="text-sm text-muted-foreground">No list-price changes vs. current catalog.</p>;
   }
   const visible = showAll ? changes : changes.slice(0, 10);
 

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchTodayBriefing, fetchRepPipeline } from "../lib/sales-api";
+import { fetchRepPriceImpacts } from "@/features/price-intelligence/lib/price-intelligence-api";
 import type { BriefingContent, PipelineStats, PriorityAction, RepPipelineDeal } from "../lib/types";
 
 function getTimeOfDay(): "morning" | "afternoon" | "evening" {
@@ -20,6 +21,13 @@ export function useTodayFeed() {
     queryKey: ["sales", "pipeline"],
     queryFn: fetchRepPipeline,
     staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  const priceImpactsQuery = useQuery({
+    queryKey: ["sales", "price-impacts"],
+    queryFn: fetchRepPriceImpacts,
+    staleTime: 60 * 1000,
+    refetchInterval: 2 * 60 * 1000,
   });
 
   const timeOfDay = getTimeOfDay();
@@ -55,6 +63,9 @@ export function useTodayFeed() {
     liveStats,
     livePriorityActions,
     pipeline,
+    priceImpacts: priceImpactsQuery.data ?? null,
+    priceImpactsLoading: priceImpactsQuery.isLoading,
+    priceImpactsError: priceImpactsQuery.error,
     timeOfDay,
     isLoading: briefingQuery.isLoading || pipelineQuery.isLoading,
     error: briefingQuery.error || pipelineQuery.error,

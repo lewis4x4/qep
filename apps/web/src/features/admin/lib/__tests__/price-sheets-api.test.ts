@@ -91,9 +91,11 @@ const {
   getFreightZones,
   upsertFreightZone,
   deleteFreightZone,
+  uploadAndStageSheet,
   uploadAndExtractSheet,
   retryExtract,
-  retryPublish,
+  publishStagedSheet,
+  rejectStagedSheet,
   getBrandDrilldown,
   normalizeBrandIdRows,
   normalizeBrandSheetSourceRows,
@@ -497,35 +499,20 @@ describe("price-sheets-api", () => {
     uploadedBy:  "user-1",
   };
 
-  // ── Test 6: uploadAndExtractSheet happy path (extract + publish) ────────
+  // ── Test 6: uploadAndStageSheet happy path (stage only) ──────────────
 
-  test("uploadAndExtractSheet: happy path uploads, inserts, extracts, then publishes", async () => {
+  test("uploadAndStageSheet: happy path uploads, inserts, extracts, and stages for review", async () => {
     mockStorageUpload.mockClear();
     mockFunctionsInvoke.mockClear();
     storageState.upload = { data: { path: "asv/2026-04/stub.pdf" }, error: null };
 
-    // Two distinct edge-fn responses: extract first, then publish
     mockFunctionsInvoke.mockImplementationOnce((_name: string, _opts?: unknown) =>
       Promise.resolve({
         data: { priceSheetId: "ps-new", status: "extracted", itemsWritten: 42, programsWritten: 3 },
         error: null,
       }),
     );
-    mockFunctionsInvoke.mockImplementationOnce((_name: string, _opts?: unknown) =>
-      Promise.resolve({
-        data: {
-          priceSheetId: "ps-new",
-          status: "published",
-          itemsApplied: 42,
-          itemsSkipped: 0,
-          programsApplied: 3,
-          programsSkipped: 0,
-        },
-        error: null,
-      }),
-    );
 
-    // qb_price_sheets insert returns the new row id
     const insertChain: Record<string, unknown> = {};
     for (const m of ["insert", "select"]) {
       insertChain[m] = () => insertChain;
@@ -533,25 +520,41 @@ describe("price-sheets-api", () => {
     insertChain["single"] = () => Promise.resolve({ data: { id: "ps-new" }, error: null });
     mockFrom.mockImplementationOnce((_t: string) => insertChain);
 
-    const result = await uploadAndExtractSheet({ ...UPLOAD_INPUT, file: makeFile() });
+    const result = await uploadAndStageSheet({ ...UPLOAD_INPUT, file: makeFile() });
 
     expect(result).toMatchObject({
       ok: true,
       priceSheetId:    "ps-new",
       itemsWritten:    42,
       programsWritten: 3,
-      itemsApplied:    42,
-      programsApplied: 3,
+      status:          "extracted",
     });
     expect(mockStorageUpload).toHaveBeenCalled();
-    // Extract called first
+    expect(mockFunctionsInvoke.mock.calls).toHaveLength(1);
     expect(mockFunctionsInvoke.mock.calls[0]?.[0]).toBe("extract-price-sheet");
     expect(mockFunctionsInvoke.mock.calls[0]?.[1]).toEqual({ body: { priceSheetId: "ps-new" } });
-    // Publish called second with auto_approve:true
-    expect(mockFunctionsInvoke.mock.calls[1]?.[0]).toBe("publish-price-sheet");
-    expect(mockFunctionsInvoke.mock.calls[1]?.[1]).toEqual({
-      body: { priceSheetId: "ps-new", auto_approve: true },
-    });
+  });
+
+  test("uploadAndExtractSheet: compatibility wrapper also stages without publishing", async () => {
+    mockStorageUpload.mockClear();
+    mockFunctionsInvoke.mockClear();
+    storageState.upload = { data: { path: "asv/2026-04/stub.pdf" }, error: null };
+    mockFunctionsInvoke.mockImplementationOnce((_name: string) =>
+      Promise.resolve({
+        data: { priceSheetId: "ps-wrapper", status: "extracted", itemsWritten: 5, programsWritten: 0 },
+        error: null,
+      }),
+    );
+
+    const insertChain: Record<string, unknown> = {};
+    for (const m of ["insert", "select"]) insertChain[m] = () => insertChain;
+    insertChain["single"] = () => Promise.resolve({ data: { id: "ps-wrapper" }, error: null });
+    mockFrom.mockImplementationOnce((_t: string) => insertChain);
+
+    const result = await uploadAndExtractSheet({ ...UPLOAD_INPUT, file: makeFile() });
+
+    expect(result).toMatchObject({ ok: true, priceSheetId: "ps-wrapper", itemsWritten: 5 });
+    expect(mockFunctionsInvoke.mock.calls.map((call) => call[0])).toEqual(["extract-price-sheet"]);
   });
 
   // ── Test 7: uploadAndExtractSheet — storage failure aborts before DB ─────
@@ -593,49 +596,39 @@ describe("price-sheets-api", () => {
       error: expect.stringContaining("Extraction failed"),
       phase: "extract",
     });
-    // Publish should NOT have been attempted after extract failure
     expect(mockFunctionsInvoke.mock.calls).toHaveLength(1);
   });
 
-  // ── Test 8b: publish failure — extract succeeded, surfaces phase=publish ─
-
-  test("uploadAndExtractSheet: publish failure returns priceSheetId + phase=publish", async () => {
-    mockStorageUpload.mockClear();
+  test("publishStagedSheet: publishes through oem-price-feeds server API", async () => {
     mockFunctionsInvoke.mockClear();
-    storageState.upload = { data: { path: "asv/2026-04/stub.pdf" }, error: null };
-
-    // Extract succeeds
-    mockFunctionsInvoke.mockImplementationOnce((_name: string) =>
+    mockFunctionsInvoke.mockImplementationOnce((_name: string, _opts?: unknown) =>
       Promise.resolve({
-        data: { priceSheetId: "ps-x", status: "extracted", itemsWritten: 10, programsWritten: 0 },
+        data: {
+          ok: true,
+          eventId: "evt-1",
+          priceSheetId: "ps-new",
+          itemsApplied: 42,
+          programsApplied: 3,
+          materialQuotesAffected: 4,
+          totalDeltaCents: 840000,
+        },
         error: null,
       }),
     );
-    // Publish fails
-    mockFunctionsInvoke.mockImplementationOnce((_name: string) =>
-      Promise.resolve({ data: null, error: { message: "conflict: already publishing" } }),
-    );
 
-    const insertChain: Record<string, unknown> = {};
-    for (const m of ["insert", "select"]) {
-      insertChain[m] = () => insertChain;
-    }
-    insertChain["single"] = () => Promise.resolve({ data: { id: "ps-x" }, error: null });
-    mockFrom.mockImplementationOnce((_t: string) => insertChain);
-
-    const result = await uploadAndExtractSheet({ ...UPLOAD_INPUT, file: makeFile() });
+    const result = await publishStagedSheet("ps-new");
 
     expect(result).toMatchObject({
-      priceSheetId: "ps-x",
-      error: expect.stringContaining("Publish failed"),
-      phase: "publish",
-      // Fix H1: publish-failure result now carries the extract counts forward
-      // so a retryPublish() call can restore them on the final success banner.
-      extractCounts: { itemsWritten: 10, programsWritten: 0 },
+      ok: true,
+      eventId: "evt-1",
+      priceSheetId: "ps-new",
+      itemsApplied: 42,
+      programsApplied: 3,
+      materialQuotesAffected: 4,
+      totalDeltaCents: 840000,
     });
-    // Both edge fns should have been called
-    expect(mockFunctionsInvoke.mock.calls).toHaveLength(2);
-    expect(mockFunctionsInvoke.mock.calls[1]?.[0]).toBe("publish-price-sheet");
+    expect(mockFunctionsInvoke.mock.calls[0]?.[0]).toBe("oem-price-feeds/publish");
+    expect(mockFunctionsInvoke.mock.calls[0]?.[1]).toEqual({ body: { priceSheetId: "ps-new" } });
   });
 
   // ── Test 9: client-side validation rejects oversized files ───────────────
@@ -726,9 +719,9 @@ describe("price-sheets-api", () => {
     });
   });
 
-  // ── Fix H1: retry helpers ────────────────────────────────────────────────
+  // ── Staged review helpers ─────────────────────────────────────────────
 
-  test("retryExtract: invokes extract → publish for an existing priceSheetId without re-uploading", async () => {
+  test("retryExtract: invokes only extract for an existing priceSheetId without re-uploading", async () => {
     mockStorageUpload.mockClear();
     mockStorageRemove.mockClear();
     mockFrom.mockClear();
@@ -740,19 +733,6 @@ describe("price-sheets-api", () => {
         error: null,
       }),
     );
-    mockFunctionsInvoke.mockImplementationOnce((_name: string) =>
-      Promise.resolve({
-        data: {
-          priceSheetId: "ps-retry",
-          status: "published",
-          itemsApplied: 15,
-          itemsSkipped: 0,
-          programsApplied: 1,
-          programsSkipped: 0,
-        },
-        error: null,
-      }),
-    );
 
     const result = await retryExtract("ps-retry");
 
@@ -761,59 +741,13 @@ describe("price-sheets-api", () => {
       priceSheetId: "ps-retry",
       itemsWritten: 15,
       programsWritten: 1,
-      itemsApplied: 15,
-      programsApplied: 1,
+      status: "extracted",
     });
-    // Critical: NO storage upload, NO DB insert, NO storage remove
     expect(mockStorageUpload).not.toHaveBeenCalled();
     expect(mockStorageRemove).not.toHaveBeenCalled();
     expect(mockFrom).not.toHaveBeenCalled();
-    // Both edge fns called in order
-    expect(mockFunctionsInvoke.mock.calls[0]?.[0]).toBe("extract-price-sheet");
-    expect(mockFunctionsInvoke.mock.calls[1]?.[0]).toBe("publish-price-sheet");
-    expect(mockFunctionsInvoke.mock.calls[1]?.[1]).toEqual({
-      body: { priceSheetId: "ps-retry", auto_approve: true },
-    });
-  });
-
-  test("retryPublish: invokes only publish-price-sheet and restores extract counts", async () => {
-    mockStorageUpload.mockClear();
-    mockFrom.mockClear();
-    mockFunctionsInvoke.mockClear();
-
-    mockFunctionsInvoke.mockImplementationOnce((_name: string) =>
-      Promise.resolve({
-        data: {
-          priceSheetId: "ps-pub-retry",
-          status: "published",
-          itemsApplied: 22,
-          itemsSkipped: 2,
-          programsApplied: 3,
-          programsSkipped: 0,
-        },
-        error: null,
-      }),
-    );
-
-    const result = await retryPublish("ps-pub-retry", {
-      itemsWritten: 24,
-      programsWritten: 3,
-    });
-
-    expect(result).toMatchObject({
-      ok: true,
-      priceSheetId: "ps-pub-retry",
-      itemsWritten: 24,         // preserved from extractCounts
-      programsWritten: 3,        // preserved from extractCounts
-      itemsApplied: 22,          // from this publish
-      programsApplied: 3,
-    });
-    // Only publish was invoked — no re-extract
     expect(mockFunctionsInvoke.mock.calls).toHaveLength(1);
-    expect(mockFunctionsInvoke.mock.calls[0]?.[0]).toBe("publish-price-sheet");
-    // Still no storage / insert
-    expect(mockStorageUpload).not.toHaveBeenCalled();
-    expect(mockFrom).not.toHaveBeenCalled();
+    expect(mockFunctionsInvoke.mock.calls[0]?.[0]).toBe("extract-price-sheet");
   });
 
   test("retryExtract: propagates extract failure with phase='extract'", async () => {
@@ -829,25 +763,31 @@ describe("price-sheets-api", () => {
       error: expect.stringContaining("Extraction failed"),
       phase: "extract",
     });
-    // Publish should NOT have been attempted
     expect(mockFunctionsInvoke.mock.calls).toHaveLength(1);
   });
 
-  test("retryPublish: propagates publish failure with phase='publish' and preserves counts", async () => {
-    mockFunctionsInvoke.mockClear();
-    mockFunctionsInvoke.mockImplementationOnce((_name: string) =>
-      Promise.resolve({ data: null, error: { message: "rls denied" } }),
-    );
+  test("rejectStagedSheet: marks pending/extracted sheets rejected with reviewer metadata", async () => {
+    const calls: Array<[string, unknown[]]> = [];
+    const rejectChain: Record<string, unknown> = {};
+    for (const m of ["update", "eq", "in", "select"]) {
+      rejectChain[m] = (...args: unknown[]) => {
+        calls.push([m, args]);
+        return rejectChain;
+      };
+    }
+    rejectChain["single"] = () => Promise.resolve({ data: { id: "ps-reject", status: "rejected" }, error: null });
+    mockFrom.mockImplementationOnce((_table: string) => rejectChain);
 
-    const result = await retryPublish("ps-err", { itemsWritten: 7, programsWritten: 0 });
+    const result = await rejectStagedSheet("ps-reject", "user-1");
 
-    expect(result).toMatchObject({
-      priceSheetId: "ps-err",
-      error: expect.stringContaining("Publish failed"),
-      phase: "publish",
-      extractCounts: { itemsWritten: 7, programsWritten: 0 },
-    });
+    expect(result).toEqual({ ok: true, priceSheetId: "ps-reject", status: "rejected" });
+    expect(mockFrom).toHaveBeenCalledWith("qb_price_sheets");
+    const update = calls.find(([method]) => method === "update")?.[1][0] as Record<string, unknown>;
+    expect(update.status).toBe("rejected");
+    expect(update.reviewed_by).toBe("user-1");
+    expect(calls.find(([method]) => method === "in")?.[1]).toEqual(["status", ["pending_review", "extracted"]]);
   });
+
 });
 
 // Helper used by CP5 tests; must come after mockFrom is declared.

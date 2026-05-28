@@ -34,6 +34,8 @@
 
 import { supabase } from "@/lib/supabase";
 import type { Database, Json } from "@/lib/database.types";
+import { publishStagedSheet, type PublishSheetResult } from "./price-sheets-api";
+import { explainInvokeError } from "@/lib/edge-error";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -125,6 +127,54 @@ export interface InFlightImpact {
   totalDeltaCents:      number;
   /** Sorted by absolute deltaCents desc. */
   quotes:               QuoteImpactRow[];
+}
+
+export interface ServerSheetDiffItem {
+  itemType: "list_price" | "freight" | "rebate" | "incentive";
+  modelCode: string | null;
+  nameDisplay: string | null;
+  oldPriceCents: number | null;
+  newPriceCents: number | null;
+  deltaCents: number;
+  deltaPct: number | null;
+  changeKind: ChangeKind;
+}
+
+export interface ServerImpactPreviewLine {
+  equipmentLineId: string | null;
+  modelCode: string;
+  oldListPriceCents: number | null;
+  newListPriceCents: number | null;
+  deltaCents: number;
+  suppressedByStockLock?: boolean;
+}
+
+export interface ServerImpactPreviewQuote {
+  quotePackageId: string;
+  quoteStatusSnapshot: string | null;
+  totalDeltaCents: number;
+  requiresManagerReview?: boolean;
+  approvalRequiredReasons?: string[];
+  lines?: ServerImpactPreviewLine[];
+}
+
+export interface SheetDiffPreview {
+  diff: SheetDiff & {
+    changedItemCount: number;
+    items: ServerSheetDiffItem[];
+    approvalPolicy: Record<string, unknown>;
+    materialityRule: Record<string, unknown>;
+  };
+  impact: InFlightImpact;
+  impactPreview: {
+    totalQuotesAffected: number;
+    materialQuotesAffected: number;
+    quietQuotesAffected: number;
+    totalDeltaCents: number;
+    stockLockedLineCount: number;
+    needsApprovalCount: number;
+    topQuotes: ServerImpactPreviewQuote[];
+  };
 }
 
 // ── Public API ───────────────────────────────────────────────────────────
@@ -228,6 +278,114 @@ export async function getInFlightImpact(diff: SheetDiff): Promise<InFlightImpact
     totalDeltaCents:    rows.reduce((sum, r) => sum + r.deltaCents, 0),
     quotes:             rows,
   };
+}
+
+
+type ServerPreviewResponse = {
+  ok?: boolean;
+  diff?: {
+    priceSheetId?: string;
+    priorPriceSheetId?: string | null;
+    changedItemCount?: number;
+    items?: ServerSheetDiffItem[];
+    approvalPolicy?: Record<string, unknown>;
+    materialityRule?: Record<string, unknown>;
+  };
+  impactPreview?: {
+    totalQuotesAffected?: number;
+    materialQuotesAffected?: number;
+    quietQuotesAffected?: number;
+    totalDeltaCents?: number;
+    stockLockedLineCount?: number;
+    needsApprovalCount?: number;
+    topQuotes?: ServerImpactPreviewQuote[];
+  };
+};
+
+function itemToModelChange(item: ServerSheetDiffItem): ModelPriceChange | null {
+  if (item.itemType !== "list_price" || !item.modelCode) return null;
+  return {
+    modelCode: item.modelCode,
+    nameDisplay: item.nameDisplay,
+    oldPriceCents: item.oldPriceCents,
+    newPriceCents: item.newPriceCents,
+    deltaCents: Number(item.deltaCents ?? 0),
+    deltaPct: Number(item.deltaPct ?? 0),
+    kind: item.changeKind,
+  };
+}
+
+function normalizeServerPreview(payload: ServerPreviewResponse, fallbackPriceSheetId: string): SheetDiffPreview | null {
+  if (!payload.ok || !payload.diff || !payload.impactPreview) return null;
+  const items = Array.isArray(payload.diff.items) ? payload.diff.items : [];
+  const modelChanges = items.flatMap((item) => {
+    const change = itemToModelChange(item);
+    return change ? [change] : [];
+  });
+  const topQuotes = Array.isArray(payload.impactPreview.topQuotes)
+    ? payload.impactPreview.topQuotes
+    : [];
+  const priceSheetId = payload.diff.priceSheetId ?? fallbackPriceSheetId;
+  const impact: InFlightImpact = {
+    priceSheetId,
+    affectedQuoteCount: Number(payload.impactPreview.materialQuotesAffected ?? 0),
+    totalDeltaCents: Number(payload.impactPreview.totalDeltaCents ?? 0),
+    quotes: topQuotes.map((quote) => ({
+      quotePackageId: quote.quotePackageId,
+      quoteNumber: null,
+      customerName: null,
+      status: quote.quoteStatusSnapshot ?? "open",
+      deltaCents: Number(quote.totalDeltaCents ?? 0),
+      affectedLines: (quote.lines ?? []).map((line) => ({
+        lineId: line.equipmentLineId,
+        modelCode: line.modelCode,
+        oldPriceCents: Number(line.oldListPriceCents ?? 0),
+        newPriceCents: Number(line.newListPriceCents ?? 0),
+        deltaCents: Number(line.deltaCents ?? 0),
+      })),
+    })),
+  };
+
+  return {
+    diff: {
+      priceSheetId,
+      priorPriceSheetId: payload.diff.priorPriceSheetId ?? null,
+      brandId: null,
+      modelChanges,
+      summary: aggregateDiffSummary(modelChanges),
+      changedItemCount: Number(payload.diff.changedItemCount ?? modelChanges.length),
+      items,
+      approvalPolicy: payload.diff.approvalPolicy ?? {},
+      materialityRule: payload.diff.materialityRule ?? {},
+    },
+    impact,
+    impactPreview: {
+      totalQuotesAffected: Number(payload.impactPreview.totalQuotesAffected ?? 0),
+      materialQuotesAffected: Number(payload.impactPreview.materialQuotesAffected ?? 0),
+      quietQuotesAffected: Number(payload.impactPreview.quietQuotesAffected ?? 0),
+      totalDeltaCents: Number(payload.impactPreview.totalDeltaCents ?? 0),
+      stockLockedLineCount: Number(payload.impactPreview.stockLockedLineCount ?? 0),
+      needsApprovalCount: Number(payload.impactPreview.needsApprovalCount ?? 0),
+      topQuotes,
+    },
+  };
+}
+
+export async function getSheetDiffPreview(priceSheetId: string): Promise<SheetDiffPreview | null> {
+  const { data, error } = await supabase.functions.invoke<ServerPreviewResponse>(
+    "oem-price-feeds/preview",
+    { body: { priceSheetId } },
+  );
+  if (error) {
+    throw new Error(
+      await explainInvokeError(error, error.message ?? "Preview failed"),
+    );
+  }
+  return normalizeServerPreview(data ?? {}, priceSheetId);
+}
+
+export async function publishSheetAndCreateImpacts(priceSheetId: string): Promise<PublishSheetResult> {
+  return publishStagedSheet(priceSheetId);
 }
 
 // ── Pure helpers ─────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import { SalesActionsBlock } from "../components/SalesActionsBlock";
 import { SalesQuickTools } from "../components/SalesQuickTools";
 import { TomorrowFirstMove } from "../components/TomorrowFirstMove";
 import { LiveSignalsStrip } from "../components/LiveSignalsStrip";
+import { OemPriceImpactCard } from "../components/OemPriceImpactCard";
 import { StreakBadge } from "../components/StreakBadge";
 import { TodayFeedSkeleton } from "../components/TodayFeedSkeleton";
 import { PrepCard } from "../components/PrepCard";
@@ -107,11 +108,13 @@ export function TodayFeedPage() {
     liveStats,
     livePriorityActions,
     pipeline,
+    priceImpacts,
     timeOfDay,
     isLoading,
   } = useTodayFeed();
   const streaks = useRepStreaks();
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const [logVisitOpen, setLogVisitOpen] = useState(false);
 
   const firstName = useMemo(
@@ -203,6 +206,14 @@ export function TodayFeedPage() {
         <LiveSignalsStrip
           pipeline={pipeline}
           expiringQuoteCount={briefing?.expiring_quotes?.length ?? 0}
+        />
+      )}
+
+      {priceImpacts && priceImpacts.summary.visibleImpactCount > 0 && (
+        <OemPriceImpactCard
+          summary={priceImpacts.summary}
+          impacts={priceImpacts.impacts}
+          onReview={() => navigate("/sales/price-impacts")}
         />
       )}
 

@@ -13,6 +13,7 @@
 import { supabase } from "@/lib/supabase";
 import type { Database } from "@/lib/database.types";
 import { US_STATE_CODES, type StateCode } from "./us-states";
+import { explainInvokeError } from "@/lib/edge-error";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -687,19 +688,32 @@ export type UploadSheetResult =
       priceSheetId: string;
       itemsWritten: number;
       programsWritten: number;
-      itemsApplied: number;
-      programsApplied: number;
+      status: string;
     }
   | {
       error: string;
-      /** Present when insert succeeded but extract/publish failed — user can retry. */
+      /** Present when insert succeeded but extraction failed — user can retry. */
       priceSheetId?: string;
       /** Which phase failed — surfaced in the drawer for a clearer retry CTA. */
-      phase?: "extract" | "publish";
-      /** When phase="publish", the extract counts the server returned so the
-       *  retry path can preserve them through to the final success banner. */
-      extractCounts?: { itemsWritten: number; programsWritten: number };
+      phase?: "extract";
     };
+
+export type PublishSheetResult =
+  | {
+      ok: true;
+      eventId: string;
+      priceSheetId: string;
+      itemsApplied: number;
+      programsApplied: number;
+      materialQuotesAffected: number;
+      totalDeltaCents: number;
+      idempotent?: boolean;
+    }
+  | { error: string };
+
+export type RejectSheetResult =
+  | { ok: true; priceSheetId: string; status: "rejected" }
+  | { error: string };
 
 const STORAGE_BUCKET = "price-sheets";
 const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25 MB — Anthropic PDF limit
@@ -738,12 +752,14 @@ type ExtractResponse = {
 };
 
 type PublishResponse = {
-  priceSheetId: string;
-  status: string;
-  itemsApplied: number;
-  itemsSkipped: number;
-  programsApplied: number;
-  programsSkipped: number;
+  ok?: boolean;
+  eventId?: string;
+  priceSheetId?: string;
+  itemsApplied?: number;
+  programsApplied?: number;
+  materialQuotesAffected?: number;
+  totalDeltaCents?: number;
+  idempotent?: boolean;
 };
 
 /**
@@ -753,57 +769,27 @@ type PublishResponse = {
  * On failure the priceSheetId + phase is returned so callers can surface
  * a targeted retry CTA without rebuilding the full pipeline.
  */
-async function runExtractThenPublish(
+async function runExtractOnly(
   priceSheetId: string,
-  extractWritten?: { itemsWritten: number; programsWritten: number },
 ): Promise<UploadSheetResult> {
-  const extractCounts = extractWritten;
-
-  // Extract pass — skipped when the caller already has extract data (retryPublish)
-  let extractData: ExtractResponse | null = null;
-  if (!extractCounts) {
-    const res = await supabase.functions.invoke<ExtractResponse>(
-      "extract-price-sheet",
-      { body: { priceSheetId } },
-    );
-    if (res.error || !res.data) {
-      return {
-        error: `Extraction failed: ${res.error?.message ?? "no response"}`,
-        priceSheetId,
-        phase: "extract",
-      };
-    }
-    extractData = res.data;
-  }
-
-  // Publish pass — always runs
-  const pub = await supabase.functions.invoke<PublishResponse>(
-    "publish-price-sheet",
-    { body: { priceSheetId, auto_approve: true } },
+  const res = await supabase.functions.invoke<ExtractResponse>(
+    "extract-price-sheet",
+    { body: { priceSheetId } },
   );
-  if (pub.error || !pub.data) {
-    const extracted =
-      extractData
-        ? { itemsWritten: extractData.itemsWritten, programsWritten: extractData.programsWritten }
-        : extractCounts;
+  if (res.error || !res.data) {
     return {
-      error: `Publish failed: ${pub.error?.message ?? "no response"}`,
+      error: `Extraction failed: ${res.error?.message ?? "no response"}`,
       priceSheetId,
-      phase: "publish",
-      extractCounts: extracted,
+      phase: "extract",
     };
   }
 
-  const itemsWritten    = extractData?.itemsWritten    ?? extractCounts?.itemsWritten    ?? 0;
-  const programsWritten = extractData?.programsWritten ?? extractCounts?.programsWritten ?? 0;
-
   return {
     ok: true,
-    priceSheetId:    pub.data.priceSheetId,
-    itemsWritten,
-    programsWritten,
-    itemsApplied:    pub.data.itemsApplied,
-    programsApplied: pub.data.programsApplied,
+    priceSheetId:    res.data.priceSheetId ?? priceSheetId,
+    itemsWritten:    res.data.itemsWritten ?? 0,
+    programsWritten: res.data.programsWritten ?? 0,
+    status:          res.data.status ?? "extracted",
   };
 }
 
@@ -823,7 +809,7 @@ async function tryRemoveStorageObject(storagePath: string): Promise<void> {
 }
 
 /**
- * Full upload → DB insert → extract → auto-publish pipeline.
+ * Full upload → DB insert → extract/stage pipeline.
  *
  * Order of operations (each failure point leaves predictable state):
  *   1. Validate file size + extension client-side  → never leaves browser on fail
@@ -833,13 +819,11 @@ async function tryRemoveStorageObject(storagePath: string): Promise<void> {
  *          so the bucket doesn't accumulate orphans over time (M1 fix)
  *   4. invoke extract-price-sheet                   → row stays; status moves to
  *                                                      extracted / rejected server-side
- *   5. invoke publish-price-sheet with auto_approve=true (CP6 — owner Q1=B,
- *      no review gate)                              → catalog live
  *
- * On step 4 or 5 failure we return the priceSheetId + phase so the caller can
- * offer a targeted retry via retryExtract() / retryPublish() without re-uploading.
+ * The upload path intentionally does not publish. Admins review the staged diff
+ * and publish through oem-price-feeds so quote impacts are built server-side.
  */
-export async function uploadAndExtractSheet(
+export async function uploadAndStageSheet(
   input: UploadSheetInput,
 ): Promise<UploadSheetResult> {
   const { brandId, brandCode, file, sheetType, workspaceId, uploadedBy } = input;
@@ -895,36 +879,100 @@ export async function uploadAndExtractSheet(
 
   const priceSheetId = sheetRow.id as string;
 
-  // 4 + 5. Extract then publish
-  return runExtractThenPublish(priceSheetId);
+  // 4. Extract only; publishing happens from the staged-review card.
+  return runExtractOnly(priceSheetId);
 }
 
 /**
- * Retry the extract → publish pipeline against an existing priceSheetId.
+ * Backwards-compatible name for call sites that still import the older helper.
+ * Semantics are now upload → extract/stage only; publishing is separate.
+ */
+export async function uploadAndExtractSheet(
+  input: UploadSheetInput,
+): Promise<UploadSheetResult> {
+  return uploadAndStageSheet(input);
+}
+
+/**
+ * Retry extraction against an existing priceSheetId.
  * Used after a phase="extract" failure: the DB row was already inserted and
- * the storage object already uploaded, so re-running from extraction is both
+ * the storage object already uploaded, so re-running extraction is both
  * correct and cheap.
- *
- * Note: the edge function enforces a status guard — the sheet must be in
- * 'pending_review' or 'extracted' status. If a prior attempt left it in
- * 'extracting' (mid-flight) or 'published', the edge function will reject.
  */
 export async function retryExtract(
   priceSheetId: string,
 ): Promise<UploadSheetResult> {
-  return runExtractThenPublish(priceSheetId);
+  return runExtractOnly(priceSheetId);
 }
 
-/**
- * Retry only the publish pass against an already-extracted priceSheetId.
- * Used after a phase="publish" failure: extraction succeeded (items/programs
- * are in the staging tables), but applying to the catalog failed. Counts
- * passed in are the extraction counts the caller already saw, so the success
- * result still has itemsWritten / programsWritten populated for the UI.
- */
+function normalizePublishResponse(data: PublishResponse | null | undefined, fallbackPriceSheetId: string): PublishSheetResult {
+  if (!data?.eventId) return { error: "Publish returned no event id" };
+  return {
+    ok: true,
+    eventId: data.eventId,
+    priceSheetId: data.priceSheetId ?? fallbackPriceSheetId,
+    itemsApplied: Number(data.itemsApplied ?? 0),
+    programsApplied: Number(data.programsApplied ?? 0),
+    materialQuotesAffected: Number(data.materialQuotesAffected ?? 0),
+    totalDeltaCents: Number(data.totalDeltaCents ?? 0),
+    ...(data.idempotent ? { idempotent: true } : {}),
+  };
+}
+
+export async function publishStagedSheet(
+  priceSheetId: string,
+): Promise<PublishSheetResult> {
+  const { data, error } = await supabase.functions.invoke<PublishResponse>(
+    "oem-price-feeds/publish",
+    { body: { priceSheetId } },
+  );
+  if (error) {
+    return {
+      error: `Publish failed: ${
+        await explainInvokeError(error, error.message ?? "no response")
+      }`,
+    };
+  }
+  return normalizePublishResponse(data, priceSheetId);
+}
+
+export async function rejectStagedSheet(
+  priceSheetId: string,
+  reviewerId?: string | null,
+): Promise<RejectSheetResult> {
+  const update: Record<string, unknown> = {
+    status: "rejected",
+    reviewed_at: new Date().toISOString(),
+  };
+  if (reviewerId) update.reviewed_by = reviewerId;
+
+  const { data, error } = await supabase
+    .from("qb_price_sheets")
+    .update(update)
+    .eq("id", priceSheetId)
+    .in("status", ["pending_review", "extracted"])
+    .select("id, status")
+    .single();
+
+  if (error) return { error: `Reject failed: ${error.message}` };
+  if (!data || (data as { status?: string }).status !== "rejected") {
+    return { error: "Reject failed: sheet was not moved to rejected" };
+  }
+  return { ok: true, priceSheetId: (data as { id?: string }).id ?? priceSheetId, status: "rejected" };
+}
+
+/** @deprecated Publishing now goes through publishStagedSheet(). */
 export async function retryPublish(
   priceSheetId: string,
-  extractCounts: { itemsWritten: number; programsWritten: number },
+  _extractCounts: { itemsWritten: number; programsWritten: number },
 ): Promise<UploadSheetResult> {
-  return runExtractThenPublish(priceSheetId, extractCounts);
+  const published = await publishStagedSheet(priceSheetId);
+  if ("error" in published) return { error: published.error, priceSheetId };
+  return {
+    ok: true,
+    priceSheetId,
+    itemsWritten: _extractCounts.itemsWritten,
+    programsWritten: _extractCounts.programsWritten,
+    status: "published",
+  };
 }

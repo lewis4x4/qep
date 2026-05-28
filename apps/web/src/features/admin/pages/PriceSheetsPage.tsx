@@ -19,19 +19,21 @@ type SelectedBrand = { id: string; code: string; name: string } | null;
 type PriceSheetsTab = "dashboard" | "watchdog";
 
 /**
- * Slice 16: shape of a watchdog-ingested sheet awaiting review. Loaded via
- * a separate query alongside the dashboard so the Moonshot banner is
- * visible on the main tab without a click.
+ * Staged price sheets awaiting admin review. Includes manual uploads and
+ * watchdog-detected sheets; source metadata is label-only, never a filter.
  */
-interface WatchdogPendingSheet {
+interface StagedReviewSheet {
   id:            string;
+  brand_id:      string | null;
   brand_name:    string | null;
+  brand_code:    string | null;
   source_label:  string | null;
 }
 
-type WatchdogPendingSheetJoinRow = {
+type StagedReviewSheetJoinRow = {
   id: string;
-  qb_brands?: Array<{ name: string }> | { name: string } | null;
+  brand_id: string | null;
+  qb_brands?: Array<{ name: string; code: string }> | { name: string; code: string } | null;
   qb_brand_sheet_sources?: Array<{ label: string }> | { label: string } | null;
 };
 
@@ -46,7 +48,7 @@ export function PriceSheetsPage() {
 function PriceSheetsPageInner() {
   const { profile } = useAuth();
   const [rows, setRows] = useState<BrandSheetStatus[]>([]);
-  const [pendingWatchdog, setPendingWatchdog] = useState<WatchdogPendingSheet[]>([]);
+  const [pendingReviewSheets, setPendingReviewSheets] = useState<StagedReviewSheet[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<PriceSheetsTab>("dashboard");
   const [drilldownBrand, setDrilldownBrand] = useState<BrandSheetStatus | null>(null);
@@ -58,11 +60,11 @@ function PriceSheetsPageInner() {
     setLoading(true);
     Promise.all([
       getBrandSheetStatus(),
-      loadWatchdogPending(),
+      loadStagedReviewSheets(),
     ]).then(([brandRows, pending]) => {
       if (!cancelled) {
         setRows(brandRows);
-        setPendingWatchdog(pending);
+        setPendingReviewSheets(pending);
         setLoading(false);
       }
     });
@@ -116,9 +118,9 @@ function PriceSheetsPageInner() {
         <TabsList>
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="watchdog">
-            Watchdog
-            {pendingWatchdog.length > 0 && (
-              <Badge variant="default" className="ml-2">{pendingWatchdog.length}</Badge>
+            Review Queue
+            {pendingReviewSheets.length > 0 && (
+              <Badge variant="default" className="ml-2">{pendingReviewSheets.length}</Badge>
             )}
           </TabsTrigger>
         </TabsList>
@@ -144,13 +146,18 @@ function PriceSheetsPageInner() {
             </div>
           </div>
 
-          {/* Slice 16: Watchdog pending-review banners */}
-          {pendingWatchdog.map((p) => (
+          {/* Staged review banners for manual and watchdog uploads */}
+          {pendingReviewSheets.map((p) => (
             <WatchdogApprovalCard
               key={p.id}
               priceSheetId={p.id}
               brandName={p.brand_name}
               sourceLabel={p.source_label}
+              onMutated={refetch}
+              onReview={() => {
+                const row = p.brand_id ? rows.find((candidate) => candidate.brand_id === p.brand_id) : null;
+                if (row) setDrilldownBrand(row);
+              }}
             />
           ))}
 
@@ -227,34 +234,37 @@ function PriceSheetsPageInner() {
 }
 
 /**
- * Fetch every pending_review sheet that was auto-ingested via the watchdog
- * (source_id is not null), along with the human-readable brand + source
- * label for the approval banner.
+ * Fetch every staged review sheet, including manual uploads and watchdog
+ * detections. `source_id` is metadata only; manual uploads still need review.
  */
-async function loadWatchdogPending(): Promise<WatchdogPendingSheet[]> {
+async function loadStagedReviewSheets(): Promise<StagedReviewSheet[]> {
   const { data } = await supabase
     .from("qb_price_sheets")
-    .select("id, status, source_id, qb_brands!brand_id(name), qb_brand_sheet_sources!source_id(label)")
-    .eq("status", "pending_review")
-    .not("source_id", "is", null)
+    .select("id, status, source_id, brand_id, qb_brands!brand_id(name, code), qb_brand_sheet_sources!source_id(label)")
+    .in("status", ["pending_review", "extracted"])
     .order("created_at", { ascending: false })
     .limit(10)
-    .returns<WatchdogPendingSheetJoinRow[]>();
+    .returns<StagedReviewSheetJoinRow[]>();
 
-  const pickName = (v: WatchdogPendingSheetJoinRow["qb_brands"]): string | null => {
-    if (!v) return null;
-    if (Array.isArray(v)) return v[0]?.name ?? null;
-    return v.name ?? null;
+  const pickBrand = (v: StagedReviewSheetJoinRow["qb_brands"]): { name: string | null; code: string | null } => {
+    if (!v) return { name: null, code: null };
+    const row = Array.isArray(v) ? v[0] : v;
+    return { name: row?.name ?? null, code: row?.code ?? null };
   };
-  const pickLabel = (v: WatchdogPendingSheetJoinRow["qb_brand_sheet_sources"]): string | null => {
+  const pickLabel = (v: StagedReviewSheetJoinRow["qb_brand_sheet_sources"]): string | null => {
     if (!v) return null;
     if (Array.isArray(v)) return v[0]?.label ?? null;
     return v.label ?? null;
   };
 
-  return (data ?? []).map((row) => ({
-    id:           row.id,
-    brand_name:   pickName(row.qb_brands),
-    source_label: pickLabel(row.qb_brand_sheet_sources),
-  }));
+  return (data ?? []).map((row) => {
+    const brand = pickBrand(row.qb_brands);
+    return {
+      id:           row.id,
+      brand_id:     row.brand_id,
+      brand_name:   brand.name,
+      brand_code:   brand.code,
+      source_label: pickLabel(row.qb_brand_sheet_sources) ?? "Manual upload",
+    };
+  });
 }

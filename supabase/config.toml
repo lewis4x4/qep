@@ -247,6 +247,18 @@ verify_jwt = false
 [functions.m365-mailbox-sync]
 verify_jwt = false
 
+[functions.decision-email-card]
+verify_jwt = false
+
+[functions.decision-voice-memo-answer]
+verify_jwt = false
+
+[functions.decision-magic-link]
+verify_jwt = false
+
+[functions.decision-audit-artifact]
+verify_jwt = false
+
 # Nightly cron + occasional manager/owner manual POST; cron-auth for service,
 # requireServiceUser for ES256-safe JWT (manager/owner only).
 [functions.qrm-absence-engine-nightly]
@@ -353,6 +365,9 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.requote-drafts]
+verify_jwt = false
+
+[functions.oem-price-feeds]
 verify_jwt = false
 
 # draft-email also accepts service-role callers for cron-driven drafting
@@ -785,25 +800,19 @@ verify_jwt = false
 [functions.voice-to-parts-order]
 verify_jwt = false
 
+[functions.sync-roadmap-linear]
+verify_jwt = false
+
+[functions.sync-linear-to-roadmap]
+verify_jwt = false
+
 [functions.lane-classifier]
 verify_jwt = false
 
 [functions.auto-triage-pipeline]
 verify_jwt = false
 
-[functions.decision-email-card]
-verify_jwt = false
-
-[functions.decision-magic-link]
-verify_jwt = false
-
 [functions.decision-linear-comment]
-verify_jwt = false
-
-[functions.decision-voice-memo-answer]
-verify_jwt = false
-
-[functions.decision-audit-artifact]
 verify_jwt = false
 
 [functions.ratify-silence-runner]
