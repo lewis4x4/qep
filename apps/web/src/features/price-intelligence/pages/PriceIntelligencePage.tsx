@@ -23,8 +23,11 @@ import {
   type CreateRepriceDraftResponse,
   type RepPriceImpact,
 } from "../lib/price-intelligence-api";
+import { REP_PRICE_IMPACTS_QUERY_KEY } from "@/lib/queryKeys";
 
-const PRICE_INTELLIGENCE_IMPACTS_QUERY_KEY = ["price-intelligence", "phase1-impacts"] as const;
+// Shared with the Sales feed + price-impacts page so all three dedupe cache,
+// polling, and invalidations (was a separate key, which left this view stale).
+const PRICE_INTELLIGENCE_IMPACTS_QUERY_KEY = REP_PRICE_IMPACTS_QUERY_KEY;
 
 function formatCents(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
@@ -69,7 +72,6 @@ export function PriceIntelligencePage() {
     onSuccess: (data) => {
       setSelectedDraft(data);
       void queryClient.invalidateQueries({ queryKey: PRICE_INTELLIGENCE_IMPACTS_QUERY_KEY });
-      void queryClient.invalidateQueries({ queryKey: ["sales", "price-impacts"] });
     },
   });
 

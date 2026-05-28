@@ -27,8 +27,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
+import { REP_PRICE_IMPACTS_QUERY_KEY } from "@/lib/queryKeys";
 
-const PRICE_IMPACTS_QUERY_KEY = ["sales", "price-impacts"] as const;
+const PRICE_IMPACTS_QUERY_KEY = REP_PRICE_IMPACTS_QUERY_KEY;
 
 function formatCents(cents: number | null): string {
   if (cents === null || cents === undefined || Number.isNaN(cents)) return "—";
