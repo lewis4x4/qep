@@ -276,8 +276,8 @@ CREATE POLICY qep_decisions_authenticated_read ON public.qep_decisions
 DROP POLICY IF EXISTS qep_decisions_authenticated_update ON public.qep_decisions;
 CREATE POLICY qep_decisions_authenticated_update ON public.qep_decisions
   FOR UPDATE TO authenticated
-  USING (public.get_my_role() IN ('admin', 'manager', 'owner'))
-  WITH CHECK (public.get_my_role() IN ('admin', 'manager', 'owner'));
+  USING ((select public.get_my_role()) IN ('admin', 'manager', 'owner'))
+  WITH CHECK ((select public.get_my_role()) IN ('admin', 'manager', 'owner'));
 
 DROP POLICY IF EXISTS qep_decision_blocks_service_role_all ON public.qep_decision_blocks;
 CREATE POLICY qep_decision_blocks_service_role_all ON public.qep_decision_blocks

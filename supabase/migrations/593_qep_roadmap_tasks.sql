@@ -392,8 +392,8 @@ CREATE POLICY qep_roadmap_tasks_authenticated_read ON public.qep_roadmap_tasks
 DROP POLICY IF EXISTS qep_roadmap_tasks_authenticated_update ON public.qep_roadmap_tasks;
 CREATE POLICY qep_roadmap_tasks_authenticated_update ON public.qep_roadmap_tasks
   FOR UPDATE TO authenticated
-  USING (public.get_my_role() IN ('admin', 'manager', 'owner'))
-  WITH CHECK (public.get_my_role() IN ('admin', 'manager', 'owner'));
+  USING ((select public.get_my_role()) IN ('admin', 'manager', 'owner'))
+  WITH CHECK ((select public.get_my_role()) IN ('admin', 'manager', 'owner'));
 
 COMMIT;
 

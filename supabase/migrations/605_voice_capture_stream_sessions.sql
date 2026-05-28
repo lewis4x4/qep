@@ -95,11 +95,11 @@ create policy "voice_capture_stream_sessions_select"
   on public.voice_capture_stream_sessions
   for select
   using (
-    user_id = auth.uid()
+    user_id = (select auth.uid())
     or exists (
       select 1
       from public.profiles p
-      where p.id = auth.uid()
+      where p.id = (select auth.uid())
         and p.role in ('admin', 'manager', 'owner')
         and coalesce(p.active_workspace_id, 'default') = voice_capture_stream_sessions.workspace_id
     )
@@ -109,19 +109,19 @@ drop policy if exists "voice_capture_stream_sessions_service_all" on public.voic
 create policy "voice_capture_stream_sessions_service_all"
   on public.voice_capture_stream_sessions
   for all
-  using (auth.role() = 'service_role')
-  with check (auth.role() = 'service_role');
+  using ((select auth.role()) = 'service_role')
+  with check ((select auth.role()) = 'service_role');
 
 drop policy if exists "voice_capture_stream_chunks_select" on public.voice_capture_stream_chunks;
 create policy "voice_capture_stream_chunks_select"
   on public.voice_capture_stream_chunks
   for select
   using (
-    user_id = auth.uid()
+    user_id = (select auth.uid())
     or exists (
       select 1
       from public.profiles p
-      where p.id = auth.uid()
+      where p.id = (select auth.uid())
         and p.role in ('admin', 'manager', 'owner')
         and coalesce(p.active_workspace_id, 'default') = voice_capture_stream_chunks.workspace_id
     )
@@ -131,8 +131,8 @@ drop policy if exists "voice_capture_stream_chunks_service_all" on public.voice_
 create policy "voice_capture_stream_chunks_service_all"
   on public.voice_capture_stream_chunks
   for all
-  using (auth.role() = 'service_role')
-  with check (auth.role() = 'service_role');
+  using ((select auth.role()) = 'service_role')
+  with check ((select auth.role()) = 'service_role');
 
 drop trigger if exists set_voice_capture_stream_sessions_updated_at on public.voice_capture_stream_sessions;
 create trigger set_voice_capture_stream_sessions_updated_at

@@ -66,7 +66,7 @@ drop policy if exists "oems_workspace_member_select" on public.oems;
 create policy "oems_workspace_member_select"
   on public.oems for select
   using (
-    auth.uid() is not null
+    (select auth.uid()) is not null
     and workspace_id = (select public.get_my_workspace())
     and deleted_at is null
   );

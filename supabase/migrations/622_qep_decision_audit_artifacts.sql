@@ -74,7 +74,7 @@ DROP POLICY IF EXISTS qep_decision_audit_artifacts_authenticated_read ON public.
 CREATE POLICY qep_decision_audit_artifacts_authenticated_read
   ON public.qep_decision_audit_artifacts
   FOR SELECT TO authenticated
-  USING (public.get_my_role() IN ('admin', 'manager', 'owner'));
+  USING ((select public.get_my_role()) IN ('admin', 'manager', 'owner'));
 
 COMMENT ON TABLE public.qep_decision_audit_artifacts IS
   'QEP-150/F5.1 ledger of tiered decision audit artifacts: AUTO row-only, RATIFY HTML snapshot in R2, AUTHORIZE signed PDF in R2 with retention.';

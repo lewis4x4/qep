@@ -186,57 +186,57 @@ alter table public.qb_quote_reprice_impact_lines enable row level security;
 alter table public.qb_quote_reprice_drafts enable row level security;
 
 create policy "qb_price_change_events_service" on public.qb_price_change_events
-  for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+  for all using ((select auth.role()) = 'service_role') with check ((select auth.role()) = 'service_role');
 create policy "qb_price_change_items_service" on public.qb_price_change_items
-  for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+  for all using ((select auth.role()) = 'service_role') with check ((select auth.role()) = 'service_role');
 create policy "qb_quote_reprice_impacts_service" on public.qb_quote_reprice_impacts
-  for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+  for all using ((select auth.role()) = 'service_role') with check ((select auth.role()) = 'service_role');
 create policy "qb_quote_reprice_impact_lines_service" on public.qb_quote_reprice_impact_lines
-  for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+  for all using ((select auth.role()) = 'service_role') with check ((select auth.role()) = 'service_role');
 create policy "qb_quote_reprice_drafts_service" on public.qb_quote_reprice_drafts
-  for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+  for all using ((select auth.role()) = 'service_role') with check ((select auth.role()) = 'service_role');
 
 create policy "qb_price_change_events_elevated" on public.qb_price_change_events
-  for all using (workspace_id = public.get_my_workspace() and public.get_my_role() in ('admin','manager','owner'))
-  with check (workspace_id = public.get_my_workspace() and public.get_my_role() in ('admin','manager','owner'));
+  for all using (workspace_id = (select public.get_my_workspace()) and (select public.get_my_role()) in ('admin','manager','owner'))
+  with check (workspace_id = (select public.get_my_workspace()) and (select public.get_my_role()) in ('admin','manager','owner'));
 
 create policy "qb_price_change_items_elevated_select" on public.qb_price_change_items
-  for select using (workspace_id = public.get_my_workspace() and public.get_my_role() in ('admin','manager','owner'));
+  for select using (workspace_id = (select public.get_my_workspace()) and (select public.get_my_role()) in ('admin','manager','owner'));
 
 create policy "qb_quote_reprice_impacts_select" on public.qb_quote_reprice_impacts
   for select using (
-    workspace_id = public.get_my_workspace()
-    and (public.get_my_role() in ('admin','manager','owner') or assigned_rep_id = auth.uid())
+    workspace_id = (select public.get_my_workspace())
+    and ((select public.get_my_role()) in ('admin','manager','owner') or assigned_rep_id = (select auth.uid()))
   );
 
 create policy "qb_quote_reprice_impacts_update" on public.qb_quote_reprice_impacts
-  for update using (workspace_id = public.get_my_workspace() and public.get_my_role() in ('admin','manager','owner'))
-  with check (workspace_id = public.get_my_workspace() and public.get_my_role() in ('admin','manager','owner'));
+  for update using (workspace_id = (select public.get_my_workspace()) and (select public.get_my_role()) in ('admin','manager','owner'))
+  with check (workspace_id = (select public.get_my_workspace()) and (select public.get_my_role()) in ('admin','manager','owner'));
 
 create policy "qb_quote_reprice_impact_lines_select" on public.qb_quote_reprice_impact_lines
   for select using (
     exists (
       select 1 from public.qb_quote_reprice_impacts i
       where i.id = qb_quote_reprice_impact_lines.impact_id
-        and i.workspace_id = public.get_my_workspace()
-        and (public.get_my_role() in ('admin','manager','owner') or i.assigned_rep_id = auth.uid())
+        and i.workspace_id = (select public.get_my_workspace())
+        and ((select public.get_my_role()) in ('admin','manager','owner') or i.assigned_rep_id = (select auth.uid()))
     )
   );
 
 create policy "qb_quote_reprice_drafts_select" on public.qb_quote_reprice_drafts
   for select using (
-    workspace_id = public.get_my_workspace()
-    and (public.get_my_role() in ('admin','manager','owner') or created_by = auth.uid())
+    workspace_id = (select public.get_my_workspace())
+    and ((select public.get_my_role()) in ('admin','manager','owner') or created_by = (select auth.uid()))
   );
 
 create policy "qb_quote_reprice_drafts_insert_own" on public.qb_quote_reprice_drafts
-  for insert with check (workspace_id = public.get_my_workspace() and created_by = auth.uid());
+  for insert with check (workspace_id = (select public.get_my_workspace()) and created_by = (select auth.uid()));
 
 create policy "qb_quote_reprice_drafts_update" on public.qb_quote_reprice_drafts
   for update using (
-    workspace_id = public.get_my_workspace()
-    and (public.get_my_role() in ('admin','manager','owner') or created_by = auth.uid())
+    workspace_id = (select public.get_my_workspace())
+    and ((select public.get_my_role()) in ('admin','manager','owner') or created_by = (select auth.uid()))
   ) with check (
-    workspace_id = public.get_my_workspace()
-    and (public.get_my_role() in ('admin','manager','owner') or created_by = auth.uid())
+    workspace_id = (select public.get_my_workspace())
+    and ((select public.get_my_role()) in ('admin','manager','owner') or created_by = (select auth.uid()))
   );

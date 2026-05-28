@@ -347,7 +347,7 @@ DROP POLICY IF EXISTS qep_shadow_ship_flags_authenticated_write ON public.qep_sh
 CREATE POLICY qep_shadow_ship_flags_authenticated_write
   ON public.qep_shadow_ship_flags
   FOR INSERT TO authenticated
-  WITH CHECK (public.get_my_role() IN ('admin', 'manager', 'owner'));
+  WITH CHECK ((select public.get_my_role()) IN ('admin', 'manager', 'owner'));
 
 REVOKE EXECUTE ON FUNCTION public.fn_qep_shadow_ship_flags_touch_updated_at() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.fn_qep_shadow_ship_flags_touch_updated_at() FROM anon;

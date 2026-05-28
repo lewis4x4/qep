@@ -5,11 +5,11 @@
 DROP POLICY IF EXISTS qep_roadmap_tasks_authenticated_update ON public.qep_roadmap_tasks;
 CREATE POLICY qep_roadmap_tasks_authenticated_update ON public.qep_roadmap_tasks
   FOR UPDATE TO authenticated
-  USING (public.get_my_role() IN ('admin', 'manager', 'owner'))
-  WITH CHECK (public.get_my_role() IN ('admin', 'manager', 'owner'));
+  USING ((select public.get_my_role()) IN ('admin', 'manager', 'owner'))
+  WITH CHECK ((select public.get_my_role()) IN ('admin', 'manager', 'owner'));
 
 DROP POLICY IF EXISTS qep_decisions_authenticated_update ON public.qep_decisions;
 CREATE POLICY qep_decisions_authenticated_update ON public.qep_decisions
   FOR UPDATE TO authenticated
-  USING (public.get_my_role() IN ('admin', 'manager', 'owner'))
-  WITH CHECK (public.get_my_role() IN ('admin', 'manager', 'owner'));
+  USING ((select public.get_my_role()) IN ('admin', 'manager', 'owner'))
+  WITH CHECK ((select public.get_my_role()) IN ('admin', 'manager', 'owner'));

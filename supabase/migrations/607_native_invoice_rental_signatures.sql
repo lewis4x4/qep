@@ -80,15 +80,15 @@ alter table public.customer_invoice_signatures enable row level security;
 alter table public.rental_contract_signatures enable row level security;
 
 create policy "customer_invoice_signatures_internal" on public.customer_invoice_signatures for select
-  using (workspace_id = public.get_my_workspace() and public.get_my_role() in ('rep', 'admin', 'manager', 'owner'));
+  using (workspace_id = (select public.get_my_workspace()) and (select public.get_my_role()) in ('rep', 'admin', 'manager', 'owner'));
 create policy "customer_invoice_signatures_self" on public.customer_invoice_signatures for select
   using (portal_customer_id = public.get_portal_customer_id());
 create policy "customer_invoice_signatures_service" on public.customer_invoice_signatures for all
-  using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+  using ((select auth.role()) = 'service_role') with check ((select auth.role()) = 'service_role');
 
 create policy "rental_contract_signatures_internal" on public.rental_contract_signatures for select
-  using (workspace_id = public.get_my_workspace() and public.get_my_role() in ('rep', 'admin', 'manager', 'owner'));
+  using (workspace_id = (select public.get_my_workspace()) and (select public.get_my_role()) in ('rep', 'admin', 'manager', 'owner'));
 create policy "rental_contract_signatures_self" on public.rental_contract_signatures for select
   using (portal_customer_id = public.get_portal_customer_id());
 create policy "rental_contract_signatures_service" on public.rental_contract_signatures for all
-  using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+  using ((select auth.role()) = 'service_role') with check ((select auth.role()) = 'service_role');

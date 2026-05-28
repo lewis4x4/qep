@@ -374,8 +374,8 @@ DROP POLICY IF EXISTS qep_decision_delegation_policies_authenticated_write ON pu
 CREATE POLICY qep_decision_delegation_policies_authenticated_write
   ON public.qep_decision_delegation_policies
   FOR ALL TO authenticated
-  USING (public.get_my_role() IN ('admin', 'manager', 'owner'))
-  WITH CHECK (public.get_my_role() IN ('admin', 'manager', 'owner'));
+  USING ((select public.get_my_role()) IN ('admin', 'manager', 'owner'))
+  WITH CHECK ((select public.get_my_role()) IN ('admin', 'manager', 'owner'));
 
 DROP POLICY IF EXISTS qep_decision_delegation_audit_service_role_all ON public.qep_decision_delegation_audit;
 CREATE POLICY qep_decision_delegation_audit_service_role_all

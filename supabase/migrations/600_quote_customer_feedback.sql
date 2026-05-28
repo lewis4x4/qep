@@ -66,14 +66,14 @@ alter table public.quote_customer_feedback enable row level security;
 
 drop policy if exists "qcf_service_all" on public.quote_customer_feedback;
 create policy "qcf_service_all" on public.quote_customer_feedback for all
-  using (auth.role() = 'service_role')
-  with check (auth.role() = 'service_role');
+  using ((select auth.role()) = 'service_role')
+  with check ((select auth.role()) = 'service_role');
 
 drop policy if exists "qcf_staff_select_workspace" on public.quote_customer_feedback;
 create policy "qcf_staff_select_workspace" on public.quote_customer_feedback for select
   using (
-    workspace_id = public.get_my_workspace()
-    and public.get_my_role() in ('rep', 'admin', 'manager', 'owner')
+    workspace_id = (select public.get_my_workspace())
+    and (select public.get_my_role()) in ('rep', 'admin', 'manager', 'owner')
   );
 
 comment on table public.quote_customer_feedback is
