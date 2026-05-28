@@ -183,6 +183,37 @@ function diffOldPrice(item: JsonObject): number | null {
   return firstCents(lp.old, lp.from, lp.previous);
 }
 
+/**
+ * Page through a query in fixed-size batches instead of a single capped
+ * .limit(), so large workspaces aren't silently truncated (a quote past the
+ * old 1000-cap was never scanned/flagged; a rep summary past 200 under-counted).
+ * The caller supplies a builder that applies its filters + a STABLE .order
+ * (use a unique key like id) + .range(from, to). A generous safety cap prevents
+ * runaway; if hit, we log rather than fail silently.
+ */
+async function loadAllPages<T>(
+  build: (
+    from: number,
+    to: number,
+  ) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  label: string,
+  pageSize = 1000,
+  maxRows = 50_000,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; from < maxRows; from += pageSize) {
+    const { data, error } = await build(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < pageSize) return out;
+  }
+  console.warn(
+    `[oem-price-feeds] ${label} hit ${maxRows}-row safety cap; results truncated`,
+  );
+  return out;
+}
+
 async function loadSheet(
   admin: ServiceClient,
   priceSheetId: string,
@@ -229,18 +260,17 @@ async function buildItemDiffs(
 
   const existingByCode = new Map<string, JsonObject>();
   if (modelItems.length) {
-    const { data: models, error: modelErr } = await admin.from(
+    const models = await loadAllPages<JsonObject>(
+      (from, to) =>
+        admin.from("qb_equipment_models").select(
+          "id, model_code, name_display, list_price_cents",
+        ).eq("workspace_id", sheet.workspace_id).eq(
+          "brand_id",
+          sheet.brand_id,
+        ).order("id", { ascending: true }).range(from, to),
       "qb_equipment_models",
-    ).select("id, model_code, name_display, list_price_cents").eq(
-      "workspace_id",
-      sheet.workspace_id,
-    ).eq("brand_id", sheet.brand_id).limit(5000);
-    if (modelErr) {
-      throw new Error(
-        `Failed to load existing model prices: ${modelErr.message}`,
-      );
-    }
-    for (const model of (models ?? []) as JsonObject[]) {
+    );
+    for (const model of models) {
       const code = normalizeModelCode(model.model_code);
       if (code) existingByCode.set(code, model);
     }
@@ -407,27 +437,31 @@ async function buildQuoteImpacts(
     sheet.brand_id,
   );
 
-  const { data: quotes, error: quoteErr } = await admin.from("quote_packages")
-    .select(
-      "id, workspace_id, deal_id, status, updated_at, equipment, net_total, margin_amount, margin_pct, created_by, crm_deals(assigned_rep_id)",
-    ).eq("workspace_id", sheet.workspace_id).in("status", OPEN_QUOTE_STATUSES)
-    .limit(1000);
-  if (quoteErr) {
-    throw new Error(`Failed to load open quotes: ${quoteErr.message}`);
-  }
-
-  const quoteIds = ((quotes ?? []) as JsonObject[]).map((quote) =>
-    String(quote.id)
+  const quotes = await loadAllPages<JsonObject>(
+    (from, to) =>
+      admin.from("quote_packages").select(
+        "id, workspace_id, deal_id, status, updated_at, equipment, net_total, margin_amount, margin_pct, created_by, crm_deals(assigned_rep_id)",
+      ).eq("workspace_id", sheet.workspace_id).in("status", OPEN_QUOTE_STATUSES)
+        .order("id", { ascending: true }).range(from, to),
+    "open quotes",
   );
+
+  const quoteIds = quotes.map((quote) => String(quote.id));
   const linesByQuote = new Map<string, JsonObject[]>();
-  if (quoteIds.length) {
-    const { data: lineRows, error: lineErr } = await admin.from(
+  // Chunk the id list (URL-length safety) and paginate each batch's rows
+  // (PostgREST's implicit row cap), so no line items are silently dropped.
+  const QUOTE_ID_CHUNK = 200;
+  for (let i = 0; i < quoteIds.length; i += QUOTE_ID_CHUNK) {
+    const batch = quoteIds.slice(i, i + QUOTE_ID_CHUNK);
+    const lineRows = await loadAllPages<JsonObject>(
+      (from, to) =>
+        admin.from("quote_package_line_items").select("*").in(
+          "quote_package_id",
+          batch,
+        ).order("id", { ascending: true }).range(from, to),
       "quote_package_line_items",
-    ).select("*").in("quote_package_id", quoteIds);
-    if (lineErr) {
-      throw new Error(`Failed to load quote line items: ${lineErr.message}`);
-    }
-    for (const row of (lineRows ?? []) as JsonObject[]) {
+    );
+    for (const row of lineRows) {
       const quoteId = String(row.quote_package_id);
       const list = linesByQuote.get(quoteId) ?? [];
       list.push(row);
@@ -589,8 +623,12 @@ async function buildPreview(
   if (sheet.workspace_id !== workspaceId) {
     throw new Error("Price sheet is outside caller workspace");
   }
-  const priorPriceSheetId = await loadPriorPriceSheetId(admin, sheet);
-  const itemDiffs = await buildItemDiffs(admin, sheet);
+  // loadPriorPriceSheetId and buildItemDiffs both depend only on `sheet` and
+  // are independent of each other — run them concurrently.
+  const [priorPriceSheetId, itemDiffs] = await Promise.all([
+    loadPriorPriceSheetId(admin, sheet),
+    buildItemDiffs(admin, sheet),
+  ]);
   const impacts = await buildQuoteImpacts(admin, sheet, itemDiffs);
   return { sheet, priorPriceSheetId, itemDiffs, impacts };
 }
@@ -812,41 +850,54 @@ async function persistEvent(
       }
     }
 
-    for (const impact of preview.impacts) {
-      const { data: impactRow, error: impactErr } = await admin.from(
+    if (preview.impacts.length) {
+      // Batch the per-quote upsert and the per-line insert into two set-based
+      // round-trips instead of 2N. (Equivalent to the old loop: in the normal
+      // flow the event is fresh — clearRebuildableEvent removed any building/
+      // failed predecessor via cascade — so there are no pre-existing rows to
+      // duplicate.)
+      const { data: impactRows, error: impactErr } = await admin.from(
         "qb_quote_reprice_impacts",
-      ).upsert({
-        event_id: eventId,
-        workspace_id: preview.sheet.workspace_id,
-        quote_package_id: impact.quotePackageId,
-        deal_id: impact.dealId,
-        assigned_rep_id: impact.assignedRepId,
-        quote_status_snapshot: impact.quoteStatusSnapshot,
-        quote_updated_at_snapshot: impact.quoteUpdatedAtSnapshot,
-        total_delta_cents: impact.totalDeltaCents,
-        max_line_delta_pct: impact.maxLineDeltaPct,
-        old_margin_pct: impact.oldMarginPct,
-        projected_margin_pct: impact.projectedMarginPct,
-        margin_floor_pct: impact.marginFloorPct,
-        below_margin_floor: impact.belowMarginFloor,
-        materiality_trigger: impact.materialityTrigger,
-        requires_manager_review: impact.requiresManagerReview,
-        approval_required_reasons: impact.approvalRequiredReasons,
-        old_commission_cents: impact.oldCommissionCents,
-        projected_commission_cents: impact.projectedCommissionCents,
-        commission_delta_cents: impact.commissionDeltaCents,
-        state: impact.state,
-      }, { onConflict: "event_id,quote_package_id" }).select("id").single();
-      if (impactErr || !impactRow) {
+      ).upsert(
+        preview.impacts.map((impact) => ({
+          event_id: eventId,
+          workspace_id: preview.sheet.workspace_id,
+          quote_package_id: impact.quotePackageId,
+          deal_id: impact.dealId,
+          assigned_rep_id: impact.assignedRepId,
+          quote_status_snapshot: impact.quoteStatusSnapshot,
+          quote_updated_at_snapshot: impact.quoteUpdatedAtSnapshot,
+          total_delta_cents: impact.totalDeltaCents,
+          max_line_delta_pct: impact.maxLineDeltaPct,
+          old_margin_pct: impact.oldMarginPct,
+          projected_margin_pct: impact.projectedMarginPct,
+          margin_floor_pct: impact.marginFloorPct,
+          below_margin_floor: impact.belowMarginFloor,
+          materiality_trigger: impact.materialityTrigger,
+          requires_manager_review: impact.requiresManagerReview,
+          approval_required_reasons: impact.approvalRequiredReasons,
+          old_commission_cents: impact.oldCommissionCents,
+          projected_commission_cents: impact.projectedCommissionCents,
+          commission_delta_cents: impact.commissionDeltaCents,
+          state: impact.state,
+        })),
+        { onConflict: "event_id,quote_package_id" },
+      ).select("id, quote_package_id");
+      if (impactErr || !impactRows) {
         throw new Error(
-          `Failed to persist quote impact: ${impactErr?.message ?? "unknown"}`,
+          `Failed to persist quote impacts: ${impactErr?.message ?? "unknown"}`,
         );
       }
-      const impactId = String((impactRow as JsonObject).id);
-      if (impact.lines.length) {
-        const { error: lineErr } = await admin.from(
-          "qb_quote_reprice_impact_lines",
-        ).insert(impact.lines.map((line) => ({
+      const impactIdByQuote = new Map(
+        (impactRows as JsonObject[]).map((row) => [
+          String(row.quote_package_id),
+          String(row.id),
+        ]),
+      );
+      const allLines = preview.impacts.flatMap((impact) => {
+        const impactId = impactIdByQuote.get(impact.quotePackageId);
+        if (!impactId) return [];
+        return impact.lines.map((line) => ({
           impact_id: impactId,
           quote_package_line_item_id: line.quotePackageLineItemId,
           equipment_line_id: line.equipmentLineId,
@@ -862,7 +913,12 @@ async function persistEvent(
           suppressed_by_stock_lock: line.suppressedByStockLock,
           suppression_reason: line.suppressionReason,
           metadata: line.metadata,
-        })));
+        }));
+      });
+      if (allLines.length) {
+        const { error: lineErr } = await admin.from(
+          "qb_quote_reprice_impact_lines",
+        ).insert(allLines);
         if (lineErr) {
           throw new Error(`Failed to persist impact lines: ${lineErr.message}`);
         }
@@ -1058,27 +1114,34 @@ async function handleRepImpacts(ctx: AuthContext): Promise<Response> {
   // Inner-join the parent event and require status='active'. Without this an
   // impact whose event was superseded or failed (partial publish) would still
   // surface here — handleRepImpacts otherwise filters only on impact state.
-  let query = ctx.admin.from("qb_quote_reprice_impacts").select(
-    "*, qb_quote_reprice_impact_lines(*), qb_price_change_events!inner(status)",
-  ).eq("workspace_id", ctx.workspaceId).eq(
-    "qb_price_change_events.status",
-    "active",
-  ).in("state", [
-    "visible",
-    "draft_created",
-    "approval_pending",
-    "approved",
-  ]).order("created_at", { ascending: false }).limit(200);
-  if (ctx.role === "rep") query = query.eq("assigned_rep_id", ctx.userId);
-  const { data, error } = await query;
-  if (error) {
+  // Page through the full set (no .limit(200)) so the rep queue isn't
+  // truncated and the summary counts/sums cover every matching impact, not
+  // just the first page. Order by id for stable pagination — the client sorts
+  // for display.
+  let impacts: JsonObject[];
+  try {
+    impacts = await loadAllPages<JsonObject>((from, to) => {
+      let q = ctx.admin.from("qb_quote_reprice_impacts").select(
+        "*, qb_quote_reprice_impact_lines(*), qb_price_change_events!inner(status)",
+      ).eq("workspace_id", ctx.workspaceId).eq(
+        "qb_price_change_events.status",
+        "active",
+      ).in("state", [
+        "visible",
+        "draft_created",
+        "approval_pending",
+        "approved",
+      ]).order("id", { ascending: true }).range(from, to);
+      if (ctx.role === "rep") q = q.eq("assigned_rep_id", ctx.userId);
+      return q;
+    }, "rep-impacts");
+  } catch (err) {
     return safeJsonError(
-      `Failed to load OEM quote impacts: ${error.message}`,
+      `Failed to load OEM quote impacts: ${errorMessage(err)}`,
       500,
       ctx.origin,
     );
   }
-  const impacts = (data ?? []) as JsonObject[];
   return safeJsonOk({
     summary: {
       visibleImpactCount: impacts.length,
