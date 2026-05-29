@@ -130,7 +130,6 @@ mock.module("../../lib/price-sheets-api", () => ({
   uploadAndStageSheet: () => Promise.resolve({ ok: true as const, priceSheetId: "stub", itemsWritten: 0, programsWritten: 0, status: "extracted" }),
   uploadAndExtractSheet: () => Promise.resolve({ ok: true as const, priceSheetId: "stub", itemsWritten: 0, programsWritten: 0, status: "extracted" }),
   retryExtract: () => Promise.resolve({ ok: true as const, priceSheetId: "stub", itemsWritten: 0, programsWritten: 0, status: "extracted" }),
-  retryPublish: () => Promise.resolve({ ok: true as const, priceSheetId: "stub", itemsWritten: 0, programsWritten: 0, status: "published" }),
   publishStagedSheet: () => Promise.resolve({ ok: true as const, eventId: "evt", priceSheetId: "stub", itemsApplied: 0, programsApplied: 0, materialQuotesAffected: 0, totalDeltaCents: 0 }),
   rejectStagedSheet: () => Promise.resolve({ ok: true as const, priceSheetId: "stub", status: "rejected" }),
   analyzeFreightCoverage: () => ({ covered: [], uncovered: [], overlaps: [] }),

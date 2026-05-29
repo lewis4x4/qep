@@ -34,7 +34,6 @@
 
 import { supabase } from "@/lib/supabase";
 import type { Database, Json } from "@/lib/database.types";
-import { publishStagedSheet, type PublishSheetResult } from "./price-sheets-api";
 import { explainInvokeError } from "@/lib/edge-error";
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -382,10 +381,6 @@ export async function getSheetDiffPreview(priceSheetId: string): Promise<SheetDi
     );
   }
   return normalizeServerPreview(data ?? {}, priceSheetId);
-}
-
-export async function publishSheetAndCreateImpacts(priceSheetId: string): Promise<PublishSheetResult> {
-  return publishStagedSheet(priceSheetId);
 }
 
 // ── Pure helpers ─────────────────────────────────────────────────────────

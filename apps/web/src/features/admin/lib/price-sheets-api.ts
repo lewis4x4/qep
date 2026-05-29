@@ -960,19 +960,3 @@ export async function rejectStagedSheet(
   }
   return { ok: true, priceSheetId: (data as { id?: string }).id ?? priceSheetId, status: "rejected" };
 }
-
-/** @deprecated Publishing now goes through publishStagedSheet(). */
-export async function retryPublish(
-  priceSheetId: string,
-  _extractCounts: { itemsWritten: number; programsWritten: number },
-): Promise<UploadSheetResult> {
-  const published = await publishStagedSheet(priceSheetId);
-  if ("error" in published) return { error: published.error, priceSheetId };
-  return {
-    ok: true,
-    priceSheetId,
-    itemsWritten: _extractCounts.itemsWritten,
-    programsWritten: _extractCounts.programsWritten,
-    status: "published",
-  };
-}

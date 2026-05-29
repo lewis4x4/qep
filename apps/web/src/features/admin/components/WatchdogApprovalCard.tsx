@@ -12,10 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, Send, Sparkles, XCircle } from "lucide-react";
-import { rejectStagedSheet } from "../lib/price-sheets-api";
+import { publishStagedSheet, rejectStagedSheet } from "../lib/price-sheets-api";
 import {
   getSheetDiffPreview,
-  publishSheetAndCreateImpacts,
   type InFlightImpact,
   type ModelPriceChange,
   type SheetDiff,
@@ -73,7 +72,7 @@ export function WatchdogApprovalCard({
     setActionError(null);
     setActionMessage(null);
     try {
-      const result = await publishSheetAndCreateImpacts(priceSheetId);
+      const result = await publishStagedSheet(priceSheetId);
       if ("error" in result) {
         setActionError(result.error);
         return;
