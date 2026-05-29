@@ -16,6 +16,7 @@ import {
   deltaPct,
   dollarsToCents,
   evaluateMarginGate,
+  freightValuesFromExtracted,
   impactStateFor,
   isStockLockedLine,
   MATERIALITY_LINE_PCT_GT,
@@ -346,6 +347,58 @@ async function buildItemDiffs(
         source: "qb_price_sheet_programs",
       },
     });
+  }
+
+  // Freight changes (item_type='freight'): compare the new sheet's zone freight
+  // against the current qb_freight_zones for the brand. These surface as
+  // catalog diffs in the admin preview (changedItemCount + items) so a reviewer
+  // sees a freight move before publishing — they do NOT yet drive per-quote
+  // impact (that needs the quote's persisted destination; tracked separately).
+  const freightItems = (items ?? []).filter((item: JsonObject) =>
+    item.item_type === "freight"
+  ) as JsonObject[];
+  if (freightItems.length) {
+    const { data: priorZones } = await admin.from("qb_freight_zones")
+      .select("zone_name, state_codes, freight_large_cents, freight_small_cents")
+      .eq("brand_id", sheet.brand_id);
+    const priorZoneRows = (priorZones ?? []) as JsonObject[];
+    for (const item of freightItems) {
+      const extracted = asObject(item.extracted);
+      const stateCodes = Array.isArray(extracted.state_codes)
+        ? (extracted.state_codes as unknown[]).map((s) => String(s).toUpperCase())
+        : [];
+      const next = freightValuesFromExtracted(extracted);
+      const prior = priorZoneRows.find((zone) => {
+        const zoneStates = Array.isArray(zone.state_codes)
+          ? (zone.state_codes as unknown[]).map((s) => String(s).toUpperCase())
+          : [];
+        return zoneStates.some((s) => stateCodes.includes(s));
+      });
+      const oldLarge = prior ? centsValue(prior.freight_large_cents) : null;
+      const oldSmall = prior ? centsValue(prior.freight_small_cents) : null;
+      diffs.push({
+        itemType: "freight",
+        modelCode: null,
+        normalizedCode: null,
+        nameDisplay: firstString(extracted.zone_name) ??
+          (stateCodes.length ? `Freight: ${stateCodes.join(", ")}` : "Freight"),
+        oldPriceCents: oldLarge,
+        newPriceCents: next.largeCents,
+        deltaCents: (next.largeCents ?? 0) - (oldLarge ?? 0),
+        deltaPct: deltaPct(oldLarge, next.largeCents),
+        changeKind: changeKind(oldLarge, next.largeCents),
+        priorItemId: null,
+        newItemId: typeof item.id === "string" ? item.id : null,
+        metadata: {
+          source: "qb_freight_zones",
+          state_codes: stateCodes,
+          zone_name: extracted.zone_name ?? null,
+          new_freight_small_cents: next.smallCents,
+          prior_freight_small_cents: oldSmall,
+          action: item.action ?? null,
+        },
+      });
+    }
   }
   return diffs;
 }

@@ -63,6 +63,23 @@ export function centsValue(value: unknown): number | null {
   return Math.round(num);
 }
 
+/**
+ * Extract the large/small freight amounts (cents) from a freight payload —
+ * either a price-sheet freight item's `extracted` or a qb_freight_zones row.
+ * Both store `freight_large_cents` / `freight_small_cents` as integer cents.
+ */
+export function freightValuesFromExtracted(
+  value: unknown,
+): { largeCents: number | null; smallCents: number | null } {
+  const obj = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  return {
+    largeCents: centsValue(obj.freight_large_cents),
+    smallCents: centsValue(obj.freight_small_cents),
+  };
+}
+
 export function isStockLockedLine(
   input: { sourceLocation?: unknown; isYardStock?: unknown },
 ): boolean {

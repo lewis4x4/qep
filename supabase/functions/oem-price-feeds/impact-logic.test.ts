@@ -4,6 +4,7 @@ import {
   classifyMateriality,
   deltaPct,
   evaluateMarginGate,
+  freightValuesFromExtracted,
   impactStateFor,
   isStockLockedLine,
   normalizeModelCode,
@@ -87,6 +88,24 @@ Deno.test("manager-review policy reason is independent from numeric floor", () =
   });
   assertEquals(gate.belowMarginFloor, false);
   assertEquals(gate.approvalRequiredReasons, ["manager_review_policy"]);
+});
+
+Deno.test("freightValuesFromExtracted reads large/small cents", () => {
+  assertEquals(
+    freightValuesFromExtracted({
+      freight_large_cents: 194200,
+      freight_small_cents: 77700,
+    }),
+    { largeCents: 194200, smallCents: 77700 },
+  );
+  assertEquals(
+    freightValuesFromExtracted({ freight_large_cents: "210000" }),
+    { largeCents: 210000, smallCents: null },
+  );
+  assertEquals(
+    freightValuesFromExtracted(null),
+    { largeCents: null, smallCents: null },
+  );
 });
 
 Deno.test("model normalization and percent delta are stable", () => {

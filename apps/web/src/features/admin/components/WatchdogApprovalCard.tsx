@@ -207,10 +207,16 @@ function Message({ tone, title, message }: { tone: "success" | "error"; title: s
 }
 
 function ServerPreviewBadges({ preview }: { preview: SheetDiffPreview }) {
+  const freightChanges = preview.diff.items.filter(
+    (i) => i.itemType === "freight" && i.changeKind !== "unchanged",
+  ).length;
   return (
     <div className="flex flex-wrap gap-2 text-xs">
       <Badge variant="outline">{preview.impactPreview.materialQuotesAffected} material quote impacts</Badge>
       <Badge variant="secondary">{preview.impactPreview.quietQuotesAffected} quiet impacts</Badge>
+      {freightChanges > 0 && (
+        <Badge variant="warning">{freightChanges} freight zone {freightChanges === 1 ? "change" : "changes"}</Badge>
+      )}
       {preview.impactPreview.needsApprovalCount > 0 && (
         <Badge variant="warning">{preview.impactPreview.needsApprovalCount} need manager review</Badge>
       )}
@@ -221,14 +227,17 @@ function ServerPreviewBadges({ preview }: { preview: SheetDiffPreview }) {
   );
 }
 
-function HeadlineStrip({ diff, impact }: { diff: SheetDiff; impact: InFlightImpact | null }) {
+function HeadlineStrip({ diff, impact }: { diff: SheetDiff & { changedItemCount?: number }; impact: InFlightImpact | null }) {
   const s = diff.summary;
+  // Count ALL changed items (list price + freight + programs), not just model
+  // changes, so a freight/program-only sheet doesn't read as "0 changes".
+  const totalChanges = diff.changedItemCount ?? s.totalChanges;
   const netDeltaFmt = formatCents(s.totalDeltaCents, { showSign: true });
   const impactFmt = impact ? formatCents(impact.totalDeltaCents, { showSign: true }) : "—";
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
-      <Stat label="Total changes" value={s.totalChanges.toString()} hint={`${s.newModels} new · ${s.removedModels} removed`} />
+      <Stat label="Total changes" value={totalChanges.toString()} hint={`${s.newModels} new · ${s.removedModels} removed (models)`} />
       <Stat
         label="Avg Δ"
         value={s.avgDeltaPct != null ? `${s.avgDeltaPct > 0 ? "+" : ""}${s.avgDeltaPct.toFixed(1)}%` : "—"}
