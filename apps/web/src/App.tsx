@@ -203,6 +203,9 @@ const AssetDetailPage = lazy(() =>
 const ServiceDashboardPage = lazy(() =>
   import("./features/service/pages/ServiceDashboardPage").then((m) => ({ default: m.ServiceDashboardPage }))
 );
+const ServiceMetricsDashboardPage = lazy(() =>
+  import("./features/service/pages/ServiceMetricsDashboardPage").then((m) => ({ default: m.ServiceMetricsDashboardPage }))
+);
 const FleetMapPage = lazy(() =>
   import("./features/fleet/pages/FleetMapPage").then((m) => ({ default: m.FleetMapPage }))
 );
@@ -994,6 +997,7 @@ function App() {
   const canAccessRentalsHeader = canAccessPrimaryHeaderForIronRole(profile.iron_role, "rentals");
   const canAccessServiceSurface = hasRepOrAboveRole && canAccessServiceHeader;
   const canAccessServiceManagedSurface = hasManagerOrAboveRole && canAccessServiceHeader;
+  const canAccessServiceMetricsSurface = ["admin", "manager", "owner", "service_writer", "finance_admin"].includes(profile.role) && canAccessServiceHeader;
   const canAccessPartsSurface = hasRepOrAboveRole && canAccessPartsHeader;
   const canAccessPartsManagedSurface = hasManagerOrAboveRole && canAccessPartsHeader;
   const canAccessRentalsSurface = hasRepOrAboveRole && canAccessRentalsHeader;
@@ -1307,6 +1311,16 @@ function App() {
                 element={
                   canAccessServiceSurface ? (
                     <ServiceEfficiencyPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/service/metrics"
+                element={
+                  canAccessServiceMetricsSurface ? (
+                    <ServiceMetricsDashboardPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

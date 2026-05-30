@@ -293,6 +293,14 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     sectionLabel: "Operations",
   },
   {
+    label: "Metrics",
+    href: "/service/metrics",
+    icon: LineChart,
+    roles: ["admin", "manager", "owner"],
+    primaryHeaderId: "service",
+    sectionLabel: "Insight",
+  },
+  {
     label: "Branches",
     href: "/service/branches",
     icon: UserPlus,

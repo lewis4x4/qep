@@ -8,6 +8,7 @@ import {
   ChartColumnIncreasing,
   Banknote,
   BarChart3,
+  LineChart,
   GitBranch,
   Boxes,
   Lightbulb,
@@ -29,6 +30,7 @@ const SUB_NAV_LINKS = [
   { to: "/parts/orders", label: "Parts Orders", icon: ShoppingCart },
   { to: "/parts/vendors", label: "Vendors", icon: Truck },
   { to: "/service/efficiency", label: "Efficiency", icon: BarChart3 },
+  { to: "/service/metrics", label: "Metrics", icon: LineChart },
 ] as const;
 
 const ADMIN_LINKS = [
@@ -92,7 +94,10 @@ function Divider() {
 export function ServiceSubNav() {
   const { profile } = useAuth();
   const location = useLocation();
+  const serviceSurfaceRoles = ["rep", "admin", "manager", "owner"];
   const isAdmin = ["admin", "manager", "owner"].includes(profile?.role ?? "");
+  const canViewCoreServiceLinks = serviceSurfaceRoles.includes(profile?.role ?? "");
+  const canViewMetrics = ["admin", "manager", "owner", "service_writer", "finance_admin"].includes(profile?.role ?? "");
   const isCommandCenter = location.pathname === "/service";
 
   const isActive = (to: string) => {
@@ -131,7 +136,9 @@ export function ServiceSubNav() {
       )}
 
       {/* Core service links */}
-      {SUB_NAV_LINKS.map((navItem) => {
+      {SUB_NAV_LINKS.filter((navItem) => (
+        navItem.to === "/service/metrics" ? canViewMetrics : canViewCoreServiceLinks
+      )).map((navItem) => {
         const NavIcon = navItem.icon;
         return (
           <Link
