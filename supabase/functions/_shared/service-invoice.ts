@@ -9,10 +9,18 @@ export async function generateInvoiceForServiceJob(
 ): Promise<{ invoice_id: string | null; error?: string }> {
   const { data: job, error: jErr } = await supabase
     .from("service_jobs")
-    .select("id, workspace_id, customer_id, quote_total, portal_request_id")
+    .select(
+      "id, workspace_id, customer_id, quote_total, portal_request_id, comeback_no_rebill",
+    )
     .eq("id", jobId)
     .single();
   if (jErr || !job) return { invoice_id: null, error: "job not found" };
+  if (job.comeback_no_rebill === true) {
+    return {
+      invoice_id: null,
+      error: "no customer invoice for QEP-fault comeback",
+    };
+  }
 
   const { data: existing } = await supabase
     .from("customer_invoices")
@@ -41,11 +49,51 @@ export async function generateInvoiceForServiceJob(
     .limit(1)
     .maybeSingle();
 
-  let total = Number(job.quote_total ?? approvedQuote?.total ?? 0);
-  if (total <= 0 && approvedQuote?.total != null) {
+  let customerQuoteLines: Record<string, unknown>[] = [];
+  if (approvedQuote?.id) {
+    const { data: quoteLines } = await supabase
+      .from("service_quote_lines")
+      .select(
+        "description, quantity, unit_price, extended_price, sort_order, payer_type",
+      )
+      .eq("quote_id", approvedQuote.id)
+      .order("sort_order", { ascending: true });
+    customerQuoteLines = (quoteLines ?? []).filter((line) =>
+      String(line.payer_type ?? "customer") === "customer"
+    ) as Record<string, unknown>[];
+  }
+
+  if (approvedQuote?.id && customerQuoteLines.length === 0) {
+    return {
+      invoice_id: null,
+      error: job.comeback_no_rebill === true
+        ? "no customer-billable lines for QEP-fault comeback"
+        : "no customer-billable quote lines",
+    };
+  }
+
+  let total = customerQuoteLines.length > 0
+    ? customerQuoteLines.reduce((sum, line) => {
+      const qty = Number(line.quantity ?? 1);
+      const unit = Number(line.unit_price ?? 0);
+      const ext = Number(line.extended_price ?? qty * unit);
+      return sum + ext;
+    }, 0)
+    : Number(job.quote_total ?? approvedQuote?.total ?? 0);
+  if (job.comeback_no_rebill === true && customerQuoteLines.length === 0) {
+    return {
+      invoice_id: null,
+      error: "no customer-billable lines for QEP-fault comeback",
+    };
+  }
+  if (
+    total <= 0 && approvedQuote?.total != null && customerQuoteLines.length > 0
+  ) {
     total = Number(approvedQuote.total);
   }
-  if (total <= 0) return { invoice_id: null, error: "no quote_total" };
+  if (total <= 0) {
+    return { invoice_id: null, error: "no customer-billable total" };
+  }
 
   const invNo = `SRV-${String(jobId).slice(0, 8).toUpperCase()}`;
   const due = new Date();
@@ -80,16 +128,10 @@ export async function generateInvoiceForServiceJob(
   if (!invoiceId) return { invoice_id: null, error: "insert failed" };
 
   if (approvedQuote?.id) {
-    const { data: quoteLines } = await supabase
-      .from("service_quote_lines")
-      .select("description, quantity, unit_price, extended_price, sort_order")
-      .eq("quote_id", approvedQuote.id)
-      .order("sort_order", { ascending: true });
-
     const ws = job.workspace_id as string;
     let lineNo = 1;
     const rows: Record<string, unknown>[] = [];
-    for (const line of quoteLines ?? []) {
+    for (const line of customerQuoteLines) {
       const qty = Number(line.quantity ?? 1);
       const unit = Number(line.unit_price ?? 0);
       const ext = Number(line.extended_price ?? qty * unit);
@@ -112,17 +154,19 @@ export async function generateInvoiceForServiceJob(
         unit_price: total,
       });
     }
-    const { error: liErr } = await supabase.from("customer_invoice_line_items").insert(rows);
+    const { error: liErr } = await supabase.from("customer_invoice_line_items")
+      .insert(rows);
     if (liErr) console.warn("customer_invoice_line_items:", liErr.message);
   } else {
-    const { error: liErr } = await supabase.from("customer_invoice_line_items").insert({
-      workspace_id: job.workspace_id as string,
-      invoice_id: invoiceId,
-      line_number: 1,
-      description: "Service total",
-      quantity: 1,
-      unit_price: total,
-    });
+    const { error: liErr } = await supabase.from("customer_invoice_line_items")
+      .insert({
+        workspace_id: job.workspace_id as string,
+        invoice_id: invoiceId,
+        line_number: 1,
+        description: "Service total",
+        quantity: 1,
+        unit_price: total,
+      });
     if (liErr) console.warn("customer_invoice_line_items:", liErr.message);
   }
 
