@@ -5,7 +5,10 @@
  * Auth: user JWT only
  */
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { requireServiceUser } from "../_shared/service-auth.ts";
+import {
+  requireServiceUser,
+  SERVICE_PARTS_ROLES,
+} from "../_shared/service-auth.ts";
 import {
   optionsResponse,
   safeJsonError,
@@ -26,7 +29,9 @@ type Action =
   | "consume"
   | "return_part";
 
-function intakeLineStatusForSource(source: string | undefined): "suggested" | "accepted" {
+function intakeLineStatusForSource(
+  source: string | undefined,
+): "suggested" | "accepted" {
   const s = (source ?? "manual").toLowerCase();
   if (s === "ai_suggested" || s === "job_code_template") return "suggested";
   return "accepted";
@@ -53,7 +58,11 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    const auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+      SERVICE_PARTS_ROLES,
+    );
     if (!auth.ok) return auth.response;
 
     const supabase = auth.supabase;
@@ -74,15 +83,47 @@ Deno.serve(async (req) => {
       case "accept_intake_line":
         return await handleAcceptIntakeLine(supabase, body, actorId, origin);
       case "pick":
-        return await handleFulfillment(supabase, body, actorId, "pick", "picking", origin, true);
+        return await handleFulfillment(
+          supabase,
+          body,
+          actorId,
+          "pick",
+          "picking",
+          origin,
+          true,
+        );
       case "receive":
-        return await handleFulfillment(supabase, body, actorId, "receive", "received", origin, false);
+        return await handleFulfillment(
+          supabase,
+          body,
+          actorId,
+          "receive",
+          "received",
+          origin,
+          false,
+        );
       case "stage":
         return await handleStage(supabase, body, actorId, origin);
       case "consume":
-        return await handleFulfillment(supabase, body, actorId, "consume", "consumed", origin, false);
+        return await handleFulfillment(
+          supabase,
+          body,
+          actorId,
+          "consume",
+          "consumed",
+          origin,
+          false,
+        );
       case "return_part":
-        return await handleFulfillment(supabase, body, actorId, "return", "returned", origin, false);
+        return await handleFulfillment(
+          supabase,
+          body,
+          actorId,
+          "return",
+          "returned",
+          origin,
+          false,
+        );
       default:
         return safeJsonError(`Unknown action: ${action}`, 400, origin);
     }
@@ -92,7 +133,11 @@ Deno.serve(async (req) => {
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);
     }
-    return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
+    return safeJsonError(
+      "Internal server error",
+      500,
+      req.headers.get("Origin"),
+    );
   }
 });
 
@@ -171,11 +216,17 @@ async function handleUpdate(
   body: Body,
   origin: string | null,
 ) {
-  if (!body.requirement_id) return safeJsonError("requirement_id required", 400, origin);
+  if (!body.requirement_id) {
+    return safeJsonError("requirement_id required", 400, origin);
+  }
   const fields: Record<string, unknown> = {};
-  if (body.part_number != null) fields.part_number = String(body.part_number).trim();
+  if (body.part_number != null) {
+    fields.part_number = String(body.part_number).trim();
+  }
   if (body.description !== undefined) fields.description = body.description;
-  if (body.quantity != null) fields.quantity = Math.max(1, Math.floor(Number(body.quantity)) || 1);
+  if (body.quantity != null) {
+    fields.quantity = Math.max(1, Math.floor(Number(body.quantity)) || 1);
+  }
   if (body.unit_cost !== undefined) fields.unit_cost = body.unit_cost;
   if (body.vendor_id !== undefined) fields.vendor_id = body.vendor_id;
 
@@ -195,7 +246,9 @@ async function handleRemove(
   actorId: string,
   origin: string | null,
 ) {
-  if (!body.requirement_id) return safeJsonError("requirement_id required", 400, origin);
+  if (!body.requirement_id) {
+    return safeJsonError("requirement_id required", 400, origin);
+  }
   const { data: row, error } = await supabase
     .from("service_parts_requirements")
     .update({ status: "cancelled" })
@@ -244,7 +297,8 @@ async function handleBulkAdd(
   }
   if (rows.length === 0) return safeJsonError("No valid items", 400, origin);
 
-  const { data, error } = await supabase.from("service_parts_requirements").insert(rows).select();
+  const { data, error } = await supabase.from("service_parts_requirements")
+    .insert(rows).select();
   if (error) return safeJsonError(error.message, 400, origin);
   await logEvent(supabase, job.workspace_id, body.job_id, actorId, {
     action: "bulk_add",
@@ -259,12 +313,17 @@ async function handleAcceptIntakeLine(
   actorId: string,
   origin: string | null,
 ) {
-  if (!body.requirement_id) return safeJsonError("requirement_id required", 400, origin);
+  if (!body.requirement_id) {
+    return safeJsonError("requirement_id required", 400, origin);
+  }
 
-  const { data, error } = await supabase.rpc("service_parts_accept_intake_line", {
-    p_requirement_id: body.requirement_id,
-    p_actor_id: actorId,
-  });
+  const { data, error } = await supabase.rpc(
+    "service_parts_accept_intake_line",
+    {
+      p_requirement_id: body.requirement_id,
+      p_actor_id: actorId,
+    },
+  );
 
   if (error) {
     const msg = error.message ?? "accept_intake_failed";
@@ -273,7 +332,10 @@ async function handleAcceptIntakeLine(
     return safeJsonError(msg, status, origin);
   }
 
-  const payload = data as { requirement?: Record<string, unknown>; ok?: boolean } | null;
+  const payload = data as {
+    requirement?: Record<string, unknown>;
+    ok?: boolean;
+  } | null;
   return safeJsonOk(payload ?? {}, origin);
 }
 
@@ -300,7 +362,9 @@ async function handleFulfillment(
   origin: string | null,
   allowOverride = false,
 ) {
-  if (!body.requirement_id) return safeJsonError("requirement_id required", 400, origin);
+  if (!body.requirement_id) {
+    return safeJsonError("requirement_id required", 400, origin);
+  }
 
   const rpcAction = actionType === "return_part" ? "return" : actionType;
   const rpcArgs: {
@@ -320,13 +384,18 @@ async function handleFulfillment(
     }
   }
 
-  const { data, error } = await supabase.rpc("service_parts_apply_fulfillment_action", rpcArgs);
+  const { data, error } = await supabase.rpc(
+    "service_parts_apply_fulfillment_action",
+    rpcArgs,
+  );
 
   if (error) {
     const msg = error.message ?? "fulfillment_failed";
     const code = (error as { code?: string }).code;
     const status =
-      code === "42501" || /forbidden|override_requires_manager/i.test(msg) ? 403 : 400;
+      code === "42501" || /forbidden|override_requires_manager/i.test(msg)
+        ? 403
+        : 400;
     if (/INTAKE_SUGGESTED_NOT_ACCEPTED/i.test(msg)) {
       return safeJsonError(
         "Accept suggested line before pick, receive, consume, or return",
@@ -380,7 +449,9 @@ async function handleStage(
   actorId: string,
   origin: string | null,
 ) {
-  if (!body.requirement_id) return safeJsonError("requirement_id required", 400, origin);
+  if (!body.requirement_id) {
+    return safeJsonError("requirement_id required", 400, origin);
+  }
 
   const { data: req, error: rErr } = await supabase
     .from("service_parts_requirements")
@@ -388,7 +459,9 @@ async function handleStage(
     .eq("id", body.requirement_id)
     .single();
   if (rErr || !req) return safeJsonError("Requirement not found", 404, origin);
-  if ((req as { intake_line_status?: string }).intake_line_status === "suggested") {
+  if (
+    (req as { intake_line_status?: string }).intake_line_status === "suggested"
+  ) {
     return safeJsonError("Accept suggested line before staging", 400, origin);
   }
 

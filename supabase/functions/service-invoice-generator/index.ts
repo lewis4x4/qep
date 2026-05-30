@@ -2,9 +2,16 @@
  * Service invoice generator — wraps shared helper for manual/regenerate invokes.
  * Auth: user JWT
  */
-import { requireServiceUser } from "../_shared/service-auth.ts";
+import {
+  requireServiceUser,
+  SERVICE_BILLING_ROLES,
+} from "../_shared/service-auth.ts";
 import { generateInvoiceForServiceJob } from "../_shared/service-invoice.ts";
-import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import {
+  optionsResponse,
+  safeJsonError,
+  safeJsonOk,
+} from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
@@ -12,7 +19,11 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    const auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+      SERVICE_BILLING_ROLES,
+    );
     if (!auth.ok) return auth.response;
 
     const body = await req.json() as { job_id?: string };
@@ -24,6 +35,10 @@ Deno.serve(async (req) => {
   } catch (err) {
     captureEdgeException(err, { fn: "service-invoice-generator", req });
     console.error("service-invoice-generator:", err);
-    return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
+    return safeJsonError(
+      "Internal server error",
+      500,
+      req.headers.get("Origin"),
+    );
   }
 });

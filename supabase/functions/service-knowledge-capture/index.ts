@@ -4,13 +4,19 @@
  *
  * Auth: user JWT only
  */
-import { requireServiceUser } from "../_shared/service-auth.ts";
+import {
+  requireServiceUser,
+  SERVICE_TECHNICIAN_ROLES,
+} from "../_shared/service-auth.ts";
 import {
   optionsResponse,
   safeJsonError,
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
-import { embedText, formatVectorLiteral } from "../_shared/openai-embeddings.ts";
+import {
+  embedText,
+  formatVectorLiteral,
+} from "../_shared/openai-embeddings.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 interface CaptureRequest {
@@ -26,7 +32,11 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    const auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+      SERVICE_TECHNICIAN_ROLES,
+    );
     if (!auth.ok) return auth.response;
 
     const supabase = auth.supabase;
@@ -38,9 +48,21 @@ Deno.serve(async (req) => {
       return safeJsonError("content and note_type are required", 400, origin);
     }
 
-    const validTypes = ["sop", "voice", "completion", "bulletin", "field_hack", "serial_specific", "general"];
+    const validTypes = [
+      "sop",
+      "voice",
+      "completion",
+      "bulletin",
+      "field_hack",
+      "serial_specific",
+      "general",
+    ];
     if (!validTypes.includes(body.note_type)) {
-      return safeJsonError(`Invalid note_type. Must be one of: ${validTypes.join(", ")}`, 400, origin);
+      return safeJsonError(
+        `Invalid note_type. Must be one of: ${validTypes.join(", ")}`,
+        400,
+        origin,
+      );
     }
 
     let workspaceId = "default";
@@ -94,6 +116,10 @@ Deno.serve(async (req) => {
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);
     }
-    return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
+    return safeJsonError(
+      "Internal server error",
+      500,
+      req.headers.get("Origin"),
+    );
   }
 });

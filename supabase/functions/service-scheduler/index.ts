@@ -2,8 +2,15 @@
  * Suggest technicians for a service job from technician_profiles heuristics.
  * Auth: user JWT
  */
-import { requireServiceUser } from "../_shared/service-auth.ts";
-import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import {
+  requireServiceUser,
+  SERVICE_OPERATIONS_ROLES,
+} from "../_shared/service-auth.ts";
+import {
+  optionsResponse,
+  safeJsonError,
+  safeJsonOk,
+} from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
@@ -11,7 +18,11 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    const auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+      SERVICE_OPERATIONS_ROLES,
+    );
     if (!auth.ok) return auth.response;
     const supabase = auth.supabase;
 
@@ -59,16 +70,20 @@ Deno.serve(async (req) => {
       const certs = (p.certifications as string[]) ?? [];
       if (machineMake && brands.length > 0) {
         score += brands.some((b) =>
-          machineMake!.toLowerCase().includes(String(b).toLowerCase())
-        )
+            machineMake!.toLowerCase().includes(String(b).toLowerCase())
+          )
           ? 40
           : -10;
       }
       if (jobCodeName && certs.length > 0) {
         const jn = jobCodeName.toLowerCase();
-        score += certs.some((c) => jn.includes(String(c).toLowerCase())) ? 25 : 0;
+        score += certs.some((c) => jn.includes(String(c).toLowerCase()))
+          ? 25
+          : 0;
       }
-      if (job.branch_id && p.branch_id && p.branch_id !== job.branch_id) score -= 25;
+      if (job.branch_id && p.branch_id && p.branch_id !== job.branch_id) {
+        score -= 25;
+      }
       if (job.shop_or_field === "field" && !p.field_eligible) score -= 50;
       if (job.shop_or_field === "shop" && !p.shop_eligible) score -= 50;
       score -= (p.active_workload ?? 0) * 3;
@@ -85,7 +100,9 @@ Deno.serve(async (req) => {
         ranked.slice(0, 10).map((r) => r.user_id),
       );
 
-    const nameById = new Map((users ?? []).map((u) => [u.id, u.full_name ?? u.email]));
+    const nameById = new Map(
+      (users ?? []).map((u) => [u.id, u.full_name ?? u.email]),
+    );
 
     return safeJsonOk({
       suggestions: ranked.slice(0, 8).map((r) => ({
@@ -98,6 +115,10 @@ Deno.serve(async (req) => {
   } catch (err) {
     captureEdgeException(err, { fn: "service-scheduler", req });
     console.error("service-scheduler:", err);
-    return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
+    return safeJsonError(
+      "Internal server error",
+      500,
+      req.headers.get("Origin"),
+    );
   }
 });

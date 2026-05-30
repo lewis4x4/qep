@@ -4,19 +4,31 @@
  * Auth: user JWT only
  */
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { requireServiceUser } from "../_shared/service-auth.ts";
+import {
+  requireServiceUser,
+  SERVICE_QUOTE_ROLES,
+} from "../_shared/service-auth.ts";
 import {
   optionsResponse,
   safeJsonError,
+  safeJsonErrorWithFields,
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
 import { notifyAfterStageChange } from "../_shared/service-lifecycle-notify.ts";
 import {
   deriveWorkOrderStatus,
+  evaluateLaborMargin,
+  type LaborMarginEvaluation,
+  normalizeServiceEquipmentClass,
+  resolveLaborCostRate,
   resolveLaborRate,
   selectApplicableLaborPricingRule,
   type ServiceLaborPricingRule,
 } from "../_shared/service-labor-pricing.ts";
+import {
+  evaluateScopeIncrease,
+  normalizeEstimateApprovalKind,
+} from "../_shared/service-estimate-authorization.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 interface QuoteRequest {
@@ -30,6 +42,7 @@ interface QuoteRequest {
     unit_price: number;
   }>;
   approval_type?: string;
+  approval_kind?: string;
   method?: string;
   approved_by?: string;
   signature_url?: string;
@@ -38,6 +51,240 @@ interface QuoteRequest {
   labor_type_code?: string;
   premium_code?: string;
   customer_group_label?: string;
+  equipment_class_code?: string;
+}
+
+type LaborCostContext = {
+  rate: number;
+  source:
+    | "technician_profile"
+    | "pricing_rule"
+    | "branch_default"
+    | "target_margin_fallback";
+};
+
+type MarginSummary = {
+  status: "not_applicable" | LaborMarginEvaluation["status"];
+  warnings: string[];
+  floor_blocked: boolean;
+  target_margin_pct: number | null;
+  floor_margin_pct: number | null;
+  worst_margin_pct: number | null;
+};
+
+function numericValue(value: unknown): number | null {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function statusRank(status: MarginSummary["status"]): number {
+  switch (status) {
+    case "blocked_below_floor":
+      return 4;
+    case "near_floor":
+      return 3;
+    case "below_target":
+      return 2;
+    case "target_met":
+      return 1;
+    case "not_applicable":
+      return 0;
+  }
+}
+
+function summarizeMarginEvaluations(
+  evaluations: LaborMarginEvaluation[],
+): MarginSummary {
+  if (evaluations.length === 0) {
+    return {
+      status: "not_applicable",
+      warnings: [],
+      floor_blocked: false,
+      target_margin_pct: null,
+      floor_margin_pct: null,
+      worst_margin_pct: null,
+    };
+  }
+
+  const worst = [...evaluations].sort((a, b) => a.marginPct - b.marginPct)[0];
+  const status = evaluations
+    .map((evaluation) => evaluation.status)
+    .sort((a, b) => statusRank(b) - statusRank(a))[0];
+  return {
+    status,
+    warnings: evaluations.map((evaluation) => evaluation.warning).filter((
+      warning,
+    ): warning is string => Boolean(warning)),
+    floor_blocked: evaluations.some((evaluation) => evaluation.floorBlocked),
+    target_margin_pct: worst.targetMarginPct,
+    floor_margin_pct: worst.floorMarginPct,
+    worst_margin_pct: worst.marginPct,
+  };
+}
+
+function marginFields(
+  evaluation: LaborMarginEvaluation,
+  cost: LaborCostContext,
+  metadata: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    labor_cost_rate: cost.rate,
+    margin_cost_basis: evaluation.cost,
+    margin_amount: evaluation.marginAmount,
+    margin_pct: evaluation.marginPct,
+    margin_status: evaluation.status,
+    margin_warning: evaluation.warning,
+    margin_floor_blocked: evaluation.floorBlocked,
+    margin_metadata: {
+      target_margin_pct: evaluation.targetMarginPct,
+      floor_margin_pct: evaluation.floorMarginPct,
+      labor_cost_source: cost.source,
+      ...metadata,
+    },
+  };
+}
+
+async function resolveTechnicianLaborCostRate(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  technicianUserId: string | null | undefined,
+): Promise<number | null> {
+  if (!technicianUserId) return null;
+  const { data } = await supabase
+    .from("technician_profiles")
+    .select("work_order_cost_per_hour_cents")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", technicianUserId)
+    .maybeSingle();
+  const cents = numericValue(data?.work_order_cost_per_hour_cents);
+  return cents == null ? null : Math.round((cents / 100) * 100) / 100;
+}
+
+function resolveLaborCostContext(input: {
+  technicianCostRate?: number | null;
+  selectedRule: ServiceLaborPricingRule | null;
+  branchDefaultCostRate?: number | null;
+  laborRate: number;
+}): LaborCostContext {
+  const technician = numericValue(input.technicianCostRate);
+  if (technician != null) {
+    return { rate: technician, source: "technician_profile" };
+  }
+
+  const rule = numericValue(input.selectedRule?.labor_cost_rate);
+  if (rule != null) return { rate: rule, source: "pricing_rule" };
+
+  const branch = numericValue(input.branchDefaultCostRate);
+  if (branch != null) return { rate: branch, source: "branch_default" };
+
+  return {
+    rate: resolveLaborCostRate({
+      rule: input.selectedRule,
+      laborRate: input.laborRate,
+      targetMarginPct: input.selectedRule?.target_margin_pct,
+    }),
+    source: "target_margin_fallback",
+  };
+}
+
+async function resolveJobEquipmentClass(
+  supabase: SupabaseClient,
+  job: Record<string, unknown>,
+  explicitEquipmentClass: string | null | undefined,
+): Promise<{ equipmentClassCode: string | null; source: string }> {
+  const explicit = normalizeServiceEquipmentClass(explicitEquipmentClass);
+  if (explicit) return { equipmentClassCode: explicit, source: "request" };
+
+  const machineId = job.machine_id as string | null | undefined;
+  if (!machineId) return { equipmentClassCode: null, source: "none" };
+
+  const { data: machine } = await supabase
+    .from("crm_equipment")
+    .select("category, make, model, name, metadata")
+    .eq("id", machineId)
+    .maybeSingle();
+
+  const metadata = (machine?.metadata ?? {}) as Record<string, unknown>;
+  const hints = [
+    metadata.service_equipment_class,
+    metadata.equipment_class,
+    metadata.class_code,
+    machine?.category,
+    machine?.name,
+    [machine?.make, machine?.model].filter(Boolean).join(" "),
+  ];
+  for (const hint of hints) {
+    if (typeof hint !== "string") continue;
+    const normalized = normalizeServiceEquipmentClass(hint);
+    if (normalized) {
+      return { equipmentClassCode: normalized, source: "crm_equipment" };
+    }
+  }
+  return { equipmentClassCode: null, source: "none" };
+}
+
+function marginFloorResponse(
+  summary: MarginSummary,
+  origin: string | null,
+  extra: Record<string, unknown>,
+): Response {
+  return safeJsonErrorWithFields(
+    "Service labor margin is below the 35% hard floor",
+    422,
+    origin,
+    { margin_guardrail: summary, ...extra },
+  );
+}
+
+function estimateReauthorizationUpdate(
+  job: Record<string, unknown> | null | undefined,
+  proposedTotal: number,
+): Record<string, unknown> | null {
+  if (!job || job.estimate_authorization_required !== true) return null;
+
+  const scope = evaluateScopeIncrease({
+    approvedAmount: job.approved_estimate_amount,
+    proposedAmount: proposedTotal,
+    thresholdPct: job.estimate_reauth_threshold_pct,
+  });
+
+  if (scope.approvedAmount == null) return null;
+
+  if (scope.requiresReauthorization) {
+    return {
+      estimate_authorization_status: "reauthorization_required",
+      estimate_reauthorization_required_at: new Date().toISOString(),
+      estimate_reauthorization_reason: `Current estimate $${
+        proposedTotal.toFixed(2)
+      } exceeds approved estimate $${
+        scope.approvedAmount.toFixed(2)
+      } by more than ${scope.thresholdPct}%.`,
+    };
+  }
+
+  if (job.estimate_authorization_status === "reauthorization_required") {
+    return {
+      estimate_authorization_status: "approved",
+      estimate_reauthorization_required_at: null,
+      estimate_reauthorization_reason: null,
+    };
+  }
+
+  return null;
+}
+
+async function updateJobQuoteTotalAndAuthorization(
+  supabase: SupabaseClient,
+  jobId: string,
+  job: Record<string, unknown> | null | undefined,
+  total: number,
+): Promise<string | null> {
+  const authUpdate = estimateReauthorizationUpdate(job, total) ?? {};
+  const { error } = await supabase
+    .from("service_jobs")
+    .update({ quote_total: total, ...authUpdate })
+    .eq("id", jobId);
+  return error?.message ?? null;
 }
 
 Deno.serve(async (req) => {
@@ -45,7 +292,11 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    const auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+      SERVICE_QUOTE_ROLES,
+    );
     if (!auth.ok) return auth.response;
 
     const supabase = auth.supabase;
@@ -73,7 +324,11 @@ Deno.serve(async (req) => {
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);
     }
-    return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
+    return safeJsonError(
+      "Internal server error",
+      500,
+      req.headers.get("Origin"),
+    );
   }
 });
 
@@ -87,7 +342,9 @@ async function handleGenerate(
 
   const { data: job } = await supabase
     .from("service_jobs")
-    .select("id, workspace_id, haul_required, selected_job_code_id, branch_id, customer_id, status_flags")
+    .select(
+      "id, workspace_id, haul_required, selected_job_code_id, branch_id, customer_id, status_flags, machine_id, shop_or_field, technician_id, estimate_authorization_required, estimate_authorization_status, approved_estimate_amount, estimate_reauth_threshold_pct",
+    )
     .eq("id", body.job_id)
     .single();
   if (!job) return safeJsonError("Job not found", 404, origin);
@@ -100,7 +357,8 @@ async function handleGenerate(
       .select("shop_average_hours, manufacturer_estimated_hours")
       .eq("id", job.selected_job_code_id)
       .single();
-    estimatedHours = jc?.shop_average_hours ?? jc?.manufacturer_estimated_hours ?? 0;
+    estimatedHours = jc?.shop_average_hours ??
+      jc?.manufacturer_estimated_hours ?? 0;
   }
 
   // Fetch parts requirements for parts lines
@@ -112,35 +370,80 @@ async function handleGenerate(
 
   const { data: branchConfig } = await supabase
     .from("service_branch_config")
-    .select("default_labor_rate")
+    .select("default_labor_rate, default_labor_cost_rate")
     .eq("branch_id", job.branch_id)
     .maybeSingle();
 
   const { data: rules } = await supabase
     .from("service_labor_pricing_rules")
-    .select("id, location_code, customer_id, customer_group_label, work_order_status, labor_type_code, premium_code, default_premium_code, pricing_code, pricing_value, effective_start_on, effective_end_on, active, created_at");
+    .select(
+      "id, rate_key, location_code, customer_id, customer_group_label, work_order_status, equipment_class_code, labor_type_code, premium_code, default_premium_code, pricing_code, pricing_value, field_mileage_rate, labor_cost_rate, target_margin_pct, floor_margin_pct, internal_discount_pct, effective_start_on, effective_end_on, active, created_at",
+    )
+    .eq("workspace_id", job.workspace_id);
 
+  const workOrderStatus = deriveWorkOrderStatus(
+    (job.status_flags as string[] | null) ?? [],
+  );
+  const equipmentClass = await resolveJobEquipmentClass(
+    supabase,
+    job as Record<string, unknown>,
+    body.equipment_class_code ?? null,
+  );
+  const laborTypeCode = body.labor_type_code ??
+    ((job.shop_or_field as string | null) === "field" ? "field" : null);
   const baseLaborRate = Number(branchConfig?.default_labor_rate ?? 150);
   const selectedRule = selectApplicableLaborPricingRule(
-    ((rules ?? []) as ServiceLaborPricingRule[]),
+    (rules ?? []) as ServiceLaborPricingRule[],
     {
       locationCode: (job.branch_id as string | null) ?? null,
       customerId: (job.customer_id as string | null) ?? null,
       customerGroupLabel: body.customer_group_label ?? null,
-      workOrderStatus: deriveWorkOrderStatus((job.status_flags as string[] | null) ?? []),
-      laborTypeCode: body.labor_type_code ?? null,
+      workOrderStatus,
+      equipmentClassCode: equipmentClass.equipmentClassCode,
+      laborTypeCode,
       premiumCode: body.premium_code ?? null,
     },
   );
 
-  const laborRate = body.labor_rate ?? resolveLaborRate(baseLaborRate, selectedRule);
+  const laborRate = body.labor_rate ??
+    resolveLaborRate(baseLaborRate, selectedRule, { workOrderStatus });
+  const technicianCostRate = await resolveTechnicianLaborCostRate(
+    supabase,
+    job.workspace_id as string,
+    job.technician_id as string | null,
+  );
+  const laborCost = resolveLaborCostContext({
+    technicianCostRate,
+    selectedRule,
+    branchDefaultCostRate: Number(branchConfig?.default_labor_cost_rate ?? 0),
+    laborRate,
+  });
   const shopSuppliesRate = 0.08;
+  const laborEvaluations: LaborMarginEvaluation[] = [];
 
   const lines: Array<Record<string, unknown>> = [];
   let sortOrder = 0;
 
   // Labor line
   if (estimatedHours > 0) {
+    const laborMargin = evaluateLaborMargin({
+      quantity: estimatedHours,
+      unitPrice: laborRate,
+      costRate: laborCost.rate,
+      targetMarginPct: selectedRule?.target_margin_pct,
+      floorMarginPct: selectedRule?.floor_margin_pct,
+    });
+    laborEvaluations.push(laborMargin);
+    const marginSummary = summarizeMarginEvaluations(laborEvaluations);
+    if (marginSummary.floor_blocked) {
+      return marginFloorResponse(marginSummary, origin, {
+        labor_rate: laborRate,
+        labor_cost_rate: laborCost.rate,
+        labor_rate_source: body.labor_rate != null
+          ? "manual_override"
+          : selectedRule?.rate_key ?? selectedRule?.id ?? "branch_default",
+      });
+    }
     lines.push({
       workspace_id: job.workspace_id,
       line_type: "labor",
@@ -148,6 +451,19 @@ async function handleGenerate(
       quantity: estimatedHours,
       unit_price: laborRate,
       extended_price: Math.round(estimatedHours * laborRate * 100) / 100,
+      ...marginFields(laborMargin, laborCost, {
+        labor_rate_source: body.labor_rate != null
+          ? "manual_override"
+          : selectedRule?.rate_key ?? selectedRule?.id ?? "branch_default",
+        equipment_class_code: equipmentClass.equipmentClassCode,
+        equipment_class_source: equipmentClass.source,
+        labor_type_code: laborTypeCode,
+        work_order_status: workOrderStatus,
+        field_mileage_rate: Number(selectedRule?.field_mileage_rate ?? 0),
+        internal_discount_pct: workOrderStatus === "internal"
+          ? Number(selectedRule?.internal_discount_pct ?? 10)
+          : 0,
+      }),
       sort_order: sortOrder++,
     });
   }
@@ -158,7 +474,9 @@ async function handleGenerate(
     lines.push({
       workspace_id: job.workspace_id,
       line_type: "part",
-      description: `${part.part_number}${part.description ? ` — ${part.description}` : ""}`,
+      description: `${part.part_number}${
+        part.description ? ` — ${part.description}` : ""
+      }`,
       quantity: part.quantity,
       unit_price: unitCost,
       extended_price: Math.round(part.quantity * unitCost * 100) / 100,
@@ -190,7 +508,9 @@ async function handleGenerate(
     .filter((l) => l.line_type === "haul")
     .reduce((s, l) => s + (l.extended_price as number), 0);
   const shopSupplies = Math.round(partsTotal * shopSuppliesRate * 100) / 100;
-  const total = Math.round((laborTotal + partsTotal + haulTotal + shopSupplies) * 100) / 100;
+  const total =
+    Math.round((laborTotal + partsTotal + haulTotal + shopSupplies) * 100) /
+    100;
 
   // Shop supplies line
   if (shopSupplies > 0) {
@@ -204,6 +524,8 @@ async function handleGenerate(
       sort_order: sortOrder++,
     });
   }
+
+  const marginSummary = summarizeMarginEvaluations(laborEvaluations);
 
   // Supersede any existing draft quotes
   await supabase
@@ -234,6 +556,8 @@ async function handleGenerate(
       shop_supplies: shopSupplies,
       total,
       status: "draft",
+      margin_guardrail_status: marginSummary.status,
+      margin_guardrail_summary: marginSummary,
       notes: body.notes || null,
       created_by: actorId,
     })
@@ -248,18 +572,31 @@ async function handleGenerate(
     await supabase.from("service_quote_lines").insert(lineInserts);
   }
 
-  // Update job quote_total
-  await supabase
-    .from("service_jobs")
-    .update({ quote_total: total })
-    .eq("id", body.job_id);
+  const jobUpdateError = await updateJobQuoteTotalAndAuthorization(
+    supabase,
+    body.job_id,
+    job as Record<string, unknown>,
+    total,
+  );
+  if (jobUpdateError) return safeJsonError(jobUpdateError, 400, origin);
 
-  return safeJsonOk({
-    quote,
-    lines: lineInserts,
-    labor_rate: laborRate,
-    labor_rate_source: body.labor_rate != null ? "manual_override" : selectedRule?.id ?? "branch_default",
-  }, origin, 201);
+  return safeJsonOk(
+    {
+      quote,
+      lines: lineInserts,
+      labor_rate: laborRate,
+      labor_rate_source: body.labor_rate != null
+        ? "manual_override"
+        : selectedRule?.rate_key ?? selectedRule?.id ?? "branch_default",
+      labor_cost_rate: laborCost.rate,
+      labor_cost_source: laborCost.source,
+      equipment_class_code: equipmentClass.equipmentClassCode,
+      field_mileage_rate: Number(selectedRule?.field_mileage_rate ?? 0),
+      margin_guardrail: marginSummary,
+    },
+    origin,
+    201,
+  );
 }
 
 async function handleUpdate(
@@ -272,28 +609,88 @@ async function handleUpdate(
 
   const { data: quoteHeader, error: qhErr } = await supabase
     .from("service_quotes")
-    .select("workspace_id")
+    .select("workspace_id, job_id")
     .eq("id", body.quote_id)
     .single();
-  if (qhErr || !quoteHeader) return safeJsonError("Quote not found", 404, origin);
+  if (qhErr || !quoteHeader) {
+    return safeJsonError("Quote not found", 404, origin);
+  }
   const wsId = quoteHeader.workspace_id as string;
 
-  // Delete old lines and re-insert
-  await supabase.from("service_quote_lines").delete().eq("quote_id", body.quote_id);
+  const { data: job } = await supabase
+    .from("service_jobs")
+    .select(
+      "id, workspace_id, branch_id, customer_id, status_flags, machine_id, shop_or_field, technician_id, estimate_authorization_required, estimate_authorization_status, approved_estimate_amount, estimate_reauth_threshold_pct",
+    )
+    .eq("id", quoteHeader.job_id)
+    .maybeSingle();
+
+  const { data: branchConfig } = await supabase
+    .from("service_branch_config")
+    .select("default_labor_rate, default_labor_cost_rate")
+    .eq("branch_id", job?.branch_id ?? null)
+    .maybeSingle();
+
+  const { data: rules } = await supabase
+    .from("service_labor_pricing_rules")
+    .select(
+      "id, rate_key, location_code, customer_id, customer_group_label, work_order_status, equipment_class_code, labor_type_code, premium_code, default_premium_code, pricing_code, pricing_value, field_mileage_rate, labor_cost_rate, target_margin_pct, floor_margin_pct, internal_discount_pct, effective_start_on, effective_end_on, active, created_at",
+    )
+    .eq("workspace_id", wsId);
+
+  const workOrderStatus = deriveWorkOrderStatus(
+    (job?.status_flags as string[] | null) ?? [],
+  );
+  const equipmentClass = job
+    ? await resolveJobEquipmentClass(
+      supabase,
+      job as Record<string, unknown>,
+      body.equipment_class_code ?? null,
+    )
+    : {
+      equipmentClassCode: normalizeServiceEquipmentClass(
+        body.equipment_class_code,
+      ),
+      source: "request",
+    };
+  const laborTypeCode = body.labor_type_code ??
+    ((job?.shop_or_field as string | null) === "field" ? "field" : null);
+  const selectedRule = selectApplicableLaborPricingRule(
+    (rules ?? []) as ServiceLaborPricingRule[],
+    {
+      locationCode: (job?.branch_id as string | null) ?? null,
+      customerId: (job?.customer_id as string | null) ?? null,
+      customerGroupLabel: body.customer_group_label ?? null,
+      workOrderStatus,
+      equipmentClassCode: equipmentClass.equipmentClassCode,
+      laborTypeCode,
+      premiumCode: body.premium_code ?? null,
+    },
+  );
+  const technicianCostRate = await resolveTechnicianLaborCostRate(
+    supabase,
+    wsId,
+    job?.technician_id as string | null,
+  );
 
   let total = 0;
   let laborTotal = 0;
   let partsTotal = 0;
   let haulTotal = 0;
   let shopSupplies = 0;
-  const lineInserts = body.lines.map((l, i) => {
+  const laborEvaluations: LaborMarginEvaluation[] = [];
+  const lineInserts: Array<Record<string, unknown>> = [];
+
+  for (let i = 0; i < body.lines.length; i++) {
+    const l = body.lines[i];
     const ext = Math.round(l.quantity * l.unit_price * 100) / 100;
     total += ext;
     if (l.line_type === "labor") laborTotal += ext;
     if (l.line_type === "part") partsTotal += ext;
     if (l.line_type === "haul") haulTotal += ext;
     if (l.line_type === "shop_supply") shopSupplies += ext;
-    return {
+
+    const lineInsert: Record<string, unknown> = {
       workspace_id: wsId,
       quote_id: body.quote_id,
       line_type: l.line_type,
@@ -303,17 +700,78 @@ async function handleUpdate(
       extended_price: ext,
       sort_order: i,
     };
-  });
+
+    if (l.line_type === "labor") {
+      const laborCost = resolveLaborCostContext({
+        technicianCostRate,
+        selectedRule,
+        branchDefaultCostRate: Number(
+          branchConfig?.default_labor_cost_rate ?? 0,
+        ),
+        laborRate: l.unit_price,
+      });
+      const laborMargin = evaluateLaborMargin({
+        quantity: l.quantity,
+        unitPrice: l.unit_price,
+        costRate: laborCost.rate,
+        targetMarginPct: selectedRule?.target_margin_pct,
+        floorMarginPct: selectedRule?.floor_margin_pct,
+      });
+      laborEvaluations.push(laborMargin);
+      Object.assign(
+        lineInsert,
+        marginFields(laborMargin, laborCost, {
+          labor_rate_source: "manual_update",
+          equipment_class_code: equipmentClass.equipmentClassCode,
+          equipment_class_source: equipmentClass.source,
+          labor_type_code: laborTypeCode,
+          work_order_status: workOrderStatus,
+          field_mileage_rate: Number(selectedRule?.field_mileage_rate ?? 0),
+        }),
+      );
+    }
+
+    lineInserts.push(lineInsert);
+  }
+
+  const marginSummary = summarizeMarginEvaluations(laborEvaluations);
+  if (marginSummary.floor_blocked) {
+    return marginFloorResponse(marginSummary, origin, {
+      quote_id: body.quote_id,
+    });
+  }
+
+  // Delete old lines and re-insert only after the hard-floor check passes.
+  await supabase.from("service_quote_lines").delete().eq(
+    "quote_id",
+    body.quote_id,
+  );
 
   await supabase.from("service_quote_lines").insert(lineInserts);
   const { data: quote } = await supabase
     .from("service_quotes")
-    .update({ labor_total: laborTotal, parts_total: partsTotal, haul_total: haulTotal, shop_supplies: shopSupplies, total })
+    .update({
+      labor_total: laborTotal,
+      parts_total: partsTotal,
+      haul_total: haulTotal,
+      shop_supplies: shopSupplies,
+      total,
+      margin_guardrail_status: marginSummary.status,
+      margin_guardrail_summary: marginSummary,
+    })
     .eq("id", body.quote_id)
     .select()
     .single();
 
-  return safeJsonOk({ quote }, origin);
+  const jobUpdateError = await updateJobQuoteTotalAndAuthorization(
+    supabase,
+    quoteHeader.job_id as string,
+    job as Record<string, unknown> | null,
+    Math.round(total * 100) / 100,
+  );
+  if (jobUpdateError) return safeJsonError(jobUpdateError, 400, origin);
+
+  return safeJsonOk({ quote, margin_guardrail: marginSummary }, origin);
 }
 
 async function handleSend(
@@ -349,7 +807,13 @@ async function handleSend(
       .select("*")
       .eq("id", quote.job_id)
       .single();
-    if (fullJob) await notifyAfterStageChange(supabase, fullJob as Record<string, unknown>, "quote_sent");
+    if (fullJob) {
+      await notifyAfterStageChange(
+        supabase,
+        fullJob as Record<string, unknown>,
+        "quote_sent",
+      );
+    }
   }
 
   return safeJsonOk({ quote }, origin);
@@ -362,32 +826,136 @@ async function handleApprove(
 ) {
   if (!body.quote_id) return safeJsonError("quote_id required", 400, origin);
 
+  const { data: quoteBefore, error: fetchError } = await supabase
+    .from("service_quotes")
+    .select(
+      "*, job:service_jobs(id, current_stage, estimate_authorization_required, estimate_authorization_status, approved_estimate_amount, estimate_reauth_threshold_pct)",
+    )
+    .eq("id", body.quote_id)
+    .single();
+
+  if (fetchError || !quoteBefore) {
+    return safeJsonError(fetchError?.message ?? "Quote not found", 404, origin);
+  }
+
+  const job = quoteBefore.job as Record<string, unknown> | null;
+  const quoteTotal = Math.round(Number(quoteBefore.total ?? 0) * 100) / 100;
+  const scope = evaluateScopeIncrease({
+    approvedAmount: job?.approved_estimate_amount,
+    proposedAmount: quoteTotal,
+    thresholdPct: job?.estimate_reauth_threshold_pct,
+  });
+  const requestedApprovalKind = normalizeEstimateApprovalKind(
+    body.approval_kind,
+  );
+
+  if (body.approval_kind != null && requestedApprovalKind == null) {
+    return safeJsonErrorWithFields(
+      "approval_kind must be initial_estimate or scope_increase_reauthorization",
+      422,
+      origin,
+      { code: "invalid_approval_kind" },
+    );
+  }
+
+  if (
+    scope.requiresReauthorization &&
+    requestedApprovalKind !== "scope_increase_reauthorization"
+  ) {
+    return safeJsonErrorWithFields(
+      "Scope increase exceeds the approved estimate by more than 10%; document customer re-authorization before approving this estimate.",
+      422,
+      origin,
+      {
+        code: "estimate_reauthorization_required",
+        approved_amount: scope.approvedAmount,
+        proposed_amount: scope.proposedAmount,
+        threshold_amount: scope.thresholdAmount,
+        threshold_pct: scope.thresholdPct,
+        scope_increase_pct: scope.scopeIncreasePct,
+        required_approval_kind: "scope_increase_reauthorization",
+      },
+    );
+  }
+
+  const approvalKind = requestedApprovalKind ?? "initial_estimate";
   const { data: quote, error } = await supabase
     .from("service_quotes")
     .update({ status: "approved" })
     .eq("id", body.quote_id)
-    .select("*, job:service_jobs(id, current_stage)")
+    .select(
+      "*, job:service_jobs(id, current_stage, estimate_authorization_required)",
+    )
     .single();
 
   if (error) return safeJsonError(error.message, 400, origin);
 
   const ws = quote.workspace_id as string;
 
-  // Record approval
-  await supabase.from("service_quote_approvals").insert({
-    workspace_id: ws,
-    quote_id: body.quote_id,
-    approved_by: body.approved_by || "customer",
-    approval_type: body.approval_type || "customer",
-    method: body.method || "phone",
-    signature_url: body.signature_url || null,
-    notes: body.notes || null,
-  });
+  const { data: approval, error: approvalError } = await supabase
+    .from("service_quote_approvals")
+    .insert({
+      workspace_id: ws,
+      quote_id: body.quote_id,
+      approved_by: body.approved_by || "customer",
+      approval_type: body.approval_type || "customer",
+      approval_kind: approvalKind,
+      method: body.method || "phone",
+      signature_url: body.signature_url || null,
+      notes: body.notes || null,
+      approved_amount: quoteTotal,
+      scope_increase_pct: scope.scopeIncreasePct,
+      approval_metadata: {
+        h3_gate: "estimate_authorization",
+        previous_approved_amount: scope.approvedAmount,
+        threshold_amount: scope.thresholdAmount,
+        threshold_pct: scope.thresholdPct,
+        portal_esign: "future_path_not_built_in_h3",
+      },
+    })
+    .select("id")
+    .single();
 
+  if (approvalError) return safeJsonError(approvalError.message, 400, origin);
+
+  const authorizationRequired = job?.estimate_authorization_required === false
+    ? false
+    : true;
   const stageNow = new Date().toISOString();
+  const authorizationUpdate: Record<string, unknown> = authorizationRequired
+    ? {
+      quote_total: quoteTotal,
+      estimate_authorization_required: true,
+      estimate_authorization_status: "approved",
+      approved_estimate_quote_id: body.quote_id,
+      approved_estimate_approval_id: approval?.id ?? null,
+      approved_estimate_amount: quoteTotal,
+      approved_estimate_authorized_at: stageNow,
+      estimate_reauthorization_required_at: null,
+      estimate_reauthorization_reason: null,
+    }
+    : {
+      quote_total: quoteTotal,
+      estimate_authorization_required: false,
+      estimate_authorization_status: "not_required",
+      approved_estimate_quote_id: body.quote_id,
+      approved_estimate_approval_id: approval?.id ?? null,
+      approved_estimate_amount: quoteTotal,
+      approved_estimate_authorized_at: stageNow,
+      estimate_reauthorization_required_at: null,
+      estimate_reauthorization_reason: null,
+    };
+
+  const { error: authorizationUpdateError } = await supabase
+    .from("service_jobs")
+    .update(authorizationUpdate)
+    .eq("id", quote.job_id);
+  if (authorizationUpdateError) {
+    return safeJsonError(authorizationUpdateError.message, 400, origin);
+  }
 
   // Transition job to approved if at quote_sent
-  if (quote.job?.current_stage === "quote_sent") {
+  if (quoteBefore.job?.current_stage === "quote_sent") {
     await supabase
       .from("service_jobs")
       .update({
@@ -401,10 +969,16 @@ async function handleApprove(
       .select("*")
       .eq("id", quote.job_id)
       .single();
-    if (fullJob) await notifyAfterStageChange(supabase, fullJob as Record<string, unknown>, "approved");
+    if (fullJob) {
+      await notifyAfterStageChange(
+        supabase,
+        fullJob as Record<string, unknown>,
+        "approved",
+      );
+    }
   }
 
-  return safeJsonOk({ quote }, origin);
+  return safeJsonOk({ quote, approval_kind: approvalKind }, origin);
 }
 
 async function handleReject(

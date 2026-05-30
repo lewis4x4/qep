@@ -1,6 +1,14 @@
 import { captureEdgeException } from "../_shared/sentry.ts";
-import { optionsResponse, safeCorsHeaders, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
-import { requireServiceUser } from "../_shared/service-auth.ts";
+import {
+  optionsResponse,
+  safeCorsHeaders,
+  safeJsonError,
+  safeJsonOk,
+} from "../_shared/safe-cors.ts";
+import {
+  requireServiceUser,
+  SERVICE_BILLING_ROLES,
+} from "../_shared/service-auth.ts";
 
 type ExportFormat = "csv" | "json";
 type SummaryBy = "detail" | "premium_code" | "labor_date" | "employee";
@@ -45,9 +53,24 @@ const DETAIL_HEADERS = [
 ];
 
 const SUMMARY_HEADERS: Record<Exclude<SummaryBy, "detail">, string[]> = {
-  premium_code: ["premium_code", "premium_description", "entry_count", "employee_count", "first_labor_date", "last_labor_date", "hours"],
+  premium_code: [
+    "premium_code",
+    "premium_description",
+    "entry_count",
+    "employee_count",
+    "first_labor_date",
+    "last_labor_date",
+    "hours",
+  ],
   labor_date: ["labor_date", "entry_count", "employee_count", "hours"],
-  employee: ["employee_id", "employee_name", "entry_count", "first_labor_date", "last_labor_date", "hours"],
+  employee: [
+    "employee_id",
+    "employee_name",
+    "entry_count",
+    "first_labor_date",
+    "last_labor_date",
+    "hours",
+  ],
 };
 
 function clampLimit(value: unknown): number {
@@ -61,11 +84,16 @@ function parseFormat(value: unknown): ExportFormat {
 }
 
 function parseSummaryBy(value: unknown): SummaryBy {
-  return value === "premium_code" || value === "labor_date" || value === "employee" ? value : "detail";
+  return value === "premium_code" || value === "labor_date" ||
+      value === "employee"
+    ? value
+    : "detail";
 }
 
 function stringFilter(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
 }
 
 async function readInput(req: Request): Promise<Record<string, unknown>> {
@@ -80,13 +108,15 @@ async function readInput(req: Request): Promise<Record<string, unknown>> {
 function csvEscape(value: unknown): string {
   if (value == null) return "";
   const raw = typeof value === "object" ? JSON.stringify(value) : String(value);
-  return /[",\n\r]/.test(raw) ? `"${raw.replaceAll("\"", "\"\"")}"` : raw;
+  return /[",\n\r]/.test(raw) ? `"${raw.replaceAll('"', '""')}"` : raw;
 }
 
 function toCsv(headers: string[], rows: PayrollOutputRow[]): string {
   const lines = [headers.join(",")];
   for (const row of rows) {
-    const values = headers.map((header) => csvEscape((row as Record<string, unknown>)[header]));
+    const values = headers.map((header) =>
+      csvEscape((row as Record<string, unknown>)[header])
+    );
     lines.push(values.join(","));
   }
   return `${lines.join("\n")}\n`;
@@ -100,30 +130,41 @@ function dateMax(a: string | null, b: string): string {
   return a == null || b > a ? b : a;
 }
 
-function summarizeRows(rows: PayrollReportRow[], summaryBy: SummaryBy): PayrollOutputRow[] {
+function summarizeRows(
+  rows: PayrollReportRow[],
+  summaryBy: SummaryBy,
+): PayrollOutputRow[] {
   if (summaryBy === "detail") return rows;
 
-  const grouped = new Map<string, Record<string, unknown> & { employee_ids?: Set<string> }>();
+  const grouped = new Map<
+    string,
+    Record<string, unknown> & { employee_ids?: Set<string> }
+  >();
   for (const row of rows) {
-    const key =
-      summaryBy === "premium_code" ? row.premium_code
-      : summaryBy === "labor_date" ? row.labor_date
+    const key = summaryBy === "premium_code"
+      ? row.premium_code
+      : summaryBy === "labor_date"
+      ? row.labor_date
       : row.employee_id;
 
     const current = grouped.get(key) ?? {
-      ...(summaryBy === "premium_code" ? {
-        premium_code: row.premium_code,
-        premium_description: row.premium_description,
-        first_labor_date: null,
-        last_labor_date: null,
-      } : {}),
+      ...(summaryBy === "premium_code"
+        ? {
+          premium_code: row.premium_code,
+          premium_description: row.premium_description,
+          first_labor_date: null,
+          last_labor_date: null,
+        }
+        : {}),
       ...(summaryBy === "labor_date" ? { labor_date: row.labor_date } : {}),
-      ...(summaryBy === "employee" ? {
-        employee_id: row.employee_id,
-        employee_name: row.employee_name,
-        first_labor_date: null,
-        last_labor_date: null,
-      } : {}),
+      ...(summaryBy === "employee"
+        ? {
+          employee_id: row.employee_id,
+          employee_name: row.employee_name,
+          first_labor_date: null,
+          last_labor_date: null,
+        }
+        : {}),
       entry_count: 0,
       employee_count: 0,
       hours: 0,
@@ -134,14 +175,22 @@ function summarizeRows(rows: PayrollReportRow[], summaryBy: SummaryBy): PayrollO
     current.hours = Number(current.hours) + Number(row.hours ?? 0);
     current.employee_ids?.add(row.employee_id);
     if (summaryBy !== "labor_date") {
-      current.first_labor_date = dateMin(current.first_labor_date as string | null, row.labor_date);
-      current.last_labor_date = dateMax(current.last_labor_date as string | null, row.labor_date);
+      current.first_labor_date = dateMin(
+        current.first_labor_date as string | null,
+        row.labor_date,
+      );
+      current.last_labor_date = dateMax(
+        current.last_labor_date as string | null,
+        row.labor_date,
+      );
     }
     current.employee_count = current.employee_ids?.size ?? 0;
     grouped.set(key, current);
   }
 
-  return [...grouped.values()].map(({ employee_ids: _employeeIds, ...row }) => row);
+  return [...grouped.values()].map(({ employee_ids: _employeeIds, ...row }) =>
+    row
+  );
 }
 
 function buildSummary(rows: PayrollReportRow[]) {
@@ -159,7 +208,11 @@ function filename(format: ExportFormat, summaryBy: SummaryBy): string {
   return `service-payroll-hours-${summaryBy}-${day}.${format}`;
 }
 
-async function createRequestRow(auth: { supabase: any; workspaceId: string; userId: string }, format: ExportFormat, filters: Record<string, unknown>) {
+async function createRequestRow(
+  auth: { supabase: any; workspaceId: string; userId: string },
+  format: ExportFormat,
+  filters: Record<string, unknown>,
+) {
   const { data, error } = await auth.supabase
     .from("service_report_export_requests")
     .insert({
@@ -177,7 +230,11 @@ async function createRequestRow(auth: { supabase: any; workspaceId: string; user
   return data.id as string;
 }
 
-async function finishRequestRow(auth: { supabase: any }, id: string, patch: Record<string, unknown>) {
+async function finishRequestRow(
+  auth: { supabase: any },
+  id: string,
+  patch: Record<string, unknown>,
+) {
   const { error } = await auth.supabase
     .from("service_report_export_requests")
     .update({ ...patch, completed_at: new Date().toISOString() })
@@ -193,7 +250,11 @@ Deno.serve(async (req) => {
   let requestId: string | null = null;
 
   try {
-    auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+      SERVICE_BILLING_ROLES,
+    );
     if (!auth.ok) return auth.response;
 
     const input = await readInput(req);
@@ -222,19 +283,33 @@ Deno.serve(async (req) => {
       .limit(limit);
 
     if (filters.branch_id) query = query.eq("branch_id", filters.branch_id);
-    if (filters.employee_id) query = query.eq("employee_id", filters.employee_id);
-    if (filters.premium_code) query = query.eq("premium_code", filters.premium_code);
-    if (filters.labor_date_from) query = query.gte("labor_date", filters.labor_date_from);
-    if (filters.labor_date_to) query = query.lte("labor_date", filters.labor_date_to);
-    if (filters.billing_run_date_from) query = query.gte("billing_run_date", filters.billing_run_date_from);
-    if (filters.billing_run_date_to) query = query.lte("billing_run_date", filters.billing_run_date_to);
+    if (filters.employee_id) {
+      query = query.eq("employee_id", filters.employee_id);
+    }
+    if (filters.premium_code) {
+      query = query.eq("premium_code", filters.premium_code);
+    }
+    if (filters.labor_date_from) {
+      query = query.gte("labor_date", filters.labor_date_from);
+    }
+    if (filters.labor_date_to) {
+      query = query.lte("labor_date", filters.labor_date_to);
+    }
+    if (filters.billing_run_date_from) {
+      query = query.gte("billing_run_date", filters.billing_run_date_from);
+    }
+    if (filters.billing_run_date_to) {
+      query = query.lte("billing_run_date", filters.billing_run_date_to);
+    }
 
     const { data, error } = await query;
     if (error) throw new Error(error.message);
 
     const detailRows = (data ?? []) as unknown as PayrollReportRow[];
     const outputRows = summarizeRows(detailRows, summaryBy);
-    const headers = summaryBy === "detail" ? DETAIL_HEADERS : SUMMARY_HEADERS[summaryBy];
+    const headers = summaryBy === "detail"
+      ? DETAIL_HEADERS
+      : SUMMARY_HEADERS[summaryBy];
     const outName = filename(format, summaryBy);
     const contentType = format === "json" ? "application/json" : "text/csv";
 
@@ -261,7 +336,8 @@ Deno.serve(async (req) => {
       status: 200,
       headers: {
         ...safeCorsHeaders(origin),
-        "Access-Control-Expose-Headers": "Content-Disposition, X-QEP-Report-Request-Id, X-QEP-Report-Row-Count",
+        "Access-Control-Expose-Headers":
+          "Content-Disposition, X-QEP-Report-Request-Id, X-QEP-Report-Row-Count",
         "Content-Disposition": `attachment; filename="${outName}"`,
         "Content-Type": "text/csv; charset=utf-8",
         "X-QEP-Report-Request-Id": requestId,
@@ -272,13 +348,19 @@ Deno.serve(async (req) => {
     if (auth?.ok && requestId) {
       await finishRequestRow(auth, requestId, {
         status: "error",
-        error_message: err instanceof Error ? err.message : "Unknown export error",
+        error_message: err instanceof Error
+          ? err.message
+          : "Unknown export error",
       }).catch(() => undefined);
     }
     captureEdgeException(err, { fn: "service-payroll-report-export", req });
     if (err instanceof Error && err.message === "method_not_allowed") {
       return safeJsonError("Use GET or POST", 405, origin);
     }
-    return safeJsonError(err instanceof Error ? err.message : "Internal server error", 500, origin);
+    return safeJsonError(
+      err instanceof Error ? err.message : "Internal server error",
+      500,
+      origin,
+    );
   }
 });

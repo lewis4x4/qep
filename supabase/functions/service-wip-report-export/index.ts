@@ -1,6 +1,14 @@
 import { captureEdgeException } from "../_shared/sentry.ts";
-import { optionsResponse, safeCorsHeaders, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
-import { requireServiceUser } from "../_shared/service-auth.ts";
+import {
+  optionsResponse,
+  safeCorsHeaders,
+  safeJsonError,
+  safeJsonOk,
+} from "../_shared/safe-cors.ts";
+import {
+  requireServiceUser,
+  SERVICE_BILLING_ROLES,
+} from "../_shared/service-auth.ts";
 
 type ExportFormat = "csv" | "json";
 
@@ -54,7 +62,9 @@ function parseFormat(value: unknown): ExportFormat {
 }
 
 function stringFilter(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
 }
 
 function numberFilter(value: unknown): number | null {
@@ -75,20 +85,25 @@ async function readInput(req: Request): Promise<Record<string, unknown>> {
 function csvEscape(value: unknown): string {
   if (value == null) return "";
   const raw = typeof value === "object" ? JSON.stringify(value) : String(value);
-  return /[",\n\r]/.test(raw) ? `"${raw.replaceAll("\"", "\"\"")}"` : raw;
+  return /[",\n\r]/.test(raw) ? `"${raw.replaceAll('"', '""')}"` : raw;
 }
 
 function toCsv(rows: WipReportRow[]): string {
   const lines = [CSV_HEADERS.join(",")];
   for (const row of rows) {
-    const values = CSV_HEADERS.map((header) => csvEscape(row[header as keyof WipReportRow]));
+    const values = CSV_HEADERS.map((header) =>
+      csvEscape(row[header as keyof WipReportRow])
+    );
     lines.push(values.join(","));
   }
   return `${lines.join("\n")}\n`;
 }
 
 function buildSummary(rows: WipReportRow[]) {
-  const buckets: Record<string, { row_count: number; analysis_wip_cents: number }> = {};
+  const buckets: Record<
+    string,
+    { row_count: number; analysis_wip_cents: number }
+  > = {};
   let total = 0;
   for (const row of rows) {
     const bucket = row.wip_age_bucket ?? "unknown";
@@ -105,7 +120,11 @@ function filename(format: ExportFormat): string {
   return `service-wip-aging-${day}.${format}`;
 }
 
-async function createRequestRow(auth: { supabase: any; workspaceId: string; userId: string }, format: ExportFormat, filters: Record<string, unknown>) {
+async function createRequestRow(
+  auth: { supabase: any; workspaceId: string; userId: string },
+  format: ExportFormat,
+  filters: Record<string, unknown>,
+) {
   const { data, error } = await auth.supabase
     .from("service_report_export_requests")
     .insert({
@@ -123,7 +142,11 @@ async function createRequestRow(auth: { supabase: any; workspaceId: string; user
   return data.id as string;
 }
 
-async function finishRequestRow(auth: { supabase: any }, id: string, patch: Record<string, unknown>) {
+async function finishRequestRow(
+  auth: { supabase: any },
+  id: string,
+  patch: Record<string, unknown>,
+) {
   const { error } = await auth.supabase
     .from("service_report_export_requests")
     .update({ ...patch, completed_at: new Date().toISOString() })
@@ -139,7 +162,11 @@ Deno.serve(async (req) => {
   let requestId: string | null = null;
 
   try {
-    auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+      SERVICE_BILLING_ROLES,
+    );
     if (!auth.ok) return auth.response;
 
     const input = await readInput(req);
@@ -165,11 +192,21 @@ Deno.serve(async (req) => {
       .limit(limit);
 
     if (filters.branch_id) query = query.eq("branch_id", filters.branch_id);
-    if (filters.current_stage) query = query.eq("current_stage", filters.current_stage);
-    if (filters.billed_status) query = query.eq("billed_status", filters.billed_status);
-    if (filters.wip_age_bucket) query = query.eq("wip_age_bucket", filters.wip_age_bucket);
-    if (filters.min_age_days != null) query = query.gte("wip_age_days", filters.min_age_days);
-    if (filters.max_age_days != null) query = query.lte("wip_age_days", filters.max_age_days);
+    if (filters.current_stage) {
+      query = query.eq("current_stage", filters.current_stage);
+    }
+    if (filters.billed_status) {
+      query = query.eq("billed_status", filters.billed_status);
+    }
+    if (filters.wip_age_bucket) {
+      query = query.eq("wip_age_bucket", filters.wip_age_bucket);
+    }
+    if (filters.min_age_days != null) {
+      query = query.gte("wip_age_days", filters.min_age_days);
+    }
+    if (filters.max_age_days != null) {
+      query = query.lte("wip_age_days", filters.max_age_days);
+    }
 
     const { data, error } = await query;
     if (error) throw new Error(error.message);
@@ -199,7 +236,8 @@ Deno.serve(async (req) => {
       status: 200,
       headers: {
         ...safeCorsHeaders(origin),
-        "Access-Control-Expose-Headers": "Content-Disposition, X-QEP-Report-Request-Id, X-QEP-Report-Row-Count",
+        "Access-Control-Expose-Headers":
+          "Content-Disposition, X-QEP-Report-Request-Id, X-QEP-Report-Row-Count",
         "Content-Disposition": `attachment; filename="${outName}"`,
         "Content-Type": "text/csv; charset=utf-8",
         "X-QEP-Report-Request-Id": requestId,
@@ -210,13 +248,19 @@ Deno.serve(async (req) => {
     if (auth?.ok && requestId) {
       await finishRequestRow(auth, requestId, {
         status: "error",
-        error_message: err instanceof Error ? err.message : "Unknown export error",
+        error_message: err instanceof Error
+          ? err.message
+          : "Unknown export error",
       }).catch(() => undefined);
     }
     captureEdgeException(err, { fn: "service-wip-report-export", req });
     if (err instanceof Error && err.message === "method_not_allowed") {
       return safeJsonError("Use GET or POST", 405, origin);
     }
-    return safeJsonError(err instanceof Error ? err.message : "Internal server error", 500, origin);
+    return safeJsonError(
+      err instanceof Error ? err.message : "Internal server error",
+      500,
+      origin,
+    );
   }
 });

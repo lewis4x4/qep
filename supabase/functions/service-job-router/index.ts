@@ -4,12 +4,15 @@
  * Auth: user JWT only (service_role rejected — use RLS via user session).
  */
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { requireServiceUser } from "../_shared/service-auth.ts";
 import {
+  requireServiceUser,
+  SERVICE_JOB_ACCESS_ROLES,
+} from "../_shared/service-auth.ts";
+import {
+  optionsResponse,
   safeJsonError,
   safeJsonErrorWithFields,
   safeJsonOk,
-  optionsResponse,
 } from "../_shared/safe-cors.ts";
 import { notifyAfterStageChange } from "../_shared/service-lifecycle-notify.ts";
 import { generateInvoiceForServiceJob } from "../_shared/service-invoice.ts";
@@ -18,6 +21,12 @@ import {
   populatePartsFromJobCode,
   resyncPartsFromJobCode,
 } from "../_shared/service-parts-from-job-code.ts";
+import { validateH2ServiceJobIntake } from "../_shared/service-intake-hardening.ts";
+import { evaluateEstimateAuthorizationGate } from "../_shared/service-estimate-authorization.ts";
+import {
+  normalizeServiceHoldState,
+  SERVICE_HOLD_STATES,
+} from "../_shared/service-hold-integrity.ts";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -53,6 +62,29 @@ const BLOCKED_ALLOWED_FROM = new Set([
   "in_progress",
 ]);
 
+const H2_INTAKE_FIELD_NAMES = [
+  "machine_id",
+  "source_type",
+  "request_type",
+  "priority",
+  "shop_or_field",
+  "hour_meter_reading",
+  "odometer_miles",
+  "machine_make",
+  "machine_model",
+  "machine_serial_number",
+  "machine_year",
+  "complaint",
+  "cause",
+  "correction",
+  "promised_at",
+  "field_site_location",
+  "field_site_contact_name",
+  "field_site_contact_phone",
+  "field_site_conditions_access_notes",
+];
+const H2_INTAKE_FIELDS = new Set(H2_INTAKE_FIELD_NAMES);
+
 const ALLOWED_UPDATE_FIELDS = new Set([
   "customer_id",
   "contact_id",
@@ -71,12 +103,43 @@ const ALLOWED_UPDATE_FIELDS = new Set([
   "selected_job_code_id",
   "haul_required",
   "shop_or_field",
+  "hour_meter_reading",
+  "odometer_miles",
+  "machine_make",
+  "machine_model",
+  "machine_serial_number",
+  "machine_year",
+  "complaint",
+  "cause",
+  "correction",
+  "promised_at",
+  "field_site_location",
+  "field_site_contact_name",
+  "field_site_contact_phone",
+  "field_site_conditions_access_notes",
   "scheduled_start_at",
   "scheduled_end_at",
-  "quote_total",
   "invoice_total",
   "portal_request_id",
 ]);
+
+const READ_ONLY_JOB_ACTIONS = new Set(["get", "list"]);
+const SERVICE_JOB_MUTATION_ROLES = new Set([
+  "rep",
+  "admin",
+  "manager",
+  "owner",
+  "service_writer",
+  "dispatch",
+]);
+
+function canRunServiceJobAction(role: string, action: string): boolean {
+  if (SERVICE_JOB_MUTATION_ROLES.has(role)) return true;
+  if (["technician", "parts_counter", "finance_admin"].includes(role)) {
+    return READ_ONLY_JOB_ACTIONS.has(action);
+  }
+  return false;
+}
 
 interface RouterPayload {
   action: string;
@@ -119,12 +182,70 @@ async function fetchJobEnriched(
     .single();
 }
 
+async function fetchH2IntakeMachine(
+  supabase: SupabaseClient,
+  machineId: unknown,
+): Promise<Record<string, unknown> | null> {
+  if (typeof machineId !== "string" || !isUuidString(machineId)) return null;
+  const { data, error } = await supabase
+    .from("crm_equipment")
+    .select("id, name, make, model, serial_number, year, category, metadata")
+    .eq("id", machineId)
+    .maybeSingle();
+  if (error) {
+    console.warn("H2 machine lookup failed during intake:", error);
+    return null;
+  }
+  return data as Record<string, unknown> | null;
+}
+
+function hasH2IntakeShape(
+  row: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!row) return false;
+  return [
+    "hour_meter_reading",
+    "odometer_miles",
+    "machine_make",
+    "machine_model",
+    "machine_serial_number",
+    "machine_year",
+    "complaint",
+    "cause",
+    "correction",
+    "promised_at",
+    "field_site_location",
+    "field_site_contact_name",
+    "field_site_contact_phone",
+    "field_site_conditions_access_notes",
+  ].some((field) => row[field] != null && row[field] !== "");
+}
+
+function estimateAuthorizationFields(
+  gate: ReturnType<typeof evaluateEstimateAuthorizationGate>,
+) {
+  return {
+    code: gate.code,
+    approved_amount: gate.approvedAmount,
+    threshold_amount: gate.thresholdAmount,
+    scope_estimate_amount: gate.scopeEstimateAmount,
+    threshold_pct: gate.thresholdPct,
+    status: gate.status,
+    scope_increase_pct: gate.scopeIncreasePct,
+    documented_approval: gate.documentedApproval,
+  };
+}
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    const auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+      SERVICE_JOB_ACCESS_ROLES,
+    );
     if (!auth.ok) return auth.response;
 
     const supabase = auth.supabase;
@@ -132,6 +253,9 @@ Deno.serve(async (req) => {
 
     const body: RouterPayload = await req.json();
     const { action } = body;
+    if (!canRunServiceJobAction(auth.role, action)) {
+      return safeJsonError("Forbidden for service role", 403, origin);
+    }
 
     switch (action) {
       case "create":
@@ -149,7 +273,12 @@ Deno.serve(async (req) => {
       case "reassign_pool":
         return await handleReassignPool(supabase, body, actorId, origin);
       case "resync_parts_from_job_code":
-        return await handleResyncPartsFromJobCode(supabase, body, actorId, origin);
+        return await handleResyncPartsFromJobCode(
+          supabase,
+          body,
+          actorId,
+          origin,
+        );
       case "assign_technician":
         return await handleAssignTechnician(supabase, body, actorId, origin);
       case "link_portal_request":
@@ -169,7 +298,11 @@ Deno.serve(async (req) => {
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);
     }
-    return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
+    return safeJsonError(
+      "Internal server error",
+      500,
+      req.headers.get("Origin"),
+    );
   }
 });
 
@@ -183,9 +316,9 @@ async function handleCreate(
     customer_id,
     contact_id,
     machine_id,
-    source_type = "call",
-    request_type = "repair",
-    priority = "normal",
+    source_type,
+    request_type,
+    priority,
     status_flags = [],
     branch_id,
     advisor_id,
@@ -193,12 +326,29 @@ async function handleCreate(
     requested_by_name,
     customer_problem_summary,
     haul_required = false,
-    shop_or_field = "shop",
+    shop_or_field,
     scheduled_start_at,
     scheduled_end_at,
     selected_job_code_id,
     portal_request_id,
   } = body;
+
+  const machine = await fetchH2IntakeMachine(supabase, machine_id);
+
+  const h2Validation = validateH2ServiceJobIntake(body, machine);
+  if (!h2Validation.ok) {
+    return safeJsonErrorWithFields(
+      "Incomplete service work-order intake",
+      422,
+      origin,
+      {
+        code: "service_intake_incomplete",
+        missing: h2Validation.missing,
+        invalid: h2Validation.invalid,
+        is_grapple_truck: h2Validation.is_grapple_truck,
+      },
+    );
+  }
 
   const nowIso = new Date().toISOString();
 
@@ -208,9 +358,9 @@ async function handleCreate(
       customer_id: customer_id || null,
       contact_id: contact_id || null,
       machine_id: machine_id || null,
-      source_type,
-      request_type,
-      priority,
+      source_type: h2Validation.normalized.source_type,
+      request_type: h2Validation.normalized.request_type,
+      priority: h2Validation.normalized.priority,
       current_stage: "request_received",
       current_stage_entered_at: nowIso,
       status_flags,
@@ -218,13 +368,34 @@ async function handleCreate(
       advisor_id: advisor_id || actorId,
       service_manager_id: service_manager_id || null,
       requested_by_name: requested_by_name || null,
-      customer_problem_summary: customer_problem_summary || null,
+      customer_problem_summary: customer_problem_summary ||
+        h2Validation.normalized.complaint || null,
       haul_required,
-      shop_or_field,
+      shop_or_field: h2Validation.normalized.shop_or_field,
+      hour_meter_reading: h2Validation.normalized.hour_meter_reading,
+      odometer_miles: h2Validation.normalized.odometer_miles ?? null,
+      machine_make: h2Validation.normalized.machine_make,
+      machine_model: h2Validation.normalized.machine_model,
+      machine_serial_number: h2Validation.normalized.machine_serial_number,
+      machine_year: h2Validation.normalized.machine_year,
+      complaint: h2Validation.normalized.complaint,
+      cause: h2Validation.normalized.cause,
+      correction: h2Validation.normalized.correction,
+      promised_at: h2Validation.normalized.promised_at,
+      field_site_location: h2Validation.normalized.field_site_location ?? null,
+      field_site_contact_name:
+        h2Validation.normalized.field_site_contact_name ?? null,
+      field_site_contact_phone:
+        h2Validation.normalized.field_site_contact_phone ?? null,
+      field_site_conditions_access_notes:
+        h2Validation.normalized.field_site_conditions_access_notes ?? null,
       scheduled_start_at: scheduled_start_at || null,
       scheduled_end_at: scheduled_end_at || null,
       selected_job_code_id: selected_job_code_id || null,
       portal_request_id: portal_request_id || null,
+      estimate_authorization_required: true,
+      estimate_authorization_status: "pending",
+      estimate_reauth_threshold_pct: 10,
     })
     .select()
     .single();
@@ -240,7 +411,11 @@ async function handleCreate(
     event_type: "created",
     actor_id: actorId,
     new_stage: "request_received",
-    metadata: { source_type, request_type, priority },
+    metadata: {
+      source_type: h2Validation.normalized.source_type,
+      request_type: h2Validation.normalized.request_type,
+      priority: h2Validation.normalized.priority,
+    },
   });
 
   if (job.selected_job_code_id) {
@@ -319,9 +494,38 @@ async function handleUpdate(
 
   const { data: before } = await supabase
     .from("service_jobs")
-    .select("selected_job_code_id, workspace_id")
+    .select("*")
     .eq("id", id)
     .single();
+
+  const touchesH2Intake = Object.keys(fields).some((key) =>
+    H2_INTAKE_FIELDS.has(key)
+  );
+  if (
+    touchesH2Intake &&
+    hasH2IntakeShape(before as Record<string, unknown> | null)
+  ) {
+    const merged = { ...(before as Record<string, unknown>), ...fields };
+    const machine = await fetchH2IntakeMachine(supabase, merged.machine_id);
+    const h2Validation = validateH2ServiceJobIntake(merged, machine);
+    if (!h2Validation.ok) {
+      return safeJsonErrorWithFields(
+        "Service work-order intake fields cannot be made incomplete",
+        422,
+        origin,
+        {
+          code: "service_intake_incomplete",
+          missing: h2Validation.missing,
+          invalid: h2Validation.invalid,
+          is_grapple_truck: h2Validation.is_grapple_truck,
+        },
+      );
+    }
+
+    for (const [key, value] of Object.entries(h2Validation.normalized)) {
+      if (H2_INTAKE_FIELDS.has(key)) fields[key] = value;
+    }
+  }
 
   const { data: job, error } = await supabase
     .from("service_jobs")
@@ -385,9 +589,13 @@ async function handleTransition(
     return safeJsonError("Missing id or to_stage", 400, origin);
   }
 
-  if (to_stage === "blocked_waiting" && (!blocker_type || String(blocker_type).trim() === "")) {
+  const normalizedBlockerType = to_stage === "blocked_waiting"
+    ? normalizeServiceHoldState(blocker_type)
+    : null;
+
+  if (to_stage === "blocked_waiting" && !normalizedBlockerType) {
     return safeJsonError(
-      "blocker_type is required when moving to blocked_waiting",
+      `blocker_type must be one of: ${SERVICE_HOLD_STATES.join(", ")}`,
       422,
       origin,
     );
@@ -406,7 +614,8 @@ async function handleTransition(
   const fromStage = job.current_stage as string;
 
   const allowed = ALLOWED_TRANSITIONS[fromStage] ?? [];
-  const isBlockTransition = to_stage === "blocked_waiting" && BLOCKED_ALLOWED_FROM.has(fromStage);
+  const isBlockTransition = to_stage === "blocked_waiting" &&
+    BLOCKED_ALLOWED_FROM.has(fromStage);
 
   if (!allowed.includes(to_stage) && !isBlockTransition) {
     return safeJsonError(
@@ -416,11 +625,28 @@ async function handleTransition(
     );
   }
 
-  if (to_stage === "blocked_waiting" && blocker_type) {
+  if (to_stage === "in_progress") {
+    const gate = evaluateEstimateAuthorizationGate({
+      authorizationRequired: job.estimate_authorization_required,
+      authorizationStatus: job.estimate_authorization_status,
+      approvedAmount: job.approved_estimate_amount,
+      approvedQuoteId: job.approved_estimate_quote_id,
+      approvedApprovalId: job.approved_estimate_approval_id,
+      thresholdPct: job.estimate_reauth_threshold_pct,
+      scopeEstimateAmount: job.quote_total,
+    });
+    if (!gate.ok) {
+      return safeJsonErrorWithFields(gate.reason, 422, origin, {
+        estimate_authorization: estimateAuthorizationFields(gate),
+      });
+    }
+  }
+
+  if (to_stage === "blocked_waiting" && normalizedBlockerType) {
     await supabase.from("service_job_blockers").insert({
       workspace_id: job.workspace_id,
       job_id: id,
-      blocker_type,
+      blocker_type: normalizedBlockerType,
       description: blocker_description || null,
       created_by: actorId,
     });
@@ -463,11 +689,24 @@ async function handleTransition(
     old_stage: fromStage,
     new_stage: to_stage,
     metadata: {
-      ...(blocker_type ? { blocker_type, blocker_description } : {}),
+      ...(normalizedBlockerType
+        ? {
+          blocker_type: normalizedBlockerType,
+          original_blocker_type: blocker_type,
+          blocker_description,
+        }
+        : {}),
+      ...(to_stage === "in_progress"
+        ? { estimate_authorization_gate: "passed" }
+        : {}),
     },
   });
 
-  await notifyAfterStageChange(supabase, updated as Record<string, unknown>, to_stage);
+  await notifyAfterStageChange(
+    supabase,
+    updated as Record<string, unknown>,
+    to_stage,
+  );
 
   if (to_stage === "invoice_ready") {
     const inv = await generateInvoiceForServiceJob(supabase, id);
@@ -537,13 +776,16 @@ async function handleList(
 
   let query = supabase
     .from("service_jobs")
-    .select(`
+    .select(
+      `
       *,
       customer:crm_companies(id, name),
       machine:crm_equipment(id, make, model, serial_number),
       advisor:profiles!service_jobs_advisor_id_fkey(id, full_name),
       technician:profiles!service_jobs_technician_id_fkey(id, full_name)
-    `, { count: "exact" })
+    `,
+      { count: "exact" },
+    )
     .order("created_at", { ascending: false });
 
   if (!include_closed) {
@@ -617,8 +859,14 @@ async function handleReassignPool(
   const branch_id = body.branch_id as string | undefined;
   const from_user_id = body.from_user_id as string | undefined;
   const role = body.role as string | undefined;
-  if (!branch_id || !from_user_id || (role !== "advisor" && role !== "technician")) {
-    return safeJsonError("branch_id, from_user_id, and role (advisor|technician) required", 400, origin);
+  if (
+    !branch_id || !from_user_id || (role !== "advisor" && role !== "technician")
+  ) {
+    return safeJsonError(
+      "branch_id, from_user_id, and role (advisor|technician) required",
+      400,
+      origin,
+    );
   }
 
   const { data: cfg, error: cfgErr } = await supabase
@@ -627,15 +875,23 @@ async function handleReassignPool(
     .eq("branch_id", branch_id)
     .maybeSingle();
   if (cfgErr) return safeJsonError(cfgErr.message, 400, origin);
-  if (!cfg) return safeJsonError("No branch config for this branch", 404, origin);
+  if (!cfg) {
+    return safeJsonError("No branch config for this branch", 404, origin);
+  }
 
-  const pool = role === "advisor" ? cfg.default_advisor_pool : cfg.default_technician_pool;
+  const pool = role === "advisor"
+    ? cfg.default_advisor_pool
+    : cfg.default_technician_pool;
   const ids = Array.isArray(pool)
     ? pool.filter((x): x is string => typeof x === "string" && x.length > 0)
     : [];
   const replacement = ids.find((id) => id !== from_user_id) ?? ids[0];
   if (!replacement) {
-    return safeJsonError("Pool is empty — add advisor/tech UUIDs in branch config", 400, origin);
+    return safeJsonError(
+      "Pool is empty — add advisor/tech UUIDs in branch config",
+      400,
+      origin,
+    );
   }
 
   const field = role === "advisor" ? "advisor_id" : "technician_id";
@@ -727,7 +983,10 @@ async function handleAssignTechnician(
   if (jErr || !job) return safeJsonError("Job not found", 404, origin);
 
   if (job.technician_id === technician_user_id) {
-    const { data: same } = await supabase.from("service_jobs").select("*").eq("id", job_id).single();
+    const { data: same } = await supabase.from("service_jobs").select("*").eq(
+      "id",
+      job_id,
+    ).single();
     return safeJsonOk({ job: same }, origin);
   }
 
@@ -784,7 +1043,11 @@ async function handleLinkPortalRequest(
     return safeJsonError("job_id and portal_request_id required", 400, origin);
   }
   if (!isUuidString(job_id) || !isUuidString(portal_request_id)) {
-    return safeJsonError("job_id and portal_request_id must be valid UUIDs", 400, origin);
+    return safeJsonError(
+      "job_id and portal_request_id must be valid UUIDs",
+      400,
+      origin,
+    );
   }
 
   const { data: job, error: jErr } = await supabase
@@ -853,7 +1116,9 @@ async function handleLinkPortalRequest(
   });
 
   const { data: full, error: gErr } = await fetchJobEnriched(supabase, job_id);
-  if (gErr || !full) return safeJsonError(gErr?.message ?? "Failed to load job", 400, origin);
+  if (gErr || !full) {
+    return safeJsonError(gErr?.message ?? "Failed to load job", 400, origin);
+  }
   return safeJsonOk({ job: full }, origin);
 }
 
@@ -878,8 +1143,13 @@ async function handleUnlinkPortalRequest(
 
   const prev = job.portal_request_id as string | null;
   if (!prev) {
-    const { data: full, error: gErr } = await fetchJobEnriched(supabase, job_id);
-    if (gErr || !full) return safeJsonError(gErr?.message ?? "Failed to load job", 400, origin);
+    const { data: full, error: gErr } = await fetchJobEnriched(
+      supabase,
+      job_id,
+    );
+    if (gErr || !full) {
+      return safeJsonError(gErr?.message ?? "Failed to load job", 400, origin);
+    }
     return safeJsonOk({ job: full }, origin);
   }
 
@@ -903,7 +1173,9 @@ async function handleUnlinkPortalRequest(
   });
 
   const { data: full, error: gErr } = await fetchJobEnriched(supabase, job_id);
-  if (gErr || !full) return safeJsonError(gErr?.message ?? "Failed to load job", 400, origin);
+  if (gErr || !full) {
+    return safeJsonError(gErr?.message ?? "Failed to load job", 400, origin);
+  }
   return safeJsonOk({ job: full }, origin);
 }
 
@@ -939,7 +1211,9 @@ async function handleSearchPortalOrders(
     return safeJsonError(rErr.message, 400, origin);
   }
 
-  const mapped = (rows as Record<string, unknown>[] | null ?? []).map((row) => ({
+  const mapped = (rows as Record<string, unknown>[] | null ?? []).map((
+    row,
+  ) => ({
     id: row.id as string,
     status: row.status as string,
     fulfillment_run_id: row.fulfillment_run_id as string | null,
@@ -962,7 +1236,10 @@ async function handleLinkFulfillmentRun(
 ) {
   const job_id = body.job_id as string | undefined;
   const rawRun = body.fulfillment_run_id;
-  const hasKey = Object.prototype.hasOwnProperty.call(body, "fulfillment_run_id");
+  const hasKey = Object.prototype.hasOwnProperty.call(
+    body,
+    "fulfillment_run_id",
+  );
   if (!job_id) {
     return safeJsonError("job_id required", 400, origin);
   }
@@ -972,7 +1249,11 @@ async function handleLinkFulfillmentRun(
 
   let fulfillment_run_id: string | null;
   if (!hasKey) {
-    return safeJsonError("fulfillment_run_id required (UUID or null to unlink)", 400, origin);
+    return safeJsonError(
+      "fulfillment_run_id required (UUID or null to unlink)",
+      400,
+      origin,
+    );
   }
   if (rawRun === null || rawRun === "") {
     fulfillment_run_id = null;
@@ -980,7 +1261,11 @@ async function handleLinkFulfillmentRun(
     fulfillment_run_id = rawRun.trim();
     if (!fulfillment_run_id) fulfillment_run_id = null;
   } else {
-    return safeJsonError("fulfillment_run_id must be a string UUID or null", 400, origin);
+    return safeJsonError(
+      "fulfillment_run_id must be a string UUID or null",
+      400,
+      origin,
+    );
   }
 
   const { data: job, error: jErr } = await supabase
@@ -994,13 +1279,24 @@ async function handleLinkFulfillmentRun(
   const previousRun = job.fulfillment_run_id as string | null;
 
   if (fulfillment_run_id !== null && !isUuidString(fulfillment_run_id)) {
-    return safeJsonError("fulfillment_run_id must be a valid UUID", 400, origin);
+    return safeJsonError(
+      "fulfillment_run_id must be a valid UUID",
+      400,
+      origin,
+    );
   }
 
   if (fulfillment_run_id !== null && fulfillment_run_id === previousRun) {
-    const { data: full, error: sameErr } = await fetchJobEnriched(supabase, job_id);
+    const { data: full, error: sameErr } = await fetchJobEnriched(
+      supabase,
+      job_id,
+    );
     if (sameErr || !full) {
-      return safeJsonError(sameErr?.message ?? "Failed to load job", 400, origin);
+      return safeJsonError(
+        sameErr?.message ?? "Failed to load job",
+        400,
+        origin,
+      );
     }
     return safeJsonOk({ job: full }, origin);
   }
@@ -1031,8 +1327,13 @@ async function handleLinkFulfillmentRun(
       actor_id: actorId,
       metadata: { previous_fulfillment_run_id: previousRun },
     });
-    const { data: full, error: gErr } = await fetchJobEnriched(supabase, job_id);
-    if (gErr || !full) return safeJsonError(gErr?.message ?? "Failed to load job", 400, origin);
+    const { data: full, error: gErr } = await fetchJobEnriched(
+      supabase,
+      job_id,
+    );
+    if (gErr || !full) {
+      return safeJsonError(gErr?.message ?? "Failed to load job", 400, origin);
+    }
     return safeJsonOk({ job: full }, origin);
   }
 
@@ -1045,11 +1346,14 @@ async function handleLinkFulfillmentRun(
     return safeJsonError("Fulfillment run not found", 404, origin);
   }
   if (run.workspace_id !== ws) {
-    return safeJsonError("Fulfillment run is not in the same workspace as this job", 400, origin);
+    return safeJsonError(
+      "Fulfillment run is not in the same workspace as this job",
+      400,
+      origin,
+    );
   }
 
-  const acknowledge_shared =
-    body.acknowledge_shared_fulfillment_run === true ||
+  const acknowledge_shared = body.acknowledge_shared_fulfillment_run === true ||
     body.acknowledge_shared_fulfillment_run === "true";
 
   const { data: otherJobs, error: ojErr } = await supabase
@@ -1096,6 +1400,8 @@ async function handleLinkFulfillmentRun(
   });
 
   const { data: full, error: gErr } = await fetchJobEnriched(supabase, job_id);
-  if (gErr || !full) return safeJsonError(gErr?.message ?? "Failed to load job", 400, origin);
+  if (gErr || !full) {
+    return safeJsonError(gErr?.message ?? "Failed to load job", 400, origin);
+  }
   return safeJsonOk({ job: full }, origin);
 }

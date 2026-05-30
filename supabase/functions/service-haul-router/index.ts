@@ -4,7 +4,10 @@
  * Auth: user JWT only
  */
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { requireServiceUser } from "../_shared/service-auth.ts";
+import {
+  requireServiceUser,
+  SERVICE_OPERATIONS_ROLES,
+} from "../_shared/service-auth.ts";
 import {
   optionsResponse,
   safeJsonError,
@@ -24,7 +27,11 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    const auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+      SERVICE_OPERATIONS_ROLES,
+    );
     if (!auth.ok) return auth.response;
 
     const supabase = auth.supabase;
@@ -46,7 +53,11 @@ Deno.serve(async (req) => {
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);
     }
-    return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
+    return safeJsonError(
+      "Internal server error",
+      500,
+      req.headers.get("Origin"),
+    );
   }
 });
 
@@ -68,7 +79,9 @@ async function handleCreateHaul(
     .single();
 
   if (!job) return safeJsonError("Job not found", 404, origin);
-  if (!job.haul_required) return safeJsonError("Job does not require haul", 400, origin);
+  if (!job.haul_required) {
+    return safeJsonError("Job does not require haul", 400, origin);
+  }
 
   const embedded = job.machine;
   const machineRow = Array.isArray(embedded) ? embedded[0] : embedded;
@@ -120,7 +133,9 @@ async function handleSyncStatus(
   body: HaulRequest,
   origin: string | null,
 ) {
-  if (!body.traffic_ticket_id) return safeJsonError("traffic_ticket_id required", 400, origin);
+  if (!body.traffic_ticket_id) {
+    return safeJsonError("traffic_ticket_id required", 400, origin);
+  }
 
   const { data: ticket } = await supabase
     .from("traffic_tickets")
@@ -149,7 +164,12 @@ async function handleSyncStatus(
     job = legacyJob ?? null;
   }
 
-  if (!job) return safeJsonOk({ synced: false, reason: "linked job not found" }, origin);
+  if (!job) {
+    return safeJsonOk(
+      { synced: false, reason: "linked job not found" },
+      origin,
+    );
+  }
 
   const jobId = job.id;
 
@@ -172,15 +192,24 @@ async function handleSyncStatus(
       metadata: { trigger: "haul_completed", traffic_ticket_id: ticket.id },
     });
 
-    const { data: fullJob } = await supabase.from("service_jobs").select("*").eq("id", jobId).single();
-    if (fullJob) await notifyAfterStageChange(supabase, fullJob as Record<string, unknown>, "scheduled");
+    const { data: fullJob } = await supabase.from("service_jobs").select("*")
+      .eq("id", jobId).single();
+    if (fullJob) {
+      await notifyAfterStageChange(
+        supabase,
+        fullJob as Record<string, unknown>,
+        "scheduled",
+      );
+    }
 
     return safeJsonOk({ synced: true, advanced_to: "scheduled" }, origin);
   }
 
-  if ((ticket.status === "scheduled" || ticket.status === "being_shipped") &&
+  if (
+    (ticket.status === "scheduled" || ticket.status === "being_shipped") &&
     job.current_stage !== "haul_scheduled" &&
-    job.current_stage === "parts_staged") {
+    job.current_stage === "parts_staged"
+  ) {
     const stageNow = new Date().toISOString();
     await supabase
       .from("service_jobs")
@@ -199,13 +228,22 @@ async function handleSyncStatus(
       metadata: { trigger: "haul_scheduled", traffic_ticket_id: ticket.id },
     });
 
-    const { data: fullJobHaul } = await supabase.from("service_jobs").select("*").eq("id", jobId).single();
+    const { data: fullJobHaul } = await supabase.from("service_jobs").select(
+      "*",
+    ).eq("id", jobId).single();
     if (fullJobHaul) {
-      await notifyAfterStageChange(supabase, fullJobHaul as Record<string, unknown>, "haul_scheduled");
+      await notifyAfterStageChange(
+        supabase,
+        fullJobHaul as Record<string, unknown>,
+        "haul_scheduled",
+      );
     }
 
     return safeJsonOk({ synced: true, advanced_to: "haul_scheduled" }, origin);
   }
 
-  return safeJsonOk({ synced: false, reason: "no state change needed" }, origin);
+  return safeJsonOk(
+    { synced: false, reason: "no state change needed" },
+    origin,
+  );
 }

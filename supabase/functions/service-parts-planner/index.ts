@@ -4,7 +4,10 @@
  *
  * Auth: user JWT only
  */
-import { requireServiceUser } from "../_shared/service-auth.ts";
+import {
+  requireServiceUser,
+  SERVICE_PARTS_ROLES,
+} from "../_shared/service-auth.ts";
 import {
   optionsResponse,
   safeJsonError,
@@ -68,7 +71,11 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    const auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+      SERVICE_PARTS_ROLES,
+    );
     if (!auth.ok) return auth.response;
 
     const supabase = auth.supabase;
@@ -106,7 +113,10 @@ Deno.serve(async (req) => {
     );
 
     if (!requirementsRaw || requirementsRaw.length === 0) {
-      return safeJsonOk({ message: "No parts requirements to plan", actions_created: 0 }, origin);
+      return safeJsonOk({
+        message: "No parts requirements to plan",
+        actions_created: 0,
+      }, origin);
     }
 
     if (requirements.length === 0) {
@@ -129,7 +139,8 @@ Deno.serve(async (req) => {
 
     const vendorIds = [
       ...new Set(
-        requirements.map((r: { vendor_id?: string | null }) => r.vendor_id).filter(Boolean),
+        requirements.map((r: { vendor_id?: string | null }) => r.vendor_id)
+          .filter(Boolean),
       ),
     ] as string[];
     const { data: vendorRows } = vendorIds.length > 0
@@ -139,7 +150,9 @@ Deno.serve(async (req) => {
         .in("id", vendorIds)
       : { data: [] as { id: string; avg_lead_time_hours: number | null }[] };
     const vendorLead = new Map(
-      (vendorRows ?? []).map((v) => [v.id, Number(v.avg_lead_time_hours ?? 48)]),
+      (vendorRows ?? []).map((
+        v,
+      ) => [v.id, Number(v.avg_lead_time_hours ?? 48)]),
     );
 
     const isMachineDown = Array.isArray(job.status_flags) &&
@@ -190,7 +203,10 @@ Deno.serve(async (req) => {
       const f = String(e.from_branch ?? "").trim();
       const t = String(e.to_branch ?? "").trim();
       if (!f || !t) continue;
-      edgeMap.set(`${f}|${t}`, Number(e.lead_time_hours ?? defaultTransferLead));
+      edgeMap.set(
+        `${f}|${t}`,
+        Number(e.lead_time_hours ?? defaultTransferLead),
+      );
     }
 
     /** branch_id -> part -> qty */
@@ -224,7 +240,9 @@ Deno.serve(async (req) => {
       };
       const pn = String(req.part_number ?? "").trim();
       const needQty = Math.max(1, Number(req.quantity ?? 1));
-      const vendorLeadH = req.vendor_id ? (vendorLead.get(req.vendor_id) ?? 48) : 48;
+      const vendorLeadH = req.vendor_id
+        ? (vendorLead.get(req.vendor_id) ?? 48)
+        : 48;
 
       const baseDate = job.scheduled_start_at
         ? new Date(job.scheduled_start_at as string)
@@ -242,7 +260,9 @@ Deno.serve(async (req) => {
           nextLineStatus = "transferring";
         }
         const leadMs = actionType === "order" ? vendorLeadH * 3600_000 : 0;
-        const needBy = new Date(baseDate.getTime() - bufferHours * 3600_000 - leadMs);
+        const needBy = new Date(
+          baseDate.getTime() - bufferHours * 3600_000 - leadMs,
+        );
         const effectiveNeedBy = isMachineDown
           ? new Date(Date.now() + 8 * 3600_000)
           : needBy;
@@ -284,7 +304,9 @@ Deno.serve(async (req) => {
       // Stock-first + cross-branch transfer scoring
       if (!jobBranchId) {
         const leadMs = vendorLeadH * 3600_000;
-        const needBy = new Date(baseDate.getTime() - bufferHours * 3600_000 - leadMs);
+        const needBy = new Date(
+          baseDate.getTime() - bufferHours * 3600_000 - leadMs,
+        );
         const effectiveNeedBy = isMachineDown
           ? new Date(Date.now() + 8 * 3600_000)
           : needBy;
@@ -318,7 +340,12 @@ Deno.serve(async (req) => {
         if (otherBranch === jobBranchId) continue;
         const avail = pmap.get(pn) ?? 0;
         if (avail < needQty) continue;
-        const leadH = getEdgeLead(edgeMap, otherBranch, jobBranchId, defaultTransferLead);
+        const leadH = getEdgeLead(
+          edgeMap,
+          otherBranch,
+          jobBranchId,
+          defaultTransferLead,
+        );
         if (!bestRemote || leadH < bestRemote.leadH) {
           bestRemote = { branch: otherBranch, leadH };
         }
@@ -332,7 +359,9 @@ Deno.serve(async (req) => {
       if (!isMachineDown && localAvail >= needQty) {
         takeStock(stockByBranch, jobBranchId, pn, needQty);
         const leadMs = 0;
-        const needBy = new Date(baseDate.getTime() - bufferHours * 3600_000 - leadMs);
+        const needBy = new Date(
+          baseDate.getTime() - bufferHours * 3600_000 - leadMs,
+        );
         const effectiveNeedByPick = isMachineDown
           ? new Date(Date.now() + 8 * 3600_000)
           : needBy;
@@ -365,7 +394,9 @@ Deno.serve(async (req) => {
       if (transferWins && bestRemote) {
         takeStock(stockByBranch, bestRemote.branch, pn, needQty);
         const leadMs = bestRemote.leadH * 3600_000;
-        const needBy = new Date(baseDate.getTime() - bufferHours * 3600_000 - leadMs);
+        const needBy = new Date(
+          baseDate.getTime() - bufferHours * 3600_000 - leadMs,
+        );
         const effectiveNeedByTx = isMachineDown
           ? new Date(Date.now() + 8 * 3600_000)
           : needBy;
@@ -400,7 +431,9 @@ Deno.serve(async (req) => {
 
       {
         const leadMs = vendorLeadH * 3600_000;
-        const needBy = new Date(baseDate.getTime() - bufferHours * 3600_000 - leadMs);
+        const needBy = new Date(
+          baseDate.getTime() - bufferHours * 3600_000 - leadMs,
+        );
         const effectiveNeedByOrd = isMachineDown
           ? new Date(Date.now() + 8 * 3600_000)
           : needBy;
@@ -468,8 +501,11 @@ Deno.serve(async (req) => {
     }
 
     const actionsToInsert: Record<string, unknown>[] = [];
-    const requirementUpdates: { id: string; status: string; need_by_date: string | null }[] =
-      [];
+    const requirementUpdates: {
+      id: string;
+      status: string;
+      need_by_date: string | null;
+    }[] = [];
 
     for (const row of planned) {
       const meta = { ...row.meta };
@@ -520,7 +556,9 @@ Deno.serve(async (req) => {
             actions_created: actionsToInsert.length,
             is_machine_down: isMachineDown,
             traffic_ticket_id: trafficTicketId,
-            transfer_count: planned.filter((p) => p.actionType === "transfer").length,
+            transfer_count: planned.filter((p) =>
+              p.actionType === "transfer"
+            ).length,
           },
         });
       }
@@ -552,10 +590,16 @@ Deno.serve(async (req) => {
         requirements_eligible: requirements.length,
       },
       metadata: {
-        planner_mode: plannerHeuristicLegacy ? "legacy_line_index" : "stock_first",
+        planner_mode: plannerHeuristicLegacy
+          ? "legacy_line_index"
+          : "stock_first",
         planner_rules: plannerRules,
         transfer_planned: hasTransfer,
-        env: { PLANNER_HEURISTIC_MODE: plannerHeuristicLegacy ? "legacy" : "unset_or_off" },
+        env: {
+          PLANNER_HEURISTIC_MODE: plannerHeuristicLegacy
+            ? "legacy"
+            : "unset_or_off",
+        },
       },
     }, origin);
   } catch (err) {
@@ -564,6 +608,10 @@ Deno.serve(async (req) => {
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);
     }
-    return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
+    return safeJsonError(
+      "Internal server error",
+      500,
+      req.headers.get("Origin"),
+    );
   }
 });

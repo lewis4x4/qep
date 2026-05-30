@@ -3,13 +3,19 @@
  *
  * Auth: user JWT only
  */
-import { requireServiceUser } from "../_shared/service-auth.ts";
+import {
+  requireServiceUser,
+  SERVICE_TECHNICIAN_ROLES,
+} from "../_shared/service-auth.ts";
 import {
   optionsResponse,
   safeJsonError,
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
-import { embedText, formatVectorLiteral } from "../_shared/openai-embeddings.ts";
+import {
+  embedText,
+  formatVectorLiteral,
+} from "../_shared/openai-embeddings.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 interface FeedbackRequest {
@@ -24,7 +30,9 @@ interface FeedbackRequest {
   actual_hours?: number;
 }
 
-async function buildKnowledgeEmbedding(content: string): Promise<string | null> {
+async function buildKnowledgeEmbedding(
+  content: string,
+): Promise<string | null> {
   try {
     return formatVectorLiteral(await embedText(content));
   } catch (error) {
@@ -38,7 +46,11 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    const auth = await requireServiceUser(
+      req.headers.get("Authorization"),
+      origin,
+      SERVICE_TECHNICIAN_ROLES,
+    );
     if (!auth.ok) return auth.response;
 
     const supabase = auth.supabase;
@@ -50,7 +62,9 @@ Deno.serve(async (req) => {
     // Fetch job context
     const { data: job } = await supabase
       .from("service_jobs")
-      .select("id, workspace_id, machine_id, selected_job_code_id, technician_id, current_stage")
+      .select(
+        "id, workspace_id, machine_id, selected_job_code_id, technician_id, current_stage",
+      )
       .eq("id", body.job_id)
       .single();
 
@@ -116,7 +130,8 @@ Deno.serve(async (req) => {
         .eq("id", job.selected_job_code_id)
         .single();
 
-      const estimatedHours = jc?.shop_average_hours ?? jc?.manufacturer_estimated_hours;
+      const estimatedHours = jc?.shop_average_hours ??
+        jc?.manufacturer_estimated_hours;
 
       // Fetch parts data for the observation
       const { data: partsQuoted } = await supabase
@@ -161,6 +176,10 @@ Deno.serve(async (req) => {
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);
     }
-    return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
+    return safeJsonError(
+      "Internal server error",
+      500,
+      req.headers.get("Origin"),
+    );
   }
 });
