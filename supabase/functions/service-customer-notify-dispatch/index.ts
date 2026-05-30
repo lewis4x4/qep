@@ -59,12 +59,19 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      const title = typeof meta.title === "string" && meta.title.trim()
+        ? meta.title.trim()
+        : `QEP Service — ${row.notification_type}`;
+      const messageBody = typeof meta.body === "string" && meta.body.trim()
+        ? meta.body.trim()
+        : `Service update for job ${row.job_id}: ${row.notification_type}`;
+
       if (row.channel === "sms") {
         if (twilioSid && twilioToken && twilioFrom && row.recipient) {
           const body = new URLSearchParams({
             To: row.recipient,
             From: twilioFrom,
-            Body: `QEP Service: ${row.notification_type} (job ${row.job_id})`,
+            Body: `QEP Service: ${messageBody}`,
           });
           const auth = btoa(`${twilioSid}:${twilioToken}`);
           const res = await fetch(
@@ -93,9 +100,8 @@ Deno.serve(async (req) => {
             body: JSON.stringify({
               from: resendFrom,
               to: [row.recipient],
-              subject: `QEP Service — ${row.notification_type}`,
-              text:
-                `Service update for job ${row.job_id}: ${row.notification_type}`,
+              subject: title,
+              text: messageBody,
             }),
           });
           ok = res.ok;
@@ -105,7 +111,7 @@ Deno.serve(async (req) => {
       }
 
       if (ok) {
-        await supabase
+        const { error: markDeliveredError } = await supabase
           .from("service_customer_notifications")
           .update({
             metadata: {
@@ -116,6 +122,7 @@ Deno.serve(async (req) => {
             },
           })
           .eq("id", row.id);
+        if (markDeliveredError) throw markDeliveredError;
         if (row.channel === "sms") sms_sent++;
         if (row.channel === "email") email_sent++;
       }

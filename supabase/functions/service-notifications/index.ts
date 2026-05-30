@@ -27,11 +27,15 @@ interface NotifyRequest {
 
 const NOTIFICATION_TITLES: Record<string, string> = {
   quote_ready: "Service Quote Ready",
+  awaiting_approval: "Estimate Awaiting Approval",
   quote_approved: "Quote Approved",
   parts_delayed: "Parts Delayed",
+  on_hold_parts: "Service On Hold For Parts",
   job_started: "Service Work Started",
+  ready_for_pickup: "Ready For Pickup",
   job_completed: "Service Work Completed",
   invoice_ready: "Invoice Ready",
+  promised_date_changed: "Promised Date Changed",
   machine_down_update: "Machine Down Update",
   parts_ready: "All Parts Staged",
   schedule_confirmed: "Service Scheduled",

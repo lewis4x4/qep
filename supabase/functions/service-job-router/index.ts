@@ -14,7 +14,10 @@ import {
   safeJsonErrorWithFields,
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
-import { notifyAfterStageChange } from "../_shared/service-lifecycle-notify.ts";
+import {
+  notifyAfterStageChange,
+  notifyPromisedDateChanged,
+} from "../_shared/service-lifecycle-notify.ts";
 import { generateInvoiceForServiceJob } from "../_shared/service-invoice.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import {
@@ -471,6 +474,16 @@ function optionalBoolean(value: unknown): boolean | null {
   return null;
 }
 
+function normalizedIsoDate(value: unknown): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  const date = new Date(String(value));
+  return Number.isFinite(date.getTime()) ? date.toISOString() : String(value);
+}
+
+function promisedAtChanged(previous: unknown, next: unknown): boolean {
+  return normalizedIsoDate(previous) !== normalizedIsoDate(next);
+}
+
 function copyOptionalTextFields(
   body: RouterPayload,
   fields: Record<string, unknown>,
@@ -886,6 +899,30 @@ async function handleUpdate(
     });
   }
 
+  if (
+    Object.prototype.hasOwnProperty.call(fields, "promised_at") &&
+    before &&
+    fields.promised_at != null &&
+    promisedAtChanged(before.promised_at, fields.promised_at)
+  ) {
+    await supabase.from("service_job_events").insert({
+      workspace_id: job.workspace_id,
+      job_id: job.id,
+      event_type: "promised_date_changed",
+      actor_id: actorId,
+      metadata: {
+        previous_promised_at: before.promised_at ?? null,
+        new_promised_at: job.promised_at ?? fields.promised_at,
+      },
+    });
+    await notifyPromisedDateChanged(
+      supabase,
+      job as Record<string, unknown>,
+      before.promised_at,
+      job.promised_at ?? fields.promised_at,
+    );
+  }
+
   return safeJsonOk({ job }, origin);
 }
 
@@ -1042,6 +1079,10 @@ async function handleTransition(
     supabase,
     updated as Record<string, unknown>,
     to_stage,
+    {
+      blockerType: normalizedBlockerType,
+      blockerDescription: blocker_description ?? null,
+    },
   );
 
   if (to_stage === "invoice_ready") {
