@@ -27,6 +27,13 @@ import {
   normalizeServiceHoldState,
   SERVICE_HOLD_STATES,
 } from "../_shared/service-hold-integrity.ts";
+import {
+  calculateQuotedTimeOverrun,
+  H5_LABOR_STORY_FIELDS,
+  normalizeH5PhotoCategory,
+  normalizeH5PhotoPhase,
+  validateH5LaborStory,
+} from "../_shared/service-h5-execution.ts";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -121,9 +128,18 @@ const ALLOWED_UPDATE_FIELDS = new Set([
   "scheduled_end_at",
   "invoice_total",
   "portal_request_id",
+  "lockout_tagout_required",
+  "lockout_tagout_completed",
+  "lockout_tagout_notes",
 ]);
 
 const READ_ONLY_JOB_ACTIONS = new Set(["get", "list"]);
+const TECHNICIAN_EXECUTION_ACTIONS = new Set([
+  "submit_segment_diagnosis",
+  "sign_off_segment_repair",
+  "acknowledge_segment_overrun",
+  "record_segment_photo",
+]);
 const SERVICE_JOB_MUTATION_ROLES = new Set([
   "rep",
   "admin",
@@ -135,7 +151,11 @@ const SERVICE_JOB_MUTATION_ROLES = new Set([
 
 function canRunServiceJobAction(role: string, action: string): boolean {
   if (SERVICE_JOB_MUTATION_ROLES.has(role)) return true;
-  if (["technician", "parts_counter", "finance_admin"].includes(role)) {
+  if (role === "technician") {
+    return READ_ONLY_JOB_ACTIONS.has(action) ||
+      TECHNICIAN_EXECUTION_ACTIONS.has(action);
+  }
+  if (["parts_counter", "finance_admin"].includes(role)) {
     return READ_ONLY_JOB_ACTIONS.has(action);
   }
   return false;
@@ -168,6 +188,45 @@ const SERVICE_JOB_ENRICHED_SELECT = `
         description,
         created_at,
         portal_customer:portal_customers(first_name, last_name, email)
+      ),
+      segments:service_job_segments(
+        id,
+        segment_number,
+        description,
+        status,
+        technician_id,
+        estimated_hours,
+        quoted_labor_hours,
+        hours_actual,
+        diagnostic_signoff_status,
+        diagnostic_submitted_at,
+        diagnostic_approved_at,
+        repair_signoff_status,
+        repair_signed_off_at,
+        labor_story,
+        labor_story_complaint_verification,
+        labor_story_diagnostic_steps,
+        labor_story_root_cause,
+        labor_story_parts_used,
+        labor_story_work_performed,
+        overrun_status,
+        overrun_flagged_at,
+        overrun_acknowledged_at,
+        lockout_tagout_required,
+        lockout_tagout_completed,
+        warranty_parts_turn_in_required,
+        warranty_parts_turn_in_completed,
+        warranty_parts_label,
+        photos:service_job_segment_photos(
+          id,
+          phase,
+          category,
+          storage_bucket,
+          storage_path,
+          caption,
+          uploaded_by,
+          uploaded_at
+        )
       )
     `;
 
@@ -289,6 +348,18 @@ Deno.serve(async (req) => {
         return await handleSearchPortalOrders(supabase, body, origin);
       case "link_fulfillment_run":
         return await handleLinkFulfillmentRun(supabase, body, actorId, origin);
+      case "submit_segment_diagnosis":
+        return await handleSubmitSegmentDiagnosis(supabase, body, actorId, origin);
+      case "review_segment_diagnosis":
+        return await handleReviewSegmentDiagnosis(supabase, body, actorId, origin);
+      case "sign_off_segment_repair":
+        return await handleSignOffSegmentRepair(supabase, body, actorId, origin);
+      case "acknowledge_segment_overrun":
+        return await handleAcknowledgeSegmentOverrun(supabase, body, actorId, origin);
+      case "record_segment_photo":
+        return await handleRecordSegmentPhoto(supabase, body, actorId, origin);
+      case "review_documentation":
+        return await handleReviewDocumentation(supabase, body, actorId, origin);
       default:
         return safeJsonError(`Unknown action: ${action}`, 400, origin);
     }
@@ -305,6 +376,176 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+type H5GateRow = {
+  ok: boolean;
+  code: string;
+  reason: string;
+  missing: unknown;
+};
+
+function isNonEmptyText(value: unknown, minLength = 1): boolean {
+  return typeof value === "string" && value.trim().length >= minLength;
+}
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+function optionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function optionalBoolean(value: unknown): boolean | null {
+  if (value === true || value === false) return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return null;
+}
+
+function copyOptionalTextFields(
+  body: RouterPayload,
+  fields: Record<string, unknown>,
+  names: readonly string[],
+) {
+  for (const name of names) {
+    if (Object.prototype.hasOwnProperty.call(body, name)) {
+      fields[name] = optionalString(body[name]);
+    }
+  }
+}
+
+function validateOptionalNumberFields(
+  body: RouterPayload,
+  names: readonly string[],
+): string[] {
+  return names.filter((name) => {
+    if (!Object.prototype.hasOwnProperty.call(body, name)) return false;
+    const value = body[name];
+    return value !== null && value !== undefined && value !== "" &&
+      optionalNumber(value) === null;
+  });
+}
+
+function copyOptionalNumberFields(
+  body: RouterPayload,
+  fields: Record<string, unknown>,
+  names: readonly string[],
+) {
+  for (const name of names) {
+    if (Object.prototype.hasOwnProperty.call(body, name)) {
+      fields[name] = optionalNumber(body[name]);
+    }
+  }
+}
+
+function copyOptionalBooleanFields(
+  body: RouterPayload,
+  fields: Record<string, unknown>,
+  names: readonly string[],
+) {
+  for (const name of names) {
+    const value = optionalBoolean(body[name]);
+    if (value !== null) fields[name] = value;
+  }
+}
+
+function segmentOverrunUpdateFields(
+  segment: Record<string, unknown>,
+  fields: Record<string, unknown>,
+  nowIso: string,
+): { fields: Record<string, unknown>; overrun: ReturnType<typeof calculateQuotedTimeOverrun> } {
+  const overrun = calculateQuotedTimeOverrun({
+    quotedLaborHours: fields.quoted_labor_hours ?? segment.quoted_labor_hours,
+    estimatedHours: fields.estimated_hours ?? segment.estimated_hours,
+    actualHours: fields.hours_actual ?? segment.hours_actual,
+    thresholdPct: fields.overrun_threshold_pct ?? segment.overrun_threshold_pct,
+    acknowledgedAt: fields.overrun_acknowledged_at ??
+      segment.overrun_acknowledged_at,
+  });
+
+  fields.overrun_status = overrun.status;
+  if (overrun.status === "overrun_unacknowledged" &&
+    !segment.overrun_flagged_at) {
+    fields.overrun_flagged_at = nowIso;
+  }
+
+  return { fields, overrun };
+}
+
+async function fetchSegment(
+  supabase: SupabaseClient,
+  segmentId: string,
+) {
+  return await supabase
+    .from("service_job_segments")
+    .select("*")
+    .eq("id", segmentId)
+    .single();
+}
+
+async function fetchJobForH5(
+  supabase: SupabaseClient,
+  jobId: string,
+) {
+  return await supabase
+    .from("service_jobs")
+    .select("id, workspace_id, current_stage, closed_at, h5_documentation_required, documentation_review_status")
+    .eq("id", jobId)
+    .single();
+}
+
+async function insertH5Event(
+  supabase: SupabaseClient,
+  params: {
+    workspaceId: string;
+    jobId: string;
+    actorId: string;
+    eventType: string;
+    metadata?: Record<string, unknown>;
+    oldStage?: string | null;
+    newStage?: string | null;
+  },
+) {
+  await supabase.from("service_job_events").insert({
+    workspace_id: params.workspaceId,
+    job_id: params.jobId,
+    event_type: params.eventType,
+    actor_id: params.actorId,
+    old_stage: params.oldStage ?? null,
+    new_stage: params.newStage ?? null,
+    metadata: params.metadata ?? {},
+  });
+}
+
+async function runH5DocumentationGate(
+  supabase: SupabaseClient,
+  jobId: string,
+  requireSaReview: boolean,
+): Promise<{ gate: H5GateRow | null; error: unknown }> {
+  const { data, error } = await supabase.rpc(
+    "service_job_h5_documentation_gate",
+    { p_job_id: jobId, p_require_sa_review: requireSaReview },
+  );
+  if (error) return { gate: null, error };
+  const rows = Array.isArray(data) ? data as H5GateRow[] : [];
+  return { gate: rows[0] ?? null, error: null };
+}
+
+function gateErrorPayload(gate: H5GateRow | null) {
+  return {
+    documentation_gate: {
+      ok: gate?.ok ?? false,
+      code: gate?.code ?? "h5_documentation_gate_failed",
+      reason: gate?.reason ?? "H5 documentation gate failed.",
+      missing: gate?.missing ?? [],
+    },
+  };
+}
 
 async function handleCreate(
   supabase: SupabaseClient,
@@ -488,6 +729,11 @@ async function handleUpdate(
     }
   }
 
+  if (fields.lockout_tagout_completed === true) {
+    fields.lockout_tagout_completed_by = actorId;
+    fields.lockout_tagout_completed_at = new Date().toISOString();
+  }
+
   if (Object.keys(fields).length === 0) {
     return safeJsonError("No valid fields to update", 400, origin);
   }
@@ -639,6 +885,25 @@ async function handleTransition(
       return safeJsonErrorWithFields(gate.reason, 422, origin, {
         estimate_authorization: estimateAuthorizationFields(gate),
       });
+    }
+  }
+
+  if (["invoice_ready", "invoiced", "paid_closed"].includes(to_stage)) {
+    const { gate, error: gateErr } = await runH5DocumentationGate(
+      supabase,
+      id,
+      true,
+    );
+    if (gateErr) {
+      return safeJsonError("H5 documentation gate failed", 400, origin);
+    }
+    if (!gate?.ok) {
+      return safeJsonErrorWithFields(
+        gate?.reason ?? "H5 documentation is incomplete.",
+        422,
+        origin,
+        gateErrorPayload(gate),
+      );
     }
   }
 
@@ -1226,6 +1491,496 @@ async function handleSearchPortalOrders(
   }));
 
   return safeJsonOk({ orders: mapped }, origin);
+}
+
+async function handleSubmitSegmentDiagnosis(
+  supabase: SupabaseClient,
+  body: RouterPayload,
+  actorId: string,
+  origin: string | null,
+) {
+  const segment_id = body.segment_id as string | undefined;
+  if (!segment_id) return safeJsonError("segment_id required", 400, origin);
+  if (!isUuidString(segment_id)) {
+    return safeJsonError("segment_id must be a valid UUID", 400, origin);
+  }
+
+  const { data: segment, error: sErr } = await fetchSegment(supabase, segment_id);
+  if (sErr || !segment) return safeJsonError("Segment not found", 404, origin);
+
+  const nowIso = new Date().toISOString();
+  const fields: Record<string, unknown> = {
+    diagnostic_signoff_status: "submitted",
+    diagnostic_submitted_by: actorId,
+    diagnostic_submitted_at: nowIso,
+  };
+  copyOptionalTextFields(body, fields, [
+    "complaint",
+    "cause",
+    "correction",
+    "labor_story_complaint_verification",
+    "labor_story_diagnostic_steps",
+    "labor_story_root_cause",
+  ]);
+
+  const merged = { ...(segment as Record<string, unknown>), ...fields };
+  const missingDiagnostic = [
+    "labor_story_complaint_verification",
+    "labor_story_diagnostic_steps",
+    "labor_story_root_cause",
+  ].filter((field) => !isNonEmptyText(merged[field], 10));
+  if (segment.h5_documentation_required !== false && missingDiagnostic.length > 0) {
+    return safeJsonErrorWithFields(
+      "Diagnostic sign-off needs complaint verification, diagnostic steps, and root cause.",
+      422,
+      origin,
+      { missing: missingDiagnostic },
+    );
+  }
+
+  const { data: updated, error } = await supabase
+    .from("service_job_segments")
+    .update(fields)
+    .eq("id", segment_id)
+    .select()
+    .single();
+  if (error) return safeJsonError(error.message, 400, origin);
+
+  await insertH5Event(supabase, {
+    workspaceId: updated.workspace_id as string,
+    jobId: updated.service_job_id as string,
+    actorId,
+    eventType: "segment_diagnosis_submitted",
+    metadata: { segment_id, missing_resolved: missingDiagnostic.length === 0 },
+  });
+
+  return safeJsonOk({ segment: updated }, origin);
+}
+
+async function handleReviewSegmentDiagnosis(
+  supabase: SupabaseClient,
+  body: RouterPayload,
+  actorId: string,
+  origin: string | null,
+) {
+  const segment_id = body.segment_id as string | undefined;
+  const decision = optionalString(body.decision);
+  if (!segment_id || !decision) {
+    return safeJsonError("segment_id and decision required", 400, origin);
+  }
+  if (!isUuidString(segment_id)) {
+    return safeJsonError("segment_id must be a valid UUID", 400, origin);
+  }
+  if (!["approve", "return"].includes(decision)) {
+    return safeJsonError("decision must be approve or return", 400, origin);
+  }
+
+  const { data: segment, error: sErr } = await fetchSegment(supabase, segment_id);
+  if (sErr || !segment) return safeJsonError("Segment not found", 404, origin);
+
+  if (decision === "approve" && segment.diagnostic_signoff_status !== "submitted") {
+    return safeJsonErrorWithFields(
+      "Diagnostic approval requires a submitted diagnosis.",
+      422,
+      origin,
+      { diagnostic_signoff_status: segment.diagnostic_signoff_status },
+    );
+  }
+
+  if (decision === "approve") {
+    const missingDiagnostic = [
+      "labor_story_complaint_verification",
+      "labor_story_diagnostic_steps",
+      "labor_story_root_cause",
+    ].filter((field) => !isNonEmptyText(segment[field], 10));
+    if (missingDiagnostic.length > 0) {
+      return safeJsonErrorWithFields(
+        "Diagnostic approval needs complaint verification, diagnostic steps, and root cause.",
+        422,
+        origin,
+        { missing: missingDiagnostic },
+      );
+    }
+  }
+
+  const nowIso = new Date().toISOString();
+  const notes = optionalString(body.notes);
+  const fields: Record<string, unknown> = {
+    diagnostic_review_notes: notes,
+  };
+  if (decision === "approve") {
+    fields.diagnostic_signoff_status = "approved";
+    fields.diagnostic_approved_by = actorId;
+    fields.diagnostic_approved_at = nowIso;
+  } else {
+    fields.diagnostic_signoff_status = "returned";
+    fields.diagnostic_returned_by = actorId;
+    fields.diagnostic_returned_at = nowIso;
+  }
+
+  const { data: updated, error } = await supabase
+    .from("service_job_segments")
+    .update(fields)
+    .eq("id", segment_id)
+    .select()
+    .single();
+  if (error) return safeJsonError(error.message, 400, origin);
+
+  await insertH5Event(supabase, {
+    workspaceId: updated.workspace_id as string,
+    jobId: updated.service_job_id as string,
+    actorId,
+    eventType: decision === "approve"
+      ? "segment_diagnosis_approved"
+      : "segment_diagnosis_returned",
+    metadata: { segment_id, notes },
+  });
+
+  return safeJsonOk({ segment: updated }, origin);
+}
+
+async function handleSignOffSegmentRepair(
+  supabase: SupabaseClient,
+  body: RouterPayload,
+  actorId: string,
+  origin: string | null,
+) {
+  const segment_id = body.segment_id as string | undefined;
+  if (!segment_id) return safeJsonError("segment_id required", 400, origin);
+  if (!isUuidString(segment_id)) {
+    return safeJsonError("segment_id must be a valid UUID", 400, origin);
+  }
+
+  const { data: segment, error: sErr } = await fetchSegment(supabase, segment_id);
+  if (sErr || !segment) return safeJsonError("Segment not found", 404, origin);
+
+  if (segment.h5_documentation_required !== false &&
+    segment.diagnostic_signoff_status !== "approved") {
+    return safeJsonErrorWithFields(
+      "Repair sign-off is blocked until the diagnostic sign-off is approved.",
+      422,
+      origin,
+      { diagnostic_signoff_status: segment.diagnostic_signoff_status },
+    );
+  }
+
+  const nowIso = new Date().toISOString();
+  const fields: Record<string, unknown> = {
+    repair_signoff_status: "completed",
+    repair_signed_off_by: actorId,
+    repair_signed_off_at: nowIso,
+  };
+
+  copyOptionalTextFields(body, fields, H5_LABOR_STORY_FIELDS);
+  copyOptionalTextFields(body, fields, [
+    "lockout_tagout_notes",
+    "warranty_parts_label",
+    "warranty_parts_turn_in_notes",
+  ]);
+  const numericFields = [
+    "hours_actual",
+    "quoted_labor_hours",
+    "estimated_hours",
+    "overrun_threshold_pct",
+  ];
+  const invalidNumeric = validateOptionalNumberFields(body, numericFields);
+  if (invalidNumeric.length > 0) {
+    return safeJsonErrorWithFields(
+      "H5 numeric fields must be finite numbers.",
+      422,
+      origin,
+      { invalid: invalidNumeric },
+    );
+  }
+  copyOptionalNumberFields(body, fields, numericFields);
+  copyOptionalBooleanFields(body, fields, [
+    "lockout_tagout_required",
+    "lockout_tagout_completed",
+    "warranty_parts_turn_in_required",
+    "warranty_parts_turn_in_completed",
+  ]);
+
+  if (fields.lockout_tagout_completed === true) {
+    fields.lockout_tagout_completed_by = actorId;
+    fields.lockout_tagout_completed_at = nowIso;
+  }
+  if (fields.warranty_parts_turn_in_completed === true) {
+    fields.warranty_parts_turn_in_completed_by = actorId;
+    fields.warranty_parts_turn_in_completed_at = nowIso;
+  }
+
+  const merged = { ...(segment as Record<string, unknown>), ...fields };
+  const story = validateH5LaborStory(merged);
+  if (segment.h5_documentation_required !== false && !story.ok) {
+    return safeJsonErrorWithFields(
+      "Labor story does not meet the H5 quality standard.",
+      422,
+      origin,
+      { missing: story.missing, field_lengths: story.fieldLengths },
+    );
+  }
+
+  const { overrun } = segmentOverrunUpdateFields(
+    segment as Record<string, unknown>,
+    fields,
+    nowIso,
+  );
+
+  const { data: updated, error } = await supabase
+    .from("service_job_segments")
+    .update(fields)
+    .eq("id", segment_id)
+    .select()
+    .single();
+  if (error) return safeJsonError(error.message, 400, origin);
+
+  await insertH5Event(supabase, {
+    workspaceId: updated.workspace_id as string,
+    jobId: updated.service_job_id as string,
+    actorId,
+    eventType: "segment_repair_signed_off",
+    metadata: { segment_id, overrun },
+  });
+  if (overrun.status === "overrun_unacknowledged") {
+    await insertH5Event(supabase, {
+      workspaceId: updated.workspace_id as string,
+      jobId: updated.service_job_id as string,
+      actorId,
+      eventType: "segment_quoted_time_overrun_alert",
+      metadata: { segment_id, overrun },
+    });
+  }
+
+  return safeJsonOk({ segment: updated, overrun }, origin);
+}
+
+async function handleAcknowledgeSegmentOverrun(
+  supabase: SupabaseClient,
+  body: RouterPayload,
+  actorId: string,
+  origin: string | null,
+) {
+  const segment_id = body.segment_id as string | undefined;
+  if (!segment_id) return safeJsonError("segment_id required", 400, origin);
+  if (!isUuidString(segment_id)) {
+    return safeJsonError("segment_id must be a valid UUID", 400, origin);
+  }
+
+  const { data: segment, error: sErr } = await fetchSegment(supabase, segment_id);
+  if (sErr || !segment) return safeJsonError("Segment not found", 404, origin);
+
+  const nowIso = new Date().toISOString();
+  const reason = optionalString(body.overrun_reason ?? body.reason);
+  const current = calculateQuotedTimeOverrun({
+    quotedLaborHours: segment.quoted_labor_hours,
+    estimatedHours: segment.estimated_hours,
+    actualHours: segment.hours_actual,
+    thresholdPct: segment.overrun_threshold_pct,
+    acknowledgedAt: nowIso,
+  });
+
+  if (current.status === "overrun_acknowledged" && !reason) {
+    return safeJsonError(
+      "overrun_reason required to acknowledge quoted-time overrun",
+      400,
+      origin,
+    );
+  }
+
+  const fields: Record<string, unknown> = {
+    overrun_status: current.status,
+    overrun_reason: reason,
+  };
+  if (current.status === "overrun_acknowledged") {
+    fields.overrun_acknowledged_by = actorId;
+    fields.overrun_acknowledged_at = nowIso;
+  }
+
+  const { data: updated, error } = await supabase
+    .from("service_job_segments")
+    .update(fields)
+    .eq("id", segment_id)
+    .select()
+    .single();
+  if (error) return safeJsonError(error.message, 400, origin);
+
+  await insertH5Event(supabase, {
+    workspaceId: updated.workspace_id as string,
+    jobId: updated.service_job_id as string,
+    actorId,
+    eventType: current.status === "overrun_acknowledged"
+      ? "segment_quoted_time_overrun_acknowledged"
+      : "segment_quoted_time_checked",
+    metadata: { segment_id, overrun: current, reason },
+  });
+
+  return safeJsonOk({ segment: updated, overrun: current }, origin);
+}
+
+async function handleRecordSegmentPhoto(
+  supabase: SupabaseClient,
+  body: RouterPayload,
+  actorId: string,
+  origin: string | null,
+) {
+  const segment_id = body.segment_id as string | undefined;
+  const storage_path = optionalString(body.storage_path);
+  const phase = normalizeH5PhotoPhase(body.phase);
+  if (!segment_id || !storage_path || !phase) {
+    return safeJsonError(
+      "segment_id, storage_path, and phase (before|during|after) required",
+      400,
+      origin,
+    );
+  }
+  if (!isUuidString(segment_id)) {
+    return safeJsonError("segment_id must be a valid UUID", 400, origin);
+  }
+
+  const { data: segment, error: sErr } = await fetchSegment(supabase, segment_id);
+  if (sErr || !segment) return safeJsonError("Segment not found", 404, origin);
+
+  const workspaceId = segment.workspace_id as string;
+  const expectedPrefix = `${workspaceId}/service-jobs/${segment.service_job_id}/segments/${segment_id}/`;
+  if (!storage_path.startsWith(expectedPrefix)) {
+    return safeJsonError(
+      "storage_path must use workspace/service-jobs/job/segments/segment prefix for this segment",
+      400,
+      origin,
+    );
+  }
+
+  const category = normalizeH5PhotoCategory(body.category);
+  const { data: photo, error } = await supabase
+    .from("service_job_segment_photos")
+    .insert({
+      workspace_id: workspaceId,
+      service_job_id: segment.service_job_id,
+      service_job_segment_id: segment_id,
+      phase,
+      category,
+      storage_bucket: "portal-service-photos",
+      storage_path,
+      caption: optionalString(body.caption),
+      content_type: optionalString(body.content_type),
+      uploaded_by: actorId,
+      metadata: typeof body.metadata === "object" && body.metadata !== null
+        ? body.metadata
+        : {},
+    })
+    .select()
+    .single();
+  if (error) return safeJsonError(error.message, 400, origin);
+
+  await insertH5Event(supabase, {
+    workspaceId,
+    jobId: segment.service_job_id as string,
+    actorId,
+    eventType: "segment_photo_recorded",
+    metadata: { segment_id, photo_id: photo.id, phase, category },
+  });
+
+  return safeJsonOk({ photo }, origin, 201);
+}
+
+async function handleReviewDocumentation(
+  supabase: SupabaseClient,
+  body: RouterPayload,
+  actorId: string,
+  origin: string | null,
+) {
+  const job_id = body.job_id as string | undefined;
+  const decision = optionalString(body.decision);
+  if (!job_id || !decision) {
+    return safeJsonError("job_id and decision required", 400, origin);
+  }
+  if (!isUuidString(job_id)) {
+    return safeJsonError("job_id must be a valid UUID", 400, origin);
+  }
+  if (!["approve", "return"].includes(decision)) {
+    return safeJsonError("decision must be approve or return", 400, origin);
+  }
+
+  const { data: job, error: jErr } = await fetchJobForH5(supabase, job_id);
+  if (jErr || !job) return safeJsonError("Job not found", 404, origin);
+
+  const nowIso = new Date().toISOString();
+  const notes = optionalString(body.notes);
+  if (decision === "approve") {
+    const { gate, error: gateErr } = await runH5DocumentationGate(
+      supabase,
+      job_id,
+      false,
+    );
+    if (gateErr) return safeJsonError("H5 documentation gate failed", 400, origin);
+    if (!gate?.ok) {
+      return safeJsonErrorWithFields(
+        gate?.reason ?? "H5 documentation is incomplete.",
+        422,
+        origin,
+        gateErrorPayload(gate),
+      );
+    }
+
+    const { data: updated, error } = await supabase
+      .from("service_jobs")
+      .update({
+        documentation_review_status: "approved",
+        documentation_reviewed_by: actorId,
+        documentation_reviewed_at: nowIso,
+        documentation_review_notes: notes,
+        documentation_return_reason: null,
+      })
+      .eq("id", job_id)
+      .select()
+      .single();
+    if (error) return safeJsonError(error.message, 400, origin);
+
+    await insertH5Event(supabase, {
+      workspaceId: updated.workspace_id as string,
+      jobId: job_id,
+      actorId,
+      eventType: "documentation_review_approved",
+      metadata: { notes },
+    });
+    return safeJsonOk({ job: updated, documentation_gate: gate }, origin);
+  }
+
+  const returnReason = optionalString(body.return_reason ?? body.reason) ?? notes;
+  const oldStage = job.current_stage as string;
+  const returnToTech = body.return_to_technician !== false &&
+    !["invoiced", "paid_closed"].includes(oldStage) && !job.closed_at;
+  const updates: Record<string, unknown> = {
+    documentation_review_status: "returned",
+    documentation_returned_by: actorId,
+    documentation_returned_at: nowIso,
+    documentation_return_reason: returnReason,
+    documentation_review_notes: notes,
+  };
+  if (returnToTech) {
+    updates.current_stage = "in_progress";
+    updates.current_stage_entered_at = nowIso;
+  }
+
+  const { data: updated, error } = await supabase
+    .from("service_jobs")
+    .update(updates)
+    .eq("id", job_id)
+    .select()
+    .single();
+  if (error) return safeJsonError(error.message, 400, origin);
+
+  await insertH5Event(supabase, {
+    workspaceId: updated.workspace_id as string,
+    jobId: job_id,
+    actorId,
+    eventType: "documentation_review_returned",
+    oldStage,
+    newStage: returnToTech ? "in_progress" : oldStage,
+    metadata: { notes, return_reason: returnReason, returned_to_technician: returnToTech },
+  });
+
+  return safeJsonOk({ job: updated }, origin);
 }
 
 async function handleLinkFulfillmentRun(
