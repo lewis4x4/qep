@@ -7002,8 +7002,16 @@ Deno.serve(async (req) => {
       if (equipment.length === 0) {
         return safeJsonError("At least one equipment line is required", 400, origin);
       }
-      if (!customerName && !customerCompany && !contactId && !companyId) {
-        return safeJsonError("Customer or prospect identity is required", 400, origin);
+      // Decision Q7 (do_not_allow): quotes must be tied to a real CRM
+      // contact or company. Prospect quotes — typed name only, no CRM
+      // linkage — are no longer accepted. Reps are routed to create the
+      // customer in QRM before they can save the quote.
+      if (!contactId && !companyId) {
+        return safeJsonError(
+          "Quotes require a linked CRM customer. Pick an existing contact or company, or create one in QRM first.",
+          400,
+          origin,
+        );
       }
 
       // Slice 09 CP2: accept optional originating_log_id so the AI Request
@@ -7113,7 +7121,12 @@ Deno.serve(async (req) => {
         return safeJsonError(existingQuoteErr.message, 500, origin);
       }
       const existingQuote = existingQuoteById?.id ? existingQuoteById : existingQuoteByDealId;
-      const prospectNorm = normalizeProspectConversionSourcePayload(prospectConversionSource);
+      // Decision Q7 (do_not_allow): prospect_conversion_source is no
+      // longer accepted from the client. We also scrub any leftover key
+      // from existing metadata so legacy quotes don't keep advertising a
+      // prospect lineage after they've been re-saved with a CRM link.
+      void normalizeProspectConversionSourcePayload;
+      void prospectConversionSource;
       const existingRowMeta = asPlainMetadataObject(existingQuote?.metadata);
       const mergedMetadata: Record<string, unknown> = {
         ...(existingRowMeta ?? {}),
@@ -7124,17 +7137,15 @@ Deno.serve(async (req) => {
       } else if (body.show_finance_comparison_on_customer_copy === false || body.showFinanceComparisonOnCustomerCopy === false) {
         mergedMetadata.show_finance_comparison_on_customer_copy = false;
       }
-      if ("prospect_conversion_source" in body && body.prospect_conversion_source === null) {
-        delete mergedMetadata.prospect_conversion_source;
-      }
-      if (prospectNorm !== null) {
-        mergedMetadata.prospect_conversion_source = prospectNorm;
-      }
+      delete mergedMetadata.prospect_conversion_source;
       const metadataPatch = Object.keys(mergedMetadata).length > 0 ? { metadata: mergedMetadata } : {};
-      const prospectQuoteCols: Record<string, unknown> = {};
-      if ("is_prospect_quote" in body) {
-        prospectQuoteCols.is_prospect_quote = body.is_prospect_quote === true || body.is_prospect_quote === "true";
-      }
+      // Decision Q7 (do_not_allow): is_prospect_quote can never be set
+      // true on save. Existing legacy rows get downgraded to false the
+      // next time they're touched so the dataset converges on the new
+      // policy. The column itself stays in schema for historical reads.
+      const prospectQuoteCols: Record<string, unknown> = {
+        is_prospect_quote: false,
+      };
       if ("customer_warmth" in body) {
         const rawW = body.customer_warmth;
         if (rawW === null || rawW === "") {

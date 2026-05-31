@@ -10,9 +10,33 @@ export async function expectWizardStep(page: Page, stepNumber: number): Promise<
   await expect(page.getByRole("heading", { level: 2, name: new RegExp(`Step ${stepNumber}:`, "i") })).toBeVisible();
 }
 
-export async function startProspectQuote(page: Page): Promise<void> {
-  await page.getByTestId("wizard-quote-for-prospect").first().click();
-  await expectWizardStep(page, 2);
+/**
+ * Decision Q7 (do_not_allow): the "Quote for prospect" CTA has been
+ * removed — quotes now require a linked CRM contact or company before
+ * the wizard can advance past step 1. Until the staging fixture seeds
+ * a known-good CRM customer for Playwright, this helper expects a
+ * specific contact/company id via PLAYWRIGHT_CRM_CUSTOMER_QUERY and
+ * picks the first row from the CustomerPicker dropdown.
+ */
+export function playwrightCrmCustomerQuery(): string | null {
+  const q = process.env.PLAYWRIGHT_CRM_CUSTOMER_QUERY?.trim();
+  return q && q.length > 0 ? q : null;
+}
+
+export async function pickFirstCrmCustomerAndStart(page: Page): Promise<void> {
+  const query = playwrightCrmCustomerQuery();
+  if (!query) {
+    throw new Error(
+      "PLAYWRIGHT_CRM_CUSTOMER_QUERY is not set. Set it to a contact or company name that exists in the staging CRM fixture so the wizard can satisfy the do_not_allow customer requirement.",
+    );
+  }
+  const search = page.getByRole("textbox", { name: /search customers/i });
+  await search.click();
+  await search.fill(query);
+  const firstResult = page.getByRole("option").first();
+  await firstResult.waitFor({ state: "visible", timeout: 30_000 });
+  await firstResult.click();
+  await expectWizardStep(page, 1);
 }
 
 export async function clickWizardProgressPill(page: Page, stepId: string): Promise<void> {
@@ -142,9 +166,9 @@ export async function walkFromEquipmentToReview(page: Page): Promise<void> {
   await expectWizardStep(page, 9);
 }
 
-export async function walkProspectQuoteToReview(page: Page): Promise<void> {
+export async function walkCrmCustomerQuoteToReview(page: Page): Promise<void> {
   await expectWizardStep(page, 1);
-  await startProspectQuote(page);
+  await pickFirstCrmCustomerAndStart(page);
   await selectFirstQuotingBranch(page);
   await advanceWizardNext(page, "Equipment");
   await selectFirstCatalogEquipment(page);

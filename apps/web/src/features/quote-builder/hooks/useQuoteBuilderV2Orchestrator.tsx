@@ -32,7 +32,6 @@ import { useQuoteBuilderAiIntake } from "../hooks/useQuoteBuilderAiIntake";
 import { useQuoteBuilderAvailability } from "../hooks/useQuoteBuilderAvailability";
 import { useQuoteBuilderCatalogAdds } from "../hooks/useQuoteBuilderCatalogAdds";
 import { useQuoteBuilderReadiness } from "../hooks/useQuoteBuilderReadiness";
-import { useQuoteBuilderProspectIntake } from "../hooks/useQuoteBuilderProspectIntake";
 import { QuoteBuilderV2PageView } from "../components/QuoteBuilderV2PageView";
 import { buildQuoteBuilderPageShellProps } from "../lib/build-quote-builder-page-shell-props";
 import { QuoteBuilderIntelligencePanelHost } from "../components/QuoteBuilderIntelligencePanelHost";
@@ -490,8 +489,6 @@ export function useQuoteBuilderV2Orchestrator() {
   const handleQuoteStatusChange = useCallback((status: QuoteWorkspaceDraft["quoteStatus"]) => {
     setDraft((current) => ({ ...current, quoteStatus: status }));
   }, [setDraft]);
-
-  const handleQuoteForProspect = useQuoteBuilderProspectIntake({ setDraft, setStep });
 
   const quoteStatus = draft.quoteStatus ?? "draft";
   // QEP rule: every quote requires owner approval (Ryan + Rylee).
@@ -1015,8 +1012,6 @@ export function useQuoteBuilderV2Orchestrator() {
         nextWizardStep,
         wizardNextDisabled,
         nextWizardLabel,
-        hasCustomer,
-        onQuoteForProspect: handleQuoteForProspect,
         wizardMaxStepIndex0,
         equipmentTotal,
         attachmentTotal,

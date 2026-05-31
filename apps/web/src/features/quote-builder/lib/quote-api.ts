@@ -2265,19 +2265,13 @@ export function buildQuoteSavePayload(
   },
 ): Record<string, unknown> {
   const pricingLines = draft.pricingLines ?? [];
-  const isProspectQuote = !draft.contactId && !draft.companyId && (
-    draft.customerWarmth === "new"
-    || /prospect/i.test(`${draft.customerName ?? ""} ${draft.customerCompany ?? ""}`)
-  );
-  const prospectConversionSource = isProspectQuote
-    ? {
-        original_customer_name: draft.customerName || null,
-        original_customer_company: draft.customerCompany || null,
-        original_customer_phone: draft.customerPhone || null,
-        original_customer_email: draft.customerEmail || null,
-        conversion_status: "pending_crm_link",
-      }
-    : null;
+  // Decision Q7 (do_not_allow): new quotes can no longer be saved as
+  // prospects — the server requires contact_id or company_id. The
+  // legacy column stays in the schema for historical reads, but every
+  // newly-built save payload reports is_prospect_quote=false and skips
+  // the prospect_conversion_source payload.
+  const isProspectQuote = false;
+  const prospectConversionSource = null;
   const financeScenarioSource = draft.savedFinanceScenarios?.length
     ? draft.savedFinanceScenarios
     : financeScenarios;

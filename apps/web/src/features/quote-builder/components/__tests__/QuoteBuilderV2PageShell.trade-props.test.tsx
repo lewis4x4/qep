@@ -90,8 +90,6 @@ function buildProps(): QuoteBuilderV2PageShellProps {
     nextWizardStep: null,
     wizardNextDisabled: false,
     nextWizardLabel: null,
-    hasCustomer: true,
-    onQuoteForProspect: () => undefined,
     wizardMaxStepIndex0: 0,
     wizardStepRouter: <div />,
     equipmentTotal: 0,

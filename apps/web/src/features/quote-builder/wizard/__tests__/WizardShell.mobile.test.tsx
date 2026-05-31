@@ -113,8 +113,6 @@ const SHELL_PROPS = {
   nextWizardStep: "promotions" as const,
   wizardNextDisabled: false,
   nextWizardLabel: "Promos",
-  hasCustomer: true,
-  onQuoteForProspect: () => {},
   wizardMaxStepIndex0: 4,
   children: <div data-testid="wizard-shell-children">child content</div>,
 };

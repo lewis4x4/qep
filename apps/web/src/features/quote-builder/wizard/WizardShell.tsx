@@ -38,8 +38,6 @@ export interface WizardShellProps {
   nextWizardStep: Step | null;
   wizardNextDisabled: boolean;
   nextWizardLabel: string | null;
-  hasCustomer: boolean;
-  onQuoteForProspect: () => void;
   wizardMaxStepIndex0: number;
   children: ReactNode;
 }
@@ -56,8 +54,6 @@ export function WizardShell({
   nextWizardStep,
   wizardNextDisabled,
   nextWizardLabel,
-  hasCustomer,
-  onQuoteForProspect,
   wizardMaxStepIndex0,
   children,
 }: WizardShellProps) {
@@ -146,11 +142,6 @@ export function WizardShell({
                 <ArrowLeft className="mr-1 h-4 w-4" /> Back
               </Button>
             )}
-            {step === "customer" && !hasCustomer && (
-              <Button variant="ghost" className="touch-manipulation" data-testid="wizard-quote-for-prospect" onClick={onQuoteForProspect}>
-                Quote for prospect
-              </Button>
-            )}
             {nextWizardStep && (
               <Button
                 className="hidden touch-manipulation md:inline-flex"
@@ -232,11 +223,6 @@ export function WizardShell({
             </Button>
           ) : null}
         </div>
-        {step === "customer" && !hasCustomer ? (
-          <Button type="button" variant="outline" className="w-full touch-manipulation" data-testid="wizard-quote-for-prospect" onClick={onQuoteForProspect}>
-            Quote for prospect
-          </Button>
-        ) : null}
       </div>
 
       {children}

@@ -5,17 +5,19 @@ import {
   ensureApprovalForCustomerFacing,
   expectWizardStep,
   generateDocumentPreview,
+  pickFirstCrmCustomerAndStart,
   playwrightAgedEquipmentId,
+  playwrightCrmCustomerQuery,
   playwrightTestCredentials,
   selectFirstQuotingBranch,
   signInWithPassword,
-  startProspectQuote,
   waitForQuoteAutosave,
   walkFromEquipmentToReview,
 } from "./fixtures";
 
 const credentials = playwrightTestCredentials();
 const agedEquipmentId = playwrightAgedEquipmentId();
+const crmCustomerQuery = playwrightCrmCustomerQuery();
 
 test.describe("quote wizard happy path", () => {
   test("unauthenticated visit is gated behind login", async ({ page }) => {
@@ -25,12 +27,15 @@ test.describe("quote wizard happy path", () => {
     await expect(page.locator("#login-button")).toBeVisible();
   });
 
-  test.describe("authenticated prospect flow", () => {
+  test.describe("authenticated CRM customer flow", () => {
     test.describe.configure({ timeout: 180_000 });
 
+    // Decision Q7 (do_not_allow): the wizard now requires a CRM-linked
+    // customer, so PLAYWRIGHT_CRM_CUSTOMER_QUERY is mandatory alongside
+    // the existing equipment + auth env vars.
     test.skip(
-      !credentials || !agedEquipmentId,
-      "Set PLAYWRIGHT_TEST_EMAIL, PLAYWRIGHT_TEST_PASSWORD, and PLAYWRIGHT_AGED_EQUIPMENT_ID for authenticated e2e",
+      !credentials || !agedEquipmentId || !crmCustomerQuery,
+      "Set PLAYWRIGHT_TEST_EMAIL, PLAYWRIGHT_TEST_PASSWORD, PLAYWRIGHT_AGED_EQUIPMENT_ID, and PLAYWRIGHT_CRM_CUSTOMER_QUERY for authenticated e2e",
     );
 
     test.beforeEach(async ({ page }) => {
@@ -39,11 +44,11 @@ test.describe("quote wizard happy path", () => {
       await expect(page.getByRole("heading", { name: "Quote Builder" })).toBeVisible();
     });
 
-    test("prospect quote flows through configure, pricing, review, PDF preview, and send preview", async ({
+    test("CRM-linked quote flows through configure, pricing, review, PDF preview, and send preview", async ({
       page,
     }) => {
       await expectWizardStep(page, 1);
-      await startProspectQuote(page);
+      await pickFirstCrmCustomerAndStart(page);
       await selectFirstQuotingBranch(page);
       await clickStepFooterNext(page, /^Equipment/i);
       await expectWizardStep(page, 2);
