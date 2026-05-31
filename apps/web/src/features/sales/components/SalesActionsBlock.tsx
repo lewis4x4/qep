@@ -94,7 +94,7 @@ export function SalesActionsBlock({
       <div
         data-testid="sales-primary-action"
         data-kind={primary.kind}
-        className="relative overflow-hidden rounded-3xl border border-qep-orange/60 p-5"
+        className="relative min-h-[226px] overflow-hidden rounded-3xl border border-qep-orange/60 p-5"
         style={{
           background:
             "linear-gradient(135deg, #E87722 0%, #C66318 55%, #1b0e04 100%)",

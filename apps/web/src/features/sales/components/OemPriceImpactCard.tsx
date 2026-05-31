@@ -10,6 +10,80 @@ export interface OemPriceImpactCardProps {
   onReview: () => void;
 }
 
+const OEM_PRICE_IMPACT_CARD_CLASS =
+  "min-h-[316px] rounded-3xl border border-qep-orange/35 bg-gradient-to-br from-qep-orange/[0.16] via-qep-orange/[0.08] to-white/[0.03] p-4 shadow-[0_14px_40px_rgba(232,119,34,0.12)]";
+
+export function OemPriceImpactCardPlaceholder({
+  animate = true,
+}: {
+  animate?: boolean;
+}) {
+  return (
+    <section
+      aria-hidden="true"
+      data-testid="oem-price-impact-card-placeholder"
+      className={`${OEM_PRICE_IMPACT_CARD_CLASS} ${animate ? "animate-pulse motion-reduce:animate-none" : ""}`}
+    >
+      <div className="flex items-start gap-3">
+        <div className="h-10 w-10 shrink-0 rounded-2xl bg-qep-orange/20" />
+        <div className="min-w-0 flex-1">
+          <div className="h-2.5 w-28 rounded bg-qep-orange/25" />
+          <div className="mt-2 h-5 w-3/4 rounded bg-white/[0.08]" />
+          <div className="mt-2 h-3 w-full rounded bg-white/[0.06]" />
+          <div className="mt-1.5 h-3 w-2/3 rounded bg-white/[0.05]" />
+        </div>
+      </div>
+      <div className="mt-3 space-y-2">
+        {[0, 1, 2].map((item) => (
+          <div
+            key={item}
+            className="h-[57px] rounded-2xl border border-white/[0.07] bg-black/[0.12]"
+          />
+        ))}
+      </div>
+      <div className="mt-3 h-11 rounded-2xl bg-qep-orange/25" />
+    </section>
+  );
+}
+
+export function OemPriceImpactCardEmpty() {
+  return (
+    <section
+      aria-label="OEM price impacts"
+      data-testid="oem-price-impact-card-empty"
+      className={OEM_PRICE_IMPACT_CARD_CLASS}
+    >
+      <div className="flex h-full min-h-[284px] flex-col justify-between">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-qep-orange/15 border border-qep-orange/25 flex items-center justify-center shrink-0">
+            <FileWarning className="w-5 h-5 text-qep-orange-accessible" aria-hidden="true" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.13em] text-qep-orange-accessible">
+              OEM price update
+            </p>
+            <h2 className="mt-1 text-[18px] font-black leading-tight text-foreground tracking-[-0.02em]">
+              No active quote impacts
+            </h2>
+            <p className="mt-1 text-[12px] text-muted-foreground leading-snug">
+              You’re clear right now. New OEM deltas will appear here before any customer communication.
+            </p>
+          </div>
+        </div>
+        <div className="space-y-2" aria-hidden="true">
+          {[0, 1, 2].map((item) => (
+            <div
+              key={item}
+              className="h-[57px] rounded-2xl border border-white/[0.06] bg-black/[0.08]"
+            />
+          ))}
+        </div>
+        <div className="h-11 rounded-2xl border border-white/[0.08] bg-white/[0.03]" aria-hidden="true" />
+      </div>
+    </section>
+  );
+}
+
 export function formatCentsCompact(cents: number): string {
   const dollars = Math.abs(cents) / 100;
   const sign = cents > 0 ? "+" : cents < 0 ? "-" : "";
@@ -43,7 +117,7 @@ export function OemPriceImpactCard({
   return (
     <section
       aria-label="OEM price impacts"
-      className="rounded-3xl border border-qep-orange/35 bg-gradient-to-br from-qep-orange/[0.16] via-qep-orange/[0.08] to-white/[0.03] p-4 shadow-[0_14px_40px_rgba(232,119,34,0.12)]"
+      className={OEM_PRICE_IMPACT_CARD_CLASS}
     >
       <div className="flex items-start gap-3">
         <div className="w-10 h-10 rounded-2xl bg-qep-orange/20 border border-qep-orange/30 flex items-center justify-center shrink-0">

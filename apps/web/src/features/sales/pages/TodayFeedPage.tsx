@@ -9,7 +9,11 @@ import { SalesActionsBlock } from "../components/SalesActionsBlock";
 import { SalesQuickTools } from "../components/SalesQuickTools";
 import { TomorrowFirstMove } from "../components/TomorrowFirstMove";
 import { LiveSignalsStrip } from "../components/LiveSignalsStrip";
-import { OemPriceImpactCard } from "../components/OemPriceImpactCard";
+import {
+  OemPriceImpactCard,
+  OemPriceImpactCardEmpty,
+  OemPriceImpactCardPlaceholder,
+} from "../components/OemPriceImpactCard";
 import { StreakBadge } from "../components/StreakBadge";
 import { TodayFeedSkeleton } from "../components/TodayFeedSkeleton";
 import { PrepCard } from "../components/PrepCard";
@@ -109,6 +113,7 @@ export function TodayFeedPage() {
     livePriorityActions,
     pipeline,
     priceImpacts,
+    priceImpactsLoading,
     timeOfDay,
     isLoading,
   } = useTodayFeed();
@@ -172,6 +177,8 @@ export function TodayFeedPage() {
   });
 
   const handleVoiceDictate = () => setLogVisitOpen(true);
+  const showPriceImpactCard =
+    priceImpacts != null && priceImpacts.summary.visibleImpactCount > 0;
 
   return (
     <div className="px-4 py-4 space-y-4 max-w-lg mx-auto pb-8">
@@ -208,29 +215,33 @@ export function TodayFeedPage() {
 
       <SalesNarrativeBlock firstName={firstName} />
 
-      {pipeline.length > 0 && (
+      {pipeline.length > 0 ? (
         <LiveSignalsStrip
           pipeline={pipeline}
           expiringQuoteCount={briefing?.expiring_quotes?.length ?? 0}
         />
+      ) : (
+        <LiveSignalsReservedSlot />
       )}
 
-      {priceImpacts && priceImpacts.summary.visibleImpactCount > 0 && (
+      {priceImpactsLoading ? (
+        <OemPriceImpactCardPlaceholder />
+      ) : showPriceImpactCard && priceImpacts ? (
         <OemPriceImpactCard
           summary={priceImpacts.summary}
           impacts={priceImpacts.impacts}
           onReview={() => navigate("/sales/price-impacts")}
         />
+      ) : (
+        <OemPriceImpactCardEmpty />
       )}
 
-      {(pipeline.length > 0 || streaks.currentStreak > 0 || streaks.longestStreak > 0) && (
-        <StreakBadge
-          currentStreak={streaks.currentStreak}
-          longestStreak={streaks.longestStreak}
-          lastActiveAt={streaks.lastActiveAt}
-          isLoading={streaks.isLoading}
-        />
-      )}
+      <StreakBadge
+        currentStreak={streaks.currentStreak}
+        longestStreak={streaks.longestStreak}
+        lastActiveAt={streaks.lastActiveAt}
+        isLoading={streaks.isLoading}
+      />
 
       <SalesActionsBlock
         pipeline={pipeline}
@@ -238,7 +249,11 @@ export function TodayFeedPage() {
         onVoiceQuote={handleVoiceDictate}
       />
 
-      {pipeline.length > 0 && <TomorrowFirstMove pipeline={pipeline} />}
+      {pipeline.length > 0 ? (
+        <TomorrowFirstMove pipeline={pipeline} />
+      ) : (
+        <TomorrowFirstMoveReservedSlot />
+      )}
 
       <SalesQuickTools />
 
@@ -282,6 +297,51 @@ export function TodayFeedPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function LiveSignalsReservedSlot() {
+  return (
+    <div
+      data-testid="live-signals-reserved-slot"
+      className="space-y-2"
+      aria-label="Live sales signals"
+    >
+      <div className="h-2.5 w-28 rounded bg-white/[0.04]" aria-hidden="true" />
+      <div className="flex gap-2 overflow-hidden" aria-hidden="true">
+        {[0, 1, 2].map((item) => (
+          <div
+            key={item}
+            className="h-[76px] w-[140px] shrink-0 rounded-xl border border-white/[0.05] bg-white/[0.025]"
+          />
+        ))}
+      </div>
+      <span className="sr-only">Live signals will appear once pipeline activity is available.</span>
+    </div>
+  );
+}
+
+function TomorrowFirstMoveReservedSlot() {
+  return (
+    <div
+      data-testid="tomorrow-first-move-reserved-slot"
+      className="h-[112px] w-full rounded-xl border border-white/[0.08] bg-[hsl(var(--card))] px-4 py-3.5"
+      aria-label="Tomorrow's first move"
+    >
+      <div className="mb-2 flex items-center gap-2">
+        <div className="h-3.5 w-3.5 rounded bg-qep-orange/20" aria-hidden="true" />
+        <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+          Tomorrow's First Move
+        </span>
+        <div className="h-px flex-1 bg-white/[0.06]" />
+      </div>
+      <p className="text-sm font-semibold text-foreground leading-tight">
+        Build your first move from today’s pipeline
+      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        Add or advance a deal and Iron will reserve the first touch.
+      </p>
     </div>
   );
 }

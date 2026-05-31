@@ -20,12 +20,14 @@ export interface EveningBriefingHeroProps {
   storageKey?: string;
 }
 
-const COLLAPSE_KEY_PREFIX = "qep:sales:hero-collapsed:";
+export const HERO_COLLAPSE_KEY_PREFIX = "qep:sales:hero-collapsed:";
+export const HERO_COLLAPSED_MIN_HEIGHT_PX = 104;
+export const HERO_EXPANDED_MIN_HEIGHT_PX = 188;
 
-function readInitialCollapsed(key: string | undefined): boolean {
+export function readHeroCollapsedState(key: string | undefined): boolean {
   if (!key || typeof window === "undefined") return false;
   try {
-    return window.localStorage.getItem(COLLAPSE_KEY_PREFIX + key) === "true";
+    return window.localStorage.getItem(HERO_COLLAPSE_KEY_PREFIX + key) === "true";
   } catch {
     return false;
   }
@@ -58,14 +60,14 @@ export function EveningBriefingHero({
     : `Good ${timeOfDay}`;
 
   const [collapsed, setCollapsed] = useState<boolean>(() =>
-    readInitialCollapsed(storageKey),
+    readHeroCollapsedState(storageKey),
   );
 
   useEffect(() => {
     if (!collapsible || !storageKey || typeof window === "undefined") return;
     try {
       window.localStorage.setItem(
-        COLLAPSE_KEY_PREFIX + storageKey,
+        HERO_COLLAPSE_KEY_PREFIX + storageKey,
         String(collapsed),
       );
     } catch {
@@ -78,6 +80,9 @@ export function EveningBriefingHero({
       data-testid="evening-briefing-hero"
       className="rounded-2xl px-5 py-5 relative overflow-hidden"
       style={{
+        minHeight: collapsed
+          ? HERO_COLLAPSED_MIN_HEIGHT_PX
+          : HERO_EXPANDED_MIN_HEIGHT_PX,
         background:
           "linear-gradient(135deg, #E87722 0%, #F29556 40%, #D86420 100%)",
         boxShadow:

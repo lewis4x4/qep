@@ -1,5 +1,8 @@
 import { useFloorNarrative } from "@/features/floor/hooks/useFloorNarrative";
 
+const NARRATIVE_CARD_CLASS =
+  "min-h-[132px] rounded-2xl border border-white/[0.06] bg-[hsl(var(--card))] p-5";
+
 export interface SalesNarrativeBlockProps {
   /** First name used for narrative personalization (placeholder-aware upstream). */
   firstName: string | null;
@@ -12,7 +15,7 @@ export function SalesNarrativeBlock({ firstName }: SalesNarrativeBlockProps) {
     return (
       <section
         data-testid="sales-narrative-block"
-        className="rounded-2xl border border-white/[0.06] bg-[hsl(var(--card))] p-5"
+        className={NARRATIVE_CARD_CLASS}
       >
         <div className="h-4 w-24 animate-pulse rounded bg-white/[0.08]" />
         <div className="mt-3 h-4 w-full animate-pulse rounded bg-white/[0.05]" />
@@ -24,7 +27,7 @@ export function SalesNarrativeBlock({ firstName }: SalesNarrativeBlockProps) {
   return (
     <section
       data-testid="sales-narrative-block"
-      className="rounded-2xl border border-white/[0.06] bg-[hsl(var(--card))] p-5"
+      className={NARRATIVE_CARD_CLASS}
     >
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-qep-orange">
