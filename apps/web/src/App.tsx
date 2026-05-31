@@ -20,7 +20,7 @@ import {
   resolveManagerAdminRouteRedirect,
   resolveHomeRoute,
 } from "./lib/home-route";
-import { canAccessAccountModuleForIronRole, canAccessNavHrefForIronRole, canAccessPrimaryHeaderForIronRole } from "./lib/nav-config";
+import { canAccessAccountModuleForIronRole, canAccessGrappleProductionRole, canAccessNavHrefForIronRole, canAccessPrimaryHeaderForIronRole } from "./lib/nav-config";
 import { portalRouteElements } from "./features/portal/PortalRoutes";
 
 const SalesRoutes = lazy(() =>
@@ -205,6 +205,9 @@ const ServiceDashboardPage = lazy(() =>
 );
 const ServiceMetricsDashboardPage = lazy(() =>
   import("./features/service/pages/ServiceMetricsDashboardPage").then((m) => ({ default: m.ServiceMetricsDashboardPage }))
+);
+const GrappleProductionDashboardPage = lazy(() =>
+  import("./features/service/pages/GrappleProductionDashboardPage").then((m) => ({ default: m.GrappleProductionDashboardPage }))
 );
 const FleetMapPage = lazy(() =>
   import("./features/fleet/pages/FleetMapPage").then((m) => ({ default: m.FleetMapPage }))
@@ -998,6 +1001,7 @@ function App() {
   const canAccessServiceSurface = hasRepOrAboveRole && canAccessServiceHeader;
   const canAccessServiceManagedSurface = hasManagerOrAboveRole && canAccessServiceHeader;
   const canAccessServiceMetricsSurface = ["admin", "manager", "owner", "service_writer", "finance_admin"].includes(profile.role) && canAccessServiceHeader;
+  const canAccessGrappleProductionSurface = canAccessGrappleProductionRole(profile.role) && canAccessServiceHeader;
   const canAccessPartsSurface = hasRepOrAboveRole && canAccessPartsHeader;
   const canAccessPartsManagedSurface = hasManagerOrAboveRole && canAccessPartsHeader;
   const canAccessRentalsSurface = hasRepOrAboveRole && canAccessRentalsHeader;
@@ -1321,6 +1325,16 @@ function App() {
                 element={
                   canAccessServiceMetricsSurface ? (
                     <ServiceMetricsDashboardPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/service/grapple"
+                element={
+                  canAccessGrappleProductionSurface ? (
+                    <GrappleProductionDashboardPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

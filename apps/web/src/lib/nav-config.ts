@@ -44,6 +44,7 @@ import {
   FileSpreadsheet,
   History,
   LineChart,
+  Factory,
 } from "lucide-react";
 import type { UserRole } from "@/lib/database.types";
 
@@ -87,6 +88,24 @@ export const PRIMARY_NAV_GROUPS: PrimaryNavGroupDefinition[] = [
   { id: "service", label: "Service", href: "/service" },
   { id: "rentals", label: "Rentals", href: "/rentals" },
 ];
+
+export const GRAPPLE_PRODUCTION_ROLE_NAMES = [
+  "rep",
+  "service_writer",
+  "technician",
+  "parts_counter",
+  "dispatch",
+  "finance_admin",
+  "admin",
+  "manager",
+  "owner",
+] as const;
+
+const GRAPPLE_PRODUCTION_NAV_ROLES = GRAPPLE_PRODUCTION_ROLE_NAMES as unknown as UserRole[];
+
+export function canAccessGrappleProductionRole(role: string | null | undefined): boolean {
+  return GRAPPLE_PRODUCTION_ROLE_NAMES.includes(role as (typeof GRAPPLE_PRODUCTION_ROLE_NAMES)[number]);
+}
 
 export const NAV_ITEMS: NavItemDefinition[] = [
   // WAVE phase 6: Sales nav dropdown rewires to the mobile-first
@@ -291,6 +310,14 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     roles: ["rep", "admin", "manager", "owner"],
     primaryHeaderId: "service",
     sectionLabel: "Operations",
+  },
+  {
+    label: "Grapple Production",
+    href: "/service/grapple",
+    icon: Factory,
+    roles: GRAPPLE_PRODUCTION_NAV_ROLES,
+    primaryHeaderId: "service",
+    sectionLabel: "Insight",
   },
   {
     label: "Metrics",
