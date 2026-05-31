@@ -666,7 +666,7 @@ export function SmartVoiceCapture({
           <button
             type="button"
             onClick={onComplete}
-            className="rounded-2xl bg-qep-orange px-4 py-3 text-sm font-bold text-white shadow-lg active:scale-[0.98]"
+            className="rounded-2xl bg-qep-orange-accessible px-4 py-3 text-sm font-bold text-white shadow-lg active:scale-[0.98]"
           >
             Done
           </button>
@@ -919,7 +919,7 @@ export function SmartVoiceCapture({
           type="button"
           onClick={handleSave}
           disabled={state === "saving"}
-          className="rounded-2xl bg-qep-orange px-4 py-3 text-sm font-bold text-white shadow-lg active:scale-[0.98] disabled:opacity-50"
+          className="rounded-2xl bg-qep-orange-accessible px-4 py-3 text-sm font-bold text-white shadow-lg active:scale-[0.98] disabled:opacity-50"
         >
           {state === "saving"
             ? "Saving…"
@@ -1343,7 +1343,7 @@ function SmartActionsBlock({
                   <span
                     className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
                       accepted
-                        ? "border-qep-orange bg-qep-orange text-white"
+                        ? "border-qep-orange bg-qep-orange-accessible text-white"
                         : "border-white/20 bg-transparent"
                     }`}
                   >

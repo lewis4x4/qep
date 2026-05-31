@@ -193,7 +193,7 @@ export function ActionItemCard({
           <button
             type="button"
             onClick={handleQuickAction}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 bg-qep-orange text-white text-sm font-semibold rounded-lg active:scale-[0.98] transition-transform cursor-pointer"
+            className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 bg-qep-orange-accessible text-white text-sm font-semibold rounded-lg active:scale-[0.98] transition-transform cursor-pointer"
           >
             {cta.icon === "phone" ? (
               <PhoneCall className="w-3.5 h-3.5" />

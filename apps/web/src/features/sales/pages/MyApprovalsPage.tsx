@@ -211,7 +211,7 @@ export function MyApprovalsPage() {
                 onClick={() => setFilter(opt.key)}
                 className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-bold transition-colors ${
                   active
-                    ? "bg-qep-orange text-white"
+                    ? "bg-qep-orange-accessible text-white"
                     : "bg-white/[0.04] text-muted-foreground hover:bg-white/[0.07]"
                 }`}
                 aria-pressed={active}

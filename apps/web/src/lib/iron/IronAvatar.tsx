@@ -18,7 +18,10 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useMemo } from "react";
 
-import ironIdle from "@/assets/iron/iron-idle.png";
+import ironIdlePng1x from "@/assets/iron/iron-idle-72.png";
+import ironIdlePng2x from "@/assets/iron/iron-idle-144.png";
+import ironIdleWebp1x from "@/assets/iron/iron-idle-72.webp";
+import ironIdleWebp2x from "@/assets/iron/iron-idle-144.webp";
 import ironThinking from "@/assets/iron/iron-thinking.png";
 import ironSpeaking from "@/assets/iron/iron-speaking.png";
 import ironListening from "@/assets/iron/iron-listening.png";
@@ -35,14 +38,26 @@ export interface IronAvatarProps {
   className?: string;
 }
 
-const STATE_TO_SRC: Record<IronAvatarState, string> = {
-  idle: ironIdle,
-  thinking: ironThinking,
-  speaking: ironSpeaking,
-  listening: ironListening,
-  alert: ironAlert,
-  flow_active: ironThinking, // reuse thinking pose during flow execution
-  success: ironSpeaking, // positive-affect pose; ring color carries the win
+interface AvatarSource {
+  src: string;
+  srcSet?: string;
+  webpSrcSet?: string;
+}
+
+const idleAvatarSource: AvatarSource = {
+  src: ironIdlePng1x,
+  srcSet: `${ironIdlePng1x} 1x, ${ironIdlePng2x} 2x`,
+  webpSrcSet: `${ironIdleWebp1x} 1x, ${ironIdleWebp2x} 2x`,
+};
+
+const STATE_TO_SRC: Record<IronAvatarState, AvatarSource> = {
+  idle: idleAvatarSource,
+  thinking: { src: ironThinking },
+  speaking: { src: ironSpeaking },
+  listening: { src: ironListening },
+  alert: { src: ironAlert },
+  flow_active: { src: ironThinking }, // reuse thinking pose during flow execution
+  success: { src: ironSpeaking }, // positive-affect pose; ring color carries the win
 };
 
 const STATE_TO_LABEL: Record<IronAvatarState, string> = {
@@ -121,7 +136,7 @@ export function IronAvatar({
   className = "",
 }: IronAvatarProps) {
   const reduceMotion = useReducedMotion();
-  const src = STATE_TO_SRC[state];
+  const source = STATE_TO_SRC[state];
   const label = ariaLabel ?? STATE_TO_LABEL[state];
   const effectiveSize = collapsed ? 24 : size;
 
@@ -156,22 +171,31 @@ export function IronAvatar({
 
       {/* Avatar PNG with crossfade between states */}
       <AnimatePresence mode="wait" initial={false}>
-        <motion.img
+        <motion.picture
           key={state}
-          src={src}
-          alt=""
-          draggable={false}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          className="relative rounded-full"
-          style={{
-            width: effectiveSize,
-            height: effectiveSize,
-            objectFit: "cover",
-          }}
-        />
+          className="relative block rounded-full overflow-hidden"
+          style={{ width: effectiveSize, height: effectiveSize }}
+        >
+          {source.webpSrcSet ? <source type="image/webp" srcSet={source.webpSrcSet} /> : null}
+          <img
+            src={source.src}
+            srcSet={source.srcSet}
+            alt=""
+            width={effectiveSize}
+            height={effectiveSize}
+            draggable={false}
+            className="block rounded-full"
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+            }}
+          />
+        </motion.picture>
       </AnimatePresence>
 
       {/* Alert dot — visible at full size when in alert state */}

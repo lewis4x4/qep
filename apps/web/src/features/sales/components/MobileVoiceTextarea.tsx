@@ -223,7 +223,7 @@ export const MobileVoiceTextarea = forwardRef<
                 ? "border-amber-400 bg-amber-500/90 text-white"
                 : state === "processing"
                   ? "border-white/20 bg-foreground/[0.08] text-muted-foreground cursor-wait"
-                  : "border-qep-orange/40 bg-qep-orange text-white",
+                  : "border-qep-orange/40 bg-qep-orange-accessible text-white",
           )}
           data-mobile-voice-mic
           data-state={state}

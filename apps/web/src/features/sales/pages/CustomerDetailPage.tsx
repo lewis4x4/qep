@@ -227,7 +227,7 @@ export function CustomerDetailPage() {
             const baseClass = (primary?: boolean) =>
               `flex flex-col items-center gap-1 py-2.5 px-1 rounded-[10px] text-[11px] font-bold transition-colors ${
                 primary
-                  ? "bg-qep-orange text-white"
+                  ? "bg-qep-orange-accessible text-white"
                   : "bg-[hsl(var(--card))] border border-white/[0.06] text-foreground hover:border-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
               }`;
             return (
@@ -300,7 +300,7 @@ export function CustomerDetailPage() {
               <button
                 type="button"
                 onClick={() => setLiveCaptureOpen(true)}
-                className="mt-2 rounded-lg bg-qep-orange px-3 py-1.5 text-xs font-bold text-white"
+                className="mt-2 rounded-lg bg-qep-orange-accessible px-3 py-1.5 text-xs font-bold text-white"
               >
                 Start live capture
               </button>

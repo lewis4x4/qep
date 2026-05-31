@@ -43,7 +43,7 @@ export function StageFilterTabs({
               className={cn(
                 "flex items-center gap-1.5 px-3.5 py-[7px] rounded-full text-xs font-bold whitespace-nowrap transition-all duration-150 border",
                 opt.key === active
-                  ? "bg-qep-orange text-white border-qep-orange"
+                  ? "bg-qep-orange-accessible text-white border-qep-orange"
                   : "bg-[hsl(var(--card))] text-muted-foreground border-white/[0.06] hover:border-white/20",
               )}
             >

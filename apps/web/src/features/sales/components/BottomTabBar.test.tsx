@@ -23,7 +23,8 @@ describe("BottomTabBar navigation semantics", () => {
     const pipeline = screen.getByRole("link", { name: "Pipeline" });
     expect(pipeline.getAttribute("href")).toBe("/sales/pipeline");
     expect(pipeline.getAttribute("aria-current")).toBe("page");
-    expect(pipeline.className).toContain("min-h-12");
+    expect(pipeline.className).toContain("h-full");
+    expect(pipeline.className).toContain("min-h-[44px]");
     expect(screen.getByRole("link", { name: "Today" }).hasAttribute("aria-current")).toBe(false);
   });
 });
@@ -39,6 +40,20 @@ describe("BottomTabBar height contract", () => {
     const nav = screen.getByTestId("sales-bottom-tab-bar");
     expect(SALES_BOTTOM_TAB_BAR_HEIGHT).toBe(MOBILE.bottomTabBarHeight);
     expect(nav.getAttribute("data-bottom-tab-height")).toBe(String(MOBILE.bottomTabBarHeight));
+  });
+
+  test("stretches each link into an unobscured 44px-plus tap target", () => {
+    render(
+      <MemoryRouter initialEntries={["/sales/today"]}>
+        <BottomTabBar />
+      </MemoryRouter>,
+    );
+
+    for (const link of screen.getAllByRole("link")) {
+      expect(link.className).toContain("h-full");
+      expect(link.className).toContain("min-h-[44px]");
+      expect(link.className).toContain("touch-manipulation");
+    }
   });
 
   test("reserves safe-area inset exactly once inside the fixed height", () => {

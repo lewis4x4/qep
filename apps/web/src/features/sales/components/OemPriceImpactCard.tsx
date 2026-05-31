@@ -169,7 +169,7 @@ export function OemPriceImpactCard({
       <button
         type="button"
         onClick={onReview}
-        className="mt-3 w-full inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-qep-orange px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-qep-orange/20 transition-transform active:scale-[0.985]"
+        className="mt-3 w-full inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-qep-orange-accessible px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-qep-orange/20 transition-transform active:scale-[0.985]"
       >
         Review re-prices
         <ArrowRight className="w-4 h-4" aria-hidden="true" />
