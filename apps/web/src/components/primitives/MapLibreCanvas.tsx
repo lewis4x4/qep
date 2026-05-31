@@ -1,6 +1,5 @@
 import { useEffect, useRef, useMemo } from "react";
-import maplibregl from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
+import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 
 export interface MapMarker {
   id: string;
@@ -76,7 +75,7 @@ export function MapLibreCanvas({
   className = "",
 }: MapLibreCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
   const markerByIdRef = useRef<Map<string, MapMarker>>(new Map());
 
   // Build GeoJSON from markers
@@ -121,43 +120,57 @@ export function MapLibreCanvas({
 
   // One-time map setup
   useEffect(() => {
-    if (!containerRef.current) return;
+    let cancelled = false;
+    let map: MapLibreMap | null = null;
 
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: {
-        version: 8,
-        sources: {
-          "osm-raster": {
-            type: "raster",
-            tiles: [
-              "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
-              "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
-              "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
-            ],
-            tileSize: 256,
-            attribution: "© OpenStreetMap contributors",
-            maxzoom: 19,
+    async function setupMap() {
+      if (!containerRef.current) return;
+
+      const [{ default: maplibregl }] = await Promise.all([
+        import("maplibre-gl"),
+        import("maplibre-gl/dist/maplibre-gl.css"),
+      ]);
+
+      if (cancelled || !containerRef.current) return;
+
+      const activeMap = new maplibregl.Map({
+        container: containerRef.current,
+        style: {
+          version: 8,
+          sources: {
+            "osm-raster": {
+              type: "raster",
+              tiles: [
+                "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+              ],
+              tileSize: 256,
+              attribution: "© OpenStreetMap contributors",
+              maxzoom: 19,
+            },
           },
+          layers: [
+            { id: "osm-raster-layer", type: "raster", source: "osm-raster" },
+          ],
         },
-        layers: [
-          { id: "osm-raster-layer", type: "raster", source: "osm-raster" },
-        ],
-      },
-      center: initialCenter,
-      zoom,
-      attributionControl: { compact: true },
-    });
+        center: initialCenter,
+        zoom,
+        attributionControl: { compact: true },
+      });
 
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      map = activeMap;
+      mapRef.current = activeMap;
 
-    map.on("load", () => {
+      activeMap.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+
+    activeMap.on("load", () => {
       // Polygons source/layers
-      map.addSource("polygons", {
+      activeMap.addSource("polygons", {
         type: "geojson",
         data: polygonGeoJson,
       });
-      map.addLayer({
+      activeMap.addLayer({
         id: "polygons-fill",
         type: "fill",
         source: "polygons",
@@ -166,7 +179,7 @@ export function MapLibreCanvas({
           "fill-opacity": 0.15,
         },
       });
-      map.addLayer({
+      activeMap.addLayer({
         id: "polygons-line",
         type: "line",
         source: "polygons",
@@ -177,7 +190,7 @@ export function MapLibreCanvas({
       });
 
       // Markers source with clustering
-      map.addSource("markers", {
+      activeMap.addSource("markers", {
         type: "geojson",
         data: markerGeoJson,
         cluster,
@@ -194,7 +207,7 @@ export function MapLibreCanvas({
 
       if (cluster) {
         // Cluster circles
-        map.addLayer({
+        activeMap.addLayer({
           id: "clusters",
           type: "circle",
           source: "markers",
@@ -218,7 +231,7 @@ export function MapLibreCanvas({
             "circle-stroke-color": "#ffffff",
           },
         });
-        map.addLayer({
+        activeMap.addLayer({
           id: "cluster-count",
           type: "symbol",
           source: "markers",
@@ -231,7 +244,7 @@ export function MapLibreCanvas({
             "text-color": "#ffffff",
           },
         });
-        map.addLayer({
+        activeMap.addLayer({
           id: "unclustered-point",
           type: "circle",
           source: "markers",
@@ -258,13 +271,13 @@ export function MapLibreCanvas({
         });
 
         // Cluster click → zoom in
-        map.on("click", "clusters", (e) => {
-          const features = map.queryRenderedFeatures(e.point, { layers: ["clusters"] });
+        activeMap.on("click", "clusters", (e) => {
+          const features = activeMap.queryRenderedFeatures(e.point, { layers: ["clusters"] });
           const clusterId = features[0]?.properties?.cluster_id;
           if (clusterId === undefined) return;
-          (map.getSource("markers") as maplibregl.GeoJSONSource).getClusterExpansionZoom(clusterId)
+          (activeMap.getSource("markers") as GeoJSONSource).getClusterExpansionZoom(clusterId)
             .then((targetZoom) => {
-              map.easeTo({
+              activeMap.easeTo({
                 center: (features[0].geometry as GeoJSON.Point).coordinates as [number, number],
                 zoom: targetZoom,
               });
@@ -272,20 +285,20 @@ export function MapLibreCanvas({
         });
 
         // Unclustered point click
-        map.on("click", "unclustered-point", (e) => {
+        activeMap.on("click", "unclustered-point", (e) => {
           const markerId = e.features?.[0]?.properties?.id as string | undefined;
           if (!markerId) return;
           const marker = markerByIdRef.current.get(markerId);
           marker?.onClick?.();
         });
 
-        map.on("mouseenter", "clusters", () => { map.getCanvas().style.cursor = "pointer"; });
-        map.on("mouseleave", "clusters", () => { map.getCanvas().style.cursor = ""; });
-        map.on("mouseenter", "unclustered-point", () => { map.getCanvas().style.cursor = "pointer"; });
-        map.on("mouseleave", "unclustered-point", () => { map.getCanvas().style.cursor = ""; });
+        activeMap.on("mouseenter", "clusters", () => { activeMap.getCanvas().style.cursor = "pointer"; });
+        activeMap.on("mouseleave", "clusters", () => { activeMap.getCanvas().style.cursor = ""; });
+        activeMap.on("mouseenter", "unclustered-point", () => { activeMap.getCanvas().style.cursor = "pointer"; });
+        activeMap.on("mouseleave", "unclustered-point", () => { activeMap.getCanvas().style.cursor = ""; });
       } else {
         // Non-clustered: simple point layer
-        map.addLayer({
+        activeMap.addLayer({
           id: "points",
           type: "circle",
           source: "markers",
@@ -309,7 +322,7 @@ export function MapLibreCanvas({
             "circle-stroke-color": "#ffffff",
           },
         });
-        map.on("click", "points", (e) => {
+        activeMap.on("click", "points", (e) => {
           const markerId = e.features?.[0]?.properties?.id as string | undefined;
           if (!markerId) return;
           const marker = markerByIdRef.current.get(markerId);
@@ -326,16 +339,21 @@ export function MapLibreCanvas({
           }
         }
         if (!bounds.isEmpty()) {
-          map.fitBounds(bounds, { padding: 40, duration: 0, maxZoom: 12 });
+          activeMap.fitBounds(bounds, { padding: 40, duration: 0, maxZoom: 12 });
         }
       }
     });
 
-    mapRef.current = map;
+    }
+
+    void setupMap();
 
     return () => {
-      map.remove();
-      mapRef.current = null;
+      cancelled = true;
+      map?.remove();
+      if (mapRef.current === map) {
+        mapRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -343,13 +361,13 @@ export function MapLibreCanvas({
   // Update markers on prop change
   useEffect(() => {
     markerByIdRef.current = new Map(markers.map((m) => [m.id, m]));
-    const src = mapRef.current?.getSource("markers") as maplibregl.GeoJSONSource | undefined;
+    const src = mapRef.current?.getSource("markers") as GeoJSONSource | undefined;
     if (src) src.setData(markerGeoJson);
   }, [markers, markerGeoJson]);
 
   // Update polygons on prop change
   useEffect(() => {
-    const src = mapRef.current?.getSource("polygons") as maplibregl.GeoJSONSource | undefined;
+    const src = mapRef.current?.getSource("polygons") as GeoJSONSource | undefined;
     if (src) src.setData(polygonGeoJson);
   }, [polygonGeoJson]);
 
