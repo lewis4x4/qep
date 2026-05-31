@@ -190,7 +190,7 @@ export function TodayFeedPage() {
           aria-label="Log a visit"
           data-capture-trigger
           onClick={() => setLogVisitOpen(true)}
-          className="w-10 h-10 rounded-full bg-qep-orange text-white flex items-center justify-center active:scale-95 transition-transform"
+          className="w-10 h-10 rounded-full bg-qep-orange-accessible text-white flex items-center justify-center active:scale-95 transition-transform"
         >
           <Plus className="w-5 h-5" />
         </button>

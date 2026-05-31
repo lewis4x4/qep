@@ -68,7 +68,7 @@ export function BottomTabBar() {
         paddingBottom: "var(--sales-shell-safe-area-bottom)",
       }}
     >
-      <div className="flex h-[var(--sales-shell-bottom-tab-height)] items-center justify-around max-w-lg mx-auto px-2">
+      <div className="flex h-[var(--sales-shell-bottom-tab-height)] items-stretch justify-around max-w-lg mx-auto px-2">
         {TABS.map((tab) => (
           <TabLink
             key={tab.path}
@@ -94,7 +94,7 @@ function TabLink({
       to={tab.path}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex min-h-12 flex-col items-center justify-center gap-0.5 min-w-[56px] px-1 py-2 rounded-lg transition-colors",
+        "flex h-full min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 min-w-[56px] px-1 py-2 rounded-lg transition-colors touch-manipulation",
         active ? "text-qep-orange-accessible" : "text-slate-600 hover:text-slate-800",
       )}
     >

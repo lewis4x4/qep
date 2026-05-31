@@ -70,7 +70,7 @@ export function TradeInSection({ dealId, onTradeValueChange }: TradeInSectionPro
         </div>
         <div>
           <p className="text-muted-foreground">Trade Range</p>
-          <p className="font-medium text-qep-orange">
+          <p className="font-medium text-qep-orange-accessible">
             {inferredRange
               ? `${formatCurrency(inferredRange.low)} - ${formatCurrency(inferredRange.high)}`
               : formatCurrency(valuation.preliminary_value)}
@@ -101,7 +101,7 @@ export function TradeInSection({ dealId, onTradeValueChange }: TradeInSectionPro
       {hasValue && (
         <button
           onClick={() => onTradeValueChange(tradeValue, valuation.id)}
-          className="mt-3 w-full rounded bg-qep-orange/10 px-3 py-2 text-sm font-medium text-qep-orange hover:bg-qep-orange/20 transition"
+          className="mt-3 w-full rounded bg-qep-orange/10 px-3 py-2 text-sm font-medium text-qep-orange-accessible hover:bg-qep-orange/20 transition"
         >
           Apply Trade-In Credit: {formatCurrency(tradeValue)}
         </button>

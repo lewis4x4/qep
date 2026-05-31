@@ -69,8 +69,8 @@ export function CustomerIntelPanel({
     <Card className="border-qep-orange/20 bg-qep-orange/5 p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-qep-orange" />
-          <p className="text-xs font-bold uppercase tracking-wider text-qep-orange">
+          <Sparkles className="h-4 w-4 text-qep-orange-accessible" />
+          <p className="text-xs font-bold uppercase tracking-wider text-qep-orange-accessible">
             Customer Digital Twin
           </p>
         </div>

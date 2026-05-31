@@ -64,7 +64,7 @@ export function TradeCaptureDialog({
                 onClick={() => onActiveTradeCaptureKeyChange(item.key)}
                 className={`rounded-lg border p-3 text-left text-sm transition ${
                   active
-                    ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
+                    ? "border-qep-orange bg-qep-orange/10 text-qep-orange-accessible"
                     : complete
                       ? "border-emerald-500/30 bg-emerald-500/5 text-foreground"
                       : "border-border bg-card text-muted-foreground hover:text-foreground"
@@ -102,7 +102,7 @@ export function TradeCaptureDialog({
           />
           <label className="mt-3 block rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
             <div className="flex items-center gap-2 text-foreground">
-              <Camera className="h-4 w-4 text-qep-orange" /> Optional photo evidence
+              <Camera className="h-4 w-4 text-qep-orange-accessible" /> Optional photo evidence
             </div>
             <p className="mt-1 text-xs">
               Attach a local photo during capture. The note above is what drives checklist completion today.

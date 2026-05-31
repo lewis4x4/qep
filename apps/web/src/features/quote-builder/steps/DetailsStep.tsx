@@ -43,7 +43,7 @@ export function DetailsStep() {
             type="button"
             variant="link"
             title="Step 7 — Financing scenarios"
-            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed text-qep-orange-accessible hover:text-qep-orange-accessible"
             onClick={() => setStep("financing")}
           >
             Financing
@@ -53,7 +53,7 @@ export function DetailsStep() {
             type="button"
             variant="link"
             title="Step 9 — Review + approval"
-            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed text-qep-orange-accessible hover:text-qep-orange-accessible"
             onClick={() => setStep("review")}
           >
             Review

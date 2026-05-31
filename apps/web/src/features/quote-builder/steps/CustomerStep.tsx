@@ -151,7 +151,7 @@ export function CustomerStep({
             type="button"
             variant="link"
             title="Step 2 — Equipment"
-            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed text-qep-orange-accessible hover:text-qep-orange-accessible"
             onClick={() => setStep("equipment")}
           >
             Equipment
@@ -161,7 +161,7 @@ export function CustomerStep({
             type="button"
             variant="link"
             title="Step 3 — Configure the package"
-            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed text-qep-orange-accessible hover:text-qep-orange-accessible"
             onClick={() => setStep("configure")}
           >
             Configure
@@ -212,7 +212,7 @@ export function CustomerStep({
               <Button
                 type="button"
                 onClick={() => setPickerSheetOpen(true)}
-                className="min-h-[44px] w-full justify-center gap-2"
+                className="min-h-[44px] w-full justify-center gap-2 bg-qep-orange-accessible text-white hover:bg-qep-orange-accessible/90"
                 data-testid="customer-step-open-picker"
               >
                 <Search className="h-4 w-4" aria-hidden />

@@ -46,7 +46,7 @@ export function QuoteBuilderStickyBar({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="truncate text-sm font-semibold text-foreground">{quoteTitle}</p>
-              <span className="rounded-full border border-qep-orange/30 bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-qep-orange">
+              <span className="rounded-full border border-qep-orange/30 bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-qep-orange-accessible">
                 {statusLabel(quoteStatus)}
               </span>
               <span className="text-xs text-muted-foreground">
@@ -86,12 +86,12 @@ export function QuoteBuilderStickyBar({
 
         <div className="flex flex-wrap items-center justify-between gap-3 lg:justify-end">
           <div className="text-right">
-            <p className="font-kpi text-2xl font-extrabold tabular-nums text-qep-orange">
+            <p className="font-kpi text-2xl font-extrabold tabular-nums text-qep-orange-accessible">
               {money(customerTotal)}
             </p>
             <p className="text-[11px] text-muted-foreground">{financeMethodLabel}</p>
           </div>
-          <span className="rounded-lg border border-qep-orange/30 bg-qep-orange/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-qep-orange">
+          <span className="rounded-lg border border-qep-orange/30 bg-qep-orange/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-qep-orange-accessible">
             Guided wizard
           </span>
           <Button onClick={onPrimaryAction} disabled={primaryActionDisabled}>

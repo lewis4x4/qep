@@ -328,11 +328,11 @@ export function DealCopilotPanel({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
           <div className="flex items-center gap-2 min-w-0">
-            <Sparkles className="h-4 w-4 text-qep-orange shrink-0" />
+            <Sparkles className="h-4 w-4 text-qep-orange-accessible shrink-0" />
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
                 <span className="text-sm font-semibold text-foreground">Deal Copilot</span>
-                <span className="rounded-full bg-qep-orange/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-qep-orange">
+                <span className="rounded-full bg-qep-orange/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-qep-orange-accessible">
                   Live
                 </span>
               </div>
@@ -397,7 +397,7 @@ export function DealCopilotPanel({
                 className={cn(
                   "flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-[11px] font-medium transition",
                   inputMode === mode
-                    ? "bg-qep-orange/10 text-qep-orange"
+                    ? "bg-qep-orange/10 text-qep-orange-accessible"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -595,7 +595,7 @@ function TurnCard({ turn }: { turn: CopilotTurnViewModel }) {
       {/* Copilot reply */}
       {turn.copilotReply && (
         <div className="flex items-start gap-2 rounded-md border border-qep-orange/20 bg-qep-orange/5 px-2 py-1.5">
-          <Bot className="mt-0.5 h-3.5 w-3.5 shrink-0 text-qep-orange" />
+          <Bot className="mt-0.5 h-3.5 w-3.5 shrink-0 text-qep-orange-accessible" />
           <p className="text-xs text-foreground">{turn.copilotReply}</p>
         </div>
       )}
@@ -723,7 +723,7 @@ function TurnCountChip({ count }: { count: number }) {
 function EmptyState() {
   return (
     <div className="mt-6 rounded-lg border border-dashed border-border/60 bg-card/40 p-4 text-center">
-      <Sparkles className="mx-auto h-6 w-6 text-qep-orange/70" />
+      <Sparkles className="mx-auto h-6 w-6 text-qep-orange-accessible" />
       <p className="mt-2 text-xs font-semibold text-foreground">No turns yet</p>
       <p className="mt-1 text-[11px] text-muted-foreground">
         Drop a voice memo or text update — the copilot will extract signals, patch the draft, and move the score inline.

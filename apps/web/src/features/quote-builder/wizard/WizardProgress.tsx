@@ -35,7 +35,7 @@ export function QuoteWizardProgress({
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Wizard progress</p>
           <p className="mt-1 text-sm font-medium text-foreground">{steps[currentIndex]?.label ?? "Customer"}</p>
         </div>
-        <span className="rounded-full bg-qep-orange/10 px-3 py-1 text-xs font-semibold text-qep-orange">
+        <span className="rounded-full bg-qep-orange/10 px-3 py-1 text-xs font-semibold text-qep-orange-accessible">
           Step {Math.max(1, currentIndex + 1)} of {steps.length}
         </span>
       </div>
@@ -63,7 +63,7 @@ export function QuoteWizardProgress({
               aria-label={`${item.number}. ${item.label}: ${isCurrent ? "current step" : isComplete ? "editable step" : "locked step"}`}
               className={`${compact ? "min-h-[3.25rem] px-2 py-1.5 sm:min-h-[4.25rem] sm:px-3 sm:py-2" : "min-h-[4.25rem] px-3 py-2"} touch-manipulation rounded-lg border text-left text-[11px] leading-tight transition ${
                 isCurrent
-                  ? "border-qep-orange bg-qep-orange/10 text-qep-orange shadow-[0_0_0_1px_rgba(249,115,22,0.25)]"
+                  ? "border-qep-orange bg-qep-orange/10 text-qep-orange-accessible shadow-[0_0_0_1px_rgba(249,115,22,0.25)]"
                   : isComplete
                     ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-300 hover:border-emerald-400/60"
                     : "border-border/60 bg-muted/20 text-muted-foreground"

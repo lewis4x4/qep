@@ -206,7 +206,7 @@ export function LogVisitFlow({
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className="w-full h-12 bg-qep-orange text-white font-semibold rounded-xl hover:bg-qep-orange/90 active:scale-[0.98] transition-all disabled:opacity-50"
+            className="w-full h-12 bg-qep-orange-accessible text-white font-semibold rounded-xl hover:bg-qep-orange-accessible/90 active:scale-[0.98] transition-all disabled:opacity-50"
           >
             {submitting ? "Logging..." : "Log Visit"}
           </button>

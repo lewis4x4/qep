@@ -57,7 +57,7 @@ export function TaxBreakdown({
             ))}
             <div className="flex justify-between border-t border-border pt-2 text-sm">
               <span className="font-bold text-foreground">Total Tax</span>
-              <span className="font-bold text-qep-orange">{formatCurrency(data.total_tax)}</span>
+              <span className="font-bold text-qep-orange-accessible">{formatCurrency(data.total_tax)}</span>
             </div>
           </div>
         </Card>
@@ -87,11 +87,11 @@ export function TaxBreakdown({
         <Card className={`p-4 ${showUrgency ? "border-qep-orange/30 bg-qep-orange/5" : ""}`}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-qep-orange" />
+              <Sparkles className="h-4 w-4 text-qep-orange-accessible" />
               <h3 className="text-sm font-semibold text-foreground">Section 179 Tax Savings</h3>
             </div>
             {showUrgency && (
-              <span className="flex items-center gap-1 text-[10px] font-bold text-qep-orange">
+              <span className="flex items-center gap-1 text-[10px] font-bold text-qep-orange-accessible">
                 <Calendar className="h-3 w-3" />
                 {daysUntilYearEnd}d until year end
               </span>
@@ -115,7 +115,7 @@ export function TaxBreakdown({
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Net Cost After Tax</p>
-              <p className="font-bold text-qep-orange">{formatCurrency(data.section_179.net_cost)}</p>
+              <p className="font-bold text-qep-orange-accessible">{formatCurrency(data.section_179.net_cost)}</p>
             </div>
           </div>
 

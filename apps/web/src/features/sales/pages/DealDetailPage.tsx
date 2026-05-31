@@ -226,7 +226,7 @@ export function DealDetailPage() {
 
           {/* Active quote / start new */}
           <section
-            className="rounded-2xl border border-qep-orange/20 bg-qep-orange/10 p-4"
+            className="rounded-2xl border border-qep-orange/20 bg-qep-orange-accessible/10 p-4"
             data-testid="deal-detail-quote-card"
           >
             <div className="flex items-start gap-3">
@@ -242,7 +242,7 @@ export function DealDetailPage() {
             </div>
             <Link
               to={`/sales/quotes/new?crm_deal_id=${encodeURIComponent(safeDealId)}`}
-              className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-qep-orange px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-qep-orange/30 active:scale-[0.98] transition-all"
+              className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-qep-orange-accessible px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-qep-orange/30 active:scale-[0.98] transition-all"
             >
               Open Quote Builder
               <ArrowRight className="h-4 w-4" aria-hidden />
@@ -316,7 +316,7 @@ export function DealDetailPage() {
         primary={
           <Link
             to={`/sales/quotes/new?crm_deal_id=${encodeURIComponent(safeDealId)}`}
-            className="flex h-12 w-full items-center justify-center gap-1.5 rounded-full bg-qep-orange text-sm font-semibold text-white shadow-sm shadow-qep-orange/30 active:scale-[0.98] transition-all"
+            className="flex h-12 w-full items-center justify-center gap-1.5 rounded-full bg-qep-orange-accessible text-sm font-semibold text-white shadow-sm shadow-qep-orange/30 active:scale-[0.98] transition-all"
           >
             Open Quote Builder
             <ArrowRight className="h-4 w-4" aria-hidden />

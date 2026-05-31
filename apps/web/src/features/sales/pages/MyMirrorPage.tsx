@@ -184,7 +184,7 @@ export function MyMirrorPage() {
                 </p>
                 <Link
                   to="/sales/customers"
-                  className="mt-3 inline-flex items-center gap-1 rounded-full bg-qep-orange px-4 py-2 text-xs font-semibold text-white"
+                  className="mt-3 inline-flex items-center gap-1 rounded-full bg-qep-orange-accessible px-4 py-2 text-xs font-semibold text-white"
                 >
                   Browse customers
                 </Link>

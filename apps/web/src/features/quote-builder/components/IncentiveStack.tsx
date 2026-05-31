@@ -74,7 +74,7 @@ export function IncentiveStack({ quotePackageId, className = "" }: IncentiveStac
     <Card className={`p-3 ${className}`}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-qep-orange" aria-hidden />
+          <Sparkles className="h-4 w-4 text-qep-orange-accessible" aria-hidden />
           <h3 className="text-sm font-bold text-foreground">Manufacturer incentives</h3>
         </div>
         <Button

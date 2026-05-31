@@ -159,7 +159,7 @@ export function SalesCustomerCard({
           <div
             className={`absolute top-0 left-0 z-[2] flex items-center gap-1 px-2.5 py-1 rounded-br-[10px] text-[10px] font-extrabold uppercase tracking-[0.08em] ${
               rank === 0
-                ? "bg-qep-orange text-white"
+                ? "bg-qep-orange-accessible text-white"
                 : "bg-foreground/[0.06] text-muted-foreground"
             }`}
           >

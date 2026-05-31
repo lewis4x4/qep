@@ -89,7 +89,7 @@ export function MobileWizardStepper({
                 onKeyDown={(event) => handleKey(event, index)}
                 className={cn(
                   "flex items-center gap-2 min-h-[44px] px-3.5 rounded-full border text-xs font-semibold whitespace-nowrap transition-all",
-                  current && "border-qep-orange bg-qep-orange text-white shadow-sm shadow-qep-orange/30",
+                  current && "border-qep-orange bg-qep-orange-accessible text-white shadow-sm shadow-qep-orange/30",
                   done &&
                     "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15",
                   step.status === "available" &&

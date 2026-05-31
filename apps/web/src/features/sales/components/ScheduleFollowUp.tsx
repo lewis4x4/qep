@@ -174,7 +174,7 @@ export function ScheduleFollowUp({ onComplete }: { onComplete: () => void }) {
       <button
         onClick={handleSubmit}
         disabled={!dealId || !date || submitting}
-        className="w-full h-12 bg-qep-orange text-white font-semibold rounded-xl hover:bg-qep-orange/90 disabled:opacity-50"
+        className="w-full h-12 bg-qep-orange-accessible text-white font-semibold rounded-xl hover:bg-qep-orange-accessible/90 disabled:opacity-50"
       >
         {submitting ? "Scheduling..." : "Schedule Follow-Up"}
       </button>

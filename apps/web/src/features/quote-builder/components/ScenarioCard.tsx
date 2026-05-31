@@ -47,7 +47,7 @@ const ACCENT_CLASSES = [
 ];
 
 const ACCENT_BADGE = [
-  "bg-qep-orange/10 text-qep-orange",
+  "bg-qep-orange/10 text-qep-orange-accessible",
   "bg-blue-500/10 text-blue-400",
   "bg-emerald-500/10 text-emerald-400",
   "bg-purple-500/10 text-purple-400",

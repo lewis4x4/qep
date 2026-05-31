@@ -131,7 +131,7 @@ export function FinancingStep({
             type="button"
             variant="link"
             title="Step 6 — Rebates & promotions"
-            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed text-qep-orange-accessible hover:text-qep-orange-accessible"
             onClick={() => setStep("promotions")}
           >
             Promos
@@ -141,7 +141,7 @@ export function FinancingStep({
             type="button"
             variant="link"
             title="Step 8 — Quote details"
-            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed text-qep-orange-accessible hover:text-qep-orange-accessible"
             onClick={() => setStep("details")}
           >
             Details
@@ -185,7 +185,7 @@ export function FinancingStep({
                   onClick={() => setDraft((current) => ({ ...current, selectedFinanceScenario: scenario.label }))}
                   className={`rounded-xl border p-3 text-left transition ${selected ? "border-qep-orange bg-card" : "border-border/70 bg-card/50 hover:border-qep-orange/40"}`}
                 >
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-qep-orange">{scenario.label}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-qep-orange-accessible">{scenario.label}</p>
                   <p className="mt-2 text-2xl font-bold text-foreground">{scenarioPaymentLabel(scenario, customerTotal)}</p>
                   <p className="mt-1 text-[11px] text-muted-foreground">
                     {scenario.type === "cash" ? "Cash purchase" : `${scenario.termMonths ?? 0} months · ${(scenario.apr ?? scenario.rate ?? 0).toFixed(2)}% APR`}
@@ -224,7 +224,7 @@ export function FinancingStep({
                 }}
                 className={`flex-1 sm:flex-none min-h-[44px] rounded-lg border px-4 py-2 text-sm font-semibold transition ${
                   financeStepTab === tab
-                    ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
+                    ? "border-qep-orange bg-qep-orange/10 text-qep-orange-accessible"
                     : disabled
                       ? "border-border/60 bg-muted/30 text-muted-foreground"
                       : "border-border text-muted-foreground hover:text-foreground"
@@ -269,7 +269,7 @@ export function FinancingStep({
                   </label>
                   <div className="rounded-lg border border-border/70 bg-card/50 p-3">
                     <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Amount financed</p>
-                    <p className="mt-1 text-xl font-semibold text-qep-orange">{money(amountFinanced)}</p>
+                    <p className="mt-1 text-xl font-semibold text-qep-orange-accessible">{money(amountFinanced)}</p>
                   </div>
                 </div>
               );
@@ -300,7 +300,7 @@ export function FinancingStep({
                     onClick={() => setDraft((current) => ({ ...current, selectedFinanceScenario: scenario.label }))}
                     className={`rounded-lg border p-3 text-left transition ${selected ? "border-qep-orange bg-qep-orange/5" : "border-border bg-card/40 hover:border-qep-orange/40"}`}
                   >
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-qep-orange">{scenario.label}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-qep-orange-accessible">{scenario.label}</p>
                     <p className="mt-2 text-2xl font-bold text-foreground">
                       {scenarioPaymentLabel(scenario, customerTotal)}
                     </p>
@@ -325,7 +325,7 @@ export function FinancingStep({
                           type="button"
                           size="sm"
                           variant="ghost"
-                          className="text-qep-orange"
+                          className="text-qep-orange-accessible"
                           onClick={(event) => {
                             event.stopPropagation();
                             setScenarioSheetLabel(scenario.label);
@@ -360,7 +360,7 @@ export function FinancingStep({
                       onClick={() => setDraft((current) => ({ ...current, selectedFinanceScenario: scenario.label }))}
                       className={`rounded-lg border p-3 text-left transition ${selected ? "border-qep-orange bg-qep-orange/5" : "border-border bg-card/40 hover:border-qep-orange/40"}`}
                     >
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-qep-orange">{scenario.label}</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-qep-orange-accessible">{scenario.label}</p>
                       <p className="mt-2 text-2xl font-bold text-foreground">{scenarioPaymentLabel(scenario, customerTotal)}</p>
                       <p className="mt-1 text-[11px] text-muted-foreground">
                         {scenario.termMonths ?? 0} months · {(scenario.apr ?? scenario.rate ?? 0).toFixed(2)}% APR · {scenario.lender ?? "Lease partner"}
@@ -421,7 +421,7 @@ export function FinancingStep({
           <div className="space-y-3 pt-2 pb-4">
             <div className="rounded-2xl border border-qep-orange/30 bg-qep-orange/5 p-4 text-center">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Monthly</p>
-              <p className="mt-1 text-3xl font-bold text-qep-orange">
+              <p className="mt-1 text-3xl font-bold text-qep-orange-accessible">
                 {scenarioSheetScenario.monthlyPayment == null
                   ? money(scenarioSheetScenario.totalCost ?? customerTotal)
                   : `${money(scenarioSheetScenario.monthlyPayment)}/mo`}

@@ -398,7 +398,7 @@ export function QuoteReviewWorkflowPanels({
                       {approver} · {versionLine}{branchSuffix}
                     </p>
                   </div>
-                  <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange shrink-0">
+                  <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange-accessible shrink-0">
                     {statusLabel}
                   </span>
                 </div>
@@ -416,7 +416,7 @@ export function QuoteReviewWorkflowPanels({
                           event.stopPropagation();
                           setDecideDialogOpen(true);
                         }}
-                        className="bg-qep-orange text-white hover:bg-qep-orange/90"
+                        className="bg-qep-orange-accessible text-white hover:bg-qep-orange-accessible/90"
                         data-testid="approval-case-decide-now-mobile"
                       >
                         <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
@@ -471,7 +471,7 @@ export function QuoteReviewWorkflowPanels({
                   <Button
                     size="sm"
                     onClick={() => setDecideDialogOpen(true)}
-                    className="bg-qep-orange text-white hover:bg-qep-orange/90"
+                    className="bg-qep-orange-accessible text-white hover:bg-qep-orange-accessible/90"
                     data-testid="approval-case-decide-now"
                   >
                     <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
@@ -495,7 +495,7 @@ export function QuoteReviewWorkflowPanels({
                     Withdraw submission
                   </button>
                 )}
-                <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange">
+                <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange-accessible">
                   {statusLabel}
                 </span>
               </div>
@@ -669,7 +669,7 @@ export function QuoteReviewWorkflowPanels({
                 Publish a revised customer proposal from this quote workflow with manager approval.
               </p>
             </div>
-            <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange">
+            <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange-accessible">
               {publicationStatus.replace(/_/g, " ")}
             </span>
           </div>

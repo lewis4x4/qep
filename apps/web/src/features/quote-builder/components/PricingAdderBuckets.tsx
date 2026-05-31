@@ -111,7 +111,7 @@ export function PricingAdderBuckets({
                     )}
                   </div>
                   {field.kind === "pdi" && line?.metadata?.pdi_source === "rolling_average_by_model" && (
-                    <span className="mt-0.5 block text-[11px] text-qep-orange">
+                    <span className="mt-0.5 block text-[11px] text-qep-orange-accessible">
                       Prefilled from model history ({Number(line.metadata?.pdi_sample_count ?? 0)} sample{Number(line.metadata?.pdi_sample_count ?? 0) === 1 ? "" : "s"})
                     </span>
                   )}

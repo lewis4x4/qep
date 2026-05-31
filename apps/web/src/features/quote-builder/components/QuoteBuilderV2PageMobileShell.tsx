@@ -40,19 +40,19 @@ const SECTIONS: readonly SectionDef[] = [
 const MOBILE_SECTION_TONES: Record<SectionId, MobileSectionTone> = {
   who_what: {
     frameClassName: "border-white/[0.08] bg-foreground/[0.03]",
-    eyebrowClassName: "text-qep-orange",
+    eyebrowClassName: "text-qep-orange-accessible",
   },
   price: {
     frameClassName: "border-qep-orange/25 bg-qep-orange/[0.06]",
-    eyebrowClassName: "text-qep-orange",
+    eyebrowClassName: "text-qep-orange-accessible",
   },
   refine: {
     frameClassName: "border-white/[0.08] bg-foreground/[0.03]",
-    eyebrowClassName: "text-qep-orange",
+    eyebrowClassName: "text-qep-orange-accessible",
   },
   send: {
     frameClassName: "border-qep-orange/25 bg-qep-orange/[0.06]",
-    eyebrowClassName: "text-qep-orange",
+    eyebrowClassName: "text-qep-orange-accessible",
   },
 };
 
@@ -100,7 +100,7 @@ function autosaveTextClass(tone: "saved" | "saving" | "error" | "idle" | "local"
     case "error":
       return "text-red-300";
     default:
-      return "text-slate-400";
+      return "text-slate-700 dark:text-slate-300";
   }
 }
 
@@ -254,7 +254,7 @@ export function QuoteBuilderV2PageMobileShell({
             <span className="truncate text-foreground">
               Editing {activeQuoteNumber ?? "draft"}
             </span>
-            <span className="rounded-full border border-qep-orange/30 bg-background/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-qep-orange">
+            <span className="rounded-full border border-qep-orange/30 bg-background/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-qep-orange-accessible">
               {(quoteStatus ?? "draft").replace(/_/g, " ")}
             </span>
           </div>
@@ -351,8 +351,7 @@ export function QuoteBuilderV2PageMobileShell({
               {showProspectCta && (
                 <Button
                   type="button"
-                  variant="outline"
-                  className="h-11 w-full border-qep-orange/40 text-qep-orange hover:bg-qep-orange/10 hover:text-qep-orange"
+                  className="h-11 w-full bg-qep-orange-accessible text-white hover:bg-qep-orange-accessible/90"
                   onClick={onQuoteForProspect}
                 >
                   Quote for prospect
@@ -362,13 +361,13 @@ export function QuoteBuilderV2PageMobileShell({
                 type="button"
                 onClick={() => setAssistantOpen(true)}
                 aria-label="Open assistant"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-qep-orange/40 bg-qep-orange/10 text-qep-orange hover:bg-qep-orange/20 transition-colors"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-qep-orange/40 bg-qep-orange/10 text-qep-orange-accessible hover:bg-qep-orange/20 transition-colors"
               >
                 <Sparkles className="h-5 w-5" />
               </button>
               <Button
                 type="button"
-                className="h-11 flex-1"
+                className="h-11 flex-1 bg-qep-orange-accessible text-white hover:bg-qep-orange-accessible/90"
                 disabled={primaryActionDisabled}
                 onClick={onPrimaryAction}
               >

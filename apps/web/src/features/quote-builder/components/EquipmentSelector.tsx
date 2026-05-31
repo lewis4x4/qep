@@ -59,6 +59,12 @@ function availabilityCopy(status: AvailabilityStatus): { label: string; classNam
   return { label: "Source required", className: "bg-amber-500/10 text-amber-300" };
 }
 
+function modeButtonClass(active: boolean) {
+  return active
+    ? "bg-qep-orange-accessible text-white hover:bg-qep-orange-accessible/90"
+    : "text-foreground";
+}
+
 interface EquipmentSelectorProps {
   onSelect: (entry: CatalogEntry) => void;
   onSelectAttachment?: (entry: CatalogAttachmentEntry) => void;
@@ -118,19 +124,25 @@ export function EquipmentSelector({
 
       <div className="flex flex-wrap gap-2">
         <Button
-          size="sm" variant={mode === "equipment" ? "default" : "outline"}
+          size="sm"
+          variant={mode === "equipment" ? "default" : "outline"}
+          className={modeButtonClass(mode === "equipment")}
           onClick={() => setMode("equipment")}
         >
           <Search className="mr-1 h-3.5 w-3.5" /> Equipment
         </Button>
         <Button
-          size="sm" variant={mode === "attachments" ? "default" : "outline"}
+          size="sm"
+          variant={mode === "attachments" ? "default" : "outline"}
+          className={modeButtonClass(mode === "attachments")}
           onClick={() => setMode("attachments")}
         >
           Parts / Attachments
         </Button>
         <Button
-          size="sm" variant={mode === "ai" ? "default" : "outline"}
+          size="sm"
+          variant={mode === "ai" ? "default" : "outline"}
+          className={modeButtonClass(mode === "ai")}
           onClick={() => setMode("ai")}
         >
           <Sparkles className="mr-1 h-3.5 w-3.5" /> AI Recommend
@@ -148,7 +160,7 @@ export function EquipmentSelector({
               className="flex-1 rounded border border-input bg-card px-3 py-2 text-sm"
               onKeyDown={(e) => e.key === "Enter" && searchMutation.mutate({})}
             />
-            <Button size="sm" onClick={() => searchMutation.mutate({})} disabled={searchMutation.isPending}>
+            <Button size="sm" className="bg-qep-orange-accessible text-white hover:bg-qep-orange-accessible/90" onClick={() => searchMutation.mutate({})} disabled={searchMutation.isPending}>
               {searchMutation.isPending ? "Searching..." : "Search"}
             </Button>
           </div>
@@ -193,7 +205,7 @@ export function EquipmentSelector({
                     </div>
                   )}
                   {entry.list_price && (
-                    <div className="mt-1 font-medium text-qep-orange">
+                    <div className="mt-1 font-medium text-qep-orange-accessible">
                       ${entry.list_price.toLocaleString()}
                     </div>
                   )}
@@ -213,14 +225,14 @@ export function EquipmentSelector({
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="font-semibold">{entry.name}</div>
-                    <span className="shrink-0 rounded-full bg-slate-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-300">
+                    <span className="shrink-0 rounded-full bg-slate-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700 dark:text-slate-300">
                       {entry.universal ? "Universal" : "Attachment"}
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {[entry.brandName, entry.category].filter(Boolean).join(" • ") || "QEP catalog"}
                   </div>
-                  <div className="mt-1 font-medium text-qep-orange">
+                  <div className="mt-1 font-medium text-qep-orange-accessible">
                     ${entry.price.toLocaleString()}
                   </div>
                 </button>
@@ -246,7 +258,7 @@ export function EquipmentSelector({
             placeholder="Describe the job: e.g., 'Land clearing and tree service on rocky terrain, need to handle 12-inch trees...'"
             className="w-full rounded border border-input bg-card px-3 py-2 text-base sm:text-sm min-h-[80px]"
           />
-          <Button size="sm" onClick={() => aiMutation.mutate()} disabled={aiMutation.isPending || !jobDescription.trim()}>
+          <Button size="sm" className="bg-qep-orange-accessible text-white hover:bg-qep-orange-accessible/90" onClick={() => aiMutation.mutate()} disabled={aiMutation.isPending || !jobDescription.trim()}>
             {aiMutation.isPending ? "Analyzing..." : "Get AI Recommendation"}
           </Button>
         </div>

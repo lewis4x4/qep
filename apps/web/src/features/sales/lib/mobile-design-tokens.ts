@@ -45,7 +45,7 @@ export const MOBILE = {
     bg: "bg-[hsl(var(--qep-bg))]",
     card: "bg-foreground/[0.04] border border-white/[0.06]",
     cardElevated: "bg-foreground/[0.06] border border-white/[0.08]",
-    accentOrange: "bg-qep-orange text-white",
+    accentOrange: "bg-qep-orange-accessible text-white",
     accentCyan: "border-cyan-500/40 bg-cyan-500/10",
   },
 

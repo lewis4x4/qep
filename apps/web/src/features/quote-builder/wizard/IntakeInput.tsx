@@ -137,8 +137,8 @@ export function IntakeInput({
           }}
           className={`absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border transition ${
             intakeRecorderOpen
-              ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
-              : "border-border bg-background/80 text-muted-foreground hover:border-qep-orange/50 hover:text-qep-orange"
+              ? "border-qep-orange bg-qep-orange/10 text-qep-orange-accessible"
+              : "border-border bg-background/80 text-muted-foreground hover:border-qep-orange/50 hover:text-qep-orange-accessible"
           }`}
           aria-label="Use microphone intake"
           title="Use microphone intake"

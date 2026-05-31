@@ -24,8 +24,8 @@ export function AiRecommendationCard({
   return (
     <Card className="border-qep-orange/30 bg-qep-orange/5 p-4 space-y-3">
       <div className="flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-qep-orange" />
-        <p className="text-xs font-bold uppercase tracking-wider text-qep-orange">AI Recommendation</p>
+        <Sparkles className="h-4 w-4 text-qep-orange-accessible" />
+        <p className="text-xs font-bold uppercase tracking-wider text-qep-orange-accessible">AI Recommendation</p>
       </div>
 
       {/* Primary recommendation */}
@@ -65,7 +65,7 @@ export function AiRecommendationCard({
       {considerations && considerations.length > 0 && (
         <div className="space-y-1">
           <div className="flex items-center gap-1.5">
-            <Lightbulb className="h-3 w-3 text-qep-orange" />
+            <Lightbulb className="h-3 w-3 text-qep-orange-accessible" />
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Job Considerations</p>
           </div>
           <ul className="space-y-0.5 pl-4">

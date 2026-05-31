@@ -14,7 +14,7 @@ export function TradeInInputCard({ tradeAllowance, onChange }: TradeInInputCardP
   return (
     <Card className="p-4 space-y-3">
       <div className="flex items-center gap-2">
-        <ArrowDownUp className="h-4 w-4 text-qep-orange" />
+        <ArrowDownUp className="h-4 w-4 text-qep-orange-accessible" />
         <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Trade-In</p>
       </div>
       <Input

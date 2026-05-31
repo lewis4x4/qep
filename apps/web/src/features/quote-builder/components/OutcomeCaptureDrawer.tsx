@@ -188,7 +188,7 @@ export function OutcomeCaptureDrawer({
               }}
               className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
                 active
-                  ? "border-primary bg-primary text-primary-foreground"
+                  ? "border-qep-orange bg-qep-orange-accessible text-white"
                   : "border-border bg-muted/40 text-foreground hover:bg-muted"
               }`}
             >
@@ -209,7 +209,7 @@ export function OutcomeCaptureDrawer({
           <button
             type="button"
             onClick={() => setStep("reason")}
-            className="ml-2 text-primary underline-offset-2 hover:underline"
+            className="ml-2 text-qep-orange-accessible underline-offset-2 hover:underline"
           >
             change
           </button>
@@ -260,7 +260,7 @@ export function OutcomeCaptureDrawer({
                   onClick={() => setPriceSensitivity(active ? null : p)}
                   className={`rounded-full border px-3 py-1 text-xs capitalize transition ${
                     active
-                      ? "border-primary bg-primary text-primary-foreground"
+                      ? "border-qep-orange bg-qep-orange-accessible text-white"
                       : "border-border bg-muted/40 hover:bg-muted"
                   }`}
                 >

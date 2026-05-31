@@ -405,7 +405,7 @@ function ImpactCard({
           type="button"
           onClick={onDraft}
           disabled={!canCreateDraft || draftPending}
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-qep-orange px-4 py-2.5 text-sm font-black text-white transition-transform active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-55"
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-qep-orange-accessible px-4 py-2.5 text-sm font-black text-white transition-transform active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-55"
         >
           {draftPending && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
           {impact.requiresManagerReview ? "Submit approval" : "Create draft"}

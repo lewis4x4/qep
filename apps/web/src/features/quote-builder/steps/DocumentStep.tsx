@@ -99,7 +99,7 @@ export function DocumentStep({
             type="button"
             variant="link"
             title="Step 9 — Review + approval"
-            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed text-qep-orange-accessible hover:text-qep-orange-accessible"
             onClick={() => setStep("review")}
           >
             Review
@@ -109,7 +109,7 @@ export function DocumentStep({
             type="button"
             variant="link"
             title="Step 11 — Send & log"
-            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
+            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed text-qep-orange-accessible hover:text-qep-orange-accessible"
             onClick={() => setStep("send")}
           >
             Send

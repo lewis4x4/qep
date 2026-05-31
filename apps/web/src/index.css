@@ -58,8 +58,8 @@
     --qep-orange: 26 81% 52%;
     --qep-orange-hover: 26 75% 47%;
     --qep-orange-light: 29 100% 95%;
-    /* Accessible orange #D06A1E — passes 4.5:1 on white */
-    --qep-orange-accessible: 22 76% 46%;
+    /* Accessible orange #AB4D17 — passes small-text contrast on white and warm tinted cards */
+    --qep-orange-accessible: 22 76% 38%;
     --qep-dark: 213 39% 17%;
     --qep-dark-hover: 212 33% 22%;
     --qep-charcoal: 217 23% 23%;
@@ -123,7 +123,7 @@
     --qep-orange: 28 90% 55%;
     --qep-orange-hover: 28 82% 48%;
     --qep-orange-light: 28 42% 16%;
-    --qep-orange-accessible: 28 88% 58%;
+    --qep-orange-accessible: 22 76% 38%;
     --qep-dark: 222 48% 6%;
     --qep-dark-hover: 222 38% 14%;
     --qep-charcoal: 210 36% 92%;
@@ -147,6 +147,14 @@
     --qep-deck-elevated: 222 38% 11%;
     --qep-deck-rule: 217 28% 22%;
     --qep-deck-grid: 217 28% 14%;
+  }
+}
+
+@layer utilities {
+  /* Keep accessible orange as a dark CTA fill in dark mode while preserving small-text contrast on dark surfaces. */
+  .dark .text-qep-orange-accessible,
+  .dark .hover\:text-qep-orange-accessible:hover {
+    color: hsl(var(--qep-orange) / var(--tw-text-opacity, 1));
   }
 }
 

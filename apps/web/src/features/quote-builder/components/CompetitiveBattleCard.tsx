@@ -38,7 +38,7 @@ export function CompetitiveBattleCard({ make, model }: CompetitiveBattleCardProp
   return (
     <Card className="p-4 space-y-3">
       <div className="flex items-center gap-2">
-        <Swords className="h-4 w-4 text-qep-orange" />
+        <Swords className="h-4 w-4 text-qep-orange-accessible" />
         <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Competitor Intel</p>
       </div>
 

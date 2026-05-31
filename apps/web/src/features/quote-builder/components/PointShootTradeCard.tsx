@@ -279,8 +279,8 @@ export function PointShootTradeCard({
     <Card className="border-qep-orange/25 bg-gradient-to-br from-qep-orange/5 to-transparent p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-qep-orange" />
-          <p className="text-xs font-bold uppercase tracking-wider text-qep-orange">
+          <Sparkles className="h-4 w-4 text-qep-orange-accessible" />
+          <p className="text-xs font-bold uppercase tracking-wider text-qep-orange-accessible">
             Point, Shoot, Trade
           </p>
         </div>
