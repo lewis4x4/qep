@@ -53,6 +53,7 @@ export default {
         },
         // QEP USA Brand Color Tokens (HSL from CSS variables — theme-aware)
         "qep-orange": "hsl(var(--qep-orange) / <alpha-value>)",
+        "qep-orange-accessible": "hsl(var(--qep-orange-accessible) / <alpha-value>)",
         "qep-orange-hover": "hsl(var(--qep-orange-hover) / <alpha-value>)",
         "qep-orange-light": "hsl(var(--qep-orange-light) / <alpha-value>)",
         "qep-dark": "hsl(var(--qep-dark) / <alpha-value>)",

@@ -127,7 +127,12 @@ export function TodayFeedPage() {
   );
 
   if (isLoading) {
-    return <TodayFeedSkeleton />;
+    return (
+      <>
+        <h1 className="sr-only">Today</h1>
+        <TodayFeedSkeleton />
+      </>
+    );
   }
 
   const dealMap = new Map(pipeline.map((d) => [d.deal_id, d]));
@@ -170,8 +175,9 @@ export function TodayFeedPage() {
 
   return (
     <div className="px-4 py-4 space-y-4 max-w-lg mx-auto pb-8">
+      <h1 className="sr-only">Today</h1>
       <div className="flex items-center justify-between px-4 py-3 sm:hidden">
-        <h1 className="text-xl font-bold text-foreground">Today</h1>
+        <h2 className="text-xl font-bold text-foreground">Today</h2>
         <button
           type="button"
           aria-label="Log a visit"
@@ -292,12 +298,12 @@ function SectionHeader({
   return (
     <div className="flex items-center gap-2 mb-3">
       {icon}
-      <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+      <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
         {label}
-      </span>
+      </h2>
       <div className="flex-1 h-px bg-white/[0.06]" />
       {trailing && (
-        <span className="text-[11px] text-muted-foreground/60 font-medium">
+        <span className="text-[11px] text-muted-foreground font-medium">
           {trailing}
         </span>
       )}
@@ -386,14 +392,14 @@ function ApprovalsSection({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-[14px] font-semibold text-foreground leading-tight">
-                  <span className="tabular-nums text-qep-orange">
+                  <span className="tabular-nums text-qep-orange-accessible">
                     {pendingApprovals.manager_pending_count}
                   </span>{" "}
                   {pendingApprovals.manager_pending_count === 1 ? "quote" : "quotes"}{" "}
                   need your decision
                 </p>
                 {olderThan24h > 0 && (
-                  <p className="text-[12px] text-foreground/70 mt-0.5">
+                  <p className="text-[12px] text-foreground mt-0.5">
                     <span className="tabular-nums font-medium text-amber-300">
                       {olderThan24h}
                     </span>{" "}
@@ -401,7 +407,7 @@ function ApprovalsSection({
                   </p>
                 )}
               </div>
-              <ChevronRight className="w-4 h-4 shrink-0 text-qep-orange/80" />
+              <ChevronRight className="w-4 h-4 shrink-0 text-qep-orange-accessible" />
             </div>
           </button>
 
@@ -418,7 +424,7 @@ function ApprovalsSection({
                     <p className="text-[13px] font-medium text-foreground truncate">
                       {row.customer_name ?? "Customer"}
                       {row.quote_number && (
-                        <span className="text-muted-foreground/70 font-normal ml-1.5">
+                        <span className="text-muted-foreground font-normal ml-1.5">
                           · {row.quote_number}
                         </span>
                       )}
@@ -434,7 +440,7 @@ function ApprovalsSection({
                       </span>
                     </p>
                   </div>
-                  <ChevronRight className="w-3.5 h-3.5 shrink-0 text-muted-foreground/60" />
+                  <ChevronRight className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
                 </button>
               ))}
             </div>
@@ -458,7 +464,7 @@ function ApprovalsSection({
                   <p className="text-[13.5px] font-semibold text-foreground truncate">
                     {row.customer_name ?? "Customer"}
                     {row.quote_number && (
-                      <span className="text-muted-foreground/70 font-normal ml-1.5">
+                      <span className="text-muted-foreground font-normal ml-1.5">
                         · {row.quote_number}
                       </span>
                     )}

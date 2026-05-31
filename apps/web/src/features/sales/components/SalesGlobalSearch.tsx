@@ -51,19 +51,22 @@ export function SalesGlobalSearch({ onClose }: { onClose: () => void }) {
       <div className="bg-white min-h-screen max-w-lg mx-auto">
         {/* Search input */}
         <div className="flex items-center gap-3 px-4 h-14 border-b border-slate-200">
-          <Search className="w-5 h-5 text-slate-400 shrink-0" />
+          <Search className="w-5 h-5 text-slate-500 shrink-0" aria-hidden="true" />
           <input
             ref={inputRef}
+            aria-label="Search sales records"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search customers, deals, equipment..."
             className="flex-1 text-base outline-none bg-transparent placeholder:text-slate-400"
           />
           <button
+            type="button"
+            aria-label="Close sales search"
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-slate-100"
           >
-            <X className="w-5 h-5 text-slate-500" />
+            <X className="w-5 h-5 text-slate-500" aria-hidden="true" />
           </button>
         </div>
 
@@ -143,7 +146,7 @@ export function SalesGlobalSearch({ onClose }: { onClose: () => void }) {
           )}
 
           {!q && (
-            <p className="text-sm text-slate-400 text-center py-8">
+            <p className="text-sm text-slate-500 text-center py-8">
               Search by customer name, deal name, or equipment type
             </p>
           )}

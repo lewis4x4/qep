@@ -118,7 +118,7 @@ const QUICK_DESTINATIONS = [
     desc: "Speak a quote into existence",
     href: "/sales/voice-quote",
     iconBg: "bg-qep-orange/10",
-    iconColor: "text-qep-orange",
+    iconColor: "text-qep-orange-accessible",
   },
   {
     key: "my_mirror",
@@ -216,7 +216,7 @@ export function CapturePage() {
       <div className="px-5 pt-4 pb-24">
         <button
           onClick={resetAll}
-          className="flex items-center gap-1 text-sm text-qep-orange font-semibold mb-4"
+          className="flex items-center gap-1 text-sm text-qep-orange-accessible font-semibold mb-4"
         >
           <X className="w-4 h-4" />
           Cancel
@@ -267,7 +267,7 @@ export function CapturePage() {
             <p className="text-[17px] font-extrabold text-white tracking-[-0.01em]">
               Tap to record
             </p>
-            <p className="text-xs text-white/85 mt-0.5 font-medium">
+            <p className="text-xs text-white mt-0.5 font-medium">
               Recording starts instantly · IRON finds the customer
             </p>
           </div>
@@ -279,7 +279,7 @@ export function CapturePage() {
 
       {quickCustomers.length > 0 && (
         <div className="px-5 pb-5">
-          <p className="text-[10px] font-extrabold text-muted-foreground/60 uppercase tracking-[0.1em] mb-2">
+          <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-[0.1em] mb-2">
             Attach to Customer
           </p>
           <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1 -mx-1 px-1">
@@ -302,7 +302,7 @@ export function CapturePage() {
                   <span
                     className={cn(
                       "text-xs font-bold whitespace-nowrap",
-                      active ? "text-qep-orange" : "text-foreground",
+                      active ? "text-qep-orange-accessible" : "text-foreground",
                     )}
                   >
                     {c.company_name.split(" ").slice(0, 2).join(" ")}
@@ -325,7 +325,7 @@ export function CapturePage() {
       )}
 
       <div className="px-5 pb-5">
-        <p className="text-[10px] font-extrabold text-muted-foreground/60 uppercase tracking-[0.1em] mb-2">
+        <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-[0.1em] mb-2">
           On This Page
         </p>
         <div className="grid grid-cols-3 gap-2">
@@ -349,7 +349,7 @@ export function CapturePage() {
                 <span className="text-[12px] font-bold text-foreground text-center leading-tight">
                   {a.label}
                 </span>
-                <span className="text-[10px] text-muted-foreground/60 text-center -mt-0.5">
+                <span className="text-[10px] text-muted-foreground text-center -mt-0.5">
                   {a.desc}
                 </span>
               </button>
@@ -359,7 +359,7 @@ export function CapturePage() {
       </div>
 
       <div className="px-5 pb-5">
-        <p className="text-[10px] font-extrabold text-muted-foreground/60 uppercase tracking-[0.1em] mb-2">
+        <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-[0.1em] mb-2">
           Log a Specific Type
         </p>
         <div className="grid grid-cols-3 gap-2">
@@ -383,7 +383,7 @@ export function CapturePage() {
                 <span className="text-[12px] font-bold text-foreground text-center leading-tight">
                   {t.label}
                 </span>
-                <span className="text-[10px] text-muted-foreground/60 text-center -mt-0.5">
+                <span className="text-[10px] text-muted-foreground text-center -mt-0.5">
                   Log this
                 </span>
               </button>
@@ -393,7 +393,7 @@ export function CapturePage() {
       </div>
 
       <div className="px-5 pb-5">
-        <p className="text-[10px] font-extrabold text-muted-foreground/60 uppercase tracking-[0.1em] mb-2">
+        <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-[0.1em] mb-2">
           Quick Destinations
         </p>
         <div className="rounded-[14px] border border-white/[0.06] bg-[hsl(var(--card))] overflow-hidden">
@@ -426,7 +426,7 @@ export function CapturePage() {
                     {d.desc}
                   </p>
                 </div>
-                <ChevronRight className="w-4 h-4 text-muted-foreground/60 shrink-0" />
+                <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
               </button>
             );
           })}
@@ -436,12 +436,12 @@ export function CapturePage() {
       {recentCaptures.length > 0 && (
         <div className="mx-5 pt-3 mt-1 border-t border-white/[0.06]">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-extrabold text-muted-foreground/60 uppercase tracking-[0.1em]">
+            <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-[0.1em]">
               Recent Captures
             </p>
             <button
               onClick={() => navigate("/sales/field-note/history")}
-              className="text-[11px] text-qep-orange font-bold hover:underline underline-offset-2"
+              className="text-[11px] text-qep-orange-accessible font-bold hover:underline underline-offset-2"
             >
               View all
             </button>
@@ -496,7 +496,7 @@ function RecentCaptureRow({
           {status}
         </p>
       </div>
-      <span className="text-[11px] text-muted-foreground/60 shrink-0">
+      <span className="text-[11px] text-muted-foreground shrink-0">
         {relative}
       </span>
     </div>

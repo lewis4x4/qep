@@ -1,4 +1,4 @@
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Sun, BarChart3, Mic, FileText, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -55,12 +55,10 @@ const TABS: Tab[] = [
 
 export function BottomTabBar() {
   const location = useLocation();
-  const navigate = useNavigate();
 
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200/80"
-      role="tablist"
       aria-label="Sales navigation"
       data-testid="sales-bottom-tab-bar"
       data-bottom-tab-height={String(SALES_BOTTOM_TAB_BAR_HEIGHT)}
@@ -72,11 +70,10 @@ export function BottomTabBar() {
     >
       <div className="flex h-[var(--sales-shell-bottom-tab-height)] items-center justify-around max-w-lg mx-auto px-2">
         {TABS.map((tab) => (
-          <TabButton
+          <TabLink
             key={tab.path}
             tab={tab}
             active={tab.isActive(location.pathname)}
-            onClick={() => navigate(tab.path)}
           />
         ))}
       </div>
@@ -84,24 +81,21 @@ export function BottomTabBar() {
   );
 }
 
-function TabButton({
+function TabLink({
   tab,
   active,
-  onClick,
 }: {
   tab: Tab;
   active: boolean;
-  onClick: () => void;
 }) {
   const Icon = tab.icon;
   return (
-    <button
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
+    <Link
+      to={tab.path}
+      aria-current={active ? "page" : undefined}
       className={cn(
         "flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 rounded-lg transition-colors",
-        active ? "text-qep-orange" : "text-slate-400 hover:text-slate-600",
+        active ? "text-qep-orange-accessible" : "text-slate-600 hover:text-slate-800",
       )}
     >
       {tab.signature ? (
@@ -112,18 +106,19 @@ function TabButton({
           )}
         >
           <Icon
-            className={cn("w-6 h-6", active ? "text-white" : "text-qep-orange")}
+            className={cn("w-6 h-6", active ? "text-white" : "text-qep-orange-accessible")}
             strokeWidth={active ? 2.2 : 1.8}
+            aria-hidden="true"
           />
         </span>
       ) : (
-        <Icon className="w-6 h-6" strokeWidth={active ? 2.2 : 1.8} />
+        <Icon className="w-6 h-6" strokeWidth={active ? 2.2 : 1.8} aria-hidden="true" />
       )}
       <span
         className={cn("text-[10px]", active ? "font-semibold" : "font-medium")}
       >
         {tab.label}
       </span>
-    </button>
+    </Link>
   );
 }

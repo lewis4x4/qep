@@ -7,6 +7,26 @@ import { MOBILE } from "../lib/mobile-design-tokens";
 
 afterEach(cleanup);
 
+describe("BottomTabBar navigation semantics", () => {
+  test("uses nav links with aria-current for the active route", () => {
+    render(
+      <MemoryRouter initialEntries={["/sales/pipeline"]}>
+        <BottomTabBar />
+      </MemoryRouter>,
+    );
+
+    const nav = screen.getByRole("navigation", { name: "Sales navigation" });
+    expect(nav.getAttribute("role")).toBeNull();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByRole("tab")).toBeNull();
+
+    const pipeline = screen.getByRole("link", { name: "Pipeline" });
+    expect(pipeline.getAttribute("href")).toBe("/sales/pipeline");
+    expect(pipeline.getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: "Today" }).hasAttribute("aria-current")).toBe(false);
+  });
+});
+
 describe("BottomTabBar height contract", () => {
   test("exposes the shared 64px tab height as a test hook", () => {
     render(
