@@ -53,6 +53,12 @@ function isUuidString(s: string): boolean {
   return UUID_RE.test(s.trim());
 }
 
+function isMigratedGrappleProductionJob(
+  job: Record<string, unknown> | null | undefined,
+): boolean {
+  return job?.grapple_production_routing_status === "migrated_to_grapple_builds";
+}
+
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   request_received: ["triaging"],
   triaging: ["diagnosis_selected"],
@@ -671,6 +677,8 @@ async function handleCreate(
         missing: h2Validation.missing,
         invalid: h2Validation.invalid,
         is_grapple_truck: h2Validation.is_grapple_truck,
+        is_grapple_production_service_route:
+          h2Validation.is_grapple_production_service_route,
       },
     );
   }
@@ -828,6 +836,14 @@ async function handleUpdate(
     .eq("id", id)
     .single();
 
+  if (isMigratedGrappleProductionJob(before as Record<string, unknown> | null)) {
+    return safeJsonError(
+      "Migrated grapple production builds are read-only in service_jobs; use grapple_builds instead.",
+      409,
+      origin,
+    );
+  }
+
   const touchesH2Intake = Object.keys(fields).some((key) =>
     H2_INTAKE_FIELDS.has(key)
   );
@@ -848,6 +864,8 @@ async function handleUpdate(
           missing: h2Validation.missing,
           invalid: h2Validation.invalid,
           is_grapple_truck: h2Validation.is_grapple_truck,
+          is_grapple_production_service_route:
+            h2Validation.is_grapple_production_service_route,
         },
       );
     }
@@ -963,6 +981,14 @@ async function handleTransition(
 
   if (fetchErr || !job) {
     return safeJsonError("Service job not found", 404, origin);
+  }
+
+  if (isMigratedGrappleProductionJob(job as Record<string, unknown>)) {
+    return safeJsonError(
+      "Migrated grapple production builds cannot transition through service_jobs; use grapple_builds instead.",
+      409,
+      origin,
+    );
   }
 
   const fromStage = job.current_stage as string;
@@ -1149,6 +1175,7 @@ async function handleList(
     page = 1,
     per_page = 50,
     include_closed = false,
+    include_grapple_migrated = false,
   } = body as Record<string, unknown>;
 
   let query = supabase
@@ -1167,6 +1194,12 @@ async function handleList(
 
   if (!include_closed) {
     query = query.is("closed_at", null).is("deleted_at", null);
+  }
+  if (!include_grapple_migrated) {
+    query = query.neq(
+      "grapple_production_routing_status",
+      "migrated_to_grapple_builds",
+    );
   }
 
   if (stage) {

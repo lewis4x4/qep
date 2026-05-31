@@ -39,6 +39,7 @@ export interface H2ServiceJobIntakeValidation {
   missing: string[];
   invalid: string[];
   is_grapple_truck: boolean;
+  is_grapple_production_service_route: boolean;
   normalized: Record<string, unknown>;
 }
 
@@ -105,6 +106,28 @@ export function isH2GrappleTruck(machine: H2MachineSnapshotSource | null): boole
   return /\bgrapple\b/.test(freeText) && /\btruck\b/.test(freeText);
 }
 
+export function isGrappleProductionServiceRoute(
+  body: Record<string, unknown>,
+  machine: H2MachineSnapshotSource | null,
+): boolean {
+  const serviceJobHints = [
+    body.customer_problem_summary,
+    body.complaint,
+    body.cause,
+    body.correction,
+    body.description,
+    body.title,
+    body.work_summary,
+  ].map((v) => text(v)).filter(Boolean).join(" ").toLowerCase();
+
+  const hasExplicitBuildIntent =
+    /\b(?:grapple[-\s]?truck|gtb)\b.{0,80}\b(?:build|built|production|assemble|assembly|upfit|upfitting)\b/.test(serviceJobHints) ||
+    /\b(?:build|built|production|assemble|assembly|upfit|upfitting)\b.{0,80}\b(?:grapple[-\s]?truck|gtb)\b/.test(serviceJobHints) ||
+    /\b(?:production build|build package|upfit package|new unit|sold unit|mount grapple body)\b/.test(serviceJobHints);
+
+  return hasExplicitBuildIntent && isH2GrappleTruck(machine);
+}
+
 export function validateH2ServiceJobIntake(
   body: Record<string, unknown>,
   machine: H2MachineSnapshotSource | null,
@@ -152,6 +175,9 @@ export function validateH2ServiceJobIntake(
   else normalized.hour_meter_reading = hourMeter;
 
   const isGrappleTruck = isH2GrappleTruck(machine);
+  const isGrappleProductionRoute = isGrappleProductionServiceRoute(body, machine);
+  if (isGrappleProductionRoute) invalid.push("grapple_production_route");
+
   const odometerMiles = finiteNonnegativeNumber(body.odometer_miles ?? body.miles);
   if (isGrappleTruck && odometerMiles == null) missing.push("odometer_miles");
   if (odometerMiles != null) normalized.odometer_miles = odometerMiles;
@@ -209,6 +235,7 @@ export function validateH2ServiceJobIntake(
     missing: [...new Set(missing)],
     invalid: [...new Set(invalid)],
     is_grapple_truck: isGrappleTruck,
+    is_grapple_production_service_route: isGrappleProductionRoute,
     normalized,
   };
 }

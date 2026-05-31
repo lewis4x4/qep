@@ -6,6 +6,7 @@ import {
   H2_SERVICE_PRIORITIES,
   H2_SERVICE_REQUEST_TYPES,
   H2_SERVICE_SOURCE_TYPES,
+  isGrappleProductionServiceRoute,
   isH2GrappleTruck,
   validateH2ServiceJobIntake,
 } from "./service-intake-hardening.ts";
@@ -82,7 +83,7 @@ Deno.test("validateH2ServiceJobIntake rejects incomplete machine and Three-Cs", 
   assert(result.missing.includes("correction"));
 });
 
-Deno.test("validateH2ServiceJobIntake requires miles for grapple trucks only", () => {
+Deno.test("validateH2ServiceJobIntake requires miles for grapple-truck service repairs only", () => {
   const grappleTruck = {
     ...COMPLETE_MACHINE,
     name: "Grapple Truck 12",
@@ -94,6 +95,7 @@ Deno.test("validateH2ServiceJobIntake requires miles for grapple trucks only", (
   const missingMiles = validateH2ServiceJobIntake(COMPLETE_BODY, grappleTruck);
   assertEquals(missingMiles.ok, false);
   assert(missingMiles.missing.includes("odometer_miles"));
+  assertEquals(missingMiles.invalid.includes("grapple_production_route"), false);
 
   const withMiles = validateH2ServiceJobIntake(
     { ...COMPLETE_BODY, odometer_miles: "45678" },
@@ -104,6 +106,56 @@ Deno.test("validateH2ServiceJobIntake requires miles for grapple trucks only", (
 
   const nonGrapple = validateH2ServiceJobIntake(COMPLETE_BODY, COMPLETE_MACHINE);
   assertEquals(nonGrapple.ok, true);
+});
+
+Deno.test("validateH2ServiceJobIntake rejects grapple-truck production builds from service WOs", () => {
+  const grappleTruck = {
+    ...COMPLETE_MACHINE,
+    name: "Grapple Truck 12",
+    category: "truck",
+    metadata: { work_class: "grapple_truck" },
+  };
+
+  const productionBuild = {
+    ...COMPLETE_BODY,
+    request_type: "internal",
+    odometer_miles: 45678,
+    customer_problem_summary: "Build grapple truck package for sold unit.",
+    complaint: "Production build request from sales.",
+    cause: "New grapple-truck production build.",
+    correction: "Assemble and mount grapple body before delivery.",
+  };
+
+  assertEquals(isGrappleProductionServiceRoute(productionBuild, grappleTruck), true);
+
+  const result = validateH2ServiceJobIntake(productionBuild, grappleTruck);
+  assertEquals(result.ok, false);
+  assertEquals(result.is_grapple_production_service_route, true);
+  assert(result.invalid.includes("grapple_production_route"));
+});
+
+Deno.test("validateH2ServiceJobIntake keeps grapple-truck repairs in service WOs", () => {
+  const grappleTruck = {
+    ...COMPLETE_MACHINE,
+    name: "Grapple Truck 12",
+    category: "truck",
+    metadata: { work_class: "grapple_truck" },
+  };
+
+  const repair = {
+    ...COMPLETE_BODY,
+    odometer_miles: 45678,
+    customer_problem_summary: "Install replacement grapple cylinder hose.",
+    complaint: "Hydraulic leak on grapple truck.",
+    cause: "Cylinder hose failed in service.",
+    correction: "Install replacement hose and test for leaks.",
+  };
+
+  assertEquals(isGrappleProductionServiceRoute(repair, grappleTruck), false);
+
+  const result = validateH2ServiceJobIntake(repair, grappleTruck);
+  assertEquals(result.ok, true);
+  assertEquals(result.is_grapple_production_service_route, false);
 });
 
 Deno.test("validateH2ServiceJobIntake rejects legacy create vocabulary and field-service shop mismatch", () => {
