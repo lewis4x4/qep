@@ -89,12 +89,16 @@ export const BLOCKED_ALLOWED_FROM = new Set([
 
 export const PRIORITY_LABELS = {
   normal: "Normal",
-  urgent: "Urgent",
-  critical: "Critical",
+  high: "High",
+  emergency: "Emergency / Down",
+  urgent: "Urgent (legacy)",
+  critical: "Critical (legacy)",
 } as const;
 
 export const PRIORITY_COLORS = {
   normal: "bg-slate-500/15 text-slate-600 dark:bg-slate-400/15 dark:text-slate-300",
+  high: "bg-amber-500/15 text-amber-600 dark:bg-amber-400/15 dark:text-amber-300",
+  emergency: "bg-red-500/15 text-red-600 dark:bg-red-400/15 dark:text-red-300",
   urgent: "bg-amber-500/15 text-amber-600 dark:bg-amber-400/15 dark:text-amber-300",
   critical: "bg-red-500/15 text-red-600 dark:bg-red-400/15 dark:text-red-300",
 } as const;
@@ -102,18 +106,49 @@ export const PRIORITY_COLORS = {
 export const SOURCE_TYPE_LABELS = {
   call: "Phone Call",
   walk_in: "Walk-In",
-  field_tech: "Field Tech",
-  sales_handoff: "Sales Handoff",
-  portal: "Customer Portal",
+  drop_off: "Drop-off",
+  field_request: "Field Request",
+  internal_request: "Internal Request",
+  field_tech: "Field Tech (legacy)",
+  sales_handoff: "Sales Handoff (legacy)",
+  portal: "Customer Portal (legacy)",
+} as const;
+
+export const H2_SOURCE_TYPE_LABELS = {
+  call: SOURCE_TYPE_LABELS.call,
+  walk_in: SOURCE_TYPE_LABELS.walk_in,
+  drop_off: SOURCE_TYPE_LABELS.drop_off,
+  field_request: SOURCE_TYPE_LABELS.field_request,
+  internal_request: SOURCE_TYPE_LABELS.internal_request,
 } as const;
 
 export const REQUEST_TYPE_LABELS = {
   repair: "Repair",
-  pm_service: "PM Service",
-  inspection: "Inspection",
-  machine_down: "Machine Down",
-  recall: "Recall",
+  pm_service: "Preventive Maintenance",
   warranty: "Warranty",
+  field_service: "Field Service",
+  internal: "Internal",
+  comeback_rework: "Comeback / Rework",
+  hauling_transport: "Hauling / Transport",
+  inspection: "Inspection (legacy)",
+  machine_down: "Machine Down (legacy)",
+  recall: "Recall (legacy)",
+} as const;
+
+export const H2_REQUEST_TYPE_LABELS = {
+  repair: REQUEST_TYPE_LABELS.repair,
+  pm_service: REQUEST_TYPE_LABELS.pm_service,
+  warranty: REQUEST_TYPE_LABELS.warranty,
+  field_service: REQUEST_TYPE_LABELS.field_service,
+  internal: REQUEST_TYPE_LABELS.internal,
+  comeback_rework: REQUEST_TYPE_LABELS.comeback_rework,
+  hauling_transport: REQUEST_TYPE_LABELS.hauling_transport,
+} as const;
+
+export const H2_PRIORITY_LABELS = {
+  normal: PRIORITY_LABELS.normal,
+  high: PRIORITY_LABELS.high,
+  emergency: PRIORITY_LABELS.emergency,
 } as const;
 
 export const STATUS_FLAG_LABELS: Record<string, string> = {

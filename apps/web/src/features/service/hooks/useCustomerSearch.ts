@@ -35,7 +35,7 @@ export function useCustomerEquipment(customerId: string | null) {
       if (!customerId) return [];
       const { data, error } = await supabase
         .from("crm_equipment")
-        .select("id, make, model, serial_number, year, customer_id")
+        .select("id, name, make, model, serial_number, year, customer_id, category, metadata, engine_hours, mileage, warranty_registered, warranty_registration_number, warranty_provider, warranty_start_date, warranty_end_date, warranty_coverage_terms")
         .eq("customer_id", customerId)
         .is("deleted_at", null)
         .order("make")
@@ -54,7 +54,7 @@ export function useEquipmentSearch(query: string) {
     queryFn: async (): Promise<EquipmentResult[]> => {
       const { data, error } = await supabase
         .from("crm_equipment")
-        .select("id, make, model, serial_number, year, customer_id")
+        .select("id, name, make, model, serial_number, year, customer_id, category, metadata, engine_hours, mileage, warranty_registered, warranty_registration_number, warranty_provider, warranty_start_date, warranty_end_date, warranty_coverage_terms")
         .or(
           `serial_number.ilike.%${query.trim()}%,make.ilike.%${query.trim()}%,model.ilike.%${query.trim()}%`,
         )
