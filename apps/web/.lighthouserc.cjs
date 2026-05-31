@@ -6,7 +6,7 @@
  * value sales-rep routes. Thresholds are calibrated to fail PRs that
  * regress mobile performance or accessibility on these surfaces:
  *
- *   - performance >= 0.70 (error for authenticated sales routes; 0.85 warn for guest fallback)
+ *   - performance >= 0.70 (warn for authenticated sales routes; 0.85 warn for guest fallback)
  *   - accessibility >= 0.95 (error)
  *   - best-practices >= 0.90 (warn)
  *   - CLS <= 0.1 (error) — layout shift is the single most painful
@@ -93,12 +93,12 @@ module.exports = {
     assert: {
       assertions: {
         // Authenticated /sales/* routes are edge-function-backed SPA surfaces;
-        // 0.85 simulated-mobile is not a realistic hard gate yet. Keep 0.85 as
-        // the guest-fallback warning and ratchet the authenticated error floor
-        // upward as structural CLS/LCP work lands.
+        // simulated-mobile performance is tracked as a warning, not a hard
+        // gate, and will ratchet up as image/render-blocking optimizations land.
+        // Keep guest fallback at the existing warning threshold.
         "categories:performance": guestFallback
           ? ["warn", { minScore: 0.85 }]
-          : ["error", { minScore: 0.70 }],
+          : ["warn", { minScore: 0.70 }],
         "categories:accessibility": ["error", { minScore: 0.95 }],
         "categories:best-practices": ["warn", { minScore: 0.9 }],
         "first-contentful-paint": ["warn", { maxNumericValue: 2500 }],

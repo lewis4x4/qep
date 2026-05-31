@@ -23,6 +23,7 @@ describe("BottomTabBar navigation semantics", () => {
     const pipeline = screen.getByRole("link", { name: "Pipeline" });
     expect(pipeline.getAttribute("href")).toBe("/sales/pipeline");
     expect(pipeline.getAttribute("aria-current")).toBe("page");
+    expect(pipeline.className).toContain("min-h-12");
     expect(screen.getByRole("link", { name: "Today" }).hasAttribute("aria-current")).toBe(false);
   });
 });

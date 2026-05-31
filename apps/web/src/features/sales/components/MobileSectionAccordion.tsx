@@ -56,7 +56,7 @@ export function MobileSectionAccordion({
         aria-controls={bodyId}
         className="w-full flex items-center gap-3 px-4 py-3 min-h-[56px] text-left hover:bg-foreground/[0.02] transition-colors"
       >
-        <span className="font-mono text-xs font-bold text-qep-orange tracking-wider tabular-nums">
+        <span className="font-mono text-xs font-bold text-qep-orange-accessible tracking-wider tabular-nums">
           {formatted}
         </span>
         <span className="flex-1 min-w-0">

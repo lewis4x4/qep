@@ -82,7 +82,7 @@ function getScoreAccent(score: number) {
     bg: "bg-foreground/[0.04]",
     border: "border-white/[0.06]",
     text: "text-muted-foreground",
-    icon: "text-muted-foreground/60",
+    icon: "text-muted-foreground",
   };
 }
 
@@ -90,7 +90,7 @@ function getScoreAccent(score: number) {
 function getStageTagColor(stage: string): string {
   const s = stage.toLowerCase();
   if (s.includes("closing") || s.includes("close")) return "text-emerald-400 bg-emerald-500/15";
-  if (s.includes("negotiat")) return "text-qep-orange bg-qep-orange/15";
+  if (s.includes("negotiat")) return "text-qep-orange-accessible bg-qep-orange/15";
   if (s.includes("quot")) return "text-amber-400 bg-amber-500/15";
   return "text-blue-400 bg-blue-500/15";
 }
@@ -129,7 +129,7 @@ export function CustomerDetailPage() {
         <p className="text-muted-foreground">Customer not found.</p>
         <button
           onClick={() => navigate("/sales/customers")}
-          className="mt-4 text-qep-orange text-sm font-medium"
+          className="mt-4 text-qep-orange-accessible text-sm font-medium"
         >
           Back to customers
         </button>
@@ -182,7 +182,7 @@ export function CustomerDetailPage() {
         {/* Back button */}
         <button
           onClick={() => navigate("/sales/customers")}
-          className="flex items-center gap-1 text-qep-orange text-[13px] font-semibold mb-3 p-1 -ml-1"
+          className="flex items-center gap-1 text-qep-orange-accessible text-[13px] font-semibold mb-3 p-1 -ml-1"
         >
           <ChevronLeft className="w-4 h-4" />
           Customers
@@ -201,7 +201,7 @@ export function CustomerDetailPage() {
               </p>
             )}
             {selectedCustomer.city && (
-              <div className="flex items-center gap-1 mt-1 text-[11px] text-muted-foreground/60">
+              <div className="flex items-center gap-1 mt-1 text-[11px] text-muted-foreground">
                 <MapPin className="w-[11px] h-[11px]" />
                 {selectedCustomer.city}, {selectedCustomer.state}
               </div>
@@ -289,7 +289,7 @@ export function CustomerDetailPage() {
 
         <div className="mt-3 rounded-[14px] border border-qep-orange/20 bg-qep-orange/[0.07] p-3">
           <div className="flex items-start gap-3">
-            <div className="rounded-full bg-qep-orange/15 p-2 text-qep-orange">
+            <div className="rounded-full bg-qep-orange/15 p-2 text-qep-orange-accessible">
               <Radio className="h-4 w-4" />
             </div>
             <div className="min-w-0 flex-1">
@@ -327,7 +327,7 @@ export function CustomerDetailPage() {
               <span className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-[0.1em]">
                 Other Deals
               </span>
-              <span className="text-[11px] text-muted-foreground/50">
+              <span className="text-[11px] text-muted-foreground">
                 ({deals.length - 1})
               </span>
             </div>
@@ -368,7 +368,7 @@ export function CustomerDetailPage() {
               <span className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-[0.1em]">
                 Active Quotes
               </span>
-              <span className="text-[11px] text-muted-foreground/50">
+              <span className="text-[11px] text-muted-foreground">
                 ({quotes.length})
               </span>
             </div>
@@ -468,7 +468,7 @@ function ActiveDealCard({ deal }: { deal: RepPipelineDeal }) {
   return (
     <section>
       <div className="flex items-center gap-1.5 mb-2">
-        <Flame className="w-3.5 h-3.5 text-qep-orange" />
+        <Flame className="w-3.5 h-3.5 text-qep-orange-accessible" />
         <span className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-[0.1em]">
           Active Deal
         </span>

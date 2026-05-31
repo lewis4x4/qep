@@ -58,7 +58,7 @@ export function SalesGlobalSearch({ onClose }: { onClose: () => void }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search customers, deals, equipment..."
-            className="flex-1 text-base outline-none bg-transparent placeholder:text-slate-400"
+            className="flex-1 text-base outline-none bg-transparent placeholder:text-slate-500"
           />
           <button
             type="button"
@@ -86,7 +86,7 @@ export function SalesGlobalSearch({ onClose }: { onClose: () => void }) {
                   }}
                   className="w-full flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-slate-50 text-left"
                 >
-                  <Building2 className="w-5 h-5 text-slate-400 shrink-0" />
+                  <Building2 className="w-5 h-5 text-slate-500 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-900 truncate">
                       {c.company_name}
@@ -120,7 +120,7 @@ export function SalesGlobalSearch({ onClose }: { onClose: () => void }) {
                   }}
                   className="w-full flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-slate-50 text-left"
                 >
-                  <Briefcase className="w-5 h-5 text-slate-400 shrink-0" />
+                  <Briefcase className="w-5 h-5 text-slate-500 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-900 truncate">
                       {d.deal_name}

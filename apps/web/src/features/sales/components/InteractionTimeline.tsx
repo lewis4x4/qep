@@ -54,7 +54,7 @@ export function InteractionTimeline({
               className="flex gap-2.5 px-3.5 py-2.5 items-start"
             >
               {/* Date column */}
-              <div className="w-[52px] shrink-0 text-[11px] text-muted-foreground/60 font-semibold pt-[1px]">
+              <div className="w-[52px] shrink-0 text-[11px] text-muted-foreground font-semibold pt-[1px]">
                 {formatDate(act.occurred_at)}
               </div>
 

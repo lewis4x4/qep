@@ -179,7 +179,7 @@ export function MyApprovalsPage() {
         </div>
         <div className="flex items-baseline justify-between gap-2">
           <div>
-            <p className="text-[10px] font-extrabold text-muted-foreground/60 uppercase tracking-[0.1em] mb-0.5">
+            <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-[0.1em] mb-0.5">
               Submitted Approvals
             </p>
             <h1 className="text-[22px] font-black text-foreground tracking-[-0.02em]">
@@ -188,10 +188,10 @@ export function MyApprovalsPage() {
           </div>
           {!isLoading && approvals.length > 0 && pendingCount > 0 && (
             <div className="text-right">
-              <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-[0.08em]">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.08em]">
                 Pending
               </p>
-              <p className="text-[15px] font-extrabold text-qep-orange">
+              <p className="text-[15px] font-extrabold text-qep-orange-accessible">
                 {pendingCount}
               </p>
             </div>
@@ -219,7 +219,7 @@ export function MyApprovalsPage() {
                 <span>{opt.label}</span>
                 <span
                   className={`tabular-nums text-[10.5px] ${
-                    active ? "text-white/85" : "text-muted-foreground/60"
+                    active ? "text-white/85" : "text-muted-foreground"
                   }`}
                 >
                   ({opt.count})
@@ -237,7 +237,7 @@ export function MyApprovalsPage() {
         ) : approvals.length === 0 ? (
           <EmptyApprovalsState />
         ) : visible.length === 0 ? (
-          <p className="text-center text-[12px] text-muted-foreground/70 py-10">
+          <p className="text-center text-[12px] text-muted-foreground py-10">
             No approvals match this filter.
           </p>
         ) : (
@@ -335,16 +335,16 @@ function ApprovalRow({ approval }: { approval: MyApprovalRow }) {
             <p className="text-[14px] font-bold text-foreground leading-tight truncate">
               {customerLabel}
             </p>
-            <p className="text-[11px] text-muted-foreground/80 leading-snug mt-0.5 truncate">
+            <p className="text-[11px] text-muted-foreground leading-snug mt-0.5 truncate">
               {approval.quote_number ?? "No quote number"}
-              <span className="mx-1.5 text-muted-foreground/40">·</span>
+              <span className="mx-1.5 text-muted-foreground">·</span>
               {formatCurrency(approval.total_amount)}
               {approval.margin_pct !== null && (
                 <>
-                  <span className="mx-1.5 text-muted-foreground/40">·</span>
+                  <span className="mx-1.5 text-muted-foreground">·</span>
                   <span
                     className={
-                      approval.margin_pct < 8 ? "text-amber-300" : "text-muted-foreground/80"
+                      approval.margin_pct < 8 ? "text-amber-300" : "text-muted-foreground"
                     }
                   >
                     {approval.margin_pct.toFixed(1)}% margin
@@ -360,7 +360,7 @@ function ApprovalRow({ approval }: { approval: MyApprovalRow }) {
           </span>
         </div>
 
-        <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground/70">
+        <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
           <span className="truncate">{timeAgo}</span>
           {managerLabel && (
             <span className="truncate text-right">{managerLabel}</span>
@@ -368,14 +368,14 @@ function ApprovalRow({ approval }: { approval: MyApprovalRow }) {
         </div>
 
         {approval.submission_note && (
-          <p className="mt-2 text-[11.5px] italic text-muted-foreground/75 leading-snug line-clamp-2">
+          <p className="mt-2 text-[11.5px] italic text-muted-foreground leading-snug line-clamp-2">
             &ldquo;{approval.submission_note}&rdquo;
           </p>
         )}
 
         {approval.decision_note && (
           <div className="mt-2 px-2.5 py-1.5 rounded-[10px] bg-white/[0.03] border border-white/[0.05]">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground/60 mb-0.5">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-0.5">
               {approval.decided_by_name
                 ? `${approval.decided_by_name} replied`
                 : "Manager replied"}
@@ -386,7 +386,7 @@ function ApprovalRow({ approval }: { approval: MyApprovalRow }) {
           </div>
         )}
 
-        <div className="flex items-center justify-end mt-1.5 text-qep-orange/70 group-hover:text-qep-orange transition-colors">
+        <div className="flex items-center justify-end mt-1.5 text-qep-orange-accessible group-hover:text-qep-orange-accessible transition-colors">
           <ChevronRight className="w-3.5 h-3.5" />
         </div>
       </button>
@@ -404,7 +404,7 @@ function ApprovalRow({ approval }: { approval: MyApprovalRow }) {
                 aria-label="Approval actions"
                 aria-haspopup="menu"
                 onClick={(event) => event.stopPropagation()}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground/70 hover:bg-white/[0.05] hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-white/[0.05] hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange"
                 data-testid={`my-approvals-row-menu-${approval.id}`}
               >
                 <MoreHorizontal className="h-4 w-4" />
@@ -548,19 +548,19 @@ function EmptyApprovalsState() {
           onClick={() => navigate("/sales/quotes/new")}
           className="group w-full flex items-center gap-3 px-3.5 py-3 rounded-[14px] border border-qep-orange/40 bg-qep-orange/10 hover:bg-qep-orange/15 text-left transition-all active:scale-[0.985]"
         >
-          <div className="w-10 h-10 rounded-[11px] flex items-center justify-center shrink-0 bg-qep-orange/20 text-qep-orange">
+          <div className="w-10 h-10 rounded-[11px] flex items-center justify-center shrink-0 bg-qep-orange/20 text-qep-orange-accessible">
             <FileText className="w-[18px] h-[18px]" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[14px] font-bold leading-tight text-qep-orange">
+            <p className="text-[14px] font-bold leading-tight text-qep-orange-accessible">
               Draft a Quote
             </p>
-            <p className="text-[11.5px] text-muted-foreground/80 leading-snug mt-0.5">
+            <p className="text-[11.5px] text-muted-foreground leading-snug mt-0.5">
               Build a quote in the Quote Builder. Submit it for approval when
               it crosses margin or amount thresholds.
             </p>
           </div>
-          <ArrowRight className="w-4 h-4 shrink-0 text-qep-orange transition-transform group-active:translate-x-0.5" />
+          <ArrowRight className="w-4 h-4 shrink-0 text-qep-orange-accessible transition-transform group-active:translate-x-0.5" />
         </button>
 
         <Link
@@ -574,11 +574,11 @@ function EmptyApprovalsState() {
             <p className="text-[14px] font-bold leading-tight text-foreground">
               Capture a Visit
             </p>
-            <p className="text-[11.5px] text-muted-foreground/80 leading-snug mt-0.5">
+            <p className="text-[11.5px] text-muted-foreground leading-snug mt-0.5">
               Voice-capture the deal, then turn it into a quote when ready.
             </p>
           </div>
-          <ArrowRight className="w-4 h-4 shrink-0 text-muted-foreground/60 transition-transform group-active:translate-x-0.5" />
+          <ArrowRight className="w-4 h-4 shrink-0 text-muted-foreground transition-transform group-active:translate-x-0.5" />
         </Link>
       </div>
     </div>

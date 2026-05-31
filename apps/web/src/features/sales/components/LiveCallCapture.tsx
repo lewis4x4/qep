@@ -374,7 +374,7 @@ export function LiveCallCapture({ companyId, companyName, onSaved, onCancel }: L
     <div className="space-y-4 p-1">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-qep-orange">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-qep-orange-accessible">
             Live call capture
           </p>
           <h2 className="mt-1 text-lg font-black text-foreground">{companyName}</h2>

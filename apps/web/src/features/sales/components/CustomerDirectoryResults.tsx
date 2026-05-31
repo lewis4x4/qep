@@ -49,7 +49,7 @@ export function CustomerDirectoryResults({
           Dealer Directory
         </span>
         {!isLoading && (
-          <span className="text-[11px] text-muted-foreground/60 ml-auto">
+          <span className="text-[11px] text-muted-foreground ml-auto">
             {results.length} {results.length === 1 ? "match" : "matches"}
           </span>
         )}
@@ -81,7 +81,7 @@ export function CustomerDirectoryResults({
             </span>
             .
           </p>
-          <p className="text-[11px] text-muted-foreground/60 mt-1">
+          <p className="text-[11px] text-muted-foreground mt-1">
             Try a company name, contact, city, or legacy customer #.
           </p>
         </div>
@@ -127,7 +127,7 @@ function DirectoryResultRow({
   const Icon = result.kind === "company" ? Building2 : UserRound;
   const iconTone =
     result.kind === "company"
-      ? "bg-qep-orange/15 text-qep-orange"
+      ? "bg-qep-orange/15 text-qep-orange-accessible"
       : "bg-cyan-500/15 text-cyan-400";
 
   const canOpen = Boolean(companyId);
@@ -171,7 +171,7 @@ function DirectoryResultRow({
           </span>
         </div>
       </div>
-      <ArrowRight className="w-4 h-4 text-muted-foreground/60 shrink-0" />
+      <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
     </button>
   );
 }

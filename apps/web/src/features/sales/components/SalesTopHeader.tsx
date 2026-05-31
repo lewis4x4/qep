@@ -36,7 +36,7 @@ export function SalesTopHeader() {
         {/* Left: brand */}
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-qep-orange flex items-center justify-center">
-            <span className="text-white font-bold text-sm">QEP</span>
+            <span className="text-slate-950 font-bold text-sm">QEP</span>
           </div>
           <span className="text-white font-semibold text-sm">
             Sales Companion
@@ -58,7 +58,7 @@ export function SalesTopHeader() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                aria-label="User menu"
+                aria-label={initials ? `${initials} user menu` : "User menu"}
                 className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange"
               >
                 {initials ? (

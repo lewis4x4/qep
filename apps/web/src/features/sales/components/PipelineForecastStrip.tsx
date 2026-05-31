@@ -43,12 +43,12 @@ export function PipelineForecastStrip({
         {/* Header row */}
         <div className="relative flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
-            <Calendar className="w-3.5 h-3.5 text-qep-orange" aria-hidden />
+            <Calendar className="w-3.5 h-3.5 text-qep-orange-accessible" aria-hidden />
             <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-[0.12em]">
               EOM Forecast · {monthName}
             </p>
           </div>
-          <p className="text-[10px] font-extrabold text-qep-orange uppercase tracking-[0.06em]">
+          <p className="text-[10px] font-extrabold text-qep-orange-accessible uppercase tracking-[0.06em]">
             {daysLeft}d left
           </p>
         </div>
@@ -62,7 +62,7 @@ export function PipelineForecastStrip({
             weighted close
           </span>
           {closingDealCount > 0 && (
-            <span className="text-[11px] ml-auto text-muted-foreground/80">
+            <span className="text-[11px] ml-auto text-muted-foreground">
               {closingDealCount} {closingDealCount === 1 ? "deal" : "deals"}
             </span>
           )}
@@ -90,7 +90,7 @@ export function PipelineForecastStrip({
           </span>
           <span className="text-muted-foreground flex items-center gap-1">
             Stretch
-            <TrendingUp className="w-3 h-3 text-qep-orange" aria-hidden />
+            <TrendingUp className="w-3 h-3 text-qep-orange-accessible" aria-hidden />
             <span className="text-foreground font-bold">
               {formatCurrency(stretchValue)}
             </span>

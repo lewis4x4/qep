@@ -277,7 +277,7 @@ function InsightFilterBanner({
           <span className="w-1.5 h-1.5 rounded-full bg-qep-orange animate-pulse shrink-0" />
           <p className="text-[12px] font-bold text-foreground truncate">
             Filtered: <span className="text-qep-orange-accessible">{label}</span>
-            <span className="text-muted-foreground/70 font-normal ml-1.5">
+            <span className="text-muted-foreground font-normal ml-1.5">
               · {count} {count === 1 ? "deal" : "deals"}
             </span>
           </p>

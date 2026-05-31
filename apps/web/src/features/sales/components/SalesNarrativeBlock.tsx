@@ -30,11 +30,11 @@ export function SalesNarrativeBlock({ firstName }: SalesNarrativeBlockProps) {
       className={NARRATIVE_CARD_CLASS}
     >
       <div className="flex items-center justify-between">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-qep-orange">
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-qep-orange-accessible">
           01 Narrative
         </p>
         {narrative.fresh && (
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Last 24h
           </span>
         )}

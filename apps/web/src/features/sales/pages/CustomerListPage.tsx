@@ -130,7 +130,7 @@ export function CustomerListPage() {
           <div className="px-4 pt-2.5 pb-0 flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <div className="w-[22px] h-[22px] rounded-[7px] bg-qep-orange/10 flex items-center justify-center">
-                <Zap className="w-[11px] h-[11px] text-qep-orange" />
+                <Zap className="w-[11px] h-[11px] text-qep-orange-accessible" />
               </div>
               <span className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-[0.08em]">
                 {isSearching ? "In Your Book" : "Iron-Ranked by Opportunity"}
@@ -157,7 +157,7 @@ export function CustomerListPage() {
               />
             ))
           ) : isSearching ? (
-            <p className="text-center text-[12px] text-muted-foreground/70 py-2">
+            <p className="text-center text-[12px] text-muted-foreground py-2">
               No book matches — see dealer directory below.
             </p>
           ) : (
@@ -210,7 +210,7 @@ function InsightFilterBanner({
           <span className="w-1.5 h-1.5 rounded-full bg-qep-orange animate-pulse shrink-0" />
           <p className="text-[12px] font-bold text-foreground truncate">
             Filtered: <span className="text-qep-orange-accessible">{label}</span>
-            <span className="text-muted-foreground/70 font-normal ml-1.5">
+            <span className="text-muted-foreground font-normal ml-1.5">
               · {count} {count === 1 ? "customer" : "customers"}
             </span>
           </p>

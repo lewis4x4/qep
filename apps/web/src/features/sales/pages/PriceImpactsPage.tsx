@@ -173,7 +173,7 @@ export function PriceImpactsPage() {
         </button>
         <div className="mt-3 flex items-end justify-between gap-3">
           <div>
-            <p className="text-[10px] font-extrabold text-qep-orange uppercase tracking-[0.13em]">
+            <p className="text-[10px] font-extrabold text-qep-orange-accessible uppercase tracking-[0.13em]">
               OEM price impacts
             </p>
             <h1 className="text-[24px] font-black tracking-[-0.03em] text-foreground">
@@ -182,10 +182,10 @@ export function PriceImpactsPage() {
           </div>
           {summary && summary.visibleImpactCount > 0 && (
             <div className="text-right">
-              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/60">
+              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
                 Exposure
               </p>
-              <p className="text-[17px] font-black tabular-nums text-qep-orange">
+              <p className="text-[17px] font-black tabular-nums text-qep-orange-accessible">
                 {formatCents(summary.totalDeltaCents)}
               </p>
             </div>
@@ -220,7 +220,7 @@ export function PriceImpactsPage() {
                       Event {eventId.replace(/-/g, "").slice(0, 8).toUpperCase()}
                     </span>
                     <div className="flex-1 h-px bg-white/[0.06]" />
-                    <span className="text-[10px] text-muted-foreground/70">
+                    <span className="text-[10px] text-muted-foreground">
                       {impacts.length} {impacts.length === 1 ? "quote" : "quotes"}
                     </span>
                   </div>
@@ -327,7 +327,7 @@ function SummaryStrip({
 function SummaryMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-white/[0.07] bg-[hsl(var(--card))] px-3 py-2.5">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground/60">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
       <p className="mt-0.5 text-[15px] font-black tabular-nums text-foreground">
@@ -362,7 +362,7 @@ function ImpactCard({
             {impact.quoteStatus ?? "open quote"} · {impact.lines.length} impacted {impact.lines.length === 1 ? "line" : "lines"}
           </p>
         </div>
-        <span className="shrink-0 rounded-full border border-qep-orange/30 bg-qep-orange/10 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-qep-orange">
+        <span className="shrink-0 rounded-full border border-qep-orange/30 bg-qep-orange/10 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-qep-orange-accessible">
           {statusLabel(impact)}
         </span>
       </div>
@@ -443,10 +443,10 @@ function MiniMetric({
 }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-2.5 py-2">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground/60">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
-      <p className={`mt-0.5 text-[12px] font-black tabular-nums ${tone === "orange" ? "text-qep-orange" : "text-foreground"}`}>
+      <p className={`mt-0.5 text-[12px] font-black tabular-nums ${tone === "orange" ? "text-qep-orange-accessible" : "text-foreground"}`}>
         {value}
       </p>
     </div>
@@ -456,7 +456,7 @@ function MiniMetric({
 function ImpactLineRow({ line }: { line: RepPriceImpactLine }) {
   return (
     <div className="px-3 py-2.5 flex items-center gap-3">
-      <DollarSign className="w-3.5 h-3.5 shrink-0 text-muted-foreground/60" aria-hidden="true" />
+      <DollarSign className="w-3.5 h-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       <div className="flex-1 min-w-0">
         <p className="text-[12.5px] font-bold text-foreground truncate">
           {line.make ? `${line.make} ` : ""}{line.modelCode}

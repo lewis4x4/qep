@@ -15,7 +15,7 @@ export function PipelineEmptyState({ filterLabel }: PipelineEmptyStateProps) {
         <p className="text-muted-foreground text-sm">
           No deals in <span className="text-foreground font-semibold">{filterLabel}</span>.
         </p>
-        <p className="text-muted-foreground/60 text-xs mt-1">
+        <p className="text-muted-foreground text-xs mt-1">
           Switch filter, or capture a visit to grow this stage.
         </p>
       </div>
@@ -81,7 +81,7 @@ export function PipelineEmptyState({ filterLabel }: PipelineEmptyStateProps) {
         />
       </div>
 
-      <p className="text-[11px] text-muted-foreground/60 text-center mt-5 px-4 leading-relaxed">
+      <p className="text-[11px] text-muted-foreground text-center mt-5 px-4 leading-relaxed">
         Once deals land here, your pipeline surfaces at-risk accounts, closing
         opportunities, and your next best move — automatically.
       </p>
@@ -116,7 +116,7 @@ function ActionRow({
       <div
         className={`w-10 h-10 rounded-[11px] flex items-center justify-center shrink-0 ${
           isPrimary
-            ? "bg-qep-orange/20 text-qep-orange"
+            ? "bg-qep-orange/20 text-qep-orange-accessible"
             : "bg-white/[0.05] text-foreground/80"
         }`}
       >
@@ -125,18 +125,18 @@ function ActionRow({
       <div className="flex-1 min-w-0">
         <p
           className={`text-[14px] font-bold leading-tight ${
-            isPrimary ? "text-qep-orange" : "text-foreground"
+            isPrimary ? "text-qep-orange-accessible" : "text-foreground"
           }`}
         >
           {label}
         </p>
-        <p className="text-[11.5px] text-muted-foreground/80 leading-snug mt-0.5">
+        <p className="text-[11.5px] text-muted-foreground leading-snug mt-0.5">
           {hint}
         </p>
       </div>
       <ArrowRight
         className={`w-4 h-4 shrink-0 transition-transform group-active:translate-x-0.5 ${
-          isPrimary ? "text-qep-orange" : "text-muted-foreground/60"
+          isPrimary ? "text-qep-orange-accessible" : "text-muted-foreground"
         }`}
       />
     </button>

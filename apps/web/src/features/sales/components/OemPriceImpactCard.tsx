@@ -121,10 +121,10 @@ export function OemPriceImpactCard({
     >
       <div className="flex items-start gap-3">
         <div className="w-10 h-10 rounded-2xl bg-qep-orange/20 border border-qep-orange/30 flex items-center justify-center shrink-0">
-          <FileWarning className="w-5 h-5 text-qep-orange" aria-hidden="true" />
+          <FileWarning className="w-5 h-5 text-qep-orange-accessible" aria-hidden="true" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-extrabold uppercase tracking-[0.13em] text-qep-orange/90">
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.13em] text-qep-orange-accessible">
             OEM price update
           </p>
           <h2 className="mt-1 text-[18px] font-black leading-tight text-foreground tracking-[-0.02em]">

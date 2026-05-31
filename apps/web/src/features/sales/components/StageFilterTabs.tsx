@@ -53,7 +53,7 @@ export function StageFilterTabs({
                   "text-[10px] font-extrabold rounded-[10px] px-[7px] py-[1px] min-w-[20px] text-center",
                   opt.key === active
                     ? "bg-white/25 text-white"
-                    : "bg-foreground/[0.06] text-muted-foreground/60",
+                    : "bg-foreground/[0.06] text-muted-foreground",
                 )}
               >
                 {opt.count}

@@ -33,7 +33,7 @@ const TONE_CLASS: Record<NonNullable<MobileKpiItem["tone"]>, string> = {
   positive: "text-emerald-300",
   warning: "text-amber-300",
   danger: "text-red-300",
-  orange: "text-qep-orange",
+  orange: "text-qep-orange-accessible",
 };
 
 /**

@@ -2238,7 +2238,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                     {recordingState === "done" && result && (
                       <VoiceSpeakerLabelPanel captureId={result.id} compact />
                     )}
-                    <div className="flex h-16 items-center gap-1 overflow-hidden rounded-lg border border-border bg-background/40 px-3" aria-label="Recording waveform">
+                    <div className="flex h-16 items-center gap-1 overflow-hidden rounded-lg border border-border bg-background/40 px-3" role="img" aria-label="Recording waveform">
                       {Array.from({ length: 52 }).map((_, i) => (
                         <span
                           key={i}

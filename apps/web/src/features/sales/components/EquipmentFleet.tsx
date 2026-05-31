@@ -54,11 +54,11 @@ export function EquipmentFleet({
       {/* Section header */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
-          <Truck className="w-3.5 h-3.5 text-qep-orange" />
+          <Truck className="w-3.5 h-3.5 text-qep-orange-accessible" />
           <span className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-[0.1em]">
             Equipment Fleet
           </span>
-          <span className="text-[11px] text-muted-foreground/50">
+          <span className="text-[11px] text-muted-foreground">
             ({equipment.length})
           </span>
         </div>
@@ -75,7 +75,7 @@ export function EquipmentFleet({
       {equipment.length === 0 ? (
         <div className="bg-[hsl(var(--card))] border border-dashed border-white/[0.12] rounded-[14px] px-4 py-6 text-center">
           <p className="text-sm text-muted-foreground">No equipment on file.</p>
-          <p className="text-xs text-muted-foreground/50 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Log what you see on-site during your next visit.
           </p>
         </div>

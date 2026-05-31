@@ -54,7 +54,7 @@ export function StreakBadge({
         className={`${STREAK_BADGE_CLASS} bg-card text-muted-foreground`}
       >
         <Flame
-          className={`w-3.5 h-3.5 shrink-0 ${hasHistory ? "text-amber-400/80" : "text-muted-foreground/60"}`}
+          className={`w-3.5 h-3.5 shrink-0 ${hasHistory ? "text-amber-400/80" : "text-muted-foreground"}`}
           aria-hidden="true"
         />
         <span className="min-w-0 truncate text-[12.5px] font-medium">{copy}</span>
@@ -76,7 +76,7 @@ export function StreakBadge({
       className={`${STREAK_BADGE_CLASS} bg-card`}
     >
       <Flame
-        className="w-3.5 h-3.5 shrink-0 text-qep-orange"
+        className="w-3.5 h-3.5 shrink-0 text-qep-orange-accessible"
         aria-hidden="true"
       />
       <span className="shrink-0 text-[12.5px] font-semibold text-foreground tabular-nums">

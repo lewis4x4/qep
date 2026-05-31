@@ -57,7 +57,7 @@ describe("EveningBriefingHero", () => {
         }}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /dictate/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Dictate a note: Hold to recap the day" }));
     expect(pressed).toBe(true);
   });
 

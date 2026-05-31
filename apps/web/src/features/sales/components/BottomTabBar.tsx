@@ -94,7 +94,7 @@ function TabLink({
       to={tab.path}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 rounded-lg transition-colors",
+        "flex min-h-12 flex-col items-center justify-center gap-0.5 min-w-[56px] px-1 py-2 rounded-lg transition-colors",
         active ? "text-qep-orange-accessible" : "text-slate-600 hover:text-slate-800",
       )}
     >
@@ -102,7 +102,7 @@ function TabLink({
         <span
           className={cn(
             "w-9 h-9 rounded-[10px] flex items-center justify-center transition-colors",
-            active ? "bg-qep-orange" : "bg-qep-orange/10",
+            active ? "bg-qep-orange-accessible" : "bg-qep-orange/10",
           )}
         >
           <Icon
@@ -115,7 +115,7 @@ function TabLink({
         <Icon className="w-6 h-6" strokeWidth={active ? 2.2 : 1.8} aria-hidden="true" />
       )}
       <span
-        className={cn("text-[10px]", active ? "font-semibold" : "font-medium")}
+        className={cn("text-[10px] leading-none", active ? "font-semibold" : "font-medium")}
       >
         {tab.label}
       </span>

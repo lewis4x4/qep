@@ -308,7 +308,7 @@ export function CapturePage() {
                     {c.company_name.split(" ").slice(0, 2).join(" ")}
                   </span>
                   {active && (
-                    <Check className="w-[13px] h-[13px] text-qep-orange" />
+                    <Check className="w-[13px] h-[13px] text-qep-orange-accessible" />
                   )}
                 </button>
               );
@@ -486,7 +486,7 @@ function RecentCaptureRow({
       }`}
     >
       <div className="w-8 h-8 rounded-[9px] bg-qep-orange/10 flex items-center justify-center shrink-0">
-        <Mic className="w-3.5 h-3.5 text-qep-orange" />
+        <Mic className="w-3.5 h-3.5 text-qep-orange-accessible" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[13px] font-bold text-foreground truncate">

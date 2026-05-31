@@ -84,7 +84,7 @@ export function EveningBriefingHero({
           ? HERO_COLLAPSED_MIN_HEIGHT_PX
           : HERO_EXPANDED_MIN_HEIGHT_PX,
         background:
-          "linear-gradient(135deg, #E87722 0%, #F29556 40%, #D86420 100%)",
+          "linear-gradient(135deg, #9F4C16 0%, #B85619 48%, #873F12 100%)",
         boxShadow:
           "0 8px 32px rgba(232,119,34,0.28), inset 0 1px 0 rgba(255,255,255,0.22)",
       }}
@@ -103,6 +103,7 @@ export function EveningBriefingHero({
             {assistantStatus && (
               <div
                 className="flex items-center gap-1.5"
+                role="status"
                 aria-label={`Assistant status: ${assistantStatus}`}
               >
                 <span className="relative flex h-2 w-2">
@@ -151,8 +152,8 @@ export function EveningBriefingHero({
               <button
                 type="button"
                 onClick={onVoicePress}
-                aria-label="Dictate a note"
-                className="mt-4 inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white/15 backdrop-blur-sm border border-white/25 text-white text-xs font-semibold active:scale-95 transition-transform hover:bg-white/25"
+                aria-label={`Dictate a note: ${VOICE_PROMPTS[timeOfDay]}`}
+                className="mt-4 inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white/20 backdrop-blur-sm border border-white/40 text-white text-xs font-semibold active:scale-95 transition-transform hover:bg-white/30"
               >
                 <Mic className="w-3.5 h-3.5" />
                 {VOICE_PROMPTS[timeOfDay]}

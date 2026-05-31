@@ -29,18 +29,18 @@ export function PendingApprovalsBanner() {
         className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[12px] border border-qep-orange/30 bg-qep-orange/[0.06] hover:bg-qep-orange/[0.10] transition-colors text-left active:scale-[0.995]"
         aria-label={`${pendingCount} ${noun} awaiting approval — review`}
       >
-        <Clock className="w-4 h-4 shrink-0 text-qep-orange" aria-hidden />
+        <Clock className="w-4 h-4 shrink-0 text-qep-orange-accessible" aria-hidden />
         <p className="flex-1 min-w-0 text-[12.5px] leading-snug text-foreground/90">
-          <span className="font-bold text-qep-orange tabular-nums">
+          <span className="font-bold text-qep-orange-accessible tabular-nums">
             {pendingCount}
           </span>{" "}
           {noun} awaiting approval
-          <span className="text-muted-foreground/70 font-normal ml-1.5">
+          <span className="text-muted-foreground font-normal ml-1.5">
             · Tap to review
           </span>
         </p>
         <ChevronRight
-          className="w-4 h-4 shrink-0 text-qep-orange/80"
+          className="w-4 h-4 shrink-0 text-qep-orange-accessible"
           aria-hidden
         />
       </button>

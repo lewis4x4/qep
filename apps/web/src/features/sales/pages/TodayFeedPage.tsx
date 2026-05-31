@@ -260,7 +260,7 @@ export function TodayFeedPage() {
       {priorities.length > 0 && (
         <div>
           <SectionHeader
-            icon={<Flame className="w-3.5 h-3.5 text-qep-orange" />}
+            icon={<Flame className="w-3.5 h-3.5 text-qep-orange-accessible" />}
             label="Priority Actions"
             trailing={`${priorities.length} items`}
           />
@@ -306,6 +306,7 @@ function LiveSignalsReservedSlot() {
     <div
       data-testid="live-signals-reserved-slot"
       className="space-y-2"
+      role="region"
       aria-label="Live sales signals"
     >
       <div className="h-2.5 w-28 rounded bg-white/[0.04]" aria-hidden="true" />
@@ -327,6 +328,7 @@ function TomorrowFirstMoveReservedSlot() {
     <div
       data-testid="tomorrow-first-move-reserved-slot"
       className="h-[112px] w-full rounded-xl border border-white/[0.08] bg-[hsl(var(--card))] px-4 py-3.5"
+      role="region"
       aria-label="Tomorrow's first move"
     >
       <div className="mb-2 flex items-center gap-2">
@@ -427,7 +429,7 @@ function ApprovalsSection({
       <SectionHeader
         icon={
           <ClipboardCheck
-            className={`w-3.5 h-3.5 ${showManager ? "text-qep-orange" : "text-amber-400"}`}
+            className={`w-3.5 h-3.5 ${showManager ? "text-qep-orange-accessible" : "text-amber-400"}`}
           />
         }
         label="Approvals"
@@ -448,7 +450,7 @@ function ApprovalsSection({
           >
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-full bg-qep-orange/20 flex items-center justify-center shrink-0">
-                <ClipboardCheck className="w-4.5 h-4.5 text-qep-orange" />
+                <ClipboardCheck className="w-4.5 h-4.5 text-qep-orange-accessible" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-[14px] font-semibold text-foreground leading-tight">
@@ -516,7 +518,6 @@ function ApprovalsSection({
               type="button"
               onClick={() => navigate("/sales/my-approvals")}
               className="w-full text-left rounded-xl border border-amber-400/30 bg-amber-400/[0.05] hover:bg-amber-400/[0.08] transition-colors px-3.5 py-3 active:scale-[0.995]"
-              aria-label={`Quote ${row.quote_number ?? ""} stuck for ${row.hours_pending} hours`}
             >
               <div className="flex items-center gap-3">
                 <Clock className="w-4 h-4 shrink-0 text-amber-300/90" />

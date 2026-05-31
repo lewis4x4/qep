@@ -190,7 +190,7 @@ export function LogVisitFlow({
                   onClick={() => setNextAction(a.value)}
                   className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border text-left text-sm transition-colors ${
                     nextAction === a.value
-                      ? "border-qep-orange bg-orange-50 text-qep-orange font-medium"
+                      ? "border-qep-orange bg-orange-50 text-qep-orange-accessible font-medium"
                       : "border-slate-200 text-slate-700 hover:bg-slate-50"
                   }`}
                 >

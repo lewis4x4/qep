@@ -27,6 +27,7 @@ describe("MobileBottomSheet", () => {
     render(<Harness />);
     const root = screen.getByTestId("mobile-bottom-sheet-root");
     expect(root.getAttribute("data-open")).toBe("true");
+    expect(root.hasAttribute("inert")).toBe(false);
     expect(screen.getByText("Sheet body content")).toBeTruthy();
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
@@ -50,6 +51,13 @@ describe("MobileBottomSheet", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     const root = screen.getByTestId("mobile-bottom-sheet-root");
     expect(root.getAttribute("data-open")).toBe("false");
+  });
+
+  test("marks the closed sheet inert so hidden focusable children cannot receive focus", () => {
+    render(<Harness initialOpen={false} />);
+    const root = screen.getByTestId("mobile-bottom-sheet-root");
+    expect(root.getAttribute("aria-hidden")).toBe("true");
+    expect(root.hasAttribute("inert")).toBe(true);
   });
 
   test("renders translate-y-full when closed", () => {

@@ -45,7 +45,7 @@ function Stat({
       <p
         className={`text-[22px] font-extrabold tracking-tight ${
           accent
-            ? "text-qep-orange"
+            ? "text-qep-orange-accessible"
             : "text-foreground"
         }`}
       >
@@ -55,7 +55,7 @@ function Stat({
         {label}
       </p>
       {sub && (
-        <p className="text-[10px] text-muted-foreground/60">{sub}</p>
+        <p className="text-[10px] text-muted-foreground">{sub}</p>
       )}
     </div>
   );
