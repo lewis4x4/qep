@@ -16,13 +16,20 @@ describe("nav-config", () => {
     expect(resolveActivePrimaryHeader("/voice-quote")).toBe("sales");
   });
 
-  test("scopes iron_advisor away from parts/service/rentals menus", () => {
+  test("keeps workforce routes under the Workforce chrome", () => {
+    expect(resolveActivePrimaryHeader("/workforce")).toBe("workforce");
+    expect(resolveActivePrimaryHeader("/workforce/appraisals")).toBe("workforce");
+    expect(resolveActivePrimaryHeader("/workforce/pay-ladder")).toBe("workforce");
+  });
+
+  test("scopes iron_advisor away from parts/service/workforce/rentals menus", () => {
     const groups = resolvePrimaryNavGroups(false, false, "rep", "iron_advisor");
     const ids = groups.map((group) => group.id);
     expect(ids).toContain("sales");
     expect(ids).toContain("qrm");
     expect(ids).not.toContain("parts");
     expect(ids).not.toContain("service");
+    expect(ids).not.toContain("workforce");
     expect(ids).not.toContain("rentals");
   });
 
@@ -58,12 +65,30 @@ describe("nav-config", () => {
   test("applies centralized persona policy to route/header checks", () => {
     expect(canAccessPrimaryHeaderForIronRole("iron_advisor", "parts")).toBe(false);
     expect(canAccessPrimaryHeaderForIronRole("iron_advisor", "service")).toBe(false);
+    expect(canAccessPrimaryHeaderForIronRole("iron_advisor", "workforce")).toBe(false);
     expect(canAccessPrimaryHeaderForIronRole("iron_advisor", "qrm")).toBe(true);
     expect(canAccessNavHrefForIronRole("iron_advisor", "/qrm/time-bank")).toBe(true);
     expect(canAccessNavHrefForIronRole("iron_advisor", "/qrm/parts-intelligence")).toBe(false);
     expect(canAccessAccountModuleForIronRole("iron_advisor", "command")).toBe(true);
     expect(canAccessAccountModuleForIronRole("iron_advisor", "relationship-map")).toBe(true);
     expect(canAccessAccountModuleForIronRole("iron_advisor", "strategist")).toBe(false);
+  });
+  test("adds Workforce nav only for HR/workforce roles", () => {
+    const managerHrefs = resolvePrimaryNavGroups(false, false, "manager")
+      .find((group) => group.id === "workforce")
+      ?.sections.flatMap((section) => section.items.map((item) => item.href));
+    const technicianHrefs = resolvePrimaryNavGroups(false, false, "technician")
+      .find((group) => group.id === "workforce")
+      ?.sections.flatMap((section) => section.items.map((item) => item.href));
+    const serviceWriterHrefs = resolvePrimaryNavGroups(false, false, "service_writer")
+      .find((group) => group.id === "workforce")
+      ?.sections.flatMap((section) => section.items.map((item) => item.href));
+    const repGroup = resolvePrimaryNavGroups(false, false, "rep").find((group) => group.id === "workforce");
+
+    expect(managerHrefs).toEqual(["/workforce", "/workforce/appraisals", "/workforce/pay-ladder"]);
+    expect(technicianHrefs).toEqual(managerHrefs);
+    expect(serviceWriterHrefs).toEqual(managerHrefs);
+    expect(repGroup).toBeUndefined();
   });
 });
 

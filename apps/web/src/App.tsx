@@ -20,7 +20,7 @@ import {
   resolveManagerAdminRouteRedirect,
   resolveHomeRoute,
 } from "./lib/home-route";
-import { canAccessAccountModuleForIronRole, canAccessGrappleProductionRole, canAccessNavHrefForIronRole, canAccessPrimaryHeaderForIronRole } from "./lib/nav-config";
+import { canAccessAccountModuleForIronRole, canAccessGrappleProductionRole, canAccessNavHrefForIronRole, canAccessPrimaryHeaderForIronRole, canAccessWorkforceRole } from "./lib/nav-config";
 import { portalRouteElements } from "./features/portal/PortalRoutes";
 
 const SalesRoutes = lazy(() =>
@@ -142,6 +142,15 @@ const ServiceShopInvoicePage = lazy(() =>
 );
 const ServicePublicTrackPage = lazy(() =>
   import("./features/service/pages/ServicePublicTrackPage").then((m) => ({ default: m.ServicePublicTrackPage }))
+);
+const WorkforceHomePage = lazy(() =>
+  import("./features/workforce/pages/WorkforceHomePage").then((m) => ({ default: m.WorkforceHomePage }))
+);
+const WorkforcePerformanceAppraisalsPage = lazy(() =>
+  import("./features/workforce/pages/WorkforcePerformanceAppraisalsPage").then((m) => ({ default: m.WorkforcePerformanceAppraisalsPage }))
+);
+const WorkforceTechnicianPayLadderPage = lazy(() =>
+  import("./features/workforce/pages/WorkforceTechnicianPayLadderPage").then((m) => ({ default: m.WorkforceTechnicianPayLadderPage }))
 );
 const DealRoomPage = lazy(() =>
   import("./features/deal-room/pages/DealRoomPage").then((m) => ({ default: m.DealRoomPage }))
@@ -996,8 +1005,10 @@ function App() {
   const hasManagerOrAboveRole = ["admin", "manager", "owner"].includes(profile.role);
   const canAccessNavHref = (href: string) => canAccessNavHrefForIronRole(profile.iron_role, href);
   const canAccessServiceHeader = canAccessPrimaryHeaderForIronRole(profile.iron_role, "service");
+  const canAccessWorkforceHeader = canAccessPrimaryHeaderForIronRole(profile.iron_role, "workforce");
   const canAccessPartsHeader = canAccessPrimaryHeaderForIronRole(profile.iron_role, "parts");
   const canAccessRentalsHeader = canAccessPrimaryHeaderForIronRole(profile.iron_role, "rentals");
+  const canAccessWorkforceSurface = canAccessWorkforceRole(profile.role) && canAccessWorkforceHeader;
   const canAccessServiceSurface = hasRepOrAboveRole && canAccessServiceHeader;
   const canAccessServiceManagedSurface = hasManagerOrAboveRole && canAccessServiceHeader;
   const canAccessServiceMetricsSurface = ["admin", "manager", "owner", "service_writer", "finance_admin"].includes(profile.role) && canAccessServiceHeader;
@@ -1177,6 +1188,37 @@ function App() {
               {/* WAVE phase 3: /voice-quote redirects into SalesShell at
                   /sales/voice-quote. The new route lives in SalesRoutes. */}
               <Route path="/voice-quote" element={<RedirectPreserveSearch to="/sales/voice-quote" />} />
+              {/* Workforce HR-sensitive routes */}
+              <Route
+                path="/workforce"
+                element={
+                  canAccessWorkforceSurface ? (
+                    <WorkforceHomePage />
+                  ) : (
+                    <Navigate to={homeRoute} replace />
+                  )
+                }
+              />
+              <Route
+                path="/workforce/appraisals"
+                element={
+                  canAccessWorkforceSurface ? (
+                    <WorkforcePerformanceAppraisalsPage />
+                  ) : (
+                    <Navigate to={homeRoute} replace />
+                  )
+                }
+              />
+              <Route
+                path="/workforce/pay-ladder"
+                element={
+                  canAccessWorkforceSurface ? (
+                    <WorkforceTechnicianPayLadderPage />
+                  ) : (
+                    <Navigate to={homeRoute} replace />
+                  )
+                }
+              />
               {/* Service Engine routes */}
               <Route
                 path="/service/labor-pricing"

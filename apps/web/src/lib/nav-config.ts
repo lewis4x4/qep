@@ -1,10 +1,12 @@
 import {
+  Award,
   BarChart3,
   Bot,
   BookOpen,
   BriefcaseBusiness,
   Building2,
   CalendarClock,
+  ClipboardCheck,
   Crosshair,
   DoorClosed,
   FileText,
@@ -48,13 +50,14 @@ import {
 } from "lucide-react";
 import type { UserRole } from "@/lib/database.types";
 
-export type PrimaryHeaderId = "sales" | "parts" | "service" | "rentals" | "qrm";
+export type AppNavRole = UserRole | "service_writer" | "technician" | "parts_counter" | "dispatch" | "finance_admin" | string;
+export type PrimaryHeaderId = "sales" | "parts" | "service" | "workforce" | "rentals" | "qrm";
 
 export interface NavItemDefinition {
   label: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
-  roles: UserRole[];
+  roles: AppNavRole[];
   primaryHeaderId?: PrimaryHeaderId;
   sectionLabel?: string;
   utility?: boolean;
@@ -86,6 +89,7 @@ export const PRIMARY_NAV_GROUPS: PrimaryNavGroupDefinition[] = [
   { id: "sales", label: "Sales", href: "/dashboard" },
   { id: "parts", label: "Parts", href: "/parts" },
   { id: "service", label: "Service", href: "/service" },
+  { id: "workforce", label: "Workforce", href: "/workforce" },
   { id: "rentals", label: "Rentals", href: "/rentals" },
 ];
 
@@ -101,10 +105,16 @@ export const GRAPPLE_PRODUCTION_ROLE_NAMES = [
   "owner",
 ] as const;
 
-const GRAPPLE_PRODUCTION_NAV_ROLES = GRAPPLE_PRODUCTION_ROLE_NAMES as unknown as UserRole[];
+const GRAPPLE_PRODUCTION_NAV_ROLES = [...GRAPPLE_PRODUCTION_ROLE_NAMES];
+export const WORKFORCE_ROLE_NAMES = ["admin", "manager", "owner", "service_writer", "technician"] as const;
+const WORKFORCE_NAV_ROLES = [...WORKFORCE_ROLE_NAMES];
 
 export function canAccessGrappleProductionRole(role: string | null | undefined): boolean {
   return GRAPPLE_PRODUCTION_ROLE_NAMES.includes(role as (typeof GRAPPLE_PRODUCTION_ROLE_NAMES)[number]);
+}
+
+export function canAccessWorkforceRole(role: string | null | undefined): boolean {
+  return WORKFORCE_ROLE_NAMES.includes(role as (typeof WORKFORCE_ROLE_NAMES)[number]);
 }
 
 export const NAV_ITEMS: NavItemDefinition[] = [
@@ -358,6 +368,30 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     roles: ["rep", "admin", "manager", "owner"],
     primaryHeaderId: "service",
     sectionLabel: "Bridge",
+  },
+  {
+    label: "Command Center",
+    href: "/workforce",
+    icon: Users,
+    roles: WORKFORCE_NAV_ROLES,
+    primaryHeaderId: "workforce",
+    sectionLabel: "Operations",
+  },
+  {
+    label: "Appraisals",
+    href: "/workforce/appraisals",
+    icon: ClipboardCheck,
+    roles: WORKFORCE_NAV_ROLES,
+    primaryHeaderId: "workforce",
+    sectionLabel: "Performance",
+  },
+  {
+    label: "Pay Ladder",
+    href: "/workforce/pay-ladder",
+    icon: Award,
+    roles: WORKFORCE_NAV_ROLES,
+    primaryHeaderId: "workforce",
+    sectionLabel: "Progression",
   },
   {
     label: "Rental Command",
@@ -798,7 +832,7 @@ export function resolveNavItems(
 export function resolveRoleScopedNavItems(
   quoteBuilderEnabled: boolean,
   quoteBuilderLoading: boolean,
-  role: UserRole,
+  role: string,
   ironRole?: string | null,
 ): NavItem[] {
   return resolveNavItems(quoteBuilderEnabled, quoteBuilderLoading)
@@ -826,7 +860,7 @@ function groupItemsBySection(items: NavItem[]): NavSection[] {
 export function resolvePrimaryNavGroups(
   quoteBuilderEnabled: boolean,
   quoteBuilderLoading: boolean,
-  role: UserRole,
+  role: string,
   ironRole?: string | null,
 ): PrimaryNavGroup[] {
   const navItems = resolveRoleScopedNavItems(quoteBuilderEnabled, quoteBuilderLoading, role, ironRole).filter(
@@ -845,7 +879,7 @@ export function resolvePrimaryNavGroups(
 export function resolveUtilityNavSections(
   quoteBuilderEnabled: boolean,
   quoteBuilderLoading: boolean,
-  role: UserRole,
+  role: string,
   ironRole?: string | null,
 ): NavSection[] {
   const utilityItems = resolveRoleScopedNavItems(quoteBuilderEnabled, quoteBuilderLoading, role, ironRole).filter(
@@ -874,6 +908,10 @@ export function resolveActivePrimaryHeader(pathname: string): PrimaryHeaderId | 
 
   if (pathname.startsWith("/service") || pathname === "/qrm/service-to-sales") {
     return "service";
+  }
+
+  if (pathname === "/workforce" || pathname.startsWith("/workforce/")) {
+    return "workforce";
   }
 
   if (
