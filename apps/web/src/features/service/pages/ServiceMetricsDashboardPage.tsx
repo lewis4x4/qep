@@ -7,12 +7,14 @@ import {
   Clock3,
   DollarSign,
   Gauge,
+  Loader2,
   RefreshCcw,
   ShieldCheck,
   Timer,
   TrendingUp,
   Wrench,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { ServiceSubNav } from "../components/ServiceSubNav";
@@ -21,6 +23,7 @@ import {
   formatServiceMetricLabel,
   serviceMetricsDashboardIsEmpty,
   type ServiceCycleTimeBySegmentRow,
+  type ServiceMetricsDashboardData,
   type ServiceMarginByRequestTypeRow,
   type ServiceOpenWorkOrdersByHoldReasonRow,
   type ServiceOpenWorkOrdersByStatusRow,
@@ -45,6 +48,18 @@ function formatHours(value: number | null | undefined): string {
 
 function formatCount(value: number | null | undefined): string {
   return new Intl.NumberFormat("en-US").format(value ?? 0);
+}
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return "Live view";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Live view";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 export function ServiceMetricsDashboardPage() {
@@ -85,8 +100,12 @@ export function ServiceMetricsDashboardPage() {
             Role scoped
           </span>
           <span className="rounded-full border border-border px-3 py-1">
-            {data?.ownerWatch?.computedAt ? `Updated ${new Date(data.ownerWatch.computedAt).toLocaleTimeString()}` : "Live view"}
+            {data?.ownerWatch?.computedAt ? `Updated ${formatDateTime(data.ownerWatch.computedAt)}` : "Live view"}
           </span>
+          <Button type="button" variant="outline" size="sm" onClick={() => void metricsQuery.refetch()} disabled={metricsQuery.isFetching}>
+            {metricsQuery.isFetching ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RefreshCcw className="h-4 w-4" aria-hidden />}
+            Refresh
+          </Button>
         </div>
       </header>
 
@@ -99,6 +118,7 @@ export function ServiceMetricsDashboardPage() {
       ) : data ? (
         <>
           <MarginHero rows={data.marginByRequestType} topRow={topMarginRow} />
+          <OwnerPulseBar data={data} />
           <OwnerWatchGrid metrics={data.ownerWatch} />
           <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
             <CycleTimePanel rows={data.cycleTimeBySegment} />
@@ -258,6 +278,76 @@ function MarginHero({
         </div>
       </div>
     </Card>
+  );
+}
+
+function OwnerPulseBar({ data }: { data: ServiceMetricsDashboardData }) {
+  const totalMargin = data.marginByRequestType.reduce((sum, row) => sum + row.totalMarginAmount, 0);
+  const totalLaborRevenue = data.marginByRequestType.reduce((sum, row) => sum + row.totalLaborRevenue, 0);
+  const blendedMarginPct = totalLaborRevenue > 0 ? (totalMargin / totalLaborRevenue) * 100 : null;
+  const floorFlags = data.marginByRequestType.reduce((sum, row) => sum + row.belowFloorLineCount, 0);
+  const ownerWatch = data.ownerWatch;
+  const cards = [
+    {
+      label: "Owner margin signal",
+      value: formatMoney(totalMargin),
+      detail: `${formatPercent(blendedMarginPct)} blended margin · ${formatCount(floorFlags)} floor flags`,
+      icon: DollarSign,
+      tone: floorFlags > 0 ? "amber" : "green",
+    },
+    {
+      label: "Open shop pressure",
+      value: formatCount(ownerWatch?.openWorkOrders),
+      detail: ownerWatch ? `${formatCount(ownerWatch.openJobsOnHoldCount)} jobs on hold · ${formatCount(ownerWatch.openHoldCount)} active holds` : "No owner watch metrics available yet",
+      icon: AlertTriangle,
+      tone: ownerWatch ? ((ownerWatch.openJobsOnHoldCount ?? 0) > 0 ? "amber" : "green") : "muted",
+    },
+    {
+      label: "First touch speed",
+      value: formatHours(ownerWatch?.avgHoursToFirstTouch),
+      detail: ownerWatch ? `${formatCount(ownerWatch.firstTouchJobCount)} WOs with first-touch evidence` : "No first-touch evidence in the current window",
+      icon: Timer,
+      tone: ownerWatch ? (ownerWatch.avgHoursToFirstTouch != null && ownerWatch.avgHoursToFirstTouch > 24 ? "amber" : "green") : "muted",
+    },
+    {
+      label: "Warranty recovery",
+      value: formatPercent(ownerWatch?.warrantyRecoveryPct),
+      detail: ownerWatch ? `${formatMoney(ownerWatch.warrantyRevenueCents / 100)} recovered in 30d` : "No warranty recovery metrics available yet",
+      icon: ShieldCheck,
+      tone: ownerWatch ? (ownerWatch.warrantyRecoveryPct != null && ownerWatch.warrantyRecoveryPct < 70 ? "amber" : "green") : "muted",
+    },
+  ];
+
+  return (
+    <section aria-label="H11 executive pulse" className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      {cards.map((card) => {
+        const Icon = card.icon;
+        return (
+          <div
+            key={card.label}
+            className={cn(
+              "rounded-2xl border p-4",
+              card.tone === "amber"
+                ? "border-amber-500/30 bg-amber-500/10"
+                : card.tone === "muted"
+                  ? "border-border bg-muted/30"
+                  : "border-emerald-500/25 bg-emerald-500/10",
+            )}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{card.label}</p>
+                <p className="mt-2 font-mono text-2xl font-bold text-foreground">{card.value}</p>
+              </div>
+              <div className={cn("rounded-xl p-2", card.tone === "amber" ? "bg-amber-500/15 text-amber-700 dark:text-amber-300" : card.tone === "muted" ? "bg-muted text-muted-foreground" : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300")}>
+                <Icon className="h-4 w-4" aria-hidden />
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">{card.detail}</p>
+          </div>
+        );
+      })}
+    </section>
   );
 }
 

@@ -231,6 +231,33 @@ export interface GrappleFinalQcChecklist {
   updatedAt: string | null;
 }
 
+export type GrappleFinalQcItemResult = "not_checked" | "pass" | "fail" | "not_applicable";
+export type GrappleFinalQcDefectSeverity = "minor" | "major" | "critical";
+
+export interface GrappleFinalQcItem {
+  id: string;
+  workspaceId: string;
+  buildId: string;
+  buildNumber: string;
+  checklistId: string;
+  checklistNumber: number;
+  sectionKey: string;
+  itemKey: string;
+  displayOrder: number;
+  prompt: string;
+  result: GrappleFinalQcItemResult;
+  measuredValue: string | null;
+  notes: string | null;
+  defectSeverity: GrappleFinalQcDefectSeverity | null;
+  reworkRequired: boolean;
+  checkedBy: string | null;
+  checkedByName: string | null;
+  checkedAt: string | null;
+  metadata: unknown;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 export interface GrappleProductionDashboardData {
   pipeline: GrapplePipelineBuild[];
   stageSummary: GrappleStageSummaryRow[];
@@ -241,6 +268,7 @@ export interface GrappleProductionDashboardData {
   accessoryInstalls: GrappleAccessoryInstall[];
   partsSheets: GrapplePartsSheet[];
   finalQcChecklists: GrappleFinalQcChecklist[];
+  finalQcItems: GrappleFinalQcItem[];
 }
 
 interface SupabaseRpcResult {
@@ -269,6 +297,16 @@ function booleanValue(value: unknown): boolean {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") return value.toLowerCase() === "true";
   return false;
+}
+
+function finalQcItemResultValue(value: unknown): GrappleFinalQcItemResult {
+  return value === "pass" || value === "fail" || value === "not_applicable" || value === "not_checked"
+    ? value
+    : "not_checked";
+}
+
+function finalQcDefectSeverityValue(value: unknown): GrappleFinalQcDefectSeverity | null {
+  return value === "minor" || value === "major" || value === "critical" ? value : null;
 }
 
 function arrayValue(value: unknown): unknown[] {
@@ -549,6 +587,35 @@ export function normalizeGrappleFinalQcRows(rows: unknown[]): GrappleFinalQcChec
   });
 }
 
+export function normalizeGrappleFinalQcItemRows(rows: unknown[]): GrappleFinalQcItem[] {
+  return rows.map((row) => {
+    const source = row as Record<string, unknown>;
+    return {
+      id: stringValue(source.id),
+      workspaceId: stringValue(source.workspace_id, "default"),
+      buildId: stringValue(source.build_id),
+      buildNumber: stringValue(source.build_number, "Unnumbered build"),
+      checklistId: stringValue(source.checklist_id),
+      checklistNumber: numberValue(source.checklist_number, 1),
+      sectionKey: stringValue(source.section_key, "final_qc"),
+      itemKey: stringValue(source.item_key),
+      displayOrder: numberValue(source.display_order),
+      prompt: stringValue(source.prompt, "Final QC item"),
+      result: finalQcItemResultValue(source.result),
+      measuredValue: nullableString(source.measured_value),
+      notes: nullableString(source.notes),
+      defectSeverity: finalQcDefectSeverityValue(source.defect_severity),
+      reworkRequired: booleanValue(source.rework_required),
+      checkedBy: nullableString(source.checked_by),
+      checkedByName: nullableString(source.checked_by_name),
+      checkedAt: nullableString(source.checked_at),
+      metadata: source.metadata ?? null,
+      createdAt: nullableString(source.created_at),
+      updatedAt: nullableString(source.updated_at),
+    };
+  });
+}
+
 export function grappleProductionDashboardIsEmpty(data: GrappleProductionDashboardData): boolean {
   const summaryBuildCount = data.stageSummary.reduce((sum, row) => sum + row.buildCount, 0);
   return (
@@ -560,7 +627,8 @@ export function grappleProductionDashboardIsEmpty(data: GrappleProductionDashboa
     data.gtbInspections.length === 0 &&
     data.accessoryInstalls.length === 0 &&
     data.partsSheets.length === 0 &&
-    data.finalQcChecklists.length === 0
+    data.finalQcChecklists.length === 0 &&
+    (data.finalQcItems?.length ?? 0) === 0
   );
 }
 
@@ -583,6 +651,7 @@ export async function fetchGrappleProductionDashboard(): Promise<GrappleProducti
     accessoryRows,
     partsSheetRows,
     finalQcRows,
+    finalQcItemRows,
   ] = await Promise.all([
     loadViewRows("v_grapple_build_pipeline", "updated_at"),
     loadViewRows("v_grapple_build_stage_summary", "latest_updated_at"),
@@ -593,6 +662,7 @@ export async function fetchGrappleProductionDashboard(): Promise<GrappleProducti
     loadViewRows("v_grapple_build_accessory_installs", "updated_at"),
     loadViewRows("v_grapple_build_parts_sheets", "updated_at"),
     loadViewRows("v_grapple_build_final_qc_checklists", "updated_at"),
+    loadViewRows("v_grapple_build_final_qc_items", "display_order", true),
   ]);
 
   return {
@@ -605,6 +675,7 @@ export async function fetchGrappleProductionDashboard(): Promise<GrappleProducti
     accessoryInstalls: normalizeGrappleAccessoryInstallRows(accessoryRows),
     partsSheets: normalizeGrapplePartsSheetRows(partsSheetRows),
     finalQcChecklists: normalizeGrappleFinalQcRows(finalQcRows),
+    finalQcItems: normalizeGrappleFinalQcItemRows(finalQcItemRows),
   };
 }
 
@@ -677,5 +748,135 @@ export async function signGrappleBuildFinalQc(input: {
     p_signature_statement: input.signatureStatement ?? null,
     p_notes: input.notes ?? null,
   });
+  return normalizeGrappleFinalQcRows([data])[0];
+}
+
+export const DEFAULT_GRAPPLE_FINAL_QC_ITEMS = [
+  {
+    sectionKey: "structural",
+    itemKey: "mounting_and_welds",
+    prompt: "Mounting, welds, pins, and fasteners pass final structural inspection.",
+  },
+  {
+    sectionKey: "hydraulics",
+    itemKey: "hydraulic_leak_and_pressure",
+    prompt: "Hydraulic routing, pressure behavior, and leak check pass under operating load.",
+  },
+  {
+    sectionKey: "controls",
+    itemKey: "controls_and_safety_interlocks",
+    prompt: "Controls, safety interlocks, warning labels, and operator handoff checks pass.",
+  },
+  {
+    sectionKey: "documentation",
+    itemKey: "photos_parts_and_release_packet",
+    prompt: "Release photos, build parts sheet, and delivery/service packet are complete.",
+  },
+] as const;
+
+export async function createGrappleFinalQcChecklist(input: {
+  buildId: string;
+  checklistNumber: number;
+  userId?: string | null;
+  notes?: string | null;
+}): Promise<GrappleFinalQcChecklist> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("grapple_build_final_qc_checklists")
+    .insert({
+      build_id: input.buildId,
+      checklist_number: input.checklistNumber,
+      status: "in_progress",
+      qc_performed_by: input.userId ?? null,
+      qc_performed_at: now,
+      notes: input.notes ?? null,
+    })
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message || "Failed to create final QC checklist");
+  const checklist = normalizeGrappleFinalQcRows([data])[0];
+
+  const itemRows = DEFAULT_GRAPPLE_FINAL_QC_ITEMS.map((item, index) => ({
+    build_id: input.buildId,
+    checklist_id: checklist.id,
+    section_key: item.sectionKey,
+    item_key: item.itemKey,
+    display_order: index + 1,
+    prompt: item.prompt,
+  }));
+  const { error: itemError } = await supabase.from("grapple_build_final_qc_items").insert(itemRows);
+  if (itemError) {
+    await supabase.from("grapple_build_final_qc_checklists").delete().eq("id", checklist.id);
+    throw new Error(itemError.message || "Failed to seed final QC checklist items");
+  }
+
+  return checklist;
+}
+
+export async function updateGrappleFinalQcItem(input: {
+  itemId: string;
+  result: GrappleFinalQcItemResult;
+  userId?: string | null;
+  measuredValue?: string | null;
+  notes?: string | null;
+  defectSeverity?: GrappleFinalQcDefectSeverity | null;
+  reworkRequired?: boolean;
+}): Promise<GrappleFinalQcItem> {
+  const checked = input.result !== "not_checked";
+  const { data, error } = await supabase
+    .from("grapple_build_final_qc_items")
+    .update({
+      result: input.result,
+      measured_value: input.measuredValue?.trim() || null,
+      notes: input.notes?.trim() || null,
+      defect_severity: input.result === "fail" ? input.defectSeverity ?? "major" : null,
+      rework_required: input.result === "fail" ? input.reworkRequired ?? true : false,
+      checked_by: checked ? input.userId ?? null : null,
+      checked_at: checked ? new Date().toISOString() : null,
+    })
+    .eq("id", input.itemId)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message || "Failed to update final QC item");
+  return normalizeGrappleFinalQcItemRows([data])[0];
+}
+
+export async function completeGrappleFinalQcChecklist(input: {
+  checklistId: string;
+  userId?: string | null;
+  notes?: string | null;
+}): Promise<GrappleFinalQcChecklist> {
+  const { data: itemRows, error: itemReadError } = await supabase
+    .from("v_grapple_build_final_qc_items")
+    .select("*")
+    .eq("checklist_id", input.checklistId);
+  if (itemReadError) throw new Error(itemReadError.message || "Failed to validate final QC checklist items");
+  const normalizedItems = normalizeGrappleFinalQcItemRows(itemRows ?? []);
+  const releaseClean = normalizedItems.length > 0 && normalizedItems.every((item) =>
+    (item.result === "pass" || item.result === "not_applicable") && !item.reworkRequired
+  );
+  if (!releaseClean) {
+    throw new Error("Final QC cannot be completed until every checklist item passes or is not applicable with no rework required.");
+  }
+
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("grapple_build_final_qc_checklists")
+    .update({
+      status: "submitted",
+      overall_result: "pass",
+      qc_performed_by: input.userId ?? null,
+      qc_performed_at: now,
+      completed_by: input.userId ?? null,
+      completed_at: now,
+      notes: input.notes?.trim() || null,
+    })
+    .eq("id", input.checklistId)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message || "Failed to complete final QC checklist");
   return normalizeGrappleFinalQcRows([data])[0];
 }

@@ -1,37 +1,85 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
+  CheckCircle2,
   Clock3,
   ClipboardCheck,
   Factory,
   GitBranch,
+  Loader2,
+  Lock,
   Package,
+  PenLine,
+  PlusCircle,
   RefreshCcw,
   ShieldCheck,
   Truck,
   UserRound,
   Wrench,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { ServiceSubNav } from "../components/ServiceSubNav";
 import {
+  completeGrappleFinalQcChecklist,
+  createGrappleBuild,
+  createGrappleFinalQcChecklist,
   fetchGrappleProductionDashboard,
   formatGrappleLabel,
   grappleProductionDashboardIsEmpty,
   GRAPPLE_PRODUCTION_STAGES,
+  signGrappleBuildFinalQc,
+  transitionGrappleBuildStage,
+  updateGrappleFinalQcItem,
   type GrappleAccessoryInstall,
   type GrappleDashboardTimelineEvent,
   type GrappleFinalQcChecklist,
+  type GrappleFinalQcDefectSeverity,
+  type GrappleFinalQcItem,
+  type GrappleFinalQcItemResult,
   type GrappleGtbInspection,
   type GrapplePartsSheet,
   type GrapplePipelineBuild,
   type GrappleProductionDashboardData,
   type GrappleProgressSheet,
+  type GrappleProductionStage,
   type GrappleStageSummaryRow,
 } from "../lib/grapple-production-api";
+
+const GRAPPLE_DASHBOARD_QUERY_KEY = ["grapple-production-dashboard", "stream-i"] as const;
+const ELEVATED_GRAPPLE_ROLES = new Set(["admin", "manager", "owner"]);
+
+function isElevatedGrappleRole(role: string | null | undefined): boolean {
+  return ELEVATED_GRAPPLE_ROLES.has(role ?? "");
+}
+
+function trimToNull(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function nextProductionStage(currentStage: string | null | undefined): GrappleProductionStage | null {
+  const currentIndex = GRAPPLE_PRODUCTION_STAGES.findIndex((stage) => stage === currentStage);
+  if (currentIndex < 0 || currentIndex >= GRAPPLE_PRODUCTION_STAGES.length - 1) return null;
+  return GRAPPLE_PRODUCTION_STAGES[currentIndex + 1];
+}
+
+function canMutateGrappleBuild(build: GrapplePipelineBuild | null, userId: string | null, role: string | null): boolean {
+  if (isElevatedGrappleRole(role)) return true;
+  return Boolean(build && userId && build.assignedLeadId === userId);
+}
+
+function canSignFinalQc(build: GrapplePipelineBuild | null, userId: string | null): boolean {
+  return Boolean(build?.assignedLeadId && userId && build.assignedLeadId === userId);
+}
+
+function mutationErrorMessage(error: unknown): string | null {
+  return error instanceof Error ? error.message : error ? "Operation failed. Please retry." : null;
+}
 
 function formatCount(value: number | null | undefined): string {
   return new Intl.NumberFormat("en-US").format(value ?? 0);
@@ -103,24 +151,42 @@ function statusTone(value: string | null | undefined): string {
 }
 
 export function GrappleProductionDashboardPage() {
+  const { profile } = useAuth();
   const dashboardQuery = useQuery({
-    queryKey: ["grapple-production-dashboard", "stream-i"],
+    queryKey: GRAPPLE_DASHBOARD_QUERY_KEY,
     queryFn: fetchGrappleProductionDashboard,
     staleTime: 60_000,
   });
 
   const data = dashboardQuery.data;
+  const currentUserId = profile?.id ?? null;
+  const currentUserName = profile?.full_name ?? profile?.email ?? "";
+  const currentRole = profile?.role ?? null;
+  const canCreateBuild = isElevatedGrappleRole(currentRole);
   const [selectedBuildId, setSelectedBuildId] = useState<string | null>(null);
+  const [pendingCreatedBuildId, setPendingCreatedBuildId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!data?.pipeline.length) {
-      setSelectedBuildId(null);
+      if (!pendingCreatedBuildId) setSelectedBuildId(null);
+      return;
+    }
+    if (pendingCreatedBuildId) {
+      if (data.pipeline.some((build) => build.id === pendingCreatedBuildId)) {
+        setSelectedBuildId(pendingCreatedBuildId);
+        setPendingCreatedBuildId(null);
+      }
       return;
     }
     if (!selectedBuildId || !data.pipeline.some((build) => build.id === selectedBuildId)) {
       setSelectedBuildId(data.pipeline[0].id);
     }
-  }, [data?.pipeline, selectedBuildId]);
+  }, [data?.pipeline, pendingCreatedBuildId, selectedBuildId]);
+
+  const handleBuildCreated = (buildId: string) => {
+    setPendingCreatedBuildId(buildId);
+    setSelectedBuildId(buildId);
+  };
 
   const selectedBuild = useMemo(() => {
     if (!data?.pipeline.length) return null;
@@ -160,10 +226,14 @@ export function GrappleProductionDashboardPage() {
       ) : dashboardQuery.isError ? (
         <ErrorState onRetry={() => void dashboardQuery.refetch()} />
       ) : data && grappleProductionDashboardIsEmpty(data) ? (
-        <EmptyState />
+        <>
+          <EmptyState canCreateBuild={canCreateBuild} />
+          {canCreateBuild && <CreateBuildPanel onCreated={handleBuildCreated} />}
+        </>
       ) : data ? (
         <>
           <ExecutiveStrip data={data} />
+          {canCreateBuild && <CreateBuildPanel onCreated={handleBuildCreated} />}
           <StagePipelinePanel rows={data.stageSummary} builds={data.pipeline} />
           <div className="grid gap-4 xl:grid-cols-[0.82fr_1.18fr]">
             <BuildListPanel
@@ -172,7 +242,13 @@ export function GrappleProductionDashboardPage() {
               selectedBuildId={selectedBuild?.id ?? null}
               onSelectBuild={setSelectedBuildId}
             />
-            <BuildDetailPanel data={data} build={selectedBuild} />
+            <BuildDetailPanel
+              data={data}
+              build={selectedBuild}
+              currentUserId={currentUserId}
+              currentUserName={currentUserName}
+              currentRole={currentRole}
+            />
           </div>
           <TimelinePanel events={data.dashboardTimeline} selectedBuildId={selectedBuild?.id ?? null} />
         </>
@@ -224,7 +300,7 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-function EmptyState() {
+function EmptyState({ canCreateBuild }: { canCreateBuild: boolean }) {
   return (
     <Card className="p-8 text-center">
       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-qep-orange/10 text-qep-orange">
@@ -232,7 +308,7 @@ function EmptyState() {
       </div>
       <h2 className="mt-4 text-lg font-semibold text-foreground">No grapple production builds yet</h2>
       <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-        Stream I is live, but this workspace has not created a standalone grapple build. Once a build exists, this dashboard will show stage pressure, child work, final QC, and timeline movement.
+        Stream I is live, but this workspace has not created a standalone grapple build. {canCreateBuild ? "Start the first build below and the dashboard will immediately light up with stage pressure, QC gates, and timeline movement." : "Once a manager or assigned build Lead creates a build, this read-only surface will show stage pressure, final QC, and timeline movement."}
       </p>
       <Link
         to="/service"
@@ -240,6 +316,98 @@ function EmptyState() {
       >
         Open service command center
       </Link>
+    </Card>
+  );
+}
+
+function CreateBuildPanel({ onCreated }: { onCreated: (buildId: string) => void }) {
+  const queryClient = useQueryClient();
+  const [buildNumber, setBuildNumber] = useState("");
+  const [priority, setPriority] = useState("normal");
+  const [targetStartDate, setTargetStartDate] = useState("");
+  const [targetCompletionDate, setTargetCompletionDate] = useState("");
+  const [assignedLeadId, setAssignedLeadId] = useState("");
+  const [assignedBuilderId, setAssignedBuilderId] = useState("");
+  const [customerCompanyId, setCustomerCompanyId] = useState("");
+  const [salesDealId, setSalesDealId] = useState("");
+  const [chassisEquipmentId, setChassisEquipmentId] = useState("");
+
+  const createMutation = useMutation({
+    mutationFn: createGrappleBuild,
+    onSuccess: (buildId) => {
+      setBuildNumber("");
+      setTargetStartDate("");
+      setTargetCompletionDate("");
+      setAssignedLeadId("");
+      setAssignedBuilderId("");
+      setCustomerCompanyId("");
+      setSalesDealId("");
+      setChassisEquipmentId("");
+      onCreated(buildId);
+      void queryClient.invalidateQueries({ queryKey: GRAPPLE_DASHBOARD_QUERY_KEY });
+    },
+  });
+
+  const createError = mutationErrorMessage(createMutation.error);
+
+  return (
+    <Card className="overflow-hidden border-qep-orange/25 bg-gradient-to-br from-qep-orange/10 via-background to-background p-0">
+      <div className="border-b border-border/70 p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-qep-orange">Mutation controls</p>
+            <h2 className="mt-1 text-xl font-bold text-foreground">Create a grapple build</h2>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              Managers and elevated production roles can open a standalone grapple build without touching service work-order gates.
+            </p>
+          </div>
+          <Pill tone="green">Manager only create</Pill>
+        </div>
+      </div>
+      <form
+        className="grid gap-4 p-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!buildNumber.trim() || createMutation.isPending) return;
+          createMutation.mutate({
+            buildNumber: buildNumber.trim(),
+            priority,
+            targetStartDate: targetStartDate || null,
+            targetCompletionDate: targetCompletionDate || null,
+            assignedLeadId: trimToNull(assignedLeadId),
+            assignedBuilderId: trimToNull(assignedBuilderId),
+            customerCompanyId: trimToNull(customerCompanyId),
+            salesDealId: trimToNull(salesDealId),
+            chassisEquipmentId: trimToNull(chassisEquipmentId),
+            metadata: { source: "grapple_production_dashboard" },
+          });
+        }}
+      >
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <LabeledInput label="Build number" value={buildNumber} onChange={setBuildNumber} required placeholder="GTB-2026-001" />
+          <LabeledSelect label="Priority" value={priority} onChange={setPriority} options={["low", "normal", "high", "expedite"]} />
+          <LabeledInput label="Target start" value={targetStartDate} onChange={setTargetStartDate} type="date" />
+          <LabeledInput label="Target completion" value={targetCompletionDate} onChange={setTargetCompletionDate} type="date" />
+        </div>
+        <details className="rounded-2xl border bg-background/70 p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-foreground">Optional IDs for assignment and source links</summary>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <LabeledInput label="Assigned Lead ID" value={assignedLeadId} onChange={setAssignedLeadId} placeholder="uuid" />
+            <LabeledInput label="Assigned Builder ID" value={assignedBuilderId} onChange={setAssignedBuilderId} placeholder="uuid" />
+            <LabeledInput label="Customer company ID" value={customerCompanyId} onChange={setCustomerCompanyId} placeholder="uuid" />
+            <LabeledInput label="Sales deal ID" value={salesDealId} onChange={setSalesDealId} placeholder="uuid" />
+            <LabeledInput label="Chassis equipment ID" value={chassisEquipmentId} onChange={setChassisEquipmentId} placeholder="uuid" />
+          </div>
+        </details>
+        {createError && <InlineAlert tone="red">{createError}</InlineAlert>}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground">Creation uses the shipped create_grapple_build RPC and preserves service work-order boundaries.</p>
+          <Button type="submit" disabled={!buildNumber.trim() || createMutation.isPending} className="w-full sm:w-auto">
+            {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <PlusCircle className="h-4 w-4" aria-hidden />}
+            Create build
+          </Button>
+        </div>
+      </form>
     </Card>
   );
 }
@@ -428,14 +596,28 @@ function BuildListPanel({
   );
 }
 
-function BuildDetailPanel({ data, build }: { data: GrappleProductionDashboardData; build: GrapplePipelineBuild | null }) {
+function BuildDetailPanel({
+  data,
+  build,
+  currentUserId,
+  currentUserName,
+  currentRole,
+}: {
+  data: GrappleProductionDashboardData;
+  build: GrapplePipelineBuild | null;
+  currentUserId: string | null;
+  currentUserName: string;
+  currentRole: string | null;
+}) {
   const progress = data.progressSheets.find((sheet) => sheet.buildId === build?.id) ?? null;
   const timeline = data.timelines.find((item) => item.buildId === build?.id) ?? null;
   const inspections = data.gtbInspections.filter((item) => item.buildId === build?.id);
   const accessories = data.accessoryInstalls.filter((item) => item.buildId === build?.id);
   const partsSheets = data.partsSheets.filter((item) => item.buildId === build?.id);
   const finalQc = data.finalQcChecklists.filter((item) => item.buildId === build?.id);
+  const finalQcItems = data.finalQcItems.filter((item) => item.buildId === build?.id);
   const events = data.dashboardTimeline.filter((event) => event.buildId === build?.id).slice(0, 4);
+  const canMutate = canMutateGrappleBuild(build, currentUserId, currentRole);
 
   if (!build) {
     return (
@@ -492,11 +674,25 @@ function BuildDetailPanel({ data, build }: { data: GrappleProductionDashboardDat
           </div>
         ) : null}
 
+        <ReleaseGatePanel build={build} progress={progress} latestFinalQc={finalQc[0] ?? null} />
+        {canMutate ? (
+          <GrappleBuildMutationPanel
+            build={build}
+            progress={progress}
+            finalQcRows={finalQc}
+            finalQcItems={finalQcItems}
+            currentUserId={currentUserId}
+            currentUserName={currentUserName}
+          />
+        ) : (
+          <ReadOnlyMutationNotice />
+        )}
+
         <div className="grid gap-4 xl:grid-cols-2">
           <GtbInspectionPanel rows={inspections} />
           <AccessoryPanel rows={accessories} />
           <PartsSheetPanel rows={partsSheets} />
-          <FinalQcPanel rows={finalQc} progress={progress} />
+          <FinalQcPanel rows={finalQc} items={finalQcItems} progress={progress} />
         </div>
 
         <TimelineDurationsPanel timeline={timeline} />
@@ -504,6 +700,330 @@ function BuildDetailPanel({ data, build }: { data: GrappleProductionDashboardDat
       </div>
     </Card>
   );
+}
+
+function ReleaseGatePanel({
+  build,
+  progress,
+  latestFinalQc,
+}: {
+  build: GrapplePipelineBuild;
+  progress: GrappleProgressSheet | null;
+  latestFinalQc: GrappleFinalQcChecklist | null;
+}) {
+  const ready = Boolean(progress?.finalQcReleaseReady);
+  const completeWithoutEvidence = build.productionStage === "production_complete" && !ready;
+  const blocked = !ready && (build.productionStage === "ready_for_final_qc" || build.productionStage === "production_complete");
+
+  return (
+    <div className={cn(
+      "rounded-2xl border p-4",
+      ready
+        ? "border-emerald-500/30 bg-emerald-500/10"
+        : blocked
+          ? "border-amber-500/30 bg-amber-500/10"
+          : "bg-background/70",
+    )}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className={cn("rounded-xl p-2", ready ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300" : "bg-qep-orange/10 text-qep-orange")}>
+            {ready ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : <Lock className="h-4 w-4" aria-hidden />}
+          </div>
+          <div>
+            <h3 className="font-semibold text-foreground">Final-QC release gate</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {ready
+                ? "Final QC is pass/signed and the build can be released to production complete."
+                : completeWithoutEvidence
+                  ? "Production is marked complete, but final-QC release evidence is incomplete. Review the checklist and Lead sign-off before relying on this release state."
+                  : progress?.finalQcReleaseReason ?? "Production complete remains blocked until final QC passes and the assigned Lead signs off."}
+            </p>
+          </div>
+        </div>
+        <StatusPill value={progress?.finalQcReleaseCode ?? (ready ? "final_qc_release_ready" : "final_qc_incomplete")} />
+      </div>
+      {!ready && progress?.finalQcReleaseMissing.length ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {progress.finalQcReleaseMissing.slice(0, 5).map((item, index) => (
+            <Pill key={index} tone="amber">{describeReleaseMissing(item)}</Pill>
+          ))}
+        </div>
+      ) : null}
+      {latestFinalQc && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Latest checklist #{latestFinalQc.checklistNumber}: {formatGrappleLabel(latestFinalQc.status)} · {formatCount(latestFinalQc.passedItemCount)}/{formatCount(latestFinalQc.itemCount)} pass · Lead {latestFinalQc.leadSignedByName ?? latestFinalQc.leadSignatureName ?? "not signed"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function GrappleBuildMutationPanel({
+  build,
+  progress,
+  finalQcRows,
+  finalQcItems,
+  currentUserId,
+  currentUserName,
+}: {
+  build: GrapplePipelineBuild;
+  progress: GrappleProgressSheet | null;
+  finalQcRows: GrappleFinalQcChecklist[];
+  finalQcItems: GrappleFinalQcItem[];
+  currentUserId: string | null;
+  currentUserName: string;
+}) {
+  const queryClient = useQueryClient();
+  const [nextStage, setNextStage] = useState<GrappleProductionStage | "">(() => nextProductionStage(build.productionStage) ?? "");
+  const [transitionNote, setTransitionNote] = useState("");
+  const [qcNotes, setQcNotes] = useState("");
+  const [signatureName, setSignatureName] = useState(currentUserName);
+  const latestFinalQc = finalQcRows[0] ?? null;
+  const latestItems = latestFinalQc
+    ? finalQcItems.filter((item) => item.checklistId === latestFinalQc.id).sort((a, b) => a.displayOrder - b.displayOrder)
+    : [];
+
+  useEffect(() => {
+    setNextStage(nextProductionStage(build.productionStage) ?? "");
+    setTransitionNote("");
+    setQcNotes("");
+  }, [build.id, build.productionStage]);
+
+  useEffect(() => {
+    if (!signatureName && currentUserName) setSignatureName(currentUserName);
+  }, [currentUserName, signatureName]);
+
+  const invalidateDashboard = () => void queryClient.invalidateQueries({ queryKey: GRAPPLE_DASHBOARD_QUERY_KEY });
+  const transitionMutation = useMutation({
+    mutationFn: transitionGrappleBuildStage,
+    onSuccess: invalidateDashboard,
+  });
+  const createQcMutation = useMutation({
+    mutationFn: createGrappleFinalQcChecklist,
+    onSuccess: invalidateDashboard,
+  });
+  const updateItemMutation = useMutation({
+    mutationFn: updateGrappleFinalQcItem,
+    onSuccess: invalidateDashboard,
+  });
+  const markOpenPassMutation = useMutation({
+    mutationFn: async () => {
+      await Promise.all(
+        latestItems
+          .filter((item) => item.result === "not_checked")
+          .map((item) => updateGrappleFinalQcItem({ itemId: item.id, result: "pass", userId: currentUserId })),
+      );
+    },
+    onSuccess: invalidateDashboard,
+  });
+  const completeQcMutation = useMutation({
+    mutationFn: completeGrappleFinalQcChecklist,
+    onSuccess: invalidateDashboard,
+  });
+  const signQcMutation = useMutation({
+    mutationFn: signGrappleBuildFinalQc,
+    onSuccess: invalidateDashboard,
+  });
+
+  const transitionBlockedByGate = nextStage === "production_complete" && !progress?.finalQcReleaseReady;
+  const hasForwardStage = Boolean(nextStage);
+  const nextChecklistNumber = Math.max(0, ...finalQcRows.map((row) => row.checklistNumber)) + 1;
+  const releaseCleanItems = latestItems.length > 0 && latestItems.every((item) => (item.result === "pass" || item.result === "not_applicable") && !item.reworkRequired);
+  const latestCanComplete = Boolean(latestFinalQc && latestFinalQc.status !== "signed" && releaseCleanItems);
+  const leadCanSign = canSignFinalQc(build, currentUserId);
+  const latestCanSign = Boolean(latestFinalQc && latestFinalQc.status !== "signed" && latestFinalQc.overallResult === "pass" && signatureName.trim());
+  const busy = transitionMutation.isPending || createQcMutation.isPending || updateItemMutation.isPending || markOpenPassMutation.isPending || completeQcMutation.isPending || signQcMutation.isPending;
+  const error = mutationErrorMessage(transitionMutation.error)
+    ?? mutationErrorMessage(createQcMutation.error)
+    ?? mutationErrorMessage(updateItemMutation.error)
+    ?? mutationErrorMessage(markOpenPassMutation.error)
+    ?? mutationErrorMessage(completeQcMutation.error)
+    ?? mutationErrorMessage(signQcMutation.error);
+
+  const updateItem = (item: GrappleFinalQcItem, result: GrappleFinalQcItemResult, severity?: GrappleFinalQcDefectSeverity | null) => {
+    updateItemMutation.mutate({
+      itemId: item.id,
+      result,
+      userId: currentUserId,
+      defectSeverity: result === "fail" ? severity ?? item.defectSeverity ?? "major" : null,
+      reworkRequired: result === "fail",
+      notes: item.notes,
+      measuredValue: item.measuredValue,
+    });
+  };
+
+  return (
+    <div className="rounded-2xl border border-qep-orange/25 bg-background/80 p-4">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="font-semibold text-foreground">Build mutation console</h3>
+          <p className="text-xs text-muted-foreground">Visible only to elevated operators or the assigned build Lead. Sales/service roles remain read-only.</p>
+        </div>
+        <Pill tone="green">Write enabled</Pill>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <div className="rounded-2xl border bg-muted/10 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <GitBranch className="h-4 w-4 text-qep-orange" aria-hidden />
+            <h4 className="font-semibold text-foreground">Stage transition</h4>
+          </div>
+          <div className="grid gap-3">
+            <LabeledSelect
+              label="Next stage"
+              value={nextStage || build.productionStage}
+              onChange={(value) => setNextStage(value as GrappleProductionStage)}
+              options={hasForwardStage ? [...GRAPPLE_PRODUCTION_STAGES] : [build.productionStage]}
+              disabled={!hasForwardStage}
+            />
+            <LabeledTextarea label="Transition note" value={transitionNote} onChange={setTransitionNote} placeholder="What changed on the floor?" />
+            {transitionBlockedByGate && (
+              <InlineAlert tone="amber">
+                Production complete is blocked: {progress?.finalQcReleaseReason ?? "final QC must pass and the assigned Lead must sign."}
+              </InlineAlert>
+            )}
+            <Button
+              type="button"
+              disabled={busy || !hasForwardStage || transitionBlockedByGate || nextStage === build.productionStage}
+              onClick={() => {
+                if (!nextStage) return;
+                transitionMutation.mutate({
+                  buildId: build.id,
+                  nextStage,
+                  note: transitionNote.trim() || `Moved to ${formatGrappleLabel(nextStage)} from the production dashboard.`,
+                  metadata: { source: "grapple_production_dashboard" },
+                });
+              }}
+              className="w-full"
+            >
+              {transitionMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <GitBranch className="h-4 w-4" aria-hidden />}
+              Move stage
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border bg-muted/10 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-qep-orange" aria-hidden />
+            <h4 className="font-semibold text-foreground">Final QC checklist</h4>
+          </div>
+          {!latestFinalQc ? (
+            <div className="grid gap-3">
+              <p className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">No final-QC checklist exists for this build yet.</p>
+              <Button
+                type="button"
+                disabled={busy}
+                onClick={() => createQcMutation.mutate({
+                  buildId: build.id,
+                  checklistNumber: nextChecklistNumber,
+                  userId: currentUserId,
+                  notes: "Final QC checklist opened from the grapple production dashboard.",
+                })}
+              >
+                {createQcMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <ClipboardCheck className="h-4 w-4" aria-hidden />}
+                Create final-QC checklist
+              </Button>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusPill value={latestFinalQc.status} />
+                <StatusPill value={latestFinalQc.overallResult ?? progress?.finalQcReleaseCode} />
+                <Pill tone={releaseCleanItems ? "green" : "amber"}>{formatCount(latestFinalQc.uncheckedItemCount)} open</Pill>
+              </div>
+              <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                {latestItems.length === 0 ? (
+                  <p className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">Checklist header exists, but no line items are visible yet.</p>
+                ) : latestItems.map((item) => (
+                  <div key={item.id} className="rounded-xl border bg-background/70 p-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{item.prompt}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{formatGrappleLabel(item.sectionKey)} · {item.checkedByName ?? "unchecked"}</p>
+                      </div>
+                      <StatusPill value={item.result} />
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_0.8fr]">
+                      <LabeledSelect
+                        label="Result"
+                        value={item.result}
+                        onChange={(value) => updateItem(item, value as GrappleFinalQcItemResult)}
+                        options={["not_checked", "pass", "not_applicable", "fail"]}
+                        disabled={busy || latestFinalQc.status === "signed"}
+                      />
+                      {item.result === "fail" && (
+                        <LabeledSelect
+                          label="Severity"
+                          value={item.defectSeverity ?? "major"}
+                          onChange={(value) => updateItem(item, "fail", value as GrappleFinalQcDefectSeverity)}
+                          options={["minor", "major", "critical"]}
+                          disabled={busy || latestFinalQc.status === "signed"}
+                        />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button type="button" variant="outline" disabled={busy || latestFinalQc.status === "signed" || latestItems.every((item) => item.result !== "not_checked")} onClick={() => markOpenPassMutation.mutate()}>
+                  {markOpenPassMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}
+                  Mark open pass
+                </Button>
+                <Button type="button" variant="outline" disabled={busy || !latestCanComplete} onClick={() => completeQcMutation.mutate({ checklistId: latestFinalQc.id, userId: currentUserId, notes: qcNotes })}>
+                  {completeQcMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <ClipboardCheck className="h-4 w-4" aria-hidden />}
+                  Complete checklist
+                </Button>
+              </div>
+              <LabeledTextarea label="QC completion notes" value={qcNotes} onChange={setQcNotes} placeholder="Release packet notes or constraints" />
+              <div className="rounded-xl border bg-background/70 p-3">
+                <div className="mb-3 flex items-center gap-2">
+                  <PenLine className="h-4 w-4 text-qep-orange" aria-hidden />
+                  <p className="text-sm font-semibold text-foreground">Assigned Lead sign-off</p>
+                </div>
+                {!leadCanSign && <InlineAlert tone="amber">Only the assigned build Lead can sign final QC. Managers can prepare the checklist, but release sign-off remains Lead-bound.</InlineAlert>}
+                <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                  <LabeledInput label="Signature name" value={signatureName} onChange={setSignatureName} placeholder="Lead name" disabled={latestFinalQc.status === "signed"} />
+                  <Button type="button" disabled={busy || !leadCanSign || !latestCanSign} onClick={() => signQcMutation.mutate({
+                    checklistId: latestFinalQc.id,
+                    signatureName: signatureName.trim(),
+                    signatureStatement: "I certify that final QC passed and this grapple build is ready for release.",
+                    notes: qcNotes,
+                  })}>
+                    {signQcMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <PenLine className="h-4 w-4" aria-hidden />}
+                    Sign final QC
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      {error && <InlineAlert tone="red">{error}</InlineAlert>}
+    </div>
+  );
+}
+
+function ReadOnlyMutationNotice() {
+  return (
+    <div className="rounded-2xl border bg-muted/20 p-4 text-sm text-muted-foreground">
+      <div className="flex items-start gap-3">
+        <Lock className="mt-0.5 h-4 w-4 text-muted-foreground" aria-hidden />
+        <div>
+          <p className="font-semibold text-foreground">Read-only production view</p>
+          <p className="mt-1">Mutation controls are hidden for sales/service readers. Assigned build Leads and manager/elevated roles can create builds, move stages, complete final QC, and sign release.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function describeReleaseMissing(value: unknown): string {
+  if (!value || typeof value !== "object") return "QC requirement";
+  const source = value as Record<string, unknown>;
+  if (typeof source.reason === "string") return source.reason;
+  if (typeof source.field === "string") return formatGrappleLabel(source.field);
+  if (typeof source.scope === "string") return formatGrappleLabel(source.scope);
+  return "QC requirement";
 }
 
 function GtbInspectionPanel({ rows }: { rows: GrappleGtbInspection[] }) {
@@ -579,8 +1099,9 @@ function PartsSheetPanel({ rows }: { rows: GrapplePartsSheet[] }) {
   );
 }
 
-function FinalQcPanel({ rows, progress }: { rows: GrappleFinalQcChecklist[]; progress: GrappleProgressSheet | null }) {
+function FinalQcPanel({ rows, items, progress }: { rows: GrappleFinalQcChecklist[]; items: GrappleFinalQcItem[]; progress: GrappleProgressSheet | null }) {
   const latest = rows[0];
+  const latestItems = latest ? items.filter((item) => item.checklistId === latest.id).sort((a, b) => a.displayOrder - b.displayOrder) : [];
   return (
     <DetailSection icon={ShieldCheck} title="Final QC + Lead sign-off" empty={!latest} emptyLabel="No final QC checklist yet.">
       {latest && (
@@ -601,6 +1122,16 @@ function FinalQcPanel({ rows, progress }: { rows: GrappleFinalQcChecklist[]; pro
           <p className="mt-3 text-xs text-muted-foreground">
             Lead sign-off: {latest.leadSignedByName ?? latest.leadSignatureName ?? "not signed"} · {formatDateTime(latest.leadSignedAt)}
           </p>
+          {latestItems.length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              {latestItems.slice(0, 4).map((item) => (
+                <div key={item.id} className="flex items-start justify-between gap-3 rounded-xl border bg-muted/20 p-2 text-xs">
+                  <span className="text-muted-foreground">{item.prompt}</span>
+                  <StatusPill value={item.result} />
+                </div>
+              ))}
+            </div>
+          )}
           {progress?.finalQcReleaseReason && (
             <p className="mt-2 rounded-xl border bg-muted/20 p-2 text-xs text-muted-foreground">{progress.finalQcReleaseReason}</p>
           )}
@@ -721,6 +1252,107 @@ function DetailSection({
         <h3 className="font-semibold text-foreground">{title}</h3>
       </div>
       {empty ? <p className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">{emptyLabel}</p> : children}
+    </div>
+  );
+}
+
+function LabeledInput({
+  label,
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+  required,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  placeholder?: string;
+  required?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="grid gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      {label}
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        required={required}
+        disabled={disabled}
+        className="h-11 rounded-xl border bg-background px-3 text-sm font-medium normal-case tracking-normal text-foreground outline-none transition placeholder:text-muted-foreground/70 focus:border-qep-orange focus:ring-2 focus:ring-qep-orange/15 disabled:cursor-not-allowed disabled:opacity-60"
+      />
+    </label>
+  );
+}
+
+function LabeledSelect({
+  label,
+  value,
+  onChange,
+  options,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly string[];
+  disabled?: boolean;
+}) {
+  return (
+    <label className="grid gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      {label}
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
+        className="h-11 rounded-xl border bg-background px-3 text-sm font-medium normal-case tracking-normal text-foreground outline-none transition focus:border-qep-orange focus:ring-2 focus:ring-qep-orange/15 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>{formatGrappleLabel(option)}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function LabeledTextarea({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="grid gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      {label}
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        rows={3}
+        className="rounded-xl border bg-background px-3 py-2 text-sm font-medium normal-case tracking-normal text-foreground outline-none transition placeholder:text-muted-foreground/70 focus:border-qep-orange focus:ring-2 focus:ring-qep-orange/15"
+      />
+    </label>
+  );
+}
+
+function InlineAlert({ tone, children }: { tone: "red" | "amber"; children: ReactNode }) {
+  return (
+    <div className={cn(
+      "rounded-xl border p-3 text-sm",
+      tone === "red"
+        ? "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300"
+        : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+    )}>
+      {children}
     </div>
   );
 }
