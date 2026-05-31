@@ -196,7 +196,7 @@ export function QuoteBuilderV2PageShell({
                     <p className="text-base font-semibold text-foreground">
                       {activeQuoteNumber ?? `Quote ${activeQuotePackageId.slice(0, 8)}`}
                     </p>
-                    <span className="rounded-full border border-qep-orange/20 bg-background/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange-accessible">
+                    <span className="rounded-full border border-qep-orange/20 bg-background/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange">
                       {(quoteStatus ?? "draft").replace(/_/g, " ")}
                     </span>
                     <span className="text-xs text-muted-foreground">

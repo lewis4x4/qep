@@ -23,7 +23,7 @@ export function QuoteSendActionCard({
   return (
     <div className="rounded-lg border border-border/70 bg-background/50 p-4">
       <div className="flex items-start gap-3">
-        <span className="rounded-full bg-qep-orange/10 p-2 text-qep-orange-accessible">{icon}</span>
+        <span className="rounded-full bg-qep-orange/10 p-2 text-qep-orange">{icon}</span>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-foreground">{title}</p>
           <p className="mt-1 text-xs text-muted-foreground">{detail}</p>

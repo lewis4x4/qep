@@ -339,9 +339,9 @@ export function ConversationalDealEngine({
         <div className="border-b border-border/60 px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Zap className="h-4 w-4 text-qep-orange-accessible" />
+              <Zap className="h-4 w-4 text-qep-orange" />
               <span className="text-sm font-semibold text-foreground">Deal Assistant</span>
-              <span className="rounded-full bg-qep-orange/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-qep-orange-accessible">
+              <span className="rounded-full bg-qep-orange/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-qep-orange">
                 AI
               </span>
             </div>
@@ -367,7 +367,7 @@ export function ConversationalDealEngine({
                   className={cn(
                     "flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-[11px] font-medium transition",
                     activeTab === tab
-                      ? "bg-qep-orange/10 text-qep-orange-accessible"
+                      ? "bg-qep-orange/10 text-qep-orange"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -392,7 +392,7 @@ export function ConversationalDealEngine({
                   onClick={() => setInputMode(mode)}
                   className={`flex flex-1 items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium transition ${
                     inputMode === mode
-                      ? "bg-qep-orange/10 text-qep-orange-accessible"
+                      ? "bg-qep-orange/10 text-qep-orange"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
@@ -448,7 +448,7 @@ export function ConversationalDealEngine({
           {/* Running state */}
           {panelState.phase === "transcribing" && (
             <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/60 px-3 py-3">
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-qep-orange-accessible" />
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-qep-orange" />
               <p className="text-sm text-muted-foreground">Transcribing voice note…</p>
             </div>
           )}
@@ -456,7 +456,7 @@ export function ConversationalDealEngine({
           {(panelState.phase === "running" || (panelState.phase === "done" && scenarios.length === 0)) && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/60 px-3 py-3">
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-qep-orange-accessible" />
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-qep-orange" />
                 <p className="text-sm text-muted-foreground">
                   {panelState.phase === "running" ? panelState.statusMessage : "Building scenarios…"}
                 </p>

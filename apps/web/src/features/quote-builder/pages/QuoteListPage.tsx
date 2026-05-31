@@ -281,7 +281,7 @@ export function QuoteListPage() {
           type="button"
           aria-label="Start a Quote"
           onClick={() => navigate("/sales/quotes/new")}
-          className="w-10 h-10 rounded-full bg-qep-orange-accessible text-white flex items-center justify-center active:scale-95 transition-transform"
+          className="w-10 h-10 rounded-full bg-qep-orange text-white flex items-center justify-center active:scale-95 transition-transform"
         >
           <Plus className="w-5 h-5" />
         </button>
@@ -293,7 +293,7 @@ export function QuoteListPage() {
         </div>
         <Button
           onClick={() => navigate("/sales/quotes/new")}
-          className="shrink-0 bg-qep-orange-accessible text-white hover:bg-qep-orange-accessible/90"
+          className="shrink-0 bg-qep-orange text-white hover:bg-qep-orange/90"
         >
           <Plus className="mr-2 h-4 w-4" />
           Start a New Quote
@@ -327,7 +327,7 @@ export function QuoteListPage() {
           icon={Trophy}
           label="Wins MTD"
           value={String(stats.winsThisMonth)}
-          valueClassName="text-qep-orange-accessible"
+          valueClassName="text-qep-orange"
           onClick={() => toggleStatFilter("wins")}
         />
       </section>
@@ -360,7 +360,7 @@ export function QuoteListPage() {
             onClick={() => setShowScoringAccuracy((value) => !value)}
             className="inline-flex h-10 items-center justify-start gap-2 rounded-md px-3 text-sm text-muted-foreground transition hover:bg-muted/40 hover:text-foreground sm:w-auto"
           >
-            <BarChart3 className="h-4 w-4 text-qep-orange-accessible" />
+            <BarChart3 className="h-4 w-4 text-qep-orange" />
             View scoring accuracy
           </button>
           <div className="flex w-full overflow-x-auto rounded-lg border border-border/60 bg-muted/20 p-1 sm:w-auto xl:ml-auto">
@@ -549,7 +549,7 @@ function QuoteRow({
               </Badge>
             ) : null}
           </div>
-          <div className={`flex min-w-0 items-center gap-2 text-sm ${isMissingContact(item) ? "text-muted-foreground" : "text-muted-foreground"}`}>
+          <div className={`flex min-w-0 items-center gap-2 text-sm ${isMissingContact(item) ? "text-muted-foreground/60" : "text-muted-foreground"}`}>
             <User className="h-4 w-4 shrink-0" />
             <span className="truncate">{renderContactName(item)}</span>
           </div>
@@ -565,7 +565,7 @@ function QuoteRow({
         <div className="text-sm font-semibold tabular-nums text-foreground">{fmtCurrency(item.net_total)}</div>
       </td>
       <td className="px-5 py-5 align-middle">
-        <div className="text-base font-bold tabular-nums text-qep-orange-accessible">
+        <div className="text-base font-bold tabular-nums text-qep-orange">
           {typeof item.win_probability_score === "number" ? item.win_probability_score : "—"}
         </div>
       </td>
@@ -586,7 +586,7 @@ function QuoteRow({
                   event.stopPropagation();
                   onAction(action.action);
                 }}
-                className="inline-flex h-10 min-w-16 flex-col items-center justify-center gap-0.5 rounded-md border border-border/50 bg-muted/30 px-2 text-[10px] text-muted-foreground transition hover:border-qep-orange/50 hover:bg-qep-orange/10 hover:text-qep-orange-accessible disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 min-w-16 flex-col items-center justify-center gap-0.5 rounded-md border border-border/50 bg-muted/30 px-2 text-[10px] text-muted-foreground transition hover:border-qep-orange/50 hover:bg-qep-orange/10 hover:text-qep-orange disabled:cursor-not-allowed disabled:opacity-50"
                 title={action.disabledReason ?? action.label}
               >
                 <action.icon className={`h-4 w-4 ${actionPending ? "animate-pulse" : ""}`} />
@@ -623,7 +623,7 @@ function SortableHeader({
       >
         {label}
         <ChevronDown
-          className={`h-3.5 w-3.5 transition ${active ? "text-qep-orange-accessible" : "text-muted-foreground"} ${active && sort.direction === "asc" ? "rotate-180" : ""}`}
+          className={`h-3.5 w-3.5 transition ${active ? "text-qep-orange" : "text-muted-foreground/50"} ${active && sort.direction === "asc" ? "rotate-180" : ""}`}
         />
       </button>
     </th>
@@ -683,7 +683,7 @@ function LocalDraftsSection({
   return (
     <Card className="border-border/70 bg-card/80 p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-qep-orange-accessible">
+        <div className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-qep-orange">
           <Pencil className="h-4 w-4" />
           Unsaved Drafts
         </div>
@@ -712,7 +712,7 @@ function LocalDraftsSection({
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="border-qep-orange/50 text-qep-orange-accessible hover:bg-qep-orange/10" onClick={() => onResume(record)}>Resume</Button>
+                <Button size="sm" variant="outline" className="border-qep-orange/50 text-qep-orange hover:bg-qep-orange/10" onClick={() => onResume(record)}>Resume</Button>
                 <Button size="sm" variant="outline" onClick={() => onClear(record.key)}>Discard</Button>
               </div>
             </div>
@@ -788,12 +788,12 @@ function EmptyState({ onNewQuote }: { onNewQuote: () => void }) {
   return (
     <div className="flex flex-col items-center px-6 py-16 text-center">
       <div className="relative mb-5 h-24 w-24 rounded-2xl border border-qep-orange/30 bg-qep-orange/10">
-        <FileText className="absolute left-7 top-6 h-10 w-10 text-qep-orange-accessible" />
-        <Send className="absolute bottom-5 right-5 h-5 w-5 text-qep-orange-accessible" />
+        <FileText className="absolute left-7 top-6 h-10 w-10 text-qep-orange" />
+        <Send className="absolute bottom-5 right-5 h-5 w-5 text-qep-orange" />
       </div>
       <h2 className="text-lg font-semibold text-foreground">Start your first quote</h2>
       <p className="mt-2 max-w-md text-sm text-muted-foreground">Create an equipment proposal, track its status, and keep every follow-up in one place.</p>
-      <Button onClick={onNewQuote} className="mt-5 bg-qep-orange-accessible text-white hover:bg-qep-orange-accessible/90">
+      <Button onClick={onNewQuote} className="mt-5 bg-qep-orange text-white hover:bg-qep-orange/90">
         <Plus className="mr-2 h-4 w-4" />
         Start your first quote
       </Button>
@@ -804,7 +804,7 @@ function EmptyState({ onNewQuote }: { onNewQuote: () => void }) {
 function NoMatches({ onClear }: { onClear: () => void }) {
   return (
     <div className="flex flex-col items-center px-6 py-14 text-center">
-      <Search className="h-10 w-10 text-muted-foreground" />
+      <Search className="h-10 w-10 text-muted-foreground/50" />
       <h2 className="mt-3 text-sm font-semibold text-foreground">No quotes match your filters</h2>
       <p className="mt-1 text-sm text-muted-foreground">Clear filters or search for a different customer, contact, or quote number.</p>
       <Button size="sm" variant="outline" className="mt-4" onClick={onClear}>Clear filters</Button>

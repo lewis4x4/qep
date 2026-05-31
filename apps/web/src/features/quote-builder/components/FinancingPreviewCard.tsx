@@ -18,7 +18,7 @@ export function FinancingPreviewCard({ input }: FinancingPreviewCardProps) {
   return (
     <Card className="p-4 space-y-2">
       <div className="flex items-center gap-2">
-        <DollarSign className="h-4 w-4 text-qep-orange-accessible" />
+        <DollarSign className="h-4 w-4 text-qep-orange" />
         <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Financing Preview</p>
       </div>
 

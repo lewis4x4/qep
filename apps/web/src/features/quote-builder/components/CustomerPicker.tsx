@@ -355,7 +355,7 @@ function CompanyRow({ row }: { row: CustomerSearchCompany }) {
 function NewCustomerRow({ query }: { query: string }) {
   return (
     <div className="flex items-center gap-3">
-      <Plus className="h-4 w-4 text-qep-orange-accessible" />
+      <Plus className="h-4 w-4 text-qep-orange" />
       <div className="text-sm text-foreground">
         + New customer <span className="text-muted-foreground">"{query.trim()}"</span>
       </div>

@@ -141,7 +141,7 @@ export function PackageItemSearchDialog({
                       {[item.brandName, item.category].filter(Boolean).join(" • ") || "QEP package catalog"}
                     </p>
                   </div>
-                  <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-xs font-semibold text-qep-orange-accessible">
+                  <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-xs font-semibold text-qep-orange">
                     {money(item.price)}
                   </span>
                 </div>

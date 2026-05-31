@@ -139,7 +139,7 @@ export function PromotionsStep({ activeQuotePackageId }: PromotionsStepProps) {
             type="button"
             variant="link"
             title="Step 5 — Pricing build"
-            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed text-qep-orange-accessible hover:text-qep-orange-accessible"
+            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
             onClick={() => setStep("pricing")}
           >
             Pricing
@@ -149,7 +149,7 @@ export function PromotionsStep({ activeQuotePackageId }: PromotionsStepProps) {
             type="button"
             variant="link"
             title="Step 7 — Financing scenarios"
-            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed text-qep-orange-accessible hover:text-qep-orange-accessible"
+            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
             onClick={() => setStep("financing")}
           >
             Financing
@@ -192,7 +192,7 @@ export function PromotionsStep({ activeQuotePackageId }: PromotionsStepProps) {
                     <Check className="h-3 w-3" strokeWidth={3} />
                   </span>
                 )}
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-qep-orange-accessible">{promo.source}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-qep-orange">{promo.source}</p>
                 <p className={cn("mt-2 text-sm font-semibold text-foreground", selected && "pr-7")}>{promo.title}</p>
                 <p className="mt-1 text-lg font-bold text-emerald-400">−{money(promo.amount)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{promo.detail}</p>
@@ -200,7 +200,7 @@ export function PromotionsStep({ activeQuotePackageId }: PromotionsStepProps) {
                   className={cn(
                     "mt-3 inline-flex rounded-full border px-2 py-1 text-[11px]",
                     selected
-                      ? "border-qep-orange/40 bg-qep-orange/10 text-qep-orange-accessible font-semibold"
+                      ? "border-qep-orange/40 bg-qep-orange/10 text-qep-orange font-semibold"
                       : "border-border/70 text-muted-foreground",
                   )}
                 >

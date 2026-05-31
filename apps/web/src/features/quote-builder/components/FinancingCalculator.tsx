@@ -206,7 +206,7 @@ export function FinancingCalculator({
           </div>
           <div className="rounded-lg border border-border/70 bg-card/50 p-3">
             <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Amount financed</p>
-            <p className="mt-2 text-xl font-semibold text-qep-orange-accessible">{formatCurrency(amountFinanced)}</p>
+            <p className="mt-2 text-xl font-semibold text-qep-orange">{formatCurrency(amountFinanced)}</p>
             <p className="mt-1 text-xs text-muted-foreground">Customer total minus cash down.</p>
           </div>
         </div>
@@ -283,7 +283,7 @@ export function FinancingCalculator({
               <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Payment preview</p>
               {customFinancePreview ? (
                 <>
-                  <p className="mt-2 text-xl font-semibold text-qep-orange-accessible">
+                  <p className="mt-2 text-xl font-semibold text-qep-orange">
                     {formatCurrency(customFinancePreview.monthlyPayment ?? 0)}/mo
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -351,7 +351,7 @@ export function FinancingCalculator({
                     selected ? "border-qep-orange bg-qep-orange/5" : "border-border bg-card/40 hover:border-qep-orange/40"
                   }`}
                 >
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-qep-orange-accessible">{scenario.label}</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-qep-orange">{scenario.label}</p>
                   <p className="mt-2 text-lg font-semibold text-foreground">
                     {scenario.monthlyPayment == null
                       ? formatCurrency(scenario.totalCost ?? 0)
@@ -395,7 +395,7 @@ function SummaryRow({
   return (
     <div className={`flex items-center justify-between ${emphasize ? "border-t border-border pt-2" : ""}`}>
       <span className="text-muted-foreground">{label}</span>
-      <span className={`font-medium ${emphasize ? "text-qep-orange-accessible" : positive ? "text-emerald-400" : "text-foreground"}`}>
+      <span className={`font-medium ${emphasize ? "text-qep-orange" : positive ? "text-emerald-400" : "text-foreground"}`}>
         {value}
       </span>
     </div>

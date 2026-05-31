@@ -99,7 +99,7 @@ const DOT_TONE: Record<DotTone, { dot: string; ring: string; icon: string }> = {
   emerald: { dot: "bg-emerald-400",         ring: "ring-emerald-400/20",      icon: "text-emerald-300" },
   amber:   { dot: "bg-amber-400",           ring: "ring-amber-400/20",        icon: "text-amber-300" },
   rose:    { dot: "bg-rose-400",            ring: "ring-rose-400/20",         icon: "text-rose-300" },
-  orange:  { dot: "bg-qep-orange",          ring: "ring-qep-orange/20",       icon: "text-qep-orange-accessible" },
+  orange:  { dot: "bg-qep-orange",          ring: "ring-qep-orange/20",       icon: "text-qep-orange" },
 };
 
 function prettyRouteLabel(role: string | null, routeMode: string): string {

@@ -78,7 +78,7 @@ export function ConfigureStep({
             type="button"
             variant="link"
             title="Step 4 — Trade-in"
-            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed text-qep-orange-accessible hover:text-qep-orange-accessible"
+            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
             onClick={() => setStep("tradeIn")}
           >
             Trade-in
@@ -88,7 +88,7 @@ export function ConfigureStep({
             type="button"
             variant="link"
             title="Step 5 — Pricing build"
-            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed text-qep-orange-accessible hover:text-qep-orange-accessible"
+            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
             onClick={() => setStep("pricing")}
           >
             Pricing
@@ -122,7 +122,7 @@ export function ConfigureStep({
                 aria-pressed={configureTab === tab.id}
                 className={`min-h-[44px] rounded-lg border px-3 py-2 text-xs font-semibold transition ${
                   configureTab === tab.id
-                    ? "border-qep-orange bg-qep-orange/10 text-qep-orange-accessible"
+                    ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
                     : "border-border text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -140,7 +140,7 @@ export function ConfigureStep({
                 Add real {packageKindLabel(configureTab)} with saved name, price, source, and compatibility instead of typing manually.
               </p>
             </div>
-            <Button size="sm" className="bg-qep-orange-accessible text-white hover:bg-qep-orange-accessible/90" onClick={() => setPackageItemSearchOpen(true)}>
+            <Button size="sm" onClick={() => setPackageItemSearchOpen(true)}>
               <PackagePlus className="mr-1 h-4 w-4" /> Search {packageKindLabel(configureTab)}
             </Button>
           </div>

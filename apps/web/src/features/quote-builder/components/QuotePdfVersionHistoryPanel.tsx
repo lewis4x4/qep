@@ -134,7 +134,7 @@ function VersionSummaryCard({ version }: { version: QuotePdfVersionListItem }) {
           <p className="text-sm font-semibold text-foreground">{versionLabel(version.versionNumber)}</p>
           <p className="mt-1 text-xs text-muted-foreground">Sent {formatDate(version.customerVisibleAt)}</p>
         </div>
-        <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-qep-orange-accessible">
+        <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-qep-orange">
           {formatMoney(version.totalsSummary?.customerTotal)}
         </span>
       </div>
@@ -347,7 +347,7 @@ export function QuotePdfVersionHistoryPanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <FileClock className="h-4 w-4 text-qep-orange-accessible" />
+            <FileClock className="h-4 w-4 text-qep-orange" />
             <p className="text-sm font-medium text-foreground">Sent PDF Version History</p>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">

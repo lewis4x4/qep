@@ -58,7 +58,7 @@ export function TradeInStep({
             type="button"
             variant="link"
             title="Step 3 — Configure the package"
-            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed text-qep-orange-accessible hover:text-qep-orange-accessible"
+            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
             onClick={() => setStep("configure")}
           >
             Configure
@@ -68,7 +68,7 @@ export function TradeInStep({
             type="button"
             variant="link"
             title="Step 5 — Pricing build"
-            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed text-qep-orange-accessible hover:text-qep-orange-accessible"
+            className="h-auto min-h-0 inline p-0 text-xs font-semibold leading-relaxed"
             onClick={() => setStep("pricing")}
           >
             Pricing

@@ -94,7 +94,7 @@ export function WizardShell({
         <div className="grid gap-4 lg:grid-cols-[minmax(18rem,1fr)_auto] lg:items-end">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-qep-orange/10 px-3 py-1 text-xs font-semibold text-qep-orange-accessible">
+              <span className="rounded-full bg-qep-orange/10 px-3 py-1 text-xs font-semibold text-qep-orange">
                 Step {currentWizardStepNumber} of {WIZARD_STEPS.length}
               </span>
               <span className="text-sm font-semibold text-foreground">{STEP_LABELS[step]}</span>
@@ -117,7 +117,7 @@ export function WizardShell({
                 type="button"
                 variant="link"
                 title="Open step 5 — Pricing build"
-                className="h-auto justify-start p-0 text-xs font-semibold text-qep-orange-accessible hover:text-qep-orange-accessible"
+                className="h-auto justify-start p-0 text-xs font-semibold text-qep-orange"
                 onClick={() => setStep("pricing")}
               >
                 Pricing →
@@ -147,7 +147,7 @@ export function WizardShell({
               </Button>
             )}
             {step === "customer" && !hasCustomer && (
-              <Button className="touch-manipulation bg-qep-orange-accessible text-white hover:bg-qep-orange-accessible/90" data-testid="wizard-quote-for-prospect" onClick={onQuoteForProspect}>
+              <Button variant="ghost" className="touch-manipulation" data-testid="wizard-quote-for-prospect" onClick={onQuoteForProspect}>
                 Quote for prospect
               </Button>
             )}
@@ -233,7 +233,7 @@ export function WizardShell({
           ) : null}
         </div>
         {step === "customer" && !hasCustomer ? (
-          <Button type="button" className="w-full touch-manipulation bg-qep-orange-accessible text-white hover:bg-qep-orange-accessible/90" data-testid="wizard-quote-for-prospect" onClick={onQuoteForProspect}>
+          <Button type="button" variant="outline" className="w-full touch-manipulation" data-testid="wizard-quote-for-prospect" onClick={onQuoteForProspect}>
             Quote for prospect
           </Button>
         ) : null}
